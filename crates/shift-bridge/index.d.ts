@@ -29,18 +29,6 @@ export declare class Bridge {
    */
   fontFileSpecimen(path: string): Promise<NapiSpecimen | null>
   /**
-   * Returns each anchor name's kind as export reads it; the reference the
-   * editor's own anchor-name parsing is tested against.
-   */
-  anchorKinds(names: Array<string>): Array<NapiAnchorKind>
-  /**
-   * Returns every glyph's anchors as export compiles them, with component
-   * anchors propagated into composites, at each master source.
-   *
-   * The reference the editor's own anchor propagation is tested against.
-   */
-  propagatedAnchors(): Array<NapiPropagatedGlyphAnchors>
-  /**
    * Builds the thumbnail specimen from the open document's current state.
    *
    * Resolves to `null` when the font draws nothing usable; rejects when no
@@ -243,15 +231,6 @@ export declare function configSetTheme(source: string | undefined | null, theme:
  */
 export declare function configSetThemeSlots(source: string | undefined | null, slots: NapiThemeSlots): string
 
-/** An anchor's role in mark positioning, as export reads its name. */
-export interface NapiAnchorKind {
-  kind: "base" | "mark" | "ligature" | "componentMarker" | "caret" | "vcaret" | "entry" | "exit" | "invalid"
-  /** The attachment group, such as `top`, for base, mark, and ligature anchors. */
-  group?: string
-  /** The ligature component or caret number, counting from 1. */
-  index?: number
-}
-
 /** One problem in `config.toml`; line and column are one-based. */
 export interface NapiConfigProblem {
   severity: NapiConfigSeverity
@@ -313,23 +292,6 @@ export interface NapiFontExportResult {
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
-}
-
-export interface NapiPropagatedAnchor {
-  name: string
-  x: number
-  y: number
-}
-
-/** One glyph's anchors as export compiles them, at each master source it has a layer for. */
-export interface NapiPropagatedGlyphAnchors {
-  glyphName: GlyphName
-  sources: Array<NapiPropagatedSourceAnchors>
-}
-
-export interface NapiPropagatedSourceAnchors {
-  sourceId: SourceId
-  anchors: Array<NapiPropagatedAnchor>
 }
 
 /**

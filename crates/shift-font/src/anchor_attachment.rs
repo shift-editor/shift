@@ -10,11 +10,11 @@
 //! again from the new anchors, in component order, so a mark stacked on a
 //! moved mark follows it too.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use crate::composite::anchor_aligned_offset;
 use crate::ir::{
-    ComponentAlignment, ComponentId, DecomposedTransform, Font, GlyphId, GlyphLayer, LayerId,
+    Anchor, Component, ComponentAlignment, DecomposedTransform, Font, GlyphLayer, LayerId,
+    Transform,
 };
 
 /// Placements that differ by less than this are the same.
@@ -70,58 +70,34 @@ pub(crate) fn realign_attached_components<'a>(
         let (Some(old), Some(new)) = (before.layer(&layer_id), after.layer(&layer_id)) else {
             continue;
         };
-        let moved = |id: &ComponentId| {
-            old.component(id).map(|c| c.transform()) != new.component(id).map(|c| c.transform())
-        };
-        let placed = sitting_on_anchors(before, old);
-        let mut freed = HashSet::new();
-        let mut anchored = HashSet::new();
-        for component in new.components_iter() {
-            let id = component.id();
-            let existed = old.component(&id).is_some();
-            match component.alignment() {
-                ComponentAlignment::Free => {}
-                // Moved by hand: it stays where it was put.
-                _ if existed && moved(&id) => {
-                    freed.insert(id);
+        let inputs: Vec<_> = new
+            .components_iter()
+            .map(|component| {
+                let accepted = old.component(&component.id());
+                FollowingComponent {
+                    alignment: component.alignment(),
+                    transform: *component.transform(),
+                    accepted_transform: accepted.map(|accepted| *accepted.transform()),
+                    anchors: base_anchors(after, component, new),
+                    accepted_anchors: base_anchors(before, component, new),
                 }
-                ComponentAlignment::Anchored => {
-                    anchored.insert(id);
-                }
-                ComponentAlignment::Unset if placed.contains(&id) => {
-                    anchored.insert(id);
-                }
-                ComponentAlignment::Unset => {}
-            }
-        }
-        if freed.is_empty() && anchored.is_empty() {
-            continue;
-        }
+            })
+            .collect();
+        let following = follow_anchors(&inputs);
 
-        let placements = anchored_placements(after, new, &anchored);
         let Some(layer) = after.layer_mut(&layer_id) else {
             continue;
         };
         let mut changed = false;
         let mut structural = false;
-        for component in layer.components_iter_mut() {
-            let id = component.id();
-            let alignment = if freed.contains(&id) {
-                ComponentAlignment::Free
-            } else if anchored.contains(&id) {
-                ComponentAlignment::Anchored
-            } else {
-                component.alignment()
-            };
-            if component.alignment() != alignment {
-                component.set_alignment(alignment);
+        for (component, follow) in layer.components_iter_mut().zip(following) {
+            if component.alignment() != follow.alignment {
+                component.set_alignment(follow.alignment);
                 structural = true;
             }
-            if let Some(transform) = placements.get(&id) {
-                if component.transform() != transform {
-                    component.set_transform(*transform);
-                    changed = true;
-                }
+            if *component.transform() != follow.transform {
+                component.set_transform(follow.transform);
+                changed = true;
             }
         }
         if changed || structural {
@@ -131,62 +107,145 @@ pub(crate) fn realign_attached_components<'a>(
     changed_layers
 }
 
-/// Components of `layer` that sit exactly on their anchors in `font`.
-fn sitting_on_anchors(font: &Font, layer: &GlyphLayer) -> HashSet<ComponentId> {
-    let mut attached = HashSet::new();
-    let mut placed = Vec::new();
-    for component in layer.components_iter() {
-        let Some(base) = base_layer(font, &component.base_glyph_id(), layer) else {
-            continue;
-        };
-        let transform = component.transform();
-        if is_translation(transform) {
-            if let Some((dx, dy)) = anchor_aligned_offset(&placed, base) {
-                if (transform.translate_x - dx).abs() < EPSILON
-                    && (transform.translate_y - dy).abs() < EPSILON
-                {
-                    attached.insert(component.id());
-                }
-            }
-        }
-        placed.push((component.matrix(), base));
-    }
-    attached
+/// The component glyph's own anchors at `layer`'s source; none when it has no layer there.
+fn base_anchors<'font>(
+    font: &'font Font,
+    component: &Component,
+    layer: &GlyphLayer,
+) -> &'font [Anchor] {
+    font.glyph(&component.base_glyph_id())
+        .and_then(|glyph| glyph.layer_for_source(layer.source_id()))
+        .map_or(&[], GlyphLayer::anchors)
 }
 
-/// Where each anchored component of `layer` goes, placed in order from `font`'s anchors.
-fn anchored_placements(
-    font: &Font,
-    layer: &GlyphLayer,
-    anchored: &HashSet<ComponentId>,
-) -> HashMap<ComponentId, DecomposedTransform> {
-    let mut placements = HashMap::new();
-    let mut placed = Vec::new();
-    for component in layer.components_iter() {
-        let Some(base) = base_layer(font, &component.base_glyph_id(), layer) else {
+/// An anchor as alignment reads it: a name and a position in its glyph.
+pub trait AnchorLike {
+    fn anchor_name(&self) -> Option<&str>;
+    fn position(&self) -> (f64, f64);
+}
+
+impl AnchorLike for Anchor {
+    fn anchor_name(&self) -> Option<&str> {
+        self.name()
+    }
+
+    fn position(&self) -> (f64, f64) {
+        Anchor::position(self)
+    }
+}
+
+/// Returns the translation that puts a component's `_name` anchor on the
+/// matching `name` anchor of the most recently placed earlier component.
+///
+/// `placed` lists the earlier components with their absolute transforms and
+/// their glyphs' own anchors. The component's first `_name` anchor that finds a
+/// match wins, and within one placed glyph the last anchor with the name does.
+/// Returns `None` when no anchor pair matches.
+pub fn aligned_offset<A: AnchorLike>(
+    placed: &[(Transform, &[A])],
+    anchors: &[A],
+) -> Option<(f64, f64)> {
+    for anchor in anchors {
+        let Some(target_name) = anchor.anchor_name().and_then(|name| name.strip_prefix('_')) else {
             continue;
         };
-        let mut transform = *component.transform();
-        if anchored.contains(&component.id()) {
-            if let Some((dx, dy)) = anchor_aligned_offset(&placed, base) {
+        if target_name.is_empty() {
+            continue;
+        }
+
+        let target = placed.iter().rev().find_map(|(transform, anchors)| {
+            anchors
+                .iter()
+                .rev()
+                .find(|placed| placed.anchor_name() == Some(target_name))
+                .map(|placed| {
+                    let (x, y) = placed.position();
+                    transform.transform_point(x, y)
+                })
+        });
+        if let Some((target_x, target_y)) = target {
+            let (x, y) = anchor.position();
+            return Some((target_x - x, target_y - y));
+        }
+    }
+
+    None
+}
+
+/// One component of a composite, as it is now and as the workspace last accepted it.
+#[derive(Clone, Copy, Debug)]
+pub struct FollowingComponent<'a, A> {
+    pub alignment: ComponentAlignment,
+    pub transform: DecomposedTransform,
+    /// `None` for a component the edit added.
+    pub accepted_transform: Option<DecomposedTransform>,
+    /// The component glyph's own anchors now, and as last accepted.
+    pub anchors: &'a [A],
+    pub accepted_anchors: &'a [A],
+}
+
+/// Where a component goes after an edit, and whether it is anchored.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Following {
+    pub transform: DecomposedTransform,
+    pub alignment: ComponentAlignment,
+}
+
+/// Returns where each component of a composite goes after an edit.
+///
+/// The one rule for anchored components, applied by the workspace when an
+/// edit lands and by the editor while one is in progress. A free component,
+/// or one the edit moved by hand, stays where it was put and is then free. An
+/// anchored component, or an unset one whose accepted placement sat exactly on
+/// its anchors, is placed on the current anchors, in component order, so marks
+/// stacked on a moving mark follow it too; an unset one is then anchored.
+pub fn follow_anchors<A: AnchorLike>(components: &[FollowingComponent<'_, A>]) -> Vec<Following> {
+    let mut placed_accepted: Vec<(Transform, &[A])> = Vec::with_capacity(components.len());
+    let mut placed_now: Vec<(Transform, &[A])> = Vec::with_capacity(components.len());
+    let mut following = Vec::with_capacity(components.len());
+    for component in components {
+        let accepted = component.accepted_transform.unwrap_or(component.transform);
+        let moved = accepted != component.transform;
+        let alignment = match component.alignment {
+            ComponentAlignment::Free => ComponentAlignment::Free,
+            _ if moved => ComponentAlignment::Free,
+            ComponentAlignment::Anchored => ComponentAlignment::Anchored,
+            ComponentAlignment::Unset
+                if sits_on_anchors(&accepted, &placed_accepted, component.accepted_anchors) =>
+            {
+                ComponentAlignment::Anchored
+            }
+            ComponentAlignment::Unset => ComponentAlignment::Unset,
+        };
+
+        let mut transform = component.transform;
+        if alignment == ComponentAlignment::Anchored {
+            if let Some((dx, dy)) = aligned_offset(&placed_now, component.anchors) {
                 transform.translate_x = dx;
                 transform.translate_y = dy;
-                placements.insert(component.id(), transform);
             }
         }
+        following.push(Following {
+            transform,
+            alignment,
+        });
+        placed_accepted.push((accepted.to_matrix(), component.accepted_anchors));
         // Later components stack on this one where it now sits.
-        placed.push((transform.to_matrix(), base));
+        placed_now.push((transform.to_matrix(), component.anchors));
     }
-    placements
+    following
 }
 
-/// The component glyph's layer at `layer`'s source.
-fn base_layer<'font>(
-    font: &'font Font,
-    glyph_id: &GlyphId,
-    layer: &GlyphLayer,
-) -> Option<&'font GlyphLayer> {
-    font.glyph(glyph_id)?.layer_for_source(layer.source_id())
+fn sits_on_anchors<A: AnchorLike>(
+    transform: &DecomposedTransform,
+    placed: &[(Transform, &[A])],
+    anchors: &[A],
+) -> bool {
+    is_translation(transform)
+        && aligned_offset(placed, anchors).is_some_and(|(dx, dy)| {
+            (transform.translate_x - dx).abs() < EPSILON
+                && (transform.translate_y - dy).abs() < EPSILON
+        })
 }
 
 /// Whether the placement only moves the component, as anchor alignment places it.

@@ -77,6 +77,7 @@
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",
+    "@shift/wasm": "workspace:*",
     "regl": "^2.1.1"
   },
   "peerDependencies": {

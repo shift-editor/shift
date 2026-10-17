@@ -39,17 +39,17 @@ import type {
   GlyphFillHit,
   GlyphOptions,
 } from "../../types/glyph";
-import { followingPlacements } from "./anchors/anchorAttachment";
 import {
   propagateAnchors,
   type PropagatedAnchors,
   type PropagationAnchor,
-} from "./anchors/propagateAnchors";
+  followingPlacements,
+} from "../wasm/anchors";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
-import { evaluateVariationBasis } from "../interpolation/VariationBasis";
+import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import { Alignment } from "../transform/Alignment";
@@ -1648,9 +1648,7 @@ export class GlyphRenderModel {
         return {
           alignment: acceptedComponent.alignment,
           transform: component.transform,
-          matrix: component.matrix,
           acceptedTransform: acceptedComponent.transform,
-          acceptedMatrix: acceptedComponent.matrix,
           anchors,
           acceptedAnchors: baseAccepted[index]?.anchors ?? anchors,
         };

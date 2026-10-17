@@ -20,6 +20,7 @@
     "packages/types/src/generated",
     "packages/types/src/bridge/generated.ts",
     "packages/types/__fixtures__",
+    "packages/wasm/src/generated",
     "crates/shift-bridge/index.js",
     "crates/shift-bridge/index.d.ts",
     "**/vendor",

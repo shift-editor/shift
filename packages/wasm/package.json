@@ -1,0 +1,21 @@
+{
+  "name": "@shift/wasm",
+  "version": "0.0.1",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "description": "Shift's shared Rust rules for the editor, compiled from crates/shift-wasm",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:debug": "node scripts/build.mjs",
+    "build:e2e": "node scripts/build.mjs"
+  }
+}
