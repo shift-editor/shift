@@ -5,6 +5,7 @@ import { glyphTextItem as glyph } from "@shift/editor/text";
 import { layoutTestEditor, ltrRun } from "./testUtils";
 import { effect, signal } from "@shift/editor/signals";
 import type { GlyphName } from "@shift/types";
+import { kerningValueEdit } from "@shift/editor/model";
 
 describe("Positioner", () => {
   let editor: TestEditor;
@@ -95,6 +96,28 @@ describe("Positioner", () => {
       await addZeroWidthGlyph("fatha-ar");
 
       expect(positionedAfterA("fatha-ar").xAdvance).toBe(NONSPACING_MARK_EDITOR_ADVANCE);
+    });
+
+    it("kerns a glyph named like a mark against its neighbour, but not a nonspacing mark", async () => {
+      await addZeroWidthGlyph("x.comb");
+      await addZeroWidthGlyph("fatha-ar");
+      const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
+      const sourceId = editor.font.defaultSource.id;
+      editor.font.setKerningValues(
+        ["x.comb", "fatha-ar"].map((name) =>
+          kerningValueEdit(sourceId, { first: id("A"), second: id(name) }, -30),
+        ),
+        "Kern",
+      );
+      await editor.settle();
+
+      const kernAfterA = (name: string) => {
+        const run = ltrRun([glyph("A", 65), glyph(name, null)]);
+        return new Positioner().position(run, editor, signal(editor.font.defaultLocation()))
+          .glyphs[0]!.xKern;
+      };
+      expect(kernAfterA("x.comb")).toBe(-30);
+      expect(kernAfterA("fatha-ar")).toBe(0);
     });
 
     it("lays out a character with no glyph as spacing, then as a mark once the glyph exists", async () => {
