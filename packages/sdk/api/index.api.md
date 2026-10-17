@@ -1523,10 +1523,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DWlkqMcq.d.ts:2842:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DWlkqMcq.d.ts:2843:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DWlkqMcq.d.ts:2844:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-DWlkqMcq.d.ts:4928:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DyeX4ejH.d.ts:2842:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DyeX4ejH.d.ts:2843:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DyeX4ejH.d.ts:2844:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-DyeX4ejH.d.ts:4928:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

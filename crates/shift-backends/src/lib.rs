@@ -1,4 +1,3 @@
-mod anchor_kind;
 mod atomic;
 pub mod errors;
 pub mod export;
@@ -18,7 +17,6 @@ mod shift2fontir;
 mod source_glyph_ids;
 mod traits;
 
-pub use anchor_kind::{anchor_kind, AnchorKind};
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 pub use font_source::{

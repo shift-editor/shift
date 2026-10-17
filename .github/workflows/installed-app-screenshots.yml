@@ -57,6 +57,8 @@ jobs:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
           submodules: true
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -76,8 +78,10 @@ jobs:
         id: native-cache
         uses: actions/cache@v6
         with:
-          path: crates/shift-bridge/*.node
-          key: installed-native-v1-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
+          path: |
+            crates/shift-bridge/*.node
+            packages/wasm/src/generated
+          key: installed-native-v2-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
 
       - name: Install Rust toolchain
         if: steps.native-cache.outputs.cache-hit != 'true'

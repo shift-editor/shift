@@ -32,6 +32,7 @@ export default defineConfig({
       "@shift/types",
       "@shift/ui",
       "@shift/validation",
+      "@shift/wasm",
       "regl",
     ],
     neverBundle: [/^@base-ui\/react(?:\/|$)/, "react", "react-dom", "react/jsx-runtime"],

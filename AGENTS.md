@@ -107,8 +107,9 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ### Building
 
-- `pnpm build:native` - Build Rust native modules
+- `pnpm build:native` - Build Rust native modules (the NAPI addon and the WebAssembly module)
 - `pnpm build:native:debug` - Build native modules in debug mode
+- `pnpm build:wasm` - Build the editor's WebAssembly module (`crates/shift-wasm`) into `packages/wasm/src/generated/` (gitignored). `build:native` and the turbo typecheck, test, and desktop build tasks build it first; see `crates/shift-wasm/docs/DOCS.md`
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 
@@ -172,7 +173,8 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ## Architectural Constraints
 
-- **NEVER construct variation models in TypeScript.** Rust/Fontdrasil exclusively owns sample ordering, support construction, master influence, and delta decomposition. TypeScript may only evaluate transported compiled bases.
+- **NEVER construct variation models in TypeScript.** Rust/Fontdrasil exclusively owns sample ordering, support construction, master influence, and delta decomposition. TypeScript evaluates transported compiled bases only through `@shift/wasm`, which runs shift-font's evaluators.
+- **NEVER port a Rust rule to TypeScript.** When the editor needs a shift-font rule synchronously, export it from `crates/shift-wasm` and call it, rather than keeping a copy checked by an oracle. Where a call cannot cross (kerning precedence over the pending-edit overlay), check the TypeScript against a fixture Rust writes.
 - **Raw axis-mapping points stop at authoring boundaries.** `AxisMapping.points` may be read by Rust compilation and TypeScript mapping-authoring UI/model code only. Glyph, interpolation, source matching, metrics, editability, and atlas-weight evaluation must consume `AxisMappingBasis`, never `AxisMapping` or `AxisMappingPoint`.
 - **Compiled variation math carries no synthetic domain identity.** Transport `VariationBasis`, `VariationDelta`, and `GlyphVariation` as regions and numeric vectors. Never adapt imported deltas into `GlyphInterpolation`, invent `SourceId` values for them, or add an identity coefficient matrix.
 - **NEVER create Manager, Store, or Cache wrapper classes.** NativeBridge is the single interface to Rust. Do not wrap it in FooManager, FooStore, or FooCache. If you need derived data, compute it at the call site — NAPI calls are ~50μs.
