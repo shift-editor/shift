@@ -343,6 +343,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   /** Every gap of the run: before each line, between neighbours, and after each line. */
   *#gaps(node: TextRunNode, layout: TextLayout): Iterable<SpacingGap> {
     const { ascender, descender } = layout.metrics;
+    const modelFor = this.#models();
     for (const line of this.#lines(layout)) {
       const baseline = line[0]!.baseline;
       const top = baseline + ascender;
@@ -353,8 +354,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         const after = line[index];
         const leftBoundary = before ? before.left + before.glyph.xAdvance : after!.left;
         const rightBoundary = after ? after.left : leftBoundary;
-        const left = before ? this.#spacingSide(before, leftBoundary, "right") : null;
-        const right = after ? this.#spacingSide(after, rightBoundary, "left") : null;
+        const left = before ? this.#spacingSide(before, leftBoundary, "right", modelFor) : null;
+        const right = after ? this.#spacingSide(after, rightBoundary, "left", modelFor) : null;
         if (left || right) {
           yield { node, left, right, leftBoundary, rightBoundary, baseline, top, bottom };
         }
@@ -378,10 +379,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     placed: PlacedGlyph,
     boundary: number,
     facing: "left" | "right",
+    modelFor: (glyphId: GlyphId) => GlyphRenderModel | null,
   ): SpacingSide | null {
     const itemId = placed.glyph.sourceItemIds[0];
     const glyphId = placed.glyph.glyphId;
-    const bounds = glyphId ? this.#model(glyphId)?.bounds : null;
+    const bounds = glyphId ? modelFor(glyphId)?.bounds : null;
     if (!itemId || !glyphId || !bounds) return null;
 
     if (facing === "right") {
@@ -464,10 +466,15 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       color: ctx.canvas.theme.textRun.hoverOutline,
       widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
     };
+    // Occurrences of one glyph share its render model, so subscribe once per glyph.
+    const tracked = new Set<GlyphRenderModel>();
     for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
-      model.trackShape();
-      track(model.closedContoursPathCell);
-      track(model.openContoursPathCell);
+      if (!tracked.has(model)) {
+        tracked.add(model);
+        model.trackShape();
+        track(model.closedContoursPathCell);
+        track(model.openContoursPathCell);
+      }
       ctx.canvas.save();
       ctx.canvas.translate(placed.origin.x, placed.origin.y);
       this.#outline.drawDisplay(ctx.canvas, model, ctx.canvas.theme.glyph);
@@ -490,7 +497,13 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     );
   }
 
-  /** The glyphs the run draws and hits itself: every loaded glyph except an edited child's item. */
+  /**
+   * The glyphs the run draws and hits itself: every loaded glyph except an edited child's item.
+   *
+   * @remarks
+   * Resolves each distinct glyph's render model once per walk, so a reactive
+   * caller subscribes to each glyph's load once however often it occurs.
+   */
   *#runGlyphs(
     node: TextRunNode,
     layout: TextLayout,
@@ -500,10 +513,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     model: GlyphRenderModel;
   }> {
     const skip = this.#editedChildItemId(node);
+    const modelFor = this.#models();
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];
       if (!itemId || itemId === skip || !placed.glyph.glyphId) continue;
-      const model = this.#model(placed.glyph.glyphId);
+      const model = modelFor(placed.glyph.glyphId);
       if (model) yield { placed, itemId, model };
     }
   }
@@ -521,6 +535,26 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         .glyphForId(glyphId)
         ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
     );
+  }
+
+  /**
+   * Returns a lookup that resolves each glyph's render model once, for one walk over a run.
+   *
+   * @remarks
+   * A glyph's first lookup subscribes a reactive caller to its load, even when
+   * it misses, as {@link #model} does; later lookups return the remembered
+   * result. Use one lookup per walk: it does not see a glyph that loads during it.
+   */
+  #models(): (glyphId: GlyphId) => GlyphRenderModel | null {
+    const models = new Map<GlyphId, GlyphRenderModel | null>();
+    return (glyphId) => {
+      let model = models.get(glyphId);
+      if (model === undefined) {
+        model = this.#model(glyphId);
+        models.set(glyphId, model);
+      }
+      return model;
+    };
   }
 
   /** Hovered and selected items, which the run outlines. */
@@ -541,6 +575,18 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
 /** Whether a glyph-local point is inside a fill or within `radius` of a contour. */
 function hitsOutline(model: GlyphRenderModel, point: Point2D, radius: number): boolean {
+  // Beyond the outline's bounds grown by the radius, no contour is near and no fill holds the point.
+  const bounds = model.bounds;
+  if (
+    !bounds ||
+    point.x < bounds.min.x - radius ||
+    point.x > bounds.max.x + radius ||
+    point.y < bounds.min.y - radius ||
+    point.y > bounds.max.y + radius
+  ) {
+    return false;
+  }
+
   const onContour = model.contours.some((contour) =>
     contour.segments().some((segment) => segment.hit(point, radius)),
   );

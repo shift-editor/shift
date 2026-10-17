@@ -27,6 +27,21 @@ in font tooling projects for testing font loading, editing, and round-trip opera
 
 MutatorSans is licensed under the SIL Open Font License. See `LICENSE` in the mutatorsans directory.
 
+## AnchorDragBench
+
+`AnchorDragBench.glyphs` is a generated one-master font for text-run redraw and anchor-drag
+performance measurements. It has `a`–`z` (two rings and a stem each, with `top`/`bottom`
+anchors), five combining marks with `_top` and `top` anchors, and the composites `ǖ ǘ ǚ ü ú ù ū`
+built on `u` with their marks placed on anchors (`ǖ ǘ ǚ` stack a second mark on the first).
+Regenerate it with:
+
+```bash
+python3 generate_anchor_drag_bench.py AnchorDragBench.glyphs
+```
+
+Used by `apps/desktop/src/renderer/src/perf/textRunDraw.bench.ts` and the desktop `perf`
+Playwright project.
+
 ## Adding Binary Fonts
 
 To add TTF/OTF test files, you can build them from the UFO sources using fontmake:
