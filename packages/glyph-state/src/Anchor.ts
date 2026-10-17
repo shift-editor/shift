@@ -1,6 +1,12 @@
 import type { Point2D } from "@shift/geo";
-import type { AnchorData, AnchorId, GlyphStructure } from "@shift/types";
+import {
+  GLYPH_ANCHOR_VALUE_COUNT,
+  type AnchorData,
+  type AnchorId,
+  type GlyphStructure,
+} from "@shift/types";
 import { Point, type PointHit } from "./Point";
+import { anchorsValueOffset } from "./valueLayout";
 
 export interface AnchorHit extends PointHit {}
 
@@ -23,10 +29,10 @@ export class Anchor {
   }
 
   static fromStructure(structure: GlyphStructure, values: Float64Array): readonly Anchor[] {
-    let cursor = 1;
-    for (const contour of structure.contours) cursor += contour.points.length * 2;
-
-    return structure.anchors.map((anchor, index) => new Anchor(anchor, values, cursor + index * 2));
+    const cursor = anchorsValueOffset(structure);
+    return structure.anchors.map(
+      (anchor, index) => new Anchor(anchor, values, cursor + index * GLYPH_ANCHOR_VALUE_COUNT),
+    );
   }
 
   /**
@@ -37,11 +43,10 @@ export class Anchor {
    */
   static valueOffsets(structure: GlyphStructure): Map<AnchorId, number> {
     const offsets = new Map<AnchorId, number>();
-    let cursor = 1;
-    for (const contour of structure.contours) cursor += contour.points.length * 2;
+    let cursor = anchorsValueOffset(structure);
     for (const anchor of structure.anchors) {
       offsets.set(anchor.id, cursor);
-      cursor += 2;
+      cursor += GLYPH_ANCHOR_VALUE_COUNT;
     }
     return offsets;
   }

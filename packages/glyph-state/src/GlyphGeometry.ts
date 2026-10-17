@@ -18,6 +18,7 @@ import { Segment } from "./Segment";
 import type { SegmentHit } from "./Segment";
 import { Point } from "./Point";
 import type { PointHit } from "./Point";
+import { ADVANCE_VALUE_OFFSET } from "./valueLayout";
 
 export interface GlyphSidebearings {
   readonly lsb: number | null;
@@ -165,7 +166,7 @@ export class GlyphGeometry {
   }
 
   get xAdvance(): number {
-    return this.values[0] ?? 0;
+    return this.values[ADVANCE_VALUE_OFFSET] ?? 0;
   }
 
   get contours(): readonly Contour[] {
@@ -396,7 +397,7 @@ class GeometryCache {
     values: Float64Array,
     componentTransformKind: ComponentTransformKind,
   ) {
-    this.#xAdvance = values[0] ?? 0;
+    this.#xAdvance = values[ADVANCE_VALUE_OFFSET] ?? 0;
 
     let contours: readonly Contour[] | null = null;
     this.#contours = new IdIndex(

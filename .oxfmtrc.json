@@ -19,6 +19,7 @@
     "pnpm-lock.yaml",
     "packages/types/src/generated",
     "packages/types/src/bridge/generated.ts",
+    "packages/types/src/layout",
     "packages/types/__fixtures__",
     "crates/shift-bridge/index.js",
     "crates/shift-bridge/index.d.ts",

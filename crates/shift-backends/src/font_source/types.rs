@@ -423,6 +423,11 @@ pub struct AffineTransform {
 }
 
 impl AffineTransform {
+    /// Encodes the transform in [`shift_font::Transform::VALUE_FIELDS`] order.
+    pub fn to_values(&self) -> [f64; shift_font::Transform::VALUE_COUNT] {
+        [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
+    }
+
     pub const fn identity() -> Self {
         Self {
             xx: 1.0,
@@ -521,7 +526,10 @@ pub struct GlyphComponent {
 /// Immutable source shape with structure-separated interpolation values.
 ///
 /// Values are ordered as horizontal advance, contour point x/y pairs, anchor
-/// x/y pairs, then component affine transforms as xx/xy/yx/yy/dx/dy.
+/// x/y pairs, then component affine transforms in
+/// [`shift_font::Transform::VALUE_FIELDS`] order. This is the glyph value
+/// layout of [`shift_font::GlyphInterpolationValues`] with matrices in place
+/// of decomposed transforms.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlyphShape {
     pub contours: Box<[GlyphShapeContour]>,
@@ -532,13 +540,14 @@ pub struct GlyphShape {
 
 impl GlyphShape {
     pub fn expected_value_count(&self) -> usize {
-        1 + self
-            .contours
-            .iter()
-            .map(|contour| contour.points.len() * 2)
-            .sum::<usize>()
-            + self.anchors.len() * 2
-            + self.components.len() * 6
+        shift_font::GLYPH_ADVANCE_VALUE_COUNT
+            + self
+                .contours
+                .iter()
+                .map(|contour| contour.points.len() * shift_font::GLYPH_POINT_VALUE_COUNT)
+                .sum::<usize>()
+            + self.anchors.len() * shift_font::GLYPH_ANCHOR_VALUE_COUNT
+            + self.components.len() * shift_font::Transform::VALUE_COUNT
     }
 
     pub fn validate(&self) -> Result<(), FontReadError> {
@@ -710,6 +719,28 @@ mod tests {
             }]),
             Err(FontReadError::CoordinateOutOfRange { .. })
         ));
+    }
+
+    #[test]
+    fn affine_values_match_the_shared_matrix_encoding() {
+        let transform = AffineTransform {
+            xx: 1.0,
+            xy: 2.0,
+            yx: 3.0,
+            yy: 4.0,
+            dx: 5.0,
+            dy: 6.0,
+        };
+        let matrix = shift_font::Transform {
+            xx: 1.0,
+            xy: 2.0,
+            yx: 3.0,
+            yy: 4.0,
+            dx: 5.0,
+            dy: 6.0,
+        };
+
+        assert_eq!(transform.to_values(), matrix.to_values());
     }
 
     #[test]
