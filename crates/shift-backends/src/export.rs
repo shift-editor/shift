@@ -404,6 +404,106 @@ mod tests {
         assert_eq!(named("_top"), None);
     }
 
+    /// Propagates one glyph at one master with shift-font's port, recursing into components.
+    fn propagate_at(
+        font: &Font,
+        glyph_id: &shift_font::GlyphId,
+        source_id: &shift_font::SourceId,
+        categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::PropagationCategory>,
+    ) -> shift_font::anchor_propagation::PropagatedAnchors {
+        use shift_font::anchor_propagation::{
+            compiled_anchors, PropagationAnchor, PropagationComponent, PropagationGlyph,
+        };
+        let glyph = font.glyph(glyph_id).unwrap();
+        let layer = glyph.layer_for_source(source_id.clone()).unwrap();
+        let own: Vec<_> = layer
+            .anchors_iter()
+            .filter_map(|anchor| {
+                Some(PropagationAnchor {
+                    name: anchor.name()?.to_string(),
+                    x: anchor.x(),
+                    y: anchor.y(),
+                })
+            })
+            .collect();
+        let bases: Vec<_> = layer
+            .components_iter()
+            .map(|component| {
+                (
+                    propagate_at(font, &component.base_glyph_id(), source_id, categories),
+                    component.matrix(),
+                )
+            })
+            .collect();
+        let components: Vec<_> = bases
+            .iter()
+            .map(|(base, transform)| PropagationComponent {
+                anchors: Some(&base.anchors),
+                base_glyph_count: base.base_glyph_count,
+                transform: *transform,
+            })
+            .collect();
+        let category = categories.get(glyph_id).copied().unwrap_or_default();
+        let attaching = glyph
+            .layers()
+            .values()
+            .flat_map(|layer| layer.anchors())
+            .any(|anchor| !anchor.name().is_some_and(|name| name.starts_with('_')));
+        compiled_anchors(&PropagationGlyph {
+            anchors: &own,
+            components: &components,
+            is_mark: category.mark,
+            is_ligature: match category.ligature {
+                Some(crate::PropagationLigature::Explicit) => true,
+                Some(crate::PropagationLigature::Subcategory) => attaching,
+                None => false,
+            },
+        })
+    }
+
+    #[test]
+    fn shift_font_propagation_matches_fontc_for_every_glyph_at_every_master() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/fonts/AnchorPropagation.glyphs");
+        let font = crate::font_loader::FontLoader::new()
+            .read_font(path.to_str().unwrap())
+            .unwrap();
+        let categories = crate::propagation_categories(font.glyphs(), font.lib());
+        let sorted = |anchors: Vec<(String, f64, f64)>| {
+            let mut anchors = anchors;
+            anchors.sort_by(|a, b| a.0.cmp(&b.0));
+            anchors
+        };
+
+        let mut compared = 0;
+        for glyph in FontExporter::new().propagated_anchors(&font).unwrap() {
+            let glyph_id = font.glyph_by_name(&glyph.glyph_name).unwrap().id();
+            for source in glyph.sources {
+                let ours = propagate_at(&font, &glyph_id, &source.source_id, &categories);
+                assert_eq!(
+                    sorted(
+                        ours.anchors
+                            .into_iter()
+                            .map(|a| (a.name, a.x, a.y))
+                            .collect()
+                    ),
+                    sorted(
+                        source
+                            .anchors
+                            .into_iter()
+                            .map(|a| (a.name, a.x, a.y))
+                            .collect()
+                    ),
+                    "{} at {}",
+                    glyph.glyph_name,
+                    source.source_id
+                );
+                compared += 1;
+            }
+        }
+        assert!(compared > 40);
+    }
+
     #[test]
     fn version_string_omits_compiler_stamp() {
         let mut font = sample_variable_font();

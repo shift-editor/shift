@@ -79,6 +79,8 @@ jobs:
         with:
           fetch-depth: 1
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -109,8 +111,10 @@ jobs:
         id: native-cache
         uses: actions/cache@v6
         with:
-          path: crates/shift-bridge/*.node
-          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+          path: |
+            crates/shift-bridge/*.node
+            packages/wasm/src/generated
+          key: native-module-v2-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -130,6 +134,8 @@ jobs:
         with:
           fetch-depth: 1
           submodules: true
+
+      - uses: ./.github/actions/wasm-toolchain
 
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -190,8 +196,10 @@ jobs:
         id: native-cache
         uses: actions/cache/restore@v6
         with:
-          path: crates/shift-bridge/*.node
-          key: native-module-${{ runner.os }}-${{ hashFiles('crates/**', 'Cargo.lock') }}
+          path: |
+            crates/shift-bridge/*.node
+            packages/wasm/src/generated
+          key: native-module-v2-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -201,7 +209,9 @@ jobs:
         if: steps.native-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
-          path: crates/shift-bridge/*.node
+          path: |
+            crates/shift-bridge/*.node
+            packages/wasm/src/generated
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Run Playwright perf tests

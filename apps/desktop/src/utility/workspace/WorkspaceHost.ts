@@ -194,7 +194,6 @@ export class WorkspaceHost {
         this.#serialize(() => this.#bridge.resolveLayers(layerIds)),
       "workspace.layerMatch": ({ referenceLayerId, targetLayerId }) =>
         this.#serialize(() => this.#bridge.getLayerMatch(referenceLayerId, targetLayerId)),
-      "workspace.propagatedAnchors": () => this.#serialize(() => this.#bridge.propagatedAnchors()),
       "workspace.glyphProjections": ({ glyphIds }) =>
         this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
       "workspace.glyphPreviews": ({ glyphIds, location }) =>
