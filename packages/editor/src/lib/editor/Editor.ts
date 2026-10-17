@@ -2182,7 +2182,19 @@ export class Editor {
   }
 
   /**
-   * Adds an anchor at the pointer to the edited glyph in each source being edited, and selects it.
+   * Adds an anchor at the pointer to the edited glyph; see {@link addAnchorAt}.
+   *
+   * @returns `false` when there is no single edited glyph at an active source.
+   */
+  public addAnchorAtPointer(): boolean {
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
+    if (!node) return false;
+    return this.addAnchorAt(this.toLocal(node, this.getMousePosition()));
+  }
+
+  /**
+   * Adds an anchor to the edited glyph in each source being edited, and selects it.
    *
    * @remarks
    * The anchor is named `new` (or `new.1`, `new.2`, … when taken), as Glyphs
@@ -2190,26 +2202,73 @@ export class Editor {
    * into the active source and every other source selected for editing, at the
    * same position, as one undo step.
    *
+   * @param position - Glyph-local position; defaults to the middle of the advance on the baseline.
    * @returns `false` when there is no single edited glyph at an active source.
    */
-  public addAnchorAtPointer(): boolean {
+  public addAnchorAt(position?: Point2D): boolean {
     const activeSourceId = this.activeSourceId;
     const glyphNodes = this.scene.nodesOfKind("glyph");
     const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
     const layers = node ? this.#editingLayers(node.glyphId) : null;
-    if (!node || !activeSourceId || !layers) return false;
+    const active = layers?.find((layer) => layer.sourceId === activeSourceId);
+    if (!layers || !active) return false;
 
     const taken = new Set(layers.flatMap((layer) => layer.anchors.map((anchor) => anchor.name)));
     let name = "new";
     for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
-    const point = this.toLocal(node, this.getMousePosition());
-    const position = { x: Math.round(point.x), y: Math.round(point.y) };
+    const at = position ?? { x: active.xAdvance / 2, y: 0 };
+    const rounded = { x: Math.round(at.x), y: Math.round(at.y) };
 
     const added = this.transaction("Add Anchor", () =>
-      layers.map((layer) => [layer.sourceId, layer.addAnchor(name, position)] as const),
+      layers.map((layer) => [layer.sourceId, layer.addAnchor(name, rounded)] as const),
     );
     const activeAnchorId = added.find(([sourceId]) => sourceId === activeSourceId)?.[1];
     if (activeAnchorId) this.selection.select([activeAnchorId]);
+    return true;
+  }
+
+  /**
+   * Moves anchors to one coordinate on an axis, as one undo step.
+   *
+   * @remarks
+   * Each anchor in the active source moves to `value`; its matched anchor in
+   * every other source being edited moves by the same amount, as a move does,
+   * so sources keep their own positions relative to each other.
+   *
+   * @returns `false` when an anchor is not on the active source or its matches are not ready.
+   */
+  public setAnchorAxis(anchorIds: readonly AnchorId[], axis: "x" | "y", value: number): boolean {
+    const selection = this.positionSelection(anchorIds);
+    if (!selection) return false;
+
+    const reference = selection.targets.anchors ?? [];
+    const deltas = reference.map((id) => {
+      const anchor = selection.layer.anchor(id);
+      return anchor ? value - anchor[axis] : 0;
+    });
+    const move = (layer: GlyphLayer, ids: readonly AnchorId[]) =>
+      layer.applyPositionPatch(
+        ids.flatMap((id, index) => {
+          const anchor = layer.anchor(id);
+          const delta = deltas[index] ?? 0;
+          if (!anchor || delta === 0) return [];
+          return [
+            {
+              kind: "anchor" as const,
+              id,
+              x: axis === "x" ? anchor.x + delta : anchor.x,
+              y: axis === "y" ? anchor.y + delta : anchor.y,
+            },
+          ];
+        }),
+      );
+
+    this.transaction("Move Anchors", () => {
+      move(selection.layer, reference);
+      for (const target of selection.additionalLayers) {
+        move(target.layer, target.targets.anchors ?? []);
+      }
+    });
     return true;
   }
 
