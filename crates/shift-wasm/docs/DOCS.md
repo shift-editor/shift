@@ -28,12 +28,10 @@ crates/shift-wasm/src/
     kerning.rs       resolveKerning
     axis_mapping.rs  compileAxisMappings, mapLocation
 packages/wasm/
-  scripts/build.mjs   cargo build → wasm-bindgen → wasm-opt (npm binaryen) → base64 module.ts, for both modules (gitignored)
+  scripts/build.mjs   cargo build → wasm-bindgen → wasm-opt (npm binaryen) → base64 module.ts, for both modules into src/generated and src/generated-reference (gitignored)
   src/index.ts        instantiates the module and re-exports the glue
   src/reference.ts    @shift/wasm/reference: instantiates the reference module, for tests only
   src/embedded.ts     compiles a base64-embedded module synchronously
-  src/generated/      build output: glue, types, base64 module (gitignored)
-  src/generated-reference/  the same for the reference module (gitignored)
 .github/actions/wasm-toolchain/
   action.yml          installs the pinned wasm-bindgen on any CI runner
 packages/glyph-state/src/testing/
