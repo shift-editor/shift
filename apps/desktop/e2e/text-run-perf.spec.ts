@@ -8,8 +8,14 @@
  *
  * - **work**: main-thread time in the animation frames that handle the move
  *   (hit testing, preview, and every render pass), without waiting for vsync.
- * - **settled**: time from the move until the first frame with nothing left to
- *   do starts, so GPU rasterisation that holds back frames shows up, in vsyncs.
+ * - **frame**: main-thread time of the move's heaviest frame, from its first
+ *   animation-frame callback until the browser has painted it and committed
+ *   it to the compositor, which is where the canvas's draw calls are flushed
+ *   to the GPU process. A frame over the display's interval drops a frame.
+ *
+ * Time until the first idle frame is not a measure here: it counts the
+ * animation frames a move chains through (pointer, render, then UI updates),
+ * each a whole vsync, so it barely changes between 10 and 10K characters.
  *
  * Reports go to `perf-results/` beside the other perf specs. Ceilings are
  * provisional and generous; they catch a run that stops being interactive.
@@ -38,14 +44,14 @@ const DRAG_FRAMES = 60;
 /** Provisional p95 ceilings (ms) per measurement. */
 const CEILINGS: Record<string, number> = {
   "text run hover work (10K chars)": 1_000,
-  "text run hover settled (10K chars)": 1_000,
+  "text run hover frame (10K chars)": 1_000,
   "text run drag u.top work (10K chars)": 250,
-  "text run drag u.top settled (10K chars)": 250,
+  "text run drag u.top frame (10K chars)": 250,
 };
 
 interface FrameSample {
   work: number;
-  settled: number;
+  frame: number;
 }
 
 declare global {
@@ -53,8 +59,13 @@ declare global {
     __shiftFrameProbe?: {
       /** Start time and duration of every animation-frame callback since install. */
       callbacks: { start: number; duration: number }[];
-      /** Time of the latest pointer move, and when the first idle frame after it began. */
-      move: { at: number; settledAt: number | null } | null;
+      /** The latest pointer move: its time, its frames' start and end, and its first idle frame. */
+      move: {
+        at: number;
+        frameStarts: number[];
+        frameEnds: number[];
+        settledAt: number | null;
+      } | null;
     };
   }
 }
@@ -67,8 +78,12 @@ declare global {
  * the frame after, so animation-frame callbacks hold the hit test, the
  * preview, and every render pass. After a move the probe ticks once per
  * frame, unwrapped, and stops at the first frame in which no other callback
- * ran since its last tick. A frame starts only once the previous one has been
- * produced, so that time includes GPU work that holds frames back.
+ * ran since its last tick, so samples do not overlap.
+ *
+ * Each tick is the first callback of its frame, because it is requested
+ * before any callback for that frame. It posts a message, which runs as the
+ * next task, after the frame's style, layout, paint, and commit, so the gap
+ * from tick to message is the frame's main-thread time.
  */
 async function installFrameProbe(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -87,12 +102,23 @@ async function installFrameProbe(page: Page): Promise<void> {
     window.addEventListener(
       "pointermove",
       () => {
-        const move = { at: performance.now(), settledAt: null as number | null };
+        const move = {
+          at: performance.now(),
+          frameStarts: [] as number[],
+          frameEnds: [] as number[],
+          settledAt: null as number | null,
+        };
         probe.move = move;
+        const frameEnd = new MessageChannel();
+        frameEnd.port1.onmessage = ({ data }: MessageEvent<number>) => {
+          move.frameEnds[data] = performance.now();
+        };
         let last = move.at;
         let ticks = 0;
         const tick = () => {
           const now = performance.now();
+          frameEnd.port2.postMessage(move.frameStarts.length);
+          move.frameStarts.push(now);
           const busy = probe.callbacks.some(({ start }) => start >= last && start < now);
           last = now;
           ticks++;
@@ -114,7 +140,8 @@ async function installFrameProbe(page: Page): Promise<void> {
  * Moves the real pointer and times the frames that handle it.
  *
  * @returns `work`, the summed animation-frame callbacks from the move until the
- * first idle frame after it; `settled`, the time until that frame began.
+ * first idle frame after it; `frame`, the main-thread time of the heaviest
+ * frame in that span, including its rendering and commit.
  */
 async function measureMove(page: Page, position: Point2D): Promise<FrameSample> {
   await page.evaluate(() => {
@@ -122,17 +149,23 @@ async function measureMove(page: Page, position: Point2D): Promise<FrameSample> 
   });
   await page.mouse.move(position.x, position.y);
   // Poll on a timer: polling on animation frames would keep the probe from seeing an idle frame.
-  await page.waitForFunction(() => window.__shiftFrameProbe?.move?.settledAt != null, null, {
-    polling: 10,
-  });
+  await page.waitForFunction(
+    () => {
+      const move = window.__shiftFrameProbe?.move;
+      return move?.settledAt != null && move.frameEnds.length === move.frameStarts.length;
+    },
+    null,
+    { polling: 10 },
+  );
   return page.evaluate(() => {
     const probe = window.__shiftFrameProbe!;
-    const { at, settledAt } = probe.move!;
+    const { at, settledAt, frameStarts, frameEnds } = probe.move!;
     const work = probe.callbacks
       .filter((callback) => callback.start >= at && callback.start < settledAt!)
       .reduce((total, callback) => total + callback.duration, 0);
+    const frame = Math.max(...frameStarts.map((start, index) => frameEnds[index]! - start));
     probe.callbacks = [];
-    return { work, settled: settledAt! - at };
+    return { work, frame };
   });
 }
 
@@ -260,13 +293,13 @@ test.describe("Performance — 10K-character text run", () => {
     await installFrameProbe(page);
     expect(targets.length, "run glyphs on the canvas to hover").toBeGreaterThanOrEqual(2);
     const hoverWork: number[] = [];
-    const hoverSettled: number[] = [];
+    const hoverFrame: number[] = [];
     for (let frame = 0; frame < HOVER_FRAMES; frame++) {
       const target = targets[frame % targets.length]!;
       const sample = await measureMove(page, target.position);
       expect(await editor.hoverId()).toBe(target.itemId);
       hoverWork.push(sample.work);
-      hoverSettled.push(sample.settled);
+      hoverFrame.push(sample.frame);
     }
 
     // Drag: press on the anchor, start the drag, then time each move.
@@ -277,14 +310,14 @@ test.describe("Performance — 10K-character text run", () => {
     await expect.poll(() => editor.toolState()).toBe("translating");
 
     const dragWork: number[] = [];
-    const dragSettled: number[] = [];
+    const dragFrame: number[] = [];
     for (let frame = 0; frame < DRAG_FRAMES; frame++) {
       const sample = await measureMove(page, {
         x: from.x + 8 + frame * 2,
         y: from.y - 4 - (frame % 7),
       });
       dragWork.push(sample.work);
-      dragSettled.push(sample.settled);
+      dragFrame.push(sample.frame);
     }
     const dragged = await uTop(page);
     expect(dragged.x).toBeGreaterThan(before.x);
@@ -295,8 +328,8 @@ test.describe("Performance — 10K-character text run", () => {
     expect(await uTop(page)).toEqual(before);
 
     record("text run hover work (10K chars)", hoverWork);
-    record("text run hover settled (10K chars)", hoverSettled);
+    record("text run hover frame (10K chars)", hoverFrame);
     record("text run drag u.top work (10K chars)", dragWork);
-    record("text run drag u.top settled (10K chars)", dragSettled);
+    record("text run drag u.top frame (10K chars)", dragFrame);
   });
 });
