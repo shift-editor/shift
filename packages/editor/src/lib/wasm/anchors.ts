@@ -1,46 +1,9 @@
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
-import {
-  anchorKind as wasmAnchorKind,
-  followAnchors,
-  propagateAnchors as wasmPropagate,
-} from "@shift/wasm";
-import { inputView, nameFor, nameId, outputView } from "./buffers";
+import { followAnchors, propagateAnchors as wasmPropagate } from "@shift/wasm";
+import { nameFor, nameId } from "./names";
 
-/** An anchor's role in mark positioning, read from its name. */
-export type AnchorKind =
-  /** `top`: marks attach here. */
-  | { readonly kind: "base"; readonly group: string }
-  /** `_top`: attaches the mark to a base's `top`. */
-  | { readonly kind: "mark"; readonly group: string }
-  /** `top_2`: marks attach to the second component of a ligature. */
-  | { readonly kind: "ligature"; readonly group: string; readonly index: number }
-  /** `_3`: a ligature component with no anchors of its own. */
-  | { readonly kind: "componentMarker"; readonly index: number }
-  /** `caret_1`: a caret position inside a ligature. */
-  | { readonly kind: "caret"; readonly index: number }
-  /** `vcaret_1`: a vertical caret position inside a ligature. */
-  | { readonly kind: "vcaret"; readonly index: number }
-  /** `entry` and `exit`: where neighbouring glyphs join in cursive attachment. */
-  | { readonly kind: "entry" }
-  | { readonly kind: "exit" }
-  /** A name export rejects, such as `_`, `top_0`, or `_top_1`. */
-  | { readonly kind: "invalid" };
-
-/** Returns the kind fontc reads from an anchor name. */
-export function anchorKind(name: string): AnchorKind {
-  const result = wasmAnchorKind(name);
-  try {
-    const group = result.group;
-    const index = result.index;
-    return {
-      kind: result.kind,
-      ...(group === undefined ? {} : { group }),
-      ...(index === undefined ? {} : { index }),
-    } as AnchorKind;
-  } finally {
-    result.free();
-  }
-}
+/** An anchor's role in mark positioning, and the kind fontc reads from a name. */
+export { anchorKind, type AnchorKind } from "@shift/wasm";
 
 /** A named anchor position in a glyph's own coordinates. */
 export interface PropagationAnchor {
@@ -87,12 +50,7 @@ export interface PropagatedAnchors {
 export function propagateAnchors(glyph: PropagationGlyph): PropagatedAnchors {
   let length = 4 + glyph.anchors.length * 3;
   for (const component of glyph.components) length += 9 + (component.anchors?.length ?? 0) * 3;
-  // Interned before taking the view: a new name can grow module memory.
-  const ids = new Map<string, number>();
-  for (const anchors of [glyph.anchors, ...glyph.components.map((c) => c.anchors ?? [])]) {
-    for (const anchor of anchors) ids.set(anchor.name, nameId(anchor.name));
-  }
-  const input = inputView(length);
+  const input = new Float64Array(length);
   let at = 0;
   const write = (value: number) => {
     input[at++] = value;
@@ -100,7 +58,7 @@ export function propagateAnchors(glyph: PropagationGlyph): PropagatedAnchors {
   const writeAnchors = (anchors: readonly PropagationAnchor[]) => {
     write(anchors.length);
     for (const anchor of anchors) {
-      write(ids.get(anchor.name)!);
+      write(nameId(anchor.name));
       write(anchor.x);
       write(anchor.y);
     }
@@ -116,9 +74,7 @@ export function propagateAnchors(glyph: PropagationGlyph): PropagatedAnchors {
     writeAnchors(anchors ?? []);
   }
 
-  wasmPropagate();
-  // Copied first: looking up a new name can grow module memory and stale the view.
-  const output = outputView().slice();
+  const output = wasmPropagate(input);
   const anchors: PropagationAnchor[] = [];
   for (let index = 0; index < (output[1] ?? 0); index++) {
     const at = 2 + index * 3;
@@ -160,14 +116,7 @@ export function followingPlacements(components: readonly FollowingComponent[]): 
   for (const component of components) {
     length += 22 + (component.anchors.length + component.acceptedAnchors.length) * 3;
   }
-  // Interned before taking the view: a new name can grow module memory.
-  const ids = new Map<string, number>();
-  for (const component of components) {
-    for (const anchor of [...component.anchors, ...component.acceptedAnchors]) {
-      if (anchor.name !== undefined) ids.set(anchor.name, nameId(anchor.name));
-    }
-  }
-  const input = inputView(length);
+  const input = new Float64Array(length);
   let at = 0;
   const write = (value: number) => {
     input[at++] = value;
@@ -186,7 +135,7 @@ export function followingPlacements(components: readonly FollowingComponent[]): 
   const writeAnchors = (anchors: readonly AlignmentAnchor[]) => {
     write(anchors.length);
     for (const anchor of anchors) {
-      write(anchor.name === undefined ? -1 : ids.get(anchor.name)!);
+      write(anchor.name === undefined ? -1 : nameId(anchor.name));
       write(anchor.x);
       write(anchor.y);
     }
@@ -201,8 +150,7 @@ export function followingPlacements(components: readonly FollowingComponent[]): 
     writeAnchors(component.acceptedAnchors);
   }
 
-  followAnchors();
-  const output = outputView();
+  const output = followAnchors(input);
   const placements: MatModel[] = [];
   for (let index = 0; index < components.length; index++) {
     // Per component: alignment, then the decomposed transform.

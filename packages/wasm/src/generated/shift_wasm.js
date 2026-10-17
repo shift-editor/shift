@@ -1,66 +1,6 @@
 /* @ts-self-types="./shift_wasm.d.ts" */
 
 /**
- * An anchor's role in mark positioning, as export reads its name.
- */
-export class AnchorKind {
-    static __wrap(ptr) {
-        const obj = Object.create(AnchorKind.prototype);
-        obj.__wbg_ptr = ptr;
-        AnchorKindFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        AnchorKindFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_anchorkind_free(ptr, 0);
-    }
-    /**
-     * The attachment group, such as `top`, for base, mark, and ligature anchors.
-     * @returns {string | undefined}
-     */
-    get group() {
-        const ret = wasm.anchorkind_group(this.__wbg_ptr);
-        let v1;
-        if (ret[0] !== 0) {
-            v1 = getStringFromWasm0(ret[0], ret[1]).slice();
-            wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-        }
-        return v1;
-    }
-    /**
-     * The ligature component or caret number, counting from 1.
-     * @returns {number | undefined}
-     */
-    get index() {
-        const ret = wasm.anchorkind_index(this.__wbg_ptr);
-        return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
-    }
-    /**
-     * `base`, `mark`, `ligature`, `componentMarker`, `caret`, `vcaret`, `entry`, `exit`, or `invalid`.
-     * @returns {string}
-     */
-    get kind() {
-        let deferred1_0;
-        let deferred1_1;
-        try {
-            const ret = wasm.anchorkind_kind(this.__wbg_ptr);
-            deferred1_0 = ret[0];
-            deferred1_1 = ret[1];
-            return getStringFromWasm0(ret[0], ret[1]);
-        } finally {
-            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
-        }
-    }
-}
-if (Symbol.dispose) AnchorKind.prototype[Symbol.dispose] = AnchorKind.prototype.free;
-
-/**
  * Returns the kind fontc reads from an anchor name.
  * @param {string} name
  * @returns {AnchorKind}
@@ -69,7 +9,10 @@ export function anchorKind(name) {
     const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.anchorKind(ptr0, len0);
-    return AnchorKind.__wrap(ret);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -80,19 +23,16 @@ export function anchorKind(name) {
  * acceptedAnchorCount, (name, x, y)×`, transforms decomposed in interpolation
  * order and anchors the component glyph's own, a name of -1 for an unnamed
  * one. Output: per component `alignment, transform×9`.
+ * @param {Float64Array} input
+ * @returns {Float64Array}
  */
-export function followAnchors() {
-    wasm.followAnchors();
-}
-
-/**
- * Returns the address of an input buffer of `len` numbers, zeroed.
- * @param {number} len
- * @returns {number}
- */
-export function inputBuffer(len) {
-    const ret = wasm.inputBuffer(len);
-    return ret >>> 0;
+export function followAnchors(input) {
+    const ptr0 = passArrayF64ToWasm0(input, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.followAnchors(ptr0, len0);
+    var v2 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v2;
 }
 
 /**
@@ -126,39 +66,56 @@ export function nameOf(id) {
 }
 
 /**
- * The address of the last call's output.
- * @returns {number}
- */
-export function outputBuffer() {
-    const ret = wasm.outputBuffer();
-    return ret >>> 0;
-}
-
-/**
- * How many numbers the last call wrote.
- * @returns {number}
- */
-export function outputLength() {
-    const ret = wasm.outputLength();
-    return ret >>> 0;
-}
-
-/**
  * Propagates one glyph's anchors at one location, as export compiles them.
  *
  * Input: `isMark, isLigature, ownCount, (name, x, y)×ownCount, componentCount`,
  * then per component `hasAnchors, baseGlyphCount, xx, xy, yx, yy, dx, dy,
  * anchorCount, (name, x, y)×anchorCount`. Output: `baseGlyphCount, count,
  * (name, x, y)×count`. Names are interned ids.
+ * @param {Float64Array} input
+ * @returns {Float64Array}
  */
-export function propagateAnchors() {
-    wasm.propagateAnchors();
+export function propagateAnchors(input) {
+    const ptr0 = passArrayF64ToWasm0(input, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.propagateAnchors(ptr0, len0);
+    var v2 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v2;
 }
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
+        __wbg_Error_bce6d499ff0a4aff: function(arg0, arg1) {
+            const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
+        __wbg_String_8564e559799eccda: function(arg0, arg1) {
+            const ret = String(arg1);
+            const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len1 = WASM_VECTOR_LEN;
+            getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
+            getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
+        },
         __wbg___wbindgen_throw_9c31b086c2b26051: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
+        },
+        __wbg_new_02d162bc6cf02f60: function() {
+            const ret = new Object();
+            return ret;
+        },
+        __wbg_set_6be42768c690e380: function(arg0, arg1, arg2) {
+            arg0[arg1] = arg2;
+        },
+        __wbindgen_cast_0000000000000001: function(arg0) {
+            // Cast intrinsic for `F64 -> Externref`.
+            const ret = arg0;
+            return ret;
+        },
+        __wbindgen_cast_0000000000000002: function(arg0, arg1) {
+            // Cast intrinsic for `Ref(String) -> Externref`.
+            const ret = getStringFromWasm0(arg0, arg1);
+            return ret;
         },
         __wbindgen_init_externref_table: function() {
             const table = wasm.__wbindgen_externrefs;
@@ -176,9 +133,26 @@ function __wbg_get_imports() {
     };
 }
 
-const AnchorKindFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_anchorkind_free(ptr, 1));
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+
+let cachedDataViewMemory0 = null;
+function getDataViewMemory0() {
+    if (cachedDataViewMemory0 === null || cachedDataViewMemory0.buffer.detached === true || (cachedDataViewMemory0.buffer.detached === undefined && cachedDataViewMemory0.buffer !== wasm.memory.buffer)) {
+        cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
+    }
+    return cachedDataViewMemory0;
+}
+
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
+}
 
 function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);
@@ -190,6 +164,13 @@ function getUint8ArrayMemory0() {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
+}
+
+function passArrayF64ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 8, 8) >>> 0;
+    getFloat64ArrayMemory0().set(arg, ptr / 8);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
@@ -229,6 +210,12 @@ function passStringToWasm0(arg, malloc, realloc) {
     return ptr;
 }
 
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
+
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 cachedTextDecoder.decode();
 const MAX_SAFARI_DECODE_BYTES = 2146435072;
@@ -263,6 +250,8 @@ function __wbg_finalize_init(instance, module) {
     wasmInstance = instance;
     wasm = instance.exports;
     wasmModule = module;
+    cachedDataViewMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;
