@@ -130,6 +130,21 @@ pub struct AxisMappingBasis {
 }
 
 impl AxisMappingBasis {
+    /// Rebuilds a mapping basis compiled elsewhere, such as one the editor received.
+    pub fn new(
+        mapping_id: AxisMappingId,
+        input_axis_ids: Vec<AxisId>,
+        output_axis_ids: Vec<AxisId>,
+        basis: VariationBasis,
+    ) -> Self {
+        Self {
+            mapping_id,
+            input_axis_ids,
+            output_axis_ids,
+            basis,
+        }
+    }
+
     /// Returns the authored mapping identity that produced this basis.
     pub fn mapping_id(&self) -> AxisMappingId {
         self.mapping_id.clone()
@@ -150,11 +165,18 @@ impl AxisMappingBasis {
         &self.basis
     }
 
-    fn is_independent(&self) -> bool {
+    /// Whether the mapping maps one axis onto itself.
+    pub fn is_independent(&self) -> bool {
         self.input_axis_ids.len() == 1 && self.output_axis_ids == self.input_axis_ids
     }
 
-    fn evaluate(&self, location: &Location, axes: &[Axis]) -> CoreResult<Location> {
+    /// Maps a location through this basis, returning its output axes only.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CoreError::AxisNotFound`] when an output or region axis
+    /// is missing from `axes`.
+    pub fn evaluate(&self, location: &Location, axes: &[Axis]) -> CoreResult<Location> {
         let adjustments = self.basis.evaluate(location, axes, None)?;
         let mut result = Location::new();
 

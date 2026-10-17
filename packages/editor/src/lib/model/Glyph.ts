@@ -49,7 +49,7 @@ import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/varia
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
-import { evaluateVariationBasis } from "../interpolation/VariationBasis";
+import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import { Alignment } from "../transform/Alignment";
