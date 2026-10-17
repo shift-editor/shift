@@ -14,6 +14,7 @@ export type {
   MovePointsIntent,
   RemoveAnchorsIntent,
   RenameAnchorsIntent,
+  SetComponentAlignmentIntent,
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,

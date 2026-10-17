@@ -2238,6 +2238,44 @@ export class Editor {
     return true;
   }
 
+  /**
+   * Whether the selected components are all placed by their anchors.
+   *
+   * @returns `null` when the selection is not entirely components on the active source.
+   */
+  public selectedComponentsAnchored(): boolean | null {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return null;
+    const components = targets.layer.geometry.components;
+    return targets.componentIds.every(
+      (id) => components.find((component) => component.id === id)?.alignment === "anchored",
+    );
+  }
+
+  /**
+   * Places the selected components by their anchors, or frees them, in every
+   * source being edited, as one undo step.
+   *
+   * @remarks
+   * An anchored component moves onto its anchors now and follows them when
+   * they move; a free one stays where it is put.
+   *
+   * @returns `false` when the selection is not entirely components on the active source.
+   */
+  public async setSelectedComponentsAnchored(anchored: boolean): Promise<boolean> {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return false;
+
+    const alignment = anchored ? "anchored" : "free";
+    this.transaction(anchored ? "Align to Anchors" : "Stop Aligning to Anchors", () => {
+      for (const { layer, componentIds } of [targets, ...targets.additionalLayers]) {
+        layer.setComponentAlignment(componentIds, alignment);
+      }
+    });
+    await this.font.editCoordinator.settled();
+    return true;
+  }
+
   /** Whether the selection is entirely components that {@link decomposeSelection} can decompose. */
   public canDecomposeSelection(): boolean {
     return this.#componentTargets(this.selection.ids) !== null;

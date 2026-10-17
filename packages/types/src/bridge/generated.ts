@@ -587,6 +587,11 @@ export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
 }
 
 export interface ComponentGlyph {
@@ -716,7 +721,7 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -741,6 +746,7 @@ export interface FontIntent {
   renameAnchors?: RenameAnchorsIntent
   addComponent?: AddComponentIntent
   setComponentTransforms?: SetComponentTransformsIntent
+  setComponentAlignment?: SetComponentAlignmentIntent
   removeComponents?: RemoveComponentsIntent
   decomposeComponents?: DecomposeComponentsIntent
   reverseContour?: ReverseContourIntent
@@ -1208,6 +1214,16 @@ export interface ReverseContourIntent {
 
 export interface SetAxisMappingsIntent {
   mappings: Array<AxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface SetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
 }
 
 export interface SetComponentTransformsIntent {

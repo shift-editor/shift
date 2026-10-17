@@ -3,12 +3,28 @@ use crate::entity::{ComponentId, GlyphId};
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 
+/// Whether a component is placed by its anchors or by hand.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ComponentAlignment {
+    /// Not recorded, as in sources and documents from before alignment was:
+    /// the component counts as anchored while it sits exactly on its anchors.
+    #[default]
+    Unset,
+    /// Placed by its anchors: it follows them when they move.
+    Anchored,
+    /// Placed by hand: it stays where it was put.
+    Free,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Component {
     id: ComponentId,
     base_glyph_id: GlyphId,
     base_glyph_name: GlyphName,
     transform: DecomposedTransform,
+    #[serde(default)]
+    alignment: ComponentAlignment,
 }
 
 impl Identified for Component {
@@ -216,6 +232,7 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::identity(),
+            alignment: ComponentAlignment::Unset,
         }
     }
 
@@ -229,6 +246,7 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform,
+            alignment: ComponentAlignment::Unset,
         }
     }
 
@@ -243,6 +261,7 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform,
+            alignment: ComponentAlignment::Unset,
         }
     }
 
@@ -256,6 +275,7 @@ impl Component {
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::from_matrix(matrix),
+            alignment: ComponentAlignment::Unset,
         }
     }
 
@@ -281,6 +301,14 @@ impl Component {
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
         self.transform = transform;
+    }
+
+    pub fn alignment(&self) -> ComponentAlignment {
+        self.alignment
+    }
+
+    pub fn set_alignment(&mut self, alignment: ComponentAlignment) {
+        self.alignment = alignment;
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {

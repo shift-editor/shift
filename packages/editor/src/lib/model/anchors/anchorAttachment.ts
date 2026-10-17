@@ -46,6 +46,8 @@ export function anchorAlignedOffset(
 
 /** One component of a composite, as it is now and as the workspace last accepted it. */
 export interface FollowingComponent {
+  /** As the workspace last accepted it; see {@link followingPlacements}. */
+  readonly alignment: "anchored" | "free" | "unset";
   readonly transform: DecomposedTransform;
   readonly matrix: MatModel;
   readonly acceptedTransform: DecomposedTransform;
@@ -63,11 +65,11 @@ const EPSILON = 1e-6;
  *
  * @remarks
  * The rule shift-font applies when an edit lands (`anchor_attachment`), so a
- * drag shows what the commit will do. A component is attached when, as last
- * accepted, its placement is exactly the translation that aligns it on its
- * anchors; it then shows aligned on the current anchors, in component order,
- * so marks stacked on a moving mark follow it too. A component the edit
- * itself moves was placed by hand and shows where it was put.
+ * drag shows what the commit will do. An anchored component, or an `unset`
+ * one whose placement was last accepted exactly on its anchors, shows aligned
+ * on the current anchors, in component order, so marks stacked on a moving
+ * mark follow it too. A free component, or one the edit itself moves, shows
+ * where it was put.
  */
 export function followingPlacements(components: readonly FollowingComponent[]): MatModel[] {
   const placedAccepted: PlacedComponent[] = [];
@@ -88,7 +90,9 @@ export function followingPlacements(components: readonly FollowingComponent[]): 
 
 function isAttached(component: FollowingComponent, placed: readonly PlacedComponent[]): boolean {
   const accepted = component.acceptedTransform;
-  if (!sameTransform(component.transform, accepted) || !isTranslation(accepted)) return false;
+  if (component.alignment === "free" || !sameTransform(component.transform, accepted)) return false;
+  if (component.alignment === "anchored") return true;
+  if (!isTranslation(accepted)) return false;
   const offset = anchorAlignedOffset(placed, component.acceptedAnchors);
   return (
     offset !== null &&

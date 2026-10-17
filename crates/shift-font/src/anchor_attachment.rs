@@ -1,23 +1,27 @@
-//! Keeps components that sit on their anchors attached when the anchors move.
+//! Keeps anchored components on their anchors when the anchors move.
 //!
-//! A component is attached when its placement is exactly the translation that
-//! puts one of its `_name` anchors on the matching `name` anchor of an earlier
-//! component in the same layer, as adding a component places it. When an edit
-//! moves, adds, removes, or renames anchors, every component that was attached
-//! before the edit is placed again from the new anchors, in component order,
-//! so a mark stacked on a moved mark follows it too. A component the edit
-//! itself moved was placed by hand and stays where it was put; once off its
-//! anchors, a component no longer follows them.
+//! A component records whether it is placed by its anchors
+//! ([`ComponentAlignment`]). Adding one on matching anchors anchors it; moving
+//! one by hand frees it. A component with no record yet, as in imported
+//! sources, counts as anchored while its placement is exactly the translation
+//! that puts one of its `_name` anchors on the matching `name` anchor of an
+//! earlier component in the same layer, and is recorded as anchored once it
+//! follows. When an edit changes anchors, every anchored component is placed
+//! again from the new anchors, in component order, so a mark stacked on a
+//! moved mark follows it too.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::composite::anchor_aligned_offset;
-use crate::ir::{ComponentId, DecomposedTransform, Font, GlyphId, GlyphLayer, LayerId};
+use crate::ir::{
+    ComponentAlignment, ComponentId, DecomposedTransform, Font, GlyphId, GlyphLayer, LayerId,
+};
 
 /// Placements that differ by less than this are the same.
 const EPSILON: f64 = 1e-6;
 
-/// Places attached components again after an edit and returns the layers it changed.
+/// Frees components an edit moved and places anchored ones again; returns
+/// each layer it changed, and whether its components' alignment changed.
 ///
 /// `touched` lists the layers the edit itself changed. Candidates are those
 /// layers and every layer, at any source, whose components reference a glyph
@@ -26,7 +30,7 @@ pub(crate) fn realign_attached_components<'a>(
     before: &Font,
     after: &mut Font,
     touched: impl IntoIterator<Item = &'a LayerId>,
-) -> Vec<LayerId> {
+) -> Vec<(LayerId, bool)> {
     let touched: HashSet<&LayerId> = touched.into_iter().collect();
     let mut anchor_glyphs = HashSet::new();
     for &layer_id in &touched {
@@ -61,45 +65,74 @@ pub(crate) fn realign_attached_components<'a>(
         .map(|layer| layer.id())
         .collect();
 
-    let mut realigned = Vec::new();
+    let mut changed_layers = Vec::new();
     for layer_id in candidates {
         let (Some(old), Some(new)) = (before.layer(&layer_id), after.layer(&layer_id)) else {
             continue;
         };
-        let attached = attached_components(before, old)
-            .into_iter()
-            // A component the edit moved was placed by hand.
-            .filter(|id| {
-                old.component(id).map(|c| c.transform()) == new.component(id).map(|c| c.transform())
-            })
-            .collect::<HashSet<_>>();
-        if attached.is_empty() {
+        let moved = |id: &ComponentId| {
+            old.component(id).map(|c| c.transform()) != new.component(id).map(|c| c.transform())
+        };
+        let placed = sitting_on_anchors(before, old);
+        let mut freed = HashSet::new();
+        let mut anchored = HashSet::new();
+        for component in new.components_iter() {
+            let id = component.id();
+            let existed = old.component(&id).is_some();
+            match component.alignment() {
+                ComponentAlignment::Free => {}
+                // Moved by hand: it stays where it was put.
+                _ if existed && moved(&id) => {
+                    freed.insert(id);
+                }
+                ComponentAlignment::Anchored => {
+                    anchored.insert(id);
+                }
+                ComponentAlignment::Unset if placed.contains(&id) => {
+                    anchored.insert(id);
+                }
+                ComponentAlignment::Unset => {}
+            }
+        }
+        if freed.is_empty() && anchored.is_empty() {
             continue;
         }
 
-        let placements = attached_placements(after, new, &attached);
+        let placements = anchored_placements(after, new, &anchored);
         let Some(layer) = after.layer_mut(&layer_id) else {
             continue;
         };
         let mut changed = false;
+        let mut structural = false;
         for component in layer.components_iter_mut() {
-            let Some(transform) = placements.get(&component.id()) else {
-                continue;
+            let id = component.id();
+            let alignment = if freed.contains(&id) {
+                ComponentAlignment::Free
+            } else if anchored.contains(&id) {
+                ComponentAlignment::Anchored
+            } else {
+                component.alignment()
             };
-            if component.transform() != transform {
-                component.set_transform(*transform);
-                changed = true;
+            if component.alignment() != alignment {
+                component.set_alignment(alignment);
+                structural = true;
+            }
+            if let Some(transform) = placements.get(&id) {
+                if component.transform() != transform {
+                    component.set_transform(*transform);
+                    changed = true;
+                }
             }
         }
-        if changed {
-            realigned.push(layer_id);
+        if changed || structural {
+            changed_layers.push((layer_id, structural));
         }
     }
-    realigned
+    changed_layers
 }
 
 /// Components of `layer` that sit exactly on their anchors in `font`.
-fn attached_components(font: &Font, layer: &GlyphLayer) -> HashSet<ComponentId> {
+fn sitting_on_anchors(font: &Font, layer: &GlyphLayer) -> HashSet<ComponentId> {
     let mut attached = HashSet::new();
     let mut placed = Vec::new();
     for component in layer.components_iter() {
@@ -121,11 +154,11 @@ fn attached_components(font: &Font, layer: &GlyphLayer) -> HashSet<ComponentId> 
     attached
 }
 
-/// Where each attached component of `layer` goes, placed in order from `font`'s anchors.
-fn attached_placements(
+/// Where each anchored component of `layer` goes, placed in order from `font`'s anchors.
+fn anchored_placements(
     font: &Font,
     layer: &GlyphLayer,
-    attached: &HashSet<ComponentId>,
+    anchored: &HashSet<ComponentId>,
 ) -> HashMap<ComponentId, DecomposedTransform> {
     let mut placements = HashMap::new();
     let mut placed = Vec::new();
@@ -134,7 +167,7 @@ fn attached_placements(
             continue;
         };
         let mut transform = *component.transform();
-        if attached.contains(&component.id()) {
+        if anchored.contains(&component.id()) {
             if let Some((dx, dy)) = anchor_aligned_offset(&placed, base) {
                 transform.translate_x = dx;
                 transform.translate_y = dy;

@@ -392,6 +392,7 @@ export class Editor {
     // (undocumented)
     screenToScene(screen: ScreenPoint): ScenePoint;
     selectAll(): void;
+    selectedComponentsAnchored(): boolean | null;
     // Warning: (ae-forgotten-export) The symbol "Selection_2" needs to be exported by the entry point index.d.ts
     readonly selection: Selection_2;
     // Warning: (ae-forgotten-export) The symbol "LocalBounds" needs to be exported by the entry point index.d.ts
@@ -432,6 +433,7 @@ export class Editor {
     // (undocumented)
     setRenderTheme(theme: EditorRenderTheme): void;
     setRightSidebearing(value: number): void;
+    setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
     setSourceToDefault(): void;
     // (undocumented)
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
@@ -1521,10 +1523,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-C93j8gT5.d.ts:2822:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-C93j8gT5.d.ts:2823:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-C93j8gT5.d.ts:2824:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-C93j8gT5.d.ts:4900:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:2842:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:2843:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:2844:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-DWlkqMcq.d.ts:4928:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

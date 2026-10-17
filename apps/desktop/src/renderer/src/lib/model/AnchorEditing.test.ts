@@ -177,3 +177,44 @@ describe("adding, renaming, and deleting anchors", () => {
     expect(topX()).toBe(280);
   });
 });
+
+describe("aligning components to anchors", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = await new TestEditor().openSession(FIXTURE, "aacute");
+    for (const record of editor.font.glyphRecords()) await editor.font.loadGlyph(record.id);
+  });
+
+  const glyph = (name: string) =>
+    editor.glyphForId(editor.font.recordForName(name as GlyphName)!.id)!;
+  const layer = (name: string) => glyph(name).layerForSource(editor.font.defaultSource.id)!;
+  const acute = () => layer("aacute").geometry.components[1]!;
+  const moveATop = async (dx: number) => {
+    const a = layer("a");
+    const top = a.anchors.find((anchor) => anchor.name === "top")!;
+    const [position] = a.positionsFor([{ kind: "anchor", id: top.id }]);
+    a.applyPositionPatch([{ ...position!, x: position!.x + dx }]);
+    await editor.settle();
+  };
+
+  it("frees a component so it stays put, and anchors it back onto its anchors", async () => {
+    expect(acute().alignment).toBe("unset");
+    editor.selection.select([acute().id]);
+    expect(editor.selectedComponentsAnchored()).toBe(false);
+
+    expect(await editor.setSelectedComponentsAnchored(false)).toBe(true);
+    expect(acute().alignment).toBe("free");
+    await moveATop(30);
+    expect(acute().matrix.e).toBe(150);
+
+    editor.selection.select([acute().id]);
+    expect(await editor.setSelectedComponentsAnchored(true)).toBe(true);
+    expect(acute().alignment).toBe("anchored");
+    expect(acute().matrix.e).toBe(180);
+    expect(editor.selectedComponentsAnchored()).toBe(true);
+
+    await moveATop(10);
+    expect(acute().matrix.e).toBe(190);
+  });
+});

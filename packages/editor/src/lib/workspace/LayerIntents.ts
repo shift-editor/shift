@@ -10,6 +10,7 @@ import type {
   MovePointsIntent,
   RemoveAnchorsIntent,
   RenameAnchorsIntent,
+  SetComponentAlignmentIntent,
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
@@ -138,6 +139,13 @@ export class LayerIntents {
     return this.#editCoordinator.push({
       kind: "renameAnchors",
       renameAnchors: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  setComponentAlignment(payload: Payload<SetComponentAlignmentIntent>): PendingEditId {
+    return this.#editCoordinator.push({
+      kind: "setComponentAlignment",
+      setComponentAlignment: { layerId: this.#layerId, ...payload },
     });
   }
 

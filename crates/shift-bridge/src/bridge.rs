@@ -650,6 +650,7 @@ fn wire_source_shape(
         id: ComponentId::from_raw(format!("{glyph_id}-{selector}-m{index}")).to_string(),
         base_glyph_id,
         base_glyph_name,
+        alignment: Default::default(),
       })
     })
     .collect::<BridgeResult<Vec<_>>>()?;
@@ -2474,6 +2475,16 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         transforms: payload.transforms,
       })
     }
+    "setComponentAlignment" => {
+      let payload = intent
+        .set_component_alignment
+        .ok_or_else(|| missing("setComponentAlignment"))?;
+      Ok(FontIntent::SetComponentAlignment {
+        layer_id: parse::<LayerId>(&payload.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
+        alignment: shift_wire::bridges::napi::parse_alignment(Some(&payload.alignment)),
+      })
+    }
     "removeComponents" => {
       let payload = intent
         .remove_components
@@ -3011,6 +3022,7 @@ mod tests {
       rename_anchors: None,
       add_component: None,
       set_component_transforms: None,
+      set_component_alignment: None,
       remove_components: None,
       decompose_components: None,
       reverse_contour: None,

@@ -57,6 +57,14 @@ export class Component {
     return this.#data.baseGlyphName;
   }
 
+  /**
+   * Whether the component is placed by its anchors (`anchored`) or by hand
+   * (`free`); `unset` counts as anchored while it sits exactly on its anchors.
+   */
+  get alignment(): NonNullable<ComponentData["alignment"]> {
+    return this.#data.alignment ?? "unset";
+  }
+
   get transform(): ComponentTransform {
     if (this.#transformKind === "affine") return Mat.toDecomposed(this.matrix);
 

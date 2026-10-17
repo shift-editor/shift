@@ -12,9 +12,10 @@ use shift_font::composite::{
 use shift_font::{
     Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
     AxisMapping as IrAxisMapping, AxisMappingBasis as IrAxisMappingBasis, AxisMappingId,
-    AxisRole as IrAxisRole, Component as IrComponent, ComponentId, Contour as IrContour, ContourId,
-    Font as IrFont, FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph,
-    GlyphId, GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
+    AxisRole as IrAxisRole, Component as IrComponent, ComponentAlignment, ComponentId,
+    Contour as IrContour, ContourId, Font as IrFont, FontMetadata as IrFontMetadata,
+    FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
+    GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
     GuidelineId, InterpolationBasis as IrInterpolationBasis, KerningPosition as IrKerningPosition,
     KerningSide as IrKerningSide, LayerDifference as IrLayerDifference, LayerId,
@@ -1138,6 +1139,9 @@ pub struct ComponentData {
     pub id: String,
     pub base_glyph_id: GlyphId,
     pub base_glyph_name: GlyphName,
+    /// Whether the component is placed by its anchors or by hand.
+    #[serde(default)]
+    pub alignment: ComponentAlignment,
 }
 
 impl From<&IrComponent> for ComponentData {
@@ -1146,6 +1150,7 @@ impl From<&IrComponent> for ComponentData {
             id: component.id().to_string(),
             base_glyph_id: component.base_glyph_id(),
             base_glyph_name: component.base_glyph_name().clone(),
+            alignment: component.alignment(),
         }
     }
 }

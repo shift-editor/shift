@@ -615,6 +615,11 @@ export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
 }
 
 export interface NapiComponentGlyph {
@@ -747,7 +752,7 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -772,6 +777,7 @@ export interface NapiFontIntent {
   renameAnchors?: NapiRenameAnchorsIntent
   addComponent?: NapiAddComponentIntent
   setComponentTransforms?: NapiSetComponentTransformsIntent
+  setComponentAlignment?: NapiSetComponentAlignmentIntent
   removeComponents?: NapiRemoveComponentsIntent
   decomposeComponents?: NapiDecomposeComponentsIntent
   reverseContour?: NapiReverseContourIntent
@@ -1264,6 +1270,16 @@ export interface NapiReverseContourIntent {
 
 export interface NapiSetAxisMappingsIntent {
   mappings: Array<NapiAxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface NapiSetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
 }
 
 export interface NapiSetComponentTransformsIntent {

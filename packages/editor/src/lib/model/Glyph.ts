@@ -20,6 +20,7 @@ import type {
   Source,
   SourceId,
   Unicode,
+  SetComponentAlignmentIntent,
 } from "@shift/types";
 import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
 import {
@@ -386,6 +387,15 @@ class GlyphLayerWriter {
     const componentId = mintComponentId();
     this.#workspaceIntents.addComponent({ componentId, baseGlyphId });
     return componentId;
+  }
+
+  setComponentAlignment(
+    componentIds: readonly ComponentId[],
+    alignment: SetComponentAlignmentIntent["alignment"],
+  ): void {
+    if (componentIds.length === 0) return;
+    // Applied by the workspace: anchoring moves the component, which the echo carries.
+    this.#workspaceIntents.setComponentAlignment({ componentIds: [...componentIds], alignment });
   }
 
   setComponentTransforms(
@@ -1177,6 +1187,20 @@ export class GlyphLayer {
     return this.#writer.addComponent(baseGlyphId);
   }
 
+  /**
+   * Records whether components are placed by their anchors.
+   *
+   * @remarks
+   * An anchored component follows its anchors and anchoring one places it on
+   * them; a free one stays where it is put. Moving a component by hand frees it.
+   */
+  setComponentAlignment(
+    componentIds: readonly ComponentId[],
+    alignment: SetComponentAlignmentIntent["alignment"],
+  ): void {
+    this.#writer.setComponentAlignment(componentIds, alignment);
+  }
+
   /** @internal Commits direct component transforms through the workspace path. */
   setComponentTransforms(
     componentIds: readonly ComponentId[],
@@ -1622,6 +1646,7 @@ export class GlyphRenderModel {
         const acceptedComponent = acceptedComponents[index] ?? component;
         const anchors = this.geometryAt(component.baseGlyphId, location).anchors;
         return {
+          alignment: acceptedComponent.alignment,
           transform: component.transform,
           matrix: component.matrix,
           acceptedTransform: acceptedComponent.transform,

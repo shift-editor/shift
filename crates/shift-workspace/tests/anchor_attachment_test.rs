@@ -1,5 +1,6 @@
 use shift_font::{
-    AnchorId, AnchorSeed, ComponentId, FontIntent, FontIntentSet, GlyphId, LayerId, SourceId,
+    AnchorId, AnchorSeed, ComponentAlignment, ComponentId, FontIntent, FontIntentSet, GlyphId,
+    LayerId, SourceId,
 };
 use shift_workspace::{FontWorkspace, NewWorkspace};
 
@@ -222,4 +223,94 @@ fn moving_an_attached_component_by_hand_detaches_it_and_carries_marks_stacked_on
         }],
     );
     assert_eq!(translation(&f.workspace, &f.aacute, &f.acute), (170.0, 0.0));
+}
+
+fn alignment(
+    workspace: &FontWorkspace,
+    layer_id: &LayerId,
+    component: &ComponentId,
+) -> ComponentAlignment {
+    workspace
+        .font()
+        .layer(layer_id)
+        .unwrap()
+        .component(component)
+        .unwrap()
+        .alignment()
+}
+
+fn move_a_top(f: &mut Fixture, x: f64, y: f64) {
+    apply(
+        &mut f.workspace,
+        vec![FontIntent::MoveAnchors {
+            layer_id: f.a_layer.clone(),
+            anchor_ids: vec![f.a_top.clone()],
+            coords: vec![x, y],
+        }],
+    );
+}
+
+#[test]
+fn adding_on_anchors_records_anchored_and_moving_by_hand_records_free() {
+    let mut f = fixture();
+    move_a_top(&mut f, 250.0, 500.0);
+    assert_eq!(
+        alignment(&f.workspace, &f.aacute, &f.acute),
+        ComponentAlignment::Anchored
+    );
+    assert_eq!(
+        alignment(&f.workspace, &f.off_anchor, &f.off_acute),
+        ComponentAlignment::Free
+    );
+}
+
+#[test]
+fn anchoring_a_free_component_puts_it_back_on_its_anchors_and_it_follows_again() {
+    let mut f = fixture();
+    apply(
+        &mut f.workspace,
+        vec![FontIntent::SetComponentAlignment {
+            layer_id: f.off_anchor.clone(),
+            component_ids: vec![f.off_acute.clone()],
+            alignment: ComponentAlignment::Anchored,
+        }],
+    );
+    assert_eq!(
+        translation(&f.workspace, &f.off_anchor, &f.off_acute),
+        (150.0, 0.0)
+    );
+
+    move_a_top(&mut f, 300.0, 520.0);
+    assert_eq!(
+        translation(&f.workspace, &f.off_anchor, &f.off_acute),
+        (200.0, 20.0)
+    );
+}
+
+#[test]
+fn an_unrecorded_component_follows_while_it_sits_on_its_anchors_and_is_then_recorded() {
+    let mut f = fixture();
+    apply(
+        &mut f.workspace,
+        vec![FontIntent::SetComponentAlignment {
+            layer_id: f.aacute.clone(),
+            component_ids: vec![f.acute.clone(), f.tilde.clone()],
+            alignment: ComponentAlignment::Unset,
+        }],
+    );
+
+    move_a_top(&mut f, 300.0, 520.0);
+
+    assert_eq!(
+        translation(&f.workspace, &f.aacute, &f.acute),
+        (200.0, 20.0)
+    );
+    assert_eq!(
+        translation(&f.workspace, &f.aacute, &f.tilde),
+        (180.0, 220.0)
+    );
+    assert_eq!(
+        alignment(&f.workspace, &f.aacute, &f.acute),
+        ComponentAlignment::Anchored
+    );
 }
