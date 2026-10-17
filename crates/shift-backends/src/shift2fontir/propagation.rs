@@ -5,7 +5,6 @@ use fontir::propagate_anchors::propagate_all_anchors;
 use fontir::source::Source;
 use shift_font::SourceId;
 
-use super::axes::normalized_source_location;
 use super::source::ShiftIrSource;
 
 /// One glyph's anchors as export compiles them, at each master source it has a layer for.
@@ -48,15 +47,7 @@ impl ShiftIrSource {
 
         let snapshot = self.snapshot();
         let metadata = context.static_metadata.get();
-        let mut masters = Vec::new();
-        for source in snapshot.sources.iter().filter(|source| source.is_master()) {
-            if metadata.axes.is_empty() && source.id() != snapshot.default_source_id {
-                continue;
-            }
-            let location =
-                normalized_source_location(source, &snapshot.axes, &metadata.all_source_axes)?;
-            masters.push((source.id(), location));
-        }
+        let masters = snapshot.glyph_masters(&metadata)?;
 
         Ok(snapshot
             .glyphs
@@ -67,9 +58,9 @@ impl ShiftIrSource {
                     .try_get(&WorkId::Anchor(glyph.name().into()));
                 let sources = masters
                     .iter()
-                    .filter(|(source_id, _)| glyph.layer_for_source(source_id.clone()).is_some())
-                    .map(|(source_id, location)| PropagatedSourceAnchors {
-                        source_id: source_id.clone(),
+                    .filter(|(source, _)| glyph.layer_for_source(source.id()).is_some())
+                    .map(|(source, location)| PropagatedSourceAnchors {
+                        source_id: source.id(),
                         anchors: anchors
                             .iter()
                             .flat_map(|anchors| anchors.anchors.iter())

@@ -469,6 +469,37 @@ pub struct FontIntentSet {
     pub intents: Vec<FontIntent>,
 }
 
+impl FontIntentSet {
+    /// Layers whose anchors this set may change; components attached to them
+    /// in other glyphs follow.
+    pub fn layers_with_anchor_edits(&self) -> Vec<LayerId> {
+        self.intents
+            .iter()
+            .filter(|intent| intent.may_move_anchors())
+            .filter_map(FontIntent::layer_id)
+            .cloned()
+            .collect()
+    }
+}
+
+/// Layers an intent set touched, in first-touch order, with whether any
+/// touch changed structure.
+#[derive(Default)]
+struct TouchedLayers(Vec<(LayerId, bool)>);
+
+impl TouchedLayers {
+    fn touch(&mut self, layer_id: LayerId, structural: bool) {
+        match self.0.iter_mut().find(|(id, _)| *id == layer_id) {
+            Some((_, flag)) => *flag |= structural,
+            None => self.0.push((layer_id, structural)),
+        }
+    }
+
+    fn ids(&self) -> impl Iterator<Item = &LayerId> {
+        self.0.iter().map(|(layer_id, _)| layer_id)
+    }
+}
+
 /// One touched layer after an intent set applied.
 pub struct TouchedLayer {
     pub layer: Arc<GlyphLayer>,
@@ -523,23 +554,14 @@ impl Font {
     pub fn apply_intents(&mut self, set: FontIntentSet) -> CoreResult<AppliedIntents> {
         let before = self.clone();
         let mut after = self.clone();
-        let mut touched: Vec<(LayerId, bool)> = Vec::new();
+        let mut touched = TouchedLayers::default();
         let mut glyph_ids = Vec::new();
-
-        let touch =
-            |touched: &mut Vec<(LayerId, bool)>, layer_id: LayerId, structural| match touched
-                .iter_mut()
-                .find(|(id, _)| *id == layer_id)
-            {
-                Some((_, flag)) => *flag |= structural,
-                None => touched.push((layer_id, structural)),
-            };
 
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
                 let (layer_ids, glyph_id) = after.apply_font_intent(intent)?;
                 for layer_id in layer_ids {
-                    touch(&mut touched, layer_id, true);
+                    touched.touch(layer_id, true);
                 }
                 if let Some(glyph_id) = glyph_id {
                     if !glyph_ids.contains(&glyph_id) {
@@ -552,16 +574,12 @@ impl Font {
             let layer_id = layer_id.clone();
             let structural = intent.structural();
             after.apply_intent(intent)?;
-            touch(&mut touched, layer_id, structural);
+            touched.touch(layer_id, structural);
         }
 
         // Components sitting on anchors this set moved follow them, in the same undo step.
-        let edited = touched
-            .iter()
-            .map(|(layer_id, _)| layer_id.clone())
-            .collect::<Vec<_>>();
-        for layer_id in realign_attached_components(&before, &mut after, &edited) {
-            touch(&mut touched, layer_id, false);
+        for layer_id in realign_attached_components(&before, &mut after, touched.ids()) {
+            touched.touch(layer_id, false);
         }
 
         let mut changes = FontChangeSet::default();
@@ -674,7 +692,7 @@ impl Font {
         }
 
         let mut layers = Vec::new();
-        for (layer_id, structural) in touched {
+        for (layer_id, structural) in touched.0 {
             let original_owner = before.glyph_id_by_layer(&layer_id);
             let replacement_owner = after.glyph_id_by_layer(&layer_id);
             let glyph_id = match (&original_owner, &replacement_owner) {

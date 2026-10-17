@@ -22,13 +22,14 @@ const EPSILON: f64 = 1e-6;
 /// `touched` lists the layers the edit itself changed. Candidates are those
 /// layers and every layer, at any source, whose components reference a glyph
 /// whose anchors changed; their component glyphs must be loaded in both fonts.
-pub(crate) fn realign_attached_components(
+pub(crate) fn realign_attached_components<'a>(
     before: &Font,
     after: &mut Font,
-    touched: &[LayerId],
+    touched: impl IntoIterator<Item = &'a LayerId>,
 ) -> Vec<LayerId> {
+    let touched: HashSet<&LayerId> = touched.into_iter().collect();
     let mut anchor_glyphs = HashSet::new();
-    for layer_id in touched {
+    for &layer_id in &touched {
         let (Some(old), Some(new)) = (before.layer(layer_id), after.layer(layer_id)) else {
             continue;
         };
@@ -36,7 +37,6 @@ pub(crate) fn realign_attached_components(
             anchor_glyphs.extend(after.glyph_id_by_layer(layer_id));
         }
     }
-    let touched: HashSet<&LayerId> = touched.iter().collect();
     // Most edits move points: nothing to follow unless anchors or stacked components changed.
     if anchor_glyphs.is_empty()
         && !touched.iter().any(|layer_id| {

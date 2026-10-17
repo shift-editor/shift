@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use fontdrasil::coords::NormalizedLocation;
 use fontir::error::Error;
+use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
@@ -15,7 +16,7 @@ use crate::glyph_category::{gdef_classes, GlyphCategories};
 use crate::traits::FontView;
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use super::axes::{to_ir_axes, AxisConversionError};
+use super::axes::{normalized_source_location, to_ir_axes, AxisConversionError};
 use super::glyph::GlyphWork;
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
@@ -82,6 +83,30 @@ pub(super) struct ShiftSnapshot {
     /// Glyphs in the Mark category, whatever their subcategory; anchor
     /// propagation returns such a glyph's own anchors as they are.
     pub mark_category_glyphs: HashSet<String>,
+}
+
+impl ShiftSnapshot {
+    /// The master sources a glyph compiles at, with their normalized locations.
+    ///
+    /// A font without axes compiles its default source only.
+    ///
+    /// # Errors
+    ///
+    /// Returns the conversion error when a source location cannot be normalized.
+    pub(super) fn glyph_masters(
+        &self,
+        metadata: &StaticMetadata,
+    ) -> Result<Vec<(&ShiftSource, NormalizedLocation)>, Error> {
+        self.sources
+            .iter()
+            .filter(|source| source.is_master())
+            .filter(|source| !metadata.axes.is_empty() || source.id() == self.default_source_id)
+            .map(|source| {
+                normalized_source_location(source, &self.axes, &metadata.all_source_axes)
+                    .map(|location| (source, location))
+            })
+            .collect()
+    }
 }
 
 impl ShiftIrSource {
