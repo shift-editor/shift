@@ -2202,22 +2202,20 @@ export class Editor {
    * into the active source and every other source selected for editing, at the
    * same position, as one undo step.
    *
-   * @param position - Glyph-local position; defaults to the middle of the advance on the baseline.
+   * @param position - Glyph-local position.
    * @returns `false` when there is no single edited glyph at an active source.
    */
-  public addAnchorAt(position?: Point2D): boolean {
+  public addAnchorAt(position: Point2D): boolean {
     const activeSourceId = this.activeSourceId;
     const glyphNodes = this.scene.nodesOfKind("glyph");
     const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
     const layers = node ? this.#editingLayers(node.glyphId) : null;
-    const active = layers?.find((layer) => layer.sourceId === activeSourceId);
-    if (!layers || !active) return false;
+    if (!layers || !activeSourceId) return false;
 
     const taken = new Set(layers.flatMap((layer) => layer.anchors.map((anchor) => anchor.name)));
     let name = "new";
     for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
-    const at = position ?? { x: active.xAdvance / 2, y: 0 };
-    const rounded = { x: Math.round(at.x), y: Math.round(at.y) };
+    const rounded = { x: Math.round(position.x), y: Math.round(position.y) };
 
     const added = this.transaction("Add Anchor", () =>
       layers.map((layer) => [layer.sourceId, layer.addAnchor(name, rounded)] as const),

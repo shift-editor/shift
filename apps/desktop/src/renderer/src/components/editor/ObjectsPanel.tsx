@@ -1,10 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { computed, track, useSignalState } from "@shift/editor/signals";
 import type { SelectableId } from "@shift/types";
-import { Tooltip } from "@shift/ui";
-import { SidebarActionButton } from "@/components/sidebar";
-import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
-import PlusIcon from "@/assets/general/plus.svg";
+import { useEditor } from "@/workspace/WorkspaceContext";
 import type { ObjectTree, ObjectTreeSectionId } from "@/types/objectTree";
 import { useListSelection } from "@/hooks/useListSelection";
 import { createObjectTree, ObjectTreeCache } from "./object-tree/createObjectTree";
@@ -14,7 +11,6 @@ import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 
 export const ObjectsPanel = () => {
   const editor = useEditor();
-  const canAuthor = useFontSession().mode === "workspace";
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -185,21 +181,6 @@ export const ObjectsPanel = () => {
             <ObjectSectionRow
               key={section.id}
               title={section.label}
-              actions={
-                section.id === "anchors" ? (
-                  <Tooltip content="Add anchor">
-                    <SidebarActionButton
-                      label="Add anchor"
-                      aria-disabled={!canAuthor}
-                      onClick={() => {
-                        if (canAuthor) editor.addAnchorAt();
-                      }}
-                    >
-                      <PlusIcon className="h-3 w-3" />
-                    </SidebarActionButton>
-                  </Tooltip>
-                ) : undefined
-              }
               open={open}
               onOpenChange={(open) => {
                 setCollapsedSectionIds((previous) => {

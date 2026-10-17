@@ -134,16 +134,6 @@ describe("adding, renaming, and deleting anchors", () => {
     expect(at(other, "top").x).toBe(otherTopBefore + (300 - activeTopBefore));
   });
 
-  it("adds an anchor on the baseline at the middle of the advance", async () => {
-    const layer = glyph("a").layerForSource(sources().active)!;
-
-    expect(editor.addAnchorAt()).toBe(true);
-    await editor.settle();
-
-    const added = layer.anchors.find((anchor) => anchor.name === "new")!;
-    expect({ x: added.x, y: added.y }).toEqual({ x: Math.round(layer.xAdvance / 2), y: 0 });
-  });
-
   it("moves components attached to a moved anchor, in composites the editor holds", async () => {
     const source = editor.font.defaultSource;
     const aacute = glyph("aacute").layerForSource(source.id)!;

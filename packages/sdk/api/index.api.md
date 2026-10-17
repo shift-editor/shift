@@ -200,7 +200,7 @@ export class Editor {
     get activeSourceId(): SourceId | null;
     // (undocumented)
     get activeSourceIdCell(): Signal<SourceId | null>;
-    addAnchorAt(position?: Point2D): boolean;
+    addAnchorAt(position: Point2D): boolean;
     addAnchorAtPointer(): boolean;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
     // Warning: (ae-forgotten-export) The symbol "Canvas2DSurface" needs to be exported by the entry point index.d.ts
@@ -1521,10 +1521,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-Dp7ksTMM.d.ts:2822:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Dp7ksTMM.d.ts:2823:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-Dp7ksTMM.d.ts:2824:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-Dp7ksTMM.d.ts:4900:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-C93j8gT5.d.ts:2822:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-C93j8gT5.d.ts:2823:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-C93j8gT5.d.ts:2824:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-C93j8gT5.d.ts:4900:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
