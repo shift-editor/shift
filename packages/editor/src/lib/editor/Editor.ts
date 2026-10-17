@@ -92,6 +92,7 @@ import { EditorHistory } from "./history/EditorHistory";
 import type { Font } from "../model/Font";
 import type { FontStore } from "../model/FontStore";
 import type { Glyph, GlyphLayer } from "../model/Glyph";
+import { AnchorEdits } from "../model/anchors/AnchorEdits";
 import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
@@ -638,7 +639,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1) return null;
 
-    const layers = this.#editingLayers(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
     if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
@@ -680,7 +681,7 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;
 
-    const layers = this.#editingLayers(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
     if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
@@ -693,23 +694,6 @@ export class Editor {
     this.selection.select([activeComponentId]);
     this.setActiveTool("select");
     return activeComponentId;
-  }
-
-  /**
-   * Returns the edited glyph's layer at each source selected for editing.
-   *
-   * @returns `null` when the glyph lacks a layer at one of them.
-   */
-  #editingLayers(glyphId: GlyphId): GlyphLayer[] | null {
-    const glyph = this.#fontStore.glyphForId(glyphId);
-    if (!glyph) return null;
-
-    const editingSourceIds = this.#editingSourceIdsCell.peek();
-    const layers = this.font.sources
-      .filter(({ id }) => editingSourceIds.has(id))
-      .map(({ id }) => glyph.layerForSource(id));
-    if (layers.length !== editingSourceIds.size) return null;
-    return layers.every((layer) => layer !== null) ? layers : null;
   }
 
   public get externalLocationCell(): Signal<ExternalAxisLocation> {
@@ -2156,12 +2140,7 @@ export class Editor {
     const pointIds = selection.targets.points ?? [];
     const anchorIds = selection.targets.anchors ?? [];
     if (pointIds.length === 0 && anchorIds.length > 0) {
-      this.transaction("Delete Anchors", () => {
-        selection.layer.removeAnchors(anchorIds);
-        for (const target of selection.additionalLayers) {
-          target.layer.removeAnchors(target.targets.anchors ?? []);
-        }
-      });
+      this.transaction("Delete Anchors", () => AnchorEdits.fromSelection(selection).remove());
       await this.#clearSelectionAfterEdit();
       return true;
     }
@@ -2209,18 +2188,11 @@ export class Editor {
     const activeSourceId = this.activeSourceId;
     const glyphNodes = this.scene.nodesOfKind("glyph");
     const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
-    const layers = node ? this.#editingLayers(node.glyphId) : null;
+    const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
-    const taken = new Set(layers.flatMap((layer) => layer.anchors.map((anchor) => anchor.name)));
-    let name = "new";
-    for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
-    const rounded = { x: Math.round(position.x), y: Math.round(position.y) };
-
-    const added = this.transaction("Add Anchor", () =>
-      layers.map((layer) => [layer.sourceId, layer.addAnchor(name, rounded)] as const),
-    );
-    const activeAnchorId = added.find(([sourceId]) => sourceId === activeSourceId)?.[1];
+    const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, position));
+    const activeAnchorId = added.get(activeSourceId);
     if (activeAnchorId) this.selection.select([activeAnchorId]);
     return true;
   }
@@ -2239,34 +2211,9 @@ export class Editor {
     const selection = this.positionSelection(anchorIds);
     if (!selection) return false;
 
-    const reference = selection.targets.anchors ?? [];
-    const deltas = reference.map((id) => {
-      const anchor = selection.layer.anchor(id);
-      return anchor ? value - anchor[axis] : 0;
-    });
-    const move = (layer: GlyphLayer, ids: readonly AnchorId[]) =>
-      layer.applyPositionPatch(
-        ids.flatMap((id, index) => {
-          const anchor = layer.anchor(id);
-          const delta = deltas[index] ?? 0;
-          if (!anchor || delta === 0) return [];
-          return [
-            {
-              kind: "anchor" as const,
-              id,
-              x: axis === "x" ? anchor.x + delta : anchor.x,
-              y: axis === "y" ? anchor.y + delta : anchor.y,
-            },
-          ];
-        }),
-      );
-
-    this.transaction("Move Anchors", () => {
-      move(selection.layer, reference);
-      for (const target of selection.additionalLayers) {
-        move(target.layer, target.targets.anchors ?? []);
-      }
-    });
+    this.transaction("Move Anchors", () =>
+      AnchorEdits.fromSelection(selection).setAxis(axis, value),
+    );
     return true;
   }
 
@@ -2287,14 +2234,7 @@ export class Editor {
     const newName = name.trim();
     if (!selection || newName === "" || newName === current) return false;
 
-    this.transaction("Rename Anchor", () => {
-      selection.layer.renameAnchors(new Map([[anchorId, newName]]));
-      for (const target of selection.additionalLayers) {
-        target.layer.renameAnchors(
-          new Map((target.targets.anchors ?? []).map((id) => [id, newName] as const)),
-        );
-      }
-    });
+    this.transaction("Rename Anchor", () => AnchorEdits.fromSelection(selection).rename(newName));
     return true;
   }
 
