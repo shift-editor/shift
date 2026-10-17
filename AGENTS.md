@@ -112,6 +112,11 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 
+### Generated Code
+
+- `pnpm generate:bridge-types` - Regenerate `@shift/types` bridge DTOs from `shift-bridge` declarations
+- `pnpm generate:from-rust` - Regenerate Rust-derived layouts in `packages/types/src/layout/` and Rust-generated fixtures
+
 ### Glyph Info
 
 - `pnpm generate:glyph-info` - Generate glyph data, decomposition, charsets, and FTS5 search index
