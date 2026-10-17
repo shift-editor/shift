@@ -1,12 +1,14 @@
 import { Bounds, type Bounds as BoundsType, Vec2, type Point2D } from "@shift/geo";
-import type {
-  AnchorId,
-  ComponentId,
-  ComponentTransformKind,
-  ContourId,
-  GlyphState,
-  GlyphStructure,
-  PointId,
+import {
+  GLYPH_ADVANCE_VALUE_OFFSET,
+  GLYPH_POSITION_VALUE_OFFSETS,
+  type AnchorId,
+  type ComponentId,
+  type ComponentTransformKind,
+  type ContourId,
+  type GlyphState,
+  type GlyphStructure,
+  type PointId,
 } from "@shift/types";
 import { Anchor } from "./Anchor";
 import type { AnchorHit } from "./Anchor";
@@ -18,7 +20,6 @@ import { Segment } from "./Segment";
 import type { SegmentHit } from "./Segment";
 import { Point } from "./Point";
 import type { PointHit } from "./Point";
-import { ADVANCE_VALUE_OFFSET } from "./valueLayout";
 
 export interface GlyphSidebearings {
   readonly lsb: number | null;
@@ -166,7 +167,7 @@ export class GlyphGeometry {
   }
 
   get xAdvance(): number {
-    return this.values[ADVANCE_VALUE_OFFSET] ?? 0;
+    return this.values[GLYPH_ADVANCE_VALUE_OFFSET] ?? 0;
   }
 
   get contours(): readonly Contour[] {
@@ -348,15 +349,15 @@ export class GlyphGeometry {
         case "point": {
           const offset = pointOffsets.get(update.id);
           if (offset === undefined) break;
-          values[offset] = update.x;
-          values[offset + 1] = update.y;
+          values[offset + GLYPH_POSITION_VALUE_OFFSETS.x] = update.x;
+          values[offset + GLYPH_POSITION_VALUE_OFFSETS.y] = update.y;
           break;
         }
         case "anchor": {
           const offset = anchorOffsets.get(update.id);
           if (offset === undefined) break;
-          values[offset] = update.x;
-          values[offset + 1] = update.y;
+          values[offset + GLYPH_POSITION_VALUE_OFFSETS.x] = update.x;
+          values[offset + GLYPH_POSITION_VALUE_OFFSETS.y] = update.y;
           break;
         }
       }
@@ -397,7 +398,7 @@ class GeometryCache {
     values: Float64Array,
     componentTransformKind: ComponentTransformKind,
   ) {
-    this.#xAdvance = values[ADVANCE_VALUE_OFFSET] ?? 0;
+    this.#xAdvance = values[GLYPH_ADVANCE_VALUE_OFFSET] ?? 0;
 
     let contours: readonly Contour[] | null = null;
     this.#contours = new IdIndex(

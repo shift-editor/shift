@@ -10,9 +10,6 @@ import {
   type GlyphStructure,
 } from "@shift/types";
 
-/** Value-buffer offset of the glyph's horizontal advance. */
-export const ADVANCE_VALUE_OFFSET = 0;
-
 /** Value-buffer offset of the first contour point's `x` coordinate. */
 export const CONTOURS_VALUE_OFFSET = GLYPH_ADVANCE_VALUE_COUNT;
 

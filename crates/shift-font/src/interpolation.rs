@@ -28,8 +28,8 @@ pub use metrics::{
     SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
 };
 pub use values::{
-    GlyphInterpolationValues, GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ANCHOR_VALUE_COUNT,
-    GLYPH_POINT_VALUE_COUNT,
+    GlyphInterpolationValues, GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET,
+    GLYPH_ANCHOR_VALUE_COUNT, GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
 };
 
 /// Normalized support for one authoring axis within an interpolation region.

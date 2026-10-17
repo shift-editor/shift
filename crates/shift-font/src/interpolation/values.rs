@@ -1,13 +1,22 @@
 use crate::{CoreError, CoreResult, DecomposedTransform, GlyphLayer};
 
+/// Index of the horizontal advance within a glyph's values.
+pub const GLYPH_ADVANCE_VALUE_OFFSET: usize = 0;
+
 /// Number of leading glyph values holding the horizontal advance.
 pub const GLYPH_ADVANCE_VALUE_COUNT: usize = 1;
 
+/// Coordinate names of one point or anchor position, in value order.
+///
+/// TypeScript reads positions at these offsets; the layout module is generated
+/// from this table.
+pub const GLYPH_POSITION_VALUE_FIELDS: [&str; 2] = ["x", "y"];
+
 /// Number of glyph values per contour point: x, then y.
-pub const GLYPH_POINT_VALUE_COUNT: usize = 2;
+pub const GLYPH_POINT_VALUE_COUNT: usize = GLYPH_POSITION_VALUE_FIELDS.len();
 
 /// Number of glyph values per anchor: x, then y.
-pub const GLYPH_ANCHOR_VALUE_COUNT: usize = 2;
+pub const GLYPH_ANCHOR_VALUE_COUNT: usize = GLYPH_POSITION_VALUE_FIELDS.len();
 
 /// Numeric glyph-layer values that participate in interpolation.
 ///
@@ -158,21 +167,64 @@ impl<'a> ValueCursor<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ANCHOR_VALUE_COUNT, GLYPH_POINT_VALUE_COUNT};
+    use super::{
+        GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET, GLYPH_ANCHOR_VALUE_COUNT,
+        GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
+    };
     use crate::test_support::generated::{assert_generated_file, TypeScriptModule};
-    use crate::{DecomposedTransform, Transform};
+    use crate::{
+        Anchor, Contour, DecomposedTransform, GlyphLayer, LayerId, PointType, SourceId, Transform,
+    };
 
     fn field_indices<'a>(fields: &[&'a str]) -> Vec<(&'a str, usize)> {
         fields.iter().copied().zip(0..).collect()
+    }
+
+    fn position_offset(field: &str) -> usize {
+        GLYPH_POSITION_VALUE_FIELDS
+            .iter()
+            .position(|candidate| *candidate == field)
+            .unwrap()
+    }
+
+    #[test]
+    fn layer_values_place_advance_and_positions_at_their_offsets() {
+        let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 600.0);
+        let mut contour = Contour::new();
+        contour.add_point(11.0, 13.0, PointType::OnCurve, false);
+        layer.add_contour(contour);
+        layer.add_anchor(Anchor::new("top".to_string(), 17.0, 19.0));
+
+        let values = layer.interpolation_values();
+        let values = values.as_slice();
+        let point = GLYPH_ADVANCE_VALUE_COUNT;
+        let anchor = point + GLYPH_POINT_VALUE_COUNT;
+
+        assert_eq!(values.len(), anchor + GLYPH_ANCHOR_VALUE_COUNT);
+        assert_eq!(values[GLYPH_ADVANCE_VALUE_OFFSET], 600.0);
+        assert_eq!(values[point + position_offset("x")], 11.0);
+        assert_eq!(values[point + position_offset("y")], 13.0);
+        assert_eq!(values[anchor + position_offset("x")], 17.0);
+        assert_eq!(values[anchor + position_offset("y")], 19.0);
     }
 
     #[test]
     fn generated_file_glyph_value_layout_is_current() {
         let module = TypeScriptModule::new("crates/shift-font/src/interpolation/values.rs")
             .number(
+                "Index of the horizontal advance within a glyph's values.",
+                "GLYPH_ADVANCE_VALUE_OFFSET",
+                GLYPH_ADVANCE_VALUE_OFFSET,
+            )
+            .number(
                 "Leading glyph values holding the horizontal advance.",
                 "GLYPH_ADVANCE_VALUE_COUNT",
                 GLYPH_ADVANCE_VALUE_COUNT,
+            )
+            .indices(
+                "Offsets of coordinates within one point's or anchor's values.",
+                "GLYPH_POSITION_VALUE_OFFSETS",
+                &field_indices(&GLYPH_POSITION_VALUE_FIELDS),
             )
             .number(
                 "Glyph values per contour point: x, then y.",

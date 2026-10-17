@@ -1,5 +1,6 @@
 import {
   GLYPH_POINT_VALUE_COUNT,
+  GLYPH_POSITION_VALUE_OFFSETS,
   type ContourData,
   type ContourId,
   type GlyphStructure,
@@ -207,12 +208,13 @@ export class Contour {
 
   #pointAt(index: number): Point {
     const point = this.#data.points[index];
+    const offset = this.#cursor + index * GLYPH_POINT_VALUE_COUNT;
     return new Point({
       id: point.id,
       pointType: point.pointType,
       smooth: point.smooth,
-      x: this.#values[this.#cursor + index * GLYPH_POINT_VALUE_COUNT],
-      y: this.#values[this.#cursor + index * GLYPH_POINT_VALUE_COUNT + 1],
+      x: this.#values[offset + GLYPH_POSITION_VALUE_OFFSETS.x],
+      y: this.#values[offset + GLYPH_POSITION_VALUE_OFFSETS.y],
     });
   }
 }

@@ -1,6 +1,7 @@
 import type { Point2D } from "@shift/geo";
 import {
   GLYPH_ANCHOR_VALUE_COUNT,
+  GLYPH_POSITION_VALUE_OFFSETS,
   type AnchorData,
   type AnchorId,
   type GlyphStructure,
@@ -60,11 +61,11 @@ export class Anchor {
   }
 
   get x(): number {
-    return this.#values[this.#cursor];
+    return this.#values[this.#cursor + GLYPH_POSITION_VALUE_OFFSETS.x];
   }
 
   get y(): number {
-    return this.#values[this.#cursor + 1];
+    return this.#values[this.#cursor + GLYPH_POSITION_VALUE_OFFSETS.y];
   }
 
   hit(pos: Point2D, radius: number): AnchorHit | null {
