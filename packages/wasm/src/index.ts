@@ -5,8 +5,8 @@
  * @remarks
  * The module is embedded as base64, so the import works unchanged in the
  * desktop renderer, vitest, and the SDK, with no bundler plugin, fetch, or
- * top-level await. Use the typed wrappers in `@shift/editor`, which manage
- * the scratch buffers; the raw exports here are for those wrappers.
+ * top-level await. Use the typed wrappers in `@shift/editor`, which pack
+ * inputs, intern names, and hold handles; the raw exports are for them.
  */
 import { initSync, type InitOutput } from "./generated/shift_wasm.js";
 import { moduleBase64 } from "./generated/module";
