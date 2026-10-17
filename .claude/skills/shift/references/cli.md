@@ -33,11 +33,14 @@ Authoring commands work on `.shift` documents and change them atomically: an inv
 
 ```sh
 shift-cli font create Lab.shift
+shift-cli font create Lab.shift --from Family.glyphspackage   # names, UPM, metrics, axes, masters; no glyphs
 shift-cli axis add Lab.shift --tag wght --name Weight --min 100 --default 400 --max 900
 shift-cli source add Lab.shift --name Black --location wght=900
 shift-cli glyph add Lab.shift A --unicode U+0041
 shift-cli layer set Lab.shift --glyph A --source Regular --input A.json
 shift-cli glyph set Lab.shift --input glyphs.json --dry-run --json
+shift-cli glyph export Inter.glyphspackage --glyphs aacute,one.ss01 > glyphs.json   # any source → the JSON glyph set reads
+shift-cli glyph export Inter.glyphspackage --glyphs aacute | shift-cli glyph set Lab.shift --input -
 shift-cli font set Lab.shift --family-name "Packet Mono" --x-height 480 --cap-height 720
 shift-cli instance add Lab.shift --name Book --location wght=450
 shift-cli kerning set Lab.shift @A @V -60 --source Bold
@@ -46,9 +49,10 @@ shift-cli kerning group create Lab.shift O O Q --position first
 ```
 
 - **Shift assigns all identities.** Read the IDs a command returns and use them as selectors; never invent IDs.
-- **Layer payloads** are JSON with `advance`, and either `contours` (points with optional `pointType`: `onCurve`, `offCurve`, `qCurve`) or `svgPath`, plus optional `anchors`. `svgPath` uses font units with **Y up**; an SVG drawn in Y-down screen coordinates must be flipped first. Arc commands are rejected.
-- **`layer set` replaces a drawing** and removes existing components, because payloads describe outlines and anchors only. Use `layer copy` to duplicate a layer with its components into another source.
-- **`glyph set` applies a batch atomically** and supports `--dry-run`.
+- **Layer payloads** are JSON with `advance`, and either `contours` (points with optional `pointType`: `onCurve`, `offCurve`, `qCurve`) or `svgPath`, plus optional `anchors` and `components` (`{"base": "A", "transform": [xx, xy, yx, yy, dx, dy]}`, transform optional). `svgPath` uses font units with **Y up**; an SVG drawn in Y-down screen coordinates must be flipped first. Arc commands are rejected.
+- **`layer set` replaces a drawing**, components included: the payload's components replace the layer's. Use `layer copy` to duplicate a layer into another source.
+- **`glyph set` applies a batch atomically** and supports `--dry-run`. A component's base may be another glyph in the same batch.
+- **`glyph export` copies real glyphs**: it reads named glyphs from any source (`.shift`, UFO, Designspace, Glyphs, TTF, OTF) as the batch `glyph set` reads, adding every glyph their components use. `--source NAME` or `--source all` picks masters (default: the default source). Small exported files are good scratch fixtures: edit them, then `glyph set` them into a document.
 - Instances are presets, not masters: instance commands never create sources or drawings.
 - **Kerning sides**: `first` is the left glyph, and its first-position group kerns its right edge; `second` is the right glyph. A side is a glyph name or `@GROUP` for a group at that position. Values are per master and default to the default source; set every master you mean to change.
 - **`kerning set --input`** applies `groups` (created if missing; `members` replaces membership) and then `pairs` (`value: null` removes) atomically, so pairs can name groups the batch creates.
