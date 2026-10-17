@@ -1340,13 +1340,14 @@ impl Bridge {
     let workspace = self.workspace()?;
     let font = workspace.font();
     let mut component_references = workspace.glyph_component_references()?;
-    let propagation = shift_backends::propagation_categories(font.glyphs(), font.lib());
+    let categories = shift_backends::record_categories(font.glyphs(), font.lib());
     let mut records = font
       .glyphs()
       .map(|glyph| {
         let mut record = GlyphRecord::from(glyph);
-        if let Some(category) = propagation.get(&glyph.id()) {
+        if let Some(category) = categories.get(&glyph.id()) {
           record.mark = category.mark;
+          record.nonspacing_mark = category.nonspacing_mark;
           record.ligature = category.ligature.map(|ligature| {
             match ligature {
               shift_backends::PropagationLigature::Explicit => "explicit",

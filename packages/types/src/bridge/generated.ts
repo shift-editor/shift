@@ -922,6 +922,11 @@ export interface GlyphRecord {
   /** In the Mark category or classed `mark`: anchor propagation keeps its own anchors. */
   mark?: boolean
   /**
+   * A nonspacing mark (Mark category, Nonspacing subcategory): export
+   * compiles it with no advance. Absent when it is not one.
+   */
+  nonspacingMark?: boolean
+  /**
    * `"explicit"` when classed a ligature, `"subcategory"` when a ligature
    * once it has an attaching anchor.
    */

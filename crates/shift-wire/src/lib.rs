@@ -344,6 +344,9 @@ pub struct GlyphRecord {
     pub layers: Vec<GlyphLayerRecord>,
     /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
     pub mark: bool,
+    /// A nonspacing mark (Mark category, Nonspacing subcategory): export
+    /// compiles it with no advance.
+    pub nonspacing_mark: bool,
     /// `"explicit"` when classed a ligature, `"subcategory"` when a ligature
     /// once it has an attaching anchor.
     pub ligature: Option<String>,
@@ -378,6 +381,7 @@ impl From<&IrGlyph> for GlyphRecord {
             component_base_glyph_ids,
             layers,
             mark: false,
+            nonspacing_mark: false,
             ligature: None,
         }
     }
