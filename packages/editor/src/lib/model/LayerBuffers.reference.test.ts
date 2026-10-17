@@ -17,7 +17,7 @@ import {
   REFERENCE_SEED,
   seededRandom,
   type Random,
-} from "@shift/glyph-state/testing";
+} from "../../testing/reference";
 import { transformLayer } from "@shift/wasm/reference";
 import { LayerBuffers } from "./LayerBuffers";
 

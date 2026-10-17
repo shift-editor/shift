@@ -7,7 +7,7 @@ import {
   expectNumbersClose,
   matrixCases,
   transformCases,
-} from "./testing";
+} from "../../testing/reference";
 
 const transforms = transformCases();
 const point = { x: 37.5, y: -82.25 };

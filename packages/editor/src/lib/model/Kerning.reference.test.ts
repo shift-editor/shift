@@ -9,7 +9,7 @@ import {
   type KerningValueEdit,
   type SourceId,
 } from "@shift/types";
-import { describeInput } from "@shift/glyph-state/testing";
+import { describeInput } from "../../testing/reference";
 import { resolveKerning } from "@shift/wasm/reference";
 import { Kerning, kerningValueEdit, type KerningSideId } from "./Kerning";
 

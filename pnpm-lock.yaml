@@ -318,9 +318,6 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
-      '@shift/wasm':
-        specifier: workspace:*
-        version: link:../wasm
       typescript:
         specifier: ^5.5.4
         version: 5.9.3

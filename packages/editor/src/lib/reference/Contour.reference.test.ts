@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { asContourId, asPointId } from "@shift/types";
 import { contourGeometry } from "@shift/wasm/reference";
-import { Contour } from "./Contour";
-import { contourCases, describeInput, expectBoundsClose, type ContourCase } from "./testing";
+import { Contour } from "@shift/glyph-state";
+import {
+  contourCases,
+  describeInput,
+  expectBoundsClose,
+  type ContourCase,
+} from "../../testing/reference";
 
 const cases = contourCases();
 

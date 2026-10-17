@@ -11,7 +11,7 @@ import {
   expectNumbersClose,
   REFERENCE_SEED,
   seededRandom,
-} from "@shift/glyph-state/testing";
+} from "@shift/editor/reference-testing";
 import {
   axisValue,
   externalAxisLocationForDesignLocation,

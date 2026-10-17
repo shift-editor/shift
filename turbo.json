@@ -232,11 +232,6 @@
       "inputs": ["src/**", "*.config.ts"],
       "dependsOn": ["@shift/wasm#build"]
     },
-    "@shift/glyph-state#test": {
-      "outputs": [],
-      "inputs": ["src/**", "*.config.ts", "$TURBO_ROOT$/packages/*/src/**"],
-      "dependsOn": ["@shift/wasm#build"]
-    },
     "@shift/editor#test": {
       "outputs": [],
       "inputs": ["src/**", "*.config.ts", "$TURBO_ROOT$/packages/*/src/**"],

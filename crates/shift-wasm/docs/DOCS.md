@@ -34,8 +34,10 @@ packages/wasm/
   src/embedded.ts     compiles a base64-embedded module synchronously
 .github/actions/wasm-toolchain/
   action.yml          installs the pinned wasm-bindgen on any CI runner
-packages/glyph-state/src/testing/
-  reference.ts   generated inputs and comparisons shared by the reference tests
+packages/editor/src/testing/
+  reference.ts   @shift/editor/reference-testing: generated inputs and comparisons shared by the reference tests
+packages/editor/src/lib/reference/
+  Component.reference.test.ts, Contour.reference.test.ts   glyph-state and geo geometry against Rust
 packages/editor/src/lib/wasm/
   anchors.ts     typed wrappers: propagateAnchors, followingPlacements, anchorKind
   variation.ts   typed wrappers, handles, and the per-basis weights memo
@@ -70,7 +72,7 @@ The Nix dev shell provides `wasm-bindgen-cli`; CI jobs install the version `Carg
 
 A rule that stays in TypeScript is tested against the Rust directly, not against a fixture Rust writes: the test builds its inputs in code, runs the TypeScript and the matching `@shift/wasm/reference` export on each, and compares. Nothing can go stale, and a failure names the input.
 
-Inputs come from `@shift/glyph-state/testing`: every on/off-curve pattern up to four points, open and closed (the parser looks three points ahead), curated curves such as truncated cubic tails, named and collapsed transforms, and seeded sweeps (`seededRandom`, fixed seeds, a few hundred cases each). `expectNumbersClose` and its matrix, decomposed, and bounds variants compare to 9 decimal digits (the two sides run the same float operations, so they agree to about 1e-12) and compare rotations by angle difference, since 180° and -180° are the same rotation. Axis mapping (`location.test.ts`) compiles its mappings through `compileAxisMappings`, as the bridge would send them, and compares `mapAxisLocation` with `mapLocation` over a sweep of locations.
+Inputs come from `@shift/editor/reference-testing`: every on/off-curve pattern up to four points, open and closed (the parser looks three points ahead), curated curves such as truncated cubic tails, named and collapsed transforms, and seeded sweeps (`seededRandom`, fixed seeds, a few hundred cases each). `expectNumbersClose` and its matrix, decomposed, and bounds variants compare to 9 decimal digits (the two sides run the same float operations, so they agree to about 1e-12) and compare rotations by angle difference, since 180° and -180° are the same rotation. Axis mapping (`location.test.ts`) compiles its mappings through `compileAxisMappings`, as the bridge would send them, and compares `mapAxisLocation` with `mapLocation` over a sweep of locations.
 
 The reference module never ships. It is a second instance with its own memory, about 2.5 times the size of the editor's module (it carries the axis-mapping compiler and kerning model), and its exports would invite calling Rust for rules the editor deliberately runs in TypeScript.
 
@@ -87,7 +89,7 @@ The reference module never ships. It is a second instance with its own memory, a
 
 1. Add an export to `src/reference/` that converts its input to shift-font types, calls the function native callers use, and converts the result back. It must have no logic of its own. Type inputs and outputs with tsify; mirror only the fields Rust reads, so the editor's own types satisfy them.
 2. Re-export it from `packages/wasm/src/reference.ts` and run `pnpm build:wasm`. Only the sources are committed.
-3. Write a `*.reference.test.ts` beside the TypeScript it checks, generating inputs with the shared helpers in `@shift/glyph-state/testing`. The package's `test` task must depend on `@shift/wasm#build` in `turbo.json` so the module exists when it runs.
+3. Write a `*.reference.test.ts` beside the TypeScript it checks, generating inputs with the shared helpers in `@shift/editor/reference-testing`. The package's `test` task must depend on `@shift/wasm#build` in `turbo.json` so the module exists when it runs.
 
 ## Gotchas
 
