@@ -27,7 +27,6 @@ import type {
   GlyphProjection,
   LayerId,
   LayerMatch,
-  PropagatedGlyphAnchors,
   LayerRead,
   Location,
   SlugAtlas,
@@ -251,16 +250,6 @@ export class FontSessionClient {
     return this.#require().call("workspace.glyphSnapshots", {
       requests: [...requests],
     });
-  }
-
-  /**
-   * Reads every glyph's anchors as export compiles them, with component
-   * anchors propagated; the reference the editor's own propagation is tested against.
-   */
-  async propagatedAnchors(): Promise<PropagatedGlyphAnchors[]> {
-    await this.connect();
-
-    return this.#require().call("workspace.propagatedAnchors", undefined);
   }
 
   /** Derives cross-layer entity matches behind the serialized workspace lane. */
