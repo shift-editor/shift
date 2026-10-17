@@ -228,3 +228,4 @@ export type {
 // Numeric layouts generated from Rust; run `pnpm generate:from-rust` to refresh.
 export * from "./layout/glyphValues";
 export * from "./layout/sourceMetrics";
+export * from "./layout/slugAtlas";
