@@ -14,7 +14,8 @@
     }
   },
   "scripts": {
-    "build:wasm": "node scripts/build.mjs",
-    "check:wasm": "node scripts/build.mjs --check"
+    "build": "node scripts/build.mjs",
+    "build:debug": "node scripts/build.mjs",
+    "build:e2e": "node scripts/build.mjs"
   }
 }

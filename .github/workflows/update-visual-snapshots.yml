@@ -33,6 +33,8 @@ jobs:
           submodules: true
           persist-credentials: false
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:

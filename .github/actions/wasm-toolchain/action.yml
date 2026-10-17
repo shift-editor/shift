@@ -1,0 +1,29 @@
+name: WebAssembly toolchain
+description: >-
+  Installs the wasm-bindgen CLI at the version Cargo.lock pins and binaryen's
+  wasm-opt at the version the Nix dev shell provides, for building
+  packages/wasm. Run from the repository root after checkout.
+runs:
+  using: composite
+  steps:
+    - name: Install wasm-bindgen and wasm-opt
+      shell: bash
+      run: |
+        set -euo pipefail
+        binaryen=132
+        bindgen=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3 }' Cargo.lock)
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64) bindgen_target=x86_64-unknown-linux-musl binaryen_target=x86_64-linux ;;
+          Linux-ARM64) bindgen_target=aarch64-unknown-linux-musl binaryen_target=aarch64-linux ;;
+          macOS-X64) bindgen_target=x86_64-apple-darwin binaryen_target=x86_64-macos ;;
+          macOS-ARM64) bindgen_target=aarch64-apple-darwin binaryen_target=arm64-macos ;;
+          # wasm-bindgen publishes no Windows arm64 build; the x64 one runs emulated.
+          Windows-X64) bindgen_target=x86_64-pc-windows-msvc binaryen_target=x86_64-windows ;;
+          Windows-ARM64) bindgen_target=x86_64-pc-windows-msvc binaryen_target=arm64-windows ;;
+          *) echo "No WebAssembly toolchain for ${RUNNER_OS}-${RUNNER_ARCH}" >&2; exit 1 ;;
+        esac
+        cd "$RUNNER_TEMP"
+        curl -sSfL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${bindgen}/wasm-bindgen-${bindgen}-${bindgen_target}.tar.gz" | tar xz
+        curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/version_${binaryen}/binaryen-version_${binaryen}-${binaryen_target}.tar.gz" | tar xz
+        echo "${RUNNER_TEMP}/wasm-bindgen-${bindgen}-${bindgen_target}" >> "$GITHUB_PATH"
+        echo "${RUNNER_TEMP}/binaryen-version_${binaryen}/bin" >> "$GITHUB_PATH"

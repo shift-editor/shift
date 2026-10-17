@@ -107,9 +107,9 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ### Building
 
-- `pnpm build:native` - Build Rust native modules
+- `pnpm build:native` - Build Rust native modules (the NAPI addon and the WebAssembly module)
 - `pnpm build:native:debug` - Build native modules in debug mode
-- `pnpm --filter @shift/wasm build:wasm` - Rebuild the editor's WebAssembly module (`crates/shift-wasm`) after changing it or the shift-font code it calls, and commit `packages/wasm/src/generated/`; CI fails when the committed module differs from a fresh build (`check:wasm`). See `crates/shift-wasm/docs/DOCS.md`
+- `pnpm build:wasm` - Build the editor's WebAssembly module (`crates/shift-wasm`) into `packages/wasm/src/generated/` (gitignored). `build:native` and the turbo typecheck, test, and desktop build tasks build it first; see `crates/shift-wasm/docs/DOCS.md`
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 

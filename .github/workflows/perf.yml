@@ -79,6 +79,8 @@ jobs:
         with:
           fetch-depth: 1
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -130,6 +132,8 @@ jobs:
         with:
           fetch-depth: 1
           submodules: true
+
+      - uses: ./.github/actions/wasm-toolchain
 
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
