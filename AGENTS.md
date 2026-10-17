@@ -112,6 +112,11 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 
+### Generated Code
+
+- `pnpm generate:bridge-types` - Regenerate `@shift/types` bridge DTOs from `shift-bridge` declarations
+- `pnpm generate:from-rust` - Regenerate Rust-derived layouts in `packages/types/src/layout/` and Rust-generated fixtures
+
 ### Glyph Info
 
 - `pnpm generate:glyph-info` - Generate glyph data, decomposition, charsets, and FTS5 search index
@@ -160,6 +165,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 ### Generated and domain types
 
 - **Generated types** (from Rust via ts-rs) live ONLY in `packages/types/src/generated/`. Run `cargo test --package shift-core` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
+- **Generated layouts** (glyph value, source metric, and Slug atlas offsets and strides) live in `packages/types/src/layout/` and are exported from `@shift/types`. Rust tests in `shift-font` and `shift-slug` render them and fail when the checked-in copy is stale; run `pnpm generate:from-rust` after changing a Rust layout. Never hard-code these offsets in TypeScript.
 - **Domain types** (e.g. `Point`, `Contour`, `Glyph`) live in `packages/types/src/domain.ts`. They MUST derive from generated types (e.g. `Readonly<PointSnapshot>`, `Omit` + composition). See `domain.ts`: same field names, no re-declaration of structure.
 - **App layer**: NEVER re-declare types that exist in `@shift/types`. Import `FontMetadata`, `FontMetrics`, snapshot types, etc. from `@shift/types`. If you need a narrowed or immutable view, define it in `packages/types` (e.g. domain.ts) as a type derived from the generated type, not as a new interface in the app.
 - Bridge and native layer are typed with `@shift/types`; engine and UI use those types and the same field names (e.g. `familyName` in the UI, not `family`).

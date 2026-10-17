@@ -1,12 +1,14 @@
-import type {
-  ComponentData,
-  ComponentId,
-  ComponentTransformKind,
-  GlyphId,
-  GlyphName,
-  GlyphStructure,
+import {
+  AFFINE_COMPONENT_VALUE_OFFSETS,
+  type ComponentData,
+  type ComponentId,
+  type ComponentTransformKind,
+  type GlyphId,
+  type GlyphName,
+  type GlyphStructure,
 } from "@shift/types";
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
+import { componentValueCount, componentsValueOffset, readDecomposedTransform } from "./valueLayout";
 
 export type ComponentTransform = DecomposedTransform;
 export type Matrix = MatModel;
@@ -34,11 +36,8 @@ export class Component {
     values: Float64Array,
     transformKind: ComponentTransformKind,
   ): readonly Component[] {
-    let cursor = 1;
-    for (const contour of structure.contours) cursor += contour.points.length * 2;
-    cursor += structure.anchors.length * 2;
-
-    const stride = transformKind === "affine" ? 6 : 9;
+    const cursor = componentsValueOffset(structure);
+    const stride = componentValueCount(transformKind);
     return structure.components.map(
       (component, index) =>
         new Component(component, values, cursor + index * stride, transformKind),
@@ -60,28 +59,19 @@ export class Component {
   get transform(): ComponentTransform {
     if (this.#transformKind === "affine") return Mat.toDecomposed(this.matrix);
 
-    return {
-      translateX: this.#values[this.#cursor],
-      translateY: this.#values[this.#cursor + 1],
-      rotation: this.#values[this.#cursor + 2],
-      scaleX: this.#values[this.#cursor + 3],
-      scaleY: this.#values[this.#cursor + 4],
-      skewX: this.#values[this.#cursor + 5],
-      skewY: this.#values[this.#cursor + 6],
-      tCenterX: this.#values[this.#cursor + 7],
-      tCenterY: this.#values[this.#cursor + 8],
-    };
+    return readDecomposedTransform(this.#values, this.#cursor);
   }
 
   get matrix(): MatModel {
     if (this.#transformKind === "affine") {
+      const offsets = AFFINE_COMPONENT_VALUE_OFFSETS;
       return {
-        a: this.#values[this.#cursor],
-        b: this.#values[this.#cursor + 1],
-        c: this.#values[this.#cursor + 2],
-        d: this.#values[this.#cursor + 3],
-        e: this.#values[this.#cursor + 4],
-        f: this.#values[this.#cursor + 5],
+        a: this.#values[this.#cursor + offsets.xx],
+        b: this.#values[this.#cursor + offsets.xy],
+        c: this.#values[this.#cursor + offsets.yx],
+        d: this.#values[this.#cursor + offsets.yy],
+        e: this.#values[this.#cursor + offsets.dx],
+        f: this.#values[this.#cursor + offsets.dy],
       };
     }
 

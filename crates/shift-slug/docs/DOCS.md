@@ -1,6 +1,6 @@
 # shift-slug
 
-<!-- reviewed: 2026-08-18 review-every: 90d -->
+<!-- reviewed: 2026-10-17 review-every: 90d -->
 
 GPU-independent preprocessing for the experimental Slug home/catalog glyph grid.
 
@@ -35,6 +35,7 @@ src/
   retained/weights.rs    axes, regions, complements, and location weight evaluation
   resident.rs            complete authored atlas, edit patches, identity maps, and basis deduplication
   error.rs               strict conversion and size failures
+  typescript_layout.rs   (test-only) generates @shift/types slugAtlas.ts and checks packers write fields at struct offsets
 shaders/
   slug.wgsl           shared static native-wgpu/Electron-WebGPU renderer
   slug-variable.wgsl  visible curve resolve, GPU re-banding, and variable renderer
@@ -212,8 +213,9 @@ The target MacBook Air native-wgpu probe reports Apple M4/Metal, timestamp-query
 ### Changing the packed GPU layout
 
 1. Update `Layout`/`Section` construction in `pack.rs` (or the variable packing in `variable.rs`) and the matching typed WGSL decoders in `shaders/slug.wgsl` and `shaders/slug-variable.wgsl` in the same change — the byte layout and the shader decode are one contract.
-2. Run `cargo test -p shift-slug --all-features`; `tests/atlas.rs` holds the shader-layout and packing invariants that pin section alignment and offsets.
-3. Validate on a real adapter, not just llvmpipe: `cargo run --release -p shift-slug --features wgpu-benchmark --example benchmark_wgpu -- /path/to/font.ttf --iterations 120 wght=900` and confirm the pixel checksum is unchanged when the change is not meant to alter rendering.
+2. If a struct, stride, flag, or uniform word index that the desktop renderer reads changes, update `src/typescript_layout.rs` and run `pnpm generate:from-rust` to rewrite `packages/types/src/layout/slugAtlas.ts`; `SlugAtlas.ts` reads every offset from it.
+3. Run `cargo test -p shift-slug --all-features`; `tests/atlas.rs` holds the shader-layout and packing invariants that pin section alignment and offsets, and `src/typescript_layout.rs` checks that `RenderInstance`, `VariableGlyph`, and `VariableComponentGlyph` packing writes each field at its `offset_of!` position and that the generated TypeScript layout is current.
+4. Validate on a real adapter, not just llvmpipe: `cargo run --release -p shift-slug --features wgpu-benchmark --example benchmark_wgpu -- /path/to/font.ttf --iterations 120 wght=900` and confirm the pixel checksum is unchanged when the change is not meant to alter rendering.
 
 ### Extending the authored compilation path
 
