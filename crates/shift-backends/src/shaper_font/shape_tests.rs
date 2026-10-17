@@ -232,3 +232,80 @@ fn state_shapes_without_features_until_the_source_first_compiles() {
         vec![named("f", 0), named("i", 1)]
     );
 }
+
+/// Beh (U+0628) with isolated, initial, medial, and final forms, and `a`.
+fn joining_font() -> Font {
+    font_with(
+        &[
+            ("a", Some('a')),
+            ("beh-ar", Some('\u{0628}')),
+            ("beh-ar.init", None),
+            ("beh-ar.medi", None),
+            ("beh-ar.fina", None),
+        ],
+        "languagesystem DFLT dflt;
+         languagesystem arab dflt;
+         feature init { sub beh-ar by beh-ar.init; } init;
+         feature medi { sub beh-ar by beh-ar.medi; } medi;
+         feature fina { sub beh-ar by beh-ar.fina; } fina;",
+    )
+}
+
+fn paragraph<'a>(units: &'a [ShapeUnit], location: &'a ExternalLocation) -> ParagraphRequest<'a> {
+    ParagraphRequest {
+        units,
+        location,
+        language: None,
+        features: &[],
+    }
+}
+
+#[test]
+fn an_arabic_paragraph_joins_and_reads_right_to_left() {
+    let font = joining_font();
+    let location = ExternalLocation::new();
+    let units = characters("\u{0628}\u{0628}\u{0628}");
+
+    let runs = shaper(&font)
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].script.as_deref(), Some("Arab"));
+    assert_eq!(runs[0].direction, TextDirection::RightToLeft);
+    assert_eq!(
+        names_and_clusters(&font, &runs[0].glyphs),
+        vec![
+            named("beh-ar.fina", 2),
+            named("beh-ar.medi", 1),
+            named("beh-ar.init", 0),
+        ]
+    );
+}
+
+#[test]
+fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
+    let font = joining_font();
+    let location = ExternalLocation::new();
+    let units = characters("a \u{0628}\u{0628}");
+
+    let runs = shaper(&font)
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+
+    let summary: Vec<_> = runs
+        .iter()
+        .map(|run| (run.units.clone(), run.direction))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (0..2, TextDirection::LeftToRight),
+            (2..4, TextDirection::RightToLeft),
+        ]
+    );
+    assert_eq!(
+        names_and_clusters(&font, &runs[1].glyphs),
+        vec![named("beh-ar.fina", 3), named("beh-ar.init", 2)]
+    );
+}

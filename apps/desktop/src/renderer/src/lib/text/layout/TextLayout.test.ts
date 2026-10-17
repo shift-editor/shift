@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { glyphTextItem as glyph, lineBreakTextItem } from "@shift/editor/text";
+import { characterTextItem as char, lineBreakTextItem } from "@shift/editor/text";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 import type { TestEditor } from "@/testing/TestEditor";
 
@@ -12,7 +12,7 @@ describe("TextLayout", () => {
 
   // Levien invariant via the public class surface.
   it("measure equals sum of xAdvance across all runs", () => {
-    const layout = makeLayout([glyph("A", 65), glyph("B", 66), glyph("C", 67)], editor);
+    const layout = makeLayout([char(65), char(66), char(67)], editor);
 
     const sum = layout.lines
       .flatMap((l) => l.runs)
@@ -34,7 +34,7 @@ describe("TextLayout", () => {
 
   // Linebreak item splits the buffer into two lines.
   it("splits on linebreak item into separate lines", () => {
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), lineBreakTextItem(), char(66)], editor);
 
     expect(layout.lines).toHaveLength(2);
     expect(layout.lines[1].y).toBeLessThan(layout.lines[0].y);
@@ -42,7 +42,7 @@ describe("TextLayout", () => {
 
   // Second-line baseline math: y = origin.y - lineHeight.
   it("second-line baseline is one lineHeight below first", () => {
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), lineBreakTextItem(), char(66)], editor);
     const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
@@ -53,7 +53,7 @@ describe("TextLayout", () => {
   // hit-test → pointAt round trip. Pin side resolution: a point inside the
   // left half of B's advance box hits cluster=1, side="left".
   it("pointAt after hitTest recovers cluster's leading edge", () => {
-    const layout = makeLayout([glyph("A", 65), glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), char(66)], editor);
     const aAdvance = xAdvance("A", editor);
     const bAdvance = xAdvance("B", editor);
     const bLeftHalfX = aAdvance + bAdvance / 4;
@@ -70,8 +70,8 @@ describe("TextLayout", () => {
   });
 
   it("places an item's glyph by item id on the current line", () => {
-    const a = glyph("A", 65);
-    const b = glyph("B", 66);
+    const a = char(65);
+    const b = char(66);
     const layout = makeLayout([a, b], editor);
     const aAdvance = xAdvance("A", editor);
 
@@ -82,15 +82,15 @@ describe("TextLayout", () => {
   });
 
   it("places an item's glyph by item id after a linebreak", () => {
-    const b = glyph("B", 66);
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), b], editor);
+    const b = char(66);
+    const layout = makeLayout([char(65), lineBreakTextItem(), b], editor);
 
     expect(layout.placedGlyphForItem(b.id)?.origin).toEqual({ x: 0, y: layout.lines[1].y });
   });
 
   it("has no placed glyph for a line break", () => {
     const linebreak = lineBreakTextItem();
-    const layout = makeLayout([glyph("A", 65), linebreak, glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), linebreak, char(66)], editor);
 
     expect(layout.placedGlyphForItem(linebreak.id)).toBeNull();
     expect(layout.placedGlyphs.map((placed) => placed.lineIndex)).toEqual([0, 1]);

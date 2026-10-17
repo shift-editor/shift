@@ -1,144 +1,283 @@
+import type { Point2D } from "@shift/geo";
+import type { GlyphId, GlyphName, ShapedGlyph, Source, Unicode } from "@shift/types";
 import { track } from "../../signals";
 import { displayAdvance, isNonSpacingGlyph } from "../../utils/unicode";
-import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
+import type { PositionedGlyph, PositionedRun, SegmentedRun } from "./types";
 import type { Editor } from "../../editor/Editor";
-import type { Font } from "../../model/Font";
 import type { GlyphRenderModel } from "../../model/Glyph";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
-import type { Bounds, Point2D } from "@shift/geo";
-import type { GlyphEntry, Source } from "@shift/types";
 
 /**
- * No-shape positioner — literal LTR advance walk, `cluster = clusterStart + i`.
- * Permanent product mode for editing scripts where the user wants source-order
- * glyph display without joining/contextual substitution (e.g. Arabic
- * side-by-side editing).
+ * How marks are placed: `"anchors"` attaches each mark to the glyph before it
+ * through matching anchors, as shaped text does; `"literal"` sets each
+ * non-spacing glyph beside the text, for unshaped side-by-side editing.
+ */
+export type MarkPlacement = "anchors" | "literal";
+
+/** One glyph of a run with the data positioning reads from it. */
+interface RunGlyph {
+  readonly shaped: ShapedGlyph;
+  readonly glyphId: GlyphId | null;
+  readonly name: GlyphName;
+  readonly codepoint: number | null;
+  readonly model: GlyphRenderModel | null;
+}
+
+/**
+ * Where a mark goes: `offset` from the anchor of the glyph at index `to`, or a
+ * fixed `offset` from its own place when `to` is null.
+ */
+interface MarkOffset {
+  readonly to: number | null;
+  readonly offset: Point2D;
+}
+
+const NOTDEF = ".notdef" as GlyphName;
+
+/**
+ * Positions a run's glyphs with live glyph data.
  *
- * Neighbouring spacing glyphs are kerned with the font's pair kerning at the
- * displayed location; a mark between them interrupts the pair.
+ * @remarks
+ * The shaper substitutes glyphs and applies the feature code's own
+ * positioning; this adds what export generates from structured data: each
+ * glyph's current advance, pair kerning between neighbours in a left-to-right
+ * run, and mark placement. Made for one layout, which tracks every glyph it
+ * reads; glyph lookups are cached for that layout.
  */
 export class Positioner {
-  position(
-    run: SegmentedRun,
-    editor: Editor,
-    externalLocation: Signal<ExternalAxisLocation>,
-  ): PositionedRun {
-    let totalAdvance = 0;
-    const glyphs: PositionedRun["glyphs"] = [];
-    const source = editor.activeSource ?? editor.font.sourceAtOrDefault(externalLocation.peek());
+  readonly #editor: Editor;
+  readonly #externalLocation: Signal<ExternalAxisLocation>;
+  // non-reactive: lookups for one layout computation, which tracks each model on first read
+  readonly #models = new Map<GlyphId, GlyphRenderModel | null>();
+
+  constructor(editor: Editor, externalLocation: Signal<ExternalAxisLocation>) {
+    this.#editor = editor;
+    this.#externalLocation = externalLocation;
+  }
+
+  position(run: SegmentedRun, marks: MarkPlacement): PositionedRun {
     // Called from the run's layout computed, which tracks location and active source.
-    track(editor.font.kerningCell);
-    let kernable: PositionedRun["glyphs"][number] | null = null;
+    track(this.#editor.font.kerningCell);
+    const glyphs = run.shaped.map((shaped) => this.#runGlyph(run, shaped));
+    const markOffsets =
+      marks === "anchors" ? this.#anchorOffsets(run, glyphs) : this.#literalOffsets(glyphs);
 
-    for (const [idx, g] of run.glyphs.entries()) {
-      const entry = editor.font.entryForName(g.glyphName);
-      const glyph = entry ? editor.glyphForId(entry.id) : null;
-      const renderModel = glyph?.renderModelAt(externalLocation, editor.activeSourceIdCell) ?? null;
-      let glyphName = g.glyphName;
-      let bounds: Bounds | null = null;
-
-      if (entry && renderModel) {
-        // Inside the run's layout computed: spacing edits re-run the layout.
-        track(renderModel.xAdvanceCell);
-        glyphName = entry.name;
-        bounds = renderModel.bounds;
-      }
-
-      const xAdvance = resolveAdvance(g, renderModel);
-      const spacing = !isNonSpacingGlyph(g.glyphName, g.codepoint);
-      if (kernable?.glyphId && entry && spacing) {
-        kernable.xKern = editor.font.kerningBetween(
+    const positioned: PositionedGlyph[] = [];
+    let pen = 0;
+    let kernable: PositionedGlyph | null = null;
+    for (const [index, glyph] of glyphs.entries()) {
+      const mark = markOffsets.get(index);
+      if (!mark && kernable?.glyphId && glyph.glyphId && run.direction === "ltr") {
+        kernable.xKern = this.#editor.font.kerningBetween(
           kernable.glyphId,
-          entry.id,
-          externalLocation.peek(),
-          editor.activeSourceIdCell.peek(),
+          glyph.glyphId,
+          this.#externalLocation.peek(),
+          this.#editor.activeSourceIdCell.peek(),
         );
-        totalAdvance += kernable.xKern;
+        pen += kernable.xKern;
       }
-      const origin = { x: totalAdvance, y: 0 };
-      const offset = resolveGlyphOffset(g, editor, source);
-      totalAdvance += xAdvance;
 
-      const positioned = {
-        glyphId: entry?.id ?? null,
-        glyphName,
-        sourceItemIds: [g.id],
-        origin,
+      const attached = mark !== undefined && mark.to !== null;
+      const ownOffset = mark && !attached ? mark.offset : { x: 0, y: 0 };
+      const xAdvance = attached
+        ? 0
+        : displayAdvance(glyph.model?.xAdvance ?? 0, glyph.name, glyph.codepoint) +
+          glyph.shaped.xAdvance;
+      const current: PositionedGlyph = {
+        glyphId: glyph.glyphId,
+        glyphName: glyph.name,
+        sourceItemIds: itemIds(run, glyph.shaped.cluster),
+        origin: { x: pen, y: 0 },
         xAdvance,
         xKern: 0,
-        yAdvance: 0,
-        xOffset: offset.x,
-        yOffset: offset.y,
-        cluster: run.clusterStart + idx,
-        bounds,
+        yAdvance: glyph.shaped.yAdvance,
+        xOffset: glyph.shaped.xOffset + ownOffset.x,
+        yOffset: glyph.shaped.yOffset + ownOffset.y,
+        cluster: run.clusterStart + glyph.shaped.cluster,
+        bounds: glyph.model?.bounds ?? null,
       };
-      glyphs.push(positioned);
-      kernable = spacing ? positioned : null;
+      positioned.push(current);
+      if (attached) continue;
+      pen += xAdvance;
+      // A literal mark breaks the kerning pair around it; an attached one is skipped over.
+      kernable = mark ? null : current;
     }
 
-    return { ...run, glyphs, advance: totalAdvance };
+    // In logical order, so a mark on a mark follows its target's final place.
+    for (const index of logicalIndexes(run)) {
+      const mark = markOffsets.get(index);
+      const current = positioned[index];
+      const target = mark?.to == null ? undefined : positioned[mark.to];
+      if (!mark || !current || !target) continue;
+      current.origin = { ...target.origin };
+      current.xOffset += target.xOffset + mark.offset.x;
+      current.yOffset += target.yOffset + mark.offset.y;
+    }
+
+    return { ...run, glyphs: positioned, advance: pen };
   }
-}
 
-/** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(item: GlyphTextItem, view: GlyphRenderModel | null): number {
-  const raw = view?.xAdvance ?? 0;
-  return displayAdvance(raw, item.glyphName, item.codepoint);
-}
-
-export function resolveGlyphOffset(
-  item: GlyphTextItem,
-  editor: Editor,
-  source: Source | null,
-): Point2D {
-  if (!isNonSpacingGlyph(item.glyphName, item.codepoint)) return { x: 0, y: 0 };
-  if (!source) return { x: 0, y: 0 };
-
-  const record = recordForTextItem(item, editor.font);
-  const glyph = record ? editor.glyphForId(record.id) : null;
-  const layer = glyph?.layerForSource(source.id) ?? null;
-  if (!layer) return { x: 0, y: 0 };
-
-  const metrics = editor.font.defaultSourceMetrics;
-  const targetX = 300;
-  const targetYForAnchorName = (anchorName: string): number => {
-    switch (anchorName) {
-      case "top":
-        return metrics.capHeight ?? metrics.ascender;
-      case "bottom":
-      case "ogonek":
-        return 0;
-      case "center":
-      default:
-        return (metrics.ascender + metrics.descender) / 2;
+  #runGlyph(run: SegmentedRun, shaped: ShapedGlyph): RunGlyph {
+    const font = this.#editor.font;
+    const entry = shaped.glyphId ? font.entryForId(shaped.glyphId) : null;
+    if (entry) {
+      return {
+        shaped,
+        glyphId: entry.id,
+        name: entry.name,
+        codepoint: entry.unicodes[0] ?? null,
+        model: this.#model(entry.id),
+      };
     }
-  };
-
-  const attachingAnchor = layer.anchors.find((anchor) => {
-    const name = anchor.name ?? "";
-    return name.startsWith("_") && name.length > 1;
-  });
-
-  if (attachingAnchor) {
-    const targetName = attachingAnchor.name!.slice(1);
+    // No glyph: a character the font lacks keeps the name it would take; a missing pick is .notdef.
+    const item = run.items[shaped.cluster];
+    const codepoint = item?.kind === "character" ? item.codepoint : null;
     return {
-      x: targetX - attachingAnchor.x,
-      y: targetYForAnchorName(targetName) - attachingAnchor.y,
+      shaped,
+      glyphId: null,
+      name: codepoint === null ? NOTDEF : font.nameForUnicode(codepoint as Unicode),
+      codepoint,
+      model: null,
     };
   }
 
-  const bounds = layer.bounds;
-  if (!bounds) return { x: 0, y: 0 };
+  /** The glyph's render model at the layout's location; null until the glyph loads. */
+  #model(glyphId: GlyphId): GlyphRenderModel | null {
+    const cached = this.#models.get(glyphId);
+    if (cached !== undefined) return cached;
+    const model =
+      this.#editor
+        .glyphForId(glyphId)
+        ?.renderModelAt(this.#externalLocation, this.#editor.activeSourceIdCell) ?? null;
+    // Inside the run's layout computed: spacing edits re-run the layout.
+    if (model) track(model.xAdvanceCell);
+    this.#models.set(glyphId, model);
+    return model;
+  }
 
-  const centerX = (bounds.min.x + bounds.max.x) / 2;
-  const centerY = (bounds.min.y + bounds.max.y) / 2;
-  return {
-    x: targetX - centerX,
-    y: (metrics.ascender + metrics.descender) / 2 - centerY,
-  };
+  /**
+   * Attaches each mark to the glyph before it in logical order: to a preceding
+   * mark with the matching anchor (mark to mark), otherwise to the base. A
+   * glyph is a mark when it has an `_name` anchor its target has as `name`.
+   */
+  #anchorOffsets(run: SegmentedRun, glyphs: readonly RunGlyph[]): Map<number, MarkOffset> {
+    const offsets = new Map<number, MarkOffset>();
+    let base: number | null = null;
+    let previousMark: number | null = null;
+    for (const index of logicalIndexes(run)) {
+      const model = glyphs[index]?.model ?? null;
+      // Inside the run's layout computed: anchor edits re-run the layout.
+      model?.trackAnchors();
+      const offset = anchorOffset(model, previousMark, glyphs) ?? anchorOffset(model, base, glyphs);
+      if (offset) {
+        offsets.set(index, offset);
+        previousMark = index;
+        continue;
+      }
+      base = index;
+      previousMark = null;
+    }
+    return offsets;
+  }
+
+  /** Sets each non-spacing glyph beside the text, on the anchor height it attaches at. */
+  #literalOffsets(glyphs: readonly RunGlyph[]): Map<number, MarkOffset> {
+    const source =
+      this.#editor.activeSource ??
+      this.#editor.font.sourceAtOrDefault(this.#externalLocation.peek());
+    const offsets = new Map<number, MarkOffset>();
+    for (const [index, glyph] of glyphs.entries()) {
+      if (!isNonSpacingGlyph(glyph.name, glyph.codepoint)) continue;
+      offsets.set(index, {
+        to: null,
+        offset: this.#literalMarkOffset(glyph, source),
+      });
+    }
+    return offsets;
+  }
+
+  #literalMarkOffset(glyph: RunGlyph, source: Source | null): Point2D {
+    const layer =
+      glyph.glyphId && source
+        ? (this.#editor.glyphForId(glyph.glyphId)?.layerForSource(source.id) ?? null)
+        : null;
+    if (!layer) return { x: 0, y: 0 };
+
+    const metrics = this.#editor.font.defaultSourceMetrics;
+    const targetX = 300;
+    const targetYForAnchorName = (anchorName: string): number => {
+      switch (anchorName) {
+        case "top":
+          return metrics.capHeight ?? metrics.ascender;
+        case "bottom":
+        case "ogonek":
+          return 0;
+        case "center":
+        default:
+          return (metrics.ascender + metrics.descender) / 2;
+      }
+    };
+
+    const attachingAnchor = layer.anchors.find((anchor) => {
+      const name = anchor.name ?? "";
+      return name.startsWith("_") && name.length > 1;
+    });
+    if (attachingAnchor) {
+      const targetName = attachingAnchor.name!.slice(1);
+      return {
+        x: targetX - attachingAnchor.x,
+        y: targetYForAnchorName(targetName) - attachingAnchor.y,
+      };
+    }
+
+    const bounds = layer.bounds;
+    if (!bounds) return { x: 0, y: 0 };
+    const centerX = (bounds.min.x + bounds.max.x) / 2;
+    const centerY = (bounds.min.y + bounds.max.y) / 2;
+    return {
+      x: targetX - centerX,
+      y: (metrics.ascender + metrics.descender) / 2 - centerY,
+    };
+  }
 }
 
-function recordForTextItem(item: GlyphTextItem, font: Font): GlyphEntry | null {
-  return font.entryForName(item.glyphName);
+/** The offset that puts a mark's `_name` anchor on the target's `name` anchor; null when none match. */
+function anchorOffset(
+  mark: GlyphRenderModel | null,
+  target: number | null,
+  glyphs: readonly RunGlyph[],
+): MarkOffset | null {
+  const targetModel = target === null ? null : glyphs[target]?.model;
+  if (!mark || target === null || !targetModel) return null;
+  for (const markAnchor of mark.anchors) {
+    if (!markAnchor.name?.startsWith("_")) continue;
+    const name = markAnchor.name.slice(1);
+    const targetAnchor = targetModel.anchors.find((anchor) => anchor.name === name);
+    if (targetAnchor) {
+      return {
+        to: target,
+        offset: {
+          x: targetAnchor.x - markAnchor.x,
+          y: targetAnchor.y - markAnchor.y,
+        },
+      };
+    }
+  }
+  return null;
+}
+
+/** Indexes into the run's visual-order glyphs, in logical order. */
+function logicalIndexes(run: SegmentedRun): number[] {
+  const indexes = run.shaped.map((_, index) => index);
+  return run.direction === "rtl" ? indexes.reverse() : indexes;
+}
+
+/** Returns the items a glyph at `cluster` covers: up to the run's next cluster. */
+function itemIds(run: SegmentedRun, cluster: number): PositionedGlyph["sourceItemIds"] {
+  const next = run.shaped.reduce(
+    (end, glyph) => (glyph.cluster > cluster && glyph.cluster < end ? glyph.cluster : end),
+    run.items.length,
+  );
+  return run.items.slice(cluster, next).map((item) => item.id);
 }
