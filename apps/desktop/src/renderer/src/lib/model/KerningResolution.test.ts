@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { GlyphId, KerningSnapshot, SourceId } from "@shift/types";
-import { Kerning, type ResolvedKerning } from "./Kerning";
+import { Kerning, type ResolvedKerning } from "@shift/editor/model";
 
 interface ResolutionCase {
   readonly sourceId: SourceId;
@@ -15,7 +15,7 @@ interface ResolutionCase {
 // snapshot Rust sends and Rust's own resolution of every pair in it.
 const fixture = JSON.parse(
   readFileSync(
-    resolve(import.meta.dirname, "../../../../types/__fixtures__/kerning_resolution.json"),
+    resolve(process.cwd(), "../../packages/types/__fixtures__/kerning_resolution.json"),
     "utf8",
   ),
 ) as { snapshot: KerningSnapshot; cases: ResolutionCase[] };
