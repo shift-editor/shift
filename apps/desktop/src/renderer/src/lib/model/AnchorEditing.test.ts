@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AnchorId, GlyphName } from "@shift/types";
 import { signal } from "@shift/editor/signals";
+import { PositionEdits } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
 
 const FIXTURE = resolve(process.cwd(), "../../fixtures/fonts/AnchorPropagation.glyphs");
@@ -79,5 +80,33 @@ describe("adding and renaming anchors", () => {
     await editor.settle();
 
     expect(acuteX()).toBe(180);
+  });
+
+  it("moves attached components in other glyphs live while the anchor is dragged", async () => {
+    const source = editor.font.defaultSource;
+    const aacute = glyph("aacute").renderModelAt(
+      signal(editor.font.externalLocationForSource(source.id)!),
+      signal(source.id),
+    );
+    const acuteId = glyph("acutecomb").id;
+    const acuteX = () => aacute.components.find((c) => c.glyphId === acuteId)!.transform.e;
+    const topX = () => aacute.anchorNamed("top")!.x;
+    expect(acuteX()).toBe(150);
+    expect(topX()).toBe(250);
+
+    const layer = glyph("a").layerForSource(source.id)!;
+    const top = layer.anchors.find((anchor) => anchor.name === "top")!;
+    const selection = editor.positionSelection([top.id])!;
+    const move = PositionEdits.fromSelection(selection).move(selection.targets);
+
+    move.preview({ x: 30, y: 10 });
+    expect(acuteX()).toBe(180);
+    expect(topX()).toBe(280);
+
+    move.commit("Move anchor");
+    expect(acuteX()).toBe(180);
+    await editor.settle();
+    expect(acuteX()).toBe(180);
+    expect(topX()).toBe(280);
   });
 });

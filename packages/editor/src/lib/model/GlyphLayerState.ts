@@ -44,8 +44,12 @@ export class GlyphLayerState {
   readonly #sidebearings: ComputedSignal<GlyphSidebearings>;
   readonly #buffersChanged: ComputedSignal<LayerChangeToken>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
+  readonly #acceptedGeometry: ComputedSignal<GlyphGeometry | null>;
 
-  #confirmedState: GlyphState | null = null;
+  /** The last accepted state while local edits await confirmation; null when none are pending. */
+  readonly #confirmedState: WritableSignal<GlyphState | null> = signal<GlyphState | null>(null, {
+    name: "glyphLayer.confirmed",
+  });
   // non-reactive: rollback snapshots per pending edit; only read by the imperative edit, fold, and rollback paths
   readonly #pendingStates = new Map<PendingEditId, GlyphState>();
 
@@ -74,6 +78,13 @@ export class GlyphLayerState {
     this.#geometry = computed(
       () => new GlyphGeometry(this.#structure.value, this.#buffers.value.snapshotCell.value),
       { name: "glyphLayer.geometry" },
+    );
+    this.#acceptedGeometry = computed(
+      () => {
+        const accepted = this.#editBaseState.value ?? this.#confirmedState.value;
+        return accepted ? new GlyphGeometry(accepted.structure, accepted.values) : null;
+      },
+      { name: "glyphLayer.acceptedGeometry" },
     );
   }
 
@@ -134,6 +145,18 @@ export class GlyphLayerState {
 
   get geometryCell(): Signal<GlyphGeometry> {
     return this.#geometry;
+  }
+
+  /**
+   * The layer as the workspace last accepted it, while a local edit or an
+   * unconfirmed one shows something else; null when the layer shows exactly that.
+   *
+   * @remarks
+   * Lets other glyphs decide what was true before an edit in progress, such
+   * as which of their components sat on this layer's anchors.
+   */
+  get acceptedGeometryCell(): Signal<GlyphGeometry | null> {
+    return this.#acceptedGeometry;
   }
 
   /**
@@ -248,7 +271,7 @@ export class GlyphLayerState {
   }
 
   replace(state: GlyphState): void {
-    this.#confirmedState = null;
+    this.#confirmedState.set(null);
     this.#pendingStates.clear();
     this.#publish(state);
   }
@@ -267,22 +290,22 @@ export class GlyphLayerState {
 
     this.#pendingStates.delete(editId);
     this.#publish(state);
-    if (this.#pendingStates.size === 0) this.#confirmedState = null;
+    if (this.#pendingStates.size === 0) this.#confirmedState.set(null);
   }
 
   foldWorkspaceState(editId: PendingEditId | null, replacement: LayerReplaced): void {
-    const confirmed = this.#confirmedState ?? this.#editBaseState.peek() ?? this.state;
+    const confirmed = this.#confirmedState.peek() ?? this.#editBaseState.peek() ?? this.state;
     const state = {
       layerId: this.#layerId,
       structure: replacement.structure ?? confirmed.structure,
       values: replacement.values,
     };
-    this.#confirmedState = state;
+    this.#confirmedState.set(state);
 
     if (editId !== null) this.#pendingStates.delete(editId);
     if (this.#pendingStates.size > 0) return;
 
-    this.#confirmedState = null;
+    this.#confirmedState.set(null);
     this.#publish(state);
   }
 
@@ -342,7 +365,7 @@ export class GlyphLayerState {
         if (!applied) return false;
         if (alreadyPending || !before) return true;
 
-        if (this.#pendingStates.size === 0) this.#confirmedState = before;
+        if (this.#pendingStates.size === 0) this.#confirmedState.set(before);
         this.#pendingStates.set(editId, before);
         return true;
       } catch (error) {

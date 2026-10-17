@@ -38,6 +38,7 @@ import type {
   GlyphFillHit,
   GlyphOptions,
 } from "../../types/glyph";
+import { followingPlacements } from "./anchors/anchorAttachment";
 import {
   propagateAnchors,
   type PropagatedAnchors,
@@ -526,6 +527,11 @@ export class GlyphLayer {
   }
 
   /** @internal Reactive geometry used for component transform reads. */
+  /** This source as the workspace last accepted it, while an edit shows something else; otherwise null. */
+  get acceptedGeometryCell(): Signal<GlyphGeometry | null> {
+    return this.#writer.layerState.acceptedGeometryCell;
+  }
+
   get geometryCell(): Signal<GlyphGeometry> {
     return this.#writer.geometryCell;
   }
@@ -1395,6 +1401,7 @@ export class GlyphRenderModel {
   // non-reactive: glyphs whose propagation is being computed, to stop at a component cycle
   readonly #propagating = new Set<GlyphId>();
   readonly #propagatedAnchorsCell: Signal<readonly PropagationAnchor[]>;
+  readonly #placementsCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>;
   readonly #anchorsByNameCell: Signal<ReadonlyMap<string, PropagationAnchor>>;
 
   /**
@@ -1439,6 +1446,15 @@ export class GlyphRenderModel {
       create: (idCell) =>
         computed(() => this.#propagate(idCell.value), {
           name: "glyph.renderModel.propagatedAnchors",
+        }),
+      dispose: (cell) => cell.dispose(),
+    });
+    this.#placementsCache = keyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>({
+      name: "glyph.renderModel.componentPlacements",
+      key: (id) => id,
+      create: (idCell) =>
+        computed(() => this.#placements(idCell.value), {
+          name: "glyph.renderModel.componentPlacements",
         }),
       dispose: (cell) => cell.dispose(),
     });
@@ -1565,6 +1581,58 @@ export class GlyphRenderModel {
     return this.#anchorsByNameCell.peek().get(name) ?? null;
   }
 
+  /**
+   * @internal Where a glyph's direct components show, by component index.
+   *
+   * @remarks
+   * The authored placements, except while an edit is in progress at an exact
+   * source: a component that sat on anchors the edit moves follows them, as
+   * the workspace will place it when the edit lands.
+   */
+  componentMatrices(glyphId: GlyphId): readonly MatModel[] {
+    const cell = this.#placementsCache.get(glyphId);
+    track(cell);
+    return cell.peek();
+  }
+
+  #placements(glyphId: GlyphId): readonly MatModel[] {
+    // Called from the placement computeds: track, then read.
+    track(this.#externalLocation);
+    track(this.#activeSourceId);
+    const location = this.#externalLocation.peek();
+    const sourceId = this.#activeSourceId.peek();
+    const geometry = this.geometryAt(glyphId, location);
+    const authored = geometry.components.map((component) => component.matrix);
+    if (authored.length < 2) return authored;
+
+    // Accepted state exists only for exact layers with an edit in progress.
+    const accepted = (id: GlyphId) => {
+      const cell = this.#layerAt(id, location, sourceId)?.acceptedGeometryCell;
+      if (!cell) return null;
+      track(cell);
+      return cell.peek();
+    };
+    const parentAccepted = accepted(glyphId);
+    const baseAccepted = geometry.components.map((component) => accepted(component.baseGlyphId));
+    if (!parentAccepted && baseAccepted.every((base) => base === null)) return authored;
+
+    const acceptedComponents = parentAccepted?.components ?? geometry.components;
+    return followingPlacements(
+      geometry.components.map((component, index) => {
+        const acceptedComponent = acceptedComponents[index] ?? component;
+        const anchors = this.geometryAt(component.baseGlyphId, location).anchors;
+        return {
+          transform: component.transform,
+          matrix: component.matrix,
+          acceptedTransform: acceptedComponent.transform,
+          acceptedMatrix: acceptedComponent.matrix,
+          anchors,
+          acceptedAnchors: baseAccepted[index]?.anchors ?? anchors,
+        };
+      }),
+    );
+  }
+
   #propagate(glyphId: GlyphId): PropagatedAnchors {
     // Rust rejects component cycles; this stops one that reaches the editor first.
     if (this.#propagating.has(glyphId)) return { anchors: [], baseGlyphCount: 0 };
@@ -1576,14 +1644,15 @@ export class GlyphRenderModel {
       const anchors = geometry.anchors.flatMap((anchor) =>
         anchor.name === undefined ? [] : [{ name: anchor.name, x: anchor.x, y: anchor.y }],
       );
-      const components = geometry.components.map((component) => {
+      const matrices = this.componentMatrices(glyphId);
+      const components = geometry.components.map((component, index) => {
         const propagatedCell = this.#propagatedCache.get(component.baseGlyphId);
         track(propagatedCell);
         const propagated = propagatedCell.peek();
         return {
           anchors: propagated.anchors,
           baseGlyphCount: propagated.baseGlyphCount,
-          matrix: component.matrix,
+          matrix: matrices[index] ?? component.matrix,
         };
       });
       const category = this.#anchorCategory(glyphId);
