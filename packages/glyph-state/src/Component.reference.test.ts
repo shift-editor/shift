@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import reference from "@shift/types/fixtures/geometry_reference.json";
 import { Mat, type DecomposedTransform, type MatModel, type Point2D } from "@shift/geo";
+import { angleBetween } from "./testing";
 
 interface ComposeCase {
   readonly name: string;
@@ -50,13 +51,3 @@ describe("component matrices match shift-font's DecomposedTransform", () => {
     }
   });
 });
-
-/**
- * Signed difference between two angles in degrees, in [-180, 180).
- *
- * JSON imports drop the sign of zero, so a flip whose matrix holds `-0`
- * decomposes to 180° here and -180° in Rust; both are the same rotation.
- */
-function angleBetween(a: number, b: number): number {
-  return ((((a - b + 180) % 360) + 360) % 360) - 180;
-}

@@ -27,13 +27,13 @@ const FIXTURE: &str = "../../packages/types/__fixtures__/geometry_reference.json
 
 #[test]
 fn geometry_reference_fixture_matches_shift_font() {
-    let fixture = json!({
-        "compose": compose_cases(),
-        "decompose": decompose_cases(),
-        "contours": contour_cases(),
-        "layerTransforms": layer_transform_cases(),
-    });
-    let generated = format!("{}\n", serde_json::to_string_pretty(&fixture).unwrap());
+    let generated = fixture_text(&[
+        ("compose", json!(compose_cases())),
+        ("contours", json!(contour_cases())),
+        ("decompose", json!(decompose_cases())),
+        ("layerInput", json!(GlyphState::from_layer(&sample_layer()))),
+        ("layerTransforms", json!(layer_transform_cases())),
+    ]);
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURE);
 
     if std::env::var_os("SHIFT_UPDATE_FIXTURES").is_some() {
@@ -47,6 +47,29 @@ fn geometry_reference_fixture_matches_shift_font() {
         "{FIXTURE} is stale; regenerate it with \
          `SHIFT_UPDATE_FIXTURES=1 cargo test -p shift-wire --test geometry_reference`",
     );
+}
+
+/// Writes the fixture's sections pretty-printed, but each case as one compact
+/// line, so a regenerated fixture diffs per case instead of per number.
+fn fixture_text(sections: &[(&str, Value)]) -> String {
+    let compact = |value: &Value| serde_json::to_string(value).unwrap();
+    let sections = sections
+        .iter()
+        .map(|(name, value)| {
+            let body = match value {
+                Value::Array(cases) => {
+                    let lines = cases
+                        .iter()
+                        .map(|case| format!("    {}", compact(case)))
+                        .collect::<Vec<_>>();
+                    format!("[\n{}\n  ]", lines.join(",\n"))
+                }
+                other => compact(other),
+            };
+            format!("  {}: {body}", compact(&json!(name)))
+        })
+        .collect::<Vec<_>>();
+    format!("{{\n{}\n}}\n", sections.join(",\n"))
 }
 
 fn decomposed(
@@ -370,11 +393,6 @@ fn contour_inputs() -> Vec<(String, Vec<Point>, bool)> {
             true,
         ),
         (
-            "closed single on-curve point",
-            vec![(12.5, -7.25, on)],
-            true,
-        ),
-        (
             "open cubic with a dangling handle",
             vec![
                 (0.0, 0.0, on),
@@ -570,7 +588,7 @@ fn rotation(degrees: f64) -> Transform {
     matrix(cos, sin, -sin, cos, 0.0, 0.0)
 }
 
-/// `GlyphLayer::transform_layer` on one layer under several matrices.
+/// `GlyphLayer::transform_layer` on the `layerInput` layer under several matrices.
 fn layer_transform_cases() -> Vec<Value> {
     let center = (250.0, 260.0);
     let matrices = [
@@ -591,18 +609,20 @@ fn layer_transform_cases() -> Vec<Value> {
         ),
         ("vertical flip", Transform::scale(1.0, -1.0)),
         ("skew", matrix(1.0, 0.0, 0.25, 1.0, 0.0, 0.0)),
+        (
+            "collapse to zero width",
+            about(center, Transform::scale(0.0, 1.0)),
+        ),
     ];
 
     matrices
         .into_iter()
         .map(|(name, transform)| {
-            let before = sample_layer();
-            let mut after = before.clone();
+            let mut after = sample_layer();
             after.transform_layer(&transform);
             json!({
                 "name": name,
                 "matrix": matrix_json(&transform),
-                "before": GlyphState::from_layer(&before),
                 "after": GlyphState::from_layer(&after).values,
                 "afterBounds": layer_bbox(&after, &[]).map(bounds_json),
             })

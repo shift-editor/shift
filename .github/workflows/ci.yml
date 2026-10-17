@@ -55,6 +55,7 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
+              - 'packages/types/__fixtures__/**'
             typescript:
               - 'apps/**'
               - 'packages/**'
