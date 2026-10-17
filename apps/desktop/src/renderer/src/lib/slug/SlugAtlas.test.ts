@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { GlyphId, SlugSection, SourceId } from "@shift/types";
-import { mintAxisId, mintAxisMappingId, mintSourceId } from "@shift/types";
+import {
+  mintAxisId,
+  mintAxisMappingId,
+  mintSourceId,
+  SLUG_COMPONENT_GLYPH_FLAG,
+  SLUG_VARIABLE_COMPONENT_GLYPH_BYTES,
+  SLUG_VARIABLE_COMPONENT_GLYPH_OFFSETS,
+  SLUG_VARIABLE_GLYPH_BYTES,
+  SLUG_VARIABLE_GLYPH_OFFSETS,
+} from "@shift/types";
 import type { GlyphAtlasPage } from "@/types/glyphAtlas";
 import { SlugAtlas } from "./SlugAtlas";
 
@@ -10,8 +19,8 @@ function residentFixture(): {
   descriptor: GlyphAtlasPage;
   bytes: Uint8Array<ArrayBuffer>;
 } {
-  const glyphs = { offset: 256, length: 64 };
-  const componentGlyphs = { offset: 512, length: 24 };
+  const glyphs = { offset: 256, length: 2 * SLUG_VARIABLE_GLYPH_BYTES };
+  const componentGlyphs = { offset: 512, length: SLUG_VARIABLE_COMPONENT_GLYPH_BYTES };
   const descriptor: GlyphAtlasPage = {
     generation: 7,
     pageIndex: 0,
@@ -29,7 +38,7 @@ function residentFixture(): {
       components: emptySection(),
       componentSources: emptySection(),
       lineBits: emptySection(),
-      totalLength: 536,
+      totalLength: componentGlyphs.offset + componentGlyphs.length,
     },
     previewExtents: { horizontal: 0, minimumY: 0, maximumY: 0 },
     glyphs: [
@@ -46,10 +55,16 @@ function residentFixture(): {
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);
   const view = new DataView(bytes.buffer);
-  view.setUint32(glyphs.offset + 20, 2, true);
-  view.setUint32(glyphs.offset + 32 + 20, 3, true);
-  view.setUint32(glyphs.offset + 32 + 24, 0x8000_0000, true);
-  view.setUint32(componentGlyphs.offset + 12, 4, true);
+  const glyphFields = SLUG_VARIABLE_GLYPH_OFFSETS;
+  const componentGlyph = glyphs.offset + SLUG_VARIABLE_GLYPH_BYTES;
+  view.setUint32(glyphs.offset + glyphFields.curveCount, 2, true);
+  view.setUint32(componentGlyph + glyphFields.curveCount, 3, true);
+  view.setUint32(componentGlyph + glyphFields.sourceStart, SLUG_COMPONENT_GLYPH_FLAG, true);
+  view.setUint32(
+    componentGlyphs.offset + SLUG_VARIABLE_COMPONENT_GLYPH_OFFSETS.componentCount,
+    4,
+    true,
+  );
   return { descriptor, bytes };
 }
 
@@ -181,7 +196,11 @@ describe("resident atlas frame planning", () => {
     const { descriptor, bytes } = residentFixture();
     const atlas = new SlugAtlas(descriptor, buffer(), buffer(), descriptor.layout.totalLength);
     const queue = { writeBuffer() {} } as unknown as GPUQueue;
-    new DataView(bytes.buffer).setUint32(descriptor.layout.glyphs.offset + 20, 0, true);
+    new DataView(bytes.buffer).setUint32(
+      descriptor.layout.glyphs.offset + SLUG_VARIABLE_GLYPH_OFFSETS.curveCount,
+      0,
+      true,
+    );
     atlas.write(queue, 0, bytes);
 
     expect(atlas.hasDrawableOutline("glyph-a" as GlyphId, null)).toBe(false);

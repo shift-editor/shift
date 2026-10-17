@@ -44,7 +44,7 @@ Proof text is document-scoped item content projected through one implicit page r
 
 ## How it works
 
-Pointer actions use `ToolManager`'s click/drag history capture. Keyboard edits capture a replacement run record and the session caret together. `ShiftStore.onChange` notifies only the edited run's layout cell; changing the caret record does not rebuild layout. Missing glyphs load asynchronously and bump a layout version once available. Node definitions read snapshots during draw; background and scene layer props declare reactive redraw dependencies.
+Pointer actions use `ToolManager`'s click/drag history capture. Keyboard edits capture a replacement run record and the session caret together. `ShiftStore.onChange` notifies only the edited run's layout cell; changing the caret record does not rebuild layout. Missing glyphs load asynchronously and bump a layout version once available. Node definitions read snapshots during draw; background and scene layer props declare reactive redraw dependencies. A run's occurrences of one glyph share its render model, so `TextRunNodeDefinition` resolves and subscribes to each distinct glyph once per draw or hit test and spends only a translate and fill per occurrence; outline hits skip glyphs whose bounds, grown by the hit radius, miss the point. `apps/desktop/src/renderer/src/perf/textRunDraw.bench.ts` and `apps/desktop/e2e/text-run-perf.spec.ts` measure both at proof scale.
 
 ## Workflow recipes
 

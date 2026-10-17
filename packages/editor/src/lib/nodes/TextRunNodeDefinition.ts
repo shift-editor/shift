@@ -265,13 +265,13 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
     const radius = this.editor.hitRadius / this.#scale(node);
     let target: PointerTarget | null = null;
-    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
+    this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
       const local = {
         x: point.x - placed.origin.x,
         y: point.y - placed.origin.y,
       };
       if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
-    }
+    });
     return target;
   }
 
@@ -343,6 +343,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   /** Every gap of the run: before each line, between neighbours, and after each line. */
   *#gaps(node: TextRunNode, layout: TextLayout): Iterable<SpacingGap> {
     const { ascender, descender } = layout.metrics;
+    const modelFor = this.#models();
     for (const line of this.#lines(layout)) {
       const baseline = line[0]!.baseline;
       const top = baseline + ascender;
@@ -353,8 +354,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         const after = line[index];
         const leftBoundary = before ? before.left + before.glyph.xAdvance : after!.left;
         const rightBoundary = after ? after.left : leftBoundary;
-        const left = before ? this.#spacingSide(before, leftBoundary, "right") : null;
-        const right = after ? this.#spacingSide(after, rightBoundary, "left") : null;
+        const left = before ? this.#spacingSide(before, leftBoundary, "right", modelFor) : null;
+        const right = after ? this.#spacingSide(after, rightBoundary, "left", modelFor) : null;
         if (left || right) {
           yield { node, left, right, leftBoundary, rightBoundary, baseline, top, bottom };
         }
@@ -378,10 +379,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     placed: PlacedGlyph,
     boundary: number,
     facing: "left" | "right",
+    modelFor: (glyphId: GlyphId) => GlyphRenderModel | null,
   ): SpacingSide | null {
     const itemId = placed.glyph.sourceItemIds[0];
     const glyphId = placed.glyph.glyphId;
-    const bounds = glyphId ? this.#model(glyphId)?.bounds : null;
+    const bounds = glyphId ? modelFor(glyphId)?.bounds : null;
     if (!itemId || !glyphId || !bounds) return null;
 
     if (facing === "right") {
@@ -458,22 +460,35 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
   }
 
+  /**
+   * Fills every run glyph, strokes its open contours, and outlines it when hovered or selected.
+   *
+   * @remarks
+   * One path batch for the whole run: a glyph costs one translate and one
+   * fill, plus a stroke only when it has open contours. Each distinct glyph
+   * subscribes and resolves its paths once per draw (see {@link distinctGlyph}).
+   */
   #drawGlyphs(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
+    const canvas = ctx.canvas;
     const outlined = this.#outlinedItemIds();
     const outlineStroke = {
-      color: ctx.canvas.theme.textRun.hoverOutline,
-      widthPx: ctx.canvas.theme.textRun.hoverOutlineWidthPx,
+      color: canvas.theme.textRun.hoverOutline,
+      widthPx: canvas.theme.textRun.hoverOutlineWidthPx,
     };
-    for (const { placed, itemId, model } of this.#runGlyphs(node, layout)) {
-      model.trackShape();
-      track(model.closedContoursPathCell);
-      track(model.openContoursPathCell);
-      ctx.canvas.save();
-      ctx.canvas.translate(placed.origin.x, placed.origin.y);
-      this.#outline.drawDisplay(ctx.canvas, model, ctx.canvas.theme.glyph);
-      if (outlined.has(itemId)) this.#outline.draw(ctx.canvas, model, { stroke: outlineStroke });
-      ctx.canvas.restore();
-    }
+    const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
+    canvas.withPathBatch(canvas.theme.glyph, (batch) => {
+      this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
+        let glyph = distinct.get(model);
+        if (!glyph) {
+          glyph = distinctGlyph(model);
+          distinct.set(model, glyph);
+        }
+        batch.offset(placed.origin.x, placed.origin.y);
+        batch.fill(glyph.closed);
+        if (glyph.open) batch.stroke(glyph.open);
+        if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
+      });
+    });
   }
 
   #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
@@ -490,21 +505,27 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     );
   }
 
-  /** The glyphs the run draws and hits itself: every loaded glyph except an edited child's item. */
-  *#runGlyphs(
+  /**
+   * Visits the glyphs the run draws and hits itself: every loaded glyph except an edited child's item.
+   *
+   * @remarks
+   * Resolves each distinct glyph's render model once per walk, so a reactive
+   * caller subscribes to each glyph's load once however often it occurs. A
+   * callback rather than an iterator, so a walk over a long run allocates
+   * nothing per glyph.
+   */
+  #forEachRunGlyph(
     node: TextRunNode,
     layout: TextLayout,
-  ): Iterable<{
-    placed: PlacedGlyph;
-    itemId: TextItemId;
-    model: GlyphRenderModel;
-  }> {
+    visit: (placed: PlacedGlyph, itemId: TextItemId, model: GlyphRenderModel) => void,
+  ): void {
     const skip = this.#editedChildItemId(node);
+    const modelFor = this.#models();
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];
       if (!itemId || itemId === skip || !placed.glyph.glyphId) continue;
-      const model = this.#model(placed.glyph.glyphId);
-      if (model) yield { placed, itemId, model };
+      const model = modelFor(placed.glyph.glyphId);
+      if (model) visit(placed, itemId, model);
     }
   }
 
@@ -523,6 +544,26 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     );
   }
 
+  /**
+   * Returns a lookup that resolves each glyph's render model once, for one walk over a run.
+   *
+   * @remarks
+   * A glyph's first lookup subscribes a reactive caller to its load, even when
+   * it misses, as {@link #model} does; later lookups return the remembered
+   * result. Use one lookup per walk: it does not see a glyph that loads during it.
+   */
+  #models(): (glyphId: GlyphId) => GlyphRenderModel | null {
+    const models = new Map<GlyphId, GlyphRenderModel | null>();
+    return (glyphId) => {
+      let model = models.get(glyphId);
+      if (model === undefined) {
+        model = this.#model(glyphId);
+        models.set(glyphId, model);
+      }
+      return model;
+    };
+  }
+
   /** Hovered and selected items, which the run outlines. */
   #outlinedItemIds(): ReadonlySet<TextItemId> {
     const ids = new Set<TextItemId>();
@@ -539,8 +580,45 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 }
 
+/** One distinct glyph's display paths, resolved once per draw of a run. */
+interface DistinctGlyph {
+  readonly closed: Path2D;
+  /** Null when the glyph has no open contours, so nothing is stroked. */
+  readonly open: Path2D | null;
+}
+
+/**
+ * Subscribes the reactive caller to a glyph's display and returns its paths.
+ *
+ * @remarks
+ * Subscribes to the open-contours path only while there are open contours;
+ * {@link GlyphRenderModel.hasOpenContoursCell} reruns the caller when a
+ * contour opens.
+ */
+function distinctGlyph(model: GlyphRenderModel): DistinctGlyph {
+  model.trackShape();
+  track(model.closedContoursPathCell);
+  track(model.hasOpenContoursCell);
+  if (!model.hasOpenContoursCell.peek()) return { closed: model.closedContoursPath, open: null };
+
+  track(model.openContoursPathCell);
+  return { closed: model.closedContoursPath, open: model.openContoursPath };
+}
+
 /** Whether a glyph-local point is inside a fill or within `radius` of a contour. */
 function hitsOutline(model: GlyphRenderModel, point: Point2D, radius: number): boolean {
+  // Beyond the outline's bounds grown by the radius, no contour is near and no fill holds the point.
+  const bounds = model.bounds;
+  if (
+    !bounds ||
+    point.x < bounds.min.x - radius ||
+    point.x > bounds.max.x + radius ||
+    point.y < bounds.min.y - radius ||
+    point.y > bounds.max.y + radius
+  ) {
+    return false;
+  }
+
   const onContour = model.contours.some((contour) =>
     contour.segments().some((segment) => segment.hit(point, radius)),
   );
