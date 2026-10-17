@@ -21,5 +21,8 @@
     "build": "node scripts/build.mjs",
     "build:debug": "node scripts/build.mjs",
     "build:e2e": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "binaryen": "132.0.0"
   }
 }

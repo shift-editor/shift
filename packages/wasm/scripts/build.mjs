@@ -5,16 +5,21 @@
 // compare the editor's TypeScript rules against shift-font. Neither output is
 // committed: rustc's output depends on the build host, so both are built like
 // the native addon, by turbo, before anything that imports them. Needs the Nix
-// dev shell's wasm-bindgen and wasm-opt (CI: .github/actions/wasm-toolchain);
-// wasm-bindgen must match the crate version in Cargo.lock exactly.
+// dev shell's wasm-bindgen (CI: .github/actions/wasm-toolchain), which must
+// match the crate version in Cargo.lock exactly; wasm-opt comes from the
+// pinned binaryen devDependency.
 import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../../..");
 const src = resolve(import.meta.dirname, "../src");
 const run = (command, args) => execFileSync(command, args, { cwd: root, stdio: "inherit" });
+// binaryen's wasm-opt is a Node script, so it runs the same on every OS.
+const binaryen = createRequire(import.meta.url).resolve("binaryen/package.json");
+const wasmOpt = join(dirname(binaryen), JSON.parse(readFileSync(binaryen, "utf8")).bin["wasm-opt"]);
 
 const locked = /name = "wasm-bindgen"\r?\nversion = "([^"]+)"/.exec(
   readFileSync(join(root, "Cargo.lock"), "utf8"),
@@ -75,7 +80,8 @@ function build(out, features) {
     "target/wasm32-unknown-unknown/release/shift_wasm.wasm",
   ]);
   const wasm = join(out, "shift_wasm_bg.wasm");
-  run("wasm-opt", [
+  run(process.execPath, [
+    wasmOpt,
     "-Oz",
     ...[
       "bulk-memory",
