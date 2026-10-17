@@ -86,18 +86,51 @@ function locationFromValues(axes: readonly Axis[], values: Float64Array): Map<Ax
  *
  * @remarks
  * Runs shift-font's `InterpolationBasis::weights_at`. A region naming an axis
- * the basis or `axes` lack contributes nothing.
+ * the basis or `axes` lack contributes nothing. The result is shared between
+ * callers at the same location: read it, don't change it.
  */
 export function interpolationWeights(
   basis: InterpolationBasis,
   location: DesignAxisLocation,
   axes: readonly Axis[],
 ): Float64Array {
-  return wasmInterpolationWeights(
+  const values = locationValues(axes, location);
+  const last = lastWeights.get(basis);
+  if (last && last.axes === axes && sameValues(last.location, values)) return last.weights;
+
+  const weights = wasmInterpolationWeights(
     interpolationHandles.of(basis),
     axesHandles.of(axes),
-    locationValues(axes, location),
+    values,
   );
+  lastWeights.set(basis, { axes, location: values, weights });
+  return weights;
+}
+
+/**
+ * The last weights evaluated for each basis.
+ *
+ * @remarks
+ * Glyphs with the same sources share one interned basis, so while a location
+ * holds, every glyph after the first reuses its weights: a scrub step costs
+ * one evaluation per distinct source set, however many glyphs are drawn.
+ */
+// non-reactive: a memo of pure results keyed by basis identity
+const lastWeights = new WeakMap<
+  InterpolationBasis,
+  {
+    readonly axes: readonly Axis[];
+    readonly location: Float64Array;
+    readonly weights: Float64Array;
+  }
+>();
+
+function sameValues(left: Float64Array, right: Float64Array): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) {
+    if (!Object.is(left[index], right[index])) return false;
+  }
+  return true;
 }
 
 /** Evaluates a Rust-compiled variation basis, normalizing by each axis's own range. */
