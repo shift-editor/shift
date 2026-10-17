@@ -2161,10 +2161,26 @@ export class Editor {
     const pointIds = selection.targets.points ?? [];
     const anchorIds = selection.targets.anchors ?? [];
     if (pointIds.length === 0 && anchorIds.length > 0) {
+      // Sources interpolate only when their anchors match, so a named anchor
+      // goes from every source; an unnamed one only from the sources edited.
+      const named = new Map<Glyph, Set<string>>();
+      const unnamed = new Set<AnchorId>();
+      for (const anchorId of anchorIds) {
+        const object = this.object(anchorId);
+        const name = object?.kind === "anchor" ? object.geometry.anchor(anchorId)?.name : undefined;
+        const glyph = object?.kind === "anchor" ? this.glyphForId(object.node.glyphId) : null;
+        if (name === undefined || !glyph) unnamed.add(anchorId);
+        else named.set(glyph, (named.get(glyph) ?? new Set()).add(name));
+      }
       this.transaction("Delete Anchors", () => {
-        selection.layer.removeAnchors(anchorIds);
+        for (const [glyph, names] of named) for (const name of names) glyph.removeAnchor(name);
+        selection.layer.removeAnchors([...unnamed]);
         for (const target of selection.additionalLayers) {
-          target.layer.removeAnchors(target.targets.anchors ?? []);
+          target.layer.removeAnchors(
+            (target.targets.anchors ?? []).filter(
+              (anchorId) => target.layer.anchor(anchorId)?.name === undefined,
+            ),
+          );
         }
       });
       await this.#clearSelectionAfterEdit();

@@ -2207,6 +2207,13 @@ export class Glyph {
     for (const layer of this.#layersCell.peek()) layer.addAnchor(name, position);
   }
 
+  /** Removes the anchor called `name` from every source, keeping sources compatible. */
+  removeAnchor(name: string): void {
+    for (const layer of this.#layersCell.peek()) {
+      layer.removeAnchors(layer.anchors.filter((anchor) => anchor.name === name).map((a) => a.id));
+    }
+  }
+
   /**
    * Renames the anchor called `name` in every source, keeping sources compatible.
    *

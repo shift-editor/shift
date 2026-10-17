@@ -46,6 +46,23 @@ describe("adding and renaming anchors", () => {
     expect(aacute.anchorNamed("bottom")).not.toBeNull();
   });
 
+  it("deletes a named anchor from every source as one undo step", async () => {
+    const before = namesBySource("a");
+    const ogonek = glyph("a")
+      .layerForSource(editor.font.defaultSource.id)!
+      .anchors.find((anchor) => anchor.name === "ogonek")!;
+    editor.selection.select([ogonek.id]);
+
+    expect(await editor.deleteSelection()).toBe(true);
+
+    expect(namesBySource("a")).toEqual(
+      before.map((names) => names.filter((name) => name !== "ogonek")),
+    );
+    await editor.undo();
+    await editor.settle();
+    expect(namesBySource("a")).toEqual(before);
+  });
+
   it("adds an anchor at the pointer to every source and selects it", async () => {
     const point = editor.localToScreen({ x: 120, y: 340 });
     // As the canvas context menu reports the pointer before running the command.
