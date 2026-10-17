@@ -638,24 +638,13 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1) return null;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
-    if (!glyph) return null;
-
-    const editingSourceIds = this.#editingSourceIdsCell.peek();
-    const layers = this.font.sources
-      .filter(({ id }) => editingSourceIds.has(id))
-      .map(({ id }) => glyph.layerForSource(id));
-    if (layers.length !== editingSourceIds.size || layers.some((layer) => layer === null)) {
-      return null;
-    }
+    const layers = this.#editingLayers(node.glyphId);
+    if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
       const record = this.createGlyph(name);
 
-      return layers.map((layer) => {
-        if (!layer) throw new Error("validated component layer is unavailable");
-        return [layer.sourceId, layer.addComponent(record.id)] as const;
-      });
+      return layers.map((layer) => [layer.sourceId, layer.addComponent(record.id)] as const);
     });
     const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
     if (!activeComponentId) return null;
@@ -691,22 +680,11 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
-    if (!glyph) return null;
-
-    const editingSourceIds = this.#editingSourceIdsCell.peek();
-    const layers = this.font.sources
-      .filter(({ id }) => editingSourceIds.has(id))
-      .map(({ id }) => glyph.layerForSource(id));
-    if (layers.length !== editingSourceIds.size || layers.some((layer) => layer === null)) {
-      return null;
-    }
+    const layers = this.#editingLayers(node.glyphId);
+    if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
-      layers.map((layer) => {
-        if (!layer) throw new Error("validated component layer is unavailable");
-        return [layer.sourceId, layer.addComponent(baseGlyphId)] as const;
-      }),
+      layers.map((layer) => [layer.sourceId, layer.addComponent(baseGlyphId)] as const),
     );
     const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
     if (!activeComponentId) return null;
@@ -715,6 +693,23 @@ export class Editor {
     this.selection.select([activeComponentId]);
     this.setActiveTool("select");
     return activeComponentId;
+  }
+
+  /**
+   * Returns the edited glyph's layer at each source selected for editing.
+   *
+   * @returns `null` when the glyph lacks a layer at one of them.
+   */
+  #editingLayers(glyphId: GlyphId): GlyphLayer[] | null {
+    const glyph = this.#fontStore.glyphForId(glyphId);
+    if (!glyph) return null;
+
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    const layers = this.font.sources
+      .filter(({ id }) => editingSourceIds.has(id))
+      .map(({ id }) => glyph.layerForSource(id));
+    if (layers.length !== editingSourceIds.size) return null;
+    return layers.every((layer) => layer !== null) ? layers : null;
   }
 
   public get externalLocationCell(): Signal<ExternalAxisLocation> {
@@ -2161,26 +2156,10 @@ export class Editor {
     const pointIds = selection.targets.points ?? [];
     const anchorIds = selection.targets.anchors ?? [];
     if (pointIds.length === 0 && anchorIds.length > 0) {
-      // Sources interpolate only when their anchors match, so a named anchor
-      // goes from every source; an unnamed one only from the sources edited.
-      const named = new Map<Glyph, Set<string>>();
-      const unnamed = new Set<AnchorId>();
-      for (const anchorId of anchorIds) {
-        const object = this.object(anchorId);
-        const name = object?.kind === "anchor" ? object.geometry.anchor(anchorId)?.name : undefined;
-        const glyph = object?.kind === "anchor" ? this.glyphForId(object.node.glyphId) : null;
-        if (name === undefined || !glyph) unnamed.add(anchorId);
-        else named.set(glyph, (named.get(glyph) ?? new Set()).add(name));
-      }
       this.transaction("Delete Anchors", () => {
-        for (const [glyph, names] of named) for (const name of names) glyph.removeAnchor(name);
-        selection.layer.removeAnchors([...unnamed]);
+        selection.layer.removeAnchors(anchorIds);
         for (const target of selection.additionalLayers) {
-          target.layer.removeAnchors(
-            (target.targets.anchors ?? []).filter(
-              (anchorId) => target.layer.anchor(anchorId)?.name === undefined,
-            ),
-          );
+          target.layer.removeAnchors(target.targets.anchors ?? []);
         }
       });
       await this.#clearSelectionAfterEdit();
@@ -2203,57 +2182,61 @@ export class Editor {
   }
 
   /**
-   * Adds an anchor at the pointer to the edited glyph, in every source, and selects it.
+   * Adds an anchor at the pointer to the edited glyph in each source being edited, and selects it.
    *
    * @remarks
    * The anchor is named `new` (or `new.1`, `new.2`, … when taken), as Glyphs
-   * names it, for renaming in the sidebar. Sources interpolate only when their
-   * anchors match, so every source gets it at the same position. One undo step.
+   * names it, for renaming in the sidebar. Like other structural edits it goes
+   * into the active source and every other source selected for editing, at the
+   * same position, as one undo step.
    *
    * @returns `false` when there is no single edited glyph at an active source.
    */
   public addAnchorAtPointer(): boolean {
-    const sourceId = this.activeSourceId;
+    const activeSourceId = this.activeSourceId;
     const glyphNodes = this.scene.nodesOfKind("glyph");
     const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
-    const glyph = node ? this.glyphForId(node.glyphId) : null;
-    const layer = node && sourceId ? this.layerForGlyph(node.glyphId, sourceId) : null;
-    if (!node || !glyph || !layer) return false;
+    const layers = node ? this.#editingLayers(node.glyphId) : null;
+    if (!node || !activeSourceId || !layers) return false;
 
-    const taken = new Set(glyph.layers.flatMap((each) => each.anchors.map((a) => a.name)));
+    const taken = new Set(layers.flatMap((layer) => layer.anchors.map((anchor) => anchor.name)));
     let name = "new";
     for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
     const point = this.toLocal(node, this.getMousePosition());
+    const position = { x: Math.round(point.x), y: Math.round(point.y) };
 
-    this.transaction("Add Anchor", () => {
-      glyph.addAnchor(name, { x: Math.round(point.x), y: Math.round(point.y) });
-    });
-    const added = layer.anchors.find((anchor) => anchor.name === name);
-    if (added) this.selection.select([added.id]);
+    const added = this.transaction("Add Anchor", () =>
+      layers.map((layer) => [layer.sourceId, layer.addAnchor(name, position)] as const),
+    );
+    const activeAnchorId = added.find(([sourceId]) => sourceId === activeSourceId)?.[1];
+    if (activeAnchorId) this.selection.select([activeAnchorId]);
     return true;
   }
 
   /**
-   * Renames an anchor in every source of its glyph, as one undo step.
+   * Renames an anchor in the active source and every other source selected
+   * for editing, as one undo step.
    *
    * @remarks
-   * Sources interpolate only when their anchors share names, so the anchor
-   * with the same name is renamed in each. An unnamed anchor is named in its
-   * own source only.
+   * The anchor in each other source is the one the layer match pairs with it,
+   * as moving it would.
    *
-   * @returns `false` when the anchor is unknown or the name is empty or unchanged.
+   * @returns `false` when the anchor is not on the active source, its
+   * matches are not ready, or the name is empty or unchanged.
    */
   public renameAnchor(anchorId: AnchorId, name: string): boolean {
-    const object = this.object(anchorId);
-    if (object?.kind !== "anchor") return false;
-    const current = object.geometry.anchor(anchorId)?.name;
-    const glyph = this.glyphForId(object.node.glyphId);
+    const selection = this.positionSelection([anchorId]);
+    const current = selection?.layer.anchor(anchorId)?.name;
     const newName = name.trim();
-    if (!glyph || newName === "" || newName === current) return false;
+    if (!selection || newName === "" || newName === current) return false;
 
     this.transaction("Rename Anchor", () => {
-      if (current === undefined) object.layer?.renameAnchors(new Map([[anchorId, newName]]));
-      else glyph.renameAnchor(current, newName);
+      selection.layer.renameAnchors(new Map([[anchorId, newName]]));
+      for (const target of selection.additionalLayers) {
+        target.layer.renameAnchors(
+          new Map((target.targets.anchors ?? []).map((id) => [id, newName] as const)),
+        );
+      }
     });
     return true;
   }

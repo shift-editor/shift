@@ -1159,7 +1159,7 @@ export class GlyphLayer {
    *
    * @remarks
    * Sources interpolate only when their anchors share names in the same
-   * order; {@link Glyph.renameAnchor} renames across every source at once.
+   * order; `Editor.renameAnchor` renames across the sources being edited.
    *
    * @param names - New name for each anchor id.
    */
@@ -2194,41 +2194,6 @@ export class Glyph {
 
   get layers(): readonly GlyphLayer[] {
     return this.#layersCell.peek();
-  }
-
-  /**
-   * Adds a named anchor at the same position in every source.
-   *
-   * @remarks
-   * Sources interpolate only when their anchors match by name and order, so
-   * an anchor goes into all of them; move it per source afterwards.
-   */
-  addAnchor(name: string, position: Point2D): void {
-    for (const layer of this.#layersCell.peek()) layer.addAnchor(name, position);
-  }
-
-  /** Removes the anchor called `name` from every source, keeping sources compatible. */
-  removeAnchor(name: string): void {
-    for (const layer of this.#layersCell.peek()) {
-      layer.removeAnchors(layer.anchors.filter((anchor) => anchor.name === name).map((a) => a.id));
-    }
-  }
-
-  /**
-   * Renames the anchor called `name` in every source, keeping sources compatible.
-   *
-   * @returns The number of anchors renamed.
-   */
-  renameAnchor(name: string, newName: string): number {
-    let renamed = 0;
-    for (const layer of this.#layersCell.peek()) {
-      const names = new Map(
-        layer.anchors.flatMap((anchor) => (anchor.name === name ? [[anchor.id, newName]] : [])),
-      );
-      layer.renameAnchors(names);
-      renamed += names.size;
-    }
-    return renamed;
   }
 
   layerForSource(sourceId: SourceId): GlyphLayer | null {

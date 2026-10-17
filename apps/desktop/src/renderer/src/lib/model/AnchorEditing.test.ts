@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { AnchorId, GlyphName } from "@shift/types";
+import type { AnchorId, GlyphName, SourceId } from "@shift/types";
 import { signal } from "@shift/editor/signals";
 import { PositionEdits } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
 
 const FIXTURE = resolve(process.cwd(), "../../fixtures/fonts/AnchorPropagation.glyphs");
 
-describe("adding and renaming anchors", () => {
+describe("adding, renaming, and deleting anchors", () => {
   let editor: TestEditor;
 
   beforeEach(async () => {
@@ -17,53 +17,86 @@ describe("adding and renaming anchors", () => {
 
   const glyph = (name: string) =>
     editor.glyphForId(editor.font.recordForName(name as GlyphName)!.id)!;
-  const namesBySource = (name: string) =>
-    glyph(name).layers.map((layer) => layer.anchors.map((anchor) => anchor.name));
+  const anchorNames = (name: string, sourceId: SourceId) =>
+    glyph(name)
+      .layerForSource(sourceId)!
+      .anchors.map((anchor) => anchor.name);
+  const sources = () => {
+    const active = editor.font.defaultSource.id;
+    const other = editor.font.sources.find((source) => source.id !== active)!.id;
+    return { active, other };
+  };
+  const anchorId = (glyphName: string, name: string) =>
+    glyph(glyphName)
+      .layerForSource(sources().active)!
+      .anchors.find((anchor) => anchor.name === name)!.id;
+  /** Edits the other master together with the active one, once their layers are matched. */
+  const editBothSources = async () => {
+    editor.selectSourceForEditing(sources().active);
+    editor.selectSourceForEditing(sources().other, "toggle");
+    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+  };
 
-  it("renames an anchor in every source, follows into composites, and undoes as one step", async () => {
-    const before = namesBySource("a");
-    const bottom = glyph("a")
-      .layerForSource(editor.font.defaultSource.id)!
-      .anchors.find((anchor) => anchor.name === "bottom")!;
-    const source = editor.font.defaultSource;
+  it("renames an anchor in the source being edited, follows into composites, and undoes", async () => {
+    const { active, other } = sources();
+    const otherBefore = anchorNames("a", other);
     const aacute = glyph("aacute").renderModelAt(
-      signal(editor.font.externalLocationForSource(source.id)!),
-      signal(source.id),
+      signal(editor.font.externalLocationForSource(active)!),
+      signal(active),
     );
 
-    expect(editor.renameAnchor(bottom.id, "bottomleft")).toBe(true);
+    expect(editor.renameAnchor(anchorId("a", "bottom"), "bottomleft")).toBe(true);
     await editor.settle();
 
-    expect(namesBySource("a")).toEqual(
-      before.map((names) => names.map((name) => (name === "bottom" ? "bottomleft" : name))),
-    );
+    expect(anchorNames("a", active)).toContain("bottomleft");
+    expect(anchorNames("a", other)).toEqual(otherBefore);
     expect(aacute.anchorNamed("bottomleft")).not.toBeNull();
     expect(aacute.anchorNamed("bottom")).toBeNull();
 
     await editor.undo();
     await editor.settle();
-    expect(namesBySource("a")).toEqual(before);
+    expect(anchorNames("a", active)).not.toContain("bottomleft");
     expect(aacute.anchorNamed("bottom")).not.toBeNull();
   });
 
-  it("deletes a named anchor from every source as one undo step", async () => {
-    const before = namesBySource("a");
-    const ogonek = glyph("a")
-      .layerForSource(editor.font.defaultSource.id)!
-      .anchors.find((anchor) => anchor.name === "ogonek")!;
-    editor.selection.select([ogonek.id]);
+  it("renames, adds, and deletes in every source selected for editing", async () => {
+    const { active, other } = sources();
+    await editBothSources();
+
+    expect(editor.renameAnchor(anchorId("a", "bottom"), "bottomleft")).toBe(true);
+    await editor.settle();
+    expect(anchorNames("a", active)).toContain("bottomleft");
+    expect(anchorNames("a", other)).toContain("bottomleft");
+
+    expect(editor.addAnchorAtPointer()).toBe(true);
+    await editor.settle();
+    expect(anchorNames("a", active)).toContain("new");
+    expect(anchorNames("a", other)).toContain("new");
+
+    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    editor.selection.select([anchorId("a", "ogonek")]);
+    expect(await editor.deleteSelection()).toBe(true);
+    expect(anchorNames("a", active)).not.toContain("ogonek");
+    expect(anchorNames("a", other)).not.toContain("ogonek");
+  });
+
+  it("deletes an anchor from the source being edited as one undo step", async () => {
+    const { active, other } = sources();
+    const before = anchorNames("a", active);
+    const otherBefore = anchorNames("a", other);
+    editor.selection.select([anchorId("a", "ogonek")]);
 
     expect(await editor.deleteSelection()).toBe(true);
 
-    expect(namesBySource("a")).toEqual(
-      before.map((names) => names.filter((name) => name !== "ogonek")),
-    );
+    expect(anchorNames("a", active)).not.toContain("ogonek");
+    expect(anchorNames("a", other)).toEqual(otherBefore);
     await editor.undo();
     await editor.settle();
-    expect(namesBySource("a")).toEqual(before);
+    expect(anchorNames("a", active)).toEqual(before);
   });
 
-  it("adds an anchor at the pointer to every source and selects it", async () => {
+  it("adds an anchor at the pointer to the source being edited and selects it", async () => {
+    const { active, other } = sources();
     const point = editor.localToScreen({ x: 120, y: 340 });
     // As the canvas context menu reports the pointer before running the command.
     editor.updateMousePosition(point.x, point.y);
@@ -72,16 +105,13 @@ describe("adding and renaming anchors", () => {
     expect(editor.addAnchorAtPointer()).toBe(true);
     await editor.settle();
 
-    for (const layer of glyph("a").layers) {
-      const added = layer.anchors.find((anchor) => anchor.name === "new");
-      expect(added && { x: added.x, y: added.y }).toEqual({ x: 120, y: 340 });
-    }
     const [selected] = editor.selection.ids;
     expect(editor.anchorPosition(selected as AnchorId)).toEqual({ x: 120, y: 340 });
+    expect(anchorNames("a", other)).not.toContain("new");
 
     expect(editor.addAnchorAtPointer()).toBe(true);
     await editor.settle();
-    expect(namesBySource("a")[0]).toContain("new.1");
+    expect(anchorNames("a", active)).toContain("new.1");
   });
 
   it("moves components attached to a moved anchor, in composites the editor holds", async () => {
