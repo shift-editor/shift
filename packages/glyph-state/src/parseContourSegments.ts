@@ -4,6 +4,11 @@ import type { ContourGeometry, SegmentPoints } from "./types/contour";
 /**
  * Parses line, quadratic, and cubic segments while retaining the supplied point references.
  *
+ * Mirrors `CurveSegmentIter` in `shift-font`. A closed contour holding a single
+ * on-curve point yields one zero-length line, as the pen protocol draws it
+ * (`moveTo`, `lineTo` the same point, `closePath`), so the point counts toward
+ * bounds as it does in Rust and in compiled glyph bounding boxes.
+ *
  * @param contour - Ordered points and closure; closed contours wrap controls to the first anchor.
  * @returns Fresh segment descriptions without allocating point or segment identities.
  */
@@ -11,14 +16,14 @@ export function parseContourSegments<TPoint extends NewPoint>(
   contour: ContourGeometry<TPoint>,
 ): SegmentPoints<TPoint>[] {
   const { points, closed } = contour;
-  if (points.length < 2) return [];
+  if (points.length === 0) return [];
 
   const segments: SegmentPoints<TPoint>[] = [];
   let index = 0;
 
   const getPoint = (i: number): TPoint | null => {
     if (i < points.length) return points[i];
-    if (closed) return points[i - points.length];
+    if (closed) return points[i % points.length];
 
     return null;
   };
