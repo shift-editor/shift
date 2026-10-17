@@ -1,9 +1,8 @@
 import { track } from "../../signals";
-import { displayAdvance, isNonSpacingGlyph } from "../../utils/unicode";
+import { displayAdvance } from "../../utils/displayAdvance";
 import type { GlyphTextItem, PositionedRun, SegmentedRun } from "./types";
 import type { Editor } from "../../editor/Editor";
 import type { Font } from "../../model/Font";
-import type { GlyphRenderModel } from "../../model/Glyph";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
 import type { Bounds, Point2D } from "@shift/geo";
@@ -16,7 +15,9 @@ import type { GlyphEntry, Source } from "@shift/types";
  * side-by-side editing).
  *
  * Neighbouring spacing glyphs are kerned with the font's pair kerning at the
- * displayed location; a mark between them interrupts the pair.
+ * displayed location; a mark between them interrupts the pair. A glyph is a
+ * mark when export resolves it as a nonspacing mark ({@link Font.isNonspacingMark});
+ * a character with no glyph in the font counts as spacing.
  */
 export class Positioner {
   position(
@@ -45,8 +46,9 @@ export class Positioner {
         bounds = renderModel.bounds;
       }
 
-      const xAdvance = resolveAdvance(g, renderModel);
-      const spacing = !isNonSpacingGlyph(g.glyphName, g.codepoint);
+      const nonspacingMark = editor.font.isNonspacingMark(g.glyphName);
+      const xAdvance = displayAdvance(renderModel?.xAdvance ?? 0, nonspacingMark);
+      const spacing = !nonspacingMark;
       if (kernable?.glyphId && entry && spacing) {
         kernable.xKern = editor.font.kerningBetween(
           kernable.glyphId,
@@ -57,7 +59,7 @@ export class Positioner {
         totalAdvance += kernable.xKern;
       }
       const origin = { x: totalAdvance, y: 0 };
-      const offset = resolveGlyphOffset(g, editor, source);
+      const offset = nonspacingMark ? markOffset(g, editor, source) : { x: 0, y: 0 };
       totalAdvance += xAdvance;
 
       const positioned = {
@@ -81,18 +83,8 @@ export class Positioner {
   }
 }
 
-/** Resolve a glyph item to its display advance (handles invisibles, fallbacks). */
-export function resolveAdvance(item: GlyphTextItem, view: GlyphRenderModel | null): number {
-  const raw = view?.xAdvance ?? 0;
-  return displayAdvance(raw, item.glyphName, item.codepoint);
-}
-
-export function resolveGlyphOffset(
-  item: GlyphTextItem,
-  editor: Editor,
-  source: Source | null,
-): Point2D {
-  if (!isNonSpacingGlyph(item.glyphName, item.codepoint)) return { x: 0, y: 0 };
+/** Offset that sits a nonspacing mark over its stand-in advance, by its attaching anchor or its bounds. */
+function markOffset(item: GlyphTextItem, editor: Editor, source: Source | null): Point2D {
   if (!source) return { x: 0, y: 0 };
 
   const record = recordForTextItem(item, editor.font);

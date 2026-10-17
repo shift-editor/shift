@@ -635,6 +635,7 @@ export class Font {
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
+    isNonspacingMark(name: GlyphName): boolean;
     isVariable(): boolean;
     kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
     // Warning: (ae-forgotten-export) The symbol "Kerning" needs to be exported by the entry point index.d.ts
@@ -914,6 +915,7 @@ export interface GlyphRecord {
     mark?: boolean;
     // (undocumented)
     name: GlyphName;
+    nonspacingMark?: boolean;
     // (undocumented)
     unicodes: Array<Unicode>;
 }
@@ -1523,10 +1525,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-DWlkqMcq.d.ts:2842:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DWlkqMcq.d.ts:2843:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-DWlkqMcq.d.ts:2844:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-DWlkqMcq.d.ts:4928:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-CHJ9T_2h.d.ts:2847:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CHJ9T_2h.d.ts:2848:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-CHJ9T_2h.d.ts:2849:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-CHJ9T_2h.d.ts:4933:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

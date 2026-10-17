@@ -502,6 +502,9 @@ pub struct NapiGlyphRecord {
     pub layers: Vec<NapiGlyphLayerRecord>,
     /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
     pub mark: Option<bool>,
+    /// A nonspacing mark (Mark category, Nonspacing subcategory): export
+    /// compiles it with no advance. Absent when it is not one.
+    pub nonspacing_mark: Option<bool>,
     /// `"explicit"` when classed a ligature, `"subcategory"` when a ligature
     /// once it has an attaching anchor.
     #[napi(ts_type = "\"explicit\" | \"subcategory\"")]
@@ -521,6 +524,7 @@ impl From<GlyphRecord> for NapiGlyphRecord {
                 .collect(),
             layers: record.layers.into_iter().map(Into::into).collect(),
             mark: record.mark.then_some(true),
+            nonspacing_mark: record.nonspacing_mark.then_some(true),
             ligature: record.ligature,
         }
     }
