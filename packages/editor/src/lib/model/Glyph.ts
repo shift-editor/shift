@@ -1355,6 +1355,7 @@ export class GlyphRenderModel {
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
+  readonly #hasOpenContoursCell: Signal<boolean>;
   readonly #svgPathCell: Signal<string>;
   readonly #sidebearingsCell: Signal<GlyphSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
@@ -1459,6 +1460,15 @@ export class GlyphRenderModel {
         if (!contour.contour.closed) path.addPath(contour.path);
       }
       return path;
+    });
+    this.#hasOpenContoursCell = computed(() => {
+      for (const contour of this.#contoursCell.value) {
+        // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
+        // Contours after the first open one cannot change the answer, so they go untracked.
+        contour.trackShape();
+        if (!contour.contour.closed) return true;
+      }
+      return false;
     });
     this.#svgPathCell = computed(() => {
       const contours = this.#contoursCell.value;
@@ -1627,6 +1637,17 @@ export class GlyphRenderModel {
 
   get openContoursPath(): Path2D {
     return this.#openContoursPathCell.peek();
+  }
+
+  /**
+   * Whether any contour, the root's or a component's, is open.
+   *
+   * @remarks
+   * Recomputes with the outline but notifies readers only when the answer
+   * flips, so a reader can skip {@link openContoursPathCell} while it is false.
+   */
+  get hasOpenContoursCell(): Signal<boolean> {
+    return this.#hasOpenContoursCell;
   }
 
   get svgPath(): string {
