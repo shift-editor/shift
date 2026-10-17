@@ -12,6 +12,13 @@ export interface SpringEasing {
   easing: string;
   /** Milliseconds until the spring has come to rest, including any bounce. */
   duration: number;
+  /**
+   * Fraction of `duration`, from 0 to 1, at which the spring first reaches
+   * `progress` of its way from 0 to 1. Lets other animations be pinned to where
+   * the motion is rather than to the clock, since a spring covers most of its
+   * distance early.
+   */
+  timeAtProgress: (progress: number) => number;
 }
 
 const STEP_SECONDS = 1 / 240;
@@ -49,7 +56,19 @@ export function springEasing({ visualDuration, bounce }: Spring): SpringEasing {
   }
   samples.push(1);
 
+  const timeAtProgress = (progress: number) => {
+    const reached = samples.findIndex((sample) => sample >= progress);
+    if (reached <= 0) return 0;
+
+    const before = samples[reached - 1];
+    const span = samples[reached] - before;
+    const within = span > 0 ? (progress - before) / span : 0;
+
+    return (reached - 1 + within) / (samples.length - 1);
+  };
+
   return {
+    timeAtProgress,
     easing: `linear(${samples.map((sample) => Number(sample.toFixed(4))).join(", ")})`,
     duration: Math.round(step * STEP_SECONDS * 1000),
   };
