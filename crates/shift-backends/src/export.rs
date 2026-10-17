@@ -481,8 +481,19 @@ mod tests {
             for source in glyph.sources {
                 let ours = propagate_at(&font, &glyph_id, &source.source_id, &categories);
                 assert_eq!(
-                    sorted(ours.anchors.into_iter().map(|a| (a.name, a.x, a.y)).collect()),
-                    sorted(source.anchors.into_iter().map(|a| (a.name, a.x, a.y)).collect()),
+                    sorted(
+                        ours.anchors
+                            .into_iter()
+                            .map(|a| (a.name, a.x, a.y))
+                            .collect()
+                    ),
+                    sorted(
+                        source
+                            .anchors
+                            .into_iter()
+                            .map(|a| (a.name, a.x, a.y))
+                            .collect()
+                    ),
                     "{} at {}",
                     glyph.glyph_name,
                     source.source_id
