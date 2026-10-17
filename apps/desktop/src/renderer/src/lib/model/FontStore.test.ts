@@ -3,6 +3,11 @@ import {
   asAnchorId,
   asContourId,
   asPointId,
+  DECOMPOSED_COMPONENT_VALUE_COUNT,
+  GLYPH_ADVANCE_VALUE_COUNT,
+  GLYPH_ADVANCE_VALUE_OFFSET,
+  GLYPH_ANCHOR_VALUE_COUNT,
+  GLYPH_POINT_VALUE_COUNT,
   type AppliedChange,
   type AnchorId,
   type ContourId,
@@ -385,12 +390,14 @@ function structure({
 }
 
 function valuesFor(glyphStructure: GlyphStructure): Float64Array {
-  let length = 1;
-  for (const contour of glyphStructure.contours) length += contour.points.length * 2;
-  length += glyphStructure.anchors.length * 2;
-  length += glyphStructure.components.length * 9;
+  let length = GLYPH_ADVANCE_VALUE_COUNT;
+  for (const contour of glyphStructure.contours) {
+    length += contour.points.length * GLYPH_POINT_VALUE_COUNT;
+  }
+  length += glyphStructure.anchors.length * GLYPH_ANCHOR_VALUE_COUNT;
+  length += glyphStructure.components.length * DECOMPOSED_COMPONENT_VALUE_COUNT;
 
   const values = new Float64Array(length);
-  values[0] = 600;
+  values[GLYPH_ADVANCE_VALUE_OFFSET] = 600;
   return values;
 }

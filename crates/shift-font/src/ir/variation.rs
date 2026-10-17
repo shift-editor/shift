@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn compiled_mapping_fixture_matches_fontdrasil() {
+    fn generated_file_axis_mapping_basis_matches_fontdrasil() {
         let weight = Axis::with_id(
             AxisId::from_raw("weight"),
             "wght".to_string(),
@@ -522,16 +522,9 @@ mod tests {
             ],
         });
         let generated = format!("{}\n", serde_json::to_string_pretty(&fixture).unwrap());
-        if std::env::var_os("SHIFT_UPDATE_FIXTURES").is_some() {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../packages/types/__fixtures__/axis_mapping_basis.json");
-            std::fs::write(path, generated).unwrap();
-            return;
-        }
-
-        assert_eq!(
-            include_str!("../../../../packages/types/__fixtures__/axis_mapping_basis.json"),
-            generated,
+        crate::test_support::generated::assert_generated_file(
+            "packages/types/__fixtures__/axis_mapping_basis.json",
+            &generated,
         );
     }
 

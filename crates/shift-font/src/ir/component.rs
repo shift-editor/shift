@@ -70,6 +70,58 @@ impl Default for DecomposedTransform {
 }
 
 impl DecomposedTransform {
+    /// Number of values in one transform's numeric encoding.
+    pub const VALUE_COUNT: usize = 9;
+
+    /// Serialized field names in numeric encoding order.
+    ///
+    /// Glyph interpolation values and component-transform intents store each
+    /// transform as these fields, in this order. TypeScript layout modules are
+    /// generated from this table.
+    pub const VALUE_FIELDS: [&'static str; Self::VALUE_COUNT] = [
+        "translateX",
+        "translateY",
+        "rotation",
+        "scaleX",
+        "scaleY",
+        "skewX",
+        "skewY",
+        "tCenterX",
+        "tCenterY",
+    ];
+
+    /// Encodes the transform in [`Self::VALUE_FIELDS`] order.
+    pub fn to_values(&self) -> [f64; Self::VALUE_COUNT] {
+        [
+            self.translate_x,
+            self.translate_y,
+            self.rotation,
+            self.scale_x,
+            self.scale_y,
+            self.skew_x,
+            self.skew_y,
+            self.t_center_x,
+            self.t_center_y,
+        ]
+    }
+
+    /// Decodes values produced by [`Self::to_values`].
+    pub fn from_values(values: [f64; Self::VALUE_COUNT]) -> Self {
+        let [translate_x, translate_y, rotation, scale_x, scale_y, skew_x, skew_y, t_center_x, t_center_y] =
+            values;
+        Self {
+            translate_x,
+            translate_y,
+            rotation,
+            scale_x,
+            scale_y,
+            skew_x,
+            skew_y,
+            t_center_x,
+            t_center_y,
+        }
+    }
+
     pub fn identity() -> Self {
         Self::default()
     }
@@ -154,6 +206,22 @@ impl DecomposedTransform {
 }
 
 impl Transform {
+    /// Number of values in one matrix's numeric encoding.
+    pub const VALUE_COUNT: usize = 6;
+
+    /// Serialized field names in numeric encoding order.
+    ///
+    /// Source glyph shapes that carry component matrices store each matrix as
+    /// these fields, in this order. TypeScript layout modules are generated from
+    /// this table.
+    pub const VALUE_FIELDS: [&'static str; Self::VALUE_COUNT] =
+        ["xx", "xy", "yx", "yy", "dx", "dy"];
+
+    /// Encodes the matrix in [`Self::VALUE_FIELDS`] order.
+    pub fn to_values(&self) -> [f64; Self::VALUE_COUNT] {
+        [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
+    }
+
     pub fn identity() -> Self {
         Self {
             xx: 1.0,
@@ -293,6 +361,53 @@ impl Component {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_values_follow_serialized_fields<T: Serialize>(
+        value: &T,
+        fields: &[&str],
+        values: &[f64],
+    ) {
+        let serialized = serde_json::to_value(value).unwrap();
+        let object = serialized.as_object().unwrap();
+        assert_eq!(object.len(), fields.len());
+        for (field, value) in fields.iter().zip(values) {
+            assert_eq!(object[*field].as_f64(), Some(*value), "{field}");
+        }
+    }
+
+    #[test]
+    fn decomposed_transform_values_follow_serialized_fields() {
+        let transform =
+            DecomposedTransform::from_values([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+
+        assert_values_follow_serialized_fields(
+            &transform,
+            &DecomposedTransform::VALUE_FIELDS,
+            &transform.to_values(),
+        );
+        assert_eq!(
+            transform.to_values(),
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+    }
+
+    #[test]
+    fn matrix_values_follow_serialized_fields() {
+        let matrix = Transform {
+            xx: 1.0,
+            xy: 2.0,
+            yx: 3.0,
+            yy: 4.0,
+            dx: 5.0,
+            dy: 6.0,
+        };
+
+        assert_values_follow_serialized_fields(
+            &matrix,
+            &Transform::VALUE_FIELDS,
+            &matrix.to_values(),
+        );
+    }
 
     #[test]
     fn component_creation() {

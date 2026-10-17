@@ -60,6 +60,7 @@ import {
   Contour,
   GlyphGeometry,
   IdIndex,
+  decomposedTransformValues,
   filledContoursContain,
   type GeometryAnchorHit,
   type GeometryPointHit,
@@ -374,17 +375,7 @@ class GlyphLayerWriter {
   ): void {
     if (componentIds.length === 0) return;
 
-    const values = transforms.flatMap((transform) => [
-      transform.translateX,
-      transform.translateY,
-      transform.rotation,
-      transform.scaleX,
-      transform.scaleY,
-      transform.skewX,
-      transform.skewY,
-      transform.tCenterX,
-      transform.tCenterY,
-    ]);
+    const values = transforms.flatMap((transform) => [...decomposedTransformValues(transform)]);
     const editId = this.#workspaceIntents.setComponentTransforms({
       componentIds: [...componentIds],
       transforms: values,

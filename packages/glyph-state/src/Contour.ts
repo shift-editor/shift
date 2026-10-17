@@ -1,7 +1,15 @@
-import type { ContourData, ContourId, GlyphStructure, PointId } from "@shift/types";
+import {
+  GLYPH_POINT_VALUE_COUNT,
+  GLYPH_POSITION_VALUE_OFFSETS,
+  type ContourData,
+  type ContourId,
+  type GlyphStructure,
+  type PointId,
+} from "@shift/types";
 import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import { Segment } from "./Segment";
 import { Point, type PointWithNeighbors } from "./Point";
+import { CONTOURS_VALUE_OFFSET } from "./valueLayout";
 
 /**
  * Geometry view for one contour in a glyph state.
@@ -27,10 +35,10 @@ export class Contour {
   }
 
   static fromStructure(structure: GlyphStructure, values: Float64Array): readonly Contour[] {
-    let cursor = 1;
+    let cursor = CONTOURS_VALUE_OFFSET;
     return structure.contours.map((contour) => {
       const result = new Contour(contour, values, cursor);
-      cursor += contour.points.length * 2;
+      cursor += contour.points.length * GLYPH_POINT_VALUE_COUNT;
       return result;
     });
   }
@@ -43,11 +51,11 @@ export class Contour {
    */
   static pointValueOffsets(structure: GlyphStructure): Map<PointId, number> {
     const offsets = new Map<PointId, number>();
-    let cursor = 1;
+    let cursor = CONTOURS_VALUE_OFFSET;
     for (const contour of structure.contours) {
       for (const point of contour.points) {
         offsets.set(point.id, cursor);
-        cursor += 2;
+        cursor += GLYPH_POINT_VALUE_COUNT;
       }
     }
     return offsets;
@@ -200,12 +208,13 @@ export class Contour {
 
   #pointAt(index: number): Point {
     const point = this.#data.points[index];
+    const offset = this.#cursor + index * GLYPH_POINT_VALUE_COUNT;
     return new Point({
       id: point.id,
       pointType: point.pointType,
       smooth: point.smooth,
-      x: this.#values[this.#cursor + index * 2],
-      y: this.#values[this.#cursor + index * 2 + 1],
+      x: this.#values[offset + GLYPH_POSITION_VALUE_OFFSETS.x],
+      y: this.#values[offset + GLYPH_POSITION_VALUE_OFFSETS.y],
     });
   }
 }

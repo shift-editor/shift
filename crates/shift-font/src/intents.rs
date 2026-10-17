@@ -1434,12 +1434,13 @@ impl Font {
                 component_ids,
                 transforms,
             } => {
-                if transforms.len() != component_ids.len() * 9 {
+                let expected = component_ids.len() * DecomposedTransform::VALUE_COUNT;
+                if transforms.len() != expected {
                     return Err(CoreError::InvalidPositionUpdateInput {
                         kind: "component transforms",
                         message: format!(
                             "expected {} values for {} components, got {}",
-                            component_ids.len() * 9,
+                            expected,
                             component_ids.len(),
                             transforms.len()
                         ),
@@ -1458,20 +1459,12 @@ impl Font {
                         return Err(CoreError::InvalidComponentId(component_id.to_string()));
                     }
                 }
-                for (component_id, values) in component_ids.iter().zip(transforms.chunks_exact(9)) {
+                let (transforms, _) =
+                    transforms.as_chunks::<{ DecomposedTransform::VALUE_COUNT }>();
+                for (component_id, values) in component_ids.iter().zip(transforms) {
                     layer.set_component_transform(
                         component_id,
-                        DecomposedTransform {
-                            translate_x: values[0],
-                            translate_y: values[1],
-                            rotation: values[2],
-                            scale_x: values[3],
-                            scale_y: values[4],
-                            skew_x: values[5],
-                            skew_y: values[6],
-                            t_center_x: values[7],
-                            t_center_y: values[8],
-                        },
+                        DecomposedTransform::from_values(*values),
                     )?;
                 }
 
