@@ -44,14 +44,16 @@ const NOTDEF = ".notdef" as GlyphName;
  * run, cursive attachment from `entry` and `exit` anchors, and mark
  * placement.
  *
- * A mark the shaper classes as one (`isMark`, the compiled font's GDEF mark
- * class), or one attached by anchors, is passed over: it takes no advance,
- * is not kerned, and does not break a kerning pair or a cursive chain. A
- * glyph's display advance follows the category export resolves: a
- * nonspacing mark (`Font.isNonspacingMark`) at zero gets a visible stand-in
- * advance, and a character with no glyph counts as spacing. Made for one
- * layout, which tracks every glyph it reads; glyph lookups are cached for
- * that layout.
+ * Two facts make a glyph a mark, and they decide different things. The
+ * shaper's `isMark` (the compiled font's GDEF mark class), or attaching to a
+ * glyph by anchors, decides that a glyph is passed over: it is not kerned,
+ * does not break a kerning pair or a cursive chain, and does not join one.
+ * The category export resolves (`Font.isNonspacingMark`) decides its advance:
+ * such a mark takes none in shaped text, as export compiles it, while a
+ * spacing mark keeps its width. Outside shaped text a nonspacing mark at zero
+ * gets a visible stand-in advance, and a character with no glyph counts as
+ * spacing. Made for one layout, which tracks every glyph it reads; glyph
+ * lookups are cached for that layout.
  */
 export class Positioner {
   readonly #editor: Editor;
@@ -175,11 +177,16 @@ export class Positioner {
     };
   }
 
-  /** A glyph's advance: none for a mark that is passed over; its display advance otherwise. */
+  /**
+   * A glyph's advance: none for a nonspacing mark that is passed over, as
+   * export compiles it; a passed-over spacing mark keeps its width; any
+   * other glyph takes its display advance.
+   */
   #advance(glyph: RunGlyph, passedOver: boolean): number {
-    if (passedOver) return 0;
     const nonspacing = this.#editor.font.isNonspacingMark(glyph.name);
-    return displayAdvance(glyph.model?.xAdvance ?? 0, nonspacing) + glyph.shaped.xAdvance;
+    const own = glyph.model?.xAdvance ?? 0;
+    if (passedOver) return nonspacing ? 0 : own + glyph.shaped.xAdvance;
+    return displayAdvance(own, nonspacing) + glyph.shaped.xAdvance;
   }
 
   /** The glyph's render model at the layout's location; null until the glyph loads. */

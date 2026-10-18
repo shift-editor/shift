@@ -351,6 +351,24 @@ describe("cursive attachment joins letters at their entry and exit anchors", () 
     expect(lefts).toEqual([0, 450, 450]);
   });
 
+  // `tick` is classed as a mark but glyph data does not make it a nonspacing one, so export keeps its width.
+  it("keeps a spacing mark's width though the font classes it as a mark", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("i/tick/i")).id;
+    const placed = () => editor.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+
+    await expect
+      .poll(() =>
+        placed().map((glyph) => [glyph.glyph.glyphName, glyph.left, glyph.glyph.xAdvance]),
+      )
+      .toEqual([
+        ["i", 0, 250],
+        ["tick", 250, 200],
+        ["i", 450, 250],
+      ]);
+  });
+
   it("follows an exit anchor while it is edited", async () => {
     const editor = new TestEditor();
     await editor.openSession(SHAPING_TEST, "beh-ar.init");

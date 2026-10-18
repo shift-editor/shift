@@ -72,6 +72,7 @@ ligature (`liga`, and an off-by-default `dlig`); Arabic beh with
 `init`/`medi`/`fina` forms whose `entry`/`exit` anchors step a word up 200
 units per letter by cursive attachment; fatha and shadda marks with
 `_top`/`top` anchors for mark-to-base and mark-to-mark attachment; an
-anchorless superscript alef classed as a mark; and noon, which `ccmp`
+anchorless superscript alef classed as a mark; `tick`, an unencoded spacing
+glyph classed as a mark; and noon, which `ccmp`
 decomposes into a dotless body and a dot mark. Written for Shift's tests and released under the same terms as
 the repository.
