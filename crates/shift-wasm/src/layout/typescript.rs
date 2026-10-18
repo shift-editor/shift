@@ -14,7 +14,7 @@ use shift_font::test_support::generated::assert_generated_file;
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
 use crate::decomposition::DecomposedGlyph;
-use crate::shaping::{ShapeParagraphs, ShapedRunOutput, ShaperGlyphs};
+use crate::shaping::{ShapeParagraphs, ShapedParagraphOutput, ShaperGlyphs};
 
 /// One WebAssembly module and the hot calls it exports, generated into one
 /// TypeScript file that imports only that module, so a module the editor
@@ -85,7 +85,7 @@ fn shaping_calls() -> Vec<Call> {
             name: "shapeParagraphs",
             doc: "Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null.",
             input: ShapeParagraphs::kind(),
-            output: Vec::<Option<Vec<ShapedRunOutput>>>::kind(),
+            output: Vec::<Option<ShapedParagraphOutput>>::kind(),
         },
     ]
 }

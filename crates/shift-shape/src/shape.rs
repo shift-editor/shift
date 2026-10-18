@@ -7,7 +7,7 @@ use harfrust::{
     ShaperData, ShaperInstance, Tag, UnicodeBuffer,
 };
 
-use crate::itemize::script_runs;
+use crate::itemize::itemize;
 use crate::{GlyphSource, Unit, NOTDEF};
 
 /// The characters that stand in for glyphs inserted by name: Supplementary
@@ -19,6 +19,17 @@ const GLYPH_STAND_INS: std::ops::RangeInclusive<u32> = 0x10_0000..=0x10_FFFD;
 pub enum TextDirection {
     LeftToRight,
     RightToLeft,
+}
+
+impl TextDirection {
+    /// Returns the direction a bidi level reads in: odd levels right to left.
+    fn of_level(level: u8) -> Self {
+        if level % 2 == 1 {
+            Self::RightToLeft
+        } else {
+            Self::LeftToRight
+        }
+    }
 }
 
 /// A feature to turn on, off, or to an alternate for the whole run.
@@ -90,8 +101,9 @@ impl<G, L: ?Sized> Clone for ShapeRequest<'_, G, L> {
 
 impl<G, L: ?Sized> Copy for ShapeRequest<'_, G, L> {}
 
-/// A paragraph and how to shape it: split into runs of one script, each
-/// shaped in that script's direction. `G` and `L` are as in [`ShapeRequest`].
+/// A paragraph and how to shape it: split into runs of one script and bidi
+/// level, each shaped in its level's direction. `G` and `L` are as in
+/// [`ShapeRequest`].
 #[derive(Debug)]
 pub struct ParagraphRequest<'a, G, L: ?Sized = [NormalizedCoord]> {
     pub units: &'a [Unit<G>],
@@ -117,11 +129,16 @@ impl<'a, G, L: ?Sized> ParagraphRequest<'a, G, L> {
     }
 
     /// Returns the request for one run of the paragraph.
-    fn run(&self, units: &'a [Unit<G>], script: Option<&'a str>) -> ShapeRequest<'a, G, L> {
+    fn run(
+        &self,
+        units: &'a [Unit<G>],
+        direction: TextDirection,
+        script: Option<&'a str>,
+    ) -> ShapeRequest<'a, G, L> {
         ShapeRequest {
             units,
             location: self.location,
-            direction: None,
+            direction: Some(direction),
             script,
             language: self.language,
             features: self.features,
@@ -137,7 +154,16 @@ impl<G, L: ?Sized> Clone for ParagraphRequest<'_, G, L> {
 
 impl<G, L: ?Sized> Copy for ParagraphRequest<'_, G, L> {}
 
-/// One run of a shaped paragraph, in one script and direction.
+/// A shaped paragraph: its direction and its runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShapedParagraph<G> {
+    /// The paragraph's base direction, from its first strong character.
+    pub direction: TextDirection,
+    /// Runs in logical order; a line lays them out by their levels.
+    pub runs: Vec<ShapedRun<G>>,
+}
+
+/// One run of a shaped paragraph, in one script and bidi level.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShapedRun<G> {
     /// The paragraph units the run covers. Runs are in logical order and
@@ -146,6 +172,8 @@ pub struct ShapedRun<G> {
     /// The run's ISO 15924 script tag, such as `Arab`; `None` when the run
     /// holds only characters common to all scripts.
     pub script: Option<String>,
+    /// The run's resolved bidi level; odd levels read right to left.
+    pub level: u8,
     pub direction: TextDirection,
     /// The run's glyphs in visual order. Clusters index the paragraph's units,
     /// not the run's.
@@ -229,63 +257,12 @@ impl Shaper {
         source: &S,
         request: &ShapeRequest<S::Glyph>,
     ) -> Result<Vec<ShapedGlyph<S::Glyph>>, ShapeError> {
-        Ok(self.shape_run(source, request)?.glyphs)
-    }
-
-    /// Shapes a paragraph, run by run.
-    ///
-    /// The paragraph splits where its script changes, and each run is shaped
-    /// in its script's direction, so Arabic and Hebrew come back right to
-    /// left. Runs stay in logical order.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
-    pub fn shape_paragraph<S: GlyphSource>(
-        &self,
-        source: &S,
-        request: &ParagraphRequest<S::Glyph>,
-    ) -> Result<Vec<ShapedRun<S::Glyph>>, ShapeError> {
-        script_runs(request.units)
-            .into_iter()
-            .map(|run| {
-                let start = unit_index(run.units.start)?;
-                let end = unit_index(run.units.end)?;
-                let script = run.script.map(|script| script.short_name().to_string());
-                let units = &request.units[run.units];
-                let RunGlyphs {
-                    mut glyphs,
-                    direction,
-                } = self.shape_run(source, &request.run(units, script.as_deref()))?;
-                for glyph in &mut glyphs {
-                    glyph.cluster += start;
-                }
-                Ok(ShapedRun {
-                    units: start..end,
-                    script,
-                    direction,
-                    glyphs,
-                })
-            })
-            .collect()
-    }
-
-    /// Shapes one run and reports the direction it was shaped in.
-    fn shape_run<S: GlyphSource>(
-        &self,
-        source: &S,
-        request: &ShapeRequest<S::Glyph>,
-    ) -> Result<RunGlyphs<S::Glyph>, ShapeError> {
         let mut funcs = SourceFuncs {
             source,
             stand_ins: HashMap::new(),
             stand_in_of: HashMap::new(),
         };
         let buffer = buffer(request, &mut funcs)?;
-        let direction = match buffer.direction() {
-            Direction::RightToLeft => TextDirection::RightToLeft,
-            _ => TextDirection::LeftToRight,
-        };
         let features: Vec<Feature> = request
             .features
             .iter()
@@ -302,7 +279,7 @@ impl Shaper {
                 .font_funcs(Some(&mut funcs)),
         );
 
-        let glyphs = shaped
+        Ok(shaped
             .glyph_infos()
             .iter()
             .zip(shaped.glyph_positions())
@@ -314,19 +291,59 @@ impl Shaper {
                 x_offset: position.x_offset,
                 y_offset: position.y_offset,
             })
-            .collect();
-        Ok(RunGlyphs { glyphs, direction })
+            .collect())
+    }
+
+    /// Shapes a paragraph, run by run.
+    ///
+    /// The paragraph splits where its script or bidi level changes, and each
+    /// run is shaped in its level's direction, so Arabic and Hebrew come back
+    /// right to left and digits inside them left to right. Runs stay in
+    /// logical order with their levels; reordering them for display is the
+    /// line's job.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
+    pub fn shape_paragraph<S: GlyphSource>(
+        &self,
+        source: &S,
+        request: &ParagraphRequest<S::Glyph>,
+    ) -> Result<ShapedParagraph<S::Glyph>, ShapeError> {
+        let itemized = itemize(request.units);
+        let runs = itemized
+            .runs
+            .into_iter()
+            .map(|run| {
+                let start = unit_index(run.units.start)?;
+                let end = unit_index(run.units.end)?;
+                let script = run.script.map(|script| script.short_name().to_string());
+                let direction = TextDirection::of_level(run.level);
+                let units = &request.units[run.units];
+                let mut glyphs =
+                    self.shape(source, &request.run(units, direction, script.as_deref()))?;
+                for glyph in &mut glyphs {
+                    glyph.cluster += start;
+                }
+                Ok(ShapedRun {
+                    units: start..end,
+                    script,
+                    level: run.level,
+                    direction,
+                    glyphs,
+                })
+            })
+            .collect::<Result<_, ShapeError>>()?;
+        let direction = match itemized.right_to_left {
+            true => TextDirection::RightToLeft,
+            false => TextDirection::LeftToRight,
+        };
+        Ok(ShapedParagraph { direction, runs })
     }
 
     fn font(&self) -> Result<FontRef<'_>, ShapeError> {
         FontRef::new(&self.bytes).map_err(|_| ShapeError::InvalidFont)
     }
-}
-
-/// A shaped run's glyphs and the direction it was shaped in.
-struct RunGlyphs<G> {
-    glyphs: Vec<ShapedGlyph<G>>,
-    direction: TextDirection,
 }
 
 /// Fills a buffer with one character per unit, clustered by unit index, and

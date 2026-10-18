@@ -1,4 +1,4 @@
-import type { ParagraphRequest, RunId, ShapedRun, ShapeUnit } from "@shift/types";
+import type { ParagraphRequest, RunId, ShapedParagraph, ShapeUnit } from "@shift/types";
 import { computed, effect, track } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -12,10 +12,11 @@ export interface ShapedText {
   /** The shaped content, as {@link shapingKey} gives it. */
   readonly key: string;
   /**
-   * Each paragraph's runs in logical order, indexed like `splitParagraphs`;
-   * null for a paragraph that could not be shaped, which lays out literally.
+   * Each paragraph's direction and runs in logical order, indexed like
+   * `splitParagraphs`; null for a paragraph that could not be shaped, which
+   * lays out literally.
    */
-  readonly paragraphs: readonly (readonly ShapedRun[] | null)[];
+  readonly paragraphs: readonly (ShapedParagraph | null)[];
 }
 
 interface ShapingRequest {
@@ -41,8 +42,9 @@ export interface RunTextOwner {
  * @remarks
  * Shaping runs synchronously in `@shift/wasm/shaping`, so the layout is
  * shaped as soon as the text changes. Until the owner's shaper is ready the
- * text lays out literally. Construct outside any reactive reader: the effect
- * that reports shaping results starts at once.
+ * text lays out literally, as does a run with shaping off. Construct outside
+ * any reactive reader: the effect that reports shaping results starts at
+ * once.
  */
 export class RunText {
   readonly #keyCell: ComputedSignal<string | null>;
@@ -55,7 +57,7 @@ export class RunText {
     this.#keyCell = computed(
       () => {
         const record = owner.run(runIdCell.value);
-        return record ? shapingKey(record.items) : null;
+        return record?.shaping ? shapingKey(record.items) : null;
       },
       { name: "text.shapingKey" },
     );
@@ -117,7 +119,7 @@ export class RunText {
     );
   }
 
-  /** The run's layout; invalidates on content, location, source, glyph loads, and shaping results. */
+  /** The run's layout; invalidates on content, location, source, glyph loads, shaping results, and the shaping switch. */
   get layoutCell(): ComputedSignal<TextLayout | null> {
     return this.#layoutCell;
   }

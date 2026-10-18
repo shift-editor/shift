@@ -50,23 +50,17 @@ describe("TextLayout", () => {
     expect(layout.lines[1].y).toBe(-lineHeight);
   });
 
-  // hit-test → pointAt round trip. Pin side resolution: a point inside the
-  // left half of B's advance box hits cluster=1, side="left".
-  it("pointAt after hitTest recovers cluster's leading edge", () => {
+  // Click → caret round trip: a point in the left half of B's advance box
+  // lands before B, and that caret draws at B's leading edge.
+  it("a point in a glyph's left half places the caret on its leading edge", () => {
     const layout = makeLayout([char(65), char(66)], editor);
     const aAdvance = xAdvance("A", editor);
     const bAdvance = xAdvance("B", editor);
-    const bLeftHalfX = aAdvance + bAdvance / 4;
 
-    const hit = layout.hitTest({ x: bLeftHalfX, y: 0 });
+    const cluster = layout.caretAtPoint({ x: aAdvance + bAdvance / 4, y: 0 });
 
-    expect(hit).toEqual({
-      lineIndex: 0,
-      runIndex: 0,
-      cluster: 1,
-      side: "left",
-    });
-    expect(layout.pointAt(1)?.x).toBe(aAdvance);
+    expect(cluster).toBe(1);
+    expect(layout.caretPosition(1).x).toBe(aAdvance);
   });
 
   it("places an item's glyph by item id on the current line", () => {

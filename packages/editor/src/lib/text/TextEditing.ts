@@ -3,7 +3,7 @@ import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
 import { currentTextEditingId, type TextCaret, type TextEditingRecord } from "../../types/text";
-import { Caret, type SelectionRect, type TextItem } from "./layout";
+import { Caret, type SelectionRect, type TextItem, type TextLayout } from "./layout";
 import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
 import type { TextRunNode } from "../../types/node";
@@ -111,33 +111,39 @@ export class TextEditing {
     this.#edit("Delete text", (buffer) => buffer.delete(1));
   }
 
+  /**
+   * Moves the caret left (`-1`) or right (`1`) on screen, as the arrow keys do.
+   *
+   * @remarks
+   * Movement follows the screen, as on macOS: in right-to-left text, left is
+   * forward in reading order. A character step crosses a grapheme cluster,
+   * and a word step lands on the edge of the next word on that side, in
+   * whichever direction that word reads. Past a line's edge, either continues
+   * into the neighbouring line in reading order.
+   */
   move(direction: -1 | 1, granularity: "character" | "word" | "line", extend = false): void {
     const buffer = this.#buffer();
-    if (!buffer) return;
+    const layout = this.#layout();
+    if (!buffer || !layout) return;
     const cluster = buffer.focusCluster;
+    const lineIndex = layout.lineIndexForCluster(cluster);
+    // Reading order is screen order flipped in a right-to-left line.
+    const logical = layout.lineDirection(lineIndex) === "rtl" ? (-direction as -1 | 1) : direction;
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = buffer.graphemeStep(cluster, direction);
+        target = layout.visualStep(cluster, direction) ?? buffer.graphemeStep(cluster, logical);
         break;
-      case "word":
-        target = buffer.wordStep(cluster, direction);
-        break;
-      case "line": {
-        const node = this.#node();
-        const line =
-          node &&
-          this.#editor.text
-            .layoutCell(node.runId)
-            .peek()
-            ?.lines.find((line) => cluster >= line.clusterStart && cluster < line.clusterEnd);
-        if (!line) {
-          target = cluster;
-          break;
-        }
-        target = direction === -1 ? line.clusterStart : line.clusterEnd - 1;
+      case "word": {
+        const edges = wordEdges(buffer, layout, direction);
+        target =
+          layout.visualStep(cluster, direction, (stop) => edges.has(stop)) ??
+          buffer.wordStep(cluster, logical);
         break;
       }
+      case "line":
+        target = layout.lineEdge(lineIndex, direction) ?? cluster;
+        break;
     }
     this.#goalX = null;
     this.#place(target, extend, "Move text caret");
@@ -189,6 +195,11 @@ export class TextEditing {
     return this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
   }
 
+  #layout(): TextLayout | null {
+    const node = this.#node();
+    return node ? this.#editor.text.layoutCell(node.runId).peek() : null;
+  }
+
   /** The edited run's items with the current selection; null when not editing. */
   #buffer(): TextBuffer | null {
     const state = this.state;
@@ -211,4 +222,18 @@ export class TextEditing {
     this.#editor.history.captureOrJoin(label, write);
     this.#goalX = null;
   }
+}
+
+/**
+ * Returns the caret clusters at each word's left (`-1`) or right (`1`) edge
+ * on screen: a left-to-right word's start is its left edge, a right-to-left
+ * word's end is.
+ */
+function wordEdges(buffer: TextBuffer, layout: TextLayout, side: -1 | 1): ReadonlySet<number> {
+  return new Set(
+    buffer.words.map((word) => {
+      const rightToLeft = layout.directionAt(word.start) === "rtl";
+      return (side === 1) !== rightToLeft ? word.end : word.start;
+    }),
+  );
 }
