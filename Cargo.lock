@@ -2309,13 +2309,12 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
+ "shift-shape",
  "shift-slug",
  "shift-store",
  "skrifa",
  "tempfile",
  "thiserror",
- "unicode-bidi",
- "unicode-script",
  "write-fonts",
 ]
 
@@ -2383,6 +2382,18 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "shift-shape"
+version = "0.1.0"
+dependencies = [
+ "harfrust",
+ "skrifa",
+ "thiserror",
+ "unicode-bidi",
+ "unicode-linebreak",
+ "unicode-script",
 ]
 
 [[package]]

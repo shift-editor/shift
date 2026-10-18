@@ -13,19 +13,20 @@ Central routing table for Shift's distributed documentation. Before creating new
 
 ### Rust crates
 
-| Path pattern                | Canonical doc                                                                      | Purpose                                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)                 | Shift-independent authored font source reading and writing                                  |
-| `crates/rumil/**`           | [`crates/rumil/README.md`](../../crates/rumil/README.md)                           | Shift-independent MathML Core layout from OpenType MATH data, with provenance               |
-| `crates/rumil-build/**`     | [`crates/rumil-build/README.md`](../../crates/rumil-build/README.md)               | Shift-independent OpenType MATH table builder from glyph-name-level source data             |
-| `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
-| `crates/shift-config/**`    | [`crates/shift-config/docs/DOCS.md`](../../crates/shift-config/docs/DOCS.md)       | Reading, validating, and comment-preserving edits of `config.toml` and theme files          |
-| `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
-| `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
-| `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
-| `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font                                    |
-| `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                                               |
-| `crates/shift-wasm/**`      | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)           | shift-font rules compiled to WebAssembly for the editor                                     |
+| Path pattern                | Canonical doc                                                                      | Purpose                                                                                      |
+| --------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)                 | Shift-independent authored font source reading and writing                                   |
+| `crates/rumil/**`           | [`crates/rumil/README.md`](../../crates/rumil/README.md)                           | Shift-independent MathML Core layout from OpenType MATH data, with provenance                |
+| `crates/rumil-build/**`     | [`crates/rumil-build/README.md`](../../crates/rumil-build/README.md)               | Shift-independent OpenType MATH table builder from glyph-name-level source data              |
+| `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                                |
+| `crates/shift-config/**`    | [`crates/shift-config/docs/DOCS.md`](../../crates/shift-config/docs/DOCS.md)       | Reading, validating, and comment-preserving edits of `config.toml` and theme files           |
+| `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                      |
+| `crates/shift-shape/**`     | [`crates/shift-shape/docs/DOCS.md`](../../crates/shift-shape/docs/DOCS.md)         | Text shaping for every host: bidi and script itemization, HarfRust, line-break opportunities |
+| `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                               |
+| `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes  |
+| `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font                                     |
+| `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                                                |
+| `crates/shift-wasm/**`      | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)           | shift-font rules compiled to WebAssembly for the editor                                      |
 
 ### Desktop app — Electron shell
 

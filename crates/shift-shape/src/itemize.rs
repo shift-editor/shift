@@ -6,7 +6,7 @@ use std::ops::Range;
 use unicode_bidi::{BidiInfo, Level};
 use unicode_script::{Script, UnicodeScript};
 
-use super::ShapeUnit;
+use crate::Unit;
 
 /// What a picked glyph reads as for bidi: an inline object, neutral to the
 /// text around it.
@@ -14,7 +14,7 @@ const OBJECT_REPLACEMENT: char = '\u{FFFC}';
 
 /// A stretch of a paragraph's units in one script.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct ScriptRun {
+pub(crate) struct ScriptRun {
     pub units: Range<usize>,
     /// `None` when every unit in the run is common to all scripts, such as
     /// digits, spaces, and punctuation on their own.
@@ -23,7 +23,7 @@ pub(super) struct ScriptRun {
 
 /// A stretch of a paragraph's units in one script and one bidi level.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct TextRun {
+pub(crate) struct TextRun {
     pub units: Range<usize>,
     pub script: Option<Script>,
     /// The run's resolved bidi level: odd reads right to left.
@@ -32,7 +32,7 @@ pub(super) struct TextRun {
 
 /// A paragraph split for shaping.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct Itemized {
+pub(crate) struct Itemized {
     /// Whether the paragraph reads right to left, from its first strong
     /// character (UAX #9 rules P2 and P3); left to right when it has none.
     pub right_to_left: bool,
@@ -46,7 +46,7 @@ pub(super) struct Itemized {
 /// whitespace rule for a line's end (L1), with the paragraph treated as one
 /// line. Units common to all scripts keep their own level, so digits inside
 /// Arabic become their own left-to-right run.
-pub(super) fn itemize(units: &[ShapeUnit]) -> Itemized {
+pub(crate) fn itemize(units: &[Unit]) -> Itemized {
     let text: String = units.iter().map(bidi_character).collect();
     let bidi = BidiInfo::new(&text, None);
     let right_to_left = bidi
@@ -82,10 +82,10 @@ pub(super) fn itemize(units: &[ShapeUnit]) -> Itemized {
     }
 }
 
-fn bidi_character(unit: &ShapeUnit) -> char {
+fn bidi_character(unit: &Unit) -> char {
     match unit {
-        ShapeUnit::Character(character) => *character,
-        ShapeUnit::Glyph(_) => OBJECT_REPLACEMENT,
+        Unit::Character(character) => *character,
+        Unit::Glyph(_) => OBJECT_REPLACEMENT,
     }
 }
 
@@ -94,7 +94,7 @@ fn bidi_character(unit: &ShapeUnit) -> char {
 /// Units common to all scripts (spaces, digits, punctuation), combining marks,
 /// and glyphs inserted by name join the run around them: the preceding run,
 /// or the following one at the start of the paragraph.
-fn script_runs(units: &[ShapeUnit]) -> Vec<ScriptRun> {
+fn script_runs(units: &[Unit]) -> Vec<ScriptRun> {
     let mut runs = Vec::new();
     let mut start = 0;
     let mut current: Option<Script> = None;
@@ -128,13 +128,13 @@ fn script_runs(units: &[ShapeUnit]) -> Vec<ScriptRun> {
 
 /// Returns the script a unit belongs to, or `None` when it takes the script
 /// of its neighbours.
-fn specific_script(unit: &ShapeUnit) -> Option<Script> {
+fn specific_script(unit: &Unit) -> Option<Script> {
     match unit {
-        ShapeUnit::Character(character) => match character.script() {
+        Unit::Character(character) => match character.script() {
             Script::Common | Script::Inherited | Script::Unknown => None,
             script => Some(script),
         },
-        ShapeUnit::Glyph(_) => None,
+        Unit::Glyph(_) => None,
     }
 }
 
@@ -143,7 +143,7 @@ mod tests {
     use super::*;
 
     fn runs(text: &str) -> Vec<(Range<usize>, Option<Script>)> {
-        let units: Vec<ShapeUnit> = text.chars().map(ShapeUnit::Character).collect();
+        let units: Vec<Unit> = text.chars().map(Unit::Character).collect();
         script_runs(&units)
             .into_iter()
             .map(|run| (run.units, run.script))
@@ -179,7 +179,7 @@ mod tests {
     }
 
     fn levels(text: &str) -> (bool, Vec<(Range<usize>, u8)>) {
-        let units: Vec<ShapeUnit> = text.chars().map(ShapeUnit::Character).collect();
+        let units: Vec<Unit> = text.chars().map(Unit::Character).collect();
         let itemized = itemize(&units);
         let runs = itemized
             .runs

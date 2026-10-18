@@ -19,7 +19,6 @@
 
 mod diagnostics;
 mod features;
-mod itemize;
 mod shape;
 mod state;
 mod tables;
