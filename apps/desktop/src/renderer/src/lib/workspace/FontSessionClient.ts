@@ -29,6 +29,8 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
+  ParagraphRequest,
+  ShapedRun,
   SlugAtlas,
 } from "@shift/types";
 import { signal } from "@shift/editor/signals";
@@ -404,6 +406,17 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.mapLocation", location);
+  }
+
+  /**
+   * Shapes paragraphs with the current font's feature code in the utility process.
+   *
+   * @returns Each paragraph's runs, in request order.
+   */
+  async shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
+    await this.connect();
+
+    return this.#require().call("workspace.shapeParagraphs", { paragraphs: [...paragraphs] });
   }
 
   #fold(applied: AppliedChange): AppliedChange {

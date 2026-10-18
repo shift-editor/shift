@@ -13,6 +13,8 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
+  ParagraphRequest,
+  ShapedRun,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
   GlyphName,
@@ -70,6 +72,7 @@ export interface WorkspaceEditCoordinator {
   resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
   settled(): Promise<void>;
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;

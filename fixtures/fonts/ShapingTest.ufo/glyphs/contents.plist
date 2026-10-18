@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>beh-ar</key>
+	<string>beh-ar.glif</string>
+	<key>beh-ar.fina</key>
+	<string>beh-ar.fina.glif</string>
+	<key>beh-ar.init</key>
+	<string>beh-ar.init.glif</string>
+	<key>beh-ar.medi</key>
+	<string>beh-ar.medi.glif</string>
+	<key>dotabove-ar</key>
+	<string>dotabove-ar.glif</string>
+	<key>f</key>
+	<string>f.glif</string>
+	<key>f_i</key>
+	<string>f_i.glif</string>
+	<key>fatha-ar</key>
+	<string>fatha-ar.glif</string>
+	<key>i</key>
+	<string>i.glif</string>
+	<key>noon-ar</key>
+	<string>noon-ar.glif</string>
+	<key>noonDotless-ar</key>
+	<string>noonDotless-ar.glif</string>
+	<key>shadda-ar</key>
+	<string>shadda-ar.glif</string>
+	<key>space</key>
+	<string>space.glif</string>
+</dict>
+</plist>
