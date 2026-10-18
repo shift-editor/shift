@@ -1419,6 +1419,8 @@ export class GlyphRenderModel {
   readonly #propagatedAnchorsCell: Signal<readonly PropagationAnchor[]>;
   readonly #placementsCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>;
   readonly #anchorsByNameCell: Signal<ReadonlyMap<string, PropagationAnchor>>;
+  readonly #anchorNamedCache: KeyedCache<string, string, ComputedSignal<PropagationAnchor | null>>;
+  readonly #attachingAnchorsCell: Signal<readonly PropagationAnchor[]>;
 
   /**
    * Creates a Glyph render model tied to a live external location and optional exact source.
@@ -1481,6 +1483,21 @@ export class GlyphRenderModel {
     this.#anchorsByNameCell = computed(
       () => new Map(this.#propagatedAnchorsCell.value.map((anchor) => [anchor.name, anchor])),
       { name: "glyph.renderModel.anchorsByName" },
+    );
+    // Narrow views so a reader of one anchor does not rerun when another moves.
+    this.#anchorNamedCache = keyedCache<string, string, ComputedSignal<PropagationAnchor | null>>({
+      name: "glyph.renderModel.anchorNamed",
+      key: (name) => name,
+      create: (nameCell) =>
+        computed(() => this.#anchorsByNameCell.value.get(nameCell.value) ?? null, {
+          name: "glyph.renderModel.anchorNamed",
+          equals: sameAnchor,
+        }),
+      dispose: (cell) => cell.dispose(),
+    });
+    this.#attachingAnchorsCell = computed(
+      () => this.#propagatedAnchorsCell.value.filter((anchor) => anchor.name.startsWith("_")),
+      { name: "glyph.renderModel.attachingAnchors", equals: sameAnchors },
     );
     this.#externalLocation = externalLocation;
     this.#activeSourceId = activeSourceId;
@@ -1599,11 +1616,25 @@ export class GlyphRenderModel {
    *
    * @remarks
    * The one lookup by anchor name: with duplicate names the last one wins,
-   * as export resolves them.
+   * as export resolves them. A reactive caller reruns only when this anchor
+   * appears, disappears, or moves, not when another anchor does.
    */
   anchorNamed(name: string): PropagationAnchor | null {
-    track(this.#anchorsByNameCell);
-    return this.#anchorsByNameCell.peek().get(name) ?? null;
+    const cell = this.#anchorNamedCache.get(name);
+    track(cell);
+    return cell.peek();
+  }
+
+  /**
+   * The glyph's attaching anchors (`_top`, `_bottom`), with components'
+   * copied in, as {@link anchorsWithComponentsCell} has them.
+   *
+   * @remarks
+   * Notifies only when an attaching anchor changes, so a mark lookup does not
+   * rerun when the glyph's other anchors move.
+   */
+  get attachingAnchorsCell(): Signal<readonly PropagationAnchor[]> {
+    return this.#attachingAnchorsCell;
   }
 
   /**
@@ -2535,4 +2566,13 @@ function rootContoursPath(geometry: GlyphGeometry): Path2D {
     path.addPath(ContourPath.fromContour(contour, identity).path);
   }
   return path;
+}
+
+function sameAnchor(a: PropagationAnchor | null, b: PropagationAnchor | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.name === b.name && a.x === b.x && a.y === b.y;
+}
+
+function sameAnchors(a: readonly PropagationAnchor[], b: readonly PropagationAnchor[]): boolean {
+  return a.length === b.length && a.every((anchor, index) => sameAnchor(anchor, b[index]!));
 }

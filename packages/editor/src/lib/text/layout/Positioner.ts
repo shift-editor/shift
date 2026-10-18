@@ -214,8 +214,6 @@ export class Positioner {
     let previousMark: number | null = null;
     for (const index of logicalIndexes(run)) {
       const model = glyphs[index]?.model ?? null;
-      // Inside the run's layout computed: anchor edits, here or in a component, re-run the layout.
-      if (model) track(model.anchorsWithComponentsCell);
       const offset = anchorOffset(model, previousMark, glyphs) ?? anchorOffset(model, base, glyphs);
       if (offset) {
         offsets.set(index, offset);
@@ -303,8 +301,10 @@ function anchorOffset(
 ): MarkOffset | null {
   const targetModel = target === null ? null : glyphs[target]?.model;
   if (!mark || target === null || !targetModel) return null;
-  for (const markAnchor of mark.anchorsWithComponents) {
-    if (!markAnchor.name.startsWith("_")) continue;
+  // Inside the run's layout computed: the layout reruns when an attaching
+  // anchor, or the target anchor it attaches to, changes, and not for others.
+  track(mark.attachingAnchorsCell);
+  for (const markAnchor of mark.attachingAnchorsCell.peek()) {
     const targetAnchor = targetModel.anchorNamed(markAnchor.name.slice(1));
     if (targetAnchor) {
       return {
