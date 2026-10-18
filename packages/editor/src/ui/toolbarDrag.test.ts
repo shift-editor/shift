@@ -6,8 +6,11 @@ import { poseForDock } from "./toolbarPose";
 import { TOOL_FLOOR_OPACITY } from "./toolbarPresence";
 import {
   TEAR_DISTANCE,
+  TRAILING_REACH,
+  ZONE_MARGIN,
   nextToolbarDrag,
   startToolbarDrag,
+  toolbarBarReach,
   toolbarBarOrigin,
   toolbarLift,
   toolbarToolOpacity,
@@ -59,6 +62,17 @@ function dragTo(
   return nextToolbarDrag(start, pointer, frame);
 }
 
+/** Moves the pointer so the carried bar's reach point lands on `reach`. */
+function reachTo(
+  drag: ToolbarDragState,
+  reach: Point2D,
+  frame: ToolbarFrame = FRAME,
+): ToolbarDragState {
+  const now = toolbarBarReach(drag);
+
+  return dragTo(drag, nudged(drag.pointer, reach.x - now.x, reach.y - now.y), frame);
+}
+
 function nudged(point: Point2D, dx: number, dy: number): Point2D {
   return { x: point.x + dx, y: point.y + dy };
 }
@@ -92,43 +106,44 @@ describe("a bar held in its slot comes loose after a short pull", () => {
   it("returns to its own slot when released near it after being pulled loose", () => {
     const drag = dragTo(start, { x: 700, y: 600 });
 
-    expect(drag).toMatchObject({ tether: null, captured: true, target: "bottom" });
+    expect(drag).toMatchObject({ tether: null, target: "bottom" });
   });
 });
 
-describe("the bar follows the pointer and slots only decide where it lands", () => {
+describe("the frame is split into a zone per slot", () => {
   const start = startFrom("bottom");
 
-  it("highlights the left slot without moving or turning the bar", () => {
-    const drag = dragTo(start, { x: 100, y: 500 });
-
-    expect(drag).toMatchObject({ captured: true, target: "left", seatDock: "bottom" });
-    expect(drag.handle).toEqual({ x: 100, y: 500 });
+  it("docks to the top or bottom across the whole width of their quarter", () => {
+    expect(reachTo(start, { x: 200, y: 100 }).target).toBe("top");
+    expect(reachTo(start, { x: 800, y: 100 }).target).toBe("top");
+    expect(reachTo(start, { x: 200, y: 650 }).target).toBe("bottom");
+    expect(reachTo(start, { x: 800, y: 650 }).target).toBe("bottom");
   });
 
-  it("highlights the right slot the same way", () => {
-    const drag = dragTo(start, { x: 900, y: 500 });
-
-    expect(drag).toMatchObject({ captured: true, target: "right", seatDock: "bottom" });
+  it("gives the outer thirds of the band between them to left and right", () => {
+    expect(reachTo(start, { x: 300, y: 350 }).target).toBe("left");
+    expect(reachTo(start, { x: 700, y: 350 }).target).toBe("right");
   });
 
-  it("needs the same pull from either side", () => {
-    expect(dragTo(start, { x: 120, y: 500 }).captured).toBe(true);
-    expect(dragTo(start, { x: 121, y: 500 }).captured).toBe(false);
-    expect(dragTo(start, { x: 880, y: 500 }).captured).toBe(true);
-    expect(dragTo(start, { x: 879, y: 500 }).captured).toBe(false);
+  it("keeps whatever the target is across the centre of the band", () => {
+    const onLeft = reachTo(start, { x: 300, y: 350 });
+    const onTop = reachTo(start, { x: 500, y: 100 });
+
+    expect(reachTo(start, { x: 450, y: 350 }).target).toBe("bottom");
+    expect(reachTo(onLeft, { x: 450, y: 350 }).target).toBe("left");
+    expect(reachTo(onTop, { x: 450, y: 350 }).target).toBe("top");
   });
 
-  it("captures however far the turned bar would run past the frame", () => {
-    expect(dragTo(start, { x: 40, y: 100 })).toMatchObject({ captured: true, target: "left" });
-    expect(dragTo(start, { x: 960, y: 500 })).toMatchObject({ captured: true, target: "right" });
+  it("targets a slot without moving or turning the bar", () => {
+    const drag = dragTo(start, { x: 400, y: 350 });
+
+    expect(drag).toMatchObject({ target: "left", seatDock: "bottom" });
+    expect(drag.handle).toEqual({ x: 400, y: 350 });
   });
 
-  it("keeps a slot a little farther out than it took it, then lets go", () => {
-    const captured = dragTo(start, { x: 120, y: 500 });
-
-    expect(dragTo(captured, { x: 144, y: 500 }).captured).toBe(true);
-    expect(dragTo(captured, { x: 145, y: 500 }).captured).toBe(false);
+  it("keeps steering by zone once the pointer leaves the frame", () => {
+    expect(dragTo(start, { x: -200, y: 350 }).target).toBe("left");
+    expect(dragTo(start, { x: 500, y: -300 }).target).toBe("top");
   });
 
   it("holds the handle inside the frame however far the pointer wanders", () => {
@@ -136,29 +151,52 @@ describe("the bar follows the pointer and slots only decide where it lands", () 
   });
 });
 
-describe("a corner stays with its owner until another edge clearly wins", () => {
-  const start = startFrom("bottom");
-  const tornFrom = (target: ToolbarDock): ToolbarDragState => ({
-    ...start,
-    tether: null,
-    target,
-    captured: true,
+describe("whichever reaches a zone first, the pointer or the bar's reach point, steers", () => {
+  it("puts the reach point a share of the way in from the end away from the handle", () => {
+    const flat = dragTo(startFrom("bottom"), { x: 500, y: 400 });
+    const standing = dragTo(startFrom("left"), { x: 300, y: 500 });
+    const reach = LENGTH * TRAILING_REACH;
+
+    expect(toolbarBarReach(flat)).toEqual({ x: 500 - (LENGTH - 17) + reach, y: 400 });
+    expect(toolbarBarReach(standing)).toEqual({ x: 300, y: 500 - (LENGTH - 17) + reach });
   });
 
-  it("lets the current owner keep an exact tie", () => {
-    const tie = { x: 100, y: 600 };
+  it("turns a standing bar to the top once its far third is in, though the handle trails", () => {
+    const reaching = reachTo(startFrom("left"), { x: 100, y: 150 });
 
-    expect(dragTo(tornFrom("bottom"), tie).target).toBe("bottom");
-    expect(dragTo(tornFrom("left"), tie).target).toBe("left");
+    expect(reaching.target).toBe("top");
+    expect(reaching.handle.y).toBeGreaterThan(175);
   });
 
-  it("hands the corner over only once the other edge is more than the margin closer", () => {
-    expect(dragTo(tornFrom("bottom"), { x: 76, y: 600 }).target).toBe("bottom");
-    expect(dragTo(tornFrom("bottom"), { x: 75, y: 600 }).target).toBe("left");
+  it("turns a standing bar to the bottom as soon as the leading handle is in", () => {
+    const side = startFrom("left");
+    const bottomEdge = 525 + ZONE_MARGIN;
+    const arriving = dragTo(side, { x: 100, y: bottomEdge + 1 });
+
+    expect(dragTo(side, { x: 100, y: bottomEdge }).target).toBe("left");
+    expect(arriving.target).toBe("bottom");
+    expect(toolbarBarReach(arriving).y).toBeLessThan(525);
   });
 
-  it("gives the corner to the nearest edge when the owner is far away", () => {
-    expect(dragTo(tornFrom("top"), { x: 80, y: 600 }).target).toBe("left");
+  it("reaches the bottom from a side even where the far end could not get there", () => {
+    const frame = { width: 1000, height: 670 };
+    const side = startFrom("left", frame);
+
+    expect(dragTo(side, { x: 100, y: 660 }, frame).target).toBe("bottom");
+  });
+});
+
+describe("a zone stays with the target until the bar is clearly past it", () => {
+  const onLeft = reachTo(startFrom("bottom"), { x: 100, y: 350 });
+
+  it("hands a flat bar to the right side once its leading handle is in that third", () => {
+    expect(dragTo(onLeft, { x: 666, y: 350 }).target).toBe("left");
+    expect(dragTo(onLeft, { x: 667, y: 350 }).target).toBe("right");
+  });
+
+  it("keeps the target past the top of the band by up to the margin", () => {
+    expect(reachTo(onLeft, { x: 100, y: 175 - ZONE_MARGIN }).target).toBe("left");
+    expect(reachTo(onLeft, { x: 100, y: 175 - ZONE_MARGIN - 1 }).target).toBe("top");
   });
 });
 
@@ -177,24 +215,6 @@ describe("the bar keeps the spot where it was grabbed", () => {
     const drag = dragTo(start, { x: 500, y: 400 });
 
     expect(drag.handle).toEqual({ x: 495, y: 397 });
-  });
-});
-
-describe("the slot the bar lands in on release", () => {
-  const start = startFrom("bottom");
-
-  it("is the highlighted slot", () => {
-    expect(dragTo(start, { x: 100, y: 500 }).target).toBe("left");
-  });
-
-  it("is the nearest slot when the pointer is clear of every zone", () => {
-    const drag = dragTo(start, { x: 500, y: 300 });
-
-    expect(drag).toMatchObject({ captured: false, target: "top" });
-  });
-
-  it("stays with the slot it came from until the other is clearly nearer", () => {
-    expect(dragTo(start, { x: 500, y: 340 }).target).toBe("bottom");
   });
 });
 
@@ -217,29 +237,23 @@ describe("a short frame keeps the bar flat", () => {
   const frame = { width: 1000, height: 300 };
   const start = startFrom("bottom", frame);
 
-  it("steers to the nearest slot it can hold, even beside a side edge", () => {
-    const drag = dragTo(start, { x: 50, y: 200 }, frame);
-
-    expect(drag).toMatchObject({ target: "bottom", captured: true });
+  it("splits the frame into a top and a bottom half, even beside a side edge", () => {
+    expect(reachTo(start, { x: 50, y: 200 }, frame).target).toBe("bottom");
+    expect(reachTo(start, { x: 50, y: 100 }, frame).target).toBe("top");
   });
 
   it("leaves a side target it held before the frame shrank", () => {
-    const wasTall: ToolbarDragState = { ...start, tether: null, target: "left", captured: true };
-    const drag = dragTo(wasTall, { x: 50, y: 200 }, frame);
+    const wasTall: ToolbarDragState = { ...start, tether: null, target: "left" };
 
-    expect(drag).toMatchObject({ target: "bottom", captured: true });
+    expect(reachTo(wasTall, { x: 50, y: 200 }, frame).target).toBe("bottom");
   });
 
-  it("highlights nothing for a pointer clear of the top and bottom slots", () => {
-    expect(dragTo(start, { x: 50, y: 150 }, frame).captured).toBe(false);
-  });
-
-  it("never fades the tools, since nothing would turn the bar", () => {
-    expect(toolbarToolOpacity(dragTo(start, { x: 50, y: 200 }, frame))).toBe(1);
+  it("never dims the tools, since nothing would turn the bar", () => {
+    expect(toolbarToolOpacity(reachTo(start, { x: 50, y: 100 }, frame))).toBe(1);
   });
 });
 
-describe("the tools fade as the pointer nears a slot that turns the bar", () => {
+describe("the tools dim while the target would turn the bar", () => {
   const start = startFrom("bottom");
 
   it("are fully visible while the bar is docked", () => {
@@ -251,58 +265,32 @@ describe("the tools fade as the pointer nears a slot that turns the bar", () => 
   });
 
   it("stay fully visible while heading for a slot that only slides the bar", () => {
-    expect(toolbarToolOpacity(dragTo(start, { x: 500, y: 50 }))).toBe(1);
+    expect(toolbarToolOpacity(reachTo(start, { x: 500, y: 50 }))).toBe(1);
   });
 
-  it("fade progressively on the way to a turning slot", () => {
-    const far = toolbarToolOpacity(dragTo(start, { x: 300, y: 500 }));
-    const near = toolbarToolOpacity(dragTo(start, { x: 200, y: 500 }));
+  it("dim while a side slot is the target, and recover when it no longer is", () => {
+    const onLeft = reachTo(start, { x: 300, y: 350 });
 
-    expect(far).toBeLessThan(1);
-    expect(near).toBeLessThan(far);
-    expect(near).toBeGreaterThan(TOOL_FLOOR_OPACITY);
+    expect(toolbarToolOpacity(onLeft)).toBe(TOOL_FLOOR_OPACITY);
+    expect(toolbarToolOpacity(reachTo(onLeft, { x: 500, y: 650 }))).toBe(1);
   });
 
-  it("are nearly at their floor just outside the slot's range", () => {
-    const outside = toolbarToolOpacity(dragTo(start, { x: 121, y: 500 }));
+  it("stay fully visible moving between the two sides of a standing bar", () => {
+    const side = startFrom("left");
 
-    expect(outside).toBeGreaterThan(TOOL_FLOOR_OPACITY);
-    expect(outside).toBeLessThan(TOOL_FLOOR_OPACITY + 0.05);
-  });
-
-  it("return to full once the slot's zone takes the bar, so a lifted bar is never faded", () => {
-    expect(toolbarToolOpacity(dragTo(start, { x: 120, y: 500 }))).toBe(1);
-    expect(toolbarToolOpacity(dragTo(start, { x: 880, y: 500 }))).toBe(1);
-  });
-
-  it("never fade for a bar that began inside the turning slot's range", () => {
-    const frame = { width: 1000, height: 480 };
-    const side = startFrom("left", frame);
-
-    expect(toolbarToolOpacity(dragTo(side, { x: 500, y: 240 }, frame))).toBe(1);
-  });
-
-  it("start fully visible even in a canvas where the turning slot is close", () => {
-    const frame = { width: 1200, height: 600 };
-    const side = startFrom("left", frame);
-
-    expect(toolbarToolOpacity(side)).toBe(1);
+    expect(toolbarToolOpacity(reachTo(side, { x: 800, y: 300 }))).toBe(1);
   });
 });
 
-describe("the bar's lift follows the highlighted zone", () => {
-  const start = startFrom("bottom");
-
+describe("the bar's lift", () => {
   it("rests when docked", () => {
     expect(toolbarLift(null)).toBe("rest");
   });
 
-  it("lifts while held over a highlighted slot", () => {
-    expect(toolbarLift(start)).toBe("lifted");
-    expect(toolbarLift(dragTo(start, { x: 100, y: 500 }))).toBe("lifted");
-  });
+  it("lifts for the whole drag", () => {
+    const start = startFrom("bottom");
 
-  it("floats flat once carried clear of every slot", () => {
-    expect(toolbarLift(dragTo(start, { x: 500, y: 350 }))).toBe("floating");
+    expect(toolbarLift(start)).toBe("lifted");
+    expect(toolbarLift(reachTo(start, { x: 500, y: 350 }))).toBe("lifted");
   });
 });

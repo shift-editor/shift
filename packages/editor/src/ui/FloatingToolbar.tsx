@@ -10,11 +10,12 @@ import { readToolbarDock, writeToolbarDock } from "./toolbarStorage";
 import { useToolbarDrag } from "./useToolbarDrag";
 import { useToolbarMetrics } from "./useToolbarMetrics";
 
-const DROP_ZONE_POSITION: Record<ToolbarDock, string> = {
-  top: "inset-x-3 top-3 h-12",
-  bottom: "inset-x-3 bottom-3 h-12",
-  left: "inset-y-3 left-3 w-12",
-  right: "inset-y-3 right-3 w-12",
+/** A thin line along the whole of each canvas edge, marking where the bar lands on release. */
+const EDGE_LINE_POSITION: Record<ToolbarDock, string> = {
+  top: "inset-x-0 top-0 h-0.5",
+  bottom: "inset-x-0 bottom-0 h-0.5",
+  left: "inset-y-0 left-0 w-0.5",
+  right: "inset-y-0 right-0 w-0.5",
 };
 
 /** Strong ease-out; ease-in would hold the old bar just as the eye looks at it. */
@@ -82,11 +83,12 @@ export function FloatingToolbar({ editor }: FloatingToolbarProps) {
       ) : null}
       {/*
         A landing preview for every edge stays mounted and fades with CSS, so
-        it fades in on grab, crossfades as the target edge changes, and fades
-        out on drop.
+        it fades in once the bar comes loose, crossfades as the target edge
+        changes, and fades out on drop. Some edge is always the target, so
+        the bar never lands anywhere unmarked.
       */}
       {TOOLBAR_DOCKS.map((edge) => {
-        const shown = drag !== null && drag.captured && drag.target === edge;
+        const shown = drag !== null && drag.tether === null && drag.target === edge;
         const vertical = poseForDock(edge) === "stand";
 
         return (
@@ -95,10 +97,9 @@ export function FloatingToolbar({ editor }: FloatingToolbarProps) {
               aria-hidden="true"
               style={PREVIEW_STYLE}
               className={cn(
-                "absolute rounded-xl transition duration-150 motion-reduce:scale-100",
-                "bg-accent/10",
-                shown ? "scale-100 opacity-100" : "scale-98 opacity-0",
-                DROP_ZONE_POSITION[edge],
+                "absolute bg-accent transition-opacity duration-150",
+                shown ? "opacity-100" : "opacity-0",
+                EDGE_LINE_POSITION[edge],
               )}
             />
             {/* Outlines exactly where the bar will sit, sized for that edge's orientation. */}

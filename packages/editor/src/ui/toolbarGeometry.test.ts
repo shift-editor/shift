@@ -1,15 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { clampHandleToFrame, pointerEdgeDistances } from "./toolbarGeometry";
+import { clampHandleToFrame } from "./toolbarGeometry";
 
 const FRAME = { width: 1000, height: 700 };
-
-describe("distance from the pointer to each edge", () => {
-  it("measures each canvas edge from the pointer", () => {
-    const distances = pointerEdgeDistances({ x: 20, y: 30 }, FRAME);
-
-    expect(distances).toEqual({ top: 30, bottom: 670, left: 20, right: 980 });
-  });
-});
 
 describe("keeping the handle inside the frame", () => {
   it("holds a handle that strays out at the inset", () => {

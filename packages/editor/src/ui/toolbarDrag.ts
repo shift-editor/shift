@@ -6,18 +6,12 @@ import type {
   ToolbarFrame,
   ToolbarLift,
 } from "../types/toolbar";
-import { BAR_THICKNESS, clampHandleToFrame, pointerEdgeDistances } from "./toolbarGeometry";
-import { allowedDocksInFrame, poseForDock } from "./toolbarPose";
-import { TOOL_FADE_SPAN, toolOpacityForApproach } from "./toolbarPresence";
+import { BAR_THICKNESS, clampHandleToFrame, isInDockZone } from "./toolbarGeometry";
+import { allowedDocksInFrame, isShortToolbarFrame, poseForDock } from "./toolbarPose";
+import { TOOL_FLOOR_OPACITY } from "./toolbarPresence";
 
-/** How close the pointer must come to an edge for its slot to take the bar on release. */
-export const SNAP_DISTANCE = 120;
-
-/** How far the pointer may drift from a slot's edge before it stops taking the bar. */
-export const RELEASE_DISTANCE = 144;
-
-/** How much closer another edge must be before the pointer steers toward it. */
-export const SWITCH_MARGIN = 24;
+/** How far the pointer may stray past the target's zone before a neighbouring zone takes over. */
+export const ZONE_MARGIN = 16;
 
 /**
  * How far the pointer must move from where it went down before the bar leaves
@@ -25,40 +19,8 @@ export const SWITCH_MARGIN = 24;
  */
 export const TEAR_DISTANCE = BAR_THICKNESS / 2;
 
-/** The dock among `docks` whose edge is nearest; the first of equals wins. */
-function nearestDock(
-  docks: readonly ToolbarDock[],
-  distances: Record<ToolbarDock, number>,
-): ToolbarDock {
-  return docks.reduce((best, next) => (distances[next] < distances[best] ? next : best));
-}
-
-/**
- * How far the pointer is outside the range of the nearest slot that would turn
- * a bar docked at `seatDock`, or null when no slot would.
- */
-function turnApproach(
-  seatDock: ToolbarDock,
-  length: number,
-  pointer: Point2D,
-  frame: ToolbarFrame,
-): number | null {
-  const seatPose = poseForDock(seatDock);
-  const turning = allowedDocksInFrame(frame, length).filter(
-    (dock) => poseForDock(dock) !== seatPose,
-  );
-  if (turning.length === 0) return null;
-
-  const distances = pointerEdgeDistances(pointer, frame);
-
-  return distances[nearestDock(turning, distances)] - SNAP_DISTANCE;
-}
-
 /** Begins a drag with the bar held in the slot it was docked to. */
 export function startToolbarDrag(start: ToolbarDragStart): ToolbarDragState {
-  const approach = turnApproach(start.dock, start.length, start.pointer, start.frame);
-  const fadeSpan = Math.min(Math.max(approach ?? 0, 0), TOOL_FADE_SPAN);
-
   return {
     pointer: start.pointer,
     handle: start.handle,
@@ -66,59 +28,73 @@ export function startToolbarDrag(start: ToolbarDragStart): ToolbarDragState {
     grab: { x: start.handle.x - start.pointer.x, y: start.handle.y - start.pointer.y },
     seatDock: start.dock,
     target: start.dock,
-    captured: true,
     length: start.length,
     frame: start.frame,
     tether: start.pointer,
-    fadeSpan,
   };
 }
 
+/** Share of the bar, from its far end, that must be in a zone to steer there when the handle trails. */
+export const TRAILING_REACH = 1 / 3;
+
 /**
- * Edge the pointer is steering toward. The pointer picks the edge, not the bar,
- * because the bar's shape changes with the edge and that would feed back.
+ * Point on the carried bar that steers the target when the handle trails:
+ * `TRAILING_REACH` of the way in from the end away from the handle, across
+ * the middle of the bar.
  *
  * @remarks
- * Only slots the frame has room for are considered, so what is highlighted is
- * always somewhere the bar can land. The current target keeps a corner until
- * another edge is `SWITCH_MARGIN` closer, and wins exact ties.
+ * The carried bar keeps its pose, so this stays a fixed offset from the
+ * handle for the whole drag.
+ */
+export function toolbarBarReach(drag: ToolbarDragState): Point2D {
+  const origin = toolbarBarOrigin(drag);
+  const reach = drag.length * TRAILING_REACH;
+
+  // The far end is the bar's left end when flat and its top end when standing.
+  if (poseForDock(drag.seatDock) === "stand") {
+    return { x: origin.x + BAR_THICKNESS / 2, y: origin.y + reach };
+  }
+
+  return { x: origin.x + reach, y: origin.y + BAR_THICKNESS / 2 };
+}
+
+/**
+ * Edge the carried bar is steering toward.
+ *
+ * @remarks
+ * Each slot the frame has room for owns a zone. The target changes when the
+ * pointer, or failing that the bar's reach point, enters another slot's zone,
+ * and only once it is `ZONE_MARGIN` clear of the current target's zone. The
+ * handle sits at one end of the bar, so the pointer leads in some directions
+ * and trails in others: when it leads it switches the target as soon as it
+ * arrives, and when it trails the reach point switches it once
+ * `TRAILING_REACH` of the bar is in. Either way the switch never waits for
+ * the trailing end. The centre of the
+ * frame belongs to no zone, so a bar there keeps the target it has.
  */
 function steeredDock(
   pointer: Point2D,
+  reach: Point2D,
   frame: ToolbarFrame,
   length: number,
   previousTarget: ToolbarDock,
 ): ToolbarDock {
-  const distances = pointerEdgeDistances(pointer, frame);
   const allowed = allowedDocksInFrame(frame, length);
+  const flatOnly = isShortToolbarFrame(frame, length);
   const targetAllowed = allowed.includes(previousTarget);
-  const others = allowed.filter((dock) => dock !== previousTarget);
-  const candidates = targetAllowed ? [previousTarget, ...others] : others;
-  const nearest = nearestDock(candidates, distances);
-  const keepTarget =
-    targetAllowed && distances[previousTarget] <= distances[nearest] + SWITCH_MARGIN;
+  const claimedBy = (point: Point2D): ToolbarDock | undefined => {
+    if (targetAllowed && isInDockZone(previousTarget, point, frame, flatOnly, ZONE_MARGIN)) {
+      return undefined;
+    }
 
-  return keepTarget ? previousTarget : nearest;
-}
+    return allowed.find(
+      (dock) => dock !== previousTarget && isInDockZone(dock, point, frame, flatOnly),
+    );
+  };
+  const claimed = claimedBy(pointer) ?? claimedBy(reach);
+  if (claimed) return claimed;
 
-/**
- * Whether the target slot would take the bar with the pointer where it is.
- *
- * @remarks
- * `target` is always a slot the frame has room for, since steering only picks
- * from those. Range is the pointer's distance from the edge, so the pull needed is the same
- * on every edge. A slot already taking the bar keeps it a little farther out.
- */
-function captures(
-  previous: ToolbarDragState,
-  target: ToolbarDock,
-  pointer: Point2D,
-  frame: ToolbarFrame,
-): boolean {
-  const holding = previous.captured && previous.target === target;
-  const range = holding ? RELEASE_DISTANCE : SNAP_DISTANCE;
-
-  return pointerEdgeDistances(pointer, frame)[target] <= range;
+  return targetAllowed ? previousTarget : allowed[0];
 }
 
 /** Whether the pointer is still close enough to where it went down to hold the bar in. */
@@ -145,14 +121,20 @@ export function nextToolbarDrag(
 ): ToolbarDragState {
   if (isTethered(previous, pointer)) return { ...previous, pointer, frame };
 
-  const target = steeredDock(pointer, frame, previous.length, previous.target);
   const handle = clampHandleToFrame(
     { x: pointer.x + previous.grab.x, y: pointer.y + previous.grab.y },
     frame,
   );
-  const captured = captures(previous, target, pointer, frame);
+  const moved = { ...previous, pointer, handle, frame, tether: null };
+  const target = steeredDock(
+    pointer,
+    toolbarBarReach(moved),
+    frame,
+    previous.length,
+    previous.target,
+  );
 
-  return { ...previous, pointer, handle, target, frame, tether: null, captured };
+  return { ...moved, target };
 }
 
 /** Top-left corner of the carried bar, so its handle sits where the pointer holds it. */
@@ -164,24 +146,19 @@ export function toolbarBarOrigin(drag: ToolbarDragState): Point2D {
  * Opacity of the tools while the bar is carried.
  *
  * @remarks
- * The tools are fully visible when the drag begins and while the bar can only
- * slide. They dim as the pointer nears a slot that would turn the bar, then
- * come back to full once that slot's zone takes the bar, so a highlighted,
- * lifted bar never looks faded. The turn on release dims them again. They are
- * fully visible while the bar is docked.
+ * The tools dim while the target slot would turn the bar on release, warning
+ * of the turn before the pointer lets go, and are fully visible otherwise.
+ * The turn itself dips them further.
  */
 export function toolbarToolOpacity(drag: ToolbarDragState | null): number {
-  if (!drag || drag.captured) return 1;
+  if (!drag) return 1;
 
-  const approach = turnApproach(drag.seatDock, drag.length, drag.pointer, drag.frame);
+  const turns = poseForDock(drag.target) !== poseForDock(drag.seatDock);
 
-  return toolOpacityForApproach(approach, drag.fadeSpan);
+  return turns ? TOOL_FLOOR_OPACITY : 1;
 }
 
-/** How far the bar is raised: lifted over a highlighted slot, flat once clear of every slot. */
+/** How far the bar is raised: lifted while carried, resting once docked. */
 export function toolbarLift(drag: ToolbarDragState | null): ToolbarLift {
-  if (!drag) return "rest";
-  if (drag.captured) return "lifted";
-
-  return "floating";
+  return drag ? "lifted" : "rest";
 }

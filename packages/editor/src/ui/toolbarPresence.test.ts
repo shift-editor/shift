@@ -1,37 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { springEasing } from "./springEasing";
-import {
-  TOOL_FLOOR_OPACITY,
-  TOOL_TURN_DIM,
-  TOOL_TURN_OPACITY,
-  toolDipKeyframes,
-  toolOpacityForApproach,
-} from "./toolbarPresence";
-
-describe("tools fade as the pointer nears a slot that turns the bar", () => {
-  it("stay fully visible when no slot would turn the bar", () => {
-    expect(toolOpacityForApproach(null, 200)).toBe(1);
-  });
-
-  it("are fully visible at the start of the approach", () => {
-    expect(toolOpacityForApproach(200, 200)).toBe(1);
-    expect(toolOpacityForApproach(500, 200)).toBe(1);
-  });
-
-  it("fade continuously toward the floor", () => {
-    expect(toolOpacityForApproach(100, 200)).toBeCloseTo((1 + TOOL_FLOOR_OPACITY) / 2);
-  });
-
-  it("settle at the floor, not zero, once the pointer is in range", () => {
-    expect(toolOpacityForApproach(0, 200)).toBe(TOOL_FLOOR_OPACITY);
-    expect(toolOpacityForApproach(-50, 200)).toBe(TOOL_FLOOR_OPACITY);
-    expect(TOOL_FLOOR_OPACITY).toBeGreaterThan(0);
-  });
-
-  it("do not fade when the drag began already in range", () => {
-    expect(toolOpacityForApproach(-10, 0)).toBe(1);
-  });
-});
+import { TOOL_TURN_DIM, TOOL_TURN_OPACITY, toolDipKeyframes } from "./toolbarPresence";
 
 describe("tools dim early in a turn and are back before it settles", () => {
   const turning = springEasing({ visualDuration: 0.24, bounce: 0.08 });

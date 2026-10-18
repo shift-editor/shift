@@ -51,11 +51,10 @@ function slideSpring(dragging: boolean): Spring {
   return dragging ? DETACH_SPRING : DROP_SPRING;
 }
 
-/** Shadow and translucency per lift: lifted casts more, floating is paper lying on the canvas. */
+/** Shadow per lift: a carried bar casts more. */
 const LIFT_CLASS: Record<ToolbarLift, string> = {
   rest: "card-shadow",
   lifted: "shadow-xl",
-  floating: "opacity-70 shadow-2xs",
 };
 
 /** The tools re-render only when the bar's layout or popup side changes, not on every pointer move. */

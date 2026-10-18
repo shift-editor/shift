@@ -3,7 +3,7 @@ import type { ToolDipKeyframe } from "../types/toolbar";
 /** Duration of the tools' opacity transition while the pointer moves. */
 export const TOOL_FADE_MS = 120;
 
-/** Opacity the tools settle at once the pointer is in range of a slot that turns the bar. */
+/** Opacity the tools hold while the target slot would turn the bar on release. */
 export const TOOL_FLOOR_OPACITY = 0.4;
 
 /**
@@ -39,23 +39,4 @@ export function toolDipKeyframes(
     { opacity: 1, offset: timeAtProgress(TOOL_TURN_DIM.restoredBy) },
     { opacity: 1, offset: 1 },
   ];
-}
-
-/** Longest distance over which the tools fade as the pointer nears a slot that turns the bar. */
-export const TOOL_FADE_SPAN = 240;
-
-/**
- * Opacity of the tools for a pointer `distanceBeyondRange` pixels outside the
- * range of the nearest slot that would turn the bar, or null if none would.
- *
- * @remarks
- * The tools fade linearly over `span` pixels, from fully visible to
- * `TOOL_FLOOR_OPACITY`, and never to nothing.
- */
-export function toolOpacityForApproach(distanceBeyondRange: number | null, span: number): number {
-  if (distanceBeyondRange === null || span <= 0) return 1;
-
-  const progress = Math.min(Math.max(distanceBeyondRange / span, 0), 1);
-
-  return TOOL_FLOOR_OPACITY + (1 - TOOL_FLOOR_OPACITY) * progress;
 }

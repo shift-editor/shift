@@ -46,10 +46,8 @@ export interface ToolbarDragState {
   grab: Point2D;
   /** Slot the bar was picked up from; the carried bar keeps that slot's pose. */
   seatDock: ToolbarDock;
-  /** Edge the pointer is steering toward: the slot the bar lands in if released now. */
+  /** Edge the carried bar is steering toward: the slot it lands in if released now. */
   target: ToolbarDock;
-  /** Whether the pointer is close enough to `target`'s edge for its slot to be highlighted. */
-  captured: boolean;
   /** Bar length along its tools. */
   length: number;
   frame: ToolbarFrame;
@@ -58,8 +56,6 @@ export interface ToolbarDragState {
    * Null once the pointer has pulled the bar loose.
    */
   tether: Point2D | null;
-  /** Distance over which the tools fade from full opacity to their floor as the pointer nears a turning slot. */
-  fadeSpan: number;
 }
 
 /** Everything needed to begin a drag. */
@@ -78,10 +74,9 @@ export interface ToolbarDragStart {
 /**
  * How far the bar is raised off the canvas.
  *
- * `rest` is docked. `lifted` is held over a highlighted slot. `floating` is
- * carried clear of every slot, like paper laid flat on the surface.
+ * `rest` is docked. `lifted` is carried by its handle.
  */
-export type ToolbarLift = "rest" | "lifted" | "floating";
+export type ToolbarLift = "rest" | "lifted";
 
 /** Where the bar's handle sat the last time it was laid out. */
 export interface ToolbarBarPlace {

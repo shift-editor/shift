@@ -12,17 +12,67 @@ export function frameOf(rect: DOMRect): ToolbarFrame {
   return { width: rect.width, height: rect.height };
 }
 
-/** Gap between each canvas edge and a point. */
-export function pointerEdgeDistances(
+/** Share of the frame's height, from each of top and bottom, that docks the bar to that edge. */
+export const FLAT_ZONE_SHARE = 0.25;
+
+/** Share of the frame's width, from each of left and right, that docks the bar to that side. */
+export const SIDE_ZONE_SHARE = 1 / 3;
+
+/** Region of the frame whose pointer docks the bar to one edge; outer sides run on past the frame. */
+export interface DockZone {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * The region of the frame that docks the bar to `dock`.
+ *
+ * @remarks
+ * The top and bottom quarters dock to their edge. In the band between them
+ * the outer thirds dock to their side, and the centre third belongs to no
+ * zone. When the frame only holds a flat bar, its top and bottom halves split
+ * the whole frame.
+ */
+export function dockZone(dock: ToolbarDock, frame: ToolbarFrame, flatOnly: boolean): DockZone {
+  const share = flatOnly ? 0.5 : FLAT_ZONE_SHARE;
+  const bandTop = frame.height * share;
+  const bandBottom = frame.height * (1 - share);
+  const leftEnd = frame.width * SIDE_ZONE_SHARE;
+  const rightStart = frame.width * (1 - SIDE_ZONE_SHARE);
+
+  switch (dock) {
+    case "top":
+      return { left: -Infinity, top: -Infinity, right: Infinity, bottom: bandTop };
+    case "bottom":
+      return { left: -Infinity, top: bandBottom, right: Infinity, bottom: Infinity };
+    case "left":
+      return { left: -Infinity, top: bandTop, right: leftEnd, bottom: bandBottom };
+    case "right":
+      return { left: rightStart, top: bandTop, right: Infinity, bottom: bandBottom };
+  }
+}
+
+/**
+ * Whether `pointer` lies in the zone that docks to `dock`, with the zone
+ * grown by `margin` on every side.
+ */
+export function isInDockZone(
+  dock: ToolbarDock,
   pointer: Point2D,
   frame: ToolbarFrame,
-): Record<ToolbarDock, number> {
-  return {
-    top: pointer.y,
-    bottom: frame.height - pointer.y,
-    left: pointer.x,
-    right: frame.width - pointer.x,
-  };
+  flatOnly: boolean,
+  margin = 0,
+): boolean {
+  const zone = dockZone(dock, frame, flatOnly);
+
+  return (
+    pointer.x >= zone.left - margin &&
+    pointer.x <= zone.right + margin &&
+    pointer.y >= zone.top - margin &&
+    pointer.y <= zone.bottom + margin
+  );
 }
 
 function clampAxis(value: number, limit: number): number {
