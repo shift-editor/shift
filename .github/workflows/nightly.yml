@@ -133,6 +133,8 @@ jobs:
           fetch-depth: 1
           submodules: true
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -175,10 +177,16 @@ jobs:
         run: node scripts/product-version.mjs set "${{ needs.prepare.outputs.version }}"
 
       - name: Build native bridge
+        if: matrix.platform != 'linux'
         run: pnpm build:native
 
       - name: Build command-line tool
+        if: matrix.platform != 'linux'
         run: pnpm build:cli
+
+      - name: Build Linux native binaries against glibc 2.17
+        if: matrix.platform == 'linux'
+        run: scripts/build-linux-portable.sh
 
       - name: Build desktop application
         env:
@@ -240,6 +248,18 @@ jobs:
             exit 1
           }
           scripts/check-deb-libraries.sh "${DEBS[0]}"
+
+      - name: Verify RPM libraries on clean systems
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t RPMS < <(find "apps/desktop/out/linux-${{ matrix.arch }}" -maxdepth 1 -name '*.rpm')
+          [[ "${#RPMS[@]}" == 1 ]] || {
+            echo "Expected one RPM, found ${#RPMS[@]}" >&2
+            exit 1
+          }
+          scripts/check-rpm-libraries.sh "${RPMS[0]}"
 
       - name: Verify macOS signature
         if: matrix.platform == 'darwin'

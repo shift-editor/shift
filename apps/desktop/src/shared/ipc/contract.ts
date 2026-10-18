@@ -7,6 +7,7 @@ import type {
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
+import type { AppConfigState, ThemeSetting } from "../config/config";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 export type DocumentCallMap = {
@@ -46,6 +47,11 @@ export type RendererToMain = {
   /** Persists whether local agents may connect and starts or stops the MCP server. */
   "agentConnections.setAllowed": (allowed: boolean) => AgentConnectionsState;
   "commands.run": (id: CommandId) => void;
+  "config.state": () => AppConfigState;
+  /** Writes the theme setting to `config.toml`; rejects when the file has errors. */
+  "config.setTheme": (theme: ThemeSetting) => AppConfigState;
+  /** Opens this build's config folder in the system file manager. */
+  "config.reveal": () => void;
   "clipboard.readText": () => string;
   "clipboard.writeText": (text: string) => void;
   /**
@@ -110,6 +116,8 @@ export type MainToRenderer = {
   "update.ready": (version: string) => void;
   /** Agent connections were allowed or disallowed, failed to start, or saw a request. */
   "agentConnections.changed": (state: AgentConnectionsState) => void;
+  /** `config.toml` changed in Settings or in another program. */
+  "config.changed": (state: AppConfigState) => void;
   /** Recent files changed after an open, Save As, removal, or Clear Menu. */
   "recents.changed": (documents: RecentDocument[]) => void;
   /** The Windows and Linux menus changed: rebuilt, or command states re-evaluated. */

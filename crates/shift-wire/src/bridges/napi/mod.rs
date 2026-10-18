@@ -7,7 +7,7 @@ use shift_font::{
         resolved_contours_bbox, resolved_contours_to_svg_path, ResolvedComponentGeometry,
         ResolvedContour, ResolvedLayerGeometry,
     },
-    GlyphId, PointType as IrPointType, Transform,
+    ComponentAlignment, GlyphId, PointType as IrPointType, Transform,
 };
 
 use crate::{
@@ -500,6 +500,15 @@ pub struct NapiGlyphRecord {
     #[napi(ts_type = "Array<GlyphId>")]
     pub component_base_glyph_ids: Vec<String>,
     pub layers: Vec<NapiGlyphLayerRecord>,
+    /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
+    pub mark: Option<bool>,
+    /// A nonspacing mark (Mark category, Nonspacing subcategory): export
+    /// compiles it with no advance. Absent when it is not one.
+    pub nonspacing_mark: Option<bool>,
+    /// `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+    /// once it has an attaching anchor.
+    #[napi(ts_type = "\"explicit\" | \"subcategory\"")]
+    pub ligature: Option<String>,
 }
 
 impl From<GlyphRecord> for NapiGlyphRecord {
@@ -514,6 +523,9 @@ impl From<GlyphRecord> for NapiGlyphRecord {
                 .map(|id| id.to_string())
                 .collect(),
             layers: record.layers.into_iter().map(Into::into).collect(),
+            mark: record.mark.then_some(true),
+            nonspacing_mark: record.nonspacing_mark.then_some(true),
+            ligature: record.ligature,
         }
     }
 }
@@ -1246,6 +1258,10 @@ pub struct NapiComponentData {
     pub base_glyph_id: String,
     #[napi(ts_type = "GlyphName")]
     pub base_glyph_name: String,
+    /// Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+    /// counts as anchored while the component sits exactly on its anchors.
+    #[napi(ts_type = "\"anchored\" | \"free\" | \"unset\"")]
+    pub alignment: Option<String>,
 }
 
 impl From<ComponentData> for NapiComponentData {
@@ -1254,7 +1270,26 @@ impl From<ComponentData> for NapiComponentData {
             id: component.id,
             base_glyph_id: component.base_glyph_id.to_string(),
             base_glyph_name: component.base_glyph_name.to_string(),
+            alignment: Some(alignment_name(component.alignment).to_string()),
         }
+    }
+}
+
+/// The wire name of a component alignment.
+pub fn alignment_name(alignment: ComponentAlignment) -> &'static str {
+    match alignment {
+        ComponentAlignment::Unset => "unset",
+        ComponentAlignment::Anchored => "anchored",
+        ComponentAlignment::Free => "free",
+    }
+}
+
+/// Reads a wire component alignment; anything else is `Unset`.
+pub fn parse_alignment(name: Option<&str>) -> ComponentAlignment {
+    match name {
+        Some("anchored") => ComponentAlignment::Anchored,
+        Some("free") => ComponentAlignment::Free,
+        _ => ComponentAlignment::Unset,
     }
 }
 
@@ -1264,6 +1299,7 @@ impl From<NapiComponentData> for ComponentData {
             id: component.id,
             base_glyph_id: GlyphId::from_raw(component.base_glyph_id),
             base_glyph_name: component.base_glyph_name.into(),
+            alignment: parse_alignment(component.alignment.as_deref()),
         }
     }
 }
@@ -1540,7 +1576,7 @@ pub struct NapiFontIntent {
     /// Discriminator naming the populated payload field. Editing kinds:
     /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
     /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "addComponent" | "setComponentTransforms" |
+    /// "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
     /// "removeComponents" | "decomposeComponents" |
     /// "reverseContour" | "setContourStart" | "translatePoints" |
     /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -1561,8 +1597,10 @@ pub struct NapiFontIntent {
     pub add_anchors: Option<NapiAddAnchorsIntent>,
     pub move_anchors: Option<NapiMoveAnchorsIntent>,
     pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
+    pub rename_anchors: Option<NapiRenameAnchorsIntent>,
     pub add_component: Option<NapiAddComponentIntent>,
     pub set_component_transforms: Option<NapiSetComponentTransformsIntent>,
+    pub set_component_alignment: Option<NapiSetComponentAlignmentIntent>,
     pub remove_components: Option<NapiRemoveComponentsIntent>,
     pub decompose_components: Option<NapiDecomposeComponentsIntent>,
     pub reverse_contour: Option<NapiReverseContourIntent>,
@@ -1976,6 +2014,16 @@ pub struct NapiRemoveAnchorsIntent {
     pub anchor_ids: Vec<String>,
 }
 
+/// Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`.
+#[napi(object)]
+pub struct NapiRenameAnchorsIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<AnchorId>")]
+    pub anchor_ids: Vec<String>,
+    pub names: Vec<String>,
+}
+
 #[napi(object)]
 pub struct NapiAddComponentIntent {
     #[napi(ts_type = "LayerId")]
@@ -1993,6 +2041,18 @@ pub struct NapiSetComponentTransformsIntent {
     #[napi(ts_type = "Array<ComponentId>")]
     pub component_ids: Vec<String>,
     pub transforms: Vec<f64>,
+}
+
+/// Records whether components are placed by their anchors; anchoring one also
+/// places it on its anchors now.
+#[napi(object)]
+pub struct NapiSetComponentAlignmentIntent {
+    #[napi(ts_type = "LayerId")]
+    pub layer_id: String,
+    #[napi(ts_type = "Array<ComponentId>")]
+    pub component_ids: Vec<String>,
+    #[napi(ts_type = "\"anchored\" | \"free\" | \"unset\"")]
+    pub alignment: String,
 }
 
 #[napi(object)]

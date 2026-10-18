@@ -64,7 +64,7 @@ pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
                 glyph_id,
                 source_id,
             },
-            input.into_intent(layer_id)?,
+            input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?,
         ],
     };
 
@@ -74,7 +74,7 @@ pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
 /// Creates or replaces one layer's drawing, preserving an existing layer's identity.
 ///
 /// Source binding, height, guidelines, and lib data survive replacement. Components
-/// are removed because the JSON payload only expresses outlines and anchors.
+/// are replaced by the payload's, which name existing glyphs as their bases.
 ///
 /// # Errors
 ///
@@ -94,7 +94,7 @@ pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
             source_id,
         });
     }
-    intents.push(input.into_intent(layer_id)?);
+    intents.push(input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?);
 
     apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
 }

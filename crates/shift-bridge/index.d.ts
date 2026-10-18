@@ -220,6 +220,59 @@ export declare class Bridge {
   getSources(): Array<NapiSource>
 }
 
+/** Reads the settings in a `config.toml` source. */
+export declare function configRead(source: string): NapiConfigRead
+
+/**
+ * Returns `source` with `theme = "…"` set, preserving everything else;
+ * `null` source creates a new file.
+ *
+ * # Errors
+ *
+ * Throws when `source` has errors, so an edit never overwrites a file the
+ * user is still fixing.
+ */
+export declare function configSetTheme(source: string | undefined | null, theme: string): string
+
+/**
+ * Returns `source` with its `theme` table set, editing an existing table in
+ * place; `null` source creates a new file.
+ *
+ * # Errors
+ *
+ * Throws when `source` has errors, so an edit never overwrites a file the
+ * user is still fixing.
+ */
+export declare function configSetThemeSlots(source: string | undefined | null, slots: NapiThemeSlots): string
+
+/** One problem in `config.toml`; line and column are one-based. */
+export interface NapiConfigProblem {
+  severity: NapiConfigSeverity
+  message: string
+  line?: number
+  column?: number
+}
+
+/** The settings in a `config.toml` source. */
+export interface NapiConfigRead {
+  /** Whether the file may be applied; `false` when any problem is an error. */
+  valid: boolean
+  /** The theme name, when the file is valid and writes `theme = "…"`. */
+  theme?: string
+  /** The theme table, when the file is valid and writes `theme` as a table. */
+  themeSlots?: NapiThemeSlots
+  problems: Array<NapiConfigProblem>
+}
+
+/**
+ * How serious a config problem is: `error` keeps the last valid settings,
+ * `warning` applies the file but ignores something in it.
+ */
+export declare const enum NapiConfigSeverity {
+  Error = 'error',
+  Warning = 'warning'
+}
+
 export interface NapiDocumentIdentity {
   documentId: string
   canonicalPath: string
@@ -354,6 +407,50 @@ export interface NapiSpecimen {
   viewBox: Array<number>
   rightToLeft: boolean
 }
+
+/** Whether a theme's background is light or dark. */
+export declare const enum NapiThemeAppearance {
+  Light = 'light',
+  Dark = 'dark'
+}
+
+/** A valid theme file's contents. */
+export interface NapiThemeFile {
+  /** The name shown in Settings, when the file sets one. */
+  name?: string
+  appearance: NapiThemeAppearance
+  /** `base00` through `base0F` as lowercase `#rrggbb`. */
+  palette: Array<string>
+  /** Overrides of derived colors by name, as `#rrggbb` or `#rrggbbaa`. */
+  colors: Record<string, string>
+}
+
+/** Which appearance a `theme` table uses. */
+export declare const enum NapiThemeMode {
+  System = 'system',
+  Light = 'light',
+  Dark = 'dark'
+}
+
+/** The result of reading a theme file. */
+export interface NapiThemeRead {
+  /** The theme, or nothing when an error means it cannot be used. */
+  theme?: NapiThemeFile
+  problems: Array<NapiConfigProblem>
+}
+
+/**
+ * A `theme` table: a mode and the theme used in each appearance; missing
+ * keys are left to the app's defaults.
+ */
+export interface NapiThemeSlots {
+  mode?: NapiThemeMode
+  light?: string
+  dark?: string
+}
+
+/** Reads a `themes/<id>.toml` file. */
+export declare function themeRead(source: string): NapiThemeRead
 export interface NapiAddAnchorsIntent {
   layerId: LayerId
   anchors: Array<NapiAnchorSeed>
@@ -536,6 +633,11 @@ export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
 }
 
 export interface NapiComponentGlyph {
@@ -677,7 +779,7 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -699,8 +801,10 @@ export interface NapiFontIntent {
   addAnchors?: NapiAddAnchorsIntent
   moveAnchors?: NapiMoveAnchorsIntent
   removeAnchors?: NapiRemoveAnchorsIntent
+  renameAnchors?: NapiRenameAnchorsIntent
   addComponent?: NapiAddComponentIntent
   setComponentTransforms?: NapiSetComponentTransformsIntent
+  setComponentAlignment?: NapiSetComponentAlignmentIntent
   removeComponents?: NapiRemoveComponentsIntent
   decomposeComponents?: NapiDecomposeComponentsIntent
   reverseContour?: NapiReverseContourIntent
@@ -876,6 +980,18 @@ export interface NapiGlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<NapiGlyphLayerRecord>
+  /** In the Mark category or classed `mark`: anchor propagation keeps its own anchors. */
+  mark?: boolean
+  /**
+   * A nonspacing mark (Mark category, Nonspacing subcategory): export
+   * compiles it with no advance. Absent when it is not one.
+   */
+  nonspacingMark?: boolean
+  /**
+   * `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+   * once it has an attaching anchor.
+   */
+  ligature?: "explicit" | "subcategory"
 }
 
 export interface NapiGlyphSnapshot {
@@ -1149,6 +1265,13 @@ export interface NapiRemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface NapiRenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
+}
+
 /** Renames a kerning group; its pairs keep referencing it by id. */
 export interface NapiRenameKerningGroupIntent {
   groupId: KerningGroupId
@@ -1182,6 +1305,16 @@ export interface NapiReverseContourIntent {
 
 export interface NapiSetAxisMappingsIntent {
   mappings: Array<NapiAxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface NapiSetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
 }
 
 export interface NapiSetComponentTransformsIntent {

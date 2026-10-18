@@ -1,93 +1,53 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useInsertionEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext } from "react";
 
-import {
-  applyResolvedTheme,
-  colorThemes,
-  resolveThemeSelection,
-  type ColorTheme,
-  type ThemeAppearance,
-  type ThemeSelection,
+import type { AppConfigState, ThemeFileState } from "@shared/config/config";
+import type {
+  ColorTheme,
+  ThemeAppearance,
+  ThemePreference,
+  UnknownThemeColors,
 } from "@/lib/themes";
-export type { ColorTheme, ThemeAppearance, ThemeId, ThemeSelection } from "@/lib/themes";
+export type {
+  ColorTheme,
+  ThemeAppearance,
+  ThemeId,
+  ThemeMode,
+  ThemePreference,
+} from "@/lib/themes";
 
 export interface ThemeContextValue {
-  themeSelection: ThemeSelection;
+  /** The mode and the light and dark themes from `config.toml`. */
+  preference: ThemePreference;
+  /** The theme on screen: the previewed theme while one is set, otherwise the preference's. */
   resolvedTheme: ColorTheme;
-  setThemeSelection: (selection: ThemeSelection) => void;
+  /** Shows `theme` everywhere, canvas included, without saving it; `null` ends the preview. */
+  previewTheme: (themeId: string | null) => void;
+  /** The OS appearance, which picks the theme in `system` mode. */
+  systemAppearance: ThemeAppearance;
+  /** Built-in themes followed by the valid files in `themes/`, ordered by id. */
+  themes: readonly ColorTheme[];
+  /** Theme files ignored because they reuse a built-in theme's id or `system`. */
+  shadowingThemeFiles: readonly ThemeFileState[];
+  /** Writes the preference to `config.toml`; a refused write restores the previous one. */
+  setPreference: (preference: ThemePreference) => void;
+  /** Override names in theme files that name no color Shift has. */
+  unknownThemeColors: readonly UnknownThemeColors[];
+  /** This build's config, or `null` until main has answered. */
+  config: AppConfigState | null;
+  /** Theme names in `config.toml` that Shift does not have; each uses its default. */
+  unknownThemes: string[];
+  /** Why the last change from Settings was not saved, or `null`. */
+  saveError: string | null;
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-function getSystemAppearance(): ThemeAppearance {
-  if (typeof window !== "undefined" && window.matchMedia) {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
-  return "light";
-}
-
-interface ThemeProviderProps {
-  children: ReactNode;
-  defaultTheme?: ThemeSelection;
-}
+/**
+ * The theme context, kept free of the desktop host so browser builds of the
+ * canvas can read the theme; `ThemeProvider` supplies it.
+ */
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function useTheme(): ThemeContextValue {
   const context = useContext(ThemeContext);
   if (!context) throw new Error("useTheme must be used inside ThemeProvider");
   return context;
-}
-
-export function ThemeProvider({ children, defaultTheme = "shift-light" }: ThemeProviderProps) {
-  const [themeSelection, setThemeSelectionState] = useState<ThemeSelection>(() => {
-    if (typeof localStorage === "undefined") return defaultTheme;
-    const stored = localStorage.getItem("themeSelection");
-    if (stored === "system" || colorThemes.some((theme) => theme.id === stored)) {
-      return stored as ThemeSelection;
-    }
-    return defaultTheme;
-  });
-  const [systemAppearance, setSystemAppearance] = useState<ThemeAppearance>(getSystemAppearance);
-  const resolvedTheme = resolveThemeSelection(themeSelection, systemAppearance);
-
-  const setThemeSelection = useCallback((selection: ThemeSelection) => {
-    setThemeSelectionState(selection);
-    localStorage.setItem("themeSelection", selection);
-  }, []);
-
-  useInsertionEffect(() => {
-    applyResolvedTheme(resolvedTheme);
-  }, [resolvedTheme]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => setSystemAppearance(mediaQuery.matches ? "dark" : "light");
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  useEffect(() => {
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== "themeSelection" || !event.newValue) return;
-      if (event.newValue === "system" || colorThemes.some((theme) => theme.id === event.newValue)) {
-        setThemeSelectionState(event.newValue as ThemeSelection);
-      }
-    };
-
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  return (
-    <ThemeContext.Provider value={{ themeSelection, resolvedTheme, setThemeSelection }}>
-      {children}
-    </ThemeContext.Provider>
-  );
 }

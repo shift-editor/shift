@@ -18,6 +18,7 @@
 		<string>noonDotless-ar</string>
 		<string>dotabove-ar</string>
 		<string>alefabove-ar</string>
+		<string>tick</string>
 	</array>
 	<key>public.openTypeCategories</key>
 	<dict>
@@ -42,6 +43,8 @@
 		<key>noonDotless-ar</key>
 		<string>base</string>
 		<key>shadda-ar</key>
+		<string>mark</string>
+		<key>tick</key>
 		<string>mark</string>
 	</dict>
 </dict>

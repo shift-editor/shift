@@ -8,10 +8,10 @@ mod skill;
 use std::io::{self, IsTerminal, Write};
 
 use authoring::{
-    AuthoringReport, add_axis, add_glyph, add_instance, add_layer, add_source,
+    AuthoringReport, ExportSources, add_axis, add_glyph, add_instance, add_layer, add_source,
     assign_kerning_group, copy_layer, create_font, create_kerning_group, delete_kerning_group,
-    font_info, remove_instance, remove_kerning, rename_kerning_group, set_axis, set_features,
-    set_font, set_glyphs, set_instance, set_kerning, set_layer, show_features,
+    export_glyphs, font_info, remove_instance, remove_kerning, rename_kerning_group, set_axis,
+    set_features, set_font, set_glyphs, set_instance, set_kerning, set_layer, show_features,
     unassign_kerning_group,
 };
 use clap::Parser;
@@ -96,6 +96,7 @@ fn main() -> miette::Result<()> {
                 write_authoring_result(set_glyphs(args), json)
             }
             GlyphCommand::Inspect(args) => inspect_glyph(args),
+            GlyphCommand::Export(args) => export_glyph_batch(args),
         },
         Command::Layer { command } => match command {
             LayerCommand::Add(args) => {
@@ -256,6 +257,25 @@ fn inspect(args: cli::InspectArgs) -> miette::Result<()> {
     };
 
     write_stdout(&output)
+}
+
+fn export_glyph_batch(args: cli::ExportGlyphsArgs) -> miette::Result<()> {
+    let sources = match args.source.as_deref() {
+        None => ExportSources::Default,
+        Some("all") => ExportSources::All,
+        Some(name) => ExportSources::Named(name.to_string()),
+    };
+    let batch = export_glyphs(&args.path, &args.glyphs, &sources)?;
+    let json = serde_json::to_string_pretty(&batch).into_diagnostic()?;
+    match args.output {
+        Some(path) => std::fs::write(&path, format!("{json}\n"))
+            .into_diagnostic()
+            .map_err(|error| error.wrap_err(format!("failed to write {}", path.display()))),
+        None => {
+            let mut stdout = io::stdout().lock();
+            writeln!(stdout, "{json}").into_diagnostic()
+        }
+    }
 }
 
 fn inspect_glyph(args: cli::InspectGlyphArgs) -> miette::Result<()> {

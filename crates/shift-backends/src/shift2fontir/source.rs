@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use fontdrasil::coords::NormalizedLocation;
 use fontir::error::Error;
+use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
@@ -15,7 +16,7 @@ use crate::glyph_category::{gdef_classes, GlyphCategories};
 use crate::traits::FontView;
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use super::axes::{to_ir_axes, AxisConversionError};
+use super::axes::{normalized_source_location, to_ir_axes, AxisConversionError};
 use super::glyph::GlyphWork;
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
@@ -79,9 +80,40 @@ pub(super) struct ShiftSnapshot {
     pub gdef_classes: BTreeMap<String, GlyphClassDef>,
     /// Glyphs whose advance compiles to zero, as Glyphs does for nonspacing marks.
     pub nonspacing_marks: HashSet<String>,
+    /// Glyphs in the Mark category, whatever their subcategory; anchor
+    /// propagation returns such a glyph's own anchors as they are.
+    pub mark_category_glyphs: HashSet<String>,
+}
+
+impl ShiftSnapshot {
+    /// The master sources a glyph compiles at, with their normalized locations.
+    ///
+    /// A font without axes compiles its default source only.
+    ///
+    /// # Errors
+    ///
+    /// Returns the conversion error when a source location cannot be normalized.
+    pub(super) fn glyph_masters(
+        &self,
+        metadata: &StaticMetadata,
+    ) -> Result<Vec<(&ShiftSource, NormalizedLocation)>, Error> {
+        self.sources
+            .iter()
+            .filter(|source| source.is_master())
+            .filter(|source| !metadata.axes.is_empty() || source.id() == self.default_source_id)
+            .map(|source| {
+                normalized_source_location(source, &self.axes, &metadata.all_source_axes)
+                    .map(|location| (source, location))
+            })
+            .collect()
+    }
 }
 
 impl ShiftIrSource {
+    pub(super) fn snapshot(&self) -> &ShiftSnapshot {
+        &self.snapshot
+    }
+
     /// Freezes a font view into the representation consumed by fontir work.
     ///
     /// # Errors
@@ -132,6 +164,14 @@ impl ShiftIrSource {
                     font.glyphs()
                         .into_iter()
                         .filter(|glyph| categories.resolve(glyph).is_nonspacing_mark())
+                        .map(|glyph| glyph.name().to_string())
+                        .collect()
+                },
+                mark_category_glyphs: {
+                    let categories = GlyphCategories::new();
+                    font.glyphs()
+                        .into_iter()
+                        .filter(|glyph| categories.resolve(glyph).is_mark())
                         .map(|glyph| glyph.name().to_string())
                         .collect()
                 },
@@ -194,8 +234,9 @@ impl Source for ShiftIrSource {
         Ok(Box::new(ColorGlyphsWork))
     }
 
+    /// Propagates component anchors into composites, as fontc does for Glyphs sources.
     fn compilation_flags(&self) -> Flags {
-        Flags::empty()
+        Flags::PROPAGATE_ANCHORS
     }
 }
 

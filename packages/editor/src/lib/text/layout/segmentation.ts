@@ -1,7 +1,7 @@
 import type { TextItem } from "./types";
 
 export const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-export const words = new Intl.Segmenter(undefined, { granularity: "word" });
+const words = new Intl.Segmenter(undefined, { granularity: "word" });
 
 /** A segment of the items, in item indexes. */
 export interface ItemSegment {

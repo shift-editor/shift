@@ -9,6 +9,7 @@ export type {
 } from "./lib/model/Kerning";
 export { FontStore, type GlyphInvalidation } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
+export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
 export {
