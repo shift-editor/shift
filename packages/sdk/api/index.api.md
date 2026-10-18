@@ -562,7 +562,7 @@ export class Font {
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
-    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
+    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]>;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
