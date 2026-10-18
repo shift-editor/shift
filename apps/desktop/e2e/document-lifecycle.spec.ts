@@ -314,7 +314,7 @@ test.describe("opening a font through the application shell", () => {
     const targets = await workspacePage.evaluate(() => {
       const editor = window.shiftSession!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0]!;
-      const glyph = editor.glyphForId(node.glyphId)!;
+      const glyph = editor.glyphOf(node)!;
       const geometry = glyph.geometryAt(editor.externalLocation);
       const point = geometry.allPoints[0]!;
       const segment = geometry.segments[0]!.pointAt(0.5);

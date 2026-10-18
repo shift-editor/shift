@@ -45,6 +45,7 @@ export const VISUAL_SPECS = [
   "selector-contracts.spec.ts",
   "spacing.spec.ts",
   "svg-catalog.spec.ts",
+  "text-shaping.spec.ts",
   "theme.spec.ts",
   "tools.spec.ts",
   "canvas-focus.spec.ts",

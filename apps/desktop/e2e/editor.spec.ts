@@ -365,7 +365,7 @@ test.describe("Editor view", () => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0];
       if (!node) throw new Error("Expected glyph node");
-      const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+      const layer = editor.glyphOf(node)?.layerForSource(node.sourceId);
       if (!layer) throw new Error("Expected editable glyph layer");
 
       return layer.addAnchor("top", { x: 200, y: 700 });
@@ -557,7 +557,7 @@ test.describe("Editor view", () => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0];
       if (!node) throw new Error("Expected glyph node");
-      const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+      const layer = editor.glyphOf(node)?.layerForSource(node.sourceId);
       const segment = layer?.contours[0]?.segments()[0];
       if (!segment) throw new Error("Expected segment");
       const point = segment.pointAt(0.5);
@@ -617,7 +617,7 @@ test.describe("Editor view", () => {
       const preview = await page.evaluate(() => {
         const editor = window.shift!.editor;
         const node = editor.scene.nodesOfKind("glyph")[0];
-        const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+        const layer = editor.glyphOf(node)!.layerForSource(node.sourceId)!;
         const segment = layer.contours[0].segments().find((segment) => segment.type === "line");
         if (!segment) throw new Error("Expected line segment");
         const middle = segment.pointAt(1 / 2);

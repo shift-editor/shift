@@ -10,6 +10,10 @@ feature liga {
     sub f i by f_i;
 } liga;
 
+feature dlig {
+    sub f f by f_i;
+} dlig;
+
 feature init {
     sub beh-ar by beh-ar.init;
 } init;

@@ -238,7 +238,7 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.layerForGlyph(node.glyphId, sourceId) ?? null;
+    return this.layerOf(node, sourceId) ?? null;
   }
 
   requireGlyphLayer(): GlyphLayer {
@@ -285,10 +285,7 @@ export class TestEditor extends Editor {
     if (!node) return null;
 
     return (
-      this.glyphForId(node.glyphId)?.renderModelAt(
-        this.externalLocationCell,
-        this.activeSourceIdCell,
-      ) ?? null
+      this.glyphOf(node)?.renderModelAt(this.externalLocationCell, this.activeSourceIdCell) ?? null
     );
   }
 
@@ -296,7 +293,8 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.font.recordForId(node.glyphId);
+    const glyphId = this.glyphIdOf(node);
+    return glyphId ? this.font.recordForId(glyphId) : null;
   }
 
   get glyphContours(): readonly Contour[] {

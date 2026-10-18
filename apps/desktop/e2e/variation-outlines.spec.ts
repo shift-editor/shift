@@ -42,7 +42,7 @@ workspaceTest.describe("mapped weight interpolation", () => {
               const editor = window.shiftSession!.editor;
               const node = editor.scene.nodesOfKind("glyph")[0]!;
               const model = editor
-                .glyphForId(node.glyphId)!
+                .glyphOf(node)!
                 .renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
               return {
                 x: Math.max(...model.allPoints.map((point) => point.x)),
@@ -151,7 +151,7 @@ test("moves matched points in every selected source as one edit", async ({ page,
     )?.targetId;
     const node = session.editor.scene.nodesOfKind("glyph")[0];
     const targetLayer = node
-      ? session.editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)
+      ? session.editor.glyphOf(node)?.layerForId(layerMatch.targetLayerId)
       : null;
     const point = targetPointId ? targetLayer?.point(targetPointId) : null;
     if (!targetPointId || !point) throw new Error("Expected matched target point");
@@ -168,7 +168,7 @@ test("moves matched points in every selected source as one edit", async ({ page,
   const targetAfter = await page.evaluate(({ layerId, pointId }) => {
     const node = window.shiftSession!.editor.scene.nodesOfKind("glyph")[0];
     const point = node
-      ? window.shiftSession!.editor.glyphForId(node.glyphId)?.layerForId(layerId)?.point(pointId)
+      ? window.shiftSession!.editor.glyphOf(node)?.layerForId(layerId)?.point(pointId)
       : null;
     if (!point) throw new Error("Expected matched target point");
 
@@ -186,10 +186,7 @@ test("moves matched points in every selected source as one edit", async ({ page,
       page.evaluate(({ layerId, pointId }) => {
         const node = window.shiftSession!.editor.scene.nodesOfKind("glyph")[0];
         const point = node
-          ? window
-              .shiftSession!.editor.glyphForId(node.glyphId)
-              ?.layerForId(layerId)
-              ?.point(pointId)
+          ? window.shiftSession!.editor.glyphOf(node)?.layerForId(layerId)?.point(pointId)
           : null;
         return point ? { x: point.x, y: point.y } : null;
       }, target),
@@ -223,7 +220,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
     const editor = window.shiftSession!.editor;
     const node = editor.scene.nodesOfKind("glyph")[0];
     const point = node
-      ? editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation).allPoints[0]
+      ? editor.glyphOf(node)?.geometryAt(editor.externalLocation).allPoints[0]
       : null;
     if (!point) throw new Error("Expected an interpolated point");
 

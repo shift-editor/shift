@@ -2,7 +2,10 @@ import type { ToolContext } from "../../core/Behavior";
 import type { DoubleClickEvent } from "../../core/GestureDetector";
 import type { SelectBehavior, SelectState } from "../types";
 
-/** Offers a double-click to the hit node's definition and its ancestors' (`NodeDefinition.onDoubleClick`). */
+/**
+ * Offers a double-click to the hit node's definition and its ancestors'
+ * (`NodeDefinition.onDoubleClick`); with Shift, what is hit joins what is being edited.
+ */
 export class NodeDoubleClick implements SelectBehavior {
   onDoubleClick(
     state: SelectState,
@@ -10,6 +13,6 @@ export class NodeDoubleClick implements SelectBehavior {
     event: DoubleClickEvent,
   ): boolean {
     if (state.type !== "ready") return false;
-    return ctx.editor.doubleClickNode(event.target);
+    return ctx.editor.doubleClickNode(event.target, { add: event.shiftKey });
   }
 }
