@@ -88,6 +88,7 @@ import {
   Point,
 } from "@shift/glyph-state";
 import { ComponentGlyph, GlyphContour } from "./ComponentGlyph";
+import { blendDecomposedGlyph } from "./decomposedComponents";
 import {
   geometryRenderAnchors,
   geometryRenderContours,
@@ -1409,6 +1410,10 @@ export class GlyphRenderModel {
 
   readonly #componentsCell: Signal<readonly ComponentGlyph[]>;
   readonly #decomposedSourcesCell: Signal<readonly WeightedSource[] | null>;
+  readonly #decomposedContoursCell: Signal<ReadonlyMap<
+    ComponentGlyph,
+    readonly RenderContour[]
+  > | null>;
   readonly #contoursCell: Signal<readonly GlyphContour[]>;
   readonly #boundsCell: Signal<BoundsType | null>;
   readonly #drawPathCell: Signal<Path2D>;
@@ -1517,6 +1522,9 @@ export class GlyphRenderModel {
     this.#decomposedSourcesCell = computed(() =>
       this.#decomposedSourcesAt(this.#externalLocation.value, this.#activeSourceId.value),
     );
+    this.#decomposedContoursCell = computed(() => this.#decomposedContours(), {
+      name: "glyph.renderModel.decomposedContours",
+    });
     const rootContoursCell = this.contoursAt(
       signal(this.#glyphId, { name: "glyph.renderModel.glyphId" }),
       IDENTITY_GLYPH_TRANSFORM_CELL,
@@ -1729,16 +1737,22 @@ export class GlyphRenderModel {
   }
 
   /**
-   * @internal The root glyph's decomposition masters and their weights while
-   * this location sits between them, for a glyph that compiled fonts
-   * interpolate decomposed.
+   * @internal Each component occurrence's blended outline while this
+   * location sits between the masters of a glyph that compiled fonts
+   * interpolate decomposed; `null` otherwise.
    *
    * @remarks
-   * Component occurrences then draw their outlines as each master places
-   * them, blended, instead of applying blended transform values.
+   * Occurrences then draw their outlines as each master places them,
+   * blended, instead of applying blended transform values. The glyph blends
+   * as a whole, as compilers decompose it: when any occurrence's masters
+   * don't line up point for point, every occurrence keeps its blended
+   * transform.
    */
-  get decomposedSourcesCell(): Signal<readonly WeightedSource[] | null> {
-    return this.#decomposedSourcesCell;
+  get decomposedContoursCell(): Signal<ReadonlyMap<
+    ComponentGlyph,
+    readonly RenderContour[]
+  > | null> {
+    return this.#decomposedContoursCell;
   }
 
   /**
@@ -1762,6 +1776,24 @@ export class GlyphRenderModel {
     return computed(() =>
       contourCache.map(placedCell.value ?? this.#contoursForGlyph(glyphIdCell.value).value),
     );
+  }
+
+  #decomposedContours(): ReadonlyMap<ComponentGlyph, readonly RenderContour[]> | null {
+    // Called from the decomposed-contours computed: track, then read.
+    track(this.#decomposedSourcesCell);
+    const sources = this.#decomposedSourcesCell.peek();
+    if (!sources) return null;
+
+    track(this.#componentsCell);
+    const components = this.#componentsCell.peek();
+    const sourceIds = sources.map(({ sourceId }) => sourceId);
+    const blended = blendDecomposedGlyph(
+      components.map((component) => component.placedMasters(sourceIds)),
+      sources.map(({ weight }) => weight),
+    );
+    if (!blended) return null;
+
+    return new Map(components.map((component, index) => [component, blended[index] ?? []]));
   }
 
   #decomposedSourcesAt(

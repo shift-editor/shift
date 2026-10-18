@@ -8,11 +8,10 @@ import type {
 } from "@shift/types";
 import { ContourPath } from "../graphics/ContourPath";
 import { computed, track, type Signal } from "../signals";
-import type { GlyphRenderContour } from "../../types/glyphRender";
+import type { GlyphRenderContour, PlacedContours } from "../../types/glyphRender";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { GlyphRenderModel } from "./Glyph";
 import type { RenderContour } from "./GlyphRenderModel";
-import { blendPlacedContours } from "./decomposedComponents";
 
 const IDENTITY = Mat.Identity();
 
@@ -177,20 +176,22 @@ export class ComponentGlyph {
     return Mat.Compose(parent.transformForSource(sourceId), local);
   }
 
-  #placedContours(): readonly RenderContour[] | null {
-    track(this.#renderModel.decomposedSourcesCell);
-    const sources = this.#renderModel.decomposedSourcesCell.peek();
-    if (!sources) return null;
-
+  /**
+   * @internal Returns this occurrence's outline at each of the root glyph's
+   * decomposition masters, with that master's placement of it.
+   */
+  placedMasters(sourceIds: readonly SourceId[]): PlacedContours[] {
     track(this.#glyphIdCell);
     const glyphId = this.#glyphIdCell.peek();
-    return blendPlacedContours(
-      sources.map(({ sourceId, weight }) => ({
-        weight,
-        matrix: this.transformForSource(sourceId),
-        contours: this.#renderModel.geometryForSource(glyphId, sourceId).contours,
-      })),
-    );
+    return sourceIds.map((sourceId) => ({
+      matrix: this.transformForSource(sourceId),
+      contours: this.#renderModel.geometryForSource(glyphId, sourceId).contours,
+    }));
+  }
+
+  #placedContours(): readonly RenderContour[] | null {
+    track(this.#renderModel.decomposedContoursCell);
+    return this.#renderModel.decomposedContoursCell.peek()?.get(this) ?? null;
   }
 
   #parent(): ComponentGlyph | null {

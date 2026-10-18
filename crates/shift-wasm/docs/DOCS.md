@@ -20,6 +20,7 @@ Runs shift-font's rules in the editor through WebAssembly, so the editor calls t
 crates/shift-wasm/src/
   lib.rs         module list
   anchors.rs     anchorKind, propagateAnchors, followAnchors
+  decomposition.rs   blendDecomposedGlyph: component outlines between masters of a decomposed glyph
   variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
   names.rs       interned anchor names
   layout.rs      Reader, Writer, the Layout trait, and the layout! macros hot calls are declared with

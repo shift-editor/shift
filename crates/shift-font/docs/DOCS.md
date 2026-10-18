@@ -41,6 +41,7 @@ crates/shift-font/src/
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
   anchor_attachment.rs  -- which components follow their anchors after an edit, and where to
   anchor_propagation.rs -- fontc's anchor propagation into composites, over plain data
+  placed_blend.rs  -- decomposed component placement (mirror reversal, point pairing) and blending, over plain numbers
 ```
 
 ## Key Types

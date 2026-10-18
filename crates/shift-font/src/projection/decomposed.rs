@@ -24,6 +24,7 @@ use crate::{
 };
 
 use super::FontProjection;
+use crate::placed_blend::{mirrors, placed_point_index, shapes_match, ContourShape};
 
 /// A glyph's flattened outline split by where each contour comes from: the
 /// glyph's own contours first, then one part per component occurrence in
@@ -313,12 +314,19 @@ fn component_glyphs(glyph: &Glyph) -> Vec<GlyphId> {
 
 fn same_structure(a: &OutlineParts, b: &OutlineParts) -> bool {
     a.len() == b.len()
-        && a.iter().zip(b).all(|(a, b)| {
-            a.len() == b.len()
-                && a.iter()
-                    .zip(b)
-                    .all(|(a, b)| a.points.len() == b.points.len() && a.closed == b.closed)
+        && a.iter()
+            .zip(b)
+            .all(|(a, b)| shapes_match(&contour_shapes(a), &contour_shapes(b)))
+}
+
+fn contour_shapes(contours: &[ResolvedContour]) -> Vec<ContourShape> {
+    contours
+        .iter()
+        .map(|contour| ContourShape {
+            point_count: contour.points.len(),
+            closed: contour.closed,
         })
+        .collect()
 }
 
 /// Whether any direct component's scale, rotation, or skew differs between
@@ -420,20 +428,22 @@ fn placed(
     transform: Transform,
     placement: Placement,
 ) -> ResolvedContour {
-    let mut points = contour
-        .points
-        .iter()
+    let shape = ContourShape {
+        point_count: contour.points.len(),
+        closed: contour.closed,
+    };
+    let reversing = placement == Placement::Decomposed && mirrors(&transform);
+    let points = (0..shape.point_count)
+        .filter_map(|index| {
+            contour
+                .points
+                .get(placed_point_index(index, shape, reversing))
+        })
         .map(|point| {
             let (x, y) = transform.transform_point(point.x(), point.y());
             Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
         })
-        .collect::<Vec<_>>();
-    let mirrored = transform.xx * transform.yy - transform.xy * transform.yx < 0.0;
-    if placement == Placement::Decomposed && mirrored && contour.closed {
-        if let Some(rest) = points.get_mut(1..) {
-            rest.reverse();
-        }
-    }
+        .collect();
     ResolvedContour {
         points,
         closed: contour.closed,

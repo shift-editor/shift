@@ -145,6 +145,22 @@ width = 500;
 shapes = ({ ref = wedge; pos = (450,0); scale = (-1,1); });
 }
 );
+},
+{
+glyphname = wedgenest;
+unicode = 9700;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ ref = wedgeflip; pos = (0,0); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 500;
+shapes = ({ ref = wedgeflip; pos = (500,0); scale = (-1,1); });
+}
+);
 }
 );
 }

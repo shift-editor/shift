@@ -78,6 +78,7 @@ Hand-written. `bullet` and `bar` place `period` as a component with a different
 scale in each master (`bar` mirrored), and a named instance sits halfway.
 `ringbig` scales `ring`, which has an intermediate master at wght 250 that the
 decomposed glyph keeps. `wedgeflip` mirrors `wedge` in Bold only, so its
-decomposed contour reverses there. Compilers decompose such glyphs and interpolate the
+decomposed contour reverses there. `wedgenest` places `wedgeflip` and mirrors it in
+Bold, so Bold's wedge is mirrored twice and keeps its order. Compilers decompose such glyphs and interpolate the
 placed outlines, so the instances cover component interpolation matching
 export.

@@ -40,9 +40,8 @@ export interface WeightedSource {
   readonly weight: number;
 }
 
-/** One master's outline of a component occurrence, placed by that master's transform. */
+/** One master's outline of a component occurrence and that master's transform for it. */
 export interface PlacedContours {
-  readonly weight: number;
   readonly matrix: MatModel;
   readonly contours: readonly GlyphRenderContour[];
 }
