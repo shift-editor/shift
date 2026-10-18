@@ -95,7 +95,9 @@ describe("TextLayout", () => {
               end: 1,
               level: 0,
               direction: "ltr",
-              glyphs: [{ cluster: 0, xAdvance: 0, yAdvance: 0, xOffset: 0, yOffset: 0 }],
+              glyphs: [
+                { cluster: 0, xAdvance: 0, yAdvance: 0, xOffset: 0, yOffset: 0, isMark: false },
+              ],
             },
           ],
         },

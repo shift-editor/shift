@@ -94,6 +94,11 @@ export interface EditorRenderTheme {
     cursorColor: string;
     cursorWidthPx: number;
     selectionFill: string;
+    /**
+     * A run's other glyphs while one of them is edited, so the edited outline
+     * stays visible where letters overlap. Opaque, so overlaps do not darken.
+     */
+    contextFill: string;
     hoverOutline: string;
     hoverOutlineWidthPx: number;
     compositeArmFill: string;
@@ -274,6 +279,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     cursorColor: "#0C92F4",
     cursorWidthPx: 1.25,
     selectionFill: "rgba(12, 146, 244, 0.2)",
+    contextFill: "#AAAAAA",
     hoverOutline: "#0C92F4",
     hoverOutlineWidthPx: 3,
     compositeArmFill: "rgba(128, 128, 128, 0.22)",
@@ -455,6 +461,7 @@ export function readEditorRenderTheme(
     "--editor-text-selection-fill",
     theme.textRun.selectionFill,
   );
+  theme.textRun.contextFill = readColor("--editor-text-context-fill", theme.textRun.contextFill);
   theme.textRun.hoverOutline = readColor("--editor-text-hover-outline", theme.textRun.hoverOutline);
   theme.textRun.compositeArmFill = readColor(
     "--editor-text-composite-arm-fill",

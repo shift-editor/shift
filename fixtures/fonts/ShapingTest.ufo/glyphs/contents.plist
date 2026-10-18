@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>alefabove-ar</key>
+	<string>alefabove-ar.glif</string>
 	<key>beh-ar</key>
 	<string>beh-ar.glif</string>
 	<key>beh-ar.fina</key>
@@ -28,5 +30,7 @@
 	<string>shadda-ar.glif</string>
 	<key>space</key>
 	<string>space.glif</string>
+	<key>tick</key>
+	<string>tick.glif</string>
 </dict>
 </plist>
