@@ -33,6 +33,12 @@ const RESULTS_DIR = path.resolve(__dirname, "perf-results");
 const BASELINE_PATH = path.resolve(__dirname, "perf-baseline.json");
 const TARGET_POINTS = 50_000;
 const DRAG_FRAMES = 30;
+/**
+ * Untimed frames run before the sampled ones. The first calls of a 50K-point edit compile and
+ * size its hot paths, so they take several times a steady frame; with 30 samples, p95 is the
+ * second-slowest frame and would measure that one-off warm-up instead of the per-frame cost.
+ */
+const WARMUP_FRAMES = 5;
 const UNDO_REDO_SAMPLES = 10;
 
 /**
@@ -117,7 +123,6 @@ test.describe("Performance — 50K points", () => {
    * Assert hard threshold + baseline regression for a perf result.
    */
   function assertPerf(stats: PerfResult): void {
-    console.log(`RAW ${stats.label}: ${stats.samples.map((t) => t.toFixed(1)).join(" ")}`);
     // 1. Hard ceiling.
     const ceiling = THRESHOLDS[stats.label];
     if (ceiling !== undefined) {
@@ -286,7 +291,7 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      async ({ contours, frames }) => {
+      async ({ contours, frames, warmup }) => {
         const editor = window.shift!.editor;
         const inserted = editor.insertContent({ contours });
         if (!inserted) throw new Error("contour insertion failed");
@@ -306,7 +311,7 @@ test.describe("Performance — 50K points", () => {
         }));
         const times: number[] = [];
 
-        for (let index = 0; index < frames; index++) {
+        for (let index = -warmup; index < frames; index++) {
           const start = performance.now();
           updates = pointIds.map((id, pointIndex) => ({
             kind: "point" as const,
@@ -315,14 +320,14 @@ test.describe("Performance — 50K points", () => {
             y: 200 + index + pointIndex,
           }));
           layer.previewPositionPatch(updates);
-          times.push(performance.now() - start);
+          if (index >= 0) times.push(performance.now() - start);
         }
 
         layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
-      { contours, frames: DRAG_FRAMES },
+      { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
     const stats = computeStats("translate-drag (5 pts)", samples);
@@ -334,7 +339,7 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      async ({ contours, frames }) => {
+      async ({ contours, frames, warmup }) => {
         const editor = window.shift!.editor;
         const inserted = editor.insertContent({ contours });
         if (!inserted) throw new Error("contour insertion failed");
@@ -354,7 +359,7 @@ test.describe("Performance — 50K points", () => {
         }));
         const times: number[] = [];
 
-        for (let index = 0; index < frames; index++) {
+        for (let index = -warmup; index < frames; index++) {
           const start = performance.now();
           updates = pointIds.map((id, pointIndex) => ({
             kind: "point" as const,
@@ -363,14 +368,14 @@ test.describe("Performance — 50K points", () => {
             y: pointIndex + index,
           }));
           layer.previewPositionPatch(updates);
-          times.push(performance.now() - start);
+          if (index >= 0) times.push(performance.now() - start);
         }
 
         layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
-      { contours, frames: DRAG_FRAMES },
+      { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
     const stats = computeStats("translate-drag (1K pts)", samples);
@@ -382,7 +387,7 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      async ({ contours, frames }) => {
+      async ({ contours, frames, warmup }) => {
         const editor = window.shift!.editor;
         const inserted = editor.insertContent({ contours });
         if (!inserted) throw new Error("contour insertion failed");
@@ -402,7 +407,7 @@ test.describe("Performance — 50K points", () => {
         }));
         const times: number[] = [];
 
-        for (let index = 0; index < frames; index++) {
+        for (let index = -warmup; index < frames; index++) {
           const start = performance.now();
           updates = pointIds.map((id, pointIndex) => ({
             kind: "point" as const,
@@ -411,14 +416,14 @@ test.describe("Performance — 50K points", () => {
             y: pointIndex + index,
           }));
           layer.previewPositionPatch(updates);
-          times.push(performance.now() - start);
+          if (index >= 0) times.push(performance.now() - start);
         }
 
         layer.applyPositionPatch(updates);
         await editor.font.editCoordinator.settled();
         return times;
       },
-      { contours, frames: DRAG_FRAMES },
+      { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
     const stats = computeStats("translate-drag (all pts)", samples);
@@ -430,7 +435,7 @@ test.describe("Performance — 50K points", () => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
-      async ({ contours, frames }) => {
+      async ({ contours, frames, warmup }) => {
         const editor = window.shift!.editor;
         const inserted = editor.insertContent({ contours });
         if (!inserted) throw new Error("contour insertion failed");
@@ -444,15 +449,15 @@ test.describe("Performance — 50K points", () => {
 
         const times: number[] = [];
 
-        for (let index = 0; index < frames; index++) {
+        for (let index = -warmup; index < frames; index++) {
           const start = performance.now();
           layer.movePoints(pointIds, { x: 1, y: 0 });
-          times.push(performance.now() - start);
+          if (index >= 0) times.push(performance.now() - start);
         }
 
         return times;
       },
-      { contours, frames: DRAG_FRAMES },
+      { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
     const stats = computeStats("nudge (all pts)", samples);
