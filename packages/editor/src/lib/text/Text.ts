@@ -1,5 +1,5 @@
 import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
-import { keyedCache, signal, untracked } from "../signals";
+import { computed, keyedCache, signal, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -52,6 +52,24 @@ export class Text {
           }),
       ),
   });
+  /**
+   * The run the user is working in: the one being typed in, otherwise the
+   * scene's only run, such as the page run around an edited glyph.
+   *
+   * @remarks
+   * Null when no text is being typed and the scene holds no run or several.
+   */
+  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+    () => {
+      const editing = this.#editor.textEditing.stateCell.value;
+      // The node lookup does not subscribe; a run node keeps the same run for its whole life.
+      const typedIn = this.#editor.scene.nodeOfKind(editing?.nodeId ?? null, "textRun");
+      const runs = this.#editor.scene.cell.value.nodes.filter((node) => node.kind === "textRun");
+      const node = typedIn ?? (runs.length === 1 ? runs[0] : null);
+      return node?.kind === "textRun" ? this.run(node.runId) : null;
+    },
+    { name: "text.currentRun" },
+  );
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
@@ -107,6 +125,7 @@ export class Text {
       type: "textrun",
       scope: "document",
       items: [...items],
+      shaping: true,
     };
     this.#store.put(record);
     return record;
@@ -148,6 +167,17 @@ export class Text {
   setItems(id: RunId, items: readonly TextItem[]): void {
     const run = this.run(id);
     if (run) this.#store.put({ ...run, items: [...items] });
+  }
+
+  /**
+   * Turns shaping on or off for a run; off lays out each item as typed.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setShaping(id: RunId, shaping: boolean): void {
+    const run = this.run(id);
+    if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
   }
 
   /**
@@ -209,8 +239,8 @@ export class Text {
   }
 
   #acquireShapedGlyphs(shaped: ShapedText): void {
-    for (const runs of shaped.paragraphs) {
-      for (const run of runs ?? []) {
+    for (const paragraph of shaped.paragraphs) {
+      for (const run of paragraph?.runs ?? []) {
         for (const glyph of run.glyphs) {
           if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
             void this.#loadGlyph(glyph.glyphId);

@@ -1,6 +1,6 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, BridgeParse};
-use crate::shaping::{NapiParagraphRequest, NapiShapedRun, ParsedParagraphRequest};
+use crate::shaping::{NapiParagraphRequest, NapiShapedParagraph, ParsedParagraphRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -2096,7 +2096,7 @@ impl Bridge {
   }
 
   /// Shapes a paragraph with the font's feature code, split into runs of one
-  /// script, each in its script's direction.
+  /// script and bidi level, each shaped in its level's direction.
   ///
   /// Characters map through the live font's Unicode values and every
   /// glyph's own advance is zero while shaping, so the result carries the
@@ -2110,10 +2110,10 @@ impl Bridge {
   pub fn shape_paragraph(
     &mut self,
     request: NapiParagraphRequest,
-  ) -> errors::Result<Vec<NapiShapedRun>> {
+  ) -> errors::Result<NapiShapedParagraph> {
     let request = ParsedParagraphRequest::try_from(request)?;
-    let runs = self.live_shaper()?.shape_paragraph(&request.as_request())?;
-    Ok(runs.into_iter().map(NapiShapedRun::from).collect())
+    let paragraph = self.live_shaper()?.shape_paragraph(&request.as_request())?;
+    Ok(NapiShapedParagraph::from(paragraph))
   }
 
   /// Returns the compiled shaping tables, for the editor to shape with

@@ -38,10 +38,17 @@ export function splitParagraphs(items: readonly TextItem[]): Paragraph[] {
   return paragraphs;
 }
 
-/** Returns a paragraph's shaped runs as layout runs, with clusters made run-relative. */
+/**
+ * Returns a paragraph's shaped runs as layout runs, with clusters made run-relative.
+ *
+ * @remarks
+ * Runs stay in logical order, one per script and bidi level; the layout puts
+ * a line's runs into screen order by level.
+ */
 export function shapedRuns(paragraph: Paragraph, runs: readonly ShapedRun[]): SegmentedRun[] {
   return runs.map((run) => ({
     items: paragraph.items.slice(run.start, run.end),
+    level: run.level,
     direction: run.direction,
     script: run.script,
     clusterStart: paragraph.clusterStart + run.start,
@@ -52,10 +59,11 @@ export function shapedRuns(paragraph: Paragraph, runs: readonly ShapedRun[]): Se
   }));
 }
 
-/** Returns a paragraph as one left-to-right run of one glyph per item, unshaped. */
+/** Returns a paragraph as one left-to-right run of one glyph per item, unshaped, at bidi level 0. */
 export function literalRun(paragraph: Paragraph, font: Font): SegmentedRun {
   return {
     items: paragraph.items,
+    level: 0,
     direction: "ltr",
     clusterStart: paragraph.clusterStart,
     shaped: paragraph.items.map((item, cluster) => ({

@@ -14,7 +14,7 @@ import type {
   LayerRead,
   Location,
   ParagraphRequest,
-  ShapedRun,
+  ShapedParagraph,
   ShaperFont,
   SlugAtlas,
   Specimen,
@@ -308,10 +308,10 @@ export type SyncCallMap = {
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };
-  /** Shapes paragraphs with the font's feature code, each split into runs of one script. */
+  /** Shapes paragraphs with the font's feature code, each split into runs of one script and bidi level. */
   "workspace.shapeParagraphs": {
     request: { paragraphs: ParagraphRequest[] };
-    response: ShapedRun[][];
+    response: ShapedParagraph[];
   };
   /**
    * Compiles the font's feature code into a shaper font for the editor to

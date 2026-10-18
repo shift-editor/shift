@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName, RunId, ShapeUnit } from "@shift/types";
-import type { TextItem } from "@shift/editor/text";
+import { lineBreakTextItem, TextBuffer, type TextItem } from "@shift/editor/text";
 import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
@@ -76,8 +76,8 @@ describe("proof text shapes in the editor, as the workspace shapes it", () => {
   /** The workspace's shaping of the same run, as glyph ids in the order a single-direction line shows them. */
   const workspaceGlyphIds = async (runId: RunId) => {
     const units = editor.text.run(runId)!.items.flatMap(shapeUnit);
-    const [runs] = await editor.font.shapeParagraphs([{ units, location: { values: {} } }]);
-    return runs!.flatMap((shaped) => shaped.glyphs.map((glyph) => glyph.glyphId ?? null));
+    const [paragraph] = await editor.font.shapeParagraphs([{ units, location: { values: {} } }]);
+    return paragraph!.runs.flatMap((shaped) => shaped.glyphs.map((glyph) => glyph.glyphId ?? null));
   };
 
   it.each([
@@ -147,5 +147,151 @@ describe("double-clicking a character the font decomposes", () => {
     await doubleClickRun(dot.origin.x - 100, dot.origin.y + 550);
 
     expect(editor.runGlyph?.glyphId).toBe(glyphId("dotabove-ar"));
+  });
+});
+
+describe("carets in shaped text", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  /** Three joined behs: init (850–1250), medi (450–850), fina (0–450). */
+  const threeBehs = async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("\u0628\u0628\u0628")).id;
+    await expect.poll(() => editor.text.layoutCell(runId).peek()?.totalAdvance).toBe(1250);
+    return editor.text.layoutCell(runId).peek()!;
+  };
+
+  it("stands on the right edge before right-to-left text and the left edge after it", async () => {
+    const layout = await threeBehs();
+
+    expect([0, 1, 2, 3].map((cluster) => layout.caretPosition(cluster).x)).toEqual([
+      1250, 850, 450, 0,
+    ]);
+  });
+
+  it("lands on the nearest character boundary when right-to-left text is clicked", async () => {
+    const layout = await threeBehs();
+
+    expect(layout.caretAtPoint({ x: 1200, y: 0 })).toBe(0);
+    expect(layout.caretAtPoint({ x: 100, y: 0 })).toBe(3);
+  });
+
+  it("splits a ligature between the characters it joins", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    await expect.poll(() => editor.text.layoutCell(runId).peek()?.totalAdvance).toBe(550);
+
+    expect(editor.text.layoutCell(runId).peek()!.caretPosition(1).x).toBe(275);
+  });
+
+  it("arrow keys follow the screen in right-to-left text", async () => {
+    editor.selectTool("text");
+    editor.textEditing.selectAll();
+    editor.textEditing.insertText("ببب");
+    const runId = editor.textRun!.runId;
+    await expect.poll(() => editor.text.layoutCell(runId).peek()?.totalAdvance).toBe(1250);
+    const caret = () =>
+      new TextBuffer(editor.text.run(runId)!.items, editor.textEditing.state!.focus).focusCluster;
+
+    editor.textEditing.move(1, "character");
+    expect(caret()).toBe(2);
+    editor.textEditing.move(-1, "character");
+    editor.textEditing.move(-1, "character");
+    expect(caret()).toBe(3);
+  });
+});
+
+describe("editing shaped text keeps untouched lines shaped", () => {
+  it("pressing Enter leaves the line above joined while the new line waits", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.selectTool("text");
+    editor.textEditing.selectAll();
+    editor.textEditing.insertText("\u0628\u0628");
+    const runId = editor.textRun!.runId;
+    const firstLine = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .lines[0]!.runs.flatMap((run) => run.glyphs.map((glyph) => glyph.glyphName));
+    await expect.poll(firstLine).toEqual(["beh-ar.fina", "beh-ar.init"]);
+
+    editor.textEditing.insert([lineBreakTextItem()]);
+
+    expect(firstLine()).toEqual(["beh-ar.fina", "beh-ar.init"]);
+  });
+});
+
+describe("turning shaping off lays a run out as typed", () => {
+  it("shows the typed glyphs at once, and undo shapes the run again", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Turn shaping off", () => editor.text.setShaping(runId, false));
+    expect(names()).toEqual(["f", "i"]);
+
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+});
+
+describe("mixed-direction paragraphs lay out by bidi level", () => {
+  it("an Arabic paragraph places an English word to the left of the Arabic before it", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("بب fi")).id;
+    const layout = () => editor.text.layoutCell(runId).peek()!;
+    await expect.poll(() => layout().totalAdvance).toBe(1650);
+
+    const byPosition = layout()
+      .placedGlyphs.toSorted((a, b) => a.left - b.left)
+      .map((placed) => [placed.glyph.glyphName, placed.left]);
+    expect(byPosition).toEqual([
+      ["f_i", 0],
+      ["space", 550],
+      ["beh-ar.fina", 800],
+      ["beh-ar.init", 1250],
+    ]);
+    expect(layout().lineDirection(0)).toBe("rtl");
+    expect(layout().caretPosition(0).x).toBe(1650);
+  });
+});
+
+describe("Option-arrows in mixed-direction text", () => {
+  it("only ever move left on screen through Arabic words inside English", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.selectTool("text");
+    editor.textEditing.selectAll();
+    editor.textEditing.insertText("fi بب بب fi");
+    const runId = editor.textRun!.runId;
+    const layout = () => editor.text.layoutCell(runId).peek()!;
+    await expect.poll(() => layout().lineDirection(0)).toBe("ltr");
+    await expect.poll(() => layout().lines[0]!.runs.length).toBe(3);
+    const caretX = () => {
+      const items = editor.text.run(runId)!.items;
+      return layout().caretPosition(
+        new TextBuffer(items, editor.textEditing.state!.focus).focusCluster,
+      ).x;
+    };
+
+    const xs = [caretX()];
+    for (let press = 0; press < 4; press++) {
+      editor.textEditing.move(-1, "word");
+      xs.push(caretX());
+    }
+
+    expect(xs).toEqual([...xs].sort((a, b) => b - a));
+    expect(new Set(xs).size).toBe(xs.length);
   });
 });

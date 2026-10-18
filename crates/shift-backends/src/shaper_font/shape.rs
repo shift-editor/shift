@@ -18,6 +18,7 @@ pub type ShapeUnit = shift_shape::Unit<GlyphId>;
 pub type ShapeRequest<'a> = shift_shape::ShapeRequest<'a, GlyphId, ExternalLocation>;
 /// A paragraph to shape at a user-space location, as in [`ShapeRequest`].
 pub type ParagraphRequest<'a> = shift_shape::ParagraphRequest<'a, GlyphId, ExternalLocation>;
+pub type ShapedParagraph = shift_shape::ShapedParagraph<GlyphId>;
 pub type ShapedRun = shift_shape::ShapedRun<GlyphId>;
 /// One glyph of shaped text. Advances and offsets hold only what `GPOS` in
 /// the feature source contributes: every glyph's own advance is zero while
@@ -78,7 +79,7 @@ impl LiveShaper {
     pub fn shape_paragraph(
         &self,
         request: &ParagraphRequest,
-    ) -> Result<Vec<ShapedRun>, ShapeError> {
+    ) -> Result<ShapedParagraph, ShapeError> {
         let coords = self.normalized_coords(request.location);
         self.shaper
             .shape_paragraph(&self.glyphs, &request.at(coords.as_slice()))
