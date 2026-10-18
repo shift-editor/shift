@@ -8,7 +8,11 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use shift_font::{Axis, AxisId, DesignLocation, Font, FontIntent, FontIntentSet, SourceId};
+use shift_backends::font_loader::FontLoader;
+use shift_font::{
+    Axis, AxisId, BinaryData, DesignLocation, FeatureData, Font, FontIntent, FontIntentSet,
+    Kerning, LibData, SourceId,
+};
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
 
@@ -19,6 +23,7 @@ mod features;
 mod font_info;
 mod glyph;
 mod glyph_batch;
+mod glyph_export;
 mod input;
 mod instance;
 mod kerning;
@@ -31,6 +36,7 @@ pub use font_info::{font_info, set_font};
 pub use glyph::{add_glyph, add_layer, copy_layer, set_layer};
 pub(crate) use glyph::{resolve_glyph_id, resolve_source_id};
 pub use glyph_batch::set_glyphs;
+pub use glyph_export::{ExportSources, export_glyphs};
 pub use instance::{add_instance, remove_instance, set_instance};
 pub use kerning::{
     assign_kerning_group, create_kerning_group, delete_kerning_group, remove_kerning,
@@ -49,11 +55,15 @@ pub use report::{AuthoringChange, AuthoringReport};
 /// document serialization or filesystem failure.
 pub fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
     validate_new_document_path(&args.path)?;
+    let font = match &args.from {
+        Some(source) => font_structure(source)?,
+        None => Font::new(),
+    };
 
     let document_id = if args.dry_run {
         None
     } else {
-        let document = ShiftStore::create_document(&args.path, &Font::new())
+        let document = ShiftStore::create_document(&args.path, &font)
             .into_diagnostic()
             .wrap_err("failed to create Shift font")?;
         Some(
@@ -72,6 +82,30 @@ pub fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
         wrote: !args.dry_run,
         changes: vec![AuthoringChange::FontCreated { document_id }],
     })
+}
+
+/// The structure of the font at `path`: names, units per em, vertical metrics,
+/// axes, mappings, masters, and named instances, with no glyphs, kerning,
+/// feature code, library data, or embedded files.
+fn font_structure(path: &Path) -> Result<Font> {
+    let path_text = path
+        .to_str()
+        .ok_or_else(|| miette!("font path is not valid UTF-8"))?;
+    let mut font = FontLoader::new()
+        .read_font(path_text)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
+    // Removing from the end keeps each removal an incremental index update.
+    let glyph_ids: Vec<_> = font.glyphs().map(|glyph| glyph.id()).collect();
+    for glyph_id in glyph_ids.into_iter().rev() {
+        font.pop_glyph(glyph_id).into_diagnostic()?;
+    }
+    *font.kerning_mut() = Kerning::new();
+    *font.features_mut() = FeatureData::new();
+    *font.lib_mut() = LibData::new();
+    *font.data_files_mut() = BinaryData::new();
+    *font.images_mut() = BinaryData::new();
+    Ok(font)
 }
 
 /// Adds one continuous axis through Shift's semantic intent path.

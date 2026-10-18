@@ -5,15 +5,17 @@
 //! carry caller-minted ids and insertion anchors, while changesets retain
 //! expected originals and replacements for atomic persistence and inversion.
 
+use crate::anchor_attachment::realign_attached_components;
 use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
 use crate::composite::anchor_aligned_offset;
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
-    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentId, Contour,
-    ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata, Glyph, GlyphId, GlyphLayer,
-    GlyphName, LayerId, LibValue, MetricDefinition, MetricId, MetricValue, NamedInstance,
-    NamedInstanceId, PointId, PointType, Source, SourceId, Transform, LANGUAGES_LIB_KEY,
+    Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentAlignment,
+    ComponentId, Contour, ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, LibValue, MetricDefinition, MetricId,
+    MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId, Transform,
+    LANGUAGES_LIB_KEY,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
@@ -102,11 +104,24 @@ pub enum FontIntent {
         layer_id: LayerId,
         anchor_ids: Vec<AnchorId>,
     },
+    /// Renames anchors in one layer; `names[i]` is the new name of `anchor_ids[i]`.
+    RenameAnchors {
+        layer_id: LayerId,
+        anchor_ids: Vec<AnchorId>,
+        names: Vec<String>,
+    },
     /// Adds one direct reference after rejecting direct or transitive component cycles.
     AddComponent {
         layer_id: LayerId,
         component_id: ComponentId,
         base_glyph_id: GlyphId,
+    },
+    /// Records whether components are placed by their anchors; anchoring one
+    /// also places it on its anchors now.
+    SetComponentAlignment {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+        alignment: ComponentAlignment,
     },
     /// Replaces direct component transforms without changing component identity or order.
     SetComponentTransforms {
@@ -328,8 +343,10 @@ impl FontIntent {
             | Self::AddAnchors { layer_id, .. }
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
+            | Self::RenameAnchors { layer_id, .. }
             | Self::AddComponent { layer_id, .. }
             | Self::SetComponentTransforms { layer_id, .. }
+            | Self::SetComponentAlignment { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
             | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
@@ -386,8 +403,10 @@ impl FontIntent {
             | Self::AddAnchors { layer_id, .. }
             | Self::MoveAnchors { layer_id, .. }
             | Self::RemoveAnchors { layer_id, .. }
+            | Self::RenameAnchors { layer_id, .. }
             | Self::AddComponent { layer_id, .. }
             | Self::SetComponentTransforms { layer_id, .. }
+            | Self::SetComponentAlignment { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
             | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
@@ -435,6 +454,20 @@ impl FontIntent {
         }
     }
 
+    /// Whether this intent can change a layer's anchors, so components
+    /// attached to them elsewhere may follow.
+    pub fn may_move_anchors(&self) -> bool {
+        matches!(
+            self,
+            Self::AddAnchors { .. }
+                | Self::MoveAnchors { .. }
+                | Self::RemoveAnchors { .. }
+                | Self::RenameAnchors { .. }
+                | Self::TransformLayer { .. }
+                | Self::ReplaceGlyphLayerContent { .. }
+        )
+    }
+
     /// Whether this intent creates, renames, deletes, or fills kerning groups.
     fn edits_kerning_groups(&self) -> bool {
         matches!(
@@ -464,6 +497,37 @@ impl FontIntent {
 #[derive(Clone, Debug, Default)]
 pub struct FontIntentSet {
     pub intents: Vec<FontIntent>,
+}
+
+impl FontIntentSet {
+    /// Layers whose anchors this set may change; components attached to them
+    /// in other glyphs follow.
+    pub fn layers_with_anchor_edits(&self) -> Vec<LayerId> {
+        self.intents
+            .iter()
+            .filter(|intent| intent.may_move_anchors())
+            .filter_map(FontIntent::layer_id)
+            .cloned()
+            .collect()
+    }
+}
+
+/// Layers an intent set touched, in first-touch order, with whether any
+/// touch changed structure.
+#[derive(Default)]
+struct TouchedLayers(Vec<(LayerId, bool)>);
+
+impl TouchedLayers {
+    fn touch(&mut self, layer_id: LayerId, structural: bool) {
+        match self.0.iter_mut().find(|(id, _)| *id == layer_id) {
+            Some((_, flag)) => *flag |= structural,
+            None => self.0.push((layer_id, structural)),
+        }
+    }
+
+    fn ids(&self) -> impl Iterator<Item = &LayerId> {
+        self.0.iter().map(|(layer_id, _)| layer_id)
+    }
 }
 
 /// One touched layer after an intent set applied.
@@ -520,23 +584,14 @@ impl Font {
     pub fn apply_intents(&mut self, set: FontIntentSet) -> CoreResult<AppliedIntents> {
         let before = self.clone();
         let mut after = self.clone();
-        let mut touched: Vec<(LayerId, bool)> = Vec::new();
+        let mut touched = TouchedLayers::default();
         let mut glyph_ids = Vec::new();
-
-        let touch =
-            |touched: &mut Vec<(LayerId, bool)>, layer_id: LayerId, structural| match touched
-                .iter_mut()
-                .find(|(id, _)| *id == layer_id)
-            {
-                Some((_, flag)) => *flag |= structural,
-                None => touched.push((layer_id, structural)),
-            };
 
         for intent in &set.intents {
             let Some(layer_id) = intent.layer_id() else {
                 let (layer_ids, glyph_id) = after.apply_font_intent(intent)?;
                 for layer_id in layer_ids {
-                    touch(&mut touched, layer_id, true);
+                    touched.touch(layer_id, true);
                 }
                 if let Some(glyph_id) = glyph_id {
                     if !glyph_ids.contains(&glyph_id) {
@@ -549,7 +604,14 @@ impl Font {
             let layer_id = layer_id.clone();
             let structural = intent.structural();
             after.apply_intent(intent)?;
-            touch(&mut touched, layer_id, structural);
+            touched.touch(layer_id, structural);
+        }
+
+        // Components sitting on anchors this set moved follow them, in the same undo step.
+        for (layer_id, structural) in
+            realign_attached_components(&before, &mut after, touched.ids())
+        {
+            touched.touch(layer_id, structural);
         }
 
         let mut changes = FontChangeSet::default();
@@ -669,7 +731,7 @@ impl Font {
         }
 
         let mut layers = Vec::new();
-        for (layer_id, structural) in touched {
+        for (layer_id, structural) in touched.0 {
             let original_owner = before.glyph_id_by_layer(&layer_id);
             let replacement_owner = after.glyph_id_by_layer(&layer_id);
             let glyph_id = match (&original_owner, &replacement_owner) {
@@ -1462,6 +1524,34 @@ impl Font {
                 self.forget_anchor_ids(anchor_ids);
                 Ok(())
             }
+            FontIntent::RenameAnchors {
+                layer_id,
+                anchor_ids,
+                names,
+            } => {
+                if names.len() != anchor_ids.len() {
+                    return Err(CoreError::InvalidAnchorId(format!(
+                        "renameAnchors expects {} names for {} anchors, got {}",
+                        anchor_ids.len(),
+                        anchor_ids.len(),
+                        names.len()
+                    )));
+                }
+
+                let layer = self.require_layer_mut(layer_id)?;
+                for anchor_id in anchor_ids {
+                    if layer.anchor(anchor_id).is_none() {
+                        return Err(CoreError::AnchorNotFound(anchor_id.clone()));
+                    }
+                }
+                for (anchor_id, name) in anchor_ids.iter().zip(names) {
+                    if let Some(anchor) = layer.anchor_mut(anchor_id) {
+                        anchor.set_name(name.clone());
+                    }
+                }
+
+                Ok(())
+            }
             FontIntent::AddComponent {
                 layer_id,
                 component_id,
@@ -1479,18 +1569,42 @@ impl Font {
                     });
                 }
 
-                let transform = self.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
+                let aligned = self.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
                 {
                     let layer = self.require_layer_mut(layer_id)?;
-                    layer.add_component(Component::with_id(
+                    let mut component = Component::with_id(
                         component_id.clone(),
                         base_glyph_id.clone(),
                         base_glyph_name,
-                        transform,
-                    ));
+                        aligned.unwrap_or_default(),
+                    );
+                    component.set_alignment(if aligned.is_some() {
+                        ComponentAlignment::Anchored
+                    } else {
+                        ComponentAlignment::Free
+                    });
+                    layer.add_component(component);
                 }
 
                 self.rebuild_structure_index()?;
+                Ok(())
+            }
+            FontIntent::SetComponentAlignment {
+                layer_id,
+                component_ids,
+                alignment,
+            } => {
+                let layer = self.require_layer_mut(layer_id)?;
+                for component_id in component_ids {
+                    if layer.component(component_id).is_none() {
+                        return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                    }
+                }
+                for component in layer.components_iter_mut() {
+                    if component_ids.contains(&component.id()) {
+                        component.set_alignment(*alignment);
+                    }
+                }
                 Ok(())
             }
             FontIntent::SetComponentTransforms {
@@ -1498,12 +1612,13 @@ impl Font {
                 component_ids,
                 transforms,
             } => {
-                if transforms.len() != component_ids.len() * 9 {
+                let expected = component_ids.len() * DecomposedTransform::VALUE_COUNT;
+                if transforms.len() != expected {
                     return Err(CoreError::InvalidPositionUpdateInput {
                         kind: "component transforms",
                         message: format!(
                             "expected {} values for {} components, got {}",
-                            component_ids.len() * 9,
+                            expected,
                             component_ids.len(),
                             transforms.len()
                         ),
@@ -1522,20 +1637,12 @@ impl Font {
                         return Err(CoreError::InvalidComponentId(component_id.to_string()));
                     }
                 }
-                for (component_id, values) in component_ids.iter().zip(transforms.chunks_exact(9)) {
+                let (transforms, _) =
+                    transforms.as_chunks::<{ DecomposedTransform::VALUE_COUNT }>();
+                for (component_id, values) in component_ids.iter().zip(transforms) {
                     layer.set_component_transform(
                         component_id,
-                        DecomposedTransform {
-                            translate_x: values[0],
-                            translate_y: values[1],
-                            rotation: values[2],
-                            scale_x: values[3],
-                            scale_y: values[4],
-                            skew_x: values[5],
-                            skew_y: values[6],
-                            t_center_x: values[7],
-                            t_center_y: values[8],
-                        },
+                        DecomposedTransform::from_values(*values),
                     )?;
                 }
 
@@ -1746,7 +1853,8 @@ impl Font {
         }
     }
 
-    /// Places a new component so its `_name` anchor meets the matching sibling anchor.
+    /// Places a new component so its `_name` anchor meets the matching sibling anchor;
+    /// `None` when no anchor pair matches.
     ///
     /// Siblings and the new base glyph are read at `layer_id`'s source. A
     /// sibling whose base glyph has no layer there contributes no anchors.
@@ -1754,7 +1862,7 @@ impl Font {
         &self,
         layer_id: &LayerId,
         base_glyph_id: &GlyphId,
-    ) -> CoreResult<DecomposedTransform> {
+    ) -> CoreResult<Option<DecomposedTransform>> {
         let layer = self.require_layer(layer_id)?;
         let source_id = layer.source_id();
         let base_layer_at_source = |glyph_id: GlyphId| {
@@ -1762,7 +1870,7 @@ impl Font {
                 .and_then(|glyph| glyph.layer_for_source(source_id.clone()))
         };
         let Some(component_layer) = base_layer_at_source(base_glyph_id.clone()) else {
-            return Ok(DecomposedTransform::default());
+            return Ok(None);
         };
 
         let placed: Vec<_> = layer
@@ -1772,15 +1880,13 @@ impl Font {
                     .map(|base_layer| (component.matrix(), base_layer))
             })
             .collect();
-        let Some((dx, dy)) = anchor_aligned_offset(&placed, component_layer) else {
-            return Ok(DecomposedTransform::default());
-        };
-
-        Ok(DecomposedTransform {
-            translate_x: dx,
-            translate_y: dy,
-            ..Default::default()
-        })
+        Ok(
+            anchor_aligned_offset(&placed, component_layer).map(|(dx, dy)| DecomposedTransform {
+                translate_x: dx,
+                translate_y: dy,
+                ..Default::default()
+            }),
+        )
     }
 }
 

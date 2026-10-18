@@ -200,6 +200,8 @@ export class Editor {
     get activeSourceId(): SourceId | null;
     // (undocumented)
     get activeSourceIdCell(): Signal<SourceId | null>;
+    addAnchorAt(position: Point2D): boolean;
+    addAnchorAtPointer(): boolean;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
     addEditedNode(nodeId: NodeId): void;
     // Warning: (ae-forgotten-export) The symbol "Canvas2DSurface" needs to be exported by the entry point index.d.ts
@@ -377,6 +379,7 @@ export class Editor {
     // Warning: (ae-forgotten-export) The symbol "ToolManifest" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "ToolRegistration" needs to be exported by the entry point index.d.ts
     registerTool(manifest: ToolManifest): ToolRegistration;
+    renameAnchor(anchorId: AnchorId, name: string): boolean;
     // Warning: (ae-forgotten-export) The symbol "TemporaryToolOptions" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -395,6 +398,7 @@ export class Editor {
     // (undocumented)
     screenToScene(screen: ScreenPoint): ScenePoint;
     selectAll(): void;
+    selectedComponentsAnchored(): boolean | null;
     selectGlyphContents(nodes: readonly GlyphNode[]): void;
     // Warning: (ae-forgotten-export) The symbol "Selection_2" needs to be exported by the entry point index.d.ts
     readonly selection: Selection_2;
@@ -413,6 +417,7 @@ export class Editor {
     readonly sessionMode: FontSessionMode;
     // (undocumented)
     setActiveTool(toolName: ToolName): void;
+    setAnchorAxis(anchorIds: readonly AnchorId[], axis: "x" | "y", value: number): boolean;
     // Warning: (ae-forgotten-export) The symbol "Rect2D" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
@@ -435,6 +440,7 @@ export class Editor {
     // (undocumented)
     setRenderTheme(theme: EditorRenderTheme): void;
     setRightSidebearing(value: number): void;
+    setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
     setSourceToDefault(): void;
     // (undocumented)
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
@@ -655,6 +661,7 @@ export class Font {
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
+    isNonspacingMark(name: GlyphName): boolean;
     isVariable(): boolean;
     kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
     // Warning: (ae-forgotten-export) The symbol "Kerning" needs to be exported by the entry point index.d.ts
@@ -939,8 +946,11 @@ export interface GlyphRecord {
     //
     // (undocumented)
     layers: Array<GlyphLayerRecord>;
+    ligature?: "explicit" | "subcategory";
+    mark?: boolean;
     // (undocumented)
     name: GlyphName;
+    nonspacingMark?: boolean;
     // (undocumented)
     unicodes: Array<Unicode>;
 }
@@ -1550,10 +1560,10 @@ export function useSignalState<T>(signal: Signal<T>, options?: UseSignalOptions)
 
 // Warnings were encountered during analysis:
 //
-// dist/Editor-BEIl259I.d.ts:3008:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
-// dist/Editor-BEIl259I.d.ts:3009:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
-// dist/Editor-BEIl259I.d.ts:3010:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
-// dist/Editor-BEIl259I.d.ts:5074:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
+// dist/Editor-Dq19KNBx.d.ts:3084:5 - (ae-forgotten-export) The symbol "Axis" needs to be exported by the entry point index.d.ts
+// dist/Editor-Dq19KNBx.d.ts:3085:5 - (ae-forgotten-export) The symbol "AxisMappingBasis" needs to be exported by the entry point index.d.ts
+// dist/Editor-Dq19KNBx.d.ts:3086:5 - (ae-forgotten-export) The symbol "Source" needs to be exported by the entry point index.d.ts
+// dist/Editor-Dq19KNBx.d.ts:5943:5 - (ae-forgotten-export) The symbol "Segment" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

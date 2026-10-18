@@ -4,6 +4,18 @@ use crate::{Axis, CoreResult, DesignLocation, Font, MetricId, MetricValue, Sourc
 
 use super::InterpolationBasis;
 
+/// Number of interpolation values per metric definition.
+pub const SOURCE_METRIC_VALUE_COUNT: usize = 2;
+
+/// Offset of a metric's position within its values.
+pub const SOURCE_METRIC_POSITION_OFFSET: usize = 0;
+
+/// Offset of a metric's overshoot within its values.
+pub const SOURCE_METRIC_OVERSHOOT_OFFSET: usize = 1;
+
+/// Number of interpolation values per technical field.
+pub const SOURCE_TECHNICAL_FIELD_VALUE_COUNT: usize = 1;
+
 /// Identifies an optional source-level numeric metric within an interpolation model.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SourceMetricField {
@@ -67,8 +79,11 @@ impl ResolvedSourceMetrics {
 /// Reusable interpolation for source-owned metric values.
 ///
 /// Metric identity and flattened value ordering are owned here rather than by
-/// a transport consumer. Optional technical fields participate only when every
-/// master source authors them.
+/// a transport consumer. Each source's values hold
+/// [`SOURCE_METRIC_VALUE_COUNT`] values per [`Self::metric_ids`] entry,
+/// followed by [`SOURCE_TECHNICAL_FIELD_VALUE_COUNT`] values per
+/// [`Self::technical_fields`] entry. Optional technical fields participate only
+/// when every master source authors them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceMetricInterpolation {
     metric_ids: Vec<MetricId>,
@@ -133,22 +148,24 @@ impl SourceMetricInterpolation {
     fn decode(&self, values: &[f64]) -> ResolvedSourceMetrics {
         let mut metric_values = BTreeMap::new();
         for (index, metric_id) in self.metric_ids.iter().enumerate() {
-            let value_index = index * 2;
-            let Some(position) = values.get(value_index) else {
+            let value_index = index * SOURCE_METRIC_VALUE_COUNT;
+            let Some(position) = values.get(value_index + SOURCE_METRIC_POSITION_OFFSET) else {
                 break;
             };
-            let Some(overshoot) = values.get(value_index + 1) else {
+            let Some(overshoot) = values.get(value_index + SOURCE_METRIC_OVERSHOOT_OFFSET) else {
                 break;
             };
             metric_values.insert(metric_id.clone(), MetricValue::new(*position, *overshoot));
         }
 
-        let technical_offset = self.metric_ids.len() * 2;
+        let technical_offset = self.metric_ids.len() * SOURCE_METRIC_VALUE_COUNT;
         let technical = |field| {
             self.technical_fields
                 .iter()
                 .position(|candidate| *candidate == field)
-                .and_then(|index| values.get(technical_offset + index))
+                .and_then(|index| {
+                    values.get(technical_offset + index * SOURCE_TECHNICAL_FIELD_VALUE_COUNT)
+                })
                 .copied()
         };
 
@@ -201,11 +218,16 @@ impl Font {
         let mut source_locations = Vec::with_capacity(sources.len());
         let mut source_values = Vec::with_capacity(sources.len());
         for source in sources {
-            let mut values = Vec::with_capacity(metric_ids.len() * 2 + technical_fields.len());
+            let mut values = Vec::with_capacity(
+                metric_ids.len() * SOURCE_METRIC_VALUE_COUNT
+                    + technical_fields.len() * SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+            );
             for metric_id in &metric_ids {
                 let metric = source.metric_value(metric_id)?;
-                values.push(metric.position);
-                values.push(metric.overshoot);
+                let mut metric_values = [0.0; SOURCE_METRIC_VALUE_COUNT];
+                metric_values[SOURCE_METRIC_POSITION_OFFSET] = metric.position;
+                metric_values[SOURCE_METRIC_OVERSHOOT_OFFSET] = metric.overshoot;
+                values.extend(metric_values);
             }
             for field in &technical_fields {
                 values.push(technical_metric(source, *field)?);
@@ -242,9 +264,39 @@ fn technical_metric(source: &Source, field: SourceMetricField) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_support::generated::{assert_generated_file, TypeScriptModule};
     use crate::{DesignLocation, Font, MetricKind, MetricValue, Source};
 
-    use super::SourceMetricField;
+    use super::{
+        SourceMetricField, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,
+        SOURCE_METRIC_VALUE_COUNT, SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+    };
+
+    #[test]
+    fn generated_file_source_metric_layout_is_current() {
+        let module = TypeScriptModule::new("crates/shift-font/src/interpolation/metrics.rs")
+            .number(
+                "Interpolation values per metric definition.",
+                "SOURCE_METRIC_VALUE_COUNT",
+                SOURCE_METRIC_VALUE_COUNT,
+            )
+            .indices(
+                "Offsets of metric fields within one metric's values.",
+                "SOURCE_METRIC_VALUE_OFFSETS",
+                &[
+                    ("position", SOURCE_METRIC_POSITION_OFFSET),
+                    ("overshoot", SOURCE_METRIC_OVERSHOOT_OFFSET),
+                ],
+            )
+            .number(
+                "Interpolation values per technical field, following every metric's values.",
+                "SOURCE_TECHNICAL_FIELD_VALUE_COUNT",
+                SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+            )
+            .finish();
+
+        assert_generated_file("packages/types/src/layout/sourceMetrics.ts", &module);
+    }
 
     #[test]
     fn source_metrics_interpolate_without_inventing_sparse_fields() {

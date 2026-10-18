@@ -75,6 +75,26 @@ export class MultiSourceEditing {
   }
 
   /**
+   * Returns a glyph's layer at each source selected for editing, in source order.
+   *
+   * @returns `null` when the glyph is not loaded or lacks a layer at one of them.
+   */
+  layersFor(glyphId: GlyphId): GlyphLayer[] | null {
+    const glyph = this.#glyphForId(glyphId);
+    if (!glyph) return null;
+
+    const editingSourceIds = this.#editingSourceIdsCell.peek();
+    const layers: GlyphLayer[] = [];
+    for (const source of this.#font.sources) {
+      if (!editingSourceIds.has(source.id)) continue;
+      const layer = glyph.layerForSource(source.id);
+      if (!layer) return null;
+      layers.push(layer);
+    }
+    return layers.length === editingSourceIds.size ? layers : null;
+  }
+
+  /**
    * Maps one reference-layer selection onto every selected source layer.
    *
    * @param reference - Normalized targets owned by the active source layer.

@@ -24,8 +24,13 @@ mod values;
 pub use layer_match::{LayerDifference, LayerMatch};
 pub use metrics::{
     ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
+    SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
+    SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
 };
-pub use values::GlyphInterpolationValues;
+pub use values::{
+    GlyphInterpolationValues, GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET,
+    GLYPH_ANCHOR_VALUE_COUNT, GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
+};
 
 /// Normalized support for one authoring axis within an interpolation region.
 #[derive(Clone, Debug, PartialEq)]
@@ -37,6 +42,16 @@ pub struct AxisSupport {
 }
 
 impl AxisSupport {
+    /// Rebuilds a support compiled elsewhere, such as one the editor received.
+    pub fn new(axis_id: AxisId, minimum: f64, peak: f64, maximum: f64) -> Self {
+        Self {
+            axis_id,
+            minimum,
+            peak,
+            maximum,
+        }
+    }
+
     /// Returns the stable authoring-axis identity for this support.
     pub fn axis_id(&self) -> AxisId {
         self.axis_id.clone()
@@ -65,6 +80,10 @@ pub struct InterpolationRegion {
 }
 
 impl InterpolationRegion {
+    pub fn new(supports: Vec<AxisSupport>) -> Self {
+        Self { supports }
+    }
+
     /// Returns the axis supports whose scalars are multiplied for this region.
     pub fn supports(&self) -> &[AxisSupport] {
         &self.supports
@@ -79,6 +98,10 @@ pub struct VariationDelta {
 }
 
 impl VariationDelta {
+    pub fn new(region: InterpolationRegion, values: Vec<f64>) -> Self {
+        Self { region, values }
+    }
+
     /// Returns the normalized support region for this contribution.
     pub fn region(&self) -> &InterpolationRegion {
         &self.region
@@ -92,8 +115,9 @@ impl VariationDelta {
 
 /// Coordinate-independent variation supports and numeric contributions.
 ///
-/// Fontdrasil exclusively constructs this basis. Consumers may evaluate it at
-/// a normalized location but never rebuild its sample ordering or regions.
+/// Fontdrasil constructs this basis. Consumers may evaluate it at a
+/// normalized location, and rebuild one received from Rust with [`Self::new`],
+/// but never derive its sample ordering or regions themselves.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VariationBasis {
     deltas: Vec<VariationDelta>,
@@ -128,12 +152,26 @@ impl VariationBasis {
         }
     }
 
+    /// Rebuilds a basis Fontdrasil compiled, from its deltas in order.
+    pub fn new(deltas: Vec<VariationDelta>) -> Self {
+        Self { deltas }
+    }
+
     /// Returns the ordered support contributions produced by Fontdrasil.
     pub fn deltas(&self) -> &[VariationDelta] {
         &self.deltas
     }
 
-    pub(crate) fn evaluate(
+    /// Sums each delta scaled by its region's scalar at `location`.
+    ///
+    /// Locations are normalized with `design_normalization` when given, else
+    /// by each axis's own range; a missing coordinate is that axis's default.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CoreError::AxisNotFound`] when a region names an axis
+    /// missing from `axes` or from `design_normalization`.
+    pub fn evaluate(
         &self,
         location: &Location,
         axes: &[Axis],
@@ -175,6 +213,19 @@ pub struct InterpolationBasis {
 }
 
 impl InterpolationBasis {
+    /// Rebuilds a basis compiled elsewhere, such as one the editor received.
+    pub fn new(
+        source_ids: Vec<SourceId>,
+        basis: VariationBasis,
+        design_normalization: Vec<DesignNormalization>,
+    ) -> Self {
+        Self {
+            source_ids,
+            basis,
+            design_normalization,
+        }
+    }
+
     /// Builds a basis from ordered authored source locations.
     ///
     /// This constructor is value-agnostic: glyph coordinates, metrics, and

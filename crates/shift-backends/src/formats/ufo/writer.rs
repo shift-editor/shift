@@ -65,8 +65,11 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
 
     let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    // The raw syscall keeps the binary off glibc 2.28's `renameat2` wrapper, so
+    // Linux builds linked against an older glibc still resolve every symbol.
     let result = unsafe {
-        libc::renameat2(
+        libc::syscall(
+            libc::SYS_renameat2,
             libc::AT_FDCWD,
             staged.as_ptr(),
             libc::AT_FDCWD,

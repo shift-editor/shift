@@ -9,8 +9,8 @@
 import { signal } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 import { TextLayout } from "@shift/editor/testing";
-import { Positioner } from "@shift/editor/testing";
-import type { GlyphicTextItem, SegmentedRun, TextItem } from "@shift/editor/text";
+import { literalRun } from "@shift/editor/testing";
+import type { ParagraphItem, SegmentedRun, TextItem } from "@shift/editor/text";
 
 const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
   ["A", 65, 500],
@@ -46,8 +46,12 @@ export async function layoutTestEditor(): Promise<TestEditor> {
   return editor;
 }
 
-export function ltrRun(items: readonly GlyphicTextItem[], clusterStart = 0): SegmentedRun {
-  return { items, level: 0, direction: "ltr", clusterStart };
+export function ltrRun(
+  editor: TestEditor,
+  items: readonly ParagraphItem[],
+  clusterStart = 0,
+): SegmentedRun {
+  return literalRun({ items, clusterStart }, editor.font);
 }
 
 export function makeLayout(items: readonly TextItem[], editor: TestEditor): TextLayout {
@@ -55,7 +59,6 @@ export function makeLayout(items: readonly TextItem[], editor: TestEditor): Text
     items,
     origin: { x: 0, y: 0 },
     editor,
-    positioner: new Positioner(),
     externalLocation: signal(editor.font.defaultLocation()),
   });
 }

@@ -51,6 +51,45 @@
       ],
       "outputs": ["index.js", "index.d.ts", "*.node"]
     },
+    "@shift/wasm#build": {
+      "inputs": [
+        "scripts/**",
+        "package.json",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["src/generated/**", "src/generated-reference/**"]
+    },
+    "@shift/wasm#build:debug": {
+      "inputs": [
+        "scripts/**",
+        "package.json",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["src/generated/**", "src/generated-reference/**"]
+    },
+    "@shift/wasm#build:e2e": {
+      "inputs": [
+        "scripts/**",
+        "package.json",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["src/generated/**", "src/generated-reference/**"]
+    },
     "generate:bridge-types": {
       "dependsOn": ["shift-bridge#build"],
       "inputs": [
@@ -64,7 +103,7 @@
       "outputs": ["resources/**"]
     },
     "typecheck": {
-      "dependsOn": ["^generate:bridge-types", "generate:bridge-types"],
+      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#build"],
       "outputs": []
     },
     "@shift/glyph-info#typecheck": {
@@ -75,7 +114,8 @@
       "dependsOn": [
         "@shift/glyph-info#generate",
         "^generate:bridge-types",
-        "generate:bridge-types"
+        "generate:bridge-types",
+        "@shift/wasm#build"
       ],
       "outputs": [],
       "inputs": [
@@ -88,7 +128,8 @@
       "dependsOn": [
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
-        "@shift/glyph-info#generate"
+        "@shift/glyph-info#generate",
+        "@shift/wasm#build"
       ],
       "outputs": [".vite/**"],
       "inputs": [
@@ -108,7 +149,8 @@
       "dependsOn": [
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
-        "@shift/glyph-info#generate"
+        "@shift/glyph-info#generate",
+        "@shift/wasm#build:e2e"
       ],
       "outputs": [".vite/**"],
       "inputs": [
@@ -136,7 +178,8 @@
       "dependsOn": [
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
-        "@shift/glyph-info#generate"
+        "@shift/glyph-info#generate",
+        "@shift/wasm#build"
       ],
       "cache": false,
       "outputs": [],
@@ -186,7 +229,13 @@
     },
     "test": {
       "outputs": [],
-      "inputs": ["src/**", "*.config.ts"]
+      "inputs": ["src/**", "*.config.ts"],
+      "dependsOn": ["@shift/wasm#build"]
+    },
+    "@shift/editor#test": {
+      "outputs": [],
+      "inputs": ["src/**", "*.config.ts", "$TURBO_ROOT$/packages/*/src/**"],
+      "dependsOn": ["@shift/wasm#build"]
     },
     "@shift/glyph-info#test": {
       "dependsOn": ["generate"],
@@ -197,7 +246,8 @@
       "dependsOn": [
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
-        "@shift/glyph-info#generate"
+        "@shift/glyph-info#generate",
+        "@shift/wasm#build"
       ],
       "outputs": [],
       "inputs": [
@@ -214,7 +264,8 @@
     },
     "test:watch": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": ["@shift/wasm#build"]
     },
     "@shift/glyph-info#test:watch": {
       "dependsOn": ["generate"],
@@ -225,7 +276,8 @@
       "dependsOn": [
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
-        "@shift/glyph-info#generate"
+        "@shift/glyph-info#generate",
+        "@shift/wasm#build"
       ],
       "cache": false,
       "persistent": true

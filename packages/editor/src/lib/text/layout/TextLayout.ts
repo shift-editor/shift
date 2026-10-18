@@ -11,32 +11,31 @@ import type {
   TextItem,
   SourceMetrics,
   Direction,
-  GlyphicTextItem,
   Line,
-  ParagraphSlice,
   Point2D,
   TextAlign,
   PositionedGlyph,
   PositionedRun,
-  SegmentedRun,
+  SelectionRect,
   TextItemId,
 } from "./types";
-import type { Positioner } from "./Positioner";
-import { ShapingPositioner } from "./ShapingPositioner";
+import { literalRun, shapedRuns, splitParagraphs } from "./paragraphs";
+import { Positioner } from "./Positioner";
 import type { ShapedParagraph } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
+import type { TextSelectionRange } from "../../../types/text";
 
 export interface TextLayoutParams {
   items: readonly TextItem[];
   origin: Point2D;
   editor: Editor;
-  positioner: Positioner;
   externalLocation: Signal<ExternalAxisLocation>;
   /**
-   * Each paragraph's shaping, from shaping that paragraph's same items; a
-   * null paragraph, or null for all, lays out literally, glyph by glyph.
+   * Each paragraph's shaping, from shaping that paragraph's same items and
+   * indexed like {@link splitParagraphs}; a null paragraph, or null for all,
+   * lays out literally, glyph by glyph.
    */
   shaped?: readonly (ShapedParagraph | null)[] | null;
   /**
@@ -47,8 +46,6 @@ export interface TextLayoutParams {
   /** The distance between baselines in font units; null or absent uses the font's line spacing. */
   lineHeight?: number | null;
 }
-
-const shapingPositioner = new ShapingPositioner();
 
 /** One positioned glyph with its layout-local placement resolved. */
 export interface PlacedGlyph {
@@ -86,7 +83,7 @@ export class TextLayout {
   readonly #boundaries: ReadonlySet<number>;
 
   constructor(params: TextLayoutParams) {
-    const { items, origin, editor, positioner, externalLocation, shaped = null } = params;
+    const { items, origin, editor, externalLocation, shaped = null } = params;
     const align = params.align ?? null;
     // The active source can be one an edit just deleted, until the editor moves off it.
     const activeSourceId = editor.activeSourceId;
@@ -97,19 +94,21 @@ export class TextLayout {
     this.origin = origin;
     this.bufferLength = items.length;
 
-    // splitParagraphs → segmentRuns → position → assemble
-    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((p, index) => ({
-      runs: visualOrder(
-        segmentRuns(p, shaped?.[index] ?? null).map((run) =>
-          run.shaped
-            ? shapingPositioner.position(run, run.shaped, editor, externalLocation)
-            : positioner.position(run, editor, externalLocation),
-        ),
-      ),
-      direction: shaped?.[index]?.direction ?? "ltr",
-      clusterStart: p.clusterStart,
-      clusterEnd: p.clusterStart + p.items.length + 1,
-    }));
+    const positioner = new Positioner(editor, externalLocation);
+    const paragraphs: PositionedParagraph[] = splitParagraphs(items).map((paragraph, index) => {
+      const shapedParagraph = shaped?.[index] ?? null;
+      const runs = shapedParagraph
+        ? shapedRuns(paragraph, shapedParagraph.runs).map((run) =>
+            positioner.position(run, "anchors"),
+          )
+        : [positioner.position(literalRun(paragraph, editor.font), "literal")];
+      return {
+        runs: visualOrder(runs),
+        direction: shapedParagraph?.direction ?? "ltr",
+        clusterStart: paragraph.clusterStart,
+        clusterEnd: paragraph.clusterStart + paragraph.items.length + 1,
+      };
+    });
 
     const { lines, totalAdvance, bounds } = assembleLayout(
       paragraphs,
@@ -272,7 +271,8 @@ export class TextLayout {
    * contiguous stretch on screen; a range across a direction change can
    * cover several boxes on one line.
    */
-  selectionRects(start: number, end: number): SelectionRect[] {
+  selectionRects(range: TextSelectionRange): SelectionRect[] {
+    const { start, end } = range;
     const rects: SelectionRect[] = [];
     for (const [lineIndex, line] of this.lines.entries()) {
       const spans: [number, number][] = [];
@@ -308,88 +308,6 @@ export class TextLayout {
   measure(): number {
     return this.totalAdvance;
   }
-}
-
-/**
- * Split the flat item buffer into paragraphs on linebreak items.
- *
- * Linebreaks are *separators*, not glyphs — they're excluded from any
- * paragraph's `items` array but they consume a cluster index. The next
- * paragraph's `clusterStart` is `previous.clusterStart + previous.items.length + 1`
- * (the +1 is the linebreak itself).
- *
- *   buffer:  [A, B, \n, C, D]                buffer:  [A, \n, \n, B]
- *   index:    0  1   2  3  4                 index:    0   1   2  3
- *
- *   output:  [{[A,B], cs:0},                 output:  [{[A], cs:0},
- *             {[C,D], cs:3}]                           {[],  cs:2},
- *                                                      {[B], cs:3}]
- *
- *   buffer:  [\n, A]               buffer:  [A, \n]            buffer:  []
- *
- *   output:  [{[],  cs:0},         output:  [{[A], cs:0},      output:  []
- *             {[A], cs:1}]                   {[],  cs:2}]
- */
-function splitParagraphs(items: readonly TextItem[]): ParagraphSlice[] {
-  const paragraphs: ParagraphSlice[] = [];
-  let paragraph: GlyphicTextItem[] = [];
-  let clusterStart = 0;
-
-  items.forEach((item, index) => {
-    if (item.kind === "linebreak") {
-      paragraphs.push({ items: paragraph, clusterStart });
-      paragraph = [];
-      clusterStart = index + 1;
-      return;
-    }
-    paragraph.push(item);
-  });
-
-  if (paragraph.length > 0 || items.length > 0) {
-    paragraphs.push({ items: paragraph, clusterStart });
-  }
-
-  return paragraphs;
-}
-
-/**
- * Segment a single paragraph into runs by direction / script / language.
- *
- * A shaped paragraph takes the shaper's runs: one per script, in logical
- * order, each carrying its glyphs with clusters made run-relative. Without
- * shaping, the paragraph is one literal LTR run.
- *
- *   paragraph: { items: ["h","i"," ","ب","ا"], cs: 0 }, shaped
- *   output:    [
- *                { items: ["h","i"," "], direction: "ltr", cs: 0, shaped: [...] },
- *                { items: ["ب","ا"],     direction: "rtl", cs: 3, shaped: [...] },
- *              ]
- *
- * Runs come out in logical order; {@link visualOrder} puts a line's into
- * screen order.
- * Per-paragraph signature (not paragraphs[]) so paragraph structure is
- * preserved through the pipeline — assembleLayout makes one Line per paragraph,
- * each Line's `runs` field holds however many runs that paragraph produced.
- */
-function segmentRuns(paragraph: ParagraphSlice, shaped: ShapedParagraph | null): SegmentedRun[] {
-  if (shaped) {
-    return shaped.runs.map((run) => ({
-      items: paragraph.items.slice(run.start, run.end),
-      level: run.level,
-      direction: run.direction,
-      script: run.script,
-      clusterStart: paragraph.clusterStart + run.start,
-      shaped: run.glyphs.map((glyph) => ({ ...glyph, cluster: glyph.cluster - run.start })),
-    }));
-  }
-  return [
-    {
-      items: paragraph.items,
-      level: 0,
-      direction: "ltr",
-      clusterStart: paragraph.clusterStart,
-    },
-  ];
 }
 
 /**
@@ -499,14 +417,6 @@ function placeGlyphs(lines: readonly Line[]): PlacedGlyph[] {
 interface CaretStop {
   readonly cluster: number;
   readonly x: number;
-}
-
-/** A selection highlight box in layout units. */
-export interface SelectionRect {
-  readonly x: number;
-  readonly width: number;
-  readonly top: number;
-  readonly bottom: number;
 }
 
 const EPSILON = 1e-6;

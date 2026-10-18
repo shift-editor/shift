@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { HashRouter } from "react-router";
 import { TooltipProvider } from "@shift/ui";
 
-import { ThemeProvider } from "@/context/ThemeContext";
+import { ThemeProvider } from "@/context/ThemeProvider";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
 import { ZoomToast } from "@/components/chrome/ZoomToast";
 
@@ -30,7 +30,7 @@ export const App = () => {
   }, []);
 
   return (
-    <ThemeProvider defaultTheme="shift-light">
+    <ThemeProvider>
       <TooltipProvider delayDuration={500}>
         <ZoomToast>
           <FocusZoneProvider defaultZone="canvas">

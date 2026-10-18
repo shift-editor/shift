@@ -286,6 +286,12 @@ impl FontWorkspace {
         if !component_roots.is_empty() {
             self.acquire_glyphs(&component_roots, AcquireScope::ComponentClosure)?;
         }
+        // Components attached to anchors this set moves follow them: load
+        // every composite built on an edited glyph, with its other components.
+        let dependents = self.dependent_glyph_ids_for_layers(&set.layers_with_anchor_edits())?;
+        if !dependents.is_empty() {
+            self.acquire_glyphs(&dependents, AcquireScope::ComponentClosure)?;
+        }
 
         let outcome = self.commit_edit(true, |font| {
             let outcome = font.apply_intents(set)?;

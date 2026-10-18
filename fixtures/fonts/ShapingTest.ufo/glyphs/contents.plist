@@ -30,5 +30,7 @@
 	<string>shadda-ar.glif</string>
 	<key>space</key>
 	<string>space.glif</string>
+	<key>tick</key>
+	<string>tick.glif</string>
 </dict>
 </plist>

@@ -60,7 +60,11 @@ export class ComponentGlyph {
       const component = geometry.components[definition.componentIndex];
       if (component?.baseGlyphId !== definition.baseGlyphId) return Mat.Identity();
 
-      return component.matrix;
+      // Follows the anchors it sits on while they are being edited.
+      return (
+        this.#renderModel.componentMatrices(definition.parentGlyphId)[definition.componentIndex] ??
+        component.matrix
+      );
     });
     this.resolvedTransformCell = computed(() => {
       const parent = this.#parent();

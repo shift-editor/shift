@@ -6,7 +6,9 @@ import {
   type ShapedGlyph,
   type SourceMetrics,
   type TextItemId,
+  type Unicode,
 } from "@shift/types";
+import type { Font } from "../../model/Font";
 
 export type { TextItemId };
 
@@ -15,10 +17,10 @@ export type { TextItemId };
  * identity, or a structural line break. Line breaks are NOT glyphs — they
  * never get positioned; the layout splits on them into paragraphs.
  */
-export type TextItem = CharacterTextItem | GlyphTextItem | LineBreakTextItem;
+export type TextItem = ParagraphItem | LineBreakTextItem;
 
-/** An item that lays out as a glyph: everything but a line break. */
-export type GlyphicTextItem = CharacterTextItem | GlyphTextItem;
+/** An item inside a paragraph: everything but the line breaks that separate paragraphs. */
+export type ParagraphItem = CharacterTextItem | GlyphTextItem;
 
 /** A typed character; the font's Unicode mapping picks its glyph at layout time. */
 export interface CharacterTextItem {
@@ -52,6 +54,24 @@ export function glyphTextItem(glyphId: GlyphId, id: TextItemId = mintTextItemId(
   return { id, kind: "glyph", glyphId };
 }
 
+/**
+ * Returns the glyph an item shows before shaping.
+ *
+ * @remarks
+ * A character goes through the font's Unicode mapping only, the way a shaper
+ * maps it, so a glyph that merely has the conventional name is not used.
+ * Reads without tracking; reactive callers track `Font.glyphEntriesCell`.
+ *
+ * @returns null when the font maps no glyph to the character, or the picked glyph is gone.
+ */
+export function glyphIdForItem(item: ParagraphItem, font: Font): GlyphId | null {
+  const entry =
+    item.kind === "character"
+      ? font.entryForUnicode(item.codepoint as Unicode)
+      : font.entryForId(item.glyphId);
+  return entry?.id ?? null;
+}
+
 /** Build a line break text item — structural paragraph separator. */
 export function lineBreakTextItem(id: TextItemId = mintTextItemId()): LineBreakTextItem {
   return { id, kind: "linebreak" };
@@ -80,11 +100,11 @@ export interface PositionedGlyph {
 export type Direction = "ltr" | "rtl";
 
 export interface SegmentedRun {
-  items: readonly GlyphicTextItem[];
+  items: readonly ParagraphItem[];
   /** Bidi level; odd reads right to left. Literal runs are level 0. */
   level: number;
-  /** The shaper's glyphs in visual order, clusters indexing `items`; absent for literal layout. */
-  shaped?: readonly ShapedGlyph[];
+  /** Glyphs in visual order, clusters indexing `items`: the shaper's, or one per item for literal layout. */
+  shaped: readonly ShapedGlyph[];
   direction: Direction;
   script?: string;
   language?: string;
@@ -126,15 +146,24 @@ export interface Line {
   clusterEnd: number;
 }
 
+/** A selection highlight box in layout coordinates. */
+export interface SelectionRect {
+  readonly x: number;
+  readonly width: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
 export interface CaretPosition {
   x: number;
   y: number;
   lineHeight: number;
 }
 
-export interface ParagraphSlice {
-  items: readonly GlyphicTextItem[];
-  clusterStart: number;
+/** The items between two line breaks; `clusterStart` is the first item's index in the run. */
+export interface Paragraph {
+  readonly items: readonly ParagraphItem[];
+  readonly clusterStart: number;
 }
 
 export type { Point2D, SourceMetrics };

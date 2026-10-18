@@ -1,0 +1,4 @@
+/* The tools float over the canvas; toolbar goldens own them, so canvas goldens leave them out. */
+[data-floating-toolbar] {
+  visibility: hidden !important;
+}

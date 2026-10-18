@@ -12,12 +12,6 @@ export type TextEditingId = string & {
 };
 export const currentTextEditingId = "textEditing:current" as TextEditingId;
 
-export interface TextEditResult {
-  readonly items: readonly TextItem[];
-  readonly anchor: TextCaret;
-  readonly focus: TextCaret;
-}
-
 export interface TextSelectionRange {
   readonly start: number;
   readonly end: number;

@@ -14,6 +14,7 @@ shift-slug = { workspace = true }
 shift-specimen = { workspace = true }
 shift-wire = { workspace = true, features = ["napi"] }
 shift-backends = { workspace = true }
+shift-config = { workspace = true }
 shift-workspace = { workspace = true }
 feanor = "0.2.0"
 
