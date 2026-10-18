@@ -21,6 +21,7 @@
     "packages/types/src/bridge/generated.ts",
     "packages/types/src/layout",
     "packages/types/__fixtures__",
+    "packages/editor/src/lib/wasm/generated",
     "packages/wasm/src/generated",
     "packages/wasm/src/generated-reference",
     "crates/shift-bridge/index.js",
