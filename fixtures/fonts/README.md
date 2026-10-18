@@ -73,3 +73,10 @@ shadda marks with `_top`/`top` anchors for mark-to-base and mark-to-mark
 attachment, and noon, which `ccmp` decomposes into a dotless body and a dot
 mark. Written for Shift's tests and released under the same terms as
 the repository.
+
+## LightDefault.glyphs
+
+Hand-written. The default master is the lightest, its design values (stem
+widths, 62 to 158) sit below the user default (300), and the user-to-design
+mapping comes from the instances' weight classes, as in FiraCode. Covers axis
+mapping and interpolation when the default is at one end of the axis.
