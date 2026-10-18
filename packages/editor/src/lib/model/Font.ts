@@ -28,6 +28,8 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
+  ParagraphRequest,
+  ShapedRun,
   PointId,
   SegmentId,
   NamedInstance,
@@ -129,6 +131,11 @@ class GlyphDirectory {
 
   entryForName(name: GlyphName): GlyphEntry | null {
     return this.#index.entryByName.get(name) ?? null;
+  }
+
+  entryForUnicode(unicode: Unicode): GlyphEntry | null {
+    const name = this.#index.nameByUnicode.get(unicode);
+    return name ? this.entryForName(name) : null;
   }
 
   recordForName(name: GlyphName): GlyphRecord | null {
@@ -597,6 +604,14 @@ export class Font {
    */
   entryForName(name: GlyphName): GlyphEntry | null {
     return this.#directoryCell.peek().entryForName(name);
+  }
+  /**
+   * Returns the committed glyph the font maps a Unicode value to.
+   *
+   * @returns null when no glyph in the font claims the value.
+   */
+  entryForUnicode(unicode: Unicode): GlyphEntry | null {
+    return this.#directoryCell.peek().entryForUnicode(unicode);
   }
 
   recordForName(name: GlyphName): GlyphRecord | null {
@@ -1287,6 +1302,19 @@ export class Font {
 
   nearestSource(location: ExternalAxisLocation): Source | null {
     return this.#peekDesignspace((designspace) => designspace.nearestSource(location));
+  }
+
+  /**
+   * Shapes paragraphs with the font's feature code, after pending edits settle.
+   *
+   * @remarks
+   * Glyph advances, kerning, and mark attachment are not applied; shaped
+   * glyphs carry only what the feature code positions.
+   *
+   * @returns Each paragraph's runs in logical order, in request order.
+   */
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
+    return this.editCoordinator.shapeParagraphs(paragraphs);
   }
 
   /** @knipclassignore — used by VariationPanel component */

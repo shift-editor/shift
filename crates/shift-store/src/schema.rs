@@ -474,9 +474,13 @@ pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreErr
     }
 
     if version < OLDEST_MIGRATABLE_SCHEMA_VERSION {
-        conn.execute_batch(DOCUMENT_SCHEMA)?;
-        conn.execute_batch(WORKSPACE_SCHEMA_V1)?;
-        conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+        // One transaction: outside one, SQLite commits, and on a durable
+        // connection syncs, every CREATE statement on its own.
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(DOCUMENT_SCHEMA)?;
+        tx.execute_batch(WORKSPACE_SCHEMA_V1)?;
+        tx.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+        tx.commit()?;
     } else {
         migrate(conn, version, SHIFT_DOCUMENT_SCHEMA_VERSION)?;
     }
@@ -501,9 +505,13 @@ pub(crate) fn initialize_document(conn: &rusqlite::Connection) -> Result<(), Sto
         });
     }
 
-    conn.execute_batch(DOCUMENT_SCHEMA)?;
-    conn.pragma_update(None, "application_id", SHIFT_APPLICATION_ID)?;
-    conn.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+    // One transaction, as in `ensure_current`: a document connection syncs
+    // every commit in full.
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(DOCUMENT_SCHEMA)?;
+    tx.pragma_update(None, "application_id", SHIFT_APPLICATION_ID)?;
+    tx.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+    tx.commit()?;
     Ok(())
 }
 
