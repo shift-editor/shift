@@ -23,9 +23,15 @@ Shift is free and open source, and runs on macOS, Windows, and Linux. It stays r
 
 Download Shift for macOS, Windows, and Linux from [shift.graphics](https://shift.graphics) or [GitHub Releases](https://github.com/shift-editor/shift/releases). On Linux, install from the [APT or DNF repositories](docs/releases.md#linux-installation) to get updates. For the latest development build, use [Shift Nightly](https://github.com/shift-editor/shift/releases/tag/nightly).
 
+Shift requires macOS 13 Ventura or later, Windows 10 or later, or a Linux distribution with glibc 2.27 or later (Ubuntu 18.04, RHEL 8, or newer).
+
 ## AI agents
 
 Connect Claude Code, Codex, or another MCP client to fonts open in Shift using the [one-time MCP setup guide](docs/mcp.md). The connection is read-only; use `shift-cli` for saved files that are not open in the app.
+
+## Themes
+
+Shift's colors live in plain files you can edit and keep in your dotfiles; every save applies live. See the [theme guide](docs/themes.md), and [`contrib/omarchy`](contrib/omarchy/README.md) to follow your Omarchy theme.
 
 ## Status
 

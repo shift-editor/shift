@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-10-06 review-every: 90d -->
+<!-- reviewed: 2026-10-11 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
@@ -33,6 +33,7 @@ crates/shift-bridge/
   src/
     lib.rs       -- crate root
     bridge.rs    -- `Bridge` NAPI class, workspace lifecycle, font reads, mutations, export task
+    config.rs    -- stateless config.toml and theme-file functions over shift-config, used by desktop main
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
   scripts/

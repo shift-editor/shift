@@ -1,5 +1,7 @@
 //! Shared test corpora for round-trip and persistence tests.
 
+pub mod generated;
+
 use crate::{
     Anchor, AnchorId, Axis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange, AxisMapping,
     AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId, DecomposedTransform,

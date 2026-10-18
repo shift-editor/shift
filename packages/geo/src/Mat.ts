@@ -239,8 +239,9 @@ export class Mat implements MatModel {
 
     const rotation = (Math.atan2(m.b, m.a) * 180) / Math.PI;
 
+    // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.
     const skewX =
-      Math.abs(scaleY) > Number.EPSILON
+      Math.abs(scaleX) > Number.EPSILON && Math.abs(scaleY) > Number.EPSILON
         ? (Math.atan((m.a * m.c + m.b * m.d) / (scaleX * scaleY)) * 180) / Math.PI
         : 0;
 

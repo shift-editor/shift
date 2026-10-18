@@ -1,0 +1,12 @@
+[package]
+name = "rumil-build"
+version = "0.0.0"
+edition = "2021"
+description = "Build OpenType MATH tables from glyph-name-level font source data"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/shift-editor/shift"
+keywords = ["math", "opentype", "fonts", "font-compiler"]
+categories = ["text-processing"]
+
+[dependencies]

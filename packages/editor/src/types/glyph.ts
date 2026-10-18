@@ -56,6 +56,14 @@ export interface GlyphGeometrySelection {
   readonly segments?: Iterable<SegmentId>;
 }
 
+/** What anchor propagation reads from a glyph's category, as export resolves it. */
+export interface AnchorPropagationCategory {
+  /** In the Mark category or classed `mark`: a mark with anchors keeps its own. */
+  readonly mark: boolean;
+  /** `"explicit"` when classed a ligature; `"subcategory"` when a ligature once it has an attaching anchor. */
+  readonly ligature: "explicit" | "subcategory" | null;
+}
+
 export interface GlyphOptions {
   readonly entry: GlyphEntry;
   readonly layers: readonly GlyphLayer[];
@@ -63,4 +71,6 @@ export interface GlyphOptions {
   readonly designspace: Designspace;
   readonly projectionCell: Signal<GlyphProjection | null>;
   readonly defaultSourceId: SourceId;
+  /** Reads a glyph's propagation category; reactive callers re-run when it changes. */
+  readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
 }

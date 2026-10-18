@@ -2,6 +2,7 @@ import type { Canvas } from "../Canvas";
 import type { HandleState } from "../../../../types/graphics";
 import { drawHandle } from "./handleDrawing";
 import type { HandleStateSource } from "./handles/HandleItems";
+import type { Point2D } from "@shift/geo";
 import type { GlyphRenderAnchor } from "../../../../types/glyphRender";
 
 /**
@@ -18,6 +19,17 @@ export class Anchors {
       for (const anchor of anchors) {
         drawHandle(screen, project.point(anchor), "anchor", this.#anchorState(anchor, state));
       }
+    });
+  }
+
+  /**
+   * Draws anchors a composite takes from its components, dimmed: they follow
+   * the components and are edited there.
+   */
+  drawInherited(canvas: Canvas, anchors: readonly Point2D[]): void {
+    canvas.withScreenSpace((screen, project) => {
+      for (const anchor of anchors)
+        drawHandle(screen, project.point(anchor), "anchor", "interpolated");
     });
   }
 

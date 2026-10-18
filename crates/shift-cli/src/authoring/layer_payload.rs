@@ -5,10 +5,13 @@ use std::path::Path;
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use serde::de::DeserializeOwned;
-use shift_font::{Anchor, Contour, FontIntent, LayerId, PointType};
+use shift_font::{
+    Anchor, Component, Contour, DecomposedTransform, FontIntent, GlyphId, LayerId, PointType,
+    Transform,
+};
 use svgtypes::{PathParser, PathSegment, SimplePathSegment, SimplifyingPathParser};
 
-use super::input::LayerInput;
+use super::input::{LayerInput, TransformInput};
 use super::require_finite;
 
 pub(super) fn read_json_input<T: DeserializeOwned>(path: &Path, label: &str) -> Result<T> {
@@ -34,12 +37,17 @@ impl LayerInput {
     /// Lowers a complete drawing payload, minting every internal identity.
     ///
     /// Outlines use font units with Y up; explicit contours and SVG are mutually exclusive.
-    /// Components are not expressible in this payload and are replaced by an empty list.
+    /// Components name their base glyph, which `base_glyph` resolves to its identity.
     ///
     /// # Errors
     ///
-    /// Rejects non-finite coordinates, mixed outline formats, malformed SVG, and SVG arcs.
-    pub(super) fn into_intent(self, layer_id: LayerId) -> Result<FontIntent> {
+    /// Rejects non-finite coordinates, mixed outline formats, malformed SVG, SVG arcs,
+    /// and components whose base `base_glyph` cannot resolve.
+    pub(super) fn into_intent(
+        self,
+        layer_id: LayerId,
+        base_glyph: &dyn Fn(&str) -> Result<GlyphId>,
+    ) -> Result<FontIntent> {
         require_finite(self.advance, "layer advance")?;
         let contours = match (self.contours, self.svg_path) {
             (Some(_), Some(_)) => bail!("use contours or svgPath, not both"),
@@ -68,12 +76,40 @@ impl LayerInput {
             anchors.push(Anchor::new(anchor.name, anchor.x, anchor.y));
         }
 
+        let mut components = Vec::with_capacity(self.components.len());
+        for input in self.components {
+            let base_glyph_id = base_glyph(&input.base)
+                .wrap_err_with(|| format!("component base {:?}", input.base))?;
+            let transform = match input.transform {
+                None => DecomposedTransform::identity(),
+                Some(TransformInput::Decomposed(transform)) => transform,
+                Some(TransformInput::Affine([xx, xy, yx, yy, dx, dy])) => {
+                    for value in [xx, xy, yx, yy, dx, dy] {
+                        require_finite(value, "component transform")?;
+                    }
+                    DecomposedTransform::from_matrix(&Transform {
+                        xx,
+                        xy,
+                        yx,
+                        yy,
+                        dx,
+                        dy,
+                    })
+                }
+            };
+            components.push(Component::with_transform(
+                base_glyph_id,
+                input.base,
+                transform,
+            ));
+        }
+
         Ok(FontIntent::ReplaceGlyphLayerContent {
             layer_id,
             width: self.advance,
             contours,
             anchors,
-            components: Vec::new(),
+            components,
         })
     }
 }

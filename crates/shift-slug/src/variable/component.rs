@@ -6,7 +6,7 @@ use super::{
     VariableAtlasBuilder, VariableGlyph, COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK,
 };
 
-pub(super) const VARIABLE_COMPONENT_GLYPH_BYTES: usize = 24;
+pub(crate) const VARIABLE_COMPONENT_GLYPH_BYTES: usize = 24;
 pub(super) const VARIABLE_COMPONENT_PART_BYTES: usize = 16;
 pub(super) const VARIABLE_COMPONENT_BYTES: usize = 12;
 pub(super) const VARIABLE_COMPONENT_SOURCE_BYTES: usize = 40;
