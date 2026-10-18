@@ -169,8 +169,8 @@ export class Positioner {
     let previousMark: number | null = null;
     for (const index of logicalIndexes(run)) {
       const model = glyphs[index]?.model ?? null;
-      // Inside the run's layout computed: anchor edits re-run the layout.
-      model?.trackAnchors();
+      // Inside the run's layout computed: anchor edits, here or in a component, re-run the layout.
+      if (model) track(model.anchorsWithComponentsCell);
       const offset = anchorOffset(model, previousMark, glyphs) ?? anchorOffset(model, base, glyphs);
       if (offset) {
         offsets.set(index, offset);
@@ -244,7 +244,13 @@ export class Positioner {
   }
 }
 
-/** The offset that puts a mark's `_name` anchor on the target's `name` anchor; null when none match. */
+/**
+ * The offset that puts a mark's `_name` anchor on the target's `name` anchor; null when none match.
+ *
+ * @remarks
+ * Reads both glyphs' anchors with their components' copied in, as export
+ * compiles them, so a mark attaches to a composite's propagated anchors.
+ */
 function anchorOffset(
   mark: GlyphRenderModel | null,
   target: number | null,
@@ -252,10 +258,9 @@ function anchorOffset(
 ): MarkOffset | null {
   const targetModel = target === null ? null : glyphs[target]?.model;
   if (!mark || target === null || !targetModel) return null;
-  for (const markAnchor of mark.anchors) {
-    if (!markAnchor.name?.startsWith("_")) continue;
-    const name = markAnchor.name.slice(1);
-    const targetAnchor = targetModel.anchors.find((anchor) => anchor.name === name);
+  for (const markAnchor of mark.anchorsWithComponents) {
+    if (!markAnchor.name.startsWith("_")) continue;
+    const targetAnchor = targetModel.anchorNamed(markAnchor.name.slice(1));
     if (targetAnchor) {
       return {
         to: target,

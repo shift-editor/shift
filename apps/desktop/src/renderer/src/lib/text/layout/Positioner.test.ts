@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import type { TestEditor } from "@/testing/TestEditor";
+import { resolve } from "node:path";
+import { TestEditor } from "@/testing/TestEditor";
 import { NONSPACING_MARK_EDITOR_ADVANCE, Positioner } from "@shift/editor/testing";
 import { characterTextItem as char, glyphTextItem as glyph } from "@shift/editor/text";
 import { layoutTestEditor, ltrRun } from "./testUtils";
@@ -148,5 +149,32 @@ describe("Positioner", () => {
 
     expect(positioned.glyphs).toEqual([]);
     expect(positioned.advance).toBe(0);
+  });
+});
+
+describe("Positioner mark attachment", () => {
+  const FIXTURE = resolve(process.cwd(), "../../fixtures/fonts/AnchorPropagation.glyphs");
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = await new TestEditor().openSession(FIXTURE, "a");
+    for (const record of editor.font.glyphRecords()) await editor.font.loadGlyph(record.id);
+  });
+
+  const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
+
+  // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
+  it("attaches a mark to an anchor a composite takes from its components", () => {
+    const run = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+
+    const [base, mark] = new Positioner(editor, signal(editor.font.defaultLocation())).position(
+      run,
+      "anchors",
+    ).glyphs;
+
+    expect(mark!.origin).toEqual(base!.origin);
+    // acutecomb's `top` (100, 700) moved by its component offset (150, 0), less its `_top` (100, 500).
+    expect({ x: mark!.xOffset, y: mark!.yOffset }).toEqual({ x: 150, y: 200 });
+    expect(mark!.xAdvance).toBe(0);
   });
 });
