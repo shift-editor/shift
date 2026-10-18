@@ -333,3 +333,39 @@ fn digits_inside_an_arabic_paragraph_shape_left_to_right() {
         .collect();
     assert_eq!(runs, vec![(1, vec![1, 0]), (2, vec![2, 3])]);
 }
+
+#[test]
+fn features_list_each_tag_once_with_stylistic_set_names() {
+    let font = font_with(
+        &[
+            ("a", Some('a')),
+            ("a.ss01", None),
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+        ],
+        "languagesystem DFLT dflt;
+         languagesystem latn dflt;
+         feature liga { sub f i by f_i; } liga;
+         feature ss01 {
+             featureNames { name \"Single-storey a\"; };
+             sub a by a.ss01;
+         } ss01;",
+    );
+
+    let features = shaper(&font).font().features().unwrap();
+
+    assert_eq!(
+        features,
+        vec![
+            FontFeature {
+                tag: "liga".to_string(),
+                name: None,
+            },
+            FontFeature {
+                tag: "ss01".to_string(),
+                name: Some("Single-storey a".to_string()),
+            },
+        ]
+    );
+}

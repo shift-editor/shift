@@ -41,4 +41,9 @@ export interface TextRunRecord {
    * as typed, glyph by glyph.
    */
   readonly shaping: boolean;
+  /**
+   * Features turned on (`true`) or off (`false`) for this text by tag, such
+   * as `ss01`; a tag left out keeps the font's default.
+   */
+  readonly features: Readonly<Record<string, boolean>>;
 }
