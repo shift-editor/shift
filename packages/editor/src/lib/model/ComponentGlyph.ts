@@ -4,13 +4,16 @@ import type {
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
   GlyphId,
+  SourceId,
 } from "@shift/types";
 import { ContourPath } from "../graphics/ContourPath";
 import { computed, track, type Signal } from "../signals";
-import type { GlyphRenderContour } from "../../types/glyphRender";
+import type { GlyphRenderContour, PlacedContours } from "../../types/glyphRender";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { GlyphRenderModel } from "./Glyph";
 import type { RenderContour } from "./GlyphRenderModel";
+
+const IDENTITY = Mat.Identity();
 
 /**
  * Represents one Rust-projected component occurrence with live numeric transforms.
@@ -20,6 +23,10 @@ import type { RenderContour } from "./GlyphRenderModel";
  * `componentPath` is its stable occurrence identity. The cells here only
  * evaluate authored matrices at the current external location; a component's
  * transform is its absolute placement within the parent.
+ *
+ * Between masters of a glyph whose components change scale, rotation, or
+ * skew, the occurrence draws its outline as each master places it, blended,
+ * the way compiled fonts interpolate it. It stays this component occurrence.
  */
 export class ComponentGlyph {
   readonly #definitionCell: Signal<ComponentGlyphDefinition>;
@@ -30,6 +37,7 @@ export class ComponentGlyph {
   readonly transformCell: Signal<MatModel>;
   readonly resolvedTransformCell: Signal<MatModel>;
   readonly contoursCell: Signal<readonly GlyphContour[]>;
+  readonly #placedContoursCell: Signal<readonly RenderContour[] | null>;
   readonly closedContoursPathCell: Signal<Path2D>;
   readonly childrenCell: Signal<readonly ComponentGlyph[]>;
   readonly boundsCell: Signal<BoundsType | null>;
@@ -73,7 +81,16 @@ export class ComponentGlyph {
       return Mat.Compose(parent.resolvedTransformCell.value, this.transformCell.value);
     });
 
-    this.contoursCell = renderModel.contoursAt(this.#glyphIdCell, this.resolvedTransformCell, this);
+    this.#placedContoursCell = computed(() => this.#placedContours());
+    const placementCell = computed(() =>
+      this.#placedContoursCell.value ? IDENTITY : this.resolvedTransformCell.value,
+    );
+    this.contoursCell = renderModel.contoursAt(
+      this.#glyphIdCell,
+      placementCell,
+      this,
+      this.#placedContoursCell,
+    );
     this.closedContoursPathCell = computed(() => {
       const path = new Path2D();
       for (const contour of this.contoursCell.value) {
@@ -141,6 +158,40 @@ export class ComponentGlyph {
 
   get bounds(): BoundsType | null {
     return this.boundsCell.peek();
+  }
+
+  /**
+   * @internal Returns this occurrence's placement in root coordinates as one
+   * master of the root glyph draws it.
+   */
+  transformForSource(sourceId: SourceId): MatModel {
+    track(this.#definitionCell);
+    const definition = this.#definitionCell.peek();
+    const geometry = this.#renderModel.geometryForSource(definition.parentGlyphId, sourceId);
+    const component = geometry.components[definition.componentIndex];
+    const local = component?.baseGlyphId === definition.baseGlyphId ? component.matrix : IDENTITY;
+    const parent = this.#parent();
+    if (!parent) return local;
+
+    return Mat.Compose(parent.transformForSource(sourceId), local);
+  }
+
+  /**
+   * @internal Returns this occurrence's outline at each of the root glyph's
+   * decomposition masters, with that master's placement of it.
+   */
+  placedMasters(sourceIds: readonly SourceId[]): PlacedContours[] {
+    track(this.#glyphIdCell);
+    const glyphId = this.#glyphIdCell.peek();
+    return sourceIds.map((sourceId) => ({
+      matrix: this.transformForSource(sourceId),
+      contours: this.#renderModel.geometryForSource(glyphId, sourceId).contours,
+    }));
+  }
+
+  #placedContours(): readonly RenderContour[] | null {
+    track(this.#renderModel.decomposedContoursCell);
+    return this.#renderModel.decomposedContoursCell.peek()?.get(this) ?? null;
   }
 
   #parent(): ComponentGlyph | null {

@@ -55,6 +55,9 @@ pub enum Command {
     /// Compile a SQLite .shift document to a TrueType font.
     Compile(CompileArgs),
 
+    /// Check a font source for problems in its masters, axes, and kerning.
+    Check(CheckArgs),
+
     /// Inspect or author font metadata and source metrics.
     Font {
         #[command(subcommand)]
@@ -246,6 +249,30 @@ pub struct ExportGlyphsArgs {
     /// Write the JSON here instead of to stdout.
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct CheckArgs {
+    /// Path to a .shift, UFO, Designspace, or Glyphs font source.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Require a character set: ascii, latin1, or a file of characters,
+    /// `U+XXXX` scalars, and `U+XXXX..U+YYYY` ranges, one per line.
+    #[arg(long, value_name = "SET")]
+    pub charset: Option<String>,
+
+    /// Check the font as monospaced.
+    #[arg(long)]
+    pub mono: bool,
+
+    /// Monospace cell width; each master's most common advance when omitted.
+    #[arg(long, requires = "mono")]
+    pub width: Option<f64>,
+
+    /// Emit the findings as JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]
