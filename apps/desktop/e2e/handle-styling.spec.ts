@@ -32,7 +32,7 @@ async function drawnHandles(page: Page): Promise<DrawnHandles> {
     if (!node) return { states: [], count: 0, pointCount: 0 };
 
     const states = editor.nodeDefinition("glyph").handleStates(node);
-    const geometry = editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation);
+    const geometry = editor.glyphOf(node)?.geometryAt(editor.externalLocation);
     return {
       states: [...new Set(states.values())].sort(),
       count: states.size,
@@ -130,8 +130,7 @@ previewTest(
     const point = await workspacePage.evaluate(() => {
       const editor = window.shiftSession!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0]!;
-      const point = editor.glyphForId(node.glyphId)!.geometryAt(editor.externalLocation)
-        .allPoints[0]!;
+      const point = editor.glyphOf(node)!.geometryAt(editor.externalLocation).allPoints[0]!;
       return editor.sceneToScreen(editor.toScene(node, { x: point.x, y: point.y } as LocalPoint));
     });
     const bounds = await workspacePage.locator("#interactive-canvas").boundingBox();

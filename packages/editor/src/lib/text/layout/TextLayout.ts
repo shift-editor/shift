@@ -5,7 +5,6 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import type { GlyphId } from "@shift/types";
 import { graphemeBoundaries } from "./segmentation";
 import type {
   CaretPosition,
@@ -59,6 +58,8 @@ interface AssembledLayout {
   bounds: BoundsType | null;
 }
 
+const NO_PARTS: readonly PlacedGlyph[] = [];
+
 export class TextLayout {
   readonly metrics: SourceMetrics;
   readonly origin: Point2D;
@@ -70,6 +71,8 @@ export class TextLayout {
   /** Every positioned glyph in line, run, and glyph order. */
   readonly placedGlyphs: readonly PlacedGlyph[];
   readonly #placedByItem: ReadonlyMap<TextItemId, PlacedGlyph>;
+  /** Each item's glyphs in logical order; see {@link partsOfItem}. */
+  readonly #partsByItem: ReadonlyMap<TextItemId, readonly PlacedGlyph[]>;
   /** Each line's caret stops, in cluster order. */
   readonly #stops: readonly (readonly CaretStop[])[];
   /** Clusters a caret may rest at: grapheme boundaries. */
@@ -77,9 +80,11 @@ export class TextLayout {
 
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, externalLocation, shaped = null } = params;
+    // The active source can be one an edit just deleted, until the editor moves off it.
     const activeSourceId = editor.activeSourceId;
-    this.metrics = activeSourceId
-      ? editor.font.metricsForSource(activeSourceId)
+    const activeSource = activeSourceId ? editor.font.source(activeSourceId) : null;
+    this.metrics = activeSource
+      ? editor.font.metricsForSource(activeSource.id)
       : editor.font.metricsAtLocation(externalLocation.peek());
     this.origin = origin;
     this.bufferLength = items.length;
@@ -106,8 +111,12 @@ export class TextLayout {
     this.bounds = bounds;
     this.placedGlyphs = placeGlyphs(lines, origin);
     const placedByItem = new Map<TextItemId, PlacedGlyph>();
+    const partsByItem = new Map<TextItemId, PlacedGlyph[]>();
     for (const placed of this.placedGlyphs) {
       for (const itemId of placed.glyph.sourceItemIds) {
+        const parts = partsByItem.get(itemId);
+        if (parts) parts.push(placed);
+        else partsByItem.set(itemId, [placed]);
         const current = placedByItem.get(itemId);
         // A character the font decomposes (a base and its dot) answers with the glyph that advances.
         if (!current || placed.glyph.xAdvance > current.glyph.xAdvance) {
@@ -116,6 +125,12 @@ export class TextLayout {
       }
     }
     this.#placedByItem = placedByItem;
+    for (const parts of partsByItem.values()) {
+      const first = parts[0]!;
+      // A right-to-left run lists its glyphs in screen order, the reverse of logical.
+      if (lines[first.lineIndex]!.runs[first.runIndex]!.direction === "rtl") parts.reverse();
+    }
+    this.#partsByItem = partsByItem;
     this.#boundaries = graphemeBoundaries(items);
     this.#stops = lines.map((line, index) => lineStops(line, index, this.placedGlyphs, origin));
   }
@@ -131,16 +146,16 @@ export class TextLayout {
   }
 
   /**
-   * Returns one particular glyph an item produced.
+   * Returns the glyphs an item shapes to, in logical order: a letter's body
+   * before its dot, the first half of a split vowel before the second.
    *
-   * @returns null when the item produced no such glyph, such as after a reshape replaced it.
+   * @remarks
+   * A ligature is a part of each item it joins. Empty for line breaks and
+   * unknown items. Indexed when the layout is built, so a lookup does not
+   * walk the run.
    */
-  placedGlyph(itemId: TextItemId, glyphId: GlyphId): PlacedGlyph | null {
-    return (
-      this.placedGlyphs.find(
-        (placed) => placed.glyph.glyphId === glyphId && placed.glyph.sourceItemIds.includes(itemId),
-      ) ?? null
-    );
+  partsOfItem(itemId: TextItemId): readonly PlacedGlyph[] {
+    return this.#partsByItem.get(itemId) ?? NO_PARTS;
   }
 
   /** Returns the index of the line holding a caret cluster, or -1 when out of range. */

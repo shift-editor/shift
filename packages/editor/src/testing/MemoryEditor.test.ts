@@ -7,7 +7,6 @@ import {
   asLayerId,
   asPointId,
   asSourceId,
-  mintNodeId,
   type AxisId,
   type FontSnapshot,
   type GlyphRecord,
@@ -17,6 +16,7 @@ import { createMemoryFontSession } from "../createMemoryFontSession";
 import type { SystemClipboard } from "../lib/clipboard";
 import { externalAxisLocationFromRecord } from "../lib/variation/location";
 import type { MemoryFontSource } from "../types/fontSession";
+import type { TextRunNode } from "../types/node";
 
 const glyphId = asGlyphId("glyph_s");
 const regularSourceId = asSourceId("source_regular");
@@ -56,18 +56,15 @@ describe("memory font editing", () => {
 
     editor.selectSource(regularSourceId);
     const loadedGlyph = await font.loadGlyph(glyphId);
-    editor.scene.setNodes([
-      {
-        id: mintNodeId(),
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId,
-        sourceId: regularSourceId,
-        position: { x: 0, y: 0 },
-      },
-    ]);
+    const item = editor.text.glyphItem(glyphId)!;
+    const run = editor.scene.createNode<TextRunNode>({
+      kind: "textRun",
+      runId: editor.text.createRun([item]).id,
+      size: font.metricsCell.peek().unitsPerEm,
+      position: { x: 0, y: 0 },
+    });
+    const child = editor.nodeDefinition("textRun").editItem(run, item.id)!;
+    editor.enterNode(child.id);
 
     const midpoint = externalAxisLocationFromRecord({ [axisId]: 500 });
     expect(loadedGlyph.geometryAt(midpoint).point(regularPointId)).toMatchObject({

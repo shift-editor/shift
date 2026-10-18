@@ -100,7 +100,7 @@ test(
     const componentCount = await page.evaluate(() => {
       const { editor } = window.shift!;
       const node = editor.scene.nodesOfKind("glyph")[0];
-      const glyph = node ? editor.glyphForId(node.glyphId) : null;
+      const glyph = node ? editor.glyphOf(node) : null;
       if (!glyph) throw new Error("Expected loaded Aacute glyph");
 
       return glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell).components

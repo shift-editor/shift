@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { characterTextItem as char, lineBreakTextItem } from "@shift/editor/text";
+import { signal } from "@shift/editor/signals";
+import { characterTextItem as char, glyphTextItem, lineBreakTextItem } from "@shift/editor/text";
+import { TextLayout } from "@shift/editor/testing";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 import type { TestEditor } from "@/testing/TestEditor";
 
@@ -73,6 +75,35 @@ describe("TextLayout", () => {
     expect(placed?.origin).toEqual({ x: aAdvance, y: 0 });
     expect(placed?.glyph.sourceItemIds).toEqual([b.id]);
     expect(placed?.glyph.glyphId).toBe(editor.font.recordForName("B")?.id);
+  });
+
+  // The shaper answers .notdef, or a glyph its compiled font does not have yet, with no glyph.
+  it("shows a picked glyph that shaping answers with no glyph", () => {
+    const b = editor.font.recordForName("B")!;
+    const pick = glyphTextItem(b.id);
+    const layout = new TextLayout({
+      items: [pick],
+      origin: { x: 0, y: 0 },
+      editor,
+      externalLocation: signal(editor.font.defaultLocation()),
+      shaped: [
+        {
+          direction: "ltr",
+          runs: [
+            {
+              start: 0,
+              end: 1,
+              level: 0,
+              direction: "ltr",
+              glyphs: [{ cluster: 0, xAdvance: 0, yAdvance: 0, xOffset: 0, yOffset: 0 }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(layout.partsOfItem(pick.id).map((placed) => placed.glyph.glyphId)).toEqual([b.id]);
+    expect(layout.totalAdvance).toBe(xAdvance("B", editor));
   });
 
   it("places an item's glyph by item id after a linebreak", () => {

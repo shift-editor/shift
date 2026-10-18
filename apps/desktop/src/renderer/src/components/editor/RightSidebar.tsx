@@ -67,16 +67,10 @@ export const RightSidebar = () => {
           <KerningPairSection />
         ) : (
           <TransformOriginProvider>
-            {/* Kerning | Text | Features | Handle | Transform, each a group with a divider between. */}
+            {/* Kerning | Handle | Transform | Anchor | Text | Features, each a group with a divider between. */}
             <div ref={selectionBlockRef} className="flex flex-col">
               <SidebarGroup>
                 <GlyphKerningSection anchorRef={selectionBlockRef} />
-              </SidebarGroup>
-              <SidebarGroup>
-                <TextSection />
-              </SidebarGroup>
-              <SidebarGroup>
-                <FeaturesSection />
               </SidebarGroup>
               {hasTransformSelection ? (
                 <SidebarGroup>
@@ -99,6 +93,12 @@ export const RightSidebar = () => {
                   <AnchorSection />
                 </SidebarGroup>
               ) : null}
+              <SidebarGroup>
+                <TextSection />
+              </SidebarGroup>
+              <SidebarGroup>
+                <FeaturesSection />
+              </SidebarGroup>
             </div>
           </TransformOriginProvider>
         ),
@@ -109,12 +109,12 @@ export const RightSidebar = () => {
 
 /**
  * One group of the selection's sections. An empty group, whose section has
- * nothing to show, is hidden, and a group is divided from a shown one before it.
+ * nothing to show, is hidden; each shown group has a divider below it.
  */
 const SidebarGroup = ({ children }: { readonly children: React.ReactNode }) => (
   <div
     data-sidebar-group=""
-    className="flex flex-col gap-4 px-3 py-3 empty:hidden [[data-sidebar-group]:not(:empty)~&]:border-t [[data-sidebar-group]:not(:empty)~&]:border-line-subtle"
+    className="flex flex-col gap-4 border-b border-line-subtle px-3 py-3 empty:hidden"
   >
     {children}
   </div>
