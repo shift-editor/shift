@@ -1,0 +1,779 @@
+{
+.appVersion = "1225";
+familyName = "Anchor Propagation";
+axes = (
+{
+name = "Weight";
+tag = wght;
+}
+);
+fontMaster = (
+{
+ascender = 800;
+capHeight = 700;
+descender = -200;
+id = master-light;
+customName = Light;
+weightValue = 100;
+xHeight = 500;
+},
+{
+ascender = 800;
+capHeight = 700;
+descender = -200;
+id = master-bold;
+customName = Bold;
+weightValue = 900;
+xHeight = 500;
+}
+);
+glyphs = (
+{
+glyphname = "a";
+unicode = 0061;
+layers = (
+{
+layerId = master-light;
+width = 500;
+anchors = (
+{
+name = "top";
+position = "{250, 500}";
+},
+{
+name = "bottom";
+position = "{250, 0}";
+},
+{
+name = "ogonek";
+position = "{420, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+anchors = (
+{
+name = "top";
+position = "{290, 520}";
+},
+{
+name = "bottom";
+position = "{250, 0}";
+},
+{
+name = "ogonek";
+position = "{450, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "f";
+unicode = 0066;
+layers = (
+{
+layerId = master-light;
+width = 300;
+anchors = (
+{
+name = "top";
+position = "{150, 700}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 300;
+anchors = (
+{
+name = "top";
+position = "{160, 700}";
+}
+);
+}
+);
+},
+{
+glyphname = "i";
+unicode = 0069;
+layers = (
+{
+layerId = master-light;
+width = 250;
+anchors = (
+{
+name = "top";
+position = "{125, 500}";
+},
+{
+name = "bottom";
+position = "{125, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 250;
+anchors = (
+{
+name = "top";
+position = "{125, 520}";
+},
+{
+name = "bottom";
+position = "{125, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "acutecomb";
+unicode = 0301;
+layers = (
+{
+layerId = master-light;
+width = 0;
+anchors = (
+{
+name = "_top";
+position = "{100, 500}";
+},
+{
+name = "top";
+position = "{100, 700}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 0;
+anchors = (
+{
+name = "_top";
+position = "{100, 500}";
+},
+{
+name = "top";
+position = "{100, 730}";
+}
+);
+}
+);
+},
+{
+glyphname = "dotbelowcomb";
+unicode = 0323;
+layers = (
+{
+layerId = master-light;
+width = 0;
+anchors = (
+{
+name = "_bottom";
+position = "{50, 0}";
+},
+{
+name = "bottom";
+position = "{50, -150}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 0;
+anchors = (
+{
+name = "_bottom";
+position = "{50, 0}";
+},
+{
+name = "bottom";
+position = "{50, -150}";
+}
+);
+}
+);
+},
+{
+glyphname = "tildecomb";
+unicode = 0303;
+layers = (
+{
+layerId = master-light;
+width = 0;
+anchors = (
+{
+name = "_top";
+position = "{120, 500}";
+},
+{
+name = "top";
+position = "{120, 650}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 0;
+anchors = (
+{
+name = "_top";
+position = "{120, 500}";
+},
+{
+name = "top";
+position = "{120, 650}";
+}
+);
+}
+);
+},
+{
+glyphname = "aacute";
+unicode = 00E1;
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 150, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 190, 20}";
+}
+);
+}
+);
+},
+{
+glyphname = "adotbelow";
+unicode = 1EA1;
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "dotbelowcomb";
+transform = "{1, 0, 0, 1, 200, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "dotbelowcomb";
+transform = "{1, 0, 0, 1, 200, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "adotbelowacutetilde";
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "dotbelowcomb";
+transform = "{1, 0, 0, 1, 200, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 150, 0}";
+},
+{
+name = "tildecomb";
+transform = "{1, 0, 0, 1, 130, 200}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "dotbelowcomb";
+transform = "{1, 0, 0, 1, 200, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 190, 20}";
+},
+{
+name = "tildecomb";
+transform = "{1, 0, 0, 1, 170, 250}";
+}
+);
+}
+);
+},
+{
+glyphname = "aacute.ss01";
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "aacute";
+transform = "{1, 0, 0, 1, 10, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+components = (
+{
+name = "aacute";
+transform = "{1, 0, 0, 1, 10, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "a.flip";
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, -1, 0, 500}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, -1, 0, 500}";
+}
+);
+}
+);
+},
+{
+glyphname = "a.rotate";
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "a";
+transform = "{-1, 0, 0, -1, 500, 500}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+components = (
+{
+name = "a";
+transform = "{-1, 0, 0, -1, 500, 500}";
+}
+);
+}
+);
+},
+{
+glyphname = "aacute.own";
+layers = (
+{
+layerId = master-light;
+width = 500;
+anchors = (
+{
+name = "top";
+position = "{260, 900}";
+},
+{
+name = "*origin";
+position = "{10, 0}";
+}
+);
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 150, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 560;
+anchors = (
+{
+name = "top";
+position = "{260, 900}";
+},
+{
+name = "*origin";
+position = "{10, 0}";
+}
+);
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 150, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "f_i";
+layers = (
+{
+layerId = master-light;
+width = 550;
+components = (
+{
+name = "f";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "i";
+transform = "{1, 0, 0, 1, 300, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 550;
+components = (
+{
+name = "f";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "i";
+transform = "{1, 0, 0, 1, 300, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "caretglyph";
+layers = (
+{
+layerId = master-light;
+width = 600;
+anchors = (
+{
+name = "caret_1";
+position = "{300, 0}";
+},
+{
+name = "top_2";
+position = "{450, 500}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 600;
+anchors = (
+{
+name = "caret_1";
+position = "{300, 0}";
+},
+{
+name = "top_2";
+position = "{450, 500}";
+}
+);
+}
+);
+},
+{
+glyphname = "behDotless-ar.medi";
+layers = (
+{
+layerId = master-light;
+width = 400;
+anchors = (
+{
+name = "entry";
+position = "{400, 0}";
+},
+{
+name = "exit";
+position = "{0, 50}";
+},
+{
+name = "bottom";
+position = "{200, -20}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 400;
+anchors = (
+{
+name = "entry";
+position = "{400, 0}";
+},
+{
+name = "exit";
+position = "{0, 60}";
+},
+{
+name = "bottom";
+position = "{200, -20}";
+}
+);
+}
+);
+},
+{
+glyphname = "dotbelow-ar";
+layers = (
+{
+layerId = master-light;
+width = 0;
+anchors = (
+{
+name = "_bottom";
+position = "{60, 0}";
+},
+{
+name = "bottom";
+position = "{60, -120}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 0;
+anchors = (
+{
+name = "_bottom";
+position = "{60, 0}";
+},
+{
+name = "bottom";
+position = "{60, -120}";
+}
+);
+}
+);
+},
+{
+glyphname = "beh-ar.medi";
+layers = (
+{
+layerId = master-light;
+width = 400;
+components = (
+{
+name = "behDotless-ar.medi";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "dotbelow-ar";
+transform = "{1, 0, 0, 1, 140, -20}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 400;
+components = (
+{
+name = "behDotless-ar.medi";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "dotbelow-ar";
+transform = "{1, 0, 0, 1, 140, -20}";
+}
+);
+}
+);
+},
+{
+glyphname = "behbeh-ar";
+layers = (
+{
+layerId = master-light;
+width = 800;
+components = (
+{
+name = "behDotless-ar.medi";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "behDotless-ar.medi";
+transform = "{1, 0, 0, 1, 400, 0}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 800;
+components = (
+{
+name = "behDotless-ar.medi";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "behDotless-ar.medi";
+transform = "{1, 0, 0, 1, 400, 0}";
+}
+);
+}
+);
+},
+{
+glyphname = "acutecomb.case";
+layers = (
+{
+layerId = master-light;
+width = 0;
+anchors = (
+{
+name = "_top";
+position = "{100, 700}";
+},
+{
+name = "top";
+position = "{100, 900}";
+}
+);
+components = (
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 0, 200}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 0;
+anchors = (
+{
+name = "_top";
+position = "{100, 700}";
+},
+{
+name = "top";
+position = "{100, 900}";
+}
+);
+components = (
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 0, 200}";
+}
+);
+}
+);
+},
+{
+glyphname = "acutecomb.alt";
+layers = (
+{
+layerId = master-light;
+width = 0;
+components = (
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 0, 40}";
+}
+);
+},
+{
+layerId = master-bold;
+width = 0;
+components = (
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 0, 40}";
+}
+);
+}
+);
+},
+{
+glyphname = "aacute.sparse";
+layers = (
+{
+layerId = master-light;
+width = 500;
+components = (
+{
+name = "a";
+transform = "{1, 0, 0, 1, 0, 0}";
+},
+{
+name = "acutecomb";
+transform = "{1, 0, 0, 1, 150, 0}";
+}
+);
+}
+);
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}

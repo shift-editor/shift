@@ -1,15 +1,23 @@
-import type { GlyphId, SlugSection, SourceId } from "@shift/types";
+import {
+  SLUG_COMPONENT_GLYPH_FLAG,
+  SLUG_GLYPH_OFFSET_MASK,
+  SLUG_RENDER_INSTANCE_BYTES,
+  SLUG_RENDER_INSTANCE_OFFSETS,
+  SLUG_VARIABLE_COMPONENT_GLYPH_BYTES,
+  SLUG_VARIABLE_COMPONENT_GLYPH_OFFSETS,
+  SLUG_VARIABLE_GLYPH_BYTES,
+  SLUG_VARIABLE_GLYPH_OFFSETS,
+  SLUG_VARIABLE_PARAMS_BYTES,
+  SLUG_VARIABLE_PARAMS_WORDS,
+  type GlyphId,
+  type SlugSection,
+  type SourceId,
+} from "@shift/types";
 import { interpolationWeights } from "@shift/editor/variation";
 import { externalAxisLocationFromRecord, mapAxisLocation } from "@shift/editor/variation";
 import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
 import type { GlyphAtlasGlyph, GlyphAtlasPage } from "@/types/glyphAtlas";
-
-const VARIABLE_GLYPH_BYTES = 32;
-const COMPONENT_GLYPH_BYTES = 24;
-const INSTANCE_BYTES = 48;
-const COMPONENT_GLYPH_FLAG = 0x8000_0000;
-const GLYPH_OFFSET_MASK = 0x7fff_ffff;
 
 /** One concrete Slug atlas generation resident across two WebGPU bindings. */
 export class SlugAtlas {
@@ -189,26 +197,25 @@ export class SlugAtlas {
 
   variableParams(instanceCount: number): Uint32Array<ArrayBuffer> {
     const atlas = this.#descriptor;
-    return new Uint32Array(
-      [
-        checkedU32(instanceCount, "instance count"),
-        atlas.bandCount,
-        checkedU32(this.#splitOffset, "resident atlas split offset"),
-        0,
-        atlas.layout.baseCurves.offset,
-        atlas.layout.curveDeltas.offset,
-        atlas.layout.sparseDeltas.offset,
-        atlas.layout.glyphs.offset,
-        atlas.layout.sources.offset,
-        atlas.layout.sourceAdvances.offset,
-        atlas.layout.componentGlyphs.offset,
-        atlas.layout.componentParts.offset,
-        atlas.layout.components.offset,
-        atlas.layout.componentSources.offset,
-        0,
-        atlas.layout.lineBits.offset,
-      ].map((value) => checkedU32(value, "resident atlas offset")),
-    );
+    const layout = atlas.layout;
+    const words = SLUG_VARIABLE_PARAMS_WORDS;
+    const offset = (value: number): number => checkedU32(value, "resident atlas offset");
+    const params = new Uint32Array(SLUG_VARIABLE_PARAMS_BYTES / Uint32Array.BYTES_PER_ELEMENT);
+    params[words.instanceCount] = checkedU32(instanceCount, "instance count");
+    params[words.atlasSplitOffset] = checkedU32(this.#splitOffset, "resident atlas split offset");
+    params[words.bandCount] = checkedU32(atlas.bandCount, "band count");
+    params[words.baseCurves] = offset(layout.baseCurves.offset);
+    params[words.curveDeltas] = offset(layout.curveDeltas.offset);
+    params[words.sparseDeltas] = offset(layout.sparseDeltas.offset);
+    params[words.glyphs] = offset(layout.glyphs.offset);
+    params[words.sources] = offset(layout.sources.offset);
+    params[words.sourceAdvances] = offset(layout.sourceAdvances.offset);
+    params[words.componentGlyphs] = offset(layout.componentGlyphs.offset);
+    params[words.componentParts] = offset(layout.componentParts.offset);
+    params[words.components] = offset(layout.components.offset);
+    params[words.componentSources] = offset(layout.componentSources.offset);
+    params[words.lineBits] = offset(layout.lineBits.offset);
+    return params;
   }
 
   /** Reports whether the selected resident variant contains drawable curves. */
@@ -217,8 +224,8 @@ export class SlugAtlas {
     if (!glyph) throw new Error(`resident Slug glyph ${glyphId} is missing`);
 
     const glyphIndex = selectedGlyphIndex(glyph, sourceId);
-    const glyphOffset = glyphIndex * VARIABLE_GLYPH_BYTES;
-    if (glyphOffset + VARIABLE_GLYPH_BYTES > this.#glyphBytes.byteLength) {
+    const glyphOffset = glyphIndex * SLUG_VARIABLE_GLYPH_BYTES;
+    if (glyphOffset + SLUG_VARIABLE_GLYPH_BYTES > this.#glyphBytes.byteLength) {
       throw new Error(`resident Slug glyph index ${glyphIndex} is out of range`);
     }
 
@@ -227,15 +234,15 @@ export class SlugAtlas {
       this.#glyphBytes.byteOffset,
       this.#glyphBytes.byteLength,
     );
-    return glyphView.getUint32(glyphOffset + 20, true) > 0;
+    return glyphView.getUint32(glyphOffset + SLUG_VARIABLE_GLYPH_OFFSETS.curveCount, true) > 0;
   }
 
   /** Packs visible glyph identities into shader instances and exact scratch capacities. */
   frame(instances: readonly GlyphPreviewInstance[]): PackedGlyphPreviewFrame {
-    if (this.#glyphBytes.byteLength % VARIABLE_GLYPH_BYTES !== 0) {
+    if (this.#glyphBytes.byteLength % SLUG_VARIABLE_GLYPH_BYTES !== 0) {
       throw new Error("invalid resident Slug glyph section length");
     }
-    if (this.#componentGlyphBytes.byteLength % COMPONENT_GLYPH_BYTES !== 0) {
+    if (this.#componentGlyphBytes.byteLength % SLUG_VARIABLE_COMPONENT_GLYPH_BYTES !== 0) {
       throw new Error("invalid resident Slug component-glyph section length");
     }
 
@@ -249,7 +256,8 @@ export class SlugAtlas {
       this.#componentGlyphBytes.byteOffset,
       this.#componentGlyphBytes.byteLength,
     );
-    const packedInstances = new Uint8Array(instances.length * INSTANCE_BYTES);
+    const packedInstances = new Uint8Array(instances.length * SLUG_RENDER_INSTANCE_BYTES);
+    const instanceFields = SLUG_RENDER_INSTANCE_OFFSETS;
     const instanceView = new DataView(packedInstances.buffer);
     const bandsPerGlyph = this.#descriptor.bandCount * 2;
     let curveCount = 0;
@@ -263,29 +271,39 @@ export class SlugAtlas {
       if (!glyph) throw new Error(`resident Slug glyph ${instance.glyphId} is missing`);
 
       const glyphIndex = selectedGlyphIndex(glyph, instance.sourceId);
-      const glyphOffset = glyphIndex * VARIABLE_GLYPH_BYTES;
-      if (glyphOffset + VARIABLE_GLYPH_BYTES > glyphView.byteLength) {
+      const glyphOffset = glyphIndex * SLUG_VARIABLE_GLYPH_BYTES;
+      if (glyphOffset + SLUG_VARIABLE_GLYPH_BYTES > glyphView.byteLength) {
         throw new Error(`resident Slug glyph index ${glyphIndex} is out of range`);
       }
 
-      const glyphCurveCount = glyphView.getUint32(glyphOffset + 20, true);
-      const sourceStart = glyphView.getUint32(glyphOffset + 24, true);
-      const instanceOffset = instanceIndex * INSTANCE_BYTES;
+      const glyphCurveCount = glyphView.getUint32(
+        glyphOffset + SLUG_VARIABLE_GLYPH_OFFSETS.curveCount,
+        true,
+      );
+      const sourceStart = glyphView.getUint32(
+        glyphOffset + SLUG_VARIABLE_GLYPH_OFFSETS.sourceStart,
+        true,
+      );
+      const instanceOffset = instanceIndex * SLUG_RENDER_INSTANCE_BYTES;
       for (let valueIndex = 0; valueIndex < 4; valueIndex += 1) {
         instanceView.setFloat32(
-          instanceOffset + valueIndex * 4,
+          instanceOffset + instanceFields.pixelRect + valueIndex * 4,
           instance.pixelRect[valueIndex]!,
           true,
         );
       }
       // Preview layout is resolved from GPU advances by vertex_variable_preview.
       for (let valueIndex = 0; valueIndex < 4; valueIndex += 1) {
-        instanceView.setFloat32(instanceOffset + 16 + valueIndex * 4, 0, true);
+        instanceView.setFloat32(
+          instanceOffset + instanceFields.emTransform + valueIndex * 4,
+          0,
+          true,
+        );
       }
-      instanceView.setUint32(instanceOffset + 32, glyphIndex, true);
-      instanceView.setUint32(instanceOffset + 36, curveCount, true);
-      instanceView.setUint32(instanceOffset + 40, bandCount, true);
-      instanceView.setUint32(instanceOffset + 44, indexCount, true);
+      instanceView.setUint32(instanceOffset + instanceFields.glyphIndex, glyphIndex, true);
+      instanceView.setUint32(instanceOffset + instanceFields.scratchCurveStart, curveCount, true);
+      instanceView.setUint32(instanceOffset + instanceFields.scratchBandStart, bandCount, true);
+      instanceView.setUint32(instanceOffset + instanceFields.scratchIndexStart, indexCount, true);
 
       curveCount = checkedAdd(curveCount, glyphCurveCount, "curve scratch");
       bandCount = checkedAdd(bandCount, bandsPerGlyph, "band scratch");
@@ -295,14 +313,17 @@ export class SlugAtlas {
         "index scratch",
       );
 
-      if ((sourceStart & COMPONENT_GLYPH_FLAG) === 0) continue;
+      if ((sourceStart & SLUG_COMPONENT_GLYPH_FLAG) === 0) continue;
 
-      const componentGlyphIndex = sourceStart & GLYPH_OFFSET_MASK;
-      const componentOffset = componentGlyphIndex * COMPONENT_GLYPH_BYTES;
-      if (componentOffset + COMPONENT_GLYPH_BYTES > componentView.byteLength) {
+      const componentGlyphIndex = sourceStart & SLUG_GLYPH_OFFSET_MASK;
+      const componentOffset = componentGlyphIndex * SLUG_VARIABLE_COMPONENT_GLYPH_BYTES;
+      if (componentOffset + SLUG_VARIABLE_COMPONENT_GLYPH_BYTES > componentView.byteLength) {
         throw new Error(`resident Slug component glyph ${componentGlyphIndex} is out of range`);
       }
-      const componentCount = componentView.getUint32(componentOffset + 12, true);
+      const componentCount = componentView.getUint32(
+        componentOffset + SLUG_VARIABLE_COMPONENT_GLYPH_OFFSETS.componentCount,
+        true,
+      );
       componentTransformCount = checkedAdd(
         componentTransformCount,
         componentCount,

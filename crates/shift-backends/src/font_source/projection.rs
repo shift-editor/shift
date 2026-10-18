@@ -478,14 +478,7 @@ pub(crate) fn shape_from_layer(layer: &ProjectionLayer) -> GlyphShape {
         values.push(anchor.y);
     }
     for component in &layer.geometry.components {
-        values.extend([
-            component.transform.xx,
-            component.transform.xy,
-            component.transform.yx,
-            component.transform.yy,
-            component.transform.dx,
-            component.transform.dy,
-        ]);
+        values.extend(component.transform.to_values());
     }
     GlyphShape {
         contours: layer

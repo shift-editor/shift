@@ -16,14 +16,16 @@ Central routing table for Shift's distributed documentation. Before creating new
 | Path pattern                | Canonical doc                                                                      | Purpose                                                                                     |
 | --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `crates/fontsrc/**`         | [`crates/fontsrc/docs/DOCS.md`](../../crates/fontsrc/docs/DOCS.md)                 | Shift-independent authored font source reading and writing                                  |
-| `crates/noad/**`            | [`crates/noad/README.md`](../../crates/noad/README.md)                             | Shift-independent MathML Core layout from OpenType MATH data, with provenance               |
-| `crates/noad-build/**`      | [`crates/noad-build/README.md`](../../crates/noad-build/README.md)                 | Shift-independent OpenType MATH table builder from glyph-name-level source data             |
+| `crates/rumil/**`           | [`crates/rumil/README.md`](../../crates/rumil/README.md)                           | Shift-independent MathML Core layout from OpenType MATH data, with provenance               |
+| `crates/rumil-build/**`     | [`crates/rumil-build/README.md`](../../crates/rumil-build/README.md)               | Shift-independent OpenType MATH table builder from glyph-name-level source data             |
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
+| `crates/shift-config/**`    | [`crates/shift-config/docs/DOCS.md`](../../crates/shift-config/docs/DOCS.md)       | Reading, validating, and comment-preserving edits of `config.toml` and theme files          |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
 | `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
 | `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font                                    |
 | `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                                               |
+| `crates/shift-wasm/**`      | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)           | shift-font rules compiled to WebAssembly for the editor                                     |
 
 ### Desktop app — Electron shell
 
@@ -62,6 +64,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/ui/**`                       | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                     | UI component library wrapping Base UI primitives                   |
 | `packages/validation/**`               | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)     | Point sequence validation and persistence schemas                  |
 | `packages/rules/**`                    | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)               | Point editing rules engine for geometric constraints               |
+| `packages/wasm/**`                     | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)         | Build and synchronous loading of the editor's WebAssembly module   |
 
 ## Cross-cutting operations
 

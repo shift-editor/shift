@@ -100,6 +100,8 @@ export type {
   MoveAnchorsIntent,
   MovePointsIntent,
   RemoveAnchorsIntent,
+  RenameAnchorsIntent,
+  SetComponentAlignmentIntent,
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
@@ -167,6 +169,12 @@ export type {
   BoundsCorner,
   OutlineBounds,
   ComponentTransform,
+  ConfigProblem,
+  ConfigSeverity,
+  ThemeAppearance,
+  ThemeFile,
+  ThemeMode,
+  ThemeSlots,
   ResolvedComponentGeometry,
   ResolvedLayerGeometry,
   ResolvedOutline,
@@ -224,3 +232,8 @@ export type {
   VariationBasis,
   VariationDelta,
 } from "./bridge";
+
+// Numeric layouts generated from Rust; run `pnpm generate:from-rust` to refresh.
+export * from "./layout/glyphValues";
+export * from "./layout/sourceMetrics";
+export * from "./layout/slugAtlas";

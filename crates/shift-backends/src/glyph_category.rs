@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use glyphs_reader::glyphdata::GlyphData;
-use shift_font::{Glyph, GlyphCategory, GlyphSubcategory, LibData, LibValue};
+use shift_font::{Glyph, GlyphCategory, GlyphId, GlyphSubcategory, LibData, LibValue};
 use write_fonts::tables::gdef::GlyphClassDef;
 
 /// Font lib key a UFO uses for explicit GDEF classes.
@@ -23,6 +23,11 @@ pub struct ResolvedCategory {
 }
 
 impl ResolvedCategory {
+    /// Whether the glyph is in the Mark category, whatever its subcategory.
+    pub fn is_mark(self) -> bool {
+        self.category == Some(GlyphCategory::Mark)
+    }
+
     /// Whether the glyph is a combining mark that takes no horizontal space.
     pub fn is_nonspacing_mark(self) -> bool {
         self.category == Some(GlyphCategory::Mark)
@@ -82,6 +87,58 @@ impl GlyphCategories {
                 .filter(|sub_category| Some(*sub_category) != looked_up.sub_category),
         }
     }
+}
+
+/// How a glyph is a ligature to anchor propagation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PropagationLigature {
+    /// A UFO `public.openTypeCategories` entry makes it one.
+    Explicit,
+    /// Its Ligature subcategory makes it one once it has an attaching anchor.
+    Subcategory,
+}
+
+/// What the editor reads from a glyph's category, as export resolves it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RecordCategory {
+    /// In the Mark category or classed `mark`: propagation keeps a mark's own anchors.
+    pub mark: bool,
+    /// In the Mark category with the Nonspacing subcategory: export compiles
+    /// it with no advance.
+    ///
+    /// Unlike [`Self::mark`], a UFO's `public.openTypeCategories` does not set
+    /// it, because export zeroes advances by category alone.
+    pub nonspacing_mark: bool,
+    /// Ligature components number their anchors (`top_1`, `top_2`).
+    pub ligature: Option<PropagationLigature>,
+}
+
+/// Each glyph's record category, by glyph id.
+pub fn record_categories<'a>(
+    glyphs: impl IntoIterator<Item = &'a Glyph>,
+    font_lib: &LibData,
+) -> BTreeMap<GlyphId, RecordCategory> {
+    let categories = GlyphCategories::new();
+    let explicit = opentype_categories(font_lib);
+    glyphs
+        .into_iter()
+        .map(|glyph| {
+            let resolved = categories.resolve(glyph);
+            let explicit = explicit.get(glyph.name()).copied();
+            let ligature = match explicit {
+                Some(GlyphClassDef::Ligature) => Some(PropagationLigature::Explicit),
+                Some(_) => None,
+                None => (resolved.sub_category == Some(GlyphSubcategory::Ligature))
+                    .then_some(PropagationLigature::Subcategory),
+            };
+            let category = RecordCategory {
+                mark: resolved.is_mark() || explicit == Some(GlyphClassDef::Mark),
+                nonspacing_mark: resolved.is_nonspacing_mark(),
+                ligature,
+            };
+            (glyph.id(), category)
+        })
+        .collect()
 }
 
 /// GDEF classes for every glyph that has one, by glyph name.
@@ -213,6 +270,28 @@ mod tests {
         let classes = gdef_classes([&acute], &lib);
 
         assert_eq!(classes.get("acutecomb"), Some(&GlyphClassDef::Base));
+    }
+
+    #[test]
+    fn records_call_only_nonspacing_marks_nonspacing() {
+        let acute = Glyph::new("acutecomb");
+        let named_like_a_mark = Glyph::new("x.comb");
+        let mut spacing_mark = Glyph::new("aaMatra-deva");
+        spacing_mark.set_category(Some(GlyphCategory::Mark));
+        spacing_mark.set_sub_category(Some(GlyphSubcategory::SpacingCombining));
+        let mut classed_as_mark = Glyph::new("a");
+        classed_as_mark.set_category(Some(GlyphCategory::Mark));
+        classed_as_mark.set_sub_category(Some(GlyphSubcategory::Nonspacing));
+        let glyphs = [&acute, &named_like_a_mark, &spacing_mark, &classed_as_mark];
+
+        let records = record_categories(glyphs, &LibData::new());
+        let nonspacing = |glyph: &Glyph| records[&glyph.id()].nonspacing_mark;
+
+        assert!(nonspacing(&acute));
+        assert!(!nonspacing(&named_like_a_mark));
+        assert!(records[&spacing_mark.id()].mark);
+        assert!(!nonspacing(&spacing_mark));
+        assert!(nonspacing(&classed_as_mark));
     }
 
     #[test]

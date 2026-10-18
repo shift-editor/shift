@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { colorThemes } from "../src/renderer/src/lib/themes";
 import type { Page } from "@playwright/test";
 import type { ThemeId } from "../src/renderer/src/lib/themes";
@@ -11,12 +13,72 @@ import {
 } from "./fixtures/appLocators";
 import { expectCanvasSnapshot, expectPageSnapshot } from "./fixtures/snapshots";
 
-/** Persists a theme selection, reloads the workspace, and proves the theme is applied. */
+/** Writes a theme selection to config.toml, reloads the workspace, and proves the theme is applied. */
 async function useTheme(page: Page, themeId: ThemeId): Promise<void> {
-  await page.evaluate((id) => localStorage.setItem("themeSelection", id), themeId);
+  await page.evaluate((id) => window.shiftHost!.config.setTheme(id), themeId);
   await page.reload();
   await waitForWorkspaceReady(page);
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", themeId);
+}
+
+/** Writes `themes/<id>.toml` with Nord's palette, overriding the colors in `changes`. */
+async function writeThemeFile(
+  page: Page,
+  id: string,
+  { name = "Rice", appearance = "dark", changes = {}, colors = {} }: ThemeFileOptions = {},
+): Promise<void> {
+  const nord = colorThemes.find((theme) => theme.id === "nord");
+  if (!nord) throw new Error("Expected the Nord theme");
+  const palette = Object.entries({ ...nord.palette, ...changes }).map(
+    ([key, color]) => `${key} = "${color}"`,
+  );
+  const directory = path.join(path.dirname(await configFile(page)), "themes");
+  fs.mkdirSync(directory, { recursive: true });
+  const source: string[] = [
+    `name = "${name}"`,
+    `appearance = "${appearance}"`,
+    "[palette]",
+    ...palette,
+    "",
+  ];
+  const overrides = Object.entries(colors).map(([key, color]) => `"${key}" = "${color}"`);
+  if (overrides.length > 0) source.push("[colors]", ...overrides, "");
+  fs.writeFileSync(path.join(directory, `${id}.toml`), source.join("\n"));
+}
+
+interface ThemeFileOptions {
+  name?: string;
+  appearance?: "light" | "dark";
+  changes?: Record<string, string>;
+  /** Written as the `[colors]` override table. */
+  colors?: Record<string, string>;
+}
+
+async function cssVariable(page: Page, name: string): Promise<string> {
+  return page.evaluate(
+    (variable) => getComputedStyle(document.documentElement).getPropertyValue(variable).trim(),
+    name,
+  );
+}
+
+/** This build's config.toml in the test's isolated user data. */
+async function configFile(page: Page): Promise<string> {
+  const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
+  fs.mkdirSync(directory, { recursive: true });
+  return path.join(directory, "config.toml");
+}
+
+/** Opens Settings → Appearance. */
+async function openAppearance(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
+}
+
+/** Switches to `mode` in Settings → Appearance and picks `themeName` for it. */
+async function chooseTheme(page: Page, mode: "Light" | "Dark", themeName: string): Promise<void> {
+  await page.getByRole("tab", { name: mode, exact: true }).click();
+  await page.getByRole("button", { name: `${mode} theme`, exact: true }).click();
+  await page.getByRole("option", { name: themeName, exact: true }).click();
 }
 
 /** Opens S with every point selected so glyph, handles, and selection chrome are all drawn. */
@@ -53,9 +115,8 @@ test.describe("Theme", () => {
   });
 
   test("selects and persists a classic color theme", async ({ page }) => {
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.getByRole("radio", { name: /Nord/ }).click();
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Nord");
 
     const nord = colorThemes.find(({ id }) => id === "nord");
     if (!nord) throw new Error("Expected the Nord theme");
@@ -69,8 +130,80 @@ test.describe("Theme", () => {
       )
       .toBe(nord.palette.base00);
 
+    expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "nord"\n`);
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
+  });
+
+  test("saves a light and a dark theme for system mode", async ({ page }) => {
+    await openAppearance(page);
+    await chooseTheme(page, "Light", "Gruvbox Light");
+    await page.getByRole("tab", { name: "System", exact: true }).click();
+    await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+    await page.getByRole("option", { name: "Nord", exact: true }).click();
+
+    await expect
+      .poll(async () => fs.readFileSync(await configFile(page), "utf8"))
+      .toBe(`theme = { mode = "system", light = "gruvbox-light", dark = "nord" }\n`);
+  });
+
+  test("lists the bundled themes and applies one", async ({ page }) => {
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Catppuccin Mocha");
+
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "catppuccin-mocha");
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe("#1e1e2e");
+    expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "catppuccin-mocha"\n`);
+  });
+
+  test("applies a theme chosen by editing config.toml", async ({ page }) => {
+    const file = await configFile(page);
+    fs.writeFileSync(file, `# my rice\ntheme = "gruvbox-dark"\n`);
+
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "gruvbox-dark");
+  });
+
+  test("keeps the theme and reports the line when config.toml breaks", async ({ page }) => {
+    const file = await configFile(page);
+    fs.writeFileSync(file, `theme = "dracula"\n`);
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "dracula");
+
+    fs.writeFileSync(file, `theme = "nord\n`);
+    await openAppearance(page);
+
+    await expect(page.getByRole("list", { name: "Config problems" })).toContainText(
+      "config.toml:1:",
+    );
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "dracula");
+    await page.getByRole("tab", { name: "Light", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Not saved");
+    expect(fs.readFileSync(file, "utf8")).toBe(`theme = "nord\n`);
+  });
+
+  test("lists a theme file and applies its palette when selected", async ({ page }) => {
+    await writeThemeFile(page, "rice", { name: "Rice", changes: { base00: "#101820" } });
+    await openAppearance(page);
+
+    await page.getByRole("tab", { name: "Dark", exact: true }).click();
+    await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+    const rice = page
+      .getByRole("group", { name: "Your themes" })
+      .getByRole("option", { name: "Rice", exact: true });
+    await expect(rice).toHaveAttribute("title", /themes[\\/]rice\.toml$/);
+    await rice.click();
+
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "rice");
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe("#101820");
+    expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "rice"\n`);
+  });
+
+  test("overrides one derived color from a theme file", async ({ page }) => {
+    await writeThemeFile(page, "rice", { colors: { accent: "#ff9e64" } });
+    await page.evaluate(() => window.shiftHost!.config.setTheme("rice"));
+
+    await expect.poll(() => cssVariable(page, "--color-accent")).toBe("#ff9e64");
+    const nord = colorThemes.find(({ id }) => id === "nord")!;
+    expect(await cssVariable(page, "--editor-handle-primary-stroke")).toBe(nord.palette.base0D);
   });
 
   test("keeps viewport input live after a theme change and a Home round trip", async ({
@@ -84,9 +217,8 @@ test.describe("Theme", () => {
 
     await clickFirstCatalogGlyph(page);
     await waitForEditorReady(page, glyphId);
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.getByRole("radio", { name: /Dracula/ }).click();
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Dracula");
     await page.getByRole("button", { name: "Close settings" }).click();
     await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home$/);
@@ -150,9 +282,8 @@ test.describe("Theme", () => {
     }, markersBefore.toString("base64"));
     expect(markersDrawn).toBe(true);
 
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
-    await page.getByRole("radio", { name: /Nord/ }).click();
+    await openAppearance(page);
+    await chooseTheme(page, "Dark", "Nord");
     await page.getByRole("button", { name: "Close settings" }).click();
 
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
@@ -163,6 +294,29 @@ test.describe("Theme", () => {
       .poll(async () =>
         (await markerCanvas.screenshot(markerScreenshotOptions)).equals(markersBefore),
       )
+      .toBe(false);
+  });
+
+  test("redraws the canvas when the selected theme file is edited", async ({ page, editor }) => {
+    await writeThemeFile(page, "rice");
+    await page.evaluate(() => window.shiftHost!.config.setTheme("rice"));
+    await expect(page.locator("html")).toHaveAttribute("data-color-theme", "rice");
+    await editor.openGlyphByUnicode("41");
+    await editor.selectAll();
+    await editor.waitForCanvasRender();
+
+    const sceneCanvas = page.locator("#scene-canvas");
+    const markerCanvas = page.locator("#marker-canvas");
+    const sceneBefore = await sceneCanvas.screenshot();
+    const markersBefore = await markerCanvas.screenshot();
+
+    // Glyph fill (base06) and selected handles (base0D) change; the theme id does not.
+    await writeThemeFile(page, "rice", { changes: { base06: "#ff8800", base0D: "#00ff88" } });
+
+    await expect.poll(() => cssVariable(page, "--editor-handle-primary-stroke")).toBe("#00ff88");
+    await expect.poll(async () => (await sceneCanvas.screenshot()).equals(sceneBefore)).toBe(false);
+    await expect
+      .poll(async () => (await markerCanvas.screenshot()).equals(markersBefore))
       .toBe(false);
   });
 });
