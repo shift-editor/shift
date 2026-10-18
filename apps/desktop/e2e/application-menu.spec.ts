@@ -211,7 +211,8 @@ authoredTest(
       const session = window.shiftSession;
       const editor = window.shift?.editor;
       const glyphNodes = editor?.scene.nodesOfKind("glyph") ?? [];
-      const currentGlyphId = glyphNodes.length === 1 ? glyphNodes[0]?.glyphId : null;
+      const currentGlyphId =
+        editor && glyphNodes.length === 1 ? editor.glyphIdOf(glyphNodes[0]!) : null;
       if (!session || !editor || !currentGlyphId) throw new Error("Expected active glyph editor");
 
       const recordsById = new Map(session.font.glyphRecords().map((record) => [record.id, record]));
@@ -271,8 +272,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -333,8 +333,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -347,8 +346,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -365,8 +363,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -379,8 +376,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -401,8 +397,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -415,8 +410,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -430,8 +424,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -444,8 +437,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
+            ? editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length
             : undefined;
         }),
       )
@@ -482,7 +474,7 @@ authoredTest(
       );
       if (!candidate) throw new Error("Expected a missing Unicode glyph");
 
-      const glyph = editor.glyphForId(node.glyphId);
+      const glyph = editor.glyphOf(node);
       return {
         ...candidate,
         initialCount: glyph?.layerForSource(activeSourceId)?.components.length ?? 0,
@@ -514,8 +506,7 @@ authoredTest(
           const record = session.font.glyphEntries().find((glyph) => glyph.name === name);
           const [node] = editor.scene.nodesOfKind("glyph");
           const components = node
-            ? (editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)
-                ?.components ?? [])
+            ? (editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components ?? [])
             : [];
 
           return (
@@ -535,8 +526,7 @@ authoredTest(
           const editor = window.shift!.editor;
           const [node] = editor.scene.nodesOfKind("glyph");
           const componentCount = node
-            ? (editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length ?? 0)
+            ? (editor.glyphOf(node)?.layerForSource(editor.activeSourceId!)?.components.length ?? 0)
             : 0;
 
           return {

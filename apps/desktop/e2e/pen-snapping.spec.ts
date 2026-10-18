@@ -50,7 +50,7 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
     page.evaluate(() => {
       const editor = window.shift!.editor;
       const node = editor.scene.nodesOfKind("glyph")[0]!;
-      const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+      const layer = editor.glyphOf(node)!.layerForSource(node.sourceId)!;
       return layer.allPoints.map((point) => ({ id: point.id, x: point.x, y: point.y }));
     });
   expect(await points()).toHaveLength(1);

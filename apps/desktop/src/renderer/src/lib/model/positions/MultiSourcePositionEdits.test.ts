@@ -126,7 +126,7 @@ describe("multi-source position edits", () => {
 
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected glyph node");
-    const blackLayerId = editor.glyphForId(node.glyphId)?.layerForSource(blackSourceId)?.id;
+    const blackLayerId = editor.glyphOf(node)?.layerForSource(blackSourceId)?.id;
     if (!blackLayerId) throw new Error("Expected Black source layer");
     await expect
       .poll(() => [...editor.editingLayerMatchesCell.peek().keys()])
