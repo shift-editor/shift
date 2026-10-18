@@ -181,12 +181,14 @@ export class Editor {
     addAnchorAt(position: Point2D): boolean;
     addAnchorAtPointer(): boolean;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
+    addEditedNode(nodeId: NodeId): void;
     // (undocumented)
     attachRenderSurfaces(background: Canvas2DSurface, scene: Canvas2DSurface, overlay: Canvas2DSurface, markers: MarkerCanvasSurface): void;
     boolean(contourIdA: ContourId, contourIdB: ContourId, operation: "union" | "subtract" | "intersect" | "difference"): Promise<void>;
     // (undocumented)
     get camera(): Camera;
     canDecomposeSelection(): boolean;
+    closeGlyphNode(nodeId: NodeId): void;
     collapseEditingSources(): boolean;
     componentTransformSelection(ids: readonly SelectableId[]): ComponentTransformSelection | null;
     contentFrom(ids: readonly ShiftId[]): ShiftContent | null;
@@ -218,7 +220,7 @@ export class Editor {
     destroy(): void;
     // (undocumented)
     detachRenderSurfaces(): void;
-    doubleClickNode(target: PointerTarget): boolean;
+    doubleClickNode(target: PointerTarget, options?: DoubleClickOptions): boolean;
     get draggingCell(): Signal<boolean>;
     // (undocumented)
     duplicateSelection(): PointId[];
@@ -260,6 +262,8 @@ export class Editor {
     // (undocumented)
     getToolState(scope: ToolStateScope, toolId: string, key: string): unknown;
     glyphForId(glyphId: GlyphId): Glyph | null;
+    glyphIdOf(node: GlyphNode): GlyphId | null;
+    glyphOf(node: GlyphNode): Glyph | null;
     handlesVisible(id: PointId | ContourId, contourId?: ContourId): boolean;
     hideHandles(id: PointId | ContourId): () => void;
     // (undocumented)
@@ -278,6 +282,7 @@ export class Editor {
     get isEditingCell(): Signal<boolean>;
     layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null;
     layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null;
+    layerOf(node: GlyphNode, sourceId: SourceId): GlyphLayer | null;
     nodeBounds(node: ShiftNode): SceneBounds | null;
     // (undocumented)
     nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
@@ -313,6 +318,7 @@ export class Editor {
     screenToScene(screen: ScreenPoint): ScenePoint;
     selectAll(): void;
     selectedComponentsAnchored(): boolean | null;
+    selectGlyphContents(nodes: readonly GlyphNode[]): void;
     readonly selection: Selection_2;
     selectionBounds(ids?: readonly SelectableId[]): LocalBounds | null;
     get selectionBoundsCell(): Signal<LocalBounds | null>;
@@ -352,6 +358,8 @@ export class Editor {
     startFpsMonitor(): void;
     // (undocumented)
     stopFpsMonitor(): void;
+    get subjectGlyphIdsCell(): Signal<readonly GlyphId[]>;
+    get subjectGlyphNodesCell(): Signal<readonly GlyphNode[]>;
     // (undocumented)
     readonly text: Text_2;
     // (undocumented)
@@ -500,6 +508,7 @@ export class Font {
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
+    features(): Promise<FontFeature[]>;
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
     getAxisMappings(): AxisMapping[];
@@ -562,7 +571,7 @@ export class Font {
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
-    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
+    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]>;
     shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
