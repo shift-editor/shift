@@ -53,6 +53,18 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const glyphNames = glyphs.map(label).join(", ");
   const glyphLabel = glyphs.length > 1 ? `${glyphs.length} glyphs` : glyphNames || null;
 
+  // Only several glyphs need the tooltip; one would re-render it on every metrics change.
+  const labelElement = (
+    <div
+      className={cn(
+        "mt-2 max-w-full truncate font-sans text-sm",
+        glyphLabel === null && "text-secondary",
+      )}
+    >
+      {glyphLabel ?? "—"}
+    </div>
+  );
+
   return (
     <aside
       aria-label="Glyph properties"
@@ -128,16 +140,11 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                 />
               </div>
               {/* With several glyphs the label counts them; their names show on hover. */}
-              <Tooltip content={glyphNames} disabled={glyphs.length < 2}>
-                <div
-                  className={cn(
-                    "mt-2 max-w-full truncate font-sans text-sm",
-                    glyphLabel === null && "text-secondary",
-                  )}
-                >
-                  {glyphLabel ?? "—"}
-                </div>
-              </Tooltip>
+              {glyphs.length > 1 ? (
+                <Tooltip content={glyphNames}>{labelElement}</Tooltip>
+              ) : (
+                labelElement
+              )}
             </main>
           </section>
         </div>

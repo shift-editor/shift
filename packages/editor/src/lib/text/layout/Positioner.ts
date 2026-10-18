@@ -157,7 +157,11 @@ export class Positioner {
 
   #runGlyph(run: SegmentedRun, shaped: ShapedGlyph): RunGlyph {
     const font = this.#editor.font;
-    const entry = shaped.glyphId ? font.entryForId(shaped.glyphId) : null;
+    const item = run.items[shaped.cluster];
+    // The shaper answers .notdef, and a pick its compiled font lacks, with no glyph; a pick
+    // the font has still shows itself.
+    const glyphId = shaped.glyphId ?? (item?.kind === "glyph" ? item.glyphId : null);
+    const entry = glyphId ? font.entryForId(glyphId) : null;
     if (entry) {
       return {
         shaped,
@@ -167,7 +171,6 @@ export class Positioner {
       };
     }
     // No glyph: a character the font lacks keeps the name it would take; a missing pick is .notdef.
-    const item = run.items[shaped.cluster];
     const codepoint = item?.kind === "character" ? item.codepoint : null;
     return {
       shaped,
