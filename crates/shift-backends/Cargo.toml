@@ -10,6 +10,7 @@ crate-type = ["rlib"]
 
 [dependencies]
 shift-font = { workspace = true }
+shift-shape = { workspace = true }
 shift-slug = { workspace = true }
 
 norad = "0.18.4"
@@ -20,7 +21,6 @@ fontc = "1.0"
 fontdrasil = "1.0"
 fontir = "1.0"
 glyphs-reader = "1.0"
-harfrust = "0.13.3"
 kurbo = "0.13"
 ordered-float = "5"
 plist = "1"
@@ -29,10 +29,10 @@ rayon = "1.10"
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
-unicode-script = "0.5"
 write-fonts = "0.52"
 
 [dev-dependencies]
+harfrust = "0.13.3"
 shift-font = { workspace = true, features = ["test-support"] }
 shift-store = { workspace = true }
 

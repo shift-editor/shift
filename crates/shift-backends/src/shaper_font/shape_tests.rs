@@ -36,7 +36,7 @@ fn shaper(font: &Font) -> LiveShaper {
         "{:?}",
         compilation.diagnostics
     );
-    LiveShaper::new(Arc::new(compilation.font.unwrap()), font)
+    LiveShaper::new(Arc::new(compilation.font.unwrap()), font).unwrap()
 }
 
 fn characters(text: &str) -> Vec<ShapeUnit> {
@@ -222,7 +222,7 @@ fn state_shapes_without_features_until_the_source_first_compiles() {
         .unwrap());
     assert!(!state.diagnostics().is_empty());
 
-    let shaper = LiveShaper::new(state.font().cloned().unwrap(), &font);
+    let shaper = LiveShaper::new(state.font().cloned().unwrap(), &font).unwrap();
     let location = ExternalLocation::new();
     let units = characters("fi");
     let shaped = shaper.shape(&request(&units, &location)).unwrap();

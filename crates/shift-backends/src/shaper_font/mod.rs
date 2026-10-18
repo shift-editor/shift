@@ -18,7 +18,6 @@
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
 mod diagnostics;
-mod itemize;
 mod shape;
 mod state;
 mod tables;
