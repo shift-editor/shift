@@ -88,3 +88,14 @@ Hand-written. The default master is the lightest, its design values (stem
 widths, 62 to 158) sit below the user default (300), and the user-to-design
 mapping comes from the instances' weight classes, as in FiraCode. Covers axis
 mapping and interpolation when the default is at one end of the axis.
+
+## ScaledComponent.glyphs
+
+Hand-written. `bullet` and `bar` place `period` as a component with a different
+scale in each master (`bar` mirrored), and a named instance sits halfway.
+`ringbig` scales `ring`, which has an intermediate master at wght 250 that the
+decomposed glyph keeps. `wedgeflip` mirrors `wedge` in Bold only, so its
+decomposed contour reverses there. `wedgenest` places `wedgeflip` and mirrors it in
+Bold, so Bold's wedge is mirrored twice and keeps its order. Compilers decompose such glyphs and interpolate the
+placed outlines, so the instances cover component interpolation matching
+export.

@@ -40,6 +40,7 @@ pub mod intents;
 pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
+pub mod placed_blend;
 pub mod projection;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

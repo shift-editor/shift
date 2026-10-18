@@ -879,6 +879,7 @@ export interface GlyphProjection {
   glyphId: GlyphId
   fallback: GlyphLayerShape
   interpolation?: GlyphInterpolation
+  decomposition?: InterpolationBasis
   variation?: GlyphVariation
   exactSourceShapes: Array<GlyphSourceShape>
   components: GlyphComponents
