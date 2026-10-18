@@ -64,7 +64,7 @@ describe("contour path output", () => {
     const contour = new Contour(
       {
         id: asContourId("single"),
-        closed: true,
+        closed: false,
         points: [{ id: asPointId("only"), pointType: "onCurve", smooth: false }],
       },
       new Float64Array([0, 0]),
@@ -75,5 +75,21 @@ describe("contour path output", () => {
     expect(path.commands).toEqual([]);
     expect(path.svgPath).toBe("");
     expect(path.bounds).toBeNull();
+  });
+
+  it("draws a closed single point as a zero-length path bounded by that point", () => {
+    const contour = new Contour(
+      {
+        id: asContourId("single"),
+        closed: true,
+        points: [{ id: asPointId("only"), pointType: "onCurve", smooth: false }],
+      },
+      new Float64Array([12, -7]),
+      0,
+    );
+    const path = ContourPath.fromContour(contour, Mat.Identity());
+
+    expect(path.svgPath).toBe("M 12 -7 L 12 -7 Z");
+    expect(path.bounds).toEqual({ min: { x: 12, y: -7 }, max: { x: 12, y: -7 } });
   });
 });

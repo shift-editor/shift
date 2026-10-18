@@ -1195,6 +1195,42 @@ export default {
     },
 
     /**
+     * Ban `@shift/wasm/reference` outside tests.
+     *
+     * The reference module is a second WebAssembly build holding shift-font's
+     * answers for rules the editor keeps in TypeScript, so tests can compare
+     * the two. It is test-only and must never reach the app or the SDK.
+     */
+    "no-reference-module-outside-tests": {
+      meta: {
+        type: "problem",
+        messages: {
+          testOnly:
+            "@shift/wasm/reference is a test-only build. Import it only from .test.ts files or testing/ helpers.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+
+        const report = (node) => {
+          const source = node.source && node.source.value;
+          if (typeof source === "string" && source.startsWith("@shift/wasm/reference")) {
+            context.report({ node, messageId: "testOnly" });
+          }
+        };
+        return {
+          ImportDeclaration: report,
+          ExportNamedDeclaration: report,
+          ExportAllDeclaration: report,
+          ImportExpression: report,
+        };
+      },
+    },
+
+    /**
      * Ban vitest mock primitives in test files.
      *
      * `vi.fn`, `vi.spyOn`, `toHaveBeenCalled*`, and `.mock.calls` lead to

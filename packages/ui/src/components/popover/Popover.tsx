@@ -7,10 +7,25 @@ export interface PopoverProps extends React.ComponentProps<typeof BasePopover.Ro
 
 export const Popover = (props: PopoverProps) => <BasePopover.Root {...props} />;
 
-export interface PopoverTriggerProps extends React.ComponentProps<typeof BasePopover.Trigger> {}
+export interface PopoverTriggerProps extends React.ComponentProps<typeof BasePopover.Trigger> {
+  /**
+   * `hint` is a bare icon, such as a "?", that darkens on hover instead of
+   * showing a box; pair it with `openOnHover` so it opens on hover and click.
+   */
+  variant?: "hint";
+}
 
-export function PopoverTrigger({ className, ...props }: PopoverTriggerProps) {
-  return <BasePopover.Trigger className={cn(className)} {...props} />;
+export function PopoverTrigger({ className, variant, ...props }: PopoverTriggerProps) {
+  return (
+    <BasePopover.Trigger
+      className={cn(
+        variant === "hint" &&
+          "inline-flex cursor-pointer rounded-full text-muted transition-colors hover:text-secondary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent data-[popup-open]:text-secondary",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export function PopoverPortal(props: React.ComponentProps<typeof BasePopover.Portal>) {

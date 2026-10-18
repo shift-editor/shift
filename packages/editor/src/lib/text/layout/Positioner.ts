@@ -1,7 +1,7 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, GlyphName, ShapedGlyph, Source, Unicode } from "@shift/types";
 import { track } from "../../signals";
-import { displayAdvance, isNonSpacingGlyph } from "../../utils/unicode";
+import { displayAdvance } from "../../utils/displayAdvance";
 import type { PositionedGlyph, PositionedRun, SegmentedRun } from "./types";
 import type { Editor } from "../../editor/Editor";
 import type { GlyphRenderModel } from "../../model/Glyph";
@@ -20,7 +20,6 @@ interface RunGlyph {
   readonly shaped: ShapedGlyph;
   readonly glyphId: GlyphId | null;
   readonly name: GlyphName;
-  readonly codepoint: number | null;
   readonly model: GlyphRenderModel | null;
 }
 
@@ -42,8 +41,11 @@ const NOTDEF = ".notdef" as GlyphName;
  * The shaper substitutes glyphs and applies the feature code's own
  * positioning; this adds what export generates from structured data: each
  * glyph's current advance, pair kerning between neighbours in a left-to-right
- * run, and mark placement. Made for one layout, which tracks every glyph it
- * reads; glyph lookups are cached for that layout.
+ * run, and mark placement. A glyph's advance follows the category export
+ * resolves: a nonspacing mark (`Font.isNonspacingMark`) at zero gets a
+ * visible stand-in advance, and a character with no glyph counts as spacing.
+ * Made for one layout, which tracks every glyph it reads; glyph lookups are
+ * cached for that layout.
  */
 export class Positioner {
   readonly #editor: Editor;
@@ -82,8 +84,10 @@ export class Positioner {
       const ownOffset = mark && !attached ? mark.offset : { x: 0, y: 0 };
       const xAdvance = attached
         ? 0
-        : displayAdvance(glyph.model?.xAdvance ?? 0, glyph.name, glyph.codepoint) +
-          glyph.shaped.xAdvance;
+        : displayAdvance(
+            glyph.model?.xAdvance ?? 0,
+            this.#editor.font.isNonspacingMark(glyph.name),
+          ) + glyph.shaped.xAdvance;
       const current: PositionedGlyph = {
         glyphId: glyph.glyphId,
         glyphName: glyph.name,
@@ -126,7 +130,6 @@ export class Positioner {
         shaped,
         glyphId: entry.id,
         name: entry.name,
-        codepoint: entry.unicodes[0] ?? null,
         model: this.#model(entry.id),
       };
     }
@@ -137,7 +140,6 @@ export class Positioner {
       shaped,
       glyphId: null,
       name: codepoint === null ? NOTDEF : font.nameForUnicode(codepoint as Unicode),
-      codepoint,
       model: null,
     };
   }
@@ -188,7 +190,7 @@ export class Positioner {
       this.#editor.font.sourceAtOrDefault(this.#externalLocation.peek());
     const offsets = new Map<number, MarkOffset>();
     for (const [index, glyph] of glyphs.entries()) {
-      if (!isNonSpacingGlyph(glyph.name, glyph.codepoint)) continue;
+      if (!this.#editor.font.isNonspacingMark(glyph.name)) continue;
       offsets.set(index, {
         to: null,
         offset: this.#literalMarkOffset(glyph, source),

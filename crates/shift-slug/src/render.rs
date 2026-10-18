@@ -7,6 +7,9 @@ pub const RENDER_INSTANCE_BYTES: usize = 48;
 pub const RENDER_PARAMS_BYTES: usize = 16;
 
 /// One visible glyph quad consumed by the shared Slug vertex shader.
+///
+/// Fields are declared, and packed, in the shader's storage layout order.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct RenderInstance {
     /// Pixel-space `[min_x, min_y, max_x, max_y]` rectangle.

@@ -7,19 +7,43 @@ use crate::{
     Bounds, Curve, OutlineCommand, Point, Section, SlugError, LINE_EPSILON,
 };
 
-const CURVE_BYTES: usize = 24;
+pub(crate) const CURVE_BYTES: usize = 24;
 const DEFAULT_PACK_CHUNK_BYTES: usize = 4 * 1024 * 1024;
-const VARIABLE_GLYPH_BYTES: usize = 32;
+pub(crate) const VARIABLE_GLYPH_BYTES: usize = 32;
 const VARIABLE_SOURCE_BYTES: usize = 8;
 const BASE_SOURCE_DELTA: u32 = u32::MAX;
 const SPARSE_SOURCE_FLAG: u32 = 1 << 31;
 const SOURCE_OFFSET_MASK: u32 = !SPARSE_SOURCE_FLAG;
-const COMPONENT_GLYPH_FLAG: u32 = 1 << 31;
-const GLYPH_OFFSET_MASK: u32 = !COMPONENT_GLYPH_FLAG;
+/// Tag on [`VariableGlyph::source_start`] selecting a component glyph record.
+pub(crate) const COMPONENT_GLYPH_FLAG: u32 = 1 << 31;
+/// Mask recovering the component glyph index from a tagged `source_start`.
+pub(crate) const GLYPH_OFFSET_MASK: u32 = !COMPONENT_GLYPH_FLAG;
 pub const VARIABLE_PARAMS_BYTES: usize = 64;
+
+/// Word indices in the packed variable shader uniform.
+///
+/// Words without an index are zero padding.
+pub(crate) mod params_word {
+    pub(crate) const INSTANCE_COUNT: usize = 0;
+    pub(crate) const BAND_COUNT: usize = 1;
+    pub(crate) const ATLAS_SPLIT_OFFSET: usize = 2;
+    pub(crate) const BASE_CURVES: usize = 4;
+    pub(crate) const CURVE_DELTAS: usize = 5;
+    pub(crate) const SPARSE_DELTAS: usize = 6;
+    pub(crate) const GLYPHS: usize = 7;
+    pub(crate) const SOURCES: usize = 8;
+    pub(crate) const SOURCE_ADVANCES: usize = 9;
+    pub(crate) const COMPONENT_GLYPHS: usize = 10;
+    pub(crate) const COMPONENT_PARTS: usize = 11;
+    pub(crate) const COMPONENTS: usize = 12;
+    pub(crate) const COMPONENT_SOURCES: usize = 13;
+    pub(crate) const LINE_BITS: usize = 15;
+}
 
 mod component;
 pub(crate) use component::ROOT_COMPONENT;
+#[cfg(test)]
+pub(crate) use component::VARIABLE_COMPONENT_GLYPH_BYTES;
 pub use component::{
     VariableComponent, VariableComponentGlyph, VariableComponentPart, VariableComponentSource,
 };
@@ -87,24 +111,22 @@ pub struct VariableParams {
 pub fn pack_variable_params(
     params: VariableParams,
 ) -> Result<[u8; VARIABLE_PARAMS_BYTES], SlugError> {
-    let words = [
-        params.instance_count,
-        params.band_count,
-        params.atlas_split_offset,
-        0,
-        to_u32(params.layout.base_curves.offset)?,
-        to_u32(params.layout.curve_deltas.offset)?,
-        to_u32(params.layout.sparse_deltas.offset)?,
-        to_u32(params.layout.glyphs.offset)?,
-        to_u32(params.layout.sources.offset)?,
-        to_u32(params.layout.source_advances.offset)?,
-        to_u32(params.layout.component_glyphs.offset)?,
-        to_u32(params.layout.component_parts.offset)?,
-        to_u32(params.layout.components.offset)?,
-        to_u32(params.layout.component_sources.offset)?,
-        0,
-        to_u32(params.layout.line_bits.offset)?,
-    ];
+    let layout = params.layout;
+    let mut words = [0; VARIABLE_PARAMS_BYTES / std::mem::size_of::<u32>()];
+    words[params_word::INSTANCE_COUNT] = params.instance_count;
+    words[params_word::BAND_COUNT] = params.band_count;
+    words[params_word::ATLAS_SPLIT_OFFSET] = params.atlas_split_offset;
+    words[params_word::BASE_CURVES] = to_u32(layout.base_curves.offset)?;
+    words[params_word::CURVE_DELTAS] = to_u32(layout.curve_deltas.offset)?;
+    words[params_word::SPARSE_DELTAS] = to_u32(layout.sparse_deltas.offset)?;
+    words[params_word::GLYPHS] = to_u32(layout.glyphs.offset)?;
+    words[params_word::SOURCES] = to_u32(layout.sources.offset)?;
+    words[params_word::SOURCE_ADVANCES] = to_u32(layout.source_advances.offset)?;
+    words[params_word::COMPONENT_GLYPHS] = to_u32(layout.component_glyphs.offset)?;
+    words[params_word::COMPONENT_PARTS] = to_u32(layout.component_parts.offset)?;
+    words[params_word::COMPONENTS] = to_u32(layout.components.offset)?;
+    words[params_word::COMPONENT_SOURCES] = to_u32(layout.component_sources.offset)?;
+    words[params_word::LINE_BITS] = to_u32(layout.line_bits.offset)?;
     let mut bytes = [0; VARIABLE_PARAMS_BYTES];
     for (index, word) in words.into_iter().enumerate() {
         let start = index * std::mem::size_of::<u32>();
@@ -1024,6 +1046,18 @@ impl<'a> Iterator for PackedVariableChunks<'a> {
         self.offset = end;
         Some(chunk)
     }
+}
+
+/// Packs component glyph records alone, as the resident atlas section does.
+#[cfg(test)]
+pub(crate) fn pack_component_glyphs(values: &[VariableComponentGlyph]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut writer = PackedChunkWriter::new(DEFAULT_PACK_CHUNK_BYTES, |chunk| {
+        bytes.extend_from_slice(chunk.bytes);
+    });
+    component::write_component_glyphs(&mut writer, values);
+    writer.finish();
+    bytes
 }
 
 struct PackedChunkWriter<F> {

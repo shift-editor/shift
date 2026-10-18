@@ -19,3 +19,4 @@ export {
 } from "../lib/tools/select/BoundingBox";
 export { createBatchRequest } from "../lib/utils/batchRequest";
 export { SerialRequest } from "../lib/utils/SerialRequest";
+export { NONSPACING_MARK_EDITOR_ADVANCE } from "../lib/utils/displayAdvance";

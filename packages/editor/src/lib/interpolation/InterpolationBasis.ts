@@ -1,15 +1,6 @@
-import type { Axis, InterpolationBasis, SourceId } from "@shift/types";
-import type { DesignAxisLocation } from "../../types/variation";
-import { evaluateVariationBasis } from "./VariationBasis";
+import type { InterpolationBasis, SourceId } from "@shift/types";
 
-/** Evaluates one contribution weight per ordered source in an interpolation basis. */
-export function interpolationWeights(
-  basis: InterpolationBasis,
-  location: DesignAxisLocation,
-  axes: readonly Axis[],
-): Float64Array {
-  return evaluateVariationBasis(basis.basis, location, axes, basis.designNormalization);
-}
+export { interpolationWeights } from "../wasm/variation";
 
 /** Combines source value vectors using a location's evaluated source weights. */
 export function interpolateSourceValues(

@@ -50,6 +50,8 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import { AppConfig } from "../config/AppConfig";
+import { configDirectory } from "../config/configDirectory";
 import {
   CommandLineTool,
   type CommandLineToolState,
@@ -92,6 +94,7 @@ export class App {
 
   #commands = new CommandRegistry();
   #agentConnections: AgentConnections | null = null;
+  #config: AppConfig | null = null;
   #commandLineTool: CommandLineTool | null = null;
   #sandbox: SandboxRuntimeProcess | null = null;
   #windows = new WindowManager();
@@ -222,6 +225,8 @@ export class App {
       app.quit();
       return;
     }
+    // After the lock: a second launch hands its arguments over and quits without watching.
+    this.#startConfig();
 
     app.on("open-file", (event, sourcePath) => {
       event.preventDefault();
@@ -315,6 +320,7 @@ export class App {
     app.on("will-quit", () => {
       this.#log.info("will quit: disposing app services");
       void this.#agentConnections?.shutdown();
+      this.#config?.close();
       this.#stopSandbox();
       // Only an ordinary quit forgets open documents; an update restart reopens them.
       if (this.#lifecycle.quitReason === "quit") this.#recents?.clearOpen();
@@ -534,6 +540,16 @@ export class App {
   }
 
   #registerIpcHandlers(): void {
+    ipc.handle(ipcMain, "config.state", () => this.#requireConfig().state);
+    ipc.handle(ipcMain, "config.setTheme", (_event, theme) =>
+      this.#requireConfig().setTheme(theme),
+    );
+    ipc.handle(ipcMain, "config.reveal", async () => {
+      const { directory } = this.#requireConfig().state;
+      fs.mkdirSync(directory, { recursive: true });
+      const failure = await shell.openPath(directory);
+      if (failure) throw new Error(failure);
+    });
     ipc.handle(ipcMain, "agentConnections.state", () => this.#requireAgentConnections().state);
     ipc.handle(ipcMain, "agentConnections.setAllowed", async (_event, allowed) => {
       const connections = this.#requireAgentConnections();
@@ -1169,6 +1185,44 @@ export class App {
     });
     this.#agentConnections = connections;
     await connections.resume();
+  }
+
+  /**
+   * Reads this build's `config.toml` and sends every change to every window.
+   *
+   * @remarks
+   * Runs before Electron is ready, so a window's first request finds it.
+   */
+  #startConfig(): void {
+    const config = new AppConfig({
+      directory: configDirectory({
+        platform: process.platform,
+        buildName: buildIdentity(app.getName()).serverName,
+        homeDirectory: app.getPath("home"),
+        userDataDirectory: app.getPath("userData"),
+        explicitUserDataDirectory: app.commandLine.hasSwitch("user-data-dir"),
+        xdgConfigHome: process.env.XDG_CONFIG_HOME,
+      }),
+      // Unpackaged, main runs from apps/desktop/.vite/build, both under
+      // electron-forge and when E2E launches main.js directly.
+      bundledThemesDirectory: app.isPackaged
+        ? path.join(process.resourcesPath, "themes")
+        : path.join(__dirname, "..", "..", "themes"),
+      log: createShiftLogger("app.config"),
+    });
+    config.onChanged((state) => {
+      for (const window of this.#windows.allWindows()) {
+        if (window.window.isDestroyed()) continue;
+        ipc.send(window.window.webContents, "config.changed", state);
+      }
+    });
+    void config.watch();
+    this.#config = config;
+  }
+
+  #requireConfig(): AppConfig {
+    if (!this.#config) throw new Error("Config is not ready yet");
+    return this.#config;
   }
 
   #requireAgentConnections(): AgentConnections {
