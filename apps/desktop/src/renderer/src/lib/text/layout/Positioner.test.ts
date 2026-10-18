@@ -167,7 +167,12 @@ describe("Positioner mark attachment", () => {
 
   // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
   it("attaches a mark to an anchor a composite takes from its components", () => {
-    const run = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+    const literal = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+    // The shaper flags acutecomb as a mark from the compiled font's GDEF.
+    const run = {
+      ...literal,
+      shaped: literal.shaped.map((shaped, index) => ({ ...shaped, isMark: index === 1 })),
+    };
 
     const [base, mark] = new Positioner(editor, signal(editor.font.defaultLocation())).position(
       run,

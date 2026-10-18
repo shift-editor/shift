@@ -2785,6 +2785,22 @@ transform = "{1, 0, 0, 1, 100, 0}";
 );
 }
 );
+},
+{
+glyphname = "dieresis";
+unicode = 00A8;
+layers = (
+{
+layerId = m01;
+width = 300;
+components = (
+{
+name = "dieresiscomb";
+transform = "{1, 0, 0, 1, 0, 0}";
+}
+);
+}
+);
 }
 );
 unitsPerEm = 1000;
