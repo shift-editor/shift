@@ -791,3 +791,26 @@ fn cjk_scale_directory_open_is_payload_independent() {
         "directory open took {elapsed:?}"
     );
 }
+
+#[test]
+fn components_stored_before_alignment_was_recorded_decode_as_unset() {
+    // The four fields a component had before alignment was recorded.
+    #[derive(serde::Serialize)]
+    struct StoredComponent {
+        id: font::ComponentId,
+        base_glyph_id: font::GlyphId,
+        base_glyph_name: font::GlyphName,
+        transform: font::DecomposedTransform,
+    }
+    let bytes = rmp_serde::to_vec(&StoredComponent {
+        id: font::ComponentId::new(),
+        base_glyph_id: font::GlyphId::from_raw("acute"),
+        base_glyph_name: "acutecomb".into(),
+        transform: font::DecomposedTransform::default(),
+    })
+    .unwrap();
+
+    let component: font::Component = rmp_serde::from_slice(&bytes).unwrap();
+
+    assert_eq!(component.alignment(), font::ComponentAlignment::Unset);
+}

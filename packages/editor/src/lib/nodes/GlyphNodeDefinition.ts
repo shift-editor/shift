@@ -19,7 +19,7 @@ import {
   Handles,
   Segments,
 } from "../editor/rendering/overlays";
-import { displayAdvance } from "../utils/unicode";
+import { displayAdvance } from "../utils/displayAdvance";
 import { computed, keyedCache, track } from "../signals/index";
 import type { Glyph, GlyphRenderModel } from "../model/Glyph";
 import { standardMetricLines } from "../model/positions";
@@ -310,8 +310,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (!glyph) return null;
 
     track(view.xAdvanceCell);
-    const unicode = glyph.entry.unicodes[0] ?? null;
-    return displayAdvance(view.xAdvanceCell.peek(), glyph.name, unicode);
+    return displayAdvance(view.xAdvanceCell.peek(), this.editor.font.isNonspacingMark(glyph.name));
   }
 
   /** Metrics of the active source, or interpolated at the current location, subscribed for redraw. */
@@ -534,6 +533,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const { interpolated, rootContours } = this.#controlContours(view);
     for (const contour of rootContours) contour.trackShape();
     view.trackAnchors();
+    track(view.anchorsWithComponentsCell);
 
     this.#segments.draw(
       ctx.canvas,
@@ -559,6 +559,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       interpolated,
       metricLines,
       (pointId, contourId) => this.editor.handlesVisible(pointId, contourId),
+    );
+    const ownNames = new Set(view.anchors.map((anchor) => anchor.name));
+    this.#anchors.drawInherited(
+      ctx.canvas,
+      view.anchorsWithComponents.filter((anchor) => !ownNames.has(anchor.name)),
     );
     this.#anchors.draw(ctx.canvas, view.anchors, {
       selection: this.editor.selection,

@@ -23,6 +23,31 @@ export interface ScreenProjection {
   angle(angle: number): number;
 }
 
+/** Styles shared by every path a {@link PathBatch} paints. */
+export interface PathBatchStyle {
+  readonly fill: string;
+  readonly stroke: string;
+  /** Stroke width in screen pixels. */
+  readonly widthPx: number;
+}
+
+/**
+ * Paints retained paths in one style at offsets in the units current when the batch began.
+ *
+ * @remarks
+ * Only valid inside {@link Canvas.withPathBatch}.
+ */
+export interface PathBatch {
+  /** Moves the origin to `(x, y)` in the batch's units; later drawing happens there. */
+  offset(x: number, y: number): void;
+  /** Fills a path at the current offset with the batch's fill. */
+  fill(path: Path2D): void;
+  /** Strokes a path at the current offset with the batch's stroke and width. */
+  stroke(path: Path2D): void;
+}
+
+const NO_DASH: number[] = [];
+
 /**
  * Single 2D rendering API wrapping CanvasRenderingContext2D.
  *
@@ -167,15 +192,68 @@ export class Canvas {
    * is the geometric mean of the two axes.
    */
   strokePath(path: Path2D, stroke: string, widthPx: number): void {
-    const { a, b, c, d } = this.#transform;
-    const pixelsPerUnit = Math.sqrt(Math.abs(a * d - b * c));
-
     this.ctx.save();
     this.ctx.strokeStyle = stroke;
-    this.ctx.lineWidth = widthPx / pixelsPerUnit;
-    this.ctx.setLineDash([]);
+    this.ctx.lineWidth = widthPx / this.#pixelsPerUnit();
+    this.ctx.setLineDash(NO_DASH);
     this.ctx.stroke(path);
     this.ctx.restore();
+  }
+
+  /**
+   * Paints many retained paths in one style, each at its own offset in the current units.
+   *
+   * @remarks
+   * For drawing the same kind of shape many times (a run's glyphs). Saves
+   * once and sets the styles once, then moves between offsets by translating
+   * the context, instead of a save, translate, and restore per shape. Other
+   * drawing inside `draw` happens at the current offset, and the `Canvas`
+   * methods restore the batch's styles after themselves. The stroke width
+   * follows {@link strokePath}: given in screen pixels, scaled into the
+   * current units.
+   *
+   * @param style - Fill, stroke, and stroke width for {@link PathBatch.fill} and {@link PathBatch.stroke}.
+   * @param draw - Paints through the batch; the batch is invalid after it returns.
+   */
+  withPathBatch(style: PathBatchStyle, draw: (batch: PathBatch) => void): void {
+    this.save();
+    const ctx = this.ctx;
+    ctx.fillStyle = style.fill;
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = style.widthPx / this.#pixelsPerUnit();
+    ctx.setLineDash(NO_DASH);
+
+    let x = 0;
+    let y = 0;
+    const batch: PathBatch = {
+      offset: (nextX, nextY) => {
+        const dx = nextX - x;
+        const dy = nextY - y;
+        if (dx === 0 && dy === 0) return;
+        x = nextX;
+        y = nextY;
+        ctx.translate(dx, dy);
+        // The product `ctx` applies; `save` keeps a copy, so updating in place is safe.
+        const transform = this.#transform;
+        transform.e += transform.a * dx + transform.c * dy;
+        transform.f += transform.b * dx + transform.d * dy;
+        this.#inverse = null;
+      },
+      fill: (path) => ctx.fill(path),
+      stroke: (path) => ctx.stroke(path),
+    };
+
+    try {
+      draw(batch);
+    } finally {
+      this.restore();
+    }
+  }
+
+  /** Screen pixels per drawing unit, the geometric mean of the two axes' scales. */
+  #pixelsPerUnit(): number {
+    const { a, b, c, d } = this.#transform;
+    return Math.sqrt(Math.abs(a * d - b * c));
   }
 
   /**

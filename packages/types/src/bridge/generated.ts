@@ -227,6 +227,31 @@ export interface BridgeApi {
   getSources(): Array<Source>
 }
 
+/** One problem in `config.toml`; line and column are one-based. */
+export interface ConfigProblem {
+  severity: ConfigSeverity
+  message: string
+  line?: number
+  column?: number
+}
+
+/** The settings in a `config.toml` source. */
+export interface ConfigRead {
+  /** Whether the file may be applied; `false` when any problem is an error. */
+  valid: boolean
+  /** The theme name, when the file is valid and writes `theme = "…"`. */
+  theme?: string
+  /** The theme table, when the file is valid and writes `theme` as a table. */
+  themeSlots?: ThemeSlots
+  problems: Array<ConfigProblem>
+}
+
+/**
+ * How serious a config problem is: `error` keeps the last valid settings,
+ * `warning` applies the file but ignores something in it.
+ */
+export type ConfigSeverity = "error" | "warning";
+
 export interface DocumentIdentity {
   documentId: string
   canonicalPath: string
@@ -349,6 +374,41 @@ export interface Specimen {
   viewBox: Array<number>
   rightToLeft: boolean
 }
+
+/** Whether a theme's background is light or dark. */
+export type ThemeAppearance = "light" | "dark";
+
+/** A valid theme file's contents. */
+export interface ThemeFile {
+  /** The name shown in Settings, when the file sets one. */
+  name?: string
+  appearance: ThemeAppearance
+  /** `base00` through `base0F` as lowercase `#rrggbb`. */
+  palette: Array<string>
+  /** Overrides of derived colors by name, as `#rrggbb` or `#rrggbbaa`. */
+  colors: Record<string, string>
+}
+
+/** Which appearance a `theme` table uses. */
+export type ThemeMode = "system" | "light" | "dark";
+
+/** The result of reading a theme file. */
+export interface ThemeRead {
+  /** The theme, or nothing when an error means it cannot be used. */
+  theme?: ThemeFile
+  problems: Array<ConfigProblem>
+}
+
+/**
+ * A `theme` table: a mode and the theme used in each appearance; missing
+ * keys are left to the app's defaults.
+ */
+export interface ThemeSlots {
+  mode?: ThemeMode
+  light?: string
+  dark?: string
+}
+
 export interface AddAnchorsIntent {
   layerId: LayerId
   anchors: Array<AnchorSeed>
@@ -525,6 +585,11 @@ export interface ComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
 }
 
 export interface ComponentGlyph {
@@ -654,7 +719,7 @@ export interface FontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -676,8 +741,10 @@ export interface FontIntent {
   addAnchors?: AddAnchorsIntent
   moveAnchors?: MoveAnchorsIntent
   removeAnchors?: RemoveAnchorsIntent
+  renameAnchors?: RenameAnchorsIntent
   addComponent?: AddComponentIntent
   setComponentTransforms?: SetComponentTransformsIntent
+  setComponentAlignment?: SetComponentAlignmentIntent
   removeComponents?: RemoveComponentsIntent
   decomposeComponents?: DecomposeComponentsIntent
   reverseContour?: ReverseContourIntent
@@ -850,6 +917,18 @@ export interface GlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<GlyphLayerRecord>
+  /** In the Mark category or classed `mark`: anchor propagation keeps its own anchors. */
+  mark?: boolean
+  /**
+   * A nonspacing mark (Mark category, Nonspacing subcategory): export
+   * compiles it with no advance. Absent when it is not one.
+   */
+  nonspacingMark?: boolean
+  /**
+   * `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+   * once it has an attaching anchor.
+   */
+  ligature?: "explicit" | "subcategory"
 }
 
 export interface GlyphSnapshot {
@@ -1098,6 +1177,13 @@ export interface RemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface RenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
+}
+
 /** Renames a kerning group; its pairs keep referencing it by id. */
 export interface RenameKerningGroupIntent {
   groupId: KerningGroupId
@@ -1131,6 +1217,16 @@ export interface ReverseContourIntent {
 
 export interface SetAxisMappingsIntent {
   mappings: Array<AxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface SetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
 }
 
 export interface SetComponentTransformsIntent {

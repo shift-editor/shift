@@ -1844,6 +1844,18 @@ mod tests {
         assert_eq!(font.glyph_count(), 1);
     }
 
+    /// Fails when `elapsed` is a second or more, in optimised builds only.
+    ///
+    /// Budgets describe optimised code; an unoptimised test build still checks
+    /// each mark's behaviour but not its time, so a slow runner cannot fail it.
+    /// CI enforces the budgets with `cargo test --release -p shift-font -- perf_mark`.
+    fn assert_within_budget(elapsed: Duration, what: &str) {
+        if cfg!(debug_assertions) {
+            return;
+        }
+        assert!(elapsed < Duration::from_secs(1), "{what}; got {elapsed:?}");
+    }
+
     fn print_perf_mark(operation: &str, mark: PerfFontMark, elapsed: Duration) {
         eprintln!(
             "perf_mark {operation} [{}]: {} glyphs / {} points in {:?}",
@@ -2678,10 +2690,12 @@ mod tests {
             }
 
             print_perf_mark("font.clone snapshots x128", mark, elapsed);
-            assert!(
-                elapsed < Duration::from_secs(1),
-                "COW snapshot creation should stay comfortably sub-second for {}; got {elapsed:?}",
-                mark.label
+            assert_within_budget(
+                elapsed,
+                &format!(
+                    "COW snapshot creation should stay comfortably sub-second for {}",
+                    mark.label
+                ),
             );
         }
     }
@@ -2733,9 +2747,9 @@ mod tests {
         ));
 
         print_perf_mark("single glyph mutation after snapshot", mark, elapsed);
-        assert!(
-            elapsed < Duration::from_secs(1),
-            "single-glyph COW mutation should stay comfortably sub-second; got {elapsed:?}"
+        assert_within_budget(
+            elapsed,
+            "single-glyph COW mutation should stay comfortably sub-second",
         );
     }
 
@@ -2759,9 +2773,9 @@ mod tests {
         assert_eq!(font.glyph_id_by_name("g00000"), None);
         assert_eq!(font.glyph_id_by_name("g00000.alt"), Some(glyph_id.clone()));
         print_perf_mark("rename glyph and rebuild indexes", mark, elapsed);
-        assert!(
-            elapsed < Duration::from_secs(1),
-            "glyph rename index rebuild should stay comfortably sub-second; got {elapsed:?}"
+        assert_within_budget(
+            elapsed,
+            "glyph rename index rebuild should stay comfortably sub-second",
         );
     }
 
@@ -2790,9 +2804,9 @@ mod tests {
             vec![glyph_id.clone()]
         );
         print_perf_mark("set glyph unicodes and rebuild indexes", mark, elapsed);
-        assert!(
-            elapsed < Duration::from_secs(1),
-            "glyph Unicode index rebuild should stay comfortably sub-second; got {elapsed:?}"
+        assert_within_budget(
+            elapsed,
+            "glyph Unicode index rebuild should stay comfortably sub-second",
         );
     }
 
@@ -2823,9 +2837,9 @@ mod tests {
             None
         );
         print_perf_mark("create/remove layer and rebuild indexes", mark, elapsed);
-        assert!(
-            elapsed < Duration::from_secs(1),
-            "glyph layer membership index rebuild should stay comfortably sub-second; got {elapsed:?}"
+        assert_within_budget(
+            elapsed,
+            "glyph layer membership index rebuild should stay comfortably sub-second",
         );
     }
 }

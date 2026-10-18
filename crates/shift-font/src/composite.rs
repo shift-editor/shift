@@ -204,28 +204,11 @@ pub fn anchor_aligned_offset(
     placed: &[(Transform, &GlyphLayer)],
     component_layer: &GlyphLayer,
 ) -> Option<(f64, f64)> {
-    for anchor in component_layer.anchors_iter() {
-        let Some(target_name) = anchor.name().and_then(|name| name.strip_prefix('_')) else {
-            continue;
-        };
-        if target_name.is_empty() {
-            continue;
-        }
-
-        let target = placed.iter().rev().find_map(|(transform, layer)| {
-            layer
-                .anchors()
-                .iter()
-                .rev()
-                .find(|placed| placed.name() == Some(target_name))
-                .map(|placed| transform.transform_point(placed.x(), placed.y()))
-        });
-        if let Some((target_x, target_y)) = target {
-            return Some((target_x - anchor.x(), target_y - anchor.y()));
-        }
-    }
-
-    None
+    let placed: Vec<_> = placed
+        .iter()
+        .map(|(transform, layer)| (*transform, layer.anchors()))
+        .collect();
+    crate::anchor_attachment::aligned_offset(&placed, component_layer.anchors())
 }
 
 fn transform_contour_points(contour: &Contour, transform: Transform) -> ResolvedContour {

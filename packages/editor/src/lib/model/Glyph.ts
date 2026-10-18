@@ -20,6 +20,7 @@ import type {
   Source,
   SourceId,
   Unicode,
+  SetComponentAlignmentIntent,
 } from "@shift/types";
 import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
 import {
@@ -32,12 +33,23 @@ import {
   type Signal,
   type WritableSignal,
 } from "../signals";
-import type { DeleteMode, GlyphFillHit, GlyphOptions } from "../../types/glyph";
+import type {
+  AnchorPropagationCategory,
+  DeleteMode,
+  GlyphFillHit,
+  GlyphOptions,
+} from "../../types/glyph";
+import {
+  propagateAnchors,
+  type PropagatedAnchors,
+  type PropagationAnchor,
+  followingPlacements,
+} from "../wasm/anchors";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
-import { evaluateVariationBasis } from "../interpolation/VariationBasis";
+import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import { Alignment } from "../transform/Alignment";
@@ -60,6 +72,7 @@ import {
   Contour,
   GlyphGeometry,
   IdIndex,
+  decomposedTransformValues,
   filledContoursContain,
   type GeometryAnchorHit,
   type GeometryPointHit,
@@ -362,10 +375,28 @@ class GlyphLayerWriter {
     this.#state.state.removeAnchors(editId, ids);
   }
 
+  renameAnchors(names: ReadonlyMap<AnchorId, string>): void {
+    if (names.size === 0) return;
+
+    const anchorIds = [...names.keys()];
+    const renamed = [...names.values()];
+    const editId = this.#workspaceIntents.renameAnchors({ anchorIds, names: renamed });
+    this.#state.state.renameAnchors(editId, anchorIds, renamed);
+  }
+
   addComponent(baseGlyphId: GlyphId): ComponentId {
     const componentId = mintComponentId();
     this.#workspaceIntents.addComponent({ componentId, baseGlyphId });
     return componentId;
+  }
+
+  setComponentAlignment(
+    componentIds: readonly ComponentId[],
+    alignment: SetComponentAlignmentIntent["alignment"],
+  ): void {
+    if (componentIds.length === 0) return;
+    // Applied by the workspace: anchoring moves the component, which the echo carries.
+    this.#workspaceIntents.setComponentAlignment({ componentIds: [...componentIds], alignment });
   }
 
   setComponentTransforms(
@@ -374,17 +405,7 @@ class GlyphLayerWriter {
   ): void {
     if (componentIds.length === 0) return;
 
-    const values = transforms.flatMap((transform) => [
-      transform.translateX,
-      transform.translateY,
-      transform.rotation,
-      transform.scaleX,
-      transform.scaleY,
-      transform.skewX,
-      transform.skewY,
-      transform.tCenterX,
-      transform.tCenterY,
-    ]);
+    const values = transforms.flatMap((transform) => [...decomposedTransformValues(transform)]);
     const editId = this.#workspaceIntents.setComponentTransforms({
       componentIds: [...componentIds],
       transforms: values,
@@ -507,6 +528,11 @@ export class GlyphLayer {
   }
 
   /** @internal Reactive geometry used for component transform reads. */
+  /** This source as the workspace last accepted it, while an edit shows something else; otherwise null. */
+  get acceptedGeometryCell(): Signal<GlyphGeometry | null> {
+    return this.#writer.layerState.acceptedGeometryCell;
+  }
+
   get geometryCell(): Signal<GlyphGeometry> {
     return this.#writer.geometryCell;
   }
@@ -1130,6 +1156,19 @@ export class GlyphLayer {
   }
 
   /**
+   * Renames anchors in this source.
+   *
+   * @remarks
+   * Sources interpolate only when their anchors share names in the same
+   * order; `Editor.renameAnchor` renames across the sources being edited.
+   *
+   * @param names - New name for each anchor id.
+   */
+  renameAnchors(names: ReadonlyMap<AnchorId, string>): void {
+    this.#writer.renameAnchors(names);
+  }
+
+  /**
    * Adds an identity-transformed component reference to this source.
    *
    * @param baseGlyphId - Existing glyph referenced by the new component.
@@ -1137,6 +1176,20 @@ export class GlyphLayer {
    */
   addComponent(baseGlyphId: GlyphId): ComponentId {
     return this.#writer.addComponent(baseGlyphId);
+  }
+
+  /**
+   * Records whether components are placed by their anchors.
+   *
+   * @remarks
+   * An anchored component follows its anchors and anchoring one places it on
+   * them; a free one stays where it is put. Moving a component by hand frees it.
+   */
+  setComponentAlignment(
+    componentIds: readonly ComponentId[],
+    alignment: SetComponentAlignmentIntent["alignment"],
+  ): void {
+    this.#writer.setComponentAlignment(componentIds, alignment);
   }
 
   /** @internal Commits direct component transforms through the workspace path. */
@@ -1355,9 +1408,17 @@ export class GlyphRenderModel {
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
+  readonly #hasOpenContoursCell: Signal<boolean>;
   readonly #svgPathCell: Signal<string>;
   readonly #sidebearingsCell: Signal<GlyphSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
+  readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
+  readonly #propagatedCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>;
+  // non-reactive: glyphs whose propagation is being computed, to stop at a component cycle
+  readonly #propagating = new Set<GlyphId>();
+  readonly #propagatedAnchorsCell: Signal<readonly PropagationAnchor[]>;
+  readonly #placementsCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>;
+  readonly #anchorsByNameCell: Signal<ReadonlyMap<string, PropagationAnchor>>;
 
   /**
    * Creates a Glyph render model tied to a live external location and optional exact source.
@@ -1371,6 +1432,7 @@ export class GlyphRenderModel {
    * @param exactSourceId - Resolves an exact master identity at the current position.
    * @param layerAt - Resolves exact authored layers for root or component glyphs.
    * @param geometryAt - Resolves root or component geometry at the current position.
+   * @param anchorCategory - Reads a root or component glyph's propagation category.
    */
   constructor(
     glyphId: GlyphId,
@@ -1390,8 +1452,36 @@ export class GlyphRenderModel {
       location: ExternalAxisLocation,
       sourceId: SourceId | null,
     ) => GlyphGeometry,
+    anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory,
   ) {
     this.#glyphId = glyphId;
+    this.#anchorCategory = anchorCategory;
+    this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
+      name: "glyph.renderModel.propagatedAnchors",
+      key: (id) => id,
+      create: (idCell) =>
+        computed(() => this.#propagate(idCell.value), {
+          name: "glyph.renderModel.propagatedAnchors",
+        }),
+      dispose: (cell) => cell.dispose(),
+    });
+    this.#placementsCache = keyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>({
+      name: "glyph.renderModel.componentPlacements",
+      key: (id) => id,
+      create: (idCell) =>
+        computed(() => this.#placements(idCell.value), {
+          name: "glyph.renderModel.componentPlacements",
+        }),
+      dispose: (cell) => cell.dispose(),
+    });
+    this.#propagatedAnchorsCell = computed(
+      () => this.#propagatedCache.get(this.#glyphId).value.anchors,
+      { name: "glyph.renderModel.anchorsWithComponents" },
+    );
+    this.#anchorsByNameCell = computed(
+      () => new Map(this.#propagatedAnchorsCell.value.map((anchor) => [anchor.name, anchor])),
+      { name: "glyph.renderModel.anchorsByName" },
+    );
     this.#externalLocation = externalLocation;
     this.#activeSourceId = activeSourceId;
     this.#projectionCell = projectionCell;
@@ -1460,6 +1550,15 @@ export class GlyphRenderModel {
       }
       return path;
     });
+    this.#hasOpenContoursCell = computed(() => {
+      for (const contour of this.#contoursCell.value) {
+        // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
+        // Contours after the first open one cannot change the answer, so they go untracked.
+        contour.trackShape();
+        if (!contour.contour.closed) return true;
+      }
+      return false;
+    });
     this.#svgPathCell = computed(() => {
       const contours = this.#contoursCell.value;
       for (const contour of contours) contour.trackShape();
@@ -1475,6 +1574,126 @@ export class GlyphRenderModel {
         rsb: this.#geometry.xAdvanceCell.value - bounds.max.x,
       };
     });
+  }
+
+  /**
+   * The glyph's anchors with its components' anchors copied in, as export compiles them.
+   *
+   * @remarks
+   * A composite takes its components' anchors moved with them, a stacked mark's
+   * `name` anchor replacing the base's, and its own anchors win over copied
+   * ones. Computed at this model's location from each glyph's geometry there,
+   * so it matches export exactly at sources, and between them wherever
+   * component transforms vary linearly.
+   */
+  get anchorsWithComponentsCell(): Signal<readonly PropagationAnchor[]> {
+    return this.#propagatedAnchorsCell;
+  }
+
+  get anchorsWithComponents(): readonly PropagationAnchor[] {
+    return this.#propagatedAnchorsCell.peek();
+  }
+
+  /**
+   * Returns the anchor marks attach to by name, own or from a component.
+   *
+   * @remarks
+   * The one lookup by anchor name: with duplicate names the last one wins,
+   * as export resolves them.
+   */
+  anchorNamed(name: string): PropagationAnchor | null {
+    track(this.#anchorsByNameCell);
+    return this.#anchorsByNameCell.peek().get(name) ?? null;
+  }
+
+  /**
+   * @internal Where a glyph's direct components show, by component index.
+   *
+   * @remarks
+   * The authored placements, except while an edit is in progress at an exact
+   * source: a component that sat on anchors the edit moves follows them, as
+   * the workspace will place it when the edit lands.
+   */
+  componentMatrices(glyphId: GlyphId): readonly MatModel[] {
+    const cell = this.#placementsCache.get(glyphId);
+    track(cell);
+    return cell.peek();
+  }
+
+  #placements(glyphId: GlyphId): readonly MatModel[] {
+    // Called from the placement computeds: track, then read.
+    track(this.#externalLocation);
+    track(this.#activeSourceId);
+    const location = this.#externalLocation.peek();
+    const sourceId = this.#activeSourceId.peek();
+    const geometry = this.geometryAt(glyphId, location);
+    const authored = geometry.components.map((component) => component.matrix);
+    if (authored.length < 2) return authored;
+
+    // Accepted state exists only for exact layers with an edit in progress.
+    const accepted = (id: GlyphId) => {
+      const cell = this.#layerAt(id, location, sourceId)?.acceptedGeometryCell;
+      if (!cell) return null;
+      track(cell);
+      return cell.peek();
+    };
+    const parentAccepted = accepted(glyphId);
+    const baseAccepted = geometry.components.map((component) => accepted(component.baseGlyphId));
+    if (!parentAccepted && baseAccepted.every((base) => base === null)) return authored;
+
+    const acceptedComponents = parentAccepted?.components ?? geometry.components;
+    return followingPlacements(
+      geometry.components.map((component, index) => {
+        const acceptedComponent = acceptedComponents[index] ?? component;
+        const anchors = this.geometryAt(component.baseGlyphId, location).anchors;
+        return {
+          alignment: acceptedComponent.alignment,
+          transform: component.transform,
+          acceptedTransform: acceptedComponent.transform,
+          anchors,
+          acceptedAnchors: baseAccepted[index]?.anchors ?? anchors,
+        };
+      }),
+    );
+  }
+
+  #propagate(glyphId: GlyphId): PropagatedAnchors {
+    // Rust rejects component cycles; this stops one that reaches the editor first.
+    if (this.#propagating.has(glyphId)) return { anchors: [], baseGlyphCount: 0 };
+    this.#propagating.add(glyphId);
+    try {
+      // Called from the propagation computeds: track, then read.
+      track(this.#externalLocation);
+      const geometry = this.geometryAt(glyphId, this.#externalLocation.peek());
+      const anchors = geometry.anchors.flatMap((anchor) =>
+        anchor.name === undefined ? [] : [{ name: anchor.name, x: anchor.x, y: anchor.y }],
+      );
+      const matrices = this.componentMatrices(glyphId);
+      const components = geometry.components.map((component, index) => {
+        const propagatedCell = this.#propagatedCache.get(component.baseGlyphId);
+        track(propagatedCell);
+        const propagated = propagatedCell.peek();
+        return {
+          anchors: propagated.anchors,
+          baseGlyphCount: propagated.baseGlyphCount,
+          matrix: matrices[index] ?? component.matrix,
+        };
+      });
+      const category = this.#anchorCategory(glyphId);
+      // Export classes a glyph by its authored anchors, named or not.
+      const attaching = geometry.anchors.some((anchor) => !anchor.name?.startsWith("_"));
+      const propagated = propagateAnchors({
+        anchors,
+        components,
+        isMark: category.mark,
+        isLigature:
+          category.ligature === "explicit" || (category.ligature === "subcategory" && attaching),
+      });
+      // Export rewrites only composites' anchors; others compile as authored.
+      return components.length > 0 ? propagated : { ...propagated, anchors };
+    } finally {
+      this.#propagating.delete(glyphId);
+    }
   }
 
   /** @internal Resolves numeric geometry for component occurrence arithmetic. */
@@ -1627,6 +1846,17 @@ export class GlyphRenderModel {
 
   get openContoursPath(): Path2D {
     return this.#openContoursPathCell.peek();
+  }
+
+  /**
+   * Whether any contour, the root's or a component's, is open.
+   *
+   * @remarks
+   * Recomputes with the outline but notifies readers only when the answer
+   * flips, so a reader can skip {@link openContoursPathCell} while it is false.
+   */
+  get hasOpenContoursCell(): Signal<boolean> {
+    return this.#hasOpenContoursCell;
   }
 
   get svgPath(): string {
@@ -1947,6 +2177,7 @@ export class Glyph {
   readonly #designspace: Designspace;
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
+  readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #layersBySourceIdCell = computed(
     () => new Map(this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const)),
     { name: "glyph.layersBySourceId" },
@@ -1970,6 +2201,7 @@ export class Glyph {
     this.#designspace = options.designspace;
     this.#projectionCell = options.projectionCell;
     this.#defaultSourceId = options.defaultSourceId;
+    this.#anchorCategory = options.anchorCategory;
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -2185,6 +2417,7 @@ export class Glyph {
           new GlyphGeometry({ contours: [], anchors: [], components: [] }, new Float64Array([0]))
         );
       },
+      this.#anchorCategory,
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;

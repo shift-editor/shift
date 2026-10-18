@@ -19,6 +19,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
   const editor = useEditor();
   useSignalState(editor.selection.stateCell, { schedule: "frame" });
+  const anchored = editor.selectedComponentsAnchored();
   const runCommand = useCallback(async (commandId: CommandId) => {
     try {
       await getShiftHost().commands.run(commandId);
@@ -83,9 +84,21 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
             <ContextMenuItem onClick={async () => runCommand("glyph.addComponent")}>
               Add component…
             </ContextMenuItem>
+            <ContextMenuItem onClick={async () => runCommand("glyph.addAnchor")}>
+              Add anchor
+            </ContextMenuItem>
             {editor.canDecomposeSelection() && (
               <ContextMenuItem onClick={async () => runCommand("glyph.decomposeComponents")}>
                 Decompose Components
+              </ContextMenuItem>
+            )}
+            {anchored !== null && (
+              <ContextMenuItem
+                onClick={async () => {
+                  await editor.setSelectedComponentsAnchored(!anchored);
+                }}
+              >
+                {anchored ? "Stop Aligning to Anchors" : "Align to Anchors"}
               </ContextMenuItem>
             )}
             <ContextMenuItem onClick={async () => runCommand("glyph.reverseSelectedContour")}>
