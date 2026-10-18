@@ -18,6 +18,7 @@ fn mutation(dry_run: bool) -> MutationArgs {
 fn create_document(path: &Path) {
     create_font(CreateFontArgs {
         path: path.to_path_buf(),
+        from: None,
         dry_run: false,
         json: false,
     })
@@ -58,6 +59,7 @@ fn create_font_writes_a_new_document_and_refuses_to_overwrite_it() {
 
     let report = create_font(CreateFontArgs {
         path: path.clone(),
+        from: None,
         dry_run: false,
         json: false,
     })
@@ -68,6 +70,7 @@ fn create_font_writes_a_new_document_and_refuses_to_overwrite_it() {
     assert!(
         create_font(CreateFontArgs {
             path,
+            from: None,
             dry_run: false,
             json: false,
         })

@@ -3,19 +3,21 @@ import type {
   GlyphPreviewFrame,
   PackedGlyphPreviewFrame,
 } from "@/types/glyphPreview";
+import {
+  SLUG_CURVE_BYTES,
+  SLUG_RENDER_INSTANCE_BYTES,
+  SLUG_RENDER_PARAMS_BYTES,
+  SLUG_VARIABLE_PARAMS_BYTES,
+} from "@shift/types";
 import { SlugAtlas } from "./SlugAtlas";
 import variableShader from "../../../../../../../crates/shift-slug/shaders/slug-variable.wgsl?raw";
 
-const INSTANCE_BYTES = 48;
-const CURVE_BYTES = 24;
 const BAND_BYTES = 8;
 const INDEX_BYTES = 4;
 const BOUNDS_BYTES = 16;
 const ADVANCE_BYTES = 4;
 const COMPONENT_TRANSFORM_BYTES = 32;
 const PREVIEW_BYTES = 32;
-const GLOBAL_PARAM_BYTES = 16;
-const VARIABLE_PARAM_BYTES = 64;
 
 /** Immutable shader pipelines shared for one resident renderer lifetime. */
 export class SlugRendererPipelines {
@@ -63,7 +65,7 @@ export class SlugRendererBuffers {
   #instances: GPUBuffer;
   #scratch;
   #groups;
-  #instanceCapacity = INSTANCE_BYTES;
+  #instanceCapacity = SLUG_RENDER_INSTANCE_BYTES;
   #scratchCapacity: GlyphPreviewCapacity = minimumCapacity();
 
   constructor(device: GPUDevice, atlas: SlugAtlas, pipelines: SlugRendererPipelines) {
@@ -71,8 +73,8 @@ export class SlugRendererBuffers {
     this.#atlas = atlas;
     this.#pipelines = pipelines;
     this.#uniforms = {
-      globals: uniformBuffer(device, "shift Slug globals", GLOBAL_PARAM_BYTES),
-      variable: uniformBuffer(device, "shift Slug variable params", VARIABLE_PARAM_BYTES),
+      globals: uniformBuffer(device, "shift Slug globals", SLUG_RENDER_PARAMS_BYTES),
+      variable: uniformBuffer(device, "shift Slug variable params", SLUG_VARIABLE_PARAMS_BYTES),
       preview: uniformBuffer(device, "shift Slug preview params", PREVIEW_BYTES),
     };
     this.#weights = storageBuffer(
@@ -84,7 +86,7 @@ export class SlugRendererBuffers {
     this.#instances = storageBuffer(
       device,
       "shift Slug instances",
-      INSTANCE_BYTES,
+      SLUG_RENDER_INSTANCE_BYTES,
       GPUBufferUsage.COPY_DST,
     );
     this.#scratch = createScratch(device, this.#scratchCapacity);
@@ -300,7 +302,7 @@ function exceeds(required: GlyphPreviewCapacity, capacity: GlyphPreviewCapacity)
 
 function createScratch(device: GPUDevice, capacity: GlyphPreviewCapacity) {
   return {
-    curves: storageBuffer(device, "shift Slug curves", capacity.curveCount * CURVE_BYTES),
+    curves: storageBuffer(device, "shift Slug curves", capacity.curveCount * SLUG_CURVE_BYTES),
     bands: storageBuffer(device, "shift Slug bands", capacity.bandCount * BAND_BYTES),
     indexes: storageBuffer(device, "shift Slug indexes", capacity.indexCount * INDEX_BYTES),
     bounds: storageBuffer(

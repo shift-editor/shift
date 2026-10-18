@@ -2,24 +2,11 @@ import { computed, type Signal } from "../signals";
 import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
-import {
-  currentTextEditingId,
-  type TextCaret,
-  type TextEditingRecord,
-  type TextEditResult,
-} from "../../types/text";
+import { currentTextEditingId, type TextCaret, type TextEditingRecord } from "../../types/text";
 import { Caret, type SelectionRect, type TextItem, type TextLayout } from "./layout";
-import {
-  caretForCluster,
-  clusterForCaret,
-  deleteText,
-  graphemeCluster,
-  selectionRange,
-  spliceText,
-  wordCluster,
-} from "./edit";
+import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
-import { wordSegments } from "./layout/segmentation";
+import type { TextRunNode } from "../../types/node";
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -98,39 +85,30 @@ export class TextEditing {
   }
 
   get selectedItems(): readonly TextItem[] {
-    const state = this.state;
-    const items = this.#items();
-    if (!state || !items) return [];
-    const { start, end } = selectionRange(items, state.anchor, state.focus);
-    return items.slice(start, end);
+    return this.#buffer()?.selectedItems ?? [];
   }
 
-  get selectionRects(): SelectionRect[] {
-    const state = this.state;
-    const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
-    if (!node || !state) return [];
-    const run = this.#editor.text.run(node.runId);
-    const layout = this.#editor.text.layoutCell(node.runId).peek();
-    if (!run || !layout) return [];
-    const { start, end } = selectionRange(run.items, state.anchor, state.focus);
-    return layout.selectionRects(start, end);
+  get selectionRects(): readonly SelectionRect[] {
+    const node = this.#node();
+    const buffer = this.#buffer();
+    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    if (!buffer || !layout) return [];
+    return layout.selectionRects(buffer.selection);
   }
 
   insert(items: readonly TextItem[]): void {
     if (items.length === 0) return;
-    this.#edit("Insert text", (current, anchor, focus) =>
-      spliceText(current, anchor, focus, items),
-    );
+    this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
   }
   deleteBackward(): void {
-    this.#edit("Delete text", (items, anchor, focus) => deleteText(items, anchor, focus, -1));
+    this.#edit("Delete text", (buffer) => buffer.delete(-1));
   }
   deleteForward(): void {
-    this.#edit("Delete text", (items, anchor, focus) => deleteText(items, anchor, focus, 1));
+    this.#edit("Delete text", (buffer) => buffer.delete(1));
   }
 
   /**
@@ -144,24 +122,23 @@ export class TextEditing {
    * into the neighbouring line in reading order.
    */
   move(direction: -1 | 1, granularity: "character" | "word" | "line", extend = false): void {
-    const state = this.state;
-    const items = this.#items();
+    const buffer = this.#buffer();
     const layout = this.#layout();
-    if (!state || !items || !layout) return;
-    const cluster = clusterForCaret(items, state.focus);
+    if (!buffer || !layout) return;
+    const cluster = buffer.focusCluster;
     const lineIndex = layout.lineIndexForCluster(cluster);
     // Reading order is screen order flipped in a right-to-left line.
     const logical = layout.lineDirection(lineIndex) === "rtl" ? (-direction as -1 | 1) : direction;
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = layout.visualStep(cluster, direction) ?? graphemeCluster(items, cluster, logical);
+        target = layout.visualStep(cluster, direction) ?? buffer.graphemeStep(cluster, logical);
         break;
       case "word": {
-        const edges = wordEdges(items, layout, direction);
+        const edges = wordEdges(buffer, layout, direction);
         target =
           layout.visualStep(cluster, direction, (stop) => edges.has(stop)) ??
-          wordCluster(items, cluster, logical);
+          buffer.wordStep(cluster, logical);
         break;
       }
       case "line":
@@ -173,13 +150,11 @@ export class TextEditing {
   }
 
   moveVertical(direction: -1 | 1, extend = false): void {
-    const state = this.state;
-    const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
-    const items = this.#items();
-    if (!state || !node || !items) return;
-    const layout = this.#editor.text.layoutCell(node.runId).peek();
-    if (!layout) return;
-    const caret = Caret.atCluster(layout, clusterForCaret(items, state.focus));
+    const node = this.#node();
+    const buffer = this.#buffer();
+    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    if (!buffer || !layout) return;
+    const caret = Caret.atCluster(layout, buffer.focusCluster);
     this.#goalX ??= caret.position().x;
     this.#place(
       (direction === -1 ? caret.previousLine(this.#goalX) : caret.nextLine(this.#goalX)).cluster,
@@ -195,16 +170,16 @@ export class TextEditing {
   }
 
   selectAll(): void {
-    const items = this.#items();
-    if (!items) return;
-    this.#place(items.length, true, "Select text", null);
+    const buffer = this.#buffer();
+    if (!buffer) return;
+    this.#place(buffer.items.length, true, "Select text", null);
   }
 
   #place(cluster: number, extend: boolean, label?: string, anchor?: TextCaret): void {
     const state = this.state;
-    const items = this.#items();
-    if (!state || !items) return;
-    const caret = caretForCluster(items, cluster);
+    const buffer = this.#buffer();
+    if (!state || !buffer) return;
+    const caret = buffer.caretAt(cluster);
     const extendedAnchor = extend ? state.anchor : caret;
     const write = () =>
       this.#store.put({
@@ -216,29 +191,29 @@ export class TextEditing {
     else write();
   }
 
+  #node(): TextRunNode | null {
+    return this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
+  }
+
   #layout(): TextLayout | null {
-    const node = this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
+    const node = this.#node();
     return node ? this.#editor.text.layoutCell(node.runId).peek() : null;
   }
 
-  #items(): readonly TextItem[] | null {
-    const node = this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
-    return node ? this.#editor.text.items(node) : null;
+  /** The edited run's items with the current selection; null when not editing. */
+  #buffer(): TextBuffer | null {
+    const state = this.state;
+    const node = this.#node();
+    if (!state || !node) return null;
+    return new TextBuffer(this.#editor.text.items(node), state.focus, state.anchor);
   }
 
-  #edit(
-    label: string,
-    edit: (
-      items: readonly TextItem[],
-      anchor: TextCaret,
-      focus: TextCaret,
-    ) => TextEditResult | null,
-  ): void {
+  #edit(label: string, edit: (buffer: TextBuffer) => TextBuffer | null): void {
     const state = this.state;
-    const node = this.#editor.scene.nodeOfKind(state?.nodeId ?? null, "textRun");
+    const node = this.#node();
     const run = node && this.#editor.text.run(node.runId);
     if (!state || !run) return;
-    const result = edit(run.items, state.anchor, state.focus);
+    const result = edit(new TextBuffer(run.items, state.focus, state.anchor));
     if (!result) return;
     const write = () => {
       this.#editor.text.setItems(run.id, result.items);
@@ -254,13 +229,9 @@ export class TextEditing {
  * on screen: a left-to-right word's start is its left edge, a right-to-left
  * word's end is.
  */
-function wordEdges(
-  items: readonly TextItem[],
-  layout: TextLayout,
-  side: -1 | 1,
-): ReadonlySet<number> {
+function wordEdges(buffer: TextBuffer, layout: TextLayout, side: -1 | 1): ReadonlySet<number> {
   return new Set(
-    wordSegments(items).map((word) => {
+    buffer.words.map((word) => {
       const rightToLeft = layout.directionAt(word.start) === "rtl";
       return (side === 1) !== rightToLeft ? word.end : word.start;
     }),

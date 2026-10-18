@@ -36,6 +36,10 @@
           '';
 
           commonPackages = with pkgs; [
+            # Builds crates/shift-wasm; wasm-bindgen-cli must match the
+            # wasm-bindgen crate version in Cargo.lock exactly. wasm-opt
+            # comes from @shift/wasm's binaryen devDependency.
+            wasm-bindgen-cli
             cmake
             git
             nodejs_24

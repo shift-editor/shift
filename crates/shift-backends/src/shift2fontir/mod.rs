@@ -14,6 +14,7 @@ mod axes;
 mod glyph;
 mod kerning;
 mod metadata;
+mod propagation;
 mod source;
 mod stat;
 
@@ -22,4 +23,5 @@ mod tests;
 
 pub(crate) use axes::to_ir_axes;
 pub use axes::{AxisConversionError, MappingSide};
+pub use propagation::{PropagatedAnchor, PropagatedGlyphAnchors, PropagatedSourceAnchors};
 pub(crate) use source::{units_per_em, ShiftIrSource, ShiftIrSourceError};

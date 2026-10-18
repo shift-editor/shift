@@ -23,9 +23,10 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
   const host = useMemo<EditorToolbarHost>(
     () => ({
       documentTitle: filename,
-      documentEdited: dirty,
+      // macOS marks unsaved changes with a dot in the close button instead.
+      documentEdited: dirty && !isMac,
       navigation: <NavigationPane />,
-      windowControls: <Titlebar />,
+      windowControls: <Titlebar edited={dirty} />,
       ...(isMac
         ? {}
         : {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName, RunId } from "@shift/types";
-import { clusterForCaret, lineBreakTextItem } from "@shift/editor/text";
+import { lineBreakTextItem, TextBuffer } from "@shift/editor/text";
 import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
@@ -145,7 +145,7 @@ describe("carets in shaped text", () => {
     const runId = editor.textRun!.runId;
     await expect.poll(() => editor.text.layoutCell(runId).peek()?.totalAdvance).toBe(1250);
     const caret = () =>
-      clusterForCaret(editor.text.run(runId)!.items, editor.textEditing.state!.focus);
+      new TextBuffer(editor.text.run(runId)!.items, editor.textEditing.state!.focus).focusCluster;
 
     editor.textEditing.move(1, "character");
     expect(caret()).toBe(2);
@@ -231,7 +231,9 @@ describe("Option-arrows in mixed-direction text", () => {
     await expect.poll(() => layout().lines[0]!.runs.length).toBe(3);
     const caretX = () => {
       const items = editor.text.run(runId)!.items;
-      return layout().caretPosition(clusterForCaret(items, editor.textEditing.state!.focus)).x;
+      return layout().caretPosition(
+        new TextBuffer(items, editor.textEditing.state!.focus).focusCluster,
+      ).x;
     };
 
     const xs = [caretX()];

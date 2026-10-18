@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { localPoint, scenePoint } from "@shift/editor/spaces";
-import { characterTextItem, clusterForCaret } from "@shift/editor/text";
+import { characterTextItem, TextBuffer } from "@shift/editor/text";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 
 describe("page run text editing", () => {
@@ -157,7 +157,7 @@ describe("page run text editing", () => {
     editor.textEditing.placeAtCluster(0);
     editor.textEditing.insert([characterTextItem(65)]);
     expect(items()[2]?.id).toBe(target);
-    expect(clusterForCaret(items(), target)).toBe(3);
+    expect(new TextBuffer(items()).clusterOf(target)).toBe(3);
   });
 
   it("caret placement maps a point in a scaled run to its cluster", () => {
@@ -177,12 +177,12 @@ describe("page run text editing", () => {
 
   it("arrows step over a base and its combining mark as one character", () => {
     editor.textEditing.insertText("e\u0301x");
-    const start = clusterForCaret(items(), editor.textEditing.state!.focus);
+    const start = new TextBuffer(items()).clusterOf(editor.textEditing.state!.focus);
 
     editor.textEditing.move(-1, "character");
     editor.textEditing.move(-1, "character");
 
-    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(start - 3);
+    expect(new TextBuffer(items()).clusterOf(editor.textEditing.state!.focus)).toBe(start - 3);
   });
 
   it("Backspace removes a combining mark alone and Delete removes the whole cluster", () => {
@@ -202,13 +202,13 @@ describe("page run text editing", () => {
 
   it("Option-arrows move to word edges, skipping spaces and punctuation", () => {
     editor.textEditing.insertText(" hello, world");
-    const end = clusterForCaret(items(), editor.textEditing.state!.focus);
+    const end = new TextBuffer(items()).clusterOf(editor.textEditing.state!.focus);
 
     editor.textEditing.move(-1, "word");
-    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(end - 5);
+    expect(new TextBuffer(items()).clusterOf(editor.textEditing.state!.focus)).toBe(end - 5);
     editor.textEditing.move(-1, "word");
-    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(end - 12);
+    expect(new TextBuffer(items()).clusterOf(editor.textEditing.state!.focus)).toBe(end - 12);
     editor.textEditing.move(1, "word");
-    expect(clusterForCaret(items(), editor.textEditing.state!.focus)).toBe(end - 7);
+    expect(new TextBuffer(items()).clusterOf(editor.textEditing.state!.focus)).toBe(end - 7);
   });
 });
