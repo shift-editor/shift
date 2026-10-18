@@ -64,7 +64,8 @@ describe("text items resolve to glyphs", () => {
     editor.font.updateGlyphIdentity(b.id, "B" as GlyphName, []);
     await editor.settle();
 
-    expect(glyphIds(editor, run.id)).toEqual([null]);
+    // The text reshapes with the new mapping; the previous result shows until it is ready.
+    await expect.poll(() => glyphIds(editor, run.id)).toEqual([null]);
   });
 
   it("keeps a glyph with no Unicode value by identity, through a rename", async () => {

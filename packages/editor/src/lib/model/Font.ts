@@ -27,6 +27,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FontFeature,
   Location,
   ParagraphRequest,
   ShapedParagraph,
@@ -1325,6 +1326,15 @@ export class Font {
    */
   shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
     return this.editCoordinator.shaperFont(knownRevision);
+  }
+
+  /**
+   * Lists the features the font's feature code defines, after pending edits settle.
+   *
+   * @returns Each feature tag once, in tag order, with stylistic set and character variant names.
+   */
+  features(): Promise<FontFeature[]> {
+    return this.editCoordinator.features();
   }
 
   /** @knipclassignore — used by VariationPanel component */

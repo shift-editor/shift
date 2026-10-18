@@ -28,6 +28,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FontFeature,
   Location,
   ParagraphRequest,
   ShapedParagraph,
@@ -428,6 +429,13 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.shaperFont", { knownRevision });
+  }
+
+  /** Lists the features the current font's compiled feature code defines. */
+  async features(): Promise<FontFeature[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.features", null);
   }
 
   #fold(applied: AppliedChange): AppliedChange {

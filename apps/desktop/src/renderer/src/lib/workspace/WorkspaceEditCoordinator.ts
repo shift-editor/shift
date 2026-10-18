@@ -9,6 +9,7 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FontFeature,
   Location,
   ParagraphRequest,
   ShapedParagraph,
@@ -317,6 +318,11 @@ export class WorkspaceEditCoordinator {
    */
   shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
     return this.#withFlush(() => this.#session.shaperFont(knownRevision));
+  }
+
+  /** Lists the font's features behind pending edits. */
+  features(): Promise<FontFeature[]> {
+    return this.#withFlush(() => this.#session.features());
   }
 
   /** Replays the latest redo entry after pending pushes flush. */

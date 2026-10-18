@@ -26,7 +26,7 @@ export class Text {
   /** Made with the first run's layout, so shaping loads only once text exists. */
   #shaper: TextShaper | null = null;
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
-  readonly #loading = new Set<GlyphId>();
+  readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
   readonly #parseContext: TextParseContext = {
@@ -48,7 +48,10 @@ export class Text {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
             shaperCell: this.#textShaper().shaperCell,
-            onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
+            isLoaded: (shaped) => this.#unloadedGlyphs(shaped).length === 0,
+            load: (shaped) => {
+              for (const id of this.#unloadedGlyphs(shaped)) void this.#loadGlyph(id);
+            },
           }),
       ),
   });
@@ -126,6 +129,7 @@ export class Text {
       scope: "document",
       items: [...items],
       shaping: true,
+      features: {},
     };
     this.#store.put(record);
     return record;
@@ -181,6 +185,27 @@ export class Text {
   }
 
   /**
+   * Turns a feature on or off for a run, or back to the font's default.
+   *
+   * @param on - `true` or `false` to force the feature; `null` for the default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setFeature(id: RunId, tag: string, on: boolean | null): void {
+    const run = this.run(id);
+    if (!run || (run.features[tag] ?? null) === on) return;
+    const { [tag]: _previous, ...rest } = run.features;
+    this.#store.put({ ...run, features: on === null ? rest : { ...rest, [tag]: on } });
+  }
+
+  /** Returns every feature of a run to the font's default. */
+  resetFeatures(id: RunId): void {
+    const run = this.run(id);
+    if (run && Object.keys(run.features).length > 0) this.#store.put({ ...run, features: {} });
+  }
+
+  /**
    * Inserts items into a run directly after one of its items.
    *
    * @returns false when the run or `afterId` is missing.
@@ -232,27 +257,36 @@ export class Text {
     }
   }
 
-  /** Loads glyphs the shaper substituted in, which no item names directly. */
+  /** Made with the first run's layout, so shaping loads only once text exists. */
   #textShaper(): TextShaper {
     this.#shaper ??= new TextShaper(this.#editor);
     return this.#shaper;
   }
 
-  #acquireShapedGlyphs(shaped: ShapedText): void {
+  /** Returns the glyphs a shaping result shows that are not loaded yet. */
+  #unloadedGlyphs(shaped: ShapedText): GlyphId[] {
+    const unloaded: GlyphId[] = [];
     for (const paragraph of shaped.paragraphs) {
       for (const run of paragraph?.runs ?? []) {
         for (const glyph of run.glyphs) {
-          if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
-            void this.#loadGlyph(glyph.glyphId);
-          }
+          if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId))
+            unloaded.push(glyph.glyphId);
         }
       }
     }
+    return unloaded;
   }
 
-  async #loadGlyph(id: GlyphId): Promise<void> {
-    if (this.#loading.has(id)) return;
-    this.#loading.add(id);
+  /** Loads a glyph, joining a load already under way; failures are logged, not thrown. */
+  #loadGlyph(id: GlyphId): Promise<void> {
+    const pending = this.#loading.get(id);
+    if (pending) return pending;
+    const load = this.#fetchGlyph(id);
+    this.#loading.set(id, load);
+    return load;
+  }
+
+  async #fetchGlyph(id: GlyphId): Promise<void> {
     try {
       await this.#editor.font.loadGlyph(id);
       this.#glyphsLoadedCell.update((version) => version + 1);
