@@ -1,5 +1,6 @@
 import type { DecomposedTransform } from "@shift/geo";
-import type { ComponentData } from "@shift/types";
+import { decomposedTransformValues, readDecomposedTransform } from "@shift/glyph-state";
+import { DECOMPOSED_COMPONENT_VALUE_COUNT, type ComponentData } from "@shift/types";
 import {
   computed,
   signal,
@@ -19,12 +20,12 @@ export class ComponentBuffer {
   readonly valuesCell: ComputedSignal<Float64Array>;
 
   constructor(data: ComponentData, values: Float64Array, componentIndex: number) {
-    if (values.length !== 9) {
-      throw new RangeError("ComponentBuffer requires one nine-value transform");
+    if (values.length !== DECOMPOSED_COMPONENT_VALUE_COUNT) {
+      throw new RangeError("ComponentBuffer requires one decomposed transform");
     }
 
     this.data = data;
-    this.#transform = new PackedArray(9, values);
+    this.#transform = new PackedArray(DECOMPOSED_COMPONENT_VALUE_COUNT, values);
     this.#revision = signal(0, { name: `glyphLayer.component[${componentIndex}].transform` });
     this.valuesCell = computed(
       () => {
@@ -39,39 +40,16 @@ export class ComponentBuffer {
   }
 
   get transform(): DecomposedTransform {
-    const values = this.#transform.view;
-    return {
-      translateX: values[0],
-      translateY: values[1],
-      rotation: values[2],
-      scaleX: values[3],
-      scaleY: values[4],
-      skewX: values[5],
-      skewY: values[6],
-      tCenterX: values[7],
-      tCenterY: values[8],
-    };
+    return readDecomposedTransform(this.#transform.view, 0);
   }
 
   setTransform(transform: DecomposedTransform): void {
-    this.replaceValues(
-      Float64Array.of(
-        transform.translateX,
-        transform.translateY,
-        transform.rotation,
-        transform.scaleX,
-        transform.scaleY,
-        transform.skewX,
-        transform.skewY,
-        transform.tCenterX,
-        transform.tCenterY,
-      ),
-    );
+    this.replaceValues(decomposedTransformValues(transform));
   }
 
   replaceValues(values: Float64Array): void {
-    if (values.length !== 9) {
-      throw new RangeError("ComponentBuffer replacement requires nine values");
+    if (values.length !== DECOMPOSED_COMPONENT_VALUE_COUNT) {
+      throw new RangeError("ComponentBuffer replacement requires one decomposed transform");
     }
 
     const transform = this.#transform;

@@ -7,7 +7,7 @@
  *   node scripts/generate-third-party-licenses.mjs sdk <output>
  *
  * `desktop` covers the production npm closure of `@shift/desktop` and the Rust
- * crates compiled into the native bridge. `sdk` covers the npm packages whose
+ * crates compiled into the native bridge and the editor's WebAssembly module. `sdk` covers the npm packages whose
  * sources appear in the built SDK's source maps, so it must run after a build.
  * Packages sharing an identical license text are grouped under one copy.
  */
@@ -44,8 +44,12 @@ if (!["desktop", "sdk"].includes(target) || !output) {
   throw new Error("Usage: generate-third-party-licenses.mjs <desktop|sdk> <output>");
 }
 
+// Both ship the editor's WebAssembly module; the desktop app also ships the native bridge.
+const wasm = shippedCrates("shift-wasm", "wasm32-unknown-unknown");
 const packages =
-  target === "desktop" ? [...desktopNpmPackages(), ...bridgeCrates()] : sdkNpmPackages();
+  target === "desktop"
+    ? [...desktopNpmPackages(), ...uniqueCrates([...shippedCrates("shift-bridge"), ...wasm])]
+    : [...sdkNpmPackages(), ...wasm];
 writeFileSync(resolve(output), render(target, packages));
 console.log(`Wrote licenses for ${packages.length} ${target} dependencies to ${output}`);
 
@@ -171,22 +175,49 @@ function npmPackage(key, directory) {
 }
 
 /** Third-party crates in the native bridge's normal (shipped) dependency graph. */
-function bridgeCrates() {
+/** Crates listed once each, by name and version. */
+function uniqueCrates(crates) {
+  const seen = new Set();
+  return crates
+    .filter((entry) => {
+      const key = `${entry.name}@${entry.version}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) || left.version.localeCompare(right.version),
+    );
+}
+
+/** Third-party crates compiled into `root`, for `platform` when given. */
+function shippedCrates(root, platform) {
   const metadata = JSON.parse(
-    execFileSync("cargo", ["metadata", "--format-version", "1", "--locked"], {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-    }),
+    execFileSync(
+      "cargo",
+      [
+        "metadata",
+        "--format-version",
+        "1",
+        "--locked",
+        ...(platform ? ["--filter-platform", platform] : []),
+      ],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        maxBuffer: 256 * 1024 * 1024,
+      },
+    ),
   );
   const packagesById = new Map(metadata.packages.map((entry) => [entry.id, entry]));
   const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]));
   const members = new Set(metadata.workspace_members);
-  const bridge = metadata.packages.find((entry) => entry.name === "shift-bridge");
-  if (!bridge) throw new Error("shift-bridge is missing from the Cargo workspace");
+  const rootPackage = metadata.packages.find((entry) => entry.name === root);
+  if (!rootPackage) throw new Error(`${root} is missing from the Cargo workspace`);
 
   const shipped = new Set();
-  const pending = [bridge.id];
+  const pending = [rootPackage.id];
   while (pending.length > 0) {
     for (const dependency of nodes.get(pending.pop())?.deps ?? []) {
       if (!dependency.dep_kinds.some((kind) => kind.kind === null)) continue;

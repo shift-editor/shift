@@ -1183,31 +1183,6 @@ impl Bridge {
     })
   }
 
-  /// Returns each anchor name's kind as export reads it; the reference the
-  /// editor's own anchor-name parsing is tested against.
-  #[napi]
-  pub fn anchor_kinds(&self, names: Vec<String>) -> Vec<crate::anchors::NapiAnchorKind> {
-    names
-      .iter()
-      .map(|name| shift_backends::anchor_kind(name).into())
-      .collect()
-  }
-
-  /// Returns every glyph's anchors as export compiles them, with component
-  /// anchors propagated into composites, at each master source.
-  ///
-  /// The reference the editor's own anchor propagation is tested against.
-  #[napi]
-  pub fn propagated_anchors(&mut self) -> Result<Vec<crate::anchors::NapiPropagatedGlyphAnchors>> {
-    let snapshot = self
-      .save_snapshot()
-      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
-    let glyphs = FontExporter::new()
-      .propagated_anchors(&snapshot)
-      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
-    Ok(glyphs.into_iter().map(Into::into).collect())
-  }
-
   /// Builds the thumbnail specimen from the open document's current state.
   ///
   /// Resolves to `null` when the font draws nothing usable; rejects when no

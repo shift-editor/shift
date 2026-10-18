@@ -39,17 +39,17 @@ import type {
   GlyphFillHit,
   GlyphOptions,
 } from "../../types/glyph";
-import { followingPlacements } from "./anchors/anchorAttachment";
 import {
   propagateAnchors,
   type PropagatedAnchors,
   type PropagationAnchor,
-} from "./anchors/propagateAnchors";
+  followingPlacements,
+} from "../wasm/anchors";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
-import { evaluateVariationBasis } from "../interpolation/VariationBasis";
+import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import { Alignment } from "../transform/Alignment";
@@ -72,6 +72,7 @@ import {
   Contour,
   GlyphGeometry,
   IdIndex,
+  decomposedTransformValues,
   filledContoursContain,
   type GeometryAnchorHit,
   type GeometryPointHit,
@@ -404,17 +405,7 @@ class GlyphLayerWriter {
   ): void {
     if (componentIds.length === 0) return;
 
-    const values = transforms.flatMap((transform) => [
-      transform.translateX,
-      transform.translateY,
-      transform.rotation,
-      transform.scaleX,
-      transform.scaleY,
-      transform.skewX,
-      transform.skewY,
-      transform.tCenterX,
-      transform.tCenterY,
-    ]);
+    const values = transforms.flatMap((transform) => [...decomposedTransformValues(transform)]);
     const editId = this.#workspaceIntents.setComponentTransforms({
       componentIds: [...componentIds],
       transforms: values,
@@ -1417,6 +1408,7 @@ export class GlyphRenderModel {
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
+  readonly #hasOpenContoursCell: Signal<boolean>;
   readonly #svgPathCell: Signal<string>;
   readonly #sidebearingsCell: Signal<GlyphSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
@@ -1558,6 +1550,15 @@ export class GlyphRenderModel {
       }
       return path;
     });
+    this.#hasOpenContoursCell = computed(() => {
+      for (const contour of this.#contoursCell.value) {
+        // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
+        // Contours after the first open one cannot change the answer, so they go untracked.
+        contour.trackShape();
+        if (!contour.contour.closed) return true;
+      }
+      return false;
+    });
     this.#svgPathCell = computed(() => {
       const contours = this.#contoursCell.value;
       for (const contour of contours) contour.trackShape();
@@ -1648,9 +1649,7 @@ export class GlyphRenderModel {
         return {
           alignment: acceptedComponent.alignment,
           transform: component.transform,
-          matrix: component.matrix,
           acceptedTransform: acceptedComponent.transform,
-          acceptedMatrix: acceptedComponent.matrix,
           anchors,
           acceptedAnchors: baseAccepted[index]?.anchors ?? anchors,
         };
@@ -1847,6 +1846,17 @@ export class GlyphRenderModel {
 
   get openContoursPath(): Path2D {
     return this.#openContoursPathCell.peek();
+  }
+
+  /**
+   * Whether any contour, the root's or a component's, is open.
+   *
+   * @remarks
+   * Recomputes with the outline but notifies readers only when the answer
+   * flips, so a reader can skip {@link openContoursPathCell} while it is false.
+   */
+  get hasOpenContoursCell(): Signal<boolean> {
+    return this.#hasOpenContoursCell;
   }
 
   get svgPath(): string {

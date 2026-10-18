@@ -93,11 +93,20 @@ describe("contour traversal without authored identity", () => {
     ]);
   });
 
-  it.each([{ points: [] }, { points: [Point.onCurve({ x: 0, y: 0 })] }])(
+  it.each([{ points: [] }, { points: [Point.offCurve({ x: 0, y: 0 })] }])(
     "leaves insufficient geometry empty: %j",
     ({ points }) => {
       expect(parseContourSegments({ points, closed: true })).toEqual([]);
       expect(parseContourSegments({ points, closed: false })).toEqual([]);
     },
   );
+
+  it("draws a closed single on-curve point as a zero-length line", () => {
+    const points = [Point.onCurve({ x: 12, y: -7 })];
+
+    expect(parseContourSegments({ points, closed: true })).toEqual([
+      { type: "line", start: points[0], end: points[0] },
+    ]);
+    expect(parseContourSegments({ points, closed: false })).toEqual([]);
+  });
 });

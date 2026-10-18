@@ -148,6 +148,9 @@ importers:
       '@shadcn/lint':
         specifier: ^0.2.0
         version: 0.2.0
+      '@shift/wasm':
+        specifier: workspace:*
+        version: link:../../packages/wasm
       '@tailwindcss/vite':
         specifier: ^4.1.11
         version: 4.1.11(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
@@ -246,6 +249,9 @@ importers:
       '@shift/validation':
         specifier: workspace:*
         version: link:../validation
+      '@shift/wasm':
+        specifier: workspace:*
+        version: link:../wasm
       regl:
         specifier: ^2.1.1
         version: 2.1.1
@@ -549,6 +555,12 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.3.0)(jsdom@26.1.0)(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
+
+  packages/wasm:
+    devDependencies:
+      binaryen:
+        specifier: 132.0.0
+        version: 132.0.0
 
 packages:
 
@@ -3341,6 +3353,10 @@ packages:
 
   before-after-hook@4.0.0:
     resolution: {integrity: sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ==}
+
+  binaryen@132.0.0:
+    resolution: {integrity: sha512-4Usg7yEvwO3FMso3Oov6qkOOHSod1IEv+boKkh77kTljM+eNBouqCTbqWswGzbG+vDNO/b/v2C4gfEh1WgB9Lg==}
+    hasBin: true
 
   bluebird@3.7.2:
     resolution: {integrity: sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==}
@@ -7802,6 +7818,8 @@ snapshots:
   baseline-browser-mapping@2.11.7: {}
 
   before-after-hook@4.0.0: {}
+
+  binaryen@132.0.0: {}
 
   bluebird@3.7.2: {}
 

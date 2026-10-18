@@ -44,18 +44,6 @@ export interface BridgeApi {
    */
   fontFileSpecimen(path: string): Promise<Specimen | null>
   /**
-   * Returns each anchor name's kind as export reads it; the reference the
-   * editor's own anchor-name parsing is tested against.
-   */
-  anchorKinds(names: Array<string>): Array<AnchorKind>
-  /**
-   * Returns every glyph's anchors as export compiles them, with component
-   * anchors propagated into composites, at each master source.
-   *
-   * The reference the editor's own anchor propagation is tested against.
-   */
-  propagatedAnchors(): Array<PropagatedGlyphAnchors>
-  /**
    * Builds the thumbnail specimen from the open document's current state.
    *
    * Resolves to `null` when the font draws nothing usable; rejects when no
@@ -233,15 +221,6 @@ export interface BridgeApi {
   getSources(): Array<Source>
 }
 
-/** An anchor's role in mark positioning, as export reads its name. */
-export interface AnchorKind {
-  kind: "base" | "mark" | "ligature" | "componentMarker" | "caret" | "vcaret" | "entry" | "exit" | "invalid"
-  /** The attachment group, such as `top`, for base, mark, and ligature anchors. */
-  group?: string
-  /** The ligature component or caret number, counting from 1. */
-  index?: number
-}
-
 /** One problem in `config.toml`; line and column are one-based. */
 export interface ConfigProblem {
   severity: ConfigSeverity
@@ -300,23 +279,6 @@ export interface FontExportResult {
 export interface NewWorkspace {
   familyName?: string
   unitsPerEm?: number
-}
-
-export interface PropagatedAnchor {
-  name: string
-  x: number
-  y: number
-}
-
-/** One glyph's anchors as export compiles them, at each master source it has a layer for. */
-export interface PropagatedGlyphAnchors {
-  glyphName: GlyphName
-  sources: Array<PropagatedSourceAnchors>
-}
-
-export interface PropagatedSourceAnchors {
-  sourceId: SourceId
-  anchors: Array<PropagatedAnchor>
 }
 
 /**
