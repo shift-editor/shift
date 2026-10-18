@@ -41,6 +41,8 @@ crates/shift-font/src/
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
   anchor_attachment.rs  -- which components follow their anchors after an edit, and where to
   anchor_propagation.rs -- fontc's anchor propagation into composites, over plain data
+  check.rs         -- read-only font checks: findings, codes, severities, options
+  check/           -- designspace, outline (interpolation), health, kerning, coverage rules
 ```
 
 ## Key Types
@@ -74,6 +76,7 @@ crates/shift-font/src/
 - `GlyphProjectionSet` is an immutable, read-scoped projection table for requested roots and their transitive components. It prepares each glyph once and reuses interpolation bases keyed by ordered compatible source identities; callers discard it after the current read or compilation.
 - `GlyphComponents` is the ordered, cycle-pruned component occurrence list for one root glyph. Every `ComponentGlyph` carries its full `ComponentId` ancestry, and its zero-based slot within the immediate parent layer. The ancestry identifies the authored occurrence; the parent-local slot correlates numeric transforms across compatible source layers whose corresponding components have different authored IDs.
 - `FontProjection` is a read-only, location-bound view that reuses resolved component layers across one or many glyph requests.
+- `Finding` names one `Check` (stable code such as `I004`, kebab-case name, fixed `Severity`) with the glyph, master, and contour it concerns. `check_font`/`check_font_with` run every check over a font; `check_glyph` runs the per-glyph checks cheaply enough to follow edits. `CheckOptions` adds the opt-in character-set and monospace checks.
 - `ResolvedGlyph` is derived, flattened geometry plus x advance. An existing blank glyph resolves to an empty contour list; a missing glyph resolves to `None`.
 - `Contour` and `Point` describe outline geometry inside a glyph layer. Quadratic path conversion preserves one off-curve control and a `PointType::QCurve` endpoint rather than reducing the endpoint to `OnCurve`.
 
