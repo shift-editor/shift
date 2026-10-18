@@ -47,6 +47,7 @@ export const VISUAL_SPECS = [
   "svg-catalog.spec.ts",
   "theme.spec.ts",
   "tools.spec.ts",
+  "canvas-focus.spec.ts",
   "variable-font-authoring.spec.ts",
   "variable-navigation.spec.ts",
   "variation-outlines.spec.ts",

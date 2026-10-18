@@ -62,6 +62,10 @@ A failure that callers may handle, test, or wrap is a type, not text.
 - Integer narrowing uses `try_from` with `.or_overflow()?` or `length::to_u32`. Never use `as` for a narrowing conversion that can lose data.
 - Bit-packed fields with a limit below their integer type go through `length::within(value, MASK)?`.
 
+## Rules the editor needs
+
+When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
+
 ## Review checklist
 
 - [ ] No `CoreError::*NotFound`, `SlugError::LengthOverflow`, or `StoreError::MissingEntity` built inline where a helper above applies.
