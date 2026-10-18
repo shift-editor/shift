@@ -1,7 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { NumberField, NumberFieldGroup, NumberFieldInput, Tooltip } from "@shift/ui";
 import { NUDGES_VALUES } from "@shift/editor/types";
-import { useFocusZone } from "@/context/FocusZoneContext";
 
 interface SidebarNumberFieldProps {
   /** Names the field for assistive technology and its tooltip. */
@@ -44,7 +43,6 @@ export function SidebarNumberField({
   inputClassName,
   disabled = false,
 }: SidebarNumberFieldProps) {
-  const { lockToZone, unlock } = useFocusZone();
   const cancelled = useRef(false);
   // Remounting shows `value` again; after a commit or Escape, typed text must not linger.
   const [revision, setRevision] = useState(0);
@@ -79,11 +77,9 @@ export function SidebarNumberField({
             className={inputClassName}
             onFocus={(event) => {
               cancelled.current = false;
-              lockToZone("sidebar");
               event.currentTarget.select();
             }}
             onBlur={(event) => {
-              unlock();
               if (!cancelled.current) return;
               // Skip Base UI's commit on blur and show the value again.
               event.preventDefault();
