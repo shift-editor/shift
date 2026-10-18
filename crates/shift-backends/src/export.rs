@@ -409,7 +409,7 @@ mod tests {
         font: &Font,
         glyph_id: &shift_font::GlyphId,
         source_id: &shift_font::SourceId,
-        categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::PropagationCategory>,
+        categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::RecordCategory>,
     ) -> shift_font::anchor_propagation::PropagatedAnchors {
         use shift_font::anchor_propagation::{
             compiled_anchors, PropagationAnchor, PropagationComponent, PropagationGlyph,
@@ -468,7 +468,7 @@ mod tests {
         let font = crate::font_loader::FontLoader::new()
             .read_font(path.to_str().unwrap())
             .unwrap();
-        let categories = crate::propagation_categories(font.glyphs(), font.lib());
+        let categories = crate::record_categories(font.glyphs(), font.lib());
         let sorted = |anchors: Vec<(String, f64, f64)>| {
             let mut anchors = anchors;
             anchors.sort_by(|a, b| a.0.cmp(&b.0));

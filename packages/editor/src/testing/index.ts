@@ -17,3 +17,4 @@ export {
   hitTestRotationZones,
 } from "../lib/tools/select/BoundingBox";
 export { createBatchRequest } from "../lib/utils/batchRequest";
+export { NONSPACING_MARK_EDITOR_ADVANCE } from "../lib/utils/displayAdvance";
