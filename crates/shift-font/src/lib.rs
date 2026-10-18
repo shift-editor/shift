@@ -32,6 +32,7 @@
 pub mod anchor_attachment;
 pub mod anchor_propagation;
 pub mod changes;
+pub mod check;
 pub mod composite;
 pub mod curve;
 pub mod error;

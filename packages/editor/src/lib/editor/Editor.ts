@@ -867,9 +867,7 @@ export class Editor {
       const node = location ? this.scene.nodesReferencing(location.run.id)[0] : null;
       if (!location || node?.kind !== "textRun") return null;
 
-      const { item } = location;
-      const glyphId =
-        item.kind === "glyph" ? (this.font.entryForName(item.glyphName)?.id ?? null) : null;
+      const glyphId = this.text.glyphIdForItem(id);
       return new TextItemObject(node, id, glyphId, this.nodeDefinition("textRun"));
     }
 
@@ -1290,7 +1288,7 @@ export class Editor {
     const ids = this.scene
       .nodesOfKind("textRun")
       .flatMap((node) => this.text.run(node.runId)?.items ?? [])
-      .filter((item) => item.kind === "glyph")
+      .filter((item) => item.kind !== "linebreak")
       .map((item) => item.id);
     if (ids.length === 0) return;
 
@@ -1912,6 +1910,9 @@ export class Editor {
 
   /**
    * Fits scene-space bounds into the current canvas once.
+   *
+   * @remarks
+   * Before the canvas has a size, frames the bounds when it gets one.
    *
    * @param bounds - Scene-space rectangle to centre and fit.
    */

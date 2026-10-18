@@ -9,16 +9,18 @@ use ordered_float::OrderedFloat;
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
     ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Kerning, KerningPosition,
-    LayerId, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
+    LayerId, LibValue, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
 };
 
+use super::families::InstanceFamilies;
 use crate::{
+    distinct_named_instances,
     feature_includes::inline_feature_includes,
     font_source::piecewise_map,
     glyph_category::{GlyphCategories, ResolvedCategory},
     kerning_import::{KerningImport, NamedKerningSide},
     metrics::set_metric_position,
-    FormatBackendError, FormatBackendResult, ImportReport,
+    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -65,6 +67,31 @@ impl GlyphsAxisMapping {
         design_to_user.sort_by(|left, right| left.0.total_cmp(&right.0));
         design_to_user.dedup_by(|left, right| left.0 == right.0);
         piecewise_map(design, &design_to_user)
+    }
+
+    /// Maps a user value to design space, extending the edge segments past
+    /// the authored points the way compilers do.
+    pub(crate) fn map(&self, user: f64) -> f64 {
+        piecewise_map(user, &self.user_to_design)
+    }
+
+    /// Adds a point for each of `users` that the mapping doesn't define, at
+    /// the design value the mapping already gives it.
+    ///
+    /// Compilers need explicit points at the axis minimum, default, and
+    /// maximum; masters past the authored points otherwise leave them out.
+    pub(crate) fn pin(&mut self, users: impl IntoIterator<Item = f64>) {
+        let mut points = self.user_to_design.to_vec();
+        for user in users {
+            if points
+                .iter()
+                .all(|(existing, _)| (existing - user).abs() > 1e-9)
+            {
+                points.push((user, self.map(user)));
+            }
+        }
+        points.sort_by(|left, right| left.0.total_cmp(&right.0));
+        self.user_to_design = points.into_boxed_slice();
     }
 
     pub(crate) fn user_values(&self) -> impl Iterator<Item = f64> + '_ {
@@ -135,6 +162,8 @@ pub(crate) fn anchor_parts(anchor: &GlyphsAnchor) -> (Option<String>, f64, f64) 
 pub(crate) fn font_header(
     glyphs_font: &GlyphsFont,
     path: &Path,
+    families: &InstanceFamilies,
+    losses: &mut Vec<ImportLoss>,
 ) -> FormatBackendResult<(Font, HashMap<String, SourceId>)> {
     let mut font = Font::empty();
 
@@ -147,6 +176,23 @@ pub(crate) fn font_header(
     font.metadata_mut().version_major = Some(glyphs_font.version_major);
     font.metadata_mut().version_minor = Some(glyphs_font.version_minor as i32);
     font.metrics_mut().units_per_em = glyphs_font.units_per_em as f64;
+    let skipped = glyphs_font
+        .glyph_order
+        .iter()
+        .filter(|name| {
+            glyphs_font
+                .glyphs
+                .get(*name)
+                .is_some_and(|glyph| !glyph.export)
+        })
+        .map(|name| LibValue::String(name.to_string()))
+        .collect::<Vec<_>>();
+    if !skipped.is_empty() {
+        font.lib_mut().set(
+            shift_font::lib_data::SKIP_EXPORT_GLYPHS.to_string(),
+            LibValue::Array(skipped),
+        );
+    }
 
     let mut axis_ids_by_index = Vec::new();
     let mut axis_mappings = Vec::new();
@@ -173,6 +219,8 @@ pub(crate) fn font_header(
             .fold((user_default, user_default), |(minimum, maximum), value| {
                 (minimum.min(value), maximum.max(value))
             });
+        let mut mapping = mapping;
+        mapping.pin([user_minimum, user_default, user_maximum]);
         let mut axis = Axis::new(
             glyphs_axis.tag.clone(),
             glyphs_axis.name.clone(),
@@ -256,12 +304,15 @@ pub(crate) fn font_header(
         }
     }
 
-    font.set_named_instances(
+    let (instances, loss) = distinct_named_instances(
         glyphs_font
             .instances
             .iter()
-            .filter(|instance| is_named_instance(instance.active, &instance.type_))
-            .map(|instance| {
+            .enumerate()
+            .filter(|(index, instance)| {
+                is_named_instance(instance.active, &instance.type_) && families.is_own(*index)
+            })
+            .map(|(_, instance)| {
                 NamedInstance::new(
                     instance.name.clone(),
                     ExternalLocation::from_map(
@@ -283,7 +334,9 @@ pub(crate) fn font_header(
                 )
             })
             .collect(),
-    )?;
+    );
+    losses.extend(loss);
+    font.set_named_instances(instances)?;
     *font.features_mut() = convert_features(glyphs_font, path);
     Ok((font, source_ids_by_master_id))
 }
@@ -615,5 +668,21 @@ mod tests {
             assert!(glyph.layer_for_source(master_source_id.clone()).is_some());
             assert!(glyph.layer_for_source(brace.id()).is_some());
         }
+    }
+
+    #[test]
+    fn a_master_past_the_authored_mapping_gets_a_point_at_the_axis_end() {
+        // Signika: the mapping stops at user 600 / design 269, while the
+        // Bold master sits at design 321.
+        let mut mapping = GlyphsAxisMapping {
+            user_to_design: vec![(300.0, 154.0), (400.0, 213.0), (600.0, 269.0)].into_boxed_slice(),
+        };
+        let user_maximum = mapping.unmap(321.0);
+
+        mapping.pin([300.0, 300.0, user_maximum]);
+
+        assert_eq!(user_maximum, 652.0);
+        assert_eq!(mapping.user_to_design.last(), Some(&(652.0, 321.0)));
+        assert_eq!(mapping.user_to_design.len(), 4);
     }
 }

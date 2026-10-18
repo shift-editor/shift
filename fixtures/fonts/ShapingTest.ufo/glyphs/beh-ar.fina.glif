@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<glyph name="beh-ar.fina" format="2">
+  <advance width="450"/>
+  <anchor x="225" y="600" name="top"/>
+  <outline>
+    <contour>
+      <point x="50" y="0" type="line"/>
+      <point x="400" y="0" type="line"/>
+      <point x="400" y="500" type="line"/>
+      <point x="50" y="500" type="line"/>
+    </contour>
+  </outline>
+</glyph>

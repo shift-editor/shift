@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { TestEditor } from "@/testing/TestEditor";
 import { Caret } from "@shift/editor/testing";
-import { glyphTextItem as glyph, lineBreakTextItem } from "@shift/editor/text";
+import { characterTextItem as char, lineBreakTextItem } from "@shift/editor/text";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 
 describe("Caret", () => {
@@ -13,7 +13,7 @@ describe("Caret", () => {
 
   // atCluster preserves the cluster index.
   it("atCluster returns a caret at the requested cluster", () => {
-    const layout = makeLayout([glyph("A", 65), glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), char(66)], editor);
 
     expect(Caret.atCluster(layout, 0).cluster).toBe(0);
     expect(Caret.atCluster(layout, 1).cluster).toBe(1);
@@ -21,7 +21,7 @@ describe("Caret", () => {
 
   // next advances by one cluster within a paragraph.
   it("next advances by one cluster", () => {
-    const layout = makeLayout([glyph("A", 65), glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), char(66)], editor);
     const c0 = Caret.atCluster(layout, 0);
 
     expect(c0.next().cluster).toBe(1);
@@ -30,7 +30,7 @@ describe("Caret", () => {
 
   // next at end clamps (does not run past the buffer).
   it("next clamps at buffer end", () => {
-    const layout = makeLayout([glyph("A", 65)], editor);
+    const layout = makeLayout([char(65)], editor);
     const end = Caret.atCluster(layout, 1);
 
     expect(end.next().cluster).toBe(1);
@@ -40,7 +40,7 @@ describe("Caret", () => {
   // Caret 0 (before A) → 1 (end of line 1, before linebreak)
   //                    → 2 (start of line 2, before B)
   it("next steps through paragraph boundary", () => {
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem(), glyph("B", 66)], editor);
+    const layout = makeLayout([char(65), lineBreakTextItem(), char(66)], editor);
     const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     let c = Caret.atCluster(layout, 0);
@@ -56,7 +56,7 @@ describe("Caret", () => {
 
   // previous clamps at buffer start.
   it("previous clamps at buffer start", () => {
-    const layout = makeLayout([glyph("A", 65)], editor);
+    const layout = makeLayout([char(65)], editor);
     const start = Caret.atCluster(layout, 0);
 
     expect(start.previous().cluster).toBe(0);
@@ -70,7 +70,7 @@ describe("Caret", () => {
   //   line 0  A  ⏎    ←  cluster 0 = before A; cluster 1 = end of line 0
   //   line 1                  cluster 2 = empty line 1 (caret sits at originX)
   it("position on empty trailing line lands at that line's baseline", () => {
-    const layout = makeLayout([glyph("A", 65), lineBreakTextItem()], editor);
+    const layout = makeLayout([char(65), lineBreakTextItem()], editor);
     const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
     const caret = Caret.atCluster(layout, 2);

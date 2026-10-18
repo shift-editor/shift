@@ -9,6 +9,7 @@ export { GlyphOutlines } from "../lib/nodes/GlyphOutlines";
 export { ShiftStore } from "../lib/store/ShiftStore";
 export { Caret } from "../lib/text/layout/Caret";
 export { Positioner } from "../lib/text/layout/Positioner";
+export { literalRun } from "../lib/text/layout/paragraphs";
 export { TextLayout } from "../lib/text/layout/TextLayout";
 export {
   SELECT_BOUNDING_BOX_STYLE,
@@ -17,4 +18,5 @@ export {
   hitTestRotationZones,
 } from "../lib/tools/select/BoundingBox";
 export { createBatchRequest } from "../lib/utils/batchRequest";
+export { SerialRequest } from "../lib/utils/SerialRequest";
 export { NONSPACING_MARK_EDITOR_ADVANCE } from "../lib/utils/displayAdvance";

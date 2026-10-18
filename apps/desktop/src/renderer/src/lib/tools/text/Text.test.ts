@@ -6,7 +6,7 @@ import type { GlyphName } from "@shift/types";
 import { Mat } from "@shift/geo";
 import { TestEditor } from "@/testing/TestEditor";
 import { Point } from "@shift/glyph-state";
-import { glyphTextItem } from "@shift/editor/text";
+import { characterTextItem } from "@shift/editor/text";
 import type { Select } from "@shift/editor/tools";
 
 describe("Text tool edits the page run", () => {
@@ -42,7 +42,7 @@ describe("Text tool edits the page run", () => {
   });
 
   it("dragging over text extends the item selection", async () => {
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     const advance = glyphAdvance() / 2;
     await editor.dragScene({
       down: { x: advance * 0.2, y: 0 },
@@ -89,7 +89,7 @@ describe("typing a glyph not yet loaded this session", () => {
     const node = editor.textRun!;
     const layout = editor.text.layoutCell(node.runId);
     const before = layout.peek()!.totalAdvance;
-    editor.textEditing.insert([glyphTextItem("B", 66)]);
+    editor.textEditing.insert([characterTextItem(66)]);
     expect(layout.peek()?.totalAdvance).toBe(before);
 
     await editor.font.loadGlyph(bId);
@@ -116,7 +116,7 @@ describe("Select over the page run", () => {
       await editor.clickLocal(x, y);
     }
     editor.selectTool("text");
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
   });
 
@@ -146,7 +146,7 @@ describe("Select over the page run", () => {
   it("the selection box follows the edited glyph when an advance before it changes", async () => {
     editor.selectTool("text");
     editor.textEditing.placeAtCluster(0);
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     editor.selectAll();
     const bounds = editor.selectionSceneBoundsCell;
@@ -375,7 +375,10 @@ describe("double-clicking a component", () => {
     await editor.click(screen.x, screen.y);
 
     const items = editor.text.run(run.runId)!.items;
-    expect(items.map((item) => item.kind === "glyph" && item.glyphName)).toEqual(["A", "B"]);
+    expect(items.map((item) => editor.text.glyphIdForItem(item.id))).toEqual([
+      editor.font.recordForName("A")!.id,
+      bRecord.id,
+    ]);
     const child = editor.runGlyph!;
     expect(child).toMatchObject({ glyphId: bRecord.id, itemId: items[1]!.id });
     expect(editor.editing.nodeIds).toEqual([child.id]);

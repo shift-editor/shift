@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName } from "@shift/types";
-import { glyphTextItem } from "@shift/editor/text";
+import { characterTextItem } from "@shift/editor/text";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { Font } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
@@ -78,7 +78,7 @@ describe("kerning in a text run", () => {
     const editor = new TestEditor();
     await editor.openSession(MUTATOR_SANS, "T");
     editor.selectTool("text");
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     await editor.settle();
     const run = editor.textRun!;

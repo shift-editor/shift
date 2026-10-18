@@ -6,7 +6,7 @@ use glyphs_reader::{Font as ParsedGlyphsFont, Glyph as ParsedGlyph, Layer, Node,
 
 use super::{
     anchor_parts, component_transform, default_design_value, font_header, master_design_values,
-    master_location_values, missing_component_details,
+    master_location_values, missing_component_details, InstanceFamilies,
 };
 use crate::font_source::geometry::{
     control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
@@ -69,8 +69,13 @@ impl GlyphsFont {
                 )
             })
             .collect::<Vec<_>>();
-        let (header, _) =
-            font_header(&source, path).map_err(|error| malformed(path, error.to_string()))?;
+        let (header, _) = font_header(
+            &source,
+            path,
+            &InstanceFamilies::read(path, &source),
+            &mut Vec::new(),
+        )
+        .map_err(|error| malformed(path, error.to_string()))?;
         let (directory, glyphs_by_name) =
             FontDirectory::from_font(FontFormat::Glyphs, &header, glyphs)?;
         let master_locations = source

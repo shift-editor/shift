@@ -36,6 +36,10 @@ export function designAxisLocationFromLocation(location: Location): DesignAxisLo
   ) as unknown as DesignAxisLocation;
 }
 
+export function locationFromExternalAxisLocation(location: ExternalAxisLocation): Location {
+  return { values: Object.fromEntries(location) };
+}
+
 export function locationFromDesignAxisLocation(location: DesignAxisLocation): Location {
   return { values: Object.fromEntries(location) };
 }
