@@ -40,6 +40,8 @@ export interface ShapedGlyphOutput {
   readonly yAdvance: number;
   readonly xOffset: number;
   readonly yOffset: number;
+  /** Whether `GDEF` classes the glyph as a mark. */
+  readonly isMark: boolean;
 }
 
 /** A shaped paragraph: its base direction and its runs. */
@@ -162,6 +164,7 @@ function readShapedGlyphOutput(read: NumberReader): ShapedGlyphOutput {
     yAdvance: read.number(),
     xOffset: read.number(),
     yOffset: read.number(),
+    isMark: read.flag(),
   };
 }
 

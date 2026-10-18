@@ -2377,6 +2377,7 @@ name = "shift-shape"
 version = "0.1.0"
 dependencies = [
  "harfrust",
+ "skrifa",
  "thiserror",
  "unicode-bidi",
  "unicode-linebreak",

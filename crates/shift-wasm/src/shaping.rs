@@ -73,6 +73,8 @@ layout! {
         pub y_advance: f64,
         pub x_offset: f64,
         pub y_offset: f64,
+        /// Whether `GDEF` classes the glyph as a mark.
+        pub is_mark: bool,
     }
 }
 
@@ -296,6 +298,7 @@ mod exports {
                         y_advance: f64::from(glyph.y_advance),
                         x_offset: f64::from(glyph.x_offset),
                         y_offset: f64::from(glyph.y_offset),
+                        is_mark: glyph.is_mark,
                     })
                     .collect(),
             })

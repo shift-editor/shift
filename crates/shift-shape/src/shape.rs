@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 
 use harfrust::font::{BuiltinFontFuncs, FontFuncs};
@@ -6,9 +6,14 @@ use harfrust::{
     Direction, Feature, FontRef, GlyphId, Language, NormalizedCoord, Script, ShapeOptions,
     ShaperData, ShaperInstance, Tag, UnicodeBuffer,
 };
+use skrifa::raw::TableProvider;
+use skrifa::raw::types::GlyphId16;
 
 use crate::itemize::itemize;
 use crate::{GlyphSource, NOTDEF, Unit};
+
+/// `GDEF` glyph class of a mark.
+const MARK_CLASS: u16 = 3;
 
 /// The characters that stand in for glyphs inserted by name: Supplementary
 /// Private Use Area-B, which fonts rarely map.
@@ -193,6 +198,9 @@ pub struct ShapedGlyph<G> {
     pub y_advance: i32,
     pub x_offset: i32,
     pub y_offset: i32,
+    /// Whether `GDEF` classes the glyph as a mark: it takes no advance of
+    /// its own and cursive attachment passes over it.
+    pub is_mark: bool,
 }
 
 /// Describes why a run could not be shaped.
@@ -219,12 +227,13 @@ pub enum ShapeError {
 
 /// Shapes text with one font's compiled features.
 ///
-/// Parses the font's layout tables once, when made,
+/// Parses the font's layout tables and `GDEF` mark classes once, when made,
 /// rather than for every run: keep a shaper for as long as its font bytes do
 /// not change.
 pub struct Shaper {
     bytes: Vec<u8>,
     data: ShaperData,
+    marks: BTreeSet<u32>,
 }
 
 impl Shaper {
@@ -237,7 +246,8 @@ impl Shaper {
     pub fn new(bytes: Vec<u8>) -> Result<Self, ShapeError> {
         let font = FontRef::new(&bytes).map_err(|_| ShapeError::InvalidFont)?;
         let data = ShaperData::new(&font);
-        Ok(Self { bytes, data })
+        let marks = mark_glyphs(&bytes);
+        Ok(Self { bytes, data, marks })
     }
 
     /// Returns the font bytes this shaper shapes with.
@@ -290,6 +300,7 @@ impl Shaper {
                 y_advance: position.y_advance,
                 x_offset: position.x_offset,
                 y_offset: position.y_offset,
+                is_mark: self.marks.contains(&info.glyph_id),
             })
             .collect())
     }
@@ -449,4 +460,21 @@ impl<S: GlyphSource> FontFuncs for SourceFuncs<'_, S> {
             .advance(glyph.to_u32())
             .unwrap_or_else(|| builtin.advance_width(glyph))
     }
+}
+
+/// The glyphs `GDEF` classes as marks.
+fn mark_glyphs(bytes: &[u8]) -> BTreeSet<u32> {
+    let Some(classes) = skrifa::FontRef::new(bytes)
+        .ok()
+        .and_then(|font| font.gdef().ok())
+        .and_then(|gdef| gdef.glyph_class_def())
+        .and_then(Result::ok)
+    else {
+        return BTreeSet::new();
+    };
+    classes
+        .iter()
+        .filter(|&(_, class)| class == MARK_CLASS)
+        .map(|(glyph, _): (GlyphId16, u16)| glyph.to_u32())
+        .collect()
 }

@@ -2,6 +2,7 @@
 <glyph name="beh-ar.fina" format="2">
   <advance width="450"/>
   <anchor x="225" y="600" name="top"/>
+  <anchor x="450" y="200" name="entry"/>
   <outline>
     <contour>
       <point x="50" y="0" type="line"/>
