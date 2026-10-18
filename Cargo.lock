@@ -2428,6 +2428,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "shift-font",
+ "shift-shape",
  "tsify",
  "wasm-bindgen",
 ]

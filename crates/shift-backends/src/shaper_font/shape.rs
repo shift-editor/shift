@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use fontdrasil::coords::UserCoord;
-use shift_font::{ExternalLocation, GlyphId};
-use shift_shape::{GlyphSource, NormalizedCoord, Shaper, NOTDEF};
+use shift_font::{AxisId, ExternalLocation, GlyphId};
+use shift_shape::{
+    character_glyphs, AxisNormalization, GlyphSource, NormalizedCoord, Shaper, NOTDEF,
+};
 
 pub use shift_shape::{FeatureSetting, ShapeError, TextDirection};
 
@@ -30,6 +31,8 @@ pub type ShapedGlyph = shift_shape::ShapedGlyph<GlyphId>;
 pub struct LiveShaper {
     shaper: Shaper,
     glyphs: LiveGlyphs,
+    /// Each shaper font axis, in `fvar` order, with how it normalizes.
+    axes: Vec<(AxisId, AxisNormalization)>,
 }
 
 impl LiveShaper {
@@ -44,6 +47,7 @@ impl LiveShaper {
     pub fn new(font: Arc<ShaperFont>, view: &impl FontView) -> Result<Self, ShapeError> {
         Ok(Self {
             shaper: Shaper::new(font.bytes().to_vec())?,
+            axes: font.axis_normalizations(),
             glyphs: LiveGlyphs::new(font, view),
         })
     }
@@ -82,18 +86,9 @@ impl LiveShaper {
 
     /// Normalizes `location` on the shaper font's axes, in `fvar` order.
     fn normalized_coords(&self, location: &ExternalLocation) -> Vec<NormalizedCoord> {
-        let font = &self.glyphs.font;
-        font.axes
+        self.axes
             .iter()
-            .zip(&font.axis_ids)
-            .map(|(axis, axis_id)| {
-                let user = location
-                    .get(axis_id)
-                    .unwrap_or_else(|| axis.default.to_f64())
-                    .clamp(axis.min.to_f64(), axis.max.to_f64());
-                let normalized = UserCoord::new(user).to_normalized(&axis.converter);
-                NormalizedCoord::from_f32(normalized.to_f64() as f32)
-            })
+            .map(|(axis_id, normalization)| normalization.normalize(location.get(axis_id)))
             .collect()
     }
 }
@@ -119,18 +114,14 @@ impl LiveGlyphs {
             .filter_map(|(index, glyph_id)| Some((glyph_id.clone()?, u32::try_from(index).ok()?)))
             .collect();
 
-        let mut characters = HashMap::new();
-        for glyph in view.glyphs() {
-            let Some(&shaper_glyph) = shaper_glyphs.get(&glyph.id()) else {
-                continue;
-            };
-            for &codepoint in glyph.unicodes() {
-                characters
-                    .entry(codepoint)
-                    .and_modify(|current: &mut u32| *current = (*current).min(shaper_glyph))
-                    .or_insert(shaper_glyph);
-            }
-        }
+        let characters = character_glyphs(view.glyphs().into_iter().flat_map(|glyph| {
+            let shaper_glyph = shaper_glyphs.get(&glyph.id()).copied();
+            glyph
+                .unicodes()
+                .iter()
+                .filter_map(move |&codepoint| Some((codepoint, shaper_glyph?)))
+                .collect::<Vec<_>>()
+        }));
 
         Self {
             font,

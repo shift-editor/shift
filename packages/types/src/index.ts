@@ -215,6 +215,8 @@ export type {
   SetAxisMappingsIntent,
   ShapedGlyph,
   ShapedRun,
+  ShaperAxis,
+  ShaperFont,
   ShapeUnit,
   SetKerningValuesIntent,
   SetLanguagesIntent,

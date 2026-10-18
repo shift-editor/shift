@@ -13,18 +13,20 @@
 //! Shift glyph id, and shapes with zero advances, adding live ones itself; a
 //! compiled font ([`FontGlyphs`]) answers from its own tables.
 
+mod axis;
 mod breaks;
 mod itemize;
 mod shape;
 mod source;
 
+pub use axis::AxisNormalization;
 pub use breaks::{line_breaks, LineBreak};
-pub use harfrust::NormalizedCoord;
+pub use harfrust::{NormalizedCoord, Tag};
 pub use shape::{
     FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedRun, Shaper,
     TextDirection,
 };
-pub use source::{FontGlyphs, GlyphSource, NOTDEF};
+pub use source::{character_glyphs, FontGlyphs, GlyphSource, NOTDEF};
 
 /// One unit of text to shape, naming inserted glyphs by `G`, the host's
 /// glyph identity.
