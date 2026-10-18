@@ -27,8 +27,6 @@ packages/types/src/
     glyphValues.ts       -- glyph value buffer offsets and strides (shift-font interpolation/values.rs)
     sourceMetrics.ts     -- source metric vector layout (shift-font interpolation/metrics.rs)
     slugAtlas.ts         -- Slug atlas record strides, field offsets, uniform words (shift-slug typescript_layout.rs)
-packages/types/__fixtures__/
-  axis_mapping_basis.json -- Rust-generated axis-mapping fixture (shift-font ir/variation.rs)
 ```
 
 ## Key Types
@@ -91,7 +89,7 @@ pnpm generate:bridge-types
 
 ### Generated layouts
 
-`src/layout/*.ts` and `__fixtures__/axis_mapping_basis.json` are rendered by Rust `#[test]`s whose names start with `generated_file_`. Each test builds the file from the Rust constants, `offset_of!` positions, and field tables that encoding and packing use, then passes it to `shift_font::test_support::generated::assert_generated_file`, which fails when the checked-in copy differs. A Rust layout change without regeneration therefore fails `cargo test -p shift-font -p shift-slug`. Rust tests beside each generator also check that the encoder or packer writes fields at the generated offsets.
+`src/layout/*.ts` files are rendered by Rust `#[test]`s whose names start with `generated_file_`. Each test builds the file from the Rust constants, `offset_of!` positions, and field tables that encoding and packing use, then passes it to `shift_font::test_support::generated::assert_generated_file`, which fails when the checked-in copy differs. A Rust layout change without regeneration therefore fails `cargo test -p shift-font -p shift-slug`. Rust tests beside each generator also check that the encoder or packer writes fields at the generated offsets.
 
 Run:
 

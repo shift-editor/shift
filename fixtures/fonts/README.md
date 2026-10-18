@@ -27,6 +27,17 @@ in font tooling projects for testing font loading, editing, and round-trip opera
 
 MutatorSans is licensed under the SIL Open Font License. See `LICENSE` in the mutatorsans directory.
 
+## AnchorPropagation
+
+`AnchorPropagation.glyphs` is a two-master Glyphs source written for anchor
+propagation tests. Its composites cover stacked marks, a nested composite, a
+vertically flipped and a rotated component, an own anchor overriding a copied
+one, `*origin`, a ligature built from components (`f_i`), numbered anchors on a
+non-ligature, cursive `entry`/`exit` with a mark on a joining body, marks with
+and without their own anchors, and a composite present in one master only.
+`AnchorPropagation.test.ts` compares the editor's anchors for every glyph at
+every master with what export compiles.
+
 ## AnchorDragBench
 
 `AnchorDragBench.glyphs` is a generated one-master font for text-run redraw and anchor-drag

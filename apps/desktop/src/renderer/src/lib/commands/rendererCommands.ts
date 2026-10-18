@@ -139,6 +139,9 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       return changed;
     }
 
+    case "glyph.addAnchor":
+      return editor.addAnchorAtPointer();
+
     case "glyph.decomposeComponents":
       return editor.decomposeSelection();
 
@@ -198,6 +201,7 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
     case "edit.deselect":
     case "view.zoomIn":
     case "view.zoomOut":
+    case "glyph.addAnchor":
     case "glyph.decomposeComponents":
     case "glyph.reverseSelectedContour":
     case "glyph.makeFirstPoint":

@@ -889,6 +889,12 @@ export class Font {
       designspace: this.#designspace,
       projectionCell: this.#store.projectionCell(entry.id),
       defaultSourceId: this.defaultSource.id,
+      anchorCategory: (glyphId) => {
+        // Called from render-model computeds: a re-read glyph directory re-runs them.
+        track(this.#directoryCell);
+        const record = this.#directoryCell.peek().recordForId(glyphId);
+        return { mark: record?.mark ?? false, ligature: record?.ligature ?? null };
+      },
     });
   }
 

@@ -240,6 +240,12 @@ const glyphCommands: Command[] = [
     run: (ctx) => ctx.renderer.run("glyph.addComponent"),
   },
   {
+    id: "glyph.addAnchor",
+    label: "Add Anchor",
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => ctx.renderer.run("glyph.addAnchor"),
+  },
+  {
     id: "glyph.decomposeComponents",
     label: "Decompose Components",
     enabled: (ctx) => ctx.document.hasWorkspace(),
