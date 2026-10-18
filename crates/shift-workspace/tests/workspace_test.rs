@@ -1887,6 +1887,32 @@ fn remove_anchors_undo_redo_restores_layer() {
 }
 
 #[test]
+fn rename_anchors_undo_redo_restores_layer() {
+    let (_temp, mut workspace, layer_id) = workspace_with_layer();
+    let anchor_id = add_anchor(&mut workspace, &layer_id);
+
+    assert_layer_undo_redo(
+        &mut workspace,
+        &layer_id,
+        vec![FontIntent::RenameAnchors {
+            layer_id: layer_id.clone(),
+            anchor_ids: vec![anchor_id.clone()],
+            names: vec!["bottom".to_string()],
+        }],
+    );
+    assert_eq!(
+        workspace
+            .font()
+            .layer(&layer_id)
+            .unwrap()
+            .anchor(&anchor_id)
+            .unwrap()
+            .name(),
+        Some("bottom")
+    );
+}
+
+#[test]
 fn reverse_contour_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
     let (contour_id, _) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);

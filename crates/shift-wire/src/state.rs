@@ -83,12 +83,13 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
             component_data.base_glyph_id.as_str(),
             CoreError::InvalidGlyphId,
         )?;
-        let component = IrComponent::with_id(
+        let mut component = IrComponent::with_id(
             component_id,
             base_glyph_id,
             component_data.base_glyph_name.clone(),
             IrTransform::identity(),
         );
+        component.set_alignment(component_data.alignment);
 
         layer.add_component(component);
     }

@@ -577,6 +577,11 @@ export interface NapiComponentData {
   id: ComponentId
   baseGlyphId: GlyphId
   baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
 }
 
 export interface NapiComponentGlyph {
@@ -709,7 +714,7 @@ export interface NapiFontIntent {
    * Discriminator naming the populated payload field. Editing kinds:
    * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
    * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "addComponent" | "setComponentTransforms" |
+   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
    * "removeComponents" | "decomposeComponents" |
    * "reverseContour" | "setContourStart" | "translatePoints" |
    * "transformLayer" | "setXAdvance" | "applyBooleanOp".
@@ -731,8 +736,10 @@ export interface NapiFontIntent {
   addAnchors?: NapiAddAnchorsIntent
   moveAnchors?: NapiMoveAnchorsIntent
   removeAnchors?: NapiRemoveAnchorsIntent
+  renameAnchors?: NapiRenameAnchorsIntent
   addComponent?: NapiAddComponentIntent
   setComponentTransforms?: NapiSetComponentTransformsIntent
+  setComponentAlignment?: NapiSetComponentAlignmentIntent
   removeComponents?: NapiRemoveComponentsIntent
   decomposeComponents?: NapiDecomposeComponentsIntent
   reverseContour?: NapiReverseContourIntent
@@ -905,6 +912,18 @@ export interface NapiGlyphRecord {
   unicodes: Array<Unicode>
   componentBaseGlyphIds: Array<GlyphId>
   layers: Array<NapiGlyphLayerRecord>
+  /** In the Mark category or classed `mark`: anchor propagation keeps its own anchors. */
+  mark?: boolean
+  /**
+   * A nonspacing mark (Mark category, Nonspacing subcategory): export
+   * compiles it with no advance. Absent when it is not one.
+   */
+  nonspacingMark?: boolean
+  /**
+   * `"explicit"` when classed a ligature, `"subcategory"` when a ligature
+   * once it has an attaching anchor.
+   */
+  ligature?: "explicit" | "subcategory"
 }
 
 export interface NapiGlyphSnapshot {
@@ -1178,6 +1197,13 @@ export interface NapiRemovePointsIntent {
   pointIds: Array<PointId>
 }
 
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface NapiRenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
+}
+
 /** Renames a kerning group; its pairs keep referencing it by id. */
 export interface NapiRenameKerningGroupIntent {
   groupId: KerningGroupId
@@ -1211,6 +1237,16 @@ export interface NapiReverseContourIntent {
 
 export interface NapiSetAxisMappingsIntent {
   mappings: Array<NapiAxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface NapiSetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
 }
 
 export interface NapiSetComponentTransformsIntent {

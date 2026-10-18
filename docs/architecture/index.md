@@ -25,6 +25,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
 | `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font                                    |
 | `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                                               |
+| `crates/shift-wasm/**`      | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)           | shift-font rules compiled to WebAssembly for the editor                                     |
 
 ### Desktop app — Electron shell
 
@@ -63,6 +64,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/ui/**`                       | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                     | UI component library wrapping Base UI primitives                   |
 | `packages/validation/**`               | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)     | Point sequence validation and persistence schemas                  |
 | `packages/rules/**`                    | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)               | Point editing rules engine for geometric constraints               |
+| `packages/wasm/**`                     | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)         | Build and synchronous loading of the editor's WebAssembly module   |
 
 ## Cross-cutting operations
 

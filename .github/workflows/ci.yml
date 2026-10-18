@@ -57,6 +57,11 @@ jobs:
               - 'rust-toolchain.toml'
             typescript:
               - 'apps/**'
+              # The editor runs these through packages/wasm.
+              - 'crates/shift-font/**'
+              - 'crates/shift-wasm/**'
+              - 'Cargo.lock'
+              - '.github/actions/wasm-toolchain/**'
               - 'packages/**'
               - 'pnpm-lock.yaml'
               - 'scripts/run-e2e.mjs'
@@ -266,6 +271,8 @@ jobs:
         with:
           fetch-depth: 1
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -319,6 +326,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
+
+      - uses: ./.github/actions/wasm-toolchain
 
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -473,7 +482,12 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-font -p shift-slug -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-font -p shift-slug -p shift-wasm -p shift-wire
+
+      # The workspace clippy run leaves features off, so the test-only
+      # reference exports are linted here, for the target they build for.
+      - name: Lint the reference module
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo clippy -p shift-wasm --features reference --target wasm32-unknown-unknown -- -D warnings
 
       - name: Check Shift-independent crate boundaries
         run: |
@@ -504,6 +518,8 @@ jobs:
         with:
           fetch-depth: 1
           submodules: true
+
+      - uses: ./.github/actions/wasm-toolchain
 
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -563,6 +579,8 @@ jobs:
           fetch-depth: 1
           submodules: true
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -589,8 +607,10 @@ jobs:
         id: native-cache
         uses: actions/cache@v6
         with:
-          path: crates/shift-bridge/*.node
-          key: native-module-e2e-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
+          path: |
+            crates/shift-bridge/*.node
+            packages/wasm/src/generated
+          key: native-module-e2e-v2-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
       - uses: Swatinem/rust-cache@v2
         if: steps.native-cache.outputs.cache-hit != 'true'

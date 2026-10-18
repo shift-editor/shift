@@ -1,0 +1,29 @@
+name: WebAssembly toolchain
+description: >-
+  Installs the pinned Rust toolchain and the wasm-bindgen CLI at the version
+  Cargo.lock pins, for building
+  packages/wasm (packages/wasm/scripts/build.mjs rejects any other version).
+  wasm-opt comes from the binaryen devDependency of @shift/wasm. Run from the
+  repository root after checkout.
+runs:
+  using: composite
+  steps:
+    # Install the pinned toolchain, wasm32 target included, before anything
+    # runs cargo: turbo builds the native addon and the module in parallel,
+    # and two cargo processes installing it at once race on rustup's downloads.
+    - name: Install the Rust toolchain
+      shell: bash
+      run: rustup show
+    - name: Read the wasm-bindgen version from Cargo.lock
+      id: version
+      shell: bash
+      run: |
+        set -euo pipefail
+        # A Windows checkout has CRLF line endings.
+        version=$(tr -d '\r' < Cargo.lock | awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3 }')
+        if [ -z "${version}" ]; then echo "No wasm-bindgen in Cargo.lock" >&2; exit 1; fi
+        echo "wasm-bindgen=${version}" >> "$GITHUB_OUTPUT"
+    - name: Install wasm-bindgen
+      uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-bindgen@${{ steps.version.outputs.wasm-bindgen }}

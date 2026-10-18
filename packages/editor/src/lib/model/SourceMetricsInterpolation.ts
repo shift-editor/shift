@@ -1,11 +1,14 @@
-import type {
-  Axis,
-  FontMetrics,
-  MetricDefinition,
-  MetricKind,
-  SourceMetricField,
-  SourceMetrics,
-  SourceMetricsInterpolationSnapshot,
+import {
+  SOURCE_METRIC_VALUE_COUNT,
+  SOURCE_METRIC_VALUE_OFFSETS,
+  SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+  type Axis,
+  type FontMetrics,
+  type MetricDefinition,
+  type MetricKind,
+  type SourceMetricField,
+  type SourceMetrics,
+  type SourceMetricsInterpolationSnapshot,
 } from "@shift/types";
 import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
 import type { DesignAxisLocation } from "../../types/variation";
@@ -61,15 +64,22 @@ export class SourceMetricsInterpolation {
       const metricIndex = snapshot.metricIds.indexOf(definition.id);
       if (metricIndex < 0) continue;
 
-      positionIndexByKind.set(definition.kind, metricIndex * 2);
+      positionIndexByKind.set(
+        definition.kind,
+        metricIndex * SOURCE_METRIC_VALUE_COUNT + SOURCE_METRIC_VALUE_OFFSETS.position,
+      );
     }
 
-    const technicalOffset = snapshot.metricIds.length * 2;
+    const technicalOffset = snapshot.metricIds.length * SOURCE_METRIC_VALUE_COUNT;
     const technicalIndexByField = new Map<SourceMetricField, number>();
     snapshot.technicalFields.forEach((field, index) => {
-      technicalIndexByField.set(field, technicalOffset + index);
+      technicalIndexByField.set(
+        field,
+        technicalOffset + index * SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+      );
     });
-    const valueCount = technicalOffset + snapshot.technicalFields.length;
+    const valueCount =
+      technicalOffset + snapshot.technicalFields.length * SOURCE_TECHNICAL_FIELD_VALUE_COUNT;
     if (snapshot.basis.sourceIds.length !== snapshot.sources.length) return null;
 
     const valuesBySource = new Map(
@@ -108,11 +118,14 @@ export class SourceMetricsInterpolation {
       const index = this.#technicalIndexByField.get(field);
       return index === undefined ? undefined : values[index];
     };
-    const metricValues = this.#snapshot.metricIds.map((metricId, metricIndex) => ({
-      metricId,
-      position: values[metricIndex * 2] ?? 0,
-      overshoot: values[metricIndex * 2 + 1] ?? 0,
-    }));
+    const metricValues = this.#snapshot.metricIds.map((metricId, metricIndex) => {
+      const metricOffset = metricIndex * SOURCE_METRIC_VALUE_COUNT;
+      return {
+        metricId,
+        position: values[metricOffset + SOURCE_METRIC_VALUE_OFFSETS.position] ?? 0,
+        overshoot: values[metricOffset + SOURCE_METRIC_VALUE_OFFSETS.overshoot] ?? 0,
+      };
+    });
 
     return {
       unitsPerEm: this.#unitsPerEm,

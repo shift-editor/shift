@@ -92,6 +92,7 @@ import { EditorHistory } from "./history/EditorHistory";
 import type { Font } from "../model/Font";
 import type { FontStore } from "../model/FontStore";
 import type { Glyph, GlyphLayer } from "../model/Glyph";
+import { AnchorEdits } from "../model/anchors/AnchorEdits";
 import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
@@ -638,24 +639,13 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1) return null;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
-    if (!glyph) return null;
-
-    const editingSourceIds = this.#editingSourceIdsCell.peek();
-    const layers = this.font.sources
-      .filter(({ id }) => editingSourceIds.has(id))
-      .map(({ id }) => glyph.layerForSource(id));
-    if (layers.length !== editingSourceIds.size || layers.some((layer) => layer === null)) {
-      return null;
-    }
+    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
       const record = this.createGlyph(name);
 
-      return layers.map((layer) => {
-        if (!layer) throw new Error("validated component layer is unavailable");
-        return [layer.sourceId, layer.addComponent(record.id)] as const;
-      });
+      return layers.map((layer) => [layer.sourceId, layer.addComponent(record.id)] as const);
     });
     const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
     if (!activeComponentId) return null;
@@ -691,22 +681,11 @@ export class Editor {
     const [node] = glyphNodes;
     if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
-    if (!glyph) return null;
-
-    const editingSourceIds = this.#editingSourceIdsCell.peek();
-    const layers = this.font.sources
-      .filter(({ id }) => editingSourceIds.has(id))
-      .map(({ id }) => glyph.layerForSource(id));
-    if (layers.length !== editingSourceIds.size || layers.some((layer) => layer === null)) {
-      return null;
-    }
+    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
-      layers.map((layer) => {
-        if (!layer) throw new Error("validated component layer is unavailable");
-        return [layer.sourceId, layer.addComponent(baseGlyphId)] as const;
-      }),
+      layers.map((layer) => [layer.sourceId, layer.addComponent(baseGlyphId)] as const),
     );
     const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
     if (!activeComponentId) return null;
@@ -2161,12 +2140,7 @@ export class Editor {
     const pointIds = selection.targets.points ?? [];
     const anchorIds = selection.targets.anchors ?? [];
     if (pointIds.length === 0 && anchorIds.length > 0) {
-      this.transaction("Delete Anchors", () => {
-        selection.layer.removeAnchors(anchorIds);
-        for (const target of selection.additionalLayers) {
-          target.layer.removeAnchors(target.targets.anchors ?? []);
-        }
-      });
+      this.transaction("Delete Anchors", () => AnchorEdits.fromSelection(selection).remove());
       await this.#clearSelectionAfterEdit();
       return true;
     }
@@ -2182,6 +2156,122 @@ export class Editor {
     });
     if (!deleted) return false;
 
+    await this.font.editCoordinator.settled();
+    return true;
+  }
+
+  /**
+   * Adds an anchor at the pointer to the edited glyph; see {@link addAnchorAt}.
+   *
+   * @returns `false` when there is no single edited glyph at an active source.
+   */
+  public addAnchorAtPointer(): boolean {
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
+    if (!node) return false;
+    return this.addAnchorAt(this.toLocal(node, this.getMousePosition()));
+  }
+
+  /**
+   * Adds an anchor to the edited glyph in each source being edited, and selects it.
+   *
+   * @remarks
+   * The anchor is named `new` (or `new.1`, `new.2`, … when taken), as Glyphs
+   * names it, for renaming in the sidebar. Like other structural edits it goes
+   * into the active source and every other source selected for editing, at the
+   * same position, as one undo step.
+   *
+   * @param position - Glyph-local position.
+   * @returns `false` when there is no single edited glyph at an active source.
+   */
+  public addAnchorAt(position: Point2D): boolean {
+    const activeSourceId = this.activeSourceId;
+    const glyphNodes = this.scene.nodesOfKind("glyph");
+    const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
+    const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
+    if (!layers || !activeSourceId) return false;
+
+    const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, position));
+    const activeAnchorId = added.get(activeSourceId);
+    if (activeAnchorId) this.selection.select([activeAnchorId]);
+    return true;
+  }
+
+  /**
+   * Moves anchors to one coordinate on an axis, as one undo step.
+   *
+   * @remarks
+   * Each anchor in the active source moves to `value`; its matched anchor in
+   * every other source being edited moves by the same amount, as a move does,
+   * so sources keep their own positions relative to each other.
+   *
+   * @returns `false` when an anchor is not on the active source or its matches are not ready.
+   */
+  public setAnchorAxis(anchorIds: readonly AnchorId[], axis: "x" | "y", value: number): boolean {
+    const selection = this.positionSelection(anchorIds);
+    if (!selection) return false;
+
+    this.transaction("Move Anchors", () =>
+      AnchorEdits.fromSelection(selection).setAxis(axis, value),
+    );
+    return true;
+  }
+
+  /**
+   * Renames an anchor in the active source and every other source selected
+   * for editing, as one undo step.
+   *
+   * @remarks
+   * The anchor in each other source is the one the layer match pairs with it,
+   * as moving it would.
+   *
+   * @returns `false` when the anchor is not on the active source, its
+   * matches are not ready, or the name is empty or unchanged.
+   */
+  public renameAnchor(anchorId: AnchorId, name: string): boolean {
+    const selection = this.positionSelection([anchorId]);
+    const current = selection?.layer.anchor(anchorId)?.name;
+    const newName = name.trim();
+    if (!selection || newName === "" || newName === current) return false;
+
+    this.transaction("Rename Anchor", () => AnchorEdits.fromSelection(selection).rename(newName));
+    return true;
+  }
+
+  /**
+   * Whether the selected components are all placed by their anchors.
+   *
+   * @returns `null` when the selection is not entirely components on the active source.
+   */
+  public selectedComponentsAnchored(): boolean | null {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return null;
+    const components = targets.layer.geometry.components;
+    return targets.componentIds.every(
+      (id) => components.find((component) => component.id === id)?.alignment === "anchored",
+    );
+  }
+
+  /**
+   * Places the selected components by their anchors, or frees them, in every
+   * source being edited, as one undo step.
+   *
+   * @remarks
+   * An anchored component moves onto its anchors now and follows them when
+   * they move; a free one stays where it is put.
+   *
+   * @returns `false` when the selection is not entirely components on the active source.
+   */
+  public async setSelectedComponentsAnchored(anchored: boolean): Promise<boolean> {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return false;
+
+    const alignment = anchored ? "anchored" : "free";
+    this.transaction(anchored ? "Align to Anchors" : "Stop Aligning to Anchors", () => {
+      for (const { layer, componentIds } of [targets, ...targets.additionalLayers]) {
+        layer.setComponentAlignment(componentIds, alignment);
+      }
+    });
     await this.font.editCoordinator.settled();
     return true;
   }

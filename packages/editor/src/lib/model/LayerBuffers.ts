@@ -389,6 +389,11 @@ export class LayerBuffers {
     return true;
   }
 
+  renameAnchors(anchorIds: readonly AnchorId[], names: readonly string[]): boolean {
+    if (names.length !== anchorIds.length) return false;
+    return this.anchors.rename(new Map(anchorIds.map((id, index) => [id, names[index]!])));
+  }
+
   removeAnchors(anchorIds: readonly AnchorId[]): boolean {
     const removed = new Set(anchorIds);
     if (removed.size !== anchorIds.length) return false;

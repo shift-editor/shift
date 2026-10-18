@@ -9,7 +9,6 @@ use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
 use shift_font::{Contour, CurveSegment, Glyph, GlyphLayer};
 
-use super::axes::normalized_source_location;
 use super::source::ShiftSnapshot;
 
 /// Emits the authored master instances and anchors for one Shift glyph.
@@ -75,21 +74,10 @@ impl Work<Context, WorkId, Error> for GlyphWork {
             .extend(self.glyph.unicodes().iter().copied());
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
 
-        for source in self
-            .snapshot
-            .sources
-            .iter()
-            .filter(|source| source.is_master())
-        {
+        for (source, location) in self.snapshot.glyph_masters(&metadata)? {
             let Some(layer) = self.glyph.layer_for_source(source.id()) else {
                 continue;
             };
-            if metadata.axes.is_empty() && source.id() != self.snapshot.default_source_id {
-                continue;
-            }
-
-            let location =
-                normalized_source_location(source, &self.snapshot.axes, &metadata.all_source_axes)?;
             let mut instance = to_glyph_instance(layer);
             if self.snapshot.nonspacing_marks.contains(self.glyph.name()) {
                 // Glyphs exports nonspacing marks with no advance.

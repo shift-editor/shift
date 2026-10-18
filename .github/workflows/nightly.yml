@@ -133,6 +133,8 @@ jobs:
           fetch-depth: 1
           submodules: true
 
+      - uses: ./.github/actions/wasm-toolchain
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -185,6 +187,10 @@ jobs:
       - name: Build Linux native binaries against glibc 2.17
         if: matrix.platform == 'linux'
         run: scripts/build-linux-portable.sh
+
+      - name: Build WASM rules on Linux
+        if: matrix.platform == 'linux'
+        run: pnpm build:wasm
 
       - name: Build desktop application
         env:

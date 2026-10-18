@@ -1,0 +1,25 @@
+[package]
+name = "shift-wasm"
+version = "0.0.0"
+edition = "2021"
+description = "Shift's shared Rust rules for the editor, compiled to WebAssembly"
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# Test-only exports of shift-font rules the editor keeps in TypeScript, built
+# into @shift/wasm/reference so tests compare the two. Never shipped.
+reference = []
+
+[dependencies]
+fontir = "1.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+shift-font = { workspace = true }
+# Generates the TypeScript types of exported values and converts them.
+tsify = { version = "0.5", default-features = false, features = ["js"] }
+# Must match the wasm-bindgen CLI in the Nix dev shell exactly; scripts check it.
+wasm-bindgen = "=0.2.121"
