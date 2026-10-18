@@ -97,6 +97,10 @@ glyphs.append(glyph("uacute", 0xFA, 500, components=[("u", 0, 0), ("acutecomb", 
 glyphs.append(glyph("ugrave", 0xF9, 500, components=[("u", 0, 0), ("gravecomb", *on_u)]))
 glyphs.append(glyph("umacron", 0x16B, 500, components=[("u", 0, 0), ("macroncomb", *on_u)]))
 
+# A spacing mark built from a combining one: it inherits _top and top from its
+# component, but its category is not Mark, so text sets it beside, not on, a letter.
+glyphs.append(glyph("dieresis", 0xA8, 300, components=[("dieresiscomb", 0, 0)]))
+
 font = f"""{{
 .appVersion = "1225";
 familyName = "Anchor Drag Bench";

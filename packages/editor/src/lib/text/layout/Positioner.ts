@@ -45,9 +45,10 @@ const NOTDEF = ".notdef" as GlyphName;
  * placement.
  *
  * Two facts make a glyph a mark, and they decide different things. The
- * shaper's `isMark` (the compiled font's GDEF mark class), or attaching to a
- * glyph by anchors, decides that a glyph is passed over: it is not kerned,
- * does not break a kerning pair or a cursive chain, and does not join one.
+ * shaper's `isMark` (the compiled font's GDEF mark class, which export gives
+ * only category-Mark glyphs) decides that a glyph attaches by anchors and is
+ * passed over: it is not kerned, does not break a kerning pair or a cursive
+ * chain, and does not join one.
  * The category export resolves (`Font.isNonspacingMark`) decides its advance:
  * such a mark takes none in shaped text, as export compiles it, while a
  * spacing mark keeps its width. Outside shaped text a nonspacing mark at zero
@@ -85,8 +86,8 @@ export class Positioner {
     for (const [index, glyph] of glyphs.entries()) {
       const mark = markOffsets.get(index);
       const attached = mark !== undefined && mark.to !== null;
-      const passedOver = attached || glyph.shaped.isMark;
-      const spacing = !mark && !glyph.shaped.isMark;
+      const passedOver = glyph.shaped.isMark;
+      const spacing = !mark && !passedOver;
       const join =
         marks === "anchors" && spacing && left
           ? cursiveJoin(left.model, glyph.model, run.direction)
@@ -208,15 +209,20 @@ export class Positioner {
 
   /**
    * Attaches each mark to the glyph before it in logical order: to a preceding
-   * mark with the matching anchor (mark to mark), otherwise to the base. A
-   * glyph is a mark when it has an `_name` anchor its target has as `name`.
+   * mark with the matching anchor (mark to mark), otherwise to the base.
+   *
+   * @remarks
+   * Only a glyph the shaper flags as a mark attaches, as in the exported font.
+   * An `_name` anchor alone does not make one: a spacing dieresis inherits
+   * `_top` from its combining component but still sits beside the letter.
    */
   #anchorOffsets(run: SegmentedRun, glyphs: readonly RunGlyph[]): Map<number, MarkOffset> {
     const offsets = new Map<number, MarkOffset>();
     let base: number | null = null;
     let previousMark: number | null = null;
     for (const index of logicalIndexes(run)) {
-      const model = glyphs[index]?.model ?? null;
+      const glyph = glyphs[index];
+      const model = glyph?.shaped.isMark ? glyph.model : null;
       const offset = anchorOffset(model, previousMark, glyphs) ?? anchorOffset(model, base, glyphs);
       if (offset) {
         offsets.set(index, offset);
