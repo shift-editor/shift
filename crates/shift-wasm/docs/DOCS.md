@@ -1,6 +1,6 @@
 # shift-wasm
 
-<!-- reviewed: 2026-10-17 review-every: 90d -->
+<!-- reviewed: 2026-10-18 review-every: 90d -->
 
 Runs shift-font's rules in the editor through WebAssembly, so the editor calls the same Rust the workspace and export use instead of a TypeScript copy. `crates/shift-wasm` is the Rust side; `packages/wasm` (`@shift/wasm`) builds it and ships the module to TypeScript.
 
@@ -60,6 +60,16 @@ packages/editor/src/lib/wasm/
 Every `@shift/wasm` build task (`build`, `build:debug`, `build:e2e`) runs the script, and its turbo outputs cover both folders, so a cached build restores the reference module too and a reference test needs no step of its own.
 
 The Nix dev shell provides `wasm-bindgen-cli`; CI jobs install the version `Cargo.lock` pins with `.github/actions/wasm-toolchain` (`taiki-e/install-action`). Updating wasm-bindgen means changing the crate pin, the Nix package, and `Cargo.lock` together. wasm-opt needs no install: `pnpm install` brings it with `@shift/wasm`'s `binaryen` devDependency, so updating it is a `package.json` change.
+
+### Choosing a route
+
+Rust owns every rule the font compiler or format decides, and the editor and export must agree on it. When the editor needs one synchronously, ask: if the Rust changed tomorrow, would the TypeScript disagree with export without anything failing?
+
+- **A rule goes through this module.** Ordering, reversal, structure matching, precedence, model construction: anything a compiler decides. It is a plain-data function in shift-font that native projection calls too, exported here and called through a wrapper. There is no TypeScript copy, not even as a fallback for when the module is missing. A function that returns "no answer" (structures that don't match, a location outside the model) lets the caller fall back to a different rule's output, never to a TypeScript version of the same rule.
+- **Arithmetic with no decision in it may stay in TypeScript.** Weighted sums, matrix application, and bounds over live buffers have nothing that can drift beyond float rounding. Each one still gets a `*.reference.test.ts` against the Rust.
+- **A rule stays in TypeScript only when measured.** On a per-frame path, calling here costs packing, copying in and out, and unpacking. A rule that stays in TypeScript for that reason needs a measurement of both paths on the same workload, boundary packing included, and a reference test, and gets a line under "What stays in TypeScript" giving the reason. A guess that the boundary is too slow is not a reason; at tens of points a call can cost less than the objects the TypeScript allocates.
+- **Split mixed code at the rule.** When one function both decides (which points pair up) and computes (their weighted sum), the deciding part comes here even if the arithmetic stays in TypeScript.
+- **One side owns each piece of data.** A number layout is documented once, on the Rust export, and the editor's wrapper packs and unpacks it with no logic of its own. Identity (contour and point ids, output order) is decided on one side, and the export's doc comment says which. Rust returns numbers in a stated order, and the wrapper attaches the ids that order implies.
 
 ### What stays in TypeScript
 
