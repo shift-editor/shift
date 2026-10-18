@@ -64,3 +64,10 @@ fontmake -u MutatorSansLightCondensed.ufo -o otf
 ```
 
 Or download pre-built binaries from font distribution sources.
+
+## LightDefault.glyphs
+
+Hand-written. The default master is the lightest, its design values (stem
+widths, 62 to 158) sit below the user default (300), and the user-to-design
+mapping comes from the instances' weight classes, as in FiraCode. Covers axis
+mapping and interpolation when the default is at one end of the axis.

@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-10-06 review-every: 90d -->
+<!-- reviewed: 2026-10-15 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -66,8 +66,8 @@ crates/shift-font/src/
 - `GlyphEntityId` gives `FontIndex` one typed set for contour, point, component, anchor, and guideline identity.
 - `VariationBasis` is the source-neutral Fontdrasil output: normalized regions paired with numeric `VariationDelta` vectors.
 - `InterpolationBasis` combines real source identities with a `VariationBasis` whose vectors produce source weights; it never contains glyph coordinates or metrics.
-- `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce normalized output adjustments.
-- `DesignNormalization` retains an axis's numerical design minimum, mapped default, and maximum. `Font::design_normalization()` derives it from compiled independent mapping bases, preserving unmapped/internal ranges and reversed or nonmonotonic design extrema.
+- `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce output adjustments in design units, added to the input value. Inputs are normalized over the user axis; outputs are not, because design values can lie outside the user range (a default at the axis end with stem-width design values).
+- `DesignNormalization` retains an axis's numerical design minimum, mapped default, and maximum. `normalize` treats values within a relative `1e-9` of the default, `0`, or `±1` as exactly those, because mapped defaults and extremes carry rounding error and the variation model only recognises an exact default; region evaluation clamps normalized coordinates to `-1..=1`. `Font::design_normalization()` derives it from compiled independent mapping bases, preserving unmapped/internal ranges and reversed or nonmonotonic design extrema.
 - `GlyphInterpolation` combines a reusable basis with one glyph's compatible authored source values. The glyph's default-source layer owns topology when present; otherwise a deterministic master-backed reference layer allows sparse glyph interpolation.
 - `LayerMatch` derives cross-layer contour, point, anchor, and component identity mappings for structurally compatible layers. `LayerDifference` retains ordered structural evidence for incompatible layers.
 - `GlyphProjection` is a compact location-independent glyph payload: shared fallback layers, optional compatible interpolation, exact-source topology exceptions, `GlyphComponents`, and transitive component identities.
