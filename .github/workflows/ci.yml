@@ -633,8 +633,12 @@ jobs:
         if: github.event_name != 'push' && runner.os == 'Linux'
         run: node scripts/check-e2e-projects.mjs
 
+      # GitHub's artifact service occasionally fails to resolve (ENOTFOUND);
+      # retry once before failing the build the E2E jobs depend on.
       - name: Upload E2E app
+        id: upload-e2e-app
         if: github.event_name != 'push'
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: e2e-app-${{ github.run_id }}-${{ runner.os }}
@@ -643,6 +647,18 @@ jobs:
             crates/shift-bridge/*.node
           include-hidden-files: true
           retention-days: 1
+
+      - name: Retry E2E app upload
+        if: github.event_name != 'push' && steps.upload-e2e-app.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          path: |
+            apps/desktop/.vite/
+            crates/shift-bridge/*.node
+          include-hidden-files: true
+          retention-days: 1
+          overwrite: true
 
   e2e:
     name: E2E ${{ matrix.name }} ${{ matrix.shard }}/${{ matrix.shard-total }}
@@ -776,8 +792,13 @@ jobs:
           mkdir -p apps/desktop/blob-report
           cp apps/desktop/blob-report-platform/*.zip apps/desktop/blob-report/ 2>/dev/null || true
 
+      # Reports describe the run; they are not its result. An upload that fails
+      # (GitHub's artifact service occasionally fails to resolve) is retried
+      # once and never fails a job whose tests passed.
       - name: Upload blob report
+        id: upload-blob-report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: blob-report-${{ matrix.target }}-${{ matrix.shard }}
@@ -785,8 +806,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Retry blob report upload
+        if: always() && steps.upload-blob-report.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-${{ matrix.target }}-${{ matrix.shard }}
+          path: apps/desktop/blob-report/
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true
+
       - name: Upload platform evidence
         if: always() && matrix.project == 'platform'
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results
@@ -796,6 +829,7 @@ jobs:
 
       - name: Upload Playwright failures
         if: failure() && matrix.project != 'platform'
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: playwright-${{ matrix.target }}-${{ matrix.shard }}-of-${{ matrix.shard-total }}-results

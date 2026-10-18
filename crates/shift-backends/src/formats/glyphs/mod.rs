@@ -1,4 +1,5 @@
 mod conversion;
+mod families;
 mod import;
 mod reader;
 mod report;
@@ -8,6 +9,7 @@ pub(crate) use conversion::{
     anchor_parts, component_transform, default_design_value, font_header, master_design_values,
     master_location_values, missing_component_details,
 };
+pub(crate) use families::InstanceFamilies;
 pub(crate) use import::{stream_font, stream_retained};
 pub use reader::GlyphsReader;
 pub use source::GlyphsFont;
@@ -135,5 +137,64 @@ unicode = 0041;
         );
 
         let _ = fs::remove_dir_all(package_dir.parent().unwrap());
+    }
+
+    fn multi_family_path() -> PathBuf {
+        repo_root().join("fixtures/fonts/MultiFamily.glyphs")
+    }
+
+    #[test]
+    fn imports_only_the_source_familys_instances_once_each() {
+        let path = multi_family_path();
+        let (font, _, report) = super::stream_font(path.to_str().unwrap()).unwrap();
+
+        let names = font
+            .named_instances()
+            .iter()
+            .map(|instance| instance.name().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["Light", "Bold"]);
+        let messages = report
+            .losses
+            .iter()
+            .map(|loss| loss.message.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(messages.contains("Multi Family UI"));
+        assert!(messages.contains("'Bold Copy' (at the same location as 'Bold')"));
+    }
+
+    #[test]
+    fn a_glyph_marked_not_to_export_is_drawn_through_but_not_compiled() {
+        use skrifa::{FontRef, MetadataProvider};
+
+        let font = GlyphsReader::new()
+            .load(multi_family_path().to_str().unwrap())
+            .unwrap();
+        assert!(font.lib().skipped_export_glyphs().contains("_part"));
+
+        let bytes = crate::FontExporter::new().compile_ttf(&font).unwrap();
+        let compiled = FontRef::new(&bytes).unwrap();
+        let names = compiled
+            .glyph_names()
+            .iter()
+            .map(|(_, name)| name.to_string())
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"A".to_string()));
+        assert!(!names.contains(&"_part".to_string()));
+
+        let a = compiled.charmap().map('A').unwrap();
+        let outline = compiled.outline_glyphs().get(a).unwrap();
+        let mut pen = skrifa::outline::pen::ControlBoundsPen::default();
+        outline
+            .draw(
+                skrifa::outline::DrawSettings::unhinted(
+                    skrifa::instance::Size::unscaled(),
+                    skrifa::instance::LocationRef::default(),
+                ),
+                &mut pen,
+            )
+            .unwrap();
+        assert!(pen.bounding_box().is_some(), "A keeps the part's outline");
     }
 }

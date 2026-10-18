@@ -4,7 +4,6 @@ import { isAnchorId, type AnchorId } from "@shift/types";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { track } from "@shift/editor/signals";
 import type { PointAxis } from "@shift/geo";
-import { useFocusZone } from "@/context/FocusZoneContext";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection } from "./SidebarSection";
@@ -94,11 +93,10 @@ interface AnchorNameFieldProps {
  * The anchor's name, renamed in the sources being edited on Enter or blur.
  *
  * @remarks
- * Escape leaves the field without renaming. While focused, the sidebar keeps
- * keyboard focus and editor shortcuts do not fire.
+ * Escape leaves the field without renaming. Editor shortcuts do not fire while
+ * it is focused: the keyboard router ignores keys aimed at text fields.
  */
 function AnchorNameField({ name, mixed, disabled, onCommit }: AnchorNameFieldProps) {
-  const { lockToZone, unlock } = useFocusZone();
   const [draft, setDraft] = useState(name ?? "");
   const cancelled = useRef(false);
 
@@ -112,11 +110,9 @@ function AnchorNameField({ name, mixed, disabled, onCommit }: AnchorNameFieldPro
         onChange={(event) => setDraft(event.currentTarget.value)}
         onFocus={(event) => {
           cancelled.current = false;
-          lockToZone("sidebar");
           event.currentTarget.select();
         }}
         onBlur={() => {
-          unlock();
           if (cancelled.current) setDraft(name ?? "");
           else if (draft !== (name ?? "")) onCommit(draft);
         }}

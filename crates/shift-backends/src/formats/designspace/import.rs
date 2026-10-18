@@ -1,3 +1,4 @@
+use crate::distinct_named_instances;
 use crate::SourceGlyphIds;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -117,7 +118,9 @@ fn stream_designspace(
     }
     add_axes(&mut header, &document, &mut labels)?;
     header.set_axis_mappings(axis_mappings_from_designspace(&document, header.axes())?)?;
-    header.set_named_instances(named_instances_from_designspace(&document, header.axes())?)?;
+    let (instances, instance_loss) =
+        distinct_named_instances(named_instances_from_designspace(&document, header.axes())?);
+    header.set_named_instances(instances)?;
 
     let source_order = std::iter::once(default_index)
         .chain((0..document.sources.len()).filter(|index| *index != default_index))
@@ -191,7 +194,8 @@ fn stream_designspace(
 
     let (glyph_ids, glyphs) =
         build_glyph_directory(&SourceGlyphIds::for_path(designspace_path), &directories);
-    let report = import_kerning(&mut header, &default_kerning, &directories, &glyph_ids);
+    let mut report = import_kerning(&mut header, &default_kerning, &directories, &glyph_ids);
+    report.losses.extend(instance_loss);
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
 

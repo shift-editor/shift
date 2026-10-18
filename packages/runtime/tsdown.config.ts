@@ -8,7 +8,10 @@ export default defineConfig({
   dts: {
     eager: true,
     generator: "tsc",
-    tsconfig: "tsconfig.json",
+    // The bundled @shift/types and @shift/geo sources must sit under the
+    // program's rootDir; with the package's own `rootDir: ./src` the
+    // declaration build needed over 3 GB and ran Node out of heap.
+    tsconfig: "tsconfig.code-api.json",
   },
   sourcemap: false,
   clean: true,

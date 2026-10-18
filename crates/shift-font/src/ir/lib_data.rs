@@ -2,6 +2,11 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Font lib key listing glyphs that are drawn but not exported (UFO
+/// `public.skipExportGlyphs`). Glyphs sources fill it from each glyph's
+/// export flag.
+pub const SKIP_EXPORT_GLYPHS: &str = "public.skipExportGlyphs";
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LibData {
     data: BTreeMap<String, LibValue>,
@@ -64,6 +69,20 @@ impl LibData {
 
     pub fn into_inner(self) -> BTreeMap<String, LibValue> {
         self.data
+    }
+
+    /// Returns the glyph names listed under [`SKIP_EXPORT_GLYPHS`].
+    pub fn skipped_export_glyphs(&self) -> std::collections::HashSet<&str> {
+        let Some(LibValue::Array(names)) = self.get(SKIP_EXPORT_GLYPHS) else {
+            return std::collections::HashSet::new();
+        };
+        names
+            .iter()
+            .filter_map(|name| match name {
+                LibValue::String(name) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect()
     }
 
     pub fn from_map(data: impl IntoIterator<Item = (String, LibValue)>) -> Self {

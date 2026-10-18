@@ -235,6 +235,28 @@ describe("Camera", () => {
 
       expect(camera.zoomLevel).toBe(1);
     });
+
+    it("frames bounds requested before the canvas has a size once it gets one", () => {
+      const unsized = new Camera();
+      unsized.fitToBounds(sceneBounds(0, -100, 200, 300));
+
+      unsized.setRect({ width: 600, height: 600 } as Rect2D);
+
+      expect(unsized.zoomLevel).toBe(1.275);
+      expect(unsized.sceneToScreen(scenePoint(100, 100))).toEqual(unsized.centre);
+    });
+
+    it("keeps initial framing when asked to fit bounds without area", () => {
+      const unsized = new Camera();
+      unsized.fitInitialBounds(sceneBounds(0, -100, 200, 300));
+      // A straight horizontal outline has no height to fit.
+      unsized.fitToBounds(sceneBounds(100, -100, 700, -100));
+
+      unsized.setRect({ width: 600, height: 600 } as Rect2D);
+
+      expect(unsized.zoomLevel).toBe(1.275);
+      expect(unsized.sceneToScreen(scenePoint(100, 100))).toEqual(unsized.centre);
+    });
   });
 
   describe("zoomToPoint cursor stability", () => {

@@ -1,0 +1,63 @@
+{
+.appVersion = "3532";
+.formatVersion = 3;
+familyName = "Multi Family";
+unitsPerEm = 1000;
+axes = ({ name = Weight; tag = wght; });
+metrics = ({ type = ascender; });
+fontMaster = (
+{
+id = light;
+name = Light;
+axesValues = (100);
+metricValues = ({ pos = 700; });
+},
+{
+id = bold;
+name = Bold;
+axesValues = (700);
+metricValues = ({ pos = 800; });
+}
+);
+instances = (
+{ name = Light; axesValues = (100); weightClass = 100; },
+{ name = Bold; axesValues = (700); weightClass = 700; },
+{ name = "Bold Copy"; axesValues = (700); weightClass = 700; },
+{ name = Light; axesValues = (100); weightClass = 100; properties = ({ key = familyNames; values = ({ language = dflt; value = "Multi Family UI"; }); }); },
+{ name = Bold; axesValues = (700); weightClass = 700; properties = ({ key = familyNames; values = ({ language = dflt; value = "Multi Family UI"; }); }); }
+);
+glyphs = (
+{
+glyphname = A;
+unicode = 65;
+layers = (
+{
+layerId = light;
+width = 500;
+shapes = ({ ref = _part; });
+},
+{
+layerId = bold;
+width = 700;
+shapes = ({ ref = _part; });
+}
+);
+},
+{
+glyphname = _part;
+export = 0;
+layers = (
+{
+layerId = light;
+width = 500;
+shapes = ({ closed = 1; nodes = ((0,0,l), (100,0,l), (100,700,l), (0,700,l)); });
+},
+{
+layerId = bold;
+width = 700;
+shapes = ({ closed = 1; nodes = ((0,0,l), (200,0,l), (200,700,l), (0,700,l)); });
+}
+);
+}
+);
+}

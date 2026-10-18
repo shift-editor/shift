@@ -543,6 +543,59 @@ impl AuthoredCurveTopology {
 }
 
 impl ResolvedCurveTopology {
+    /// Freezes one cubic subdivision count large enough for every compatible
+    /// contour set.
+    fn from_compatible_contours<'a>(
+        reference: &[ResolvedContour],
+        compatible: impl IntoIterator<Item = &'a [ResolvedContour]>,
+    ) -> Result<Self, AuthoredSlugError> {
+        let mut topology = Self::from_contours(reference);
+        for contours in compatible {
+            if contours.len() != topology.contours.len() {
+                return Err(AuthoredSlugError::ContourCountMismatch {
+                    expected: topology.contours.len(),
+                    actual: contours.len(),
+                });
+            }
+            for (contour_index, (contour_topology, contour)) in
+                topology.contours.iter_mut().zip(contours).enumerate()
+            {
+                let points = contour
+                    .points
+                    .iter()
+                    .enumerate()
+                    .map(|(point_index, point)| slug_point(point, contour_index, point_index))
+                    .collect::<Result<Vec<_>, _>>()?;
+                for segment in &mut contour_topology.segments {
+                    let SegmentTopology::Cubic {
+                        points: [p0, p1, p2, p3],
+                        subdivision_count,
+                    } = segment
+                    else {
+                        continue;
+                    };
+                    let (Some(&a), Some(&b), Some(&c), Some(&d)) = (
+                        points.get(*p0),
+                        points.get(*p1),
+                        points.get(*p2),
+                        points.get(*p3),
+                    ) else {
+                        return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
+                    };
+                    *subdivision_count =
+                        (*subdivision_count).max(Curve::cubic_subdivision_count(a, b, c, d));
+                }
+            }
+        }
+        topology.curve_count = topology
+            .contours
+            .iter()
+            .flat_map(|contour| &contour.segments)
+            .map(|segment| segment.curve_count())
+            .sum();
+        Ok(topology)
+    }
+
     fn from_contours(contours: &[ResolvedContour]) -> Self {
         let contours = contours
             .iter()
@@ -615,6 +668,41 @@ impl ResolvedCurveTopology {
         debug_assert_eq!(curves.len(), self.curve_count);
         Ok(curves)
     }
+}
+
+/// Adds a variable glyph whose sources are already-resolved, compatible
+/// contour sets, each weighted by its weight index.
+///
+/// # Errors
+///
+/// Returns an error when `sources` is empty or the contour sets don't share
+/// one structure.
+pub(crate) fn add_resolved_sources_glyph(
+    builder: &mut VariableAtlasBuilder,
+    sources: &[(u32, &[ResolvedContour])],
+) -> Result<u32, AuthoredSlugError> {
+    let ((base_weight_index, base), rest) = sources
+        .split_first()
+        .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
+    let topology = ResolvedCurveTopology::from_compatible_contours(
+        base,
+        rest.iter().map(|(_, contours)| *contours),
+    )?;
+    let base_curves = topology.curves_from_contours(base)?;
+    let source_curves = rest
+        .iter()
+        .map(|(weight_index, contours)| {
+            Ok((*weight_index, topology.curves_from_contours(contours)?))
+        })
+        .collect::<Result<Vec<_>, AuthoredSlugError>>()?;
+    builder
+        .add_curve_glyph_with_sources_and_lines(
+            base_curves,
+            topology.line_flags(),
+            *base_weight_index,
+            source_curves,
+        )
+        .map_err(Into::into)
 }
 
 /// Converts one already-resolved contour set for CPU-oracle comparison.

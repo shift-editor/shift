@@ -13,7 +13,7 @@ use crate::font_source::{
     malformed, FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
 };
 use crate::metrics::set_metric_position;
-use crate::FontFormat;
+use crate::{distinct_named_instances, FontFormat};
 use shift_font::{
     Axis, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Font as ShiftFont,
     Location, MetricKind, NamedInstance,
@@ -247,6 +247,7 @@ fn binary_directory(
             )
         })
         .collect();
+    let (instances, _) = distinct_named_instances(instances);
     header
         .set_named_instances(instances)
         .map_err(|error| malformed(path, error.to_string()))?;

@@ -398,20 +398,25 @@ export class Camera {
    * Zooms and pans once so the bounds fill most of the canvas, centred.
    *
    * @remarks
-   * Does nothing for empty or non-finite bounds, or before the canvas has a size.
-   * Ends initial framing unless these are the initial bounds.
+   * Does nothing for empty or non-finite bounds, and keeps any initial framing.
+   * Otherwise ends initial framing unless these are the initial bounds. Before
+   * the canvas has a size, the bounds become the initial framing, so the first
+   * {@link setRect} frames them.
    *
    * @param bounds - scene-space rectangle to frame.
    */
   fitToBounds(bounds: SceneBounds): void {
-    if (bounds !== this.#initialFitBounds) this.#initialFitBounds = null;
-
     const width = bounds.max.x - bounds.min.x;
     const height = bounds.max.y - bounds.min.y;
     const boundsHaveArea =
       Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+    if (!boundsHaveArea) return;
+
     const viewportHasSize = this.logicalWidth > 0 && this.logicalHeight > 0;
-    if (!boundsHaveArea || !viewportHasSize) return;
+    if (bounds !== this.#initialFitBounds) {
+      this.#initialFitBounds = viewportHasSize ? null : { ...bounds };
+    }
+    if (!viewportHasSize) return;
 
     const zoom = clamp(
       FIT_FILL * Math.min(this.logicalWidth / width, this.logicalHeight / height),

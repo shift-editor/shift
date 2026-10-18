@@ -69,6 +69,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
 
         let metadata = context.static_metadata.get();
         let mut builder = GlyphBuilder::new(self.glyph_name.clone());
+        builder.emit_to_binary = !self.snapshot.skipped_glyphs.contains(self.glyph.name());
         builder
             .codepoints
             .extend(self.glyph.unicodes().iter().copied());

@@ -25,6 +25,8 @@ export class ContourBuffer {
   readonly #coordinates: PackedArray;
   /** Bumped after each in-place change to `#coordinates`; readers track this, not the array. */
   readonly #revision: WritableSignal<number>;
+  /** Each point's record index; changes only with the point list, not with coordinates. */
+  readonly #pointIndices: ComputedSignal<ReadonlyMap<PointId, number>>;
 
   readonly valuesCell: ComputedSignal<Float64Array>;
   readonly contourCell: ComputedSignal<Contour>;
@@ -42,6 +44,10 @@ export class ContourBuffer {
     });
     this.#coordinates = new PackedArray(2, values);
     this.#revision = signal(0, { name: `glyphLayer.contour[${contourIndex}].coordinates` });
+    this.#pointIndices = computed(
+      () => new Map(this.#dataCell.value.points.map((point, index) => [point.id, index])),
+      { name: `glyphLayer.contour[${contourIndex}].pointIndices` },
+    );
     this.valuesCell = computed(
       () => {
         track(this.#revision);
@@ -81,7 +87,7 @@ export class ContourBuffer {
   }
 
   pointIndex(pointId: PointId): number {
-    return this.#dataCell.peek().points.findIndex((point) => point.id === pointId);
+    return this.#pointIndices.peek().get(pointId) ?? -1;
   }
 
   point(pointId: PointId): Point | null {

@@ -1,3 +1,9 @@
+# Commits run the fast checks: formatting, lint, clippy, and types, a few
+# seconds. Tests, dead code, and the SDK API report run once per push. Install both with
+# `pre-commit install` (default_install_hook_types below). CI runs everything.
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
 repos:
   # Standard file hygiene
   # Generated files (bridge DTO typegen, NAPI .d.ts, parity fixtures) are excluded
@@ -39,13 +45,6 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-check-tests
-        name: cargo check (including tests)
-        entry: cargo check --workspace --tests --exclude shift-bridge
-        language: system
-        types: [rust]
-        pass_filenames: false
-
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --
@@ -60,22 +59,24 @@ repos:
         types: [rust]
         pass_filenames: false
 
+      # nextest runs the test binaries in parallel (about 20 s against 49 s
+      # for `cargo test`); it does not run doc tests, so they follow.
       - id: cargo-test
         name: cargo test
-        entry: cargo test --workspace --exclude shift-bridge
+        entry: bash -c 'cargo nextest run --workspace --exclude shift-bridge && cargo test --doc --workspace --exclude shift-bridge'
         language: system
         types: [rust]
         pass_filenames: false
+        stages: [pre-push]
 
   # TypeScript/JavaScript hooks
   - repo: local
     hooks:
       - id: oxfmt
         name: oxfmt
-        entry: pnpm format
+        entry: pnpm format:files
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json, markdown]
-        pass_filenames: false
         exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
 
       - id: oxlint
@@ -92,14 +93,16 @@ repos:
         types_or: [ts, tsx]
         pass_filenames: false
 
-      # Regenerates packages/sdk/api/*.api.md; a changed report fails the commit so it is
-      # reviewed and staged like any other public API change.
+      # Regenerates packages/sdk/api/*.api.md; a changed report fails the push so it is
+      # reviewed and committed like any other public API change. It bundles the
+      # whole SDK (about 25 s), so it runs per push rather than per commit.
       - id: sdk-api-report
         name: sdk api report
         entry: pnpm --filter @shift-editor/sdk api:update
         language: system
         files: ^packages/(editor|geo|glyph-state|rules|sdk|types|ui|validation)/
         pass_filenames: false
+        stages: [pre-push]
 
       - id: deadcode
         name: deadcode (strict)
@@ -107,6 +110,7 @@ repos:
         language: system
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
+        stages: [pre-push]
 
       - id: vitest
         name: vitest
@@ -114,3 +118,4 @@ repos:
         language: system
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
+        stages: [pre-push]
