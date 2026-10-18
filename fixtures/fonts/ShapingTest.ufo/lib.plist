@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>public.glyphOrder</key>
+	<array>
+		<string>space</string>
+		<string>f</string>
+		<string>i</string>
+		<string>f_i</string>
+		<string>beh-ar</string>
+		<string>beh-ar.init</string>
+		<string>beh-ar.medi</string>
+		<string>beh-ar.fina</string>
+		<string>fatha-ar</string>
+		<string>shadda-ar</string>
+		<string>noon-ar</string>
+		<string>noonDotless-ar</string>
+		<string>dotabove-ar</string>
+	</array>
+	<key>public.openTypeCategories</key>
+	<dict>
+		<key>beh-ar</key>
+		<string>base</string>
+		<key>beh-ar.fina</key>
+		<string>base</string>
+		<key>beh-ar.init</key>
+		<string>base</string>
+		<key>beh-ar.medi</key>
+		<string>base</string>
+		<key>dotabove-ar</key>
+		<string>mark</string>
+		<key>f_i</key>
+		<string>ligature</string>
+		<key>fatha-ar</key>
+		<string>mark</string>
+		<key>noon-ar</key>
+		<string>base</string>
+		<key>noonDotless-ar</key>
+		<string>base</string>
+		<key>shadda-ar</key>
+		<string>mark</string>
+	</dict>
+</dict>
+</plist>

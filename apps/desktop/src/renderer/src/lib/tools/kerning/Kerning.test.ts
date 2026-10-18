@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName } from "@shift/types";
-import { glyphTextItem } from "@shift/editor/text";
+import { characterTextItem } from "@shift/editor/text";
 import { trackRunLayouts, type KerningTool } from "@shift/editor/tools";
 import { effect } from "@shift/editor/signals";
 import { isGroupSide } from "@shift/editor/model";
@@ -43,7 +43,7 @@ describe("Kerning tool", () => {
     await editor.openSession(MUTATOR_SANS, "T");
     await editor.font.loadGlyph(editor.font.recordForName("A" as GlyphName)!.id);
     editor.selectTool("text");
-    editor.textEditing.insert([glyphTextItem("A", 65)]);
+    editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     await editor.settle();
     editor.selectTool("kerning");
@@ -91,9 +91,9 @@ describe("Kerning tool", () => {
   it("finds every other pair the hovered kern applies to, and none it does not", () => {
     editor.selectTool("text");
     editor.textEditing.insert([
-      glyphTextItem("T", 84),
-      glyphTextItem("A", 65),
-      glyphTextItem("T", 84),
+      characterTextItem(84),
+      characterTextItem(65),
+      characterTextItem(84),
     ]);
     editor.escape();
     editor.selectTool("kerning");

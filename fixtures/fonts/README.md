@@ -73,6 +73,15 @@ the same location as another (`Bold Copy`), and a non-exported component part
 (`_part`, `export = 0`) used by `A`. Covers family-scoped instance import,
 repeated-instance handling, and skipped export.
 
+## ShapingTest
+
+`ShapingTest.ufo` is a hand-written UFO for live shaping tests: an `f_i`
+ligature (`liga`), Arabic beh with `init`/`medi`/`fina` forms, and fatha and
+shadda marks with `_top`/`top` anchors for mark-to-base and mark-to-mark
+attachment, and noon, which `ccmp` decomposes into a dotless body and a dot
+mark. Written for Shift's tests and released under the same terms as
+the repository.
+
 ## LightDefault.glyphs
 
 Hand-written. The default master is the lightest, its design values (stem

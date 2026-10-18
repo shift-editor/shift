@@ -286,15 +286,16 @@ export class LayerBuffers {
   movePoints(pointIds: readonly PointId[], coords: readonly number[]): boolean {
     if (coords.length !== pointIds.length * 2) return false;
 
-    const updates: GlyphPosition[] = pointIds.map((id, index) => ({
-      kind: "point",
-      id,
-      x: coords[index * 2] ?? 0,
-      y: coords[index * 2 + 1] ?? 0,
-    }));
-    if (this.positionsFor(updates).length !== updates.length) return false;
+    if (!pointIds.every((pointId) => this.#contourForPoint(pointId))) return false;
 
-    this.patchPositions(updates);
+    this.patchPositions(
+      pointIds.map((id, index) => ({
+        kind: "point",
+        id,
+        x: coords[index * 2] ?? 0,
+        y: coords[index * 2 + 1] ?? 0,
+      })),
+    );
     return true;
   }
 

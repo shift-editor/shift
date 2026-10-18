@@ -1,7 +1,7 @@
 import { NodeDefinition } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
-import { clusterForCaret } from "../text/edit";
+import { TextBuffer } from "../text/TextBuffer";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
@@ -52,7 +52,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     if (child.kind !== "glyph" || !child.itemId) return null;
     const layoutCell = this.editor.text.layoutCell(node.runId);
     track(layoutCell);
-    const placed = layoutCell.peek()?.placedGlyphForItem(child.itemId);
+    const layout = layoutCell.peek();
+    const placed =
+      layout?.placedGlyph(child.itemId, child.glyphId) ?? layout?.placedGlyphForItem(child.itemId);
     if (!placed) return null;
 
     return Mat.applyToPoint(this.unitsTransform(node), placed.origin);
@@ -78,13 +80,17 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   override onDoubleClick(node: TextRunNode, target: PointerTarget): boolean {
     const child = this.childGlyph(node);
     let itemId: TextItemId | null = null;
-    if (target.kind === "text" && target.node.id === node.id) itemId = target.itemId;
+    let glyphId: GlyphId | null = null;
+    if (target.kind === "text" && target.node.id === node.id) {
+      itemId = target.itemId;
+      glyphId = target.glyphId;
+    }
     if (target.kind === "component" && child?.itemId && target.nodeId === child.id) {
       itemId = this.#insertComponentBase(node, child.itemId, target.componentId);
     }
     if (!itemId) return false;
 
-    const edited = this.editItem(node, itemId);
+    const edited = this.editItem(node, itemId, glyphId);
     if (!edited) return false;
     this.editor.enterNode(edited.id);
     return true;
@@ -107,19 +113,24 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * per-node caches never see a node change glyph. The new child shows the
    * previous child's source, or the active source. Does not enter the child.
    *
+   * @param glyphId - which of the item's glyphs to edit, when shaping split
+   *   its character into several; defaults to the item's main glyph.
    * @returns null when the item is not a glyph in the run or its glyph is not loaded.
    */
-  editItem(node: TextRunNode, itemId: TextItemId): GlyphNode | null {
+  editItem(
+    node: TextRunNode,
+    itemId: TextItemId,
+    glyphId: GlyphId | null = null,
+  ): GlyphNode | null {
     const item = this.editor.text
       .run(node.runId)
       ?.items.find((candidate) => candidate.id === itemId);
-    if (item?.kind !== "glyph") return null;
+    if (!item || item.kind === "linebreak") return null;
 
+    const editedGlyphId = glyphId ?? this.editor.text.glyphIdForItem(itemId);
     const current = this.childGlyph(node);
-    if (current?.itemId === itemId) return current;
-
-    const entry = this.editor.font.entryForName(item.glyphName);
-    if (!entry || !this.editor.glyphForId(entry.id)) return null;
+    if (current?.itemId === itemId && current.glyphId === editedGlyphId) return current;
+    if (!editedGlyphId || !this.editor.glyphForId(editedGlyphId)) return null;
 
     const sourceId =
       current?.sourceId ?? this.editor.activeSourceId ?? this.editor.font.defaultSource.id;
@@ -128,7 +139,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       kind: "glyph",
       parentId: node.id,
       itemId,
-      glyphId: entry.id,
+      glyphId: editedGlyphId,
       sourceId,
       position: { x: 0, y: 0 },
     });
@@ -265,12 +276,14 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
     const radius = this.editor.hitRadius / this.#scale(node);
     let target: PointerTarget | null = null;
-    this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
+    this.#forEachRunGlyph(node, layout, (placed, itemId, model, glyphId) => {
       const local = {
         x: point.x - placed.origin.x,
         y: point.y - placed.origin.y,
       };
-      if (hitsOutline(model, local, radius)) target = { kind: "text", node, point, itemId };
+      if (hitsOutline(model, local, radius)) {
+        target = { kind: "text", node, point, itemId, glyphId };
+      }
     });
     return target;
   }
@@ -496,7 +509,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const run = this.editor.text.run(node.runId);
     if (editing?.nodeId !== node.id || !run) return;
 
-    const caret = Caret.atCluster(layout, clusterForCaret(run.items, editing.focus)).position();
+    const caret = Caret.atCluster(
+      layout,
+      new TextBuffer(run.items, editing.focus).focusCluster,
+    ).position();
     ctx.canvas.line(
       { x: caret.x, y: caret.y + layout.metrics.descender },
       { x: caret.x, y: caret.y + layout.metrics.ascender },
@@ -506,7 +522,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * Visits the glyphs the run draws and hits itself: every loaded glyph except an edited child's item.
+   * Visits the glyphs the run draws and hits itself: every loaded glyph except the edited child's.
    *
    * @remarks
    * Resolves each distinct glyph's render model once per walk, so a reactive
@@ -517,23 +533,29 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   #forEachRunGlyph(
     node: TextRunNode,
     layout: TextLayout,
-    visit: (placed: PlacedGlyph, itemId: TextItemId, model: GlyphRenderModel) => void,
+    visit: (
+      placed: PlacedGlyph,
+      itemId: TextItemId,
+      model: GlyphRenderModel,
+      glyphId: GlyphId,
+    ) => void,
   ): void {
-    const skip = this.#editedChildItemId(node);
+    const skip = this.#editedChildGlyph(node, layout);
     const modelFor = this.#models();
     for (const placed of layout.placedGlyphs) {
       const itemId = placed.glyph.sourceItemIds[0];
-      if (!itemId || itemId === skip || !placed.glyph.glyphId) continue;
-      const model = modelFor(placed.glyph.glyphId);
-      if (model) visit(placed, itemId, model);
+      const glyphId = placed.glyph.glyphId;
+      if (!itemId || placed === skip || !glyphId) continue;
+      const model = modelFor(glyphId);
+      if (model) visit(placed, itemId, model, glyphId);
     }
   }
 
-  /** The child's item while the child is edited; otherwise the child is plain text. */
-  #editedChildItemId(node: TextRunNode): TextItemId | null {
+  /** The child's placed glyph while the child is edited; otherwise the child is plain text. */
+  #editedChildGlyph(node: TextRunNode, layout: TextLayout): PlacedGlyph | null {
     const child = this.childGlyph(node);
     if (!child?.itemId || !this.editor.editing.has(child.id)) return null;
-    return child.itemId;
+    return layout.placedGlyph(child.itemId, child.glyphId);
   }
 
   #model(glyphId: GlyphId): GlyphRenderModel | null {

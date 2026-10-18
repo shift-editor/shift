@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<glyph name="beh-ar.medi" format="2">
+  <advance width="400"/>
+  <anchor x="200" y="600" name="top"/>
+  <outline>
+    <contour>
+      <point x="50" y="0" type="line"/>
+      <point x="350" y="0" type="line"/>
+      <point x="350" y="500" type="line"/>
+      <point x="50" y="500" type="line"/>
+    </contour>
+  </outline>
+</glyph>
