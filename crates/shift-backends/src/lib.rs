@@ -36,6 +36,7 @@ pub use glyph_category::{
 };
 pub use glyph_subset::GlyphSubsetView;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
+pub(crate) use import_report::distinct_named_instances;
 pub use import_report::{ImportLoss, ImportLossKind, ImportReport};
 pub use shift2fontir::{
     AxisConversionError, MappingSide, PropagatedAnchor, PropagatedGlyphAnchors,
