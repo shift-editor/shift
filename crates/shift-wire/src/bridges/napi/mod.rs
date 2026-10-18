@@ -1107,6 +1107,7 @@ pub struct NapiGlyphProjection {
     pub glyph_id: String,
     pub fallback: NapiGlyphLayerShape,
     pub interpolation: Option<NapiGlyphInterpolation>,
+    pub decomposition: Option<NapiInterpolationBasis>,
     pub variation: Option<NapiGlyphVariation>,
     pub exact_source_shapes: Vec<NapiGlyphSourceShape>,
     pub components: NapiGlyphComponents,
@@ -1121,6 +1122,7 @@ impl From<GlyphProjection> for NapiGlyphProjection {
             glyph_id: projection.glyph_id.to_string(),
             fallback: projection.fallback.into(),
             interpolation: projection.interpolation.map(Into::into),
+            decomposition: projection.decomposition.map(Into::into),
             variation: projection.variation.map(Into::into),
             exact_source_shapes: projection
                 .exact_source_shapes

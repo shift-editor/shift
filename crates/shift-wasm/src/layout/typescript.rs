@@ -13,6 +13,7 @@ use shift_font::test_support::generated::assert_generated_file;
 
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
+use crate::decomposition::DecomposedGlyph;
 
 const OUTPUT: &str = "packages/editor/src/lib/wasm/generated/layouts.ts";
 
@@ -37,6 +38,12 @@ fn calls() -> Vec<Call> {
             doc: "Places a composite's components after an edit, anchored ones on their anchors.",
             input: Vec::<FollowingComponent>::kind(),
             output: Vec::<shift_font::anchor_attachment::Following>::kind(),
+        },
+        Call {
+            name: "blendDecomposedGlyph",
+            doc: "Blends every component occurrence of a decomposed glyph as each master places it, or null when any occurrence's masters don't line up point for point.",
+            input: DecomposedGlyph::kind(),
+            output: Option::<Vec<Vec<shift_font::placed_blend::BlendedPoint>>>::kind(),
         },
     ]
 }
@@ -319,7 +326,11 @@ fn type_of(kind: &Kind) -> String {
         Kind::Name => "string".into(),
         Kind::Struct(layout) => layout.name.into(),
         Kind::Enum(layout) => layout.name.into(),
-        Kind::List(item) => format!("readonly {}[]", type_of(item)),
+        Kind::List(item) => match item.as_ref() {
+            // `readonly` and `|` bind looser than `[]`.
+            Kind::List(_) | Kind::Optional(_) => format!("readonly ({})[]", type_of(item)),
+            item => format!("readonly {}[]", type_of(item)),
+        },
         Kind::Optional(item) => format!("{} | null", type_of(item)),
     }
 }

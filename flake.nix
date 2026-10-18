@@ -40,6 +40,8 @@
             # wasm-bindgen crate version in Cargo.lock exactly. wasm-opt
             # comes from @shift/wasm's binaryen devDependency.
             wasm-bindgen-cli
+            # Runs Rust test binaries in parallel for the pre-push hook.
+            cargo-nextest
             cmake
             git
             nodejs_24

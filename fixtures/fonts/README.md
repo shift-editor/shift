@@ -65,6 +65,14 @@ fontmake -u MutatorSansLightCondensed.ufo -o otf
 
 Or download pre-built binaries from font distribution sources.
 
+## MultiFamily.glyphs
+
+Hand-written. One source that also builds a second family (`Multi Family UI`)
+whose instances repeat the main family's locations, a main-family instance at
+the same location as another (`Bold Copy`), and a non-exported component part
+(`_part`, `export = 0`) used by `A`. Covers family-scoped instance import,
+repeated-instance handling, and skipped export.
+
 ## ShapingTest
 
 `ShapingTest.ufo` is a hand-written UFO for live shaping tests: an `f_i`
@@ -80,3 +88,14 @@ Hand-written. The default master is the lightest, its design values (stem
 widths, 62 to 158) sit below the user default (300), and the user-to-design
 mapping comes from the instances' weight classes, as in FiraCode. Covers axis
 mapping and interpolation when the default is at one end of the axis.
+
+## ScaledComponent.glyphs
+
+Hand-written. `bullet` and `bar` place `period` as a component with a different
+scale in each master (`bar` mirrored), and a named instance sits halfway.
+`ringbig` scales `ring`, which has an intermediate master at wght 250 that the
+decomposed glyph keeps. `wedgeflip` mirrors `wedge` in Bold only, so its
+decomposed contour reverses there. `wedgenest` places `wedgeflip` and mirrors it in
+Bold, so Bold's wedge is mirrored twice and keeps its order. Compilers decompose such glyphs and interpolate the
+placed outlines, so the instances cover component interpolation matching
+export.
