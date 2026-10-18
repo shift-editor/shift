@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<glyph name="alefabove-ar" format="2">
+  <advance width="300"/>
+  <unicode hex="0670"/>
+  <outline>
+    <contour>
+      <point x="120" y="600" type="line"/>
+      <point x="180" y="600" type="line"/>
+      <point x="180" y="800" type="line"/>
+      <point x="120" y="800" type="line"/>
+    </contour>
+  </outline>
+</glyph>

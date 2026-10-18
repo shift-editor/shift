@@ -300,8 +300,28 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const advance = this.#displayAdvance(node, view);
     if (advance === null) return;
 
+    if (!this.showsMetrics(node)) {
+      this.#guides.drawBaseline(ctx.canvas, advance);
+      return;
+    }
     const metrics = this.#trackedMetrics();
     this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
+  }
+
+  /**
+   * Whether an edited glyph draws its full metric box. With several glyphs
+   * edited, only those the selection is in do, or with nothing selected the
+   * one edited last; the others draw just their baseline.
+   */
+  showsMetrics(node: GlyphNode): boolean {
+    track(this.editor.subjectGlyphNodesCell);
+    track(this.editor.editing.stateCell);
+    const edited = this.editor.editing.nodeIds;
+    if (edited.length <= 1) return true;
+    if (this.editor.selection.ids.length > 0) {
+      return this.editor.subjectGlyphNodesCell.peek().some((subject) => subject.id === node.id);
+    }
+    return edited.at(-1) === node.id;
   }
 
   /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */

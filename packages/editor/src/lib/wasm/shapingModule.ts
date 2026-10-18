@@ -125,6 +125,7 @@ export class RegisteredShaper {
           yAdvance: glyph.yAdvance,
           xOffset: glyph.xOffset,
           yOffset: glyph.yOffset,
+          isMark: glyph.isMark,
         };
       }),
     };

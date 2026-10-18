@@ -125,7 +125,9 @@ describe("Positioner", () => {
     });
 
     it("lays out a character with no glyph as spacing, then as a mark once the glyph exists", async () => {
+      // Laid out as typed: shaped text gives a mark the font classes as one no advance.
       const run = editor.text.createRun([char(65), char(0x064e)]);
+      editor.history.capture("Shaping off", () => editor.text.setShaping(run.id, false));
       const layoutCell = editor.text.layoutCell(run.id);
       const advances: number[] = [];
       const subscription = effect(() => {

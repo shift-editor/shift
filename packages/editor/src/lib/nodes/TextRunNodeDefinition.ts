@@ -502,8 +502,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       color: canvas.theme.textRun.hoverOutline,
       widthPx: canvas.theme.textRun.hoverOutlineWidthPx,
     };
+    const style = canvas.theme.glyph;
     const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
-    canvas.withPathBatch(canvas.theme.glyph, (batch) => {
+    canvas.withPathBatch(style, (batch) => {
       this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
         let glyph = distinct.get(model);
         if (!glyph) {

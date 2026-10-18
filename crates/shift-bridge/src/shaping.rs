@@ -54,6 +54,8 @@ pub struct NapiShapedGlyph {
   pub y_advance: i32,
   pub x_offset: i32,
   pub y_offset: i32,
+  /// Whether the font classes the glyph as a mark.
+  pub is_mark: bool,
 }
 
 impl From<ShapedGlyph> for NapiShapedGlyph {
@@ -65,6 +67,7 @@ impl From<ShapedGlyph> for NapiShapedGlyph {
       y_advance: glyph.y_advance,
       x_offset: glyph.x_offset,
       y_offset: glyph.y_offset,
+      is_mark: glyph.is_mark,
     }
   }
 }
