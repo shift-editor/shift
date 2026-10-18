@@ -75,7 +75,8 @@ test("clicking a feature tag previews the glyphs it brings in", async ({ page, e
   await editor.selectTool("text");
 
   await glyphProperties(page).getByRole("button", { name: "Preview liga" }).click();
-  const preview = page.getByRole("dialog", { name: /liga/ });
+  // The preview is titled with the feature's name.
+  const preview = page.getByRole("dialog", { name: "Standard Ligatures" });
   await expect(preview).toBeVisible();
   await expect(preview.getByRole("button", { name: "f_i" })).toBeVisible();
 
