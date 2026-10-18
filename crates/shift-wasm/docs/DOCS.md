@@ -10,7 +10,7 @@ Runs shift-font's rules in the editor through WebAssembly, so the editor calls t
 - **Synchronous.** The module is embedded in `@shift/wasm` as base64 and instantiated with `initSync` at import, so computeds and render paths call it directly. Nothing awaits, fetches, or needs a bundler plugin; desktop, vitest, and the SDK import it the same way.
 - **Built, never committed.** `packages/wasm/src/generated/` and `src/generated-reference/` are gitignored and built like the native addon: `@shift/wasm#build` is a turbo task over the Rust sources, `build:native` runs it, and typecheck, tests, and desktop builds depend on it. WHY: rustc's output depends on the build host (Cargo hashes `rustc -vV`, host line included, into symbol names, which decides data layout), so a module built on macOS never matches one built on Linux, and a committed copy could not be checked against a fresh build.
 - **Pinned toolchain.** wasm-bindgen is pinned exactly (`=0.2.121`); the build script refuses a CLI that does not match `Cargo.lock`. wasm-opt is the npm `binaryen` package, pinned exactly as a devDependency of `@shift/wasm` and run through Node from the package's own `bin`, never from PATH, with explicit features. The checkout and Cargo home paths that panic messages embed are remapped, so the module carries no machine's paths.
-- **Numbers across the boundary.** Hot calls take and return `Float64Array`s in the layouts each function documents, with no per-call objects. Anchor names are interned once (`internName`/`nameOf`) and travel as ids. Axes and compiled bases are registered once, giving a handle; a location then travels as numbers in axis order, NaN for a missing coordinate. Cold, structured values (`AnchorKind`, registration inputs) are typed with tsify, so `shift_wasm.d.ts` is generated, not hand-written.
+- **Numbers across the boundary.** Hot calls take and return `Float64Array`s, with no per-call objects. **CRITICAL**: each layout is declared once, in Rust (`layout!`, `foreign_layout!`, `enum_layout!` in `src/layout.rs`), and the editor's side of every hot call — interfaces, encoder, the call, decoder — is generated from it into `packages/editor/src/lib/wasm/generated/layouts.ts` by the `generated_file_wasm_layouts` test. Never hand-write a packer: a field order typed out twice drifts silently, because reading past the end yields zeros rather than an error. Anchor names are interned once (`internName`/`nameOf`) and travel as ids. Axes and compiled bases are registered once, giving a handle; a location then travels as numbers in axis order, NaN for a missing coordinate. Cold, structured values (`AnchorKind`, registration inputs) are typed with tsify, so `shift_wasm.d.ts` is generated, not hand-written.
 - **The reference module never ships.** The `reference` cargo feature adds test-only exports (`src/reference/`) that return shift-font's answers for the rules the editor keeps in TypeScript. It builds into a second module, `src/generated-reference/`, loaded by `@shift/wasm/reference`. The production module is built without the feature and is unchanged by it. Lint (`shift/no-reference-module-outside-tests`) rejects importing it outside `.test.ts` files and `testing/` helpers, and the SDK build fails if its bundle contains it.
 - **Handles follow their objects.** The editor registers each axes array and basis once per object identity (`lib/wasm/variation.ts`, `Handles`). A `FinalizationRegistry` releases the module's copy when the object is collected.
 
@@ -22,7 +22,8 @@ crates/shift-wasm/src/
   anchors.rs     anchorKind, propagateAnchors, followAnchors
   variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
   names.rs       interned anchor names
-  reader.rs      sequential reader over a Float64Array input
+  layout.rs      Reader, Writer, the Layout trait, and the layout! macros hot calls are declared with
+  layout/typescript.rs   generated_file_wasm_layouts: the registry of hot calls and the TypeScript generator
   reference/     test-only exports behind the `reference` feature
     geometry.rs      composeTransform, transformPoint, decomposeMatrix, contourGeometry, transformLayer
     kerning.rs       resolveKerning
@@ -39,7 +40,9 @@ packages/editor/src/testing/
 packages/editor/src/lib/reference/
   Component.reference.test.ts, Contour.reference.test.ts   glyph-state and geo geometry against Rust
 packages/editor/src/lib/wasm/
-  anchors.ts     typed wrappers: propagateAnchors, followingPlacements, anchorKind
+  generated/layouts.ts   generated: interfaces and typed calls for every hot call (oxfmt-ignored)
+  numbers.ts     NumberWriter (one shared, growing buffer) and NumberReader, used by the generated calls
+  anchors.ts     propagateAnchors, followingPlacements, anchorKind over the generated calls
   variation.ts   typed wrappers, handles, and the per-basis weights memo
   names.ts       name-id cache
 ```
@@ -48,7 +51,7 @@ packages/editor/src/lib/wasm/
 
 - **`AnchorKind`** — an anchor's role read from its name, as a tsify-typed tagged union.
 - **Registries** (`registerAxes`, `registerVariationBasis`, `registerInterpolationBasis`, `registerAxisMappings`) — hold Rust copies of the editor's compiled values, addressed by handle; the editor's `Handles` maps each object to its handle.
-- **Number layouts** — `propagateAnchors` and `followAnchors` take and return flat `Float64Array`s laid out as their doc comments describe; locations are numbers in registered-axis order.
+- **`Layout`** — a value with a number layout: `read`, `write`, and (in tests) `kind`, the description the TypeScript generator reads. Fields cross in declaration order; a list is its length then its items, an optional value a flag then the value, a name its interned id, an enum its variant index (a string in TypeScript). Locations are not layouts: they are plain numbers in registered-axis order.
 - **`@shift/wasm/reference`** — the test-only module's comparison exports: `composeTransform`, `transformPoint`, `decomposeMatrix`, `contourGeometry`, `transformLayer`, `resolveKerning`, `compileAxisMappings`, `mapLocation`. Their `Reference*` input and output types are generated by tsify and mirror only the fields Rust reads, so the editor's `DecomposedTransform`, `MatModel`, `GlyphState`, `KerningSnapshot`, `KerningValueEdit`, `Axis`, and `AxisMapping` satisfy them. A value Rust has no answer for (no bounds, no kerning pair) comes back `undefined`.
 
 ## How it works
@@ -91,9 +94,10 @@ The reference module never ships. It is a second instance with its own memory, a
 ### Adding a rule
 
 1. Make the rule a plain-data function in shift-font that native callers use too.
-2. Export it here, taking numbers for anything called per frame and tsify types otherwise.
-3. Add a typed wrapper in `packages/editor/src/lib/wasm/` and delete the TypeScript copy and its oracle.
-4. Run `pnpm build:wasm` (turbo rebuilds it on its own before typecheck and tests).
+2. For a call made per frame, declare its input and output here with `layout!` (a struct this crate owns), `foreign_layout!` (a shift-font struct, listing the fields that cross), or `enum_layout!`, and export `fn(input: &[f64]) -> Vec<f64>` as `call(input, |value: Input| rule(...))`. Cold calls take tsify types instead.
+3. Register the call in `calls()` in `src/layout/typescript.rs` and run `pnpm generate:from-rust`, which writes its typed function into `generated/layouts.ts`.
+4. Wrap that function in `packages/editor/src/lib/wasm/` only where the editor needs a different shape (`followingPlacements` turns decomposed transforms into matrices), and delete the TypeScript copy and its oracle.
+5. Run `pnpm build:wasm` (turbo rebuilds it on its own before typecheck and tests).
 
 ### Adding a comparison
 
@@ -105,11 +109,14 @@ The reference module never ships. It is a second instance with its own memory, a
 
 - **Running vitest directly skips the build.** Running vitest from a package directory or an editor test runner does not go through turbo, so after changing shift-font or this crate both modules are stale until `pnpm build:wasm` runs. The root `pnpm test`, `pnpm test:desktop`, and `pnpm check` rebuild them.
 - **A missing module fails at import.** A fresh clone has no `src/generated/` or `src/generated-reference/`; anything importing `@shift/wasm` or `@shift/wasm/reference` fails to resolve it until the first build.
+- **A stale generated file fails `cargo test`, not typecheck.** Changing a layout without `pnpm generate:from-rust` still typechecks against the old `layouts.ts`; `generated_file_wasm_layouts` is what catches it.
+- **The layout description is test-only.** `Kind` and `Layout::kind` exist under `cfg(test)`, so the shipped module carries no schema; the generator runs as a host `cargo test`.
 - **The workspace clippy run skips the reference exports.** `cargo clippy --workspace` builds without features, so CI's `rust-check` job lints `--features reference` for wasm32 in its own step.
 
 ## Verification
 
 ```bash
+nix develop --command cargo test -p shift-wasm --lib  # layout round trips; fails when generated/layouts.ts is stale
 nix develop --command pnpm build:wasm                # build src/generated and src/generated-reference
 nix develop --command pnpm check                     # typecheck and tests build both first
 nix develop --command cargo clippy -p shift-wasm --target wasm32-unknown-unknown -- -D warnings

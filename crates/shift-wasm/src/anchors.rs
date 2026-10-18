@@ -1,20 +1,19 @@
 //! Anchor rules: kinds, propagation into composites, and anchored placement.
 //!
-//! Propagation and placement take and return numbers in the layouts
-//! documented on each function; anchor names are interned ids ([`crate::names`]).
+//! Propagation and placement take and return numbers in the layouts declared
+//! here ([`crate::layout`]); anchor names are interned ids ([`crate::names`]).
 
 use fontir::ir::AnchorKind as IrAnchorKind;
 use serde::Serialize;
-use shift_font::anchor_attachment::{follow_anchors, AnchorLike, FollowingComponent};
+use shift_font::anchor_attachment::{self, follow_anchors, AnchorLike, Following};
 use shift_font::anchor_propagation::{
-    compiled_anchors, PropagationAnchor, PropagationComponent, PropagationGlyph,
+    self, compiled_anchors, PropagatedAnchors, PropagationAnchor,
 };
 use shift_font::{ComponentAlignment, DecomposedTransform, Transform};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
-use crate::names::{with_names, NameTable};
-use crate::reader::Reader;
+use crate::layout::{call, enum_layout, foreign_layout, layout};
 
 /// An anchor's role in mark positioning, as export reads its name.
 #[derive(Serialize, Tsify)]
@@ -76,196 +75,165 @@ pub fn anchor_kind(name: &str) -> Result<Ts<AnchorKind>, JsError> {
 
 /// Propagates one glyph's anchors at one location, as export compiles them.
 ///
-/// Input: `isMark, isLigature, ownCount, (name, x, y)×ownCount, componentCount`,
-/// then per component `hasAnchors, baseGlyphCount, xx, xy, yx, yy, dx, dy,
-/// anchorCount, (name, x, y)×anchorCount`. Output: `baseGlyphCount, count,
-/// (name, x, y)×count`. Names are interned ids.
+/// Input: a [`PropagationGlyph`]. Output: [`PropagatedAnchors`].
 #[wasm_bindgen(js_name = propagateAnchors)]
 pub fn propagate_anchors(input: &[f64]) -> Vec<f64> {
-    let mut output = Vec::new();
-    with_names(|names| {
-        let mut read = Reader::new(input);
-        let is_mark = read.flag();
-        let is_ligature = read.flag();
-        let own = read_named(&mut read, &*names);
-        let component_count = read.count();
-        let mut bases = Vec::with_capacity(component_count);
-        for _ in 0..component_count {
-            let has_anchors = read.flag();
-            let base_glyph_count = read.count();
-            let transform = Transform {
-                xx: read.number(),
-                xy: read.number(),
-                yx: read.number(),
-                yy: read.number(),
-                dx: read.number(),
-                dy: read.number(),
-            };
-            let anchors = read_named(&mut read, &*names);
-            bases.push((has_anchors.then_some(anchors), base_glyph_count, transform));
-        }
-        let components: Vec<_> = bases
+    call(input, |glyph: PropagationGlyph| {
+        let components = glyph
+            .components
             .iter()
-            .map(
-                |(anchors, base_glyph_count, transform)| PropagationComponent {
-                    anchors: anchors.as_deref(),
-                    base_glyph_count: *base_glyph_count,
-                    transform: *transform,
-                },
-            )
-            .collect();
-
-        let propagated = compiled_anchors(&PropagationGlyph {
-            anchors: &own,
+            .map(|component| anchor_propagation::PropagationComponent {
+                anchors: component.anchors.as_deref(),
+                base_glyph_count: component.base_glyph_count,
+                transform: component.transform,
+            })
+            .collect::<Vec<_>>();
+        compiled_anchors(&anchor_propagation::PropagationGlyph {
+            anchors: &glyph.anchors,
             components: &components,
-            is_mark,
-            is_ligature,
-        });
-        output.push(propagated.base_glyph_count as f64);
-        output.push(propagated.anchors.len() as f64);
-        for anchor in propagated.anchors {
-            output.extend([f64::from(names.id(&anchor.name)), anchor.x, anchor.y]);
-        }
-    });
-    output
+            is_mark: glyph.is_mark,
+            is_ligature: glyph.is_ligature,
+        })
+    })
 }
 
 /// Places a composite's components after an edit, anchored ones on their anchors.
 ///
-/// Input: `count`, then per component `alignment (0 unset, 1 anchored, 2 free),
-/// hasAccepted, transform×9, acceptedTransform×9, anchorCount, (name, x, y)×,
-/// acceptedAnchorCount, (name, x, y)×`, transforms decomposed in interpolation
-/// order and anchors the component glyph's own, a name of -1 for an unnamed
-/// one. Output: per component `alignment, transform×9`.
+/// Input: a list of [`FollowingComponent`]. Output: a list of [`Following`],
+/// one per component.
 #[wasm_bindgen(js_name = followAnchors)]
 pub fn follow_anchors_in(input: &[f64]) -> Vec<f64> {
-    let mut output = Vec::new();
-    with_names(|names| {
-        let mut read = Reader::new(input);
-        let count = read.count();
-        let mut parts = Vec::with_capacity(count);
-        for _ in 0..count {
-            let alignment = match read.count() {
-                1 => ComponentAlignment::Anchored,
-                2 => ComponentAlignment::Free,
-                _ => ComponentAlignment::Unset,
-            };
-            let has_accepted = read.flag();
-            let transform = read_transform(&mut read);
-            let accepted = read_transform(&mut read);
-            let anchors = read_points(&mut read);
-            let accepted_anchors = read_points(&mut read);
-            parts.push((
-                alignment,
-                transform,
-                has_accepted.then_some(accepted),
-                anchors,
-                accepted_anchors,
-            ));
-        }
-
-        let lookup: &dyn NameTable = &*names;
-        let points = |anchors: &[(f64, f64, f64)]| -> Vec<Point<'_>> {
-            anchors
-                .iter()
-                .map(|&(name, x, y)| Point {
-                    name: (name >= 0.0).then(|| lookup.name(name as u32)).flatten(),
-                    x,
-                    y,
-                })
-                .collect()
-        };
-        let resolved: Vec<_> = parts
+    call(input, |components: Vec<FollowingComponent>| {
+        let components = components
             .iter()
-            .map(|(_, _, _, anchors, accepted)| (points(anchors), points(accepted)))
-            .collect();
-        let components: Vec<_> = parts
-            .iter()
-            .zip(&resolved)
-            .map(
-                |((alignment, transform, accepted, _, _), (anchors, accepted_anchors))| {
-                    FollowingComponent {
-                        alignment: *alignment,
-                        transform: *transform,
-                        accepted_transform: *accepted,
-                        anchors,
-                        accepted_anchors,
-                    }
-                },
-            )
-            .collect();
-
-        for follow in follow_anchors(&components) {
-            output.push(match follow.alignment {
-                ComponentAlignment::Unset => 0.0,
-                ComponentAlignment::Anchored => 1.0,
-                ComponentAlignment::Free => 2.0,
-            });
-            write_transform(&mut output, &follow.transform);
-        }
-    });
-    output
+            .map(|component| anchor_attachment::FollowingComponent {
+                alignment: component.alignment,
+                transform: component.transform,
+                accepted_transform: component.accepted_transform,
+                anchors: &component.anchors,
+                accepted_anchors: &component.accepted_anchors,
+            })
+            .collect::<Vec<_>>();
+        follow_anchors(&components)
+    })
 }
 
-/// An anchor whose name was looked up from its id.
-struct Point<'a> {
-    name: Option<&'a str>,
-    x: f64,
-    y: f64,
+foreign_layout! {
+    /// A named anchor position in a glyph's own coordinates.
+    PropagationAnchor => PropagationAnchor {
+        name: String,
+        x: f64,
+        y: f64,
+    }
 }
 
-impl AnchorLike for Point<'_> {
+foreign_layout! {
+    /// A glyph's anchors with its components' anchors copied in.
+    PropagatedAnchors => PropagatedAnchors {
+        anchors: Vec<PropagationAnchor>,
+        /// How many base glyphs this glyph counts, for composites built on it.
+        base_glyph_count: usize,
+    }
+}
+
+foreign_layout! {
+    /// An affine matrix: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+    Transform => Matrix {
+        xx: f64 => a,
+        xy: f64 => b,
+        yx: f64 => c,
+        yy: f64 => d,
+        dx: f64 => e,
+        dy: f64 => f,
+    }
+}
+
+foreign_layout! {
+    /// A transform as its parts, in interpolation order.
+    DecomposedTransform => DecomposedTransform {
+        translate_x: f64,
+        translate_y: f64,
+        rotation: f64,
+        scale_x: f64,
+        scale_y: f64,
+        skew_x: f64,
+        skew_y: f64,
+        t_center_x: f64,
+        t_center_y: f64,
+    }
+}
+
+enum_layout! {
+    /// How a component was placed: by its anchors, by hand, or not recorded.
+    ComponentAlignment {
+        Unset => "unset",
+        Anchored => "anchored",
+        Free => "free",
+    }
+}
+
+foreign_layout! {
+    /// Where a component goes after an edit, and whether it is anchored.
+    Following => Following {
+        transform: DecomposedTransform,
+        alignment: ComponentAlignment,
+    }
+}
+
+layout! {
+    /// One component of a composite, as propagation reads it.
+    pub struct PropagationComponent {
+        /// The component glyph's anchors after its own propagation; null when the glyph is missing.
+        pub anchors: Option<Vec<PropagationAnchor>>,
+        /// How many base glyphs the component glyph counts, for numbering ligature anchors.
+        pub base_glyph_count: usize,
+        /// Where the component sits in the composite.
+        pub transform: Transform => matrix,
+    }
+}
+
+layout! {
+    /// A glyph's own anchors and components, and the category facts propagation reads.
+    pub struct PropagationGlyph {
+        pub anchors: Vec<PropagationAnchor>,
+        pub components: Vec<PropagationComponent>,
+        /// A mark that has anchors keeps exactly its own.
+        pub is_mark: bool,
+        /// A ligature numbers its components' anchors: `top` becomes `top_1`, `top_2`.
+        pub is_ligature: bool,
+    }
+}
+
+layout! {
+    /// An anchor as alignment reads it.
+    pub struct AlignmentAnchor {
+        pub name: Option<String>,
+        pub x: f64,
+        pub y: f64,
+    }
+}
+
+layout! {
+    /// One component of a composite, as it is now and as the workspace last accepted it.
+    pub struct FollowingComponent {
+        /// As the workspace last accepted it.
+        pub alignment: ComponentAlignment,
+        pub transform: DecomposedTransform,
+        /// Null for a component the edit added.
+        pub accepted_transform: Option<DecomposedTransform>,
+        /// The component glyph's own anchors now.
+        pub anchors: Vec<AlignmentAnchor>,
+        /// The component glyph's own anchors as last accepted.
+        pub accepted_anchors: Vec<AlignmentAnchor>,
+    }
+}
+
+impl AnchorLike for AlignmentAnchor {
     fn anchor_name(&self) -> Option<&str> {
-        self.name
+        self.name.as_deref()
     }
 
     fn position(&self) -> (f64, f64) {
         (self.x, self.y)
     }
-}
-
-fn read_named(read: &mut Reader, names: &dyn NameTable) -> Vec<PropagationAnchor> {
-    let count = read.count();
-    (0..count)
-        .filter_map(|_| {
-            let name = names.name(read.count() as u32).map(str::to_string);
-            let (x, y) = (read.number(), read.number());
-            Some(PropagationAnchor { name: name?, x, y })
-        })
-        .collect()
-}
-
-fn read_points(read: &mut Reader) -> Vec<(f64, f64, f64)> {
-    let count = read.count();
-    (0..count)
-        .map(|_| (read.number(), read.number(), read.number()))
-        .collect()
-}
-
-fn read_transform(read: &mut Reader) -> DecomposedTransform {
-    DecomposedTransform {
-        translate_x: read.number(),
-        translate_y: read.number(),
-        rotation: read.number(),
-        scale_x: read.number(),
-        scale_y: read.number(),
-        skew_x: read.number(),
-        skew_y: read.number(),
-        t_center_x: read.number(),
-        t_center_y: read.number(),
-    }
-}
-
-fn write_transform(output: &mut Vec<f64>, transform: &DecomposedTransform) {
-    output.extend([
-        transform.translate_x,
-        transform.translate_y,
-        transform.rotation,
-        transform.scale_x,
-        transform.scale_y,
-        transform.skew_x,
-        transform.skew_y,
-        transform.t_center_x,
-        transform.t_center_y,
-    ]);
 }
