@@ -117,6 +117,7 @@ test.describe("Performance — 50K points", () => {
    * Assert hard threshold + baseline regression for a perf result.
    */
   function assertPerf(stats: PerfResult): void {
+    console.log(`RAW ${stats.label}: ${stats.samples.map((t) => t.toFixed(1)).join(" ")}`);
     // 1. Hard ceiling.
     const ceiling = THRESHOLDS[stats.label];
     if (ceiling !== undefined) {
