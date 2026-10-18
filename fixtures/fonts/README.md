@@ -44,6 +44,8 @@ every master with what export compiles.
 performance measurements. It has `a`–`z` (two rings and a stem each, with `top`/`bottom`
 anchors), five combining marks with `_top` and `top` anchors, and the composites `ǖ ǘ ǚ ü ú ù ū`
 built on `u` with their marks placed on anchors (`ǖ ǘ ǚ` stack a second mark on the first).
+The spacing `¨` is a composite of `dieresiscomb`, so it inherits its anchors without being a
+mark.
 Regenerate it with:
 
 ```bash
