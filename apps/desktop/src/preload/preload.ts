@@ -57,6 +57,10 @@ const shiftHost: ShiftHost = {
     onAvailable: listen(ipcRenderer, "update.available"),
     onReady: listen(ipcRenderer, "update.ready"),
   },
+  debug: {
+    overlays: invoke(ipcRenderer, "debug.overlays"),
+    onOverlaysChanged: listen(ipcRenderer, "debug.overlaysChanged"),
+  },
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
   },

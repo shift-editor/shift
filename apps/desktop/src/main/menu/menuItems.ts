@@ -2,6 +2,7 @@ import type { MenuItemConstructorOptions } from "electron";
 import { commandShortcuts, toElectronAccelerator, type CommandId } from "../../shared/commands";
 import { commands } from "../commands/Commands";
 import { pathBasename, recentFolderLabels, type RecentDocument } from "../../shared/recents";
+import { DEBUG_OVERLAY_ITEMS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
 
 /** Recent files and actions shown in File → Open Recent. */
 export type RecentMenu = {
@@ -57,6 +58,24 @@ export function fileMenuItems(
       submenu: [commandMenuItem("file.exportTtf", runCommand, isCommandEnabled)],
     },
   ];
+}
+
+/** Debug overlay toggles and how to flip one. */
+export type DebugMenu = {
+  overlays: () => DebugOverlays;
+  toggle: (id: DebugOverlayId) => void;
+};
+
+/** Builds the Debug menu: one checkbox per canvas overlay. */
+export function debugMenuItems(debug: DebugMenu): MenuItemConstructorOptions[] {
+  const overlays = debug.overlays();
+
+  return DEBUG_OVERLAY_ITEMS.map(({ id, label }) => ({
+    type: "checkbox",
+    label,
+    checked: overlays[id],
+    click: () => debug.toggle(id),
+  }));
 }
 
 /**

@@ -1,12 +1,14 @@
 import { Fragment, useCallback, useRef, useState, type CSSProperties } from "react";
 import { cn } from "@shift/ui";
 import type { Editor } from "../lib/editor/Editor";
+import { useSignalState } from "../lib/signals";
 import type { ToolbarDock, ToolbarDragState } from "../types/toolbar";
 import { SLOT_FRAME, ToolbarBar } from "./ToolbarBar";
 import { BAR_THICKNESS } from "./toolbarGeometry";
 import { toolbarBarOrigin, toolbarLift, toolbarToolOpacity } from "./toolbarDrag";
 import { TOOLBAR_DOCKS, fitDockToFrame, poseForDock } from "./toolbarPose";
 import { readToolbarDock, writeToolbarDock } from "./toolbarStorage";
+import { ToolbarZonesOverlay } from "./ToolbarZonesOverlay";
 import { useToolbarDrag } from "./useToolbarDrag";
 import { useToolbarMetrics } from "./useToolbarMetrics";
 
@@ -60,6 +62,7 @@ export function FloatingToolbar({ editor }: FloatingToolbarProps) {
     writeToolbarDock(next);
   }, []);
   const metrics = useToolbarMetrics(layerRef);
+  const showZones = useSignalState(editor.debugOverlaysCell).toolbarZones;
   const shownDock = metrics ? fitDockToFrame(dock, metrics.frame, metrics.barLength) : dock;
   const previewLength = metrics?.barLength ?? 0;
   const { drag, onGripPointerDown } = useToolbarDrag({
@@ -79,6 +82,14 @@ export function FloatingToolbar({ editor }: FloatingToolbarProps) {
         <div
           aria-hidden="true"
           className="pointer-events-auto fixed inset-0 z-50 cursor-grabbing"
+        />
+      ) : null}
+      {showZones && metrics ? (
+        <ToolbarZonesOverlay
+          frame={metrics.frame}
+          barLength={metrics.barLength}
+          dock={shownDock}
+          drag={drag}
         />
       ) : null}
       {/*

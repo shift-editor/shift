@@ -21,6 +21,7 @@ The tools bar that floats over the canvas, docked to an edge the user picks by d
 ```
 ui/
 ├── FloatingToolbar.tsx   — overlay, target edge line and landing outline, wires the hooks to the bar
+├── ToolbarZonesOverlay.tsx — debug view of the dock zones, target margin, reach point, pointer and handle
 ├── ToolbarBar.tsx        — the bar itself, FLIP slide and turn about the handle, tools dip
 ├── ToolsPane.tsx         — the tool buttons and their menus, in either orientation
 ├── useToolbarDrag.ts     — pointer tracking and the guards that always end a drag
@@ -60,6 +61,8 @@ On release `useToolbarDrag` calls `onDock(drag.target)`. `ToolbarBar` sees the n
 - The drag, animation and hooks have no automated tests; the pure modules do. Check Escape, right-click, a short window and grabbing mid-animation by hand.
 
 ## Verification
+
+- In a development build, Debug → Toolbar Dock Zones draws each zone, the target's zone grown by `ZONE_MARGIN`, and the pointer, reach point and handle while dragging. It is mounted only while toggled on and is never persisted, so profiling runs start without it.
 
 - `pnpm turbo run test --filter=@shift/editor`
 - `pnpm profile:desktop --scenario toolbar-drag --font <path>` for drag frame times and renders per commit

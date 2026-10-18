@@ -52,6 +52,7 @@ import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
+import { NO_DEBUG_OVERLAYS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
 import {
   CommandLineTool,
   type CommandLineToolState,
@@ -108,6 +109,8 @@ export class App {
   #pendingOpenPaths: string[] = [];
   /** The menu bar last sent to renderers, serialized, so unchanged refreshes are skipped. */
   #publishedMenuBar: string | null = null;
+  /** Debug menu overlay toggles; never persisted, so every launch starts with them off. */
+  #debugOverlays: DebugOverlays = NO_DEBUG_OVERLAYS;
   #previewConversions = new Map<string, Promise<void>>();
   #documentCrashDecisions = new Map<string, Promise<void>>();
 
@@ -144,6 +147,10 @@ export class App {
       clear: () => this.#recents?.clear(),
     }),
     () => this.#publishMenuBar(),
+    {
+      overlays: () => this.#debugOverlays,
+      toggle: (id) => this.#toggleDebugOverlay(id),
+    },
   );
 
   /**
@@ -588,6 +595,7 @@ export class App {
     ipc.handle(ipcMain, "update.later", () => {
       this.#updater.later();
     });
+    ipc.handle(ipcMain, "debug.overlays", () => this.#debugOverlays);
     ipc.handle(ipcMain, "recents.list", () => {
       return this.#recents?.list() ?? [];
     });
@@ -1044,6 +1052,16 @@ export class App {
     for (const window of this.#windows.allWindows()) {
       if (window.window.isDestroyed()) continue;
       ipc.send(window.window.webContents, "menu.barChanged", bar);
+    }
+  }
+
+  #toggleDebugOverlay(id: DebugOverlayId): void {
+    this.#debugOverlays = { ...this.#debugOverlays, [id]: !this.#debugOverlays[id] };
+    this.#applicationMenu.refresh();
+
+    for (const window of this.#windows.allWindows()) {
+      if (window.window.isDestroyed()) continue;
+      ipc.send(window.window.webContents, "debug.overlaysChanged", this.#debugOverlays);
     }
   }
 
