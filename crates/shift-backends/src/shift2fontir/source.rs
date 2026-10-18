@@ -83,6 +83,9 @@ pub(super) struct ShiftSnapshot {
     /// Glyphs in the Mark category, whatever their subcategory; anchor
     /// propagation returns such a glyph's own anchors as they are.
     pub mark_category_glyphs: HashSet<String>,
+    /// Glyphs the source marks as not exported, by name. They stay available
+    /// as components, which the compiler decomposes, but are not emitted.
+    pub skipped_glyphs: HashSet<String>,
 }
 
 impl ShiftSnapshot {
@@ -175,6 +178,12 @@ impl ShiftIrSource {
                         .map(|glyph| glyph.name().to_string())
                         .collect()
                 },
+                skipped_glyphs: font
+                    .lib()
+                    .skipped_export_glyphs()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
             }),
         })
     }

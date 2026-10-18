@@ -10,6 +10,7 @@ use super::{
         add_intermediate_sources, convert_glyph, convert_kerning, font_header,
         imported_layer_count, GlyphsLayerSources,
     },
+    families::InstanceFamilies,
     report::import_report,
 };
 use crate::{
@@ -89,7 +90,10 @@ pub(crate) fn stream_retained(
     source: Arc<GlyphsFont>,
 ) -> FormatBackendResult<(Font, GlyphsGlyphStream, ImportReport)> {
     let mut report = import_report(&source);
-    let (mut header, source_ids_by_master_id) = font_header(&source, path)?;
+    let families = InstanceFamilies::read(path, &source);
+    report.losses.extend(families.loss());
+    let (mut header, source_ids_by_master_id) =
+        font_header(&source, path, &families, &mut report.losses)?;
     let glyph_names = source
         .glyphs
         .values()

@@ -81,7 +81,7 @@ describe("source creation", () => {
         deltas: [
           {
             region: [{ axisId: axis.id, lower: 0, peak: 1, upper: 1 }],
-            values: Float64Array.of(-0.2),
+            values: Float64Array.of(-100),
           },
         ],
       },

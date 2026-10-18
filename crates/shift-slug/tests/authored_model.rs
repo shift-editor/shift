@@ -315,6 +315,74 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
 }
 
 #[test]
+fn components_scaled_per_master_resolve_like_the_compiled_font() {
+    let path = format!(
+        "{}/../../fixtures/fonts/ScaledComponent.glyphs",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let font = FontLoader::new().read_font(&path).unwrap();
+    let page = build_authored_atlas(&font, 8).unwrap();
+    let axis = font.axes()[0].id();
+
+    for name in ["bullet", "bar", "ringbig", "wedgeflip"] {
+        let glyph_id = font.glyph_by_name(name).unwrap().id();
+        let atlas_index = page
+            .glyphs()
+            .iter()
+            .find(|glyph| glyph.glyph_id == glyph_id)
+            .unwrap()
+            .authored
+            .default_glyph;
+        for weight in [100.0, 200.0, 250.0, 400.0, 700.0] {
+            let mut location = DesignLocation::new();
+            location.set(axis.clone(), weight);
+            let mut weights = vec![0.0_f32; page.weight_count() as usize];
+            weights[0] = 1.0;
+            for set in page.weight_sets() {
+                let values = set.basis().weights_at(&location, font.axes()).unwrap();
+                for (index, value) in set.source_weight_indices().iter().zip(values) {
+                    weights[*index as usize] = value as f32;
+                }
+            }
+            let actual = page
+                .atlas()
+                .resolve_glyph_with_weights(atlas_index, &weights)
+                .unwrap();
+            let expected = font
+                .projection(&location)
+                .glyph(&glyph_id)
+                .unwrap()
+                .unwrap();
+            let expected = curves_from_resolved_contours(expected.contours()).unwrap();
+
+            let error = maximum_curve_bounds_error(&actual, &expected);
+            assert!(error <= 0.001, "{name} at wght {weight}: error {error}");
+        }
+    }
+}
+
+/// Largest difference between the two curve sets' bounds. Point order may
+/// differ at a master, where a mirrored decomposed contour runs reversed.
+fn maximum_curve_bounds_error(actual: &[Curve], expected: &[Curve]) -> f32 {
+    let bounds = |curves: &[Curve]| {
+        curves.iter().fold(
+            [f32::MAX, f32::MAX, f32::MIN, f32::MIN],
+            |[x0, y0, x1, y1], curve| {
+                let b = curve.bounds();
+                [
+                    x0.min(b.min_x),
+                    y0.min(b.min_y),
+                    x1.max(b.max_x),
+                    y1.max(b.max_y),
+                ]
+            },
+        )
+    };
+    let (a, b) = (bounds(actual), bounds(expected));
+    (0..4).map(|i| (a[i] - b[i]).abs()).fold(0.0, f32::max)
+}
+
+#[test]
 fn component_model_resolves_varying_decomposed_transform() {
     let mut font = sample_variable_font();
     let glyph_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
@@ -497,59 +565,13 @@ fn component_model_ignores_mark_anchors_when_placing_components() {
 
 #[test]
 fn component_model_accepts_a_component_specific_interpolation_basis() {
-    let mut font = sample_variable_font();
-    let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
-    let root_source_ids = font
-        .glyph(&root_id)
-        .unwrap()
-        .layers()
-        .values()
-        .map(|layer| layer.source_id())
-        .collect::<Vec<_>>();
-    let medium_source_id = font
-        .sources()
-        .iter()
-        .find(|source| source.name() == "Medium")
-        .unwrap()
-        .id();
-
-    let child_id = GlyphId::from_raw("different-basis-child");
-    let mut child = Glyph::with_id(child_id.clone(), "different-basis-child");
-    for (source_index, source_id) in [
-        root_source_ids[0].clone(),
-        medium_source_id,
-        root_source_ids[1].clone(),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        child.set_layer(triangle_layer_for_source_shifted(
-            source_id,
-            source_index as f64 * 30.0,
-        ));
-    }
-    font.insert_glyph(child).unwrap();
-
-    let root_layer_ids = font
-        .glyph(&root_id)
-        .unwrap()
-        .layers()
-        .values()
-        .map(|layer| layer.id())
-        .collect::<Vec<_>>();
-    for (source_index, layer_id) in root_layer_ids.into_iter().enumerate() {
-        font.layer_mut(&layer_id)
-            .unwrap()
-            .add_component(Component::with_transform(
-                child_id.clone(),
-                "different-basis-child",
-                DecomposedTransform {
-                    rotation: source_index as f64 * 20.0,
-                    scale_x: 1.0 + source_index as f64 * 0.5,
-                    ..DecomposedTransform::identity()
-                },
-            ));
-    }
+    // Offsets alone vary, so the root keeps its component and needs the
+    // child's own weight set.
+    let (font, root_id, child_id) =
+        font_with_differently_based_child(|source_index| DecomposedTransform {
+            translate_x: source_index as f64 * 40.0,
+            ..DecomposedTransform::identity()
+        });
 
     let projection = font.glyph_projection(&root_id).unwrap().unwrap();
     let child_projection = font.glyph_projection(&child_id).unwrap().unwrap();
@@ -610,6 +632,119 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
     let expected =
         curves_from_resolved_contours(font_projection.glyph(&root_id).unwrap().unwrap().contours())
             .unwrap();
+
+    assert_curves_close(&actual, &expected, 0.001);
+}
+
+/// A variable font whose `A` places a child with an extra Medium master, its
+/// transform per root master given by `transform`.
+fn font_with_differently_based_child(
+    transform: impl Fn(usize) -> DecomposedTransform,
+) -> (shift_font::Font, GlyphId, GlyphId) {
+    let mut font = sample_variable_font();
+    let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
+    let root_source_ids = font
+        .glyph(&root_id)
+        .unwrap()
+        .layers()
+        .values()
+        .map(|layer| layer.source_id())
+        .collect::<Vec<_>>();
+    let medium_source_id = font
+        .sources()
+        .iter()
+        .find(|source| source.name() == "Medium")
+        .unwrap()
+        .id();
+
+    let child_id = GlyphId::from_raw("different-basis-child");
+    let mut child = Glyph::with_id(child_id.clone(), "different-basis-child");
+    for (source_index, source_id) in [
+        root_source_ids[0].clone(),
+        medium_source_id,
+        root_source_ids[1].clone(),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        child.set_layer(triangle_layer_for_source_shifted(
+            source_id,
+            source_index as f64 * 30.0,
+        ));
+    }
+    font.insert_glyph(child).unwrap();
+
+    let root_layer_ids = font
+        .glyph(&root_id)
+        .unwrap()
+        .layers()
+        .values()
+        .map(|layer| layer.id())
+        .collect::<Vec<_>>();
+    for (source_index, layer_id) in root_layer_ids.into_iter().enumerate() {
+        font.layer_mut(&layer_id)
+            .unwrap()
+            .add_component(Component::with_transform(
+                child_id.clone(),
+                "different-basis-child",
+                transform(source_index),
+            ));
+    }
+
+    (font, root_id, child_id)
+}
+
+#[test]
+fn decomposed_root_keeps_its_components_extra_master() {
+    // Rotation and scale vary, so compilers decompose the root, sampling it
+    // at its own masters and at the child's extra Medium master too.
+    let (font, root_id, _) =
+        font_with_differently_based_child(|source_index| DecomposedTransform {
+            rotation: source_index as f64 * 20.0,
+            scale_x: 1.0 + source_index as f64 * 0.5,
+            ..DecomposedTransform::identity()
+        });
+    let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+    let basis = projection.decomposition().unwrap().clone();
+    assert_eq!(
+        basis.source_ids().len(),
+        projection
+            .interpolation()
+            .unwrap()
+            .basis()
+            .source_ids()
+            .len()
+            + 1
+    );
+    let weight_indices = (1..=basis.source_ids().len() as u32).collect::<Vec<_>>();
+    let weight_set = AuthoredWeightSet::new(basis.clone(), weight_indices.clone()).unwrap();
+    let mut builder = VariableAtlasBuilder::default();
+    let authored =
+        add_authored_glyph_with_weight_sets(&mut builder, &font, &projection, &[weight_set], 0)
+            .unwrap();
+    let atlas = builder.finish();
+
+    let mut location = DesignLocation::new();
+    location.set(font.axes()[0].id(), 650.0);
+    let mut weights = vec![0.0_f32; weight_indices.len() + 1];
+    weights[0] = 1.0;
+    for (weight_index, weight) in weight_indices
+        .iter()
+        .zip(basis.weights_at(&location, font.axes()).unwrap())
+    {
+        weights[*weight_index as usize] = weight as f32;
+    }
+    let actual = atlas
+        .resolve_glyph_with_weights(authored.default_glyph, &weights)
+        .unwrap();
+    let expected = curves_from_resolved_contours(
+        font.projection(&location)
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap()
+            .contours(),
+    )
+    .unwrap();
 
     assert_curves_close(&actual, &expected, 0.001);
 }

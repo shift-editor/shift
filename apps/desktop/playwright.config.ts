@@ -48,6 +48,7 @@ export const VISUAL_SPECS = [
   "text-shaping.spec.ts",
   "theme.spec.ts",
   "tools.spec.ts",
+  "canvas-focus.spec.ts",
   "variable-font-authoring.spec.ts",
   "variable-navigation.spec.ts",
   "variation-outlines.spec.ts",

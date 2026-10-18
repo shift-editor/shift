@@ -2034,6 +2034,9 @@ export class Editor {
   /**
    * Fits scene-space bounds into the current canvas once.
    *
+   * @remarks
+   * Before the canvas has a size, frames the bounds when it gets one.
+   *
    * @param bounds - Scene-space rectangle to centre and fit.
    */
   public fitBounds(bounds: SceneBounds): void {

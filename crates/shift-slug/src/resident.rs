@@ -196,21 +196,25 @@ fn collect_weight_sets(
 
     let mut sets = Vec::new();
     let mut next_weight_index = 1_u32;
-    for projection in projections {
-        let Some(interpolation) = projection.interpolation() else {
-            continue;
-        };
+    let bases = projections.into_iter().flat_map(|projection| {
+        projection
+            .interpolation()
+            .map(|interpolation| interpolation.basis())
+            .into_iter()
+            .chain(projection.decomposition())
+    });
+    for basis in bases {
         if sets
             .iter()
-            .any(|set: &AuthoredWeightSet| set.basis() == interpolation.basis())
+            .any(|set: &AuthoredWeightSet| set.basis() == basis)
         {
             continue;
         }
 
-        let count = u32::try_from(interpolation.basis().source_ids().len()).or_overflow()?;
+        let count = u32::try_from(basis.source_ids().len()).or_overflow()?;
         let end = next_weight_index.checked_add(count).or_overflow()?;
         sets.push(AuthoredWeightSet::new(
-            interpolation.basis().clone(),
+            basis.clone(),
             (next_weight_index..end).collect(),
         )?);
         next_weight_index = end;

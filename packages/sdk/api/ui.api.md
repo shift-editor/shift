@@ -32,12 +32,8 @@ export interface EditorToolbarProps {
 
 // @public
 export interface EditorUISession {
-    // Warning: (ae-forgotten-export) The symbol "Editor" needs to be exported by the entry point ui.d.ts
-    //
     // (undocumented)
     readonly editor: Editor;
-    // Warning: (ae-forgotten-export) The symbol "Font" needs to be exported by the entry point ui.d.ts
-    //
     // (undocumented)
     readonly font: Font;
     // (undocumented)
@@ -58,7 +54,6 @@ export function GlyphSidebar(input: GlyphSidebarProps): JSX.Element;
 
 // @public
 export interface GlyphSidebarHost {
-    // Warning: (ae-forgotten-export) The symbol "GlyphId" needs to be exported by the entry point ui.d.ts
     glyphLabel?: (glyphId: GlyphId) => string | undefined;
     header?: ReactNode;
     selection?: ReactNode;

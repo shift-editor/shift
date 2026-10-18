@@ -32,6 +32,7 @@
 pub mod anchor_attachment;
 pub mod anchor_propagation;
 pub mod changes;
+pub mod check;
 pub mod composite;
 pub mod curve;
 pub mod error;
@@ -40,6 +41,7 @@ pub mod intents;
 pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
+pub mod placed_blend;
 pub mod projection;
 pub mod relationships;
 #[cfg(any(test, feature = "test-support"))]
