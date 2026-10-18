@@ -937,6 +937,7 @@ export interface NapiGlyphProjection {
   glyphId: GlyphId
   fallback: NapiGlyphLayerShape
   interpolation?: NapiGlyphInterpolation
+  decomposition?: NapiInterpolationBasis
   variation?: NapiGlyphVariation
   exactSourceShapes: Array<NapiGlyphSourceShape>
   components: NapiGlyphComponents

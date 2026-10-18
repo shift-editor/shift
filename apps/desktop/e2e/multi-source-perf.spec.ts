@@ -128,17 +128,24 @@ async function measureTransformGesture(
 
   const before = await positions();
   const bounds = await editor.selectionBounds();
-  const lowerRight = await editor.projectGlyphToPage({ x: bounds.right, y: bounds.top });
-  const from = operation === "scale" ? lowerRight : { x: lowerRight.x + 8, y: lowerRight.y + 8 };
+  // Grab the upper-right corner: the floating tools dock to the canvas's bottom edge and cover
+  // the lower corners of a zoomed-to-fit selection. Glyph y points up, so `bottom` is the top.
+  const upperRight = await editor.projectGlyphToPage({ x: bounds.right, y: bounds.bottom });
+  const from = operation === "scale" ? upperRight : { x: upperRight.x + 8, y: upperRight.y - 8 };
   const state = operation === "scale" ? "resizing" : "rotating";
+  const occludedByFloatingUi = await page.evaluate(
+    ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest("[data-floating-toolbar]")),
+    from,
+  );
+  expect(occludedByFloatingUi, "transform handle is not under the floating tools").toBe(false);
   await editor.pointerDown(from);
-  await editor.pointerMove({ x: from.x + 12, y: from.y + 6 });
+  await editor.pointerMove({ x: from.x + 12, y: from.y - 6 });
   await expect.poll(() => editor.toolState()).toBe(state);
 
   const previewTimes: number[] = [];
   for (let index = 0; index < PREVIEW_FRAMES; index++) {
     const start = performance.now();
-    await editor.pointerMove({ x: from.x + 16 + index * 4, y: from.y + 8 + index * 3 });
+    await editor.pointerMove({ x: from.x + 16 + index * 4, y: from.y - 8 - index * 3 });
     await editor.waitForCanvasRender();
     previewTimes.push(performance.now() - start);
   }

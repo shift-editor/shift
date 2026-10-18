@@ -188,6 +188,10 @@ jobs:
         if: matrix.platform == 'linux'
         run: scripts/build-linux-portable.sh
 
+      - name: Build WASM rules on Linux
+        if: matrix.platform == 'linux'
+        run: pnpm build:wasm
+
       - name: Build desktop application
         env:
           SHIFT_DISTRIBUTION: nightly

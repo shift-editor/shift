@@ -1,4 +1,5 @@
 mod authoring;
+mod check;
 mod cli;
 mod glyph_inspect;
 mod inspect;
@@ -30,6 +31,14 @@ use skill::{SkillReport, install_skill, show_skill, skill_status};
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
         Command::Inspect(args) => inspect(args),
+        Command::Check(args) => {
+            let report = check::check(&args)?;
+            write_report(&report, args.json, check::CheckReport::render)?;
+            if report.has_errors() {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         Command::Compile(args) => {
             let result = compile(args)?;
             write_stdout(&result.path.display().to_string())
