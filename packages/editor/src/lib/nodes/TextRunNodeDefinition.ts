@@ -502,8 +502,12 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       color: canvas.theme.textRun.hoverOutline,
       widthPx: canvas.theme.textRun.hoverOutlineWidthPx,
     };
+    // While one of the run's glyphs is edited, the others draw dimmed so overlaps stay readable.
+    const style = this.#editsAGlyph(node)
+      ? { ...canvas.theme.glyph, fill: canvas.theme.textRun.contextFill }
+      : canvas.theme.glyph;
     const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
-    canvas.withPathBatch(canvas.theme.glyph, (batch) => {
+    canvas.withPathBatch(style, (batch) => {
       this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
         let glyph = distinct.get(model);
         if (!glyph) {
@@ -558,6 +562,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       const model = modelFor(glyphId);
       if (model) visit(placed, itemId, model);
     }
+  }
+
+  /** Whether any of the run's glyphs is being edited. */
+  #editsAGlyph(node: TextRunNode): boolean {
+    return this.childGlyphs(node).some((child) => this.editor.editing.has(child.id));
   }
 
   /** The placed glyphs of the children being edited; a child not edited is plain text. */

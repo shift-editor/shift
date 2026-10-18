@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use shift_font::test_support::sample_variable_font;
-use shift_font::{ExternalLocation, Font, Glyph};
+use shift_font::{ExternalLocation, Font, Glyph, GlyphCategory, GlyphSubcategory};
 
 use super::*;
 
@@ -368,4 +368,23 @@ fn features_list_each_tag_once_with_stylistic_set_names() {
             },
         ]
     );
+}
+
+#[test]
+fn glyphs_the_font_classes_as_marks_are_flagged() {
+    let mut font = font_with(&[("f", Some('f')), ("acute", Some('\u{301}'))], "");
+    let acute = font.glyph_by_name("acute").unwrap().id();
+    font.set_glyph_category(
+        acute,
+        Some(GlyphCategory::Mark),
+        Some(GlyphSubcategory::Nonspacing),
+    )
+    .unwrap();
+    let location = ExternalLocation::new();
+    let units = characters("f\u{301}");
+
+    let shaped = shaper(&font).shape(&request(&units, &location)).unwrap();
+
+    let marks: Vec<bool> = shaped.iter().map(|glyph| glyph.is_mark).collect();
+    assert_eq!(marks, [false, true]);
 }
