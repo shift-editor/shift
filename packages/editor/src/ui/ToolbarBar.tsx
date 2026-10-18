@@ -211,7 +211,7 @@ export function ToolbarBar({
       role="presentation"
       title="Drag to move"
       className={cn(
-        "flex shrink-0 touch-none items-center justify-center rounded-md text-secondary opacity-60 transition-opacity hover:opacity-100",
+        "flex shrink-0 touch-none items-center justify-center rounded-md text-muted opacity-60 transition-opacity hover:opacity-100",
         vertical ? "h-5 w-9" : "h-9 w-5",
         dragging ? "cursor-grabbing" : "cursor-grab",
       )}
