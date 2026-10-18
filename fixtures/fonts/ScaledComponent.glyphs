@@ -1,0 +1,166 @@
+{
+.appVersion = "3532";
+.formatVersion = 3;
+familyName = "Scaled Component";
+unitsPerEm = 1000;
+axes = ({ name = Weight; tag = wght; });
+metrics = ({ type = ascender; });
+fontMaster = (
+{
+id = light;
+name = Light;
+axesValues = (100);
+metricValues = ({ pos = 700; });
+},
+{
+id = bold;
+name = Bold;
+axesValues = (700);
+metricValues = ({ pos = 800; });
+}
+);
+instances = (
+{ name = Light; axesValues = (100); weightClass = 100; },
+{ name = ExtraLight; axesValues = (200); weightClass = 200; },
+{ name = Regular; axesValues = (400); weightClass = 400; },
+{ name = Bold; axesValues = (700); weightClass = 700; }
+);
+glyphs = (
+{
+glyphname = period;
+unicode = 46;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (100,0,l), (100,100,l), (0,100,l)); });
+},
+{
+layerId = bold;
+width = 400;
+shapes = ({ closed = 1; nodes = ((0,0,l), (200,0,l), (200,200,l), (0,200,l)); });
+}
+);
+},
+{
+glyphname = bullet;
+unicode = 8226;
+layers = (
+{
+layerId = light;
+width = 500;
+shapes = ({ ref = period; pos = (50,100); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 900;
+shapes = ({ ref = period; pos = (50,100); scale = (3,3); });
+}
+);
+},
+{
+glyphname = bar;
+unicode = 124;
+layers = (
+{
+layerId = light;
+width = 400;
+shapes = ({ ref = period; pos = (300,0); scale = (-1,1); });
+},
+{
+layerId = bold;
+width = 600;
+shapes = ({ ref = period; pos = (500,0); scale = (-1,2); });
+}
+);
+},
+{
+glyphname = ring;
+unicode = 730;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (100,0,l), (100,100,l), (0,100,l)); });
+},
+{
+associatedMasterId = light;
+attr = { coordinates = (250); };
+layerId = "ring-250";
+name = "{250}";
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (250,0,l), (250,250,l), (0,250,l)); });
+},
+{
+layerId = bold;
+width = 400;
+shapes = ({ closed = 1; nodes = ((0,0,l), (200,0,l), (200,200,l), (0,200,l)); });
+}
+);
+},
+{
+glyphname = ringbig;
+unicode = 9675;
+layers = (
+{
+layerId = light;
+width = 500;
+shapes = ({ ref = ring; pos = (50,0); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 900;
+shapes = ({ ref = ring; pos = (50,0); scale = (2,2); });
+}
+);
+},
+{
+glyphname = wedge;
+unicode = 9698;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (100,0,l), (0,200,l)); });
+},
+{
+layerId = bold;
+width = 400;
+shapes = ({ closed = 1; nodes = ((0,0,l), (200,0,l), (0,300,l)); });
+}
+);
+},
+{
+glyphname = wedgeflip;
+unicode = 9699;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ ref = wedge; pos = (50,0); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 500;
+shapes = ({ ref = wedge; pos = (450,0); scale = (-1,1); });
+}
+);
+},
+{
+glyphname = wedgenest;
+unicode = 9700;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ ref = wedgeflip; pos = (0,0); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 500;
+shapes = ({ ref = wedgeflip; pos = (500,0); scale = (-1,1); });
+}
+);
+}
+);
+}

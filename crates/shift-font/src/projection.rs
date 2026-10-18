@@ -2,6 +2,10 @@
 
 use crate::Require;
 use std::collections::{HashMap, HashSet};
+
+mod decomposed;
+
+pub use decomposed::{Decomposition, OutlineParts};
 use std::sync::Arc;
 
 use crate::composite::{
@@ -66,6 +70,7 @@ pub struct GlyphProjectionSet {
 struct GlyphLayerProjection {
     fallback: Arc<GlyphLayer>,
     interpolation: Option<GlyphInterpolation>,
+    decomposition: Option<Arc<InterpolationBasis>>,
     exact_source_shapes: Vec<GlyphSourceShape>,
 }
 
@@ -134,6 +139,17 @@ impl GlyphProjection {
         self.layers.interpolation.as_ref()
     }
 
+    /// Returns the basis compiled fonts interpolate this glyph's outline with
+    /// when they decompose it: its own components change scale, rotation, or
+    /// skew between masters.
+    ///
+    /// It spans the glyph's masters and every master of the glyphs its
+    /// components draw, so a component's intermediate master still shapes the
+    /// decomposed outline. `None` for a glyph compilers keep composite.
+    pub fn decomposition(&self) -> Option<&InterpolationBasis> {
+        self.layers.decomposition.as_deref()
+    }
+
     /// Returns exact-source shapes excluded from compatible interpolation.
     pub fn exact_source_shapes(&self) -> &[GlyphSourceShape] {
         &self.layers.exact_source_shapes
@@ -184,6 +200,7 @@ pub struct FontProjection<'a> {
     location: DesignLocation,
     layers: HashMap<GlyphId, GlyphLayer>,
     interpolation_bases: HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
+    decompositions: HashMap<GlyphId, Option<Arc<InterpolationBasis>>>,
 }
 
 /// Fully resolved glyph geometry at one internal authoring location.
@@ -260,9 +277,17 @@ impl Font {
             })
             .collect();
 
+        let decomposition = match &interpolation {
+            Some(interpolation) => {
+                self.decomposition_basis(glyph, interpolation, interpolation_bases)?
+            }
+            None => None,
+        };
+
         Ok(Some(Arc::new(GlyphLayerProjection {
             fallback,
             interpolation,
+            decomposition,
             exact_source_shapes,
         })))
     }
@@ -474,6 +499,7 @@ impl Font {
             location: location.clone(),
             layers: HashMap::new(),
             interpolation_bases: HashMap::new(),
+            decompositions: HashMap::new(),
         }
     }
 }
@@ -565,7 +591,9 @@ impl FontProjection<'_> {
     ///
     /// Exact authored layers win, followed by compatible interpolation and the
     /// preferred fallback. Components resolve recursively at this
-    /// projection's location and cyclic branches are skipped locally.
+    /// projection's location and cyclic branches are skipped locally. A glyph
+    /// whose own components change scale, rotation, or skew between masters
+    /// interpolates its placed outlines, as compiled fonts do.
     ///
     /// # Errors
     ///
@@ -573,9 +601,15 @@ impl FontProjection<'_> {
     /// reference has no master-backed projection, or an interpolation error
     /// when derived values do not match their compatible structural reference layer.
     pub fn glyph(&mut self, glyph_id: &GlyphId) -> CoreResult<Option<ResolvedGlyph>> {
-        if !self.prepare_layer_tree(glyph_id)? {
+        let Some(parts) = self.outline_parts(
+            glyph_id,
+            &mut HashSet::new(),
+            decomposed::Placement::Composed,
+        )?
+        else {
             return Ok(None);
-        }
+        };
+        let contours = parts.into_iter().flatten().collect();
         let layer = self
             .layers
             .get(glyph_id)
@@ -583,7 +617,7 @@ impl FontProjection<'_> {
 
         Ok(Some(ResolvedGlyph {
             glyph_id: glyph_id.clone(),
-            contours: resolved_contours_from_layers(glyph_id, &self.layers)?,
+            contours,
             x_advance: layer.width(),
         }))
     }

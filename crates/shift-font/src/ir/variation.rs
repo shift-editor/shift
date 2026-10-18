@@ -28,17 +28,33 @@ pub struct DesignNormalization {
 impl DesignNormalization {
     /// Normalizes a design coordinate around the mapped default without clamping.
     pub fn normalize(&self, value: f64) -> f64 {
+        let tolerance = 1e-9 * (1.0 + self.default.abs());
         let range = if value < self.default {
             self.default - self.minimum
         } else {
             self.maximum - self.default
         };
-        if range.abs() < f64::EPSILON {
+        if range.abs() < tolerance || (value - self.default).abs() < tolerance {
             return 0.0;
         }
 
-        (value - self.default) / range
+        snap((value - self.default) / range)
     }
+}
+
+/// Snaps a normalized coordinate to `0` or `±1` when it misses by rounding.
+///
+/// Mapped defaults and extremes are computed through compiled mapping bases,
+/// so a master authored exactly at the default can normalize to `1e-15`. The
+/// variation model treats only an exact `0` as the default location.
+fn snap(normalized: f64) -> f64 {
+    const TOLERANCE: f64 = 1e-9;
+    for anchor in [-1.0, 0.0, 1.0] {
+        if (normalized - anchor).abs() < TOLERANCE {
+            return anchor;
+        }
+    }
+    normalized
 }
 
 impl Font {
@@ -186,10 +202,7 @@ impl AxisMappingBasis {
                 .find(|axis| axis.id() == *axis_id)
                 .require(&axis_id)?;
             let base = location.get(axis_id).unwrap_or(axis.default());
-            result.set(
-                axis_id.clone(),
-                axis.denormalize(axis.normalize(base) + adjustment),
-            );
+            result.set(axis_id.clone(), base + adjustment);
         }
 
         Ok(result)
@@ -218,7 +231,7 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
                 .map(|axis| {
                     let base = point.input.get(&axis.id()).unwrap_or(axis.default());
                     let output = point.output.get(&axis.id()).unwrap_or(base);
-                    axis.normalize(output) - axis.normalize(base)
+                    output - base
                 })
                 .collect();
             if let Some(previous) = sample_values.get(&input) {

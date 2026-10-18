@@ -29,13 +29,17 @@ export const Editor = () => {
   const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
-  const { activeZone, claimZone } = useFocusZone();
+  const { activeZone, setZone } = useFocusZone();
+  // The keyboard router outlives zone changes: rebuilding it would forget a held Space, and its
+  // release would then leave the temporary Hand active.
+  const activeZoneRef = useRef(activeZone);
+  activeZoneRef.current = activeZone;
 
   useEffect(() => {
     if (!glyph) return;
 
-    claimZone("canvas");
-  }, [claimZone, glyph]);
+    setZone("canvas");
+  }, [setZone, glyph]);
 
   // GlyphGrid acquires the complete Glyph before navigating. Until pages exist,
   // the canvas has one text run at the scene origin that outlives the route, and
@@ -98,7 +102,7 @@ export const Editor = () => {
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(
       () => ({
-        canvasActive: activeZone === "canvas" || editor.isDragging,
+        canvasActive: activeZoneRef.current === "canvas" || editor.isDragging,
         activeTool: editor.tool?.id ?? null,
         editor,
         toolManager,
@@ -129,7 +133,7 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [activeZone, editor, glyph]);
+  }, [editor, glyph]);
 
   if (!glyph) return null;
 

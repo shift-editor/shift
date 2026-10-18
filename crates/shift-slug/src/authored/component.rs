@@ -15,9 +15,10 @@ use crate::{
 };
 
 use super::{
-    add_default_projection_glyph, authored_advance, curves_from_resolved_contours, source_location,
-    AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredGlyphCompilation,
-    AuthoredSlugError, AuthoredSourceGlyph, ResolvedCurveTopology,
+    add_default_projection_glyph, add_resolved_sources_glyph, authored_advance,
+    curves_from_resolved_contours, source_location, AuthoredDefaultGlyphs, AuthoredDefaultKey,
+    AuthoredGlyph, AuthoredGlyphCompilation, AuthoredSlugError, AuthoredSourceGlyph,
+    ResolvedCurveTopology,
 };
 
 /// One deduplicated interpolation basis and its per-frame weight-buffer indexes.
@@ -164,6 +165,12 @@ pub(super) fn add_default_component_projection_glyph(
     resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
 ) -> Result<u32, AuthoredSlugError> {
     let component_started = Instant::now();
+    if let Some(glyph_index) =
+        add_decomposed_component_glyph(builder, compilation, projection, resolved_sources)?
+    {
+        compilation.profile.component_preparation += component_started.elapsed();
+        return Ok(glyph_index);
+    }
     let mut direct_glyphs = HashMap::<GlyphId, u32>::new();
     for glyph_id in std::iter::once(projection.glyph_id()).chain(
         projection
@@ -266,6 +273,133 @@ pub(super) fn add_default_component_projection_glyph(
             component_sources,
         )
         .map_err(Into::into)
+}
+
+/// Adds a glyph that compiled fonts interpolate decomposed, keeping one part
+/// per component occurrence.
+///
+/// Each part's curves are that occurrence's outline as each decomposition
+/// master places it, weighted by the decomposition basis, and every occurrence
+/// keeps an identity transform. Returns `None` for any other glyph.
+fn add_decomposed_component_glyph(
+    builder: &mut VariableAtlasBuilder,
+    compilation: &mut AuthoredGlyphCompilation<'_, '_>,
+    projection: &GlyphProjection,
+    resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
+) -> Result<Option<u32>, AuthoredSlugError> {
+    let glyph_id = projection.glyph_id();
+    if projection.decomposition().is_none() {
+        return Ok(None);
+    }
+    let Some(decomposition) = compilation.font.decomposition(&glyph_id)? else {
+        return Ok(None);
+    };
+    let outlines = decomposition.outlines();
+    let occurrences = projection.components().components();
+    let part_count = occurrences.len().checked_add(1).or_overflow()?;
+    if outlines.iter().any(|parts| parts.len() != part_count) {
+        return Ok(None);
+    }
+    let weight_indices = compilation
+        .weight_sets
+        .iter()
+        .find(|set| set.basis() == decomposition.basis())
+        .map(AuthoredWeightSet::source_weight_indices)
+        .ok_or_else(|| AuthoredSlugError::MissingWeightBasis(glyph_id.clone()))?;
+    if weight_indices.len() != outlines.len() {
+        return Err(AuthoredSlugError::WeightCountMismatch {
+            expected: outlines.len(),
+            actual: weight_indices.len(),
+        });
+    }
+
+    let mut parts = Vec::with_capacity(part_count);
+    let mut output_curve_start = 0_u32;
+    let mut root_glyph_index = None;
+    for part_index in 0..part_count {
+        let part_sources = outlines
+            .iter()
+            .zip(weight_indices)
+            .map(|(parts, weight_index)| (*weight_index, parts[part_index].as_slice()))
+            .collect::<Vec<_>>();
+        let glyph_index = add_resolved_sources_glyph(builder, &part_sources)?;
+        if part_index == 0 {
+            builder.set_glyph_source_advances(
+                glyph_index,
+                decomposition_advances(compilation.font, &glyph_id, decomposition.basis())?,
+            )?;
+            root_glyph_index = Some(glyph_index);
+        }
+        let component_index = match part_index {
+            0 => ROOT_COMPONENT,
+            _ => u32::try_from(part_index - 1).or_overflow()?,
+        };
+        append_part(
+            builder,
+            &mut parts,
+            glyph_index,
+            component_index,
+            &mut output_curve_start,
+        )?;
+    }
+
+    // Parts are already placed, so every occurrence gets an identity
+    // transform: one identity sample per source, whose weights sum to one.
+    let source_count = u32::try_from(weight_indices.len()).or_overflow()?;
+    let mut component_sources = Vec::new();
+    let mut components = Vec::with_capacity(occurrences.len());
+    for _ in occurrences {
+        components.push(VariableComponent {
+            parent_component: ROOT_COMPONENT,
+            source_start: u32::try_from(component_sources.len()).or_overflow()?,
+            source_count,
+        });
+        component_sources.extend(weight_indices.iter().map(|weight_index| {
+            VariableComponentSource {
+                weight_index: *weight_index,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                ..VariableComponentSource::default()
+            }
+        }));
+    }
+
+    let bounds = fallback_bounds(
+        compilation.font,
+        compilation.projection_set,
+        projection,
+        resolved_sources,
+    )?;
+    let root_glyph_index = root_glyph_index.expect("a decomposed glyph has a root part");
+    let glyph_index = builder.add_component_glyph(
+        bounds,
+        root_glyph_index,
+        parts,
+        components,
+        component_sources,
+    )?;
+    Ok(Some(glyph_index))
+}
+
+/// The glyph's advance at each master of `basis`, in its source order.
+fn decomposition_advances(
+    font: &Font,
+    glyph_id: &GlyphId,
+    basis: &InterpolationBasis,
+) -> Result<Vec<f32>, AuthoredSlugError> {
+    basis
+        .source_ids()
+        .iter()
+        .enumerate()
+        .map(|(source_index, source_id)| {
+            let location = font.require_source(source_id)?.location();
+            let glyph = font
+                .projection(location)
+                .glyph(glyph_id)?
+                .require(glyph_id)?;
+            authored_advance(glyph.x_advance(), source_index)
+        })
+        .collect()
 }
 
 fn projection_for<'a>(
