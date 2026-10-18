@@ -46,6 +46,19 @@ describe("Select tool", () => {
       expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
     });
 
+    it("keeps the bend cursor when Cmd is pressed before a queued hover is drawn", () => {
+      const point = editor.localToScreen({ x: 145, y: 215 });
+      editor.toolManager.handlePointerMove(
+        point,
+        { shiftKey: false, altKey: false, metaKey: false },
+        { force: true },
+      );
+      editor.keyDown("Meta", { metaKey: true });
+      editor.toolManager.flushPointerMoves();
+
+      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    });
+
     it("does not upgrade a line on Alt-click", async () => {
       await editor.clickLocal(145, 215, { altKey: true });
       expect(editor.glyphContours[0].segments()[0].type).toBe("line");

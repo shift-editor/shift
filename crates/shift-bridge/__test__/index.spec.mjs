@@ -256,8 +256,8 @@ describe("Bridge", () => {
 
   function shapeText(text, options = {}) {
     const units = [...text].map((character) => ({ codepoint: character.codePointAt(0) }));
-    const runs = bridge.shapeParagraph({ units, location: { values: {} }, ...options });
-    return runs.flatMap((run) => run.glyphs);
+    const paragraph = bridge.shapeParagraph({ units, location: { values: {} }, ...options });
+    return paragraph.runs.flatMap((run) => run.glyphs);
   }
 
   function glyphName(glyphId) {

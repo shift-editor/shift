@@ -125,6 +125,7 @@ export type {
   PointType,
   SetAxisMappingsIntent,
   ShapedGlyph,
+  ShapedParagraph,
   ShapedRun,
   ShaperAxis,
   ShaperFont,
