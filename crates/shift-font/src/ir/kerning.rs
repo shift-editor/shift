@@ -591,8 +591,8 @@ mod tests {
             })
         ));
         assert!(kerning.group(&group_id("other")).is_none());
-        assert!(duplicate_rename.is_ok());
-        assert!(other_position.is_ok());
+        duplicate_rename.unwrap();
+        other_position.unwrap();
         assert!(matches!(missing, Err(CoreError::KerningGroupNotFound(_))));
     }
 

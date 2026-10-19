@@ -360,7 +360,7 @@ fn failed_change_set_rolls_back_all_entity_and_order_changes() {
         layer_created(shift_font::GlyphId::from_raw("missing"), &invalid_layer),
     ]));
 
-    assert!(result.is_err());
+    result.unwrap_err();
     assert_eq!(store.load_font_state().unwrap(), original);
 }
 
@@ -438,7 +438,7 @@ fn font_info_requires_positive_units_per_em() {
         ..empty_font_info()
     });
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -529,7 +529,7 @@ fn source_location_requires_existing_source_and_axis() {
         400.0,
     );
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -569,7 +569,7 @@ fn glyph_layer_requires_existing_glyph_and_source() {
         &layer,
     )]));
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -630,7 +630,7 @@ fn glyph_component_replacement_requires_existing_layer() {
 
     let result = store.replace_glyph_layer(&layer);
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]

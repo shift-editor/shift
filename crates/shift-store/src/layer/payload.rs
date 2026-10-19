@@ -169,16 +169,16 @@ mod tests {
         assert_eq!(truncated.compression, LayerPayloadCompression::ZstandardV1);
         truncated.bytes.pop();
         truncated.stored_byte_length -= 1;
-        assert!(decompress_layer("layer_test", truncated).is_err());
+        decompress_layer("layer_test", truncated).unwrap_err();
 
         let mut trailing = compress_layer(&decoded).unwrap();
         trailing.bytes.push(0);
         trailing.stored_byte_length += 1;
-        assert!(decompress_layer("layer_test", trailing).is_err());
+        decompress_layer("layer_test", trailing).unwrap_err();
 
         let mut wrong_hash = compress_layer(&decoded).unwrap();
         wrong_hash.decoded_blake3[0] ^= 1;
-        assert!(decompress_layer("layer_test", wrong_hash).is_err());
+        decompress_layer("layer_test", wrong_hash).unwrap_err();
     }
 
     #[test]

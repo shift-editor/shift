@@ -134,8 +134,8 @@ mod tests {
             PointType::OffCurve
         );
         assert_eq!("qCurve".parse::<PointType>().unwrap(), PointType::QCurve);
-        assert!("invalid".parse::<PointType>().is_err());
-        assert!("OnCurve".parse::<PointType>().is_err());
+        "invalid".parse::<PointType>().unwrap_err();
+        "OnCurve".parse::<PointType>().unwrap_err();
     }
 
     #[test]

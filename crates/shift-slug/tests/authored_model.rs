@@ -757,7 +757,7 @@ fn authored_glyph_keeps_exact_source_topology_resident() {
     let interpolation = projection.interpolation().unwrap();
     let weight_indices = (1..=interpolation.sources().len() as u32).collect::<Vec<_>>();
     let mut invalid_builder = VariableAtlasBuilder::default();
-    assert!(add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).is_err());
+    add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).unwrap_err();
     assert!(invalid_builder.finish().glyphs().is_empty());
 
     let mut builder = VariableAtlasBuilder::default();

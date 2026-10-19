@@ -335,7 +335,7 @@ fn recovered_directory_open_remains_payload_lazy() {
             .glyph_count(),
         sample_font().glyph_count()
     );
-    assert!(recovered.load_glyph_layer(&layer_id).is_err());
+    recovered.load_glyph_layer(&layer_id).unwrap_err();
 }
 
 #[test]

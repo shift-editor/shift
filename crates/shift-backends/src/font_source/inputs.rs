@@ -670,7 +670,7 @@ unitsPerEm = 1000;
                 .index
         };
         let (bar, smart) = (glyph("bar"), glyph("_smart.dash"));
-        assert!(font.glyph(smart).is_err());
+        font.glyph(smart).unwrap_err();
 
         let page = compile_page(&font, &[bar, smart]).unwrap();
         let weights = page

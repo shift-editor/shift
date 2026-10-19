@@ -234,7 +234,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(loaded_italic.labels()[0].linked_value, Some(1.0));
-        assert!(loaded_italic.validate().is_ok());
+        loaded_italic.validate().unwrap();
     }
 
     fn mapping_point(

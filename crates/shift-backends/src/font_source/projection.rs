@@ -946,7 +946,7 @@ mod tests {
             SourceIndex::new(0),
         );
 
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     fn set_metrics(font: &Font, source: &mut Source, values: [f64; 4]) {

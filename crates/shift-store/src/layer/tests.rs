@@ -510,7 +510,7 @@ fn directory_open_never_reads_malformed_payloads() {
     let directory = store.load_font_directory().unwrap();
     assert_eq!(directory.glyph_count(), font.glyph_count());
     assert!(directory.layer(layer_id).unwrap().is_empty());
-    assert!(store.load_glyph_layer(layer_id).is_err());
+    store.load_glyph_layer(layer_id).unwrap_err();
     assert!(
         store
             .load_glyph_layers(std::slice::from_ref(layer_id))
@@ -540,7 +540,7 @@ fn directory_retains_layer_when_payload_row_is_missing() {
     let directory = store.load_font_directory().unwrap();
 
     assert!(directory.layer(layer_id).is_some());
-    assert!(store.load_font_state().is_err());
+    store.load_font_state().unwrap_err();
 }
 
 #[test]
@@ -602,7 +602,7 @@ fn index_constraint_failure_rolls_back_payload_directory_and_revision() {
         .unwrap();
     let before_revision = store.workspace_state().unwrap().unwrap().revision;
 
-    assert!(store.replace_glyph_layer(&target).is_err());
+    store.replace_glyph_layer(&target).unwrap_err();
 
     let after_payload: Vec<u8> = store
         .conn

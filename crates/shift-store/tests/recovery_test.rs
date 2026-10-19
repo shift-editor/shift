@@ -303,7 +303,7 @@ fn recovery_overlay_detects_a_changed_canonical_base_before_save() {
         700.0,
         "conflict recovery must remain inspectable"
     );
-    assert!(conflicted.save_document().is_err());
+    conflicted.save_document().unwrap_err();
 
     conflicted
         .discard_recovery()

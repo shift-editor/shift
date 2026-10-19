@@ -397,7 +397,7 @@ mod tests {
 
         source.metadata_mut().family_name = Some("Concurrent".to_string());
         let concurrent = source.clone();
-        assert!(source.apply_change_set(&changes).is_err());
+        source.apply_change_set(&changes).unwrap_err();
         assert_eq!(source, concurrent);
     }
 
@@ -412,7 +412,7 @@ mod tests {
             axes,
         )));
 
-        assert!(font.apply_change_set(&changes).is_err());
+        font.apply_change_set(&changes).unwrap_err();
         assert_eq!(font, original);
     }
 
