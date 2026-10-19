@@ -78,7 +78,7 @@ test("clicking a feature tag previews the glyphs it brings in", async ({ page, e
   // The preview is titled with the feature's name.
   const preview = page.getByRole("dialog", { name: "Standard Ligatures" });
   await expect(preview).toBeVisible();
-  await expect(preview.getByRole("button", { name: "f_i" })).toBeVisible();
+  await expect(preview.getByRole("option", { name: "f_i" })).toBeVisible();
 
   await preview.getByRole("button", { name: "Close" }).click();
   await expect(preview).toBeHidden();

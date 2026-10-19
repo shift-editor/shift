@@ -87,6 +87,7 @@ export const FeaturesSection = () => {
         </div>
       )}
       <FeaturePreviewPopover
+        run={run}
         feature={preview?.feature ?? null}
         anchor={preview?.anchor ?? null}
         onClose={() => setPreview(null)}

@@ -11,6 +11,8 @@ interface GlyphSelectionOptions {
   readonly glyphAt: (clientX: number, clientY: number) => GlyphId | null;
   /** Takes the selected glyphs out on Delete or Backspace; absent where none can be. */
   readonly onRemove?: () => void;
+  /** Copies the selected glyphs on ⌘C. */
+  readonly onCopy: () => void;
 }
 
 /** Handlers for a glyph grid: keys on the focusable container, pointer events on the surface. */
@@ -25,8 +27,8 @@ export interface GlyphSelectionHandlers {
 /**
  * Selects glyphs in a grid as a file list does: click to select, Shift-click
  * or drag for a range, ⌘-click to add or remove one; the arrow keys move
- * (Shift extends), ⌘A selects all, Escape clears, and Delete calls
- * `onRemove`.
+ * (Shift extends), ⌘A selects all, ⌘C calls `onCopy`, Escape clears, and
+ * Delete calls `onRemove`.
  */
 export function useGlyphSelection({
   selection,
@@ -34,6 +36,7 @@ export function useGlyphSelection({
   containerRef,
   glyphAt,
   onRemove,
+  onCopy,
 }: GlyphSelectionOptions): GlyphSelectionHandlers {
   const sweep = useGlyphSweep({
     containerRef,
@@ -51,6 +54,8 @@ export function useGlyphSelection({
         onSelect(selection.step(forward ? 1 : -1, event.shiftKey));
       } else if (event.key === "a" && command) {
         onSelect(selection.all());
+      } else if (event.key === "c" && command && !selection.isEmpty) {
+        onCopy();
       } else if (remove && onRemove && !selection.isEmpty) {
         onRemove();
       } else if (event.key === "Escape" && !selection.isEmpty) {
