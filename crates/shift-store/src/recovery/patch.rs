@@ -296,7 +296,7 @@ fn clear_tombstone(
 }
 
 fn delete_axis_override(tx: &Transaction<'_>, axis_id: &font::AxisId) -> Result<(), StoreError> {
-    tx.execute("DELETE FROM axes WHERE id = ?1", [axis_id.to_string()])?;
+    tx.execute("DELETE FROM axes WHERE id = ?1", [&axis_id])?;
     Ok(())
 }
 
@@ -304,33 +304,36 @@ fn delete_source_override(
     tx: &Transaction<'_>,
     source_id: &font::SourceId,
 ) -> Result<(), StoreError> {
-    let id = source_id.to_string();
-    tx.execute("DELETE FROM source_locations WHERE source_id = ?1", [&id])?;
+    tx.execute(
+        "DELETE FROM source_locations WHERE source_id = ?1",
+        [source_id],
+    )?;
     tx.execute(
         "DELETE FROM source_metric_values WHERE source_id = ?1",
-        [&id],
+        [source_id],
     )?;
-    tx.execute("DELETE FROM source_lib WHERE source_id = ?1", [&id])?;
-    tx.execute("DELETE FROM sources WHERE id = ?1", [&id])?;
+    tx.execute("DELETE FROM source_lib WHERE source_id = ?1", [source_id])?;
+    tx.execute("DELETE FROM sources WHERE id = ?1", [source_id])?;
     Ok(())
 }
 
 fn delete_glyph_override(tx: &Transaction<'_>, glyph_id: &font::GlyphId) -> Result<(), StoreError> {
-    let id = glyph_id.to_string();
-    tx.execute("DELETE FROM glyph_unicodes WHERE glyph_id = ?1", [&id])?;
-    tx.execute("DELETE FROM glyph_lib WHERE glyph_id = ?1", [&id])?;
-    tx.execute("DELETE FROM glyphs WHERE id = ?1", [&id])?;
+    tx.execute("DELETE FROM glyph_unicodes WHERE glyph_id = ?1", [glyph_id])?;
+    tx.execute("DELETE FROM glyph_lib WHERE glyph_id = ?1", [glyph_id])?;
+    tx.execute("DELETE FROM glyphs WHERE id = ?1", [glyph_id])?;
     Ok(())
 }
 
 fn delete_layer_override(tx: &Transaction<'_>, layer_id: &font::LayerId) -> Result<(), StoreError> {
-    let id = layer_id.to_string();
-    tx.execute("DELETE FROM glyph_components WHERE layer_id = ?1", [&id])?;
+    tx.execute(
+        "DELETE FROM glyph_components WHERE layer_id = ?1",
+        [layer_id],
+    )?;
     tx.execute(
         "DELETE FROM glyph_layer_payloads WHERE layer_id = ?1",
-        [&id],
+        [layer_id],
     )?;
-    tx.execute("DELETE FROM glyph_layers WHERE id = ?1", [&id])?;
+    tx.execute("DELETE FROM glyph_layers WHERE id = ?1", [layer_id])?;
     Ok(())
 }
 

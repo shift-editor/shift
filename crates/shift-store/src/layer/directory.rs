@@ -160,9 +160,9 @@ fn map_directory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphLayerDire
     let stored_byte_length = directory_byte_length(row, 6)?;
     let decoded_byte_length = directory_byte_length(row, 7)?;
     Ok(GlyphLayerDirectoryEntry {
-        layer_id: font::LayerId::from_raw(row.get::<_, String>(0)?),
-        glyph_id: font::GlyphId::from_raw(row.get::<_, String>(1)?),
-        source_id: font::SourceId::from_raw(row.get::<_, String>(2)?),
+        layer_id: row.get::<_, font::LayerId>(0)?,
+        glyph_id: row.get::<_, font::GlyphId>(1)?,
+        source_id: row.get::<_, font::SourceId>(2)?,
         name: row.get::<_, Option<String>>(3)?.map(font::GlyphName::from),
         width: row.get(4)?,
         height: row.get(5)?,

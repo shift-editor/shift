@@ -86,6 +86,26 @@ macro_rules! typed_id {
             }
         }
 
+        /// Stored as its text, so `params![glyph.id()]` and `row.get("glyph_id")`
+        /// need no conversion at the call site.
+        #[cfg(feature = "rusqlite")]
+        impl rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                Ok(rusqlite::types::ToSqlOutput::from(self.as_str()))
+            }
+        }
+
+        /// Read back as [`Self::from_raw`] does, so stored ids keep reading
+        /// exactly as before.
+        #[cfg(feature = "rusqlite")]
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(
+                value: rusqlite::types::ValueRef<'_>,
+            ) -> rusqlite::types::FromSqlResult<Self> {
+                value.as_str().map(Self::from_raw)
+            }
+        }
+
         impl<'de> Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where

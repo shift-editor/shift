@@ -71,8 +71,8 @@ pub(crate) fn store_stored_layer_in_tx(
         }
     };
     tx.prepare_cached(layer_sql)?.execute(params![
-        layer.id().to_string(),
-        glyph_id.to_string(),
+        layer.id(),
+        glyph_id,
         layer.source_id().to_string(),
         layer.width(),
         layer.height(),
@@ -102,7 +102,7 @@ pub(crate) fn store_stored_layer_in_tx(
         }
     };
     tx.prepare_cached(payload_sql)?.execute(params![
-        layer.id().to_string(),
+        layer.id(),
         GLYPH_LAYER_FORMAT,
         stored.compression.as_str(),
         stored.bytes.as_slice(),
@@ -136,7 +136,7 @@ fn write_component_index(
 ) -> Result<(), StoreError> {
     if mode == WriteMode::Upsert {
         tx.prepare_cached("DELETE FROM glyph_components WHERE layer_id = ?1")?
-            .execute([layer.id().to_string()])?;
+            .execute([layer.id()])?;
     }
     for (order_index, component) in layer.components_iter().enumerate() {
         tx.prepare_cached(
@@ -147,8 +147,8 @@ fn write_component_index(
             ",
         )?
         .execute(params![
-            component.id().to_string(),
-            layer.id().to_string(),
+            component.id(),
+            layer.id(),
             component.base_glyph_id().to_string(),
             order_index as i64,
         ])?;
@@ -162,8 +162,8 @@ fn layer_owner(
 ) -> Result<Option<font::GlyphId>, StoreError> {
     conn.query_row(
         "SELECT glyph_id FROM glyph_layers WHERE id = ?1",
-        [layer_id.to_string()],
-        |row| Ok(font::GlyphId::from_raw(row.get::<_, String>(0)?)),
+        [&layer_id],
+        |row| row.get::<_, font::GlyphId>(0),
     )
     .optional()
     .map_err(Into::into)
