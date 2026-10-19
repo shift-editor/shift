@@ -6,12 +6,12 @@ import type {
   ToolbarFrame,
   ToolbarLift,
 } from "../types/toolbar";
-import { BAR_THICKNESS, clampHandleToFrame, isInDockZone } from "./toolbarGeometry";
+import { BAR_THICKNESS, clampHandleToFrame, dockRegionAt } from "./toolbarGeometry";
 import { allowedDocksInFrame, isShortToolbarFrame, oppositeDock, poseForDock } from "./toolbarPose";
 import { TOOL_FLOOR_OPACITY } from "./toolbarPresence";
 
-/** How far the pointer may stray past the target's zone before a neighbouring zone takes over. */
-export const ZONE_MARGIN = 16;
+/** How far a steering point may stray from the target's region before a neighbouring region takes over. */
+export const REGION_MARGIN = BAR_THICKNESS / 2;
 
 /**
  * How far the pointer must move from where it went down before the bar leaves
@@ -37,67 +37,104 @@ export function startToolbarDrag(start: ToolbarDragStart): ToolbarDragState {
   };
 }
 
-/** Share of the bar, from its far end, that must be in a zone to steer there when the handle trails. */
-export const TRAILING_REACH = 1 / 3;
+/** Centre of the carried bar, which keeps the pose of the slot it was picked up from. */
+export function toolbarBarCentre(drag: ToolbarDragState): Point2D {
+  const origin = toolbarBarOrigin(drag);
+  const stands = poseForDock(drag.seatDock) === "stand";
+  const width = stands ? BAR_THICKNESS : drag.length;
+  const height = stands ? drag.length : BAR_THICKNESS;
+
+  return { x: origin.x + width / 2, y: origin.y + height / 2 };
+}
 
 /**
- * Point on the carried bar that steers the target when the handle trails:
- * `TRAILING_REACH` of the way in from the end away from the handle, across
- * the middle of the bar.
+ * Whether the bar's body, not its handle, leads toward `dock`.
  *
  * @remarks
- * The carried bar keeps its pose, so this stays a fixed offset from the
- * handle for the whole drag.
+ * The handle is the end of the bar that leads toward the bottom and right. A
+ * standing bar's body leads toward the top and a flat bar's toward the left,
+ * because the handle trails in those directions.
  */
-export function toolbarBarReach(drag: ToolbarDragState): Point2D {
-  const origin = toolbarBarOrigin(drag);
-  const reach = drag.length * TRAILING_REACH;
+function bodyLeads(dock: ToolbarDock, seatDock: ToolbarDock): boolean {
+  return poseForDock(seatDock) === "stand" ? dock === "top" : dock === "left";
+}
 
-  // The far end is the bar's left end when flat and its top end when standing.
-  if (poseForDock(drag.seatDock) === "stand") {
-    return Vec2.add(origin, { x: BAR_THICKNESS / 2, y: reach });
-  }
+/** Whether `point` is on the canvas. */
+function isInFrame(point: Point2D, frame: ToolbarFrame): boolean {
+  return point.x >= 0 && point.x <= frame.width && point.y >= 0 && point.y <= frame.height;
+}
 
-  return Vec2.add(origin, { x: reach, y: BAR_THICKNESS / 2 });
+/** Whether `point`, or any point within `margin` of it along an axis, is in the region of `dock` for a bar carried from `seatDock`. */
+function isInRegion(
+  dock: ToolbarDock,
+  point: Point2D,
+  frame: ToolbarFrame,
+  length: number,
+  flatOnly: boolean,
+  margin: number,
+  seatDock: ToolbarDock,
+): boolean {
+  const probes = [
+    point,
+    { x: point.x + margin, y: point.y },
+    { x: point.x - margin, y: point.y },
+    { x: point.x, y: point.y + margin },
+    { x: point.x, y: point.y - margin },
+  ];
+
+  return probes.some((probe) => dockRegionAt(probe, frame, length, flatOnly, seatDock) === dock);
 }
 
 /**
  * Edge the carried bar is steering toward.
  *
  * @remarks
- * Each slot the frame has room for owns a zone. The target changes when the
- * pointer, or failing that the bar's reach point, enters another slot's zone,
- * and only once it is `ZONE_MARGIN` clear of the current target's zone. The
- * handle sits at one end of the bar, so the pointer leads in some directions
- * and trails in others: when it leads it switches the target as soon as it
- * arrives, and when it trails the reach point switches it once
- * `TRAILING_REACH` of the bar is in. Either way the switch never waits for
- * the trailing end. The centre of the
- * frame belongs to no zone, so a bar there keeps the target it has.
+ * Each dock the frame has room for claims the bar when its leading point is
+ * in its region: the bar's centre for the docks its body leads toward, and the
+ * handle for the rest. The current target claims with a `REGION_MARGIN`, so a
+ * shaking pointer cannot flip it. With no claim, as when the region belongs
+ * to a dock the frame has no room for, the target stays. When the body claims a dock the handle does not, the body
+ * wins, so the far end switches the target as soon as it arrives; otherwise
+ * the current target is kept if it still claims. A far end hanging off the
+ * canvas cannot start a claim, so the handle decides, but it keeps the claim
+ * of the target it already holds.
+ *
+ * The claims depend only on the bar's position, and the current target is
+ * always among them once chosen, so a held pointer settles on its first step.
  */
 function steeredDock(
-  pointer: Point2D,
-  reach: Point2D,
+  handle: Point2D,
+  centre: Point2D,
   frame: ToolbarFrame,
   length: number,
+  seatDock: ToolbarDock,
   previousTarget: ToolbarDock,
 ): ToolbarDock {
   const allowed = allowedDocksInFrame(frame, length);
   const flatOnly = isShortToolbarFrame(frame, length);
   const targetAllowed = allowed.includes(previousTarget);
-  const claimedBy = (point: Point2D): ToolbarDock | undefined => {
-    if (targetAllowed && isInDockZone(previousTarget, point, frame, flatOnly, ZONE_MARGIN)) {
-      return undefined;
-    }
+  const bodyOnCanvas = isInFrame(centre, frame);
+  // Off the canvas the far end cannot start a claim, but it keeps the one it holds, so crossing the frame's edge never hands the target back.
+  const leadsByBody = (dock: ToolbarDock) => bodyOnCanvas && bodyLeads(dock, seatDock);
+  const claimsBar = (dock: ToolbarDock): boolean => {
+    const margin = dock === previousTarget ? REGION_MARGIN : 0;
+    const byHandle = isInRegion(dock, handle, frame, length, flatOnly, margin, seatDock);
+    if (!bodyLeads(dock, seatDock)) return byHandle;
 
-    return allowed.find(
-      (dock) => dock !== previousTarget && isInDockZone(dock, point, frame, flatOnly),
-    );
+    const byBody = isInRegion(dock, centre, frame, length, flatOnly, margin, seatDock);
+    if (bodyOnCanvas) return byBody;
+    if (dock === previousTarget) return byBody || byHandle;
+
+    return byHandle;
   };
-  const claimed = claimedBy(pointer) ?? claimedBy(reach);
-  if (claimed) return claimed;
+  const claims = allowed.filter(claimsBar);
+  if (claims.length === 0) return targetAllowed ? previousTarget : allowed[0];
 
-  return targetAllowed ? previousTarget : allowed[0];
+  const bodyClaims = claims.filter(leadsByBody);
+  const contenders = bodyClaims.length > 0 ? bodyClaims : claims;
+  if (contenders.includes(previousTarget)) return previousTarget;
+
+  return contenders[0];
 }
 
 /** Whether the pointer is still close enough to where it went down to hold the bar in. */
@@ -127,10 +164,11 @@ export function nextToolbarDrag(
   const handle = clampHandleToFrame(Vec2.add(pointer, previous.grab), frame);
   const moved = { ...previous, pointer, handle, frame, tether: null };
   const target = steeredDock(
-    pointer,
-    toolbarBarReach(moved),
+    handle,
+    toolbarBarCentre(moved),
     frame,
     previous.length,
+    previous.seatDock,
     previous.target,
   );
 

@@ -1,4 +1,4 @@
-<!-- reviewed: 2026-10-17 review-every: 90d -->
+<!-- reviewed: 2026-10-19 review-every: 90d -->
 
 # Floating Toolbar
 
@@ -8,7 +8,7 @@ The tools bar that floats over the canvas, docked to an edge the user picks by d
 
 > **Architecture Invariant:** The bar's pose is a pure function of its dock, and a carried bar keeps the pose of the slot it was picked up from for the whole drag. `poseForDock` maps top and bottom to `flat` and both side docks to `stand`, so crossing between the two sides never turns the bar. Pose and placement change only on release. If the bar re-posed while the pointer moved, its footprint would change under the pointer and feed back into which edge is nearest.
 
-> **Architecture Invariant:** Whichever reaches a new zone first, the pointer or the carried bar's reach point (`TRAILING_REACH` of the way in from the end away from the handle), picks the target edge, and some edge is always the target. The zones: the top and bottom quarters of the frame dock to their edge, and the outer thirds of the band between dock to their side (a short frame splits into top and bottom halves). The centre third of the band belongs to no zone and keeps whatever the target already is, so wobbling across the middle never flips the bar between sides. A point only claims a new zone once it is `ZONE_MARGIN` clear of the current target's zone. The handle sits at one end of the bar, so the pointer leads in some directions and trails in others. Steering by the pointer alone makes the trailing directions late, because the whole bar has crossed before the pointer does. Steering by a point on the bar alone makes the leading directions late, and can leave a zone out of reach: the handle is clamped inside the frame, so on a short canvas a standing bar's far end cannot get into the bottom quarter. Taking whichever arrives first switches every direction once at most `TRAILING_REACH` of the bar is in. The reach point is a fixed offset from the handle because the carried bar keeps its pose.
+> **Architecture Invariant:** The target is decided by where the carried bar is, and the target already chosen is always among the docks that claim it, so a held pointer settles on its first step and never flickers. Each dock the frame has room for owns a region of the frame: the strip beside the centre square, with each corner rectangle split on its diagonal so a point goes to the edge it is proportionally nearer (`dockRegionAt`). The near half of each corner rectangle, on both sides, is caught early instead: it belongs to the edge across the seat's axis, which a flat bar's corner gives to the left or right edge and a standing bar's to the top or bottom, so a handle hugging an edge does not wait for the diagonal. The far corner of that rectangle sits exactly on the diagonal. A quarter of the corner rectangle moved the periphery by only a few points, and three quarters moved it a lot but made the landing depend most on the carried bar. The centre square, as wide as the bar is long, splits in half across the axis the bar was carried along: a bar from a left or right seat gets a left and a right half, one from a top or bottom seat a top and a bottom half. Along its own axis the bar therefore claims its next edge at the square's midline, not at its far side, and the other axis does not matter inside the square (`dockRegionAt` takes the seat dock). A quarter split, where the cross-axis edges also claim by half, claims no earlier, because the current target still wins ties, and it adds flips on left-to-right pulls. A dock claims the bar when its leading point is in its region, and the leading end differs by direction: the handle leads toward the bottom and right, while the bar's centre leads toward the top for a standing bar and toward the left for a flat one, because the handle trails there. When the body claims a dock the handle does not, the body wins, so the far end switches the target as soon as it arrives. A far end hanging off the canvas cannot start a claim, so a handle in a corner decides there, but it keeps a claim the target already holds: cutting the body's vote at the frame's edge made the target flip back and forth on narrow and wide canvases. The current target claims with a `REGION_MARGIN` (half the bar's thickness), so a shaking pointer cannot flip it across a diagonal or the midline. The margin only moves where a switch happens, not how stable it is: with none the target chatters about nine times per jittering pull, and a full unit of thickness makes every switch later. Judging by the bar's centre alone makes the bottom and right late or unreachable for a standing bar, because its centre hangs about half a bar length behind the handle. Steering by both ends without a fixed leader is what made the target flicker: each end held a different dock and the next step handed the bar back.
 
 > **Architecture Invariant:** The dock (the `dock` prop, or the bar's own state when unset) is the user's intent; the displayed dock is derived. `fitDockToFrame` shows a side dock on the bottom edge when the canvas is too short to hold the bar standing, and `onDockChange` fires only when the user drops the bar somewhere. The bar stores nothing; the desktop app remembers the dock (`useToolbarDock`). Writing the fitted dock back would forget the user's side choice every time a panel is resized.
 
@@ -21,14 +21,14 @@ The tools bar that floats over the canvas, docked to an edge the user picks by d
 ```
 ui/
 ├── FloatingToolbar.tsx   — overlay, target edge line and landing outline, wires the hooks to the bar
-├── ToolbarZonesOverlay.tsx — debug view of the dock zones, target margin, reach point, pointer and handle
+├── ToolbarZonesOverlay.tsx — debug view of the dock regions, centre square halves, handle and bar centre
 ├── ToolbarBar.tsx        — the bar itself, FLIP slide and turn about the handle, tools dip
 ├── ToolsPane.tsx         — the tool buttons and their menus, in either orientation
 ├── useToolbarDrag.ts     — pointer tracking and the guards that always end a drag
 ├── useToolbarMetrics.ts  — measured canvas and bar size
-├── toolbarDrag.ts        — drag state transitions: tether, zone steering, lift, tools opacity
+├── toolbarDrag.ts        — drag state transitions: tether, region steering, lift, tools opacity
 ├── toolbarPose.ts        — dock to pose, which docks fit, the shown dock
-├── toolbarGeometry.ts    — dock zones and handle clamping
+├── toolbarGeometry.ts    — dock regions, centre square halves and handle clamping
 ├── toolbarPresence.ts    — tools opacity constants and the turn's dip keyframes
 └── springEasing.ts       — a spring baked into a CSS `linear()` easing
 ```
@@ -57,11 +57,14 @@ On release `useToolbarDrag` calls `onDock(releasedDock(…))`: the drag's target
 - `TOOLBAR_INSET` and the Tailwind `inset-3` in `SLOT_FRAME` are the same 12px written twice. Change both.
 - The bar is deliberately unpositioned so it and its handle share the wrapper as offset parent, which makes the `offsetLeft` subtraction exact and unaffected by a running turn. With `relative` the handle would measure from the bar instead, skewing `handleInBar` by the bar's position and border.
 - Ctrl+click opens the macOS context menu, which swallows the release, so the press is ignored. Escape, a context menu, window blur and a move with no buttons down all end a drag; Escape is stopped in the capture phase so the active tool never sees it.
+- Dragging straight through the middle, such as left to right, switches the target at the square's midline plus the margin, and a standing bar keeps its pose on the way. Splitting the square by the same axis for every seat instead makes pulls across it flip, because the handle travels off the square's centreline, so the split follows the seat. Releasing over the square lands on the half the handle is in, unless the bar's far end has reached a strip and claimed that edge instead.
+- The corner rectangles make the destination depend on the seat: the same handle in a corner catches the left edge for a flat bar and the top for a standing one. Giving a corner to the side edges for every seat removes that, but it leaves a standing bar's periphery late, with the top edge claiming at 61% and 84% of the path instead of 31% and 42%. Catching a whole corner rectangle's worth instead of half turns more of the periphery early but makes the landing depend still more on the bar that is carried.
+- Where the same handle position lands still depends on which bar is carried, since a flat and a standing bar put their centres in different places; the far end only steers while it is on the canvas, which narrows the difference to a quarter to a third of the canvas, and the corner rectangles widen it again a little. The handle alone would not differ, but it makes the top and left late.
 - The drag, animation and hooks have no automated tests; the pure modules do. Check Escape, right-click, a short window and grabbing mid-animation by hand.
 
 ## Verification
 
-- In a development build, Debug → Toolbar Dock Zones draws each zone, the target's zone grown by `ZONE_MARGIN`, and the pointer, reach point and handle while dragging. It is mounted only while toggled on and is never persisted, so profiling runs start without it.
+- In a development build, Debug → Toolbar Dock Zones draws each dock's region, the two halves of the centre square for the seat's axis, and the handle and bar centre while dragging. It is mounted only while toggled on and is never persisted, so profiling runs start without it.
 
 - `pnpm turbo run test --filter=@shift/editor`
 - `pnpm profile:desktop --scenario toolbar-drag --font <path>` for drag frame times and renders per commit
