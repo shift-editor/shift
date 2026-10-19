@@ -4,10 +4,10 @@ import { effect } from "@shift/editor/signals";
 import type { GlyphId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { drawGroupPreview, type MemberWord } from "./drawGroupPreview";
-import type { MemberSelection } from "./MemberSelection";
+import type { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import type { PreviewLayout } from "./PreviewLayout";
 import { glyphName } from "./previewGlyphs";
-import { useMemberDrag } from "./useMemberDrag";
 
 interface GroupPreviewProps {
   readonly position: KerningPairPosition;
@@ -15,9 +15,9 @@ interface GroupPreviewProps {
   readonly otherGlyphId: GlyphId | null;
   readonly hovered: GlyphId | null;
   /** The selection, over the group's members in order. */
-  readonly selection: MemberSelection;
+  readonly selection: GlyphSelection;
   readonly onHover: (member: GlyphId | null) => void;
-  readonly onSelect: (selection: MemberSelection) => void;
+  readonly onSelect: (selection: GlyphSelection) => void;
   /** Takes the selected members out of the group. */
   readonly onRemove: () => void;
 }
@@ -41,7 +41,7 @@ export function GroupPreview({
   onRemove,
 }: GroupPreviewProps) {
   const editor = useEditor();
-  const { members } = selection;
+  const { glyphs: members } = selection;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // non-reactive: the last drawn layout, read only by pointer handlers.
@@ -76,10 +76,12 @@ export function GroupPreview({
     return layout.memberAt(clientX - rect.left, clientY - rect.top);
   };
 
-  const drag = useMemberDrag({
+  const select = useGlyphSelection({
+    selection,
+    onSelect,
     containerRef,
-    memberAt,
-    onSweep: (anchor, member) => onSelect(selection.drag(anchor, member)),
+    glyphAt: memberAt,
+    onRemove,
   });
 
   return (
@@ -90,43 +92,20 @@ export function GroupPreview({
       role="group"
       aria-label={`Members of ${group}`}
       className="scrollbar-hidden max-h-44 overflow-y-auto rounded bg-input p-1 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
-      onKeyDown={(event) => {
-        const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
-        const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
-        if (forward || backward) {
-          onSelect(selection.step(forward ? 1 : -1, event.shiftKey));
-        } else if (event.key === "a" && (event.metaKey || event.ctrlKey)) {
-          onSelect(selection.all());
-        } else if ((event.key === "Delete" || event.key === "Backspace") && !selection.isEmpty) {
-          onRemove();
-        } else if (event.key === "Escape" && !selection.isEmpty) {
-          onSelect(selection.clear());
-        } else return;
-        event.preventDefault();
-        event.stopPropagation();
-      }}
+      onKeyDown={select.onKeyDown}
     >
       <canvas
         ref={canvasRef}
         aria-hidden="true"
         title={hovered ? glyphName(editor, hovered) : undefined}
         className="block w-full cursor-pointer select-none text-primary"
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          const member = memberAt(event.clientX, event.clientY);
-          const modifiers = { range: event.shiftKey, toggle: event.metaKey || event.ctrlKey };
-          onSelect(selection.click(member, modifiers));
-          // A drag from a plain press sweeps a range from where it started.
-          if (!member || modifiers.range || modifiers.toggle) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          drag.start(member, event.clientX, event.clientY);
-        }}
+        onPointerDown={select.onPointerDown}
         onPointerMove={(event) => {
           onHover(memberAt(event.clientX, event.clientY));
-          drag.move(event.clientX, event.clientY);
+          select.onPointerMove(event);
         }}
-        onPointerUp={drag.end}
-        onLostPointerCapture={drag.end}
+        onPointerUp={select.onPointerUp}
+        onLostPointerCapture={select.onLostPointerCapture}
         onPointerLeave={() => onHover(null)}
       />
     </div>

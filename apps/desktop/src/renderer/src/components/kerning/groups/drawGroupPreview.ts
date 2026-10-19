@@ -2,7 +2,7 @@ import type { Editor } from "@shift/editor";
 import type { KerningPairPosition } from "@shift/editor/model";
 import { track } from "@shift/editor/signals";
 import type { GlyphId } from "@shift/types";
-import type { MemberSelection } from "./MemberSelection";
+import type { GlyphSelection } from "../../glyph-grid/GlyphSelection";
 import { PreviewLayout, type PreviewWord } from "./PreviewLayout";
 import { fillGlyph, previewGlyph, type PreviewGlyph } from "./previewGlyphs";
 
@@ -35,7 +35,7 @@ export interface GroupPreviewContent {
 /** The members drawn marked: the one under the pointer and the selected ones. */
 export interface PreviewMarks {
   readonly hovered: GlyphId | null;
-  readonly selection: MemberSelection;
+  readonly selection: GlyphSelection;
 }
 
 /**

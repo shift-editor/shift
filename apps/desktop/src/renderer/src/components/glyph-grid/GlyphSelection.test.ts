@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { GlyphId } from "@shift/types";
-import { MemberSelection } from "./MemberSelection";
+import { GlyphSelection } from "./GlyphSelection";
 
-const members = ["u", "uacute", "ubreve", "ucircumflex", "udieresis"] as GlyphId[];
-const [u, uacute, ubreve, ucircumflex, udieresis] = members as [
+const glyphs = ["u", "uacute", "ubreve", "ucircumflex", "udieresis"] as GlyphId[];
+const [u, uacute, ubreve, ucircumflex, udieresis] = glyphs as [
   GlyphId,
   GlyphId,
   GlyphId,
   GlyphId,
   GlyphId,
 ];
-const none = MemberSelection.empty(members);
+const none = GlyphSelection.empty(glyphs);
 const plain = { range: false, toggle: false };
 const shift = { range: true, toggle: false };
 const command = { range: false, toggle: true };
 
-describe("group member selection", () => {
+describe("glyph selection", () => {
   it("selects a range from the anchor with Shift, in either direction", () => {
     const one = none.click(ubreve, plain);
 
@@ -23,7 +23,7 @@ describe("group member selection", () => {
     expect(one.click(u, shift).ids).toEqual([u, uacute, ubreve]);
   });
 
-  it("toggles single members with ⌘, keeping member order", () => {
+  it("toggles single glyphs with ⌘, keeping grid order", () => {
     const two = none.click(udieresis, plain).click(uacute, command);
 
     expect(two.ids).toEqual([uacute, udieresis]);
@@ -37,7 +37,7 @@ describe("group member selection", () => {
     expect(one.click(null, shift).ids).toEqual([u]);
   });
 
-  it("selects every member a drag passes over", () => {
+  it("selects every glyph a drag passes over", () => {
     expect(none.drag(ucircumflex, uacute).ids).toEqual([uacute, ubreve, ucircumflex]);
   });
 
@@ -49,8 +49,8 @@ describe("group member selection", () => {
     expect(none.step(1, false).ids).toEqual([u]);
   });
 
-  it("drops glyphs that left the group", () => {
-    const after = none.drag(u, uacute).withMembers([uacute, ubreve]);
+  it("drops glyphs that left the grid", () => {
+    const after = none.drag(u, uacute).withGlyphs([uacute, ubreve]);
 
     expect(after.ids).toEqual([uacute]);
     expect(after.anchor).toBeNull();
