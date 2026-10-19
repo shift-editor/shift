@@ -124,10 +124,7 @@ fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
 }
 
 pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<ExternalLocation> {
-    let mut location = ExternalLocation::new();
-    for axis in font.axes() {
-        location.set(axis.id(), axis.default());
-    }
+    let mut location = ExternalLocation::at_defaults(font.axes());
 
     let mut seen = HashSet::new();
     for coordinate in coordinates {

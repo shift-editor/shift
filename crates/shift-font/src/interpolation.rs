@@ -744,8 +744,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let axis_id = font.axes()[0].id();
-        let mut location = DesignLocation::new();
-        location.set(axis_id, 600.0);
+        let location = DesignLocation::from([(axis_id, 600.0)]);
 
         let layer = font
             .glyph_interpolation(&glyph.id())

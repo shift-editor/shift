@@ -1529,8 +1529,7 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
     let base_sources = workspace.font().sources().len();
 
     let axis_id = AxisId::from_raw("axis_weight");
-    let mut location = DesignLocation::new();
-    location.set(axis_id.clone(), 700.0);
+    let location = DesignLocation::from([(axis_id.clone(), 700.0)]);
     workspace
         .apply(
             &FontIntentSet {
@@ -2068,9 +2067,7 @@ fn create_weight_axis(workspace: &mut FontWorkspace) -> AxisId {
 }
 
 fn weight_location(axis_id: AxisId, value: f64) -> DesignLocation {
-    let mut location = DesignLocation::new();
-    location.set(axis_id, value);
-    location
+    DesignLocation::from([(axis_id, value)])
 }
 
 #[test]
@@ -2293,8 +2290,7 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let axis_id = AxisId::from_raw("axis_weight");
     let instance_id = NamedInstanceId::from_raw("instance_bold");
-    let mut location = ExternalLocation::new();
-    location.set(axis_id.clone(), 700.0);
+    let location = ExternalLocation::from([(axis_id.clone(), 700.0)]);
     let bold = NamedInstance::with_id(
         instance_id.clone(),
         "Bold".to_string(),
@@ -2322,8 +2318,7 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
         std::slice::from_ref(&bold)
     );
 
-    let mut updated_location = ExternalLocation::new();
-    updated_location.set(axis_id.clone(), 750.0);
+    let updated_location = ExternalLocation::from([(axis_id.clone(), 750.0)]);
     let updated = NamedInstance::with_id(
         instance_id.clone(),
         "Display Bold".to_string(),
@@ -2419,8 +2414,7 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let axis_id = AxisId::from_raw("axis_weight");
     let source_id = SourceId::from_raw("bold");
-    let mut location = DesignLocation::new();
-    location.set(axis_id.clone(), 700.0);
+    let location = DesignLocation::from([(axis_id.clone(), 700.0)]);
 
     workspace
         .apply(

@@ -98,7 +98,5 @@ fn commands_at(
 }
 
 fn location(axis_id: &shift_font::AxisId, value: f64) -> DesignLocation {
-    let mut location = DesignLocation::new();
-    location.set(axis_id.clone(), value);
-    location
+    DesignLocation::from([(axis_id.clone(), value)])
 }

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -193,8 +192,7 @@ fn binary_directory(
                     // is also the minimum or maximum, two of them name the
                     // same user value, which a mapping cannot repeat.
                     values.dedup_by(|(input, _), (previous, _)| input == previous);
-                    let user_location =
-                        |value| Location::from_map(HashMap::from([(axis_id.clone(), value)]));
+                    let user_location = |value| Location::from([(axis_id.clone(), value)]);
                     Ok(AxisMapping::new(
                         format!("{} mapping", axis.name()),
                         vec![axis_id.clone()],

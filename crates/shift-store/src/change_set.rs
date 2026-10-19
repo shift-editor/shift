@@ -237,7 +237,7 @@ pub(crate) fn replace_font_header_in_tx(
             source.lib(),
         )?;
 
-        for (axis_id, value) in source.location().iter() {
+        for (axis_id, value) in source.location() {
             // Location entries on undefined axes have no row to reference.
             if font.axes().iter().any(|axis| axis.id() == *axis_id) {
                 upsert_source_location(tx, &source.id(), axis_id, *value)?;
@@ -290,7 +290,7 @@ pub(crate) fn write_glyph_directory_in_tx(
                     unicode_order as i64
                 ])?;
             }
-            for (key, value) in glyph.lib().iter() {
+            for (key, value) in glyph.lib() {
                 tx.prepare_cached(
                     "INSERT INTO glyph_lib (glyph_id, key, value_json) VALUES (?1, ?2, ?3)",
                 )?
@@ -841,7 +841,7 @@ pub(crate) fn write_source_snapshot_in_tx(
         "DELETE FROM source_locations WHERE source_id = ?1",
         [source.id()],
     )?;
-    for (axis_id, value) in source.location().iter() {
+    for (axis_id, value) in source.location() {
         upsert_source_location(tx, &source.id(), axis_id, *value)?;
     }
     replace_source_metric_values(tx, &source.id(), source.metric_values().iter())?;
@@ -1183,7 +1183,7 @@ pub(crate) fn replace_lib_data(
             let insert_sql = format!(
                 "INSERT INTO {table} ({owner_column}, key, value_json) VALUES (?1, ?2, ?3)"
             );
-            for (key, value) in lib.iter() {
+            for (key, value) in lib {
                 tx.prepare_cached(&insert_sql)?.execute(params![
                     owner_id,
                     key,
@@ -1195,7 +1195,7 @@ pub(crate) fn replace_lib_data(
             let delete_sql = format!("DELETE FROM {table}");
             tx.execute(&delete_sql, [])?;
             let insert_sql = format!("INSERT INTO {table} (key, value_json) VALUES (?1, ?2)");
-            for (key, value) in lib.iter() {
+            for (key, value) in lib {
                 tx.execute(&insert_sql, params![key, lib_value_json(value)?])?;
             }
         }

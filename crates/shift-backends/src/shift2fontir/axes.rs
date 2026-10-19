@@ -290,10 +290,8 @@ mod tests {
         let points = points
             .iter()
             .map(|&(user, design)| {
-                let mut input = Location::new();
-                input.set(axis.id(), user);
-                let mut output = Location::new();
-                output.set(axis.id(), design);
+                let input = Location::from([(axis.id(), user)]);
+                let output = Location::from([(axis.id(), design)]);
                 AxisMappingPoint {
                     description: None,
                     input,

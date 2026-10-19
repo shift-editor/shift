@@ -247,8 +247,8 @@ pub(crate) fn font_header(
                         .iter()
                         .map(|(user, design)| AxisMappingPoint {
                             description: None,
-                            input: Location::from_map(HashMap::from([(axis_id.clone(), *user)])),
-                            output: Location::from_map(HashMap::from([(axis_id.clone(), *design)])),
+                            input: Location::from([(axis_id.clone(), *user)]),
+                            output: Location::from([(axis_id.clone(), *design)]),
                         })
                         .collect(),
                 )
@@ -396,10 +396,12 @@ pub(super) fn add_intermediate_sources(
     let metrics = font.source_metric_interpolation();
     let mut intermediates = HashMap::new();
     for coordinates in locations {
-        let mut location = DesignLocation::new();
-        for (axis, value) in font.axes().iter().zip(&coordinates) {
-            location.set(axis.id(), value.into_inner());
-        }
+        let location: DesignLocation = font
+            .axes()
+            .iter()
+            .zip(&coordinates)
+            .map(|(axis, value)| (axis.id(), value.into_inner()))
+            .collect();
         let name = coordinates
             .iter()
             .map(ToString::to_string)

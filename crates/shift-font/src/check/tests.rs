@@ -127,8 +127,7 @@ fn reports_masters_at_the_same_location() {
 fn reports_a_master_outside_its_axis() {
     let mut font = sample_variable_font();
     let axis = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis, 2000.0);
+    let location = DesignLocation::from([(axis, 2000.0)]);
     let bold = source_named(&font, "Bold");
     font.source_mut(&bold).unwrap().set_location(location);
 
@@ -139,8 +138,7 @@ fn reports_a_master_outside_its_axis() {
 fn reports_a_font_without_a_master_at_the_default() {
     let mut font = sample_variable_font();
     let axis = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis, 500.0);
+    let location = DesignLocation::from([(axis, 500.0)]);
     let regular = font.default_source_id().unwrap();
     font.source_mut(&regular).unwrap().set_location(location);
 

@@ -7,8 +7,7 @@ fn axis_edit_cannot_strand_a_master_and_failed_replacement_preserves_the_font() 
     let mut font = Font::new();
     let axis = Axis::weight();
     font.add_axis(axis.clone()).unwrap();
-    let mut location = DesignLocation::new();
-    location.set(axis.id(), 900.0);
+    let location = DesignLocation::from([(axis.id(), 900.0)]);
     font.add_source(Source::new("Black".to_string(), location));
     let before = font.clone();
     let replacement = Axis::with_id(
@@ -32,8 +31,7 @@ fn default_origin_is_preserved_for_both_explicit_and_implicit_master_coordinates
         let axis = Axis::weight();
         font.add_axis(axis.clone()).unwrap();
         if explicit {
-            let mut location = DesignLocation::new();
-            location.set(axis.id(), 400.0);
+            let location = DesignLocation::from([(axis.id(), 400.0)]);
             let source_id = font.default_source_id().unwrap();
             font.source_mut(&source_id).unwrap().set_location(location);
         }
@@ -80,8 +78,7 @@ fn range_expansion_does_not_relocate_masters_or_layer_only_sources() {
     let axis = Axis::weight();
     font.add_axis(axis.clone()).unwrap();
     let mut background = Source::layer("Background".to_string());
-    let mut location = DesignLocation::new();
-    location.set(axis.id(), 2000.0);
+    let location = DesignLocation::from([(axis.id(), 2000.0)]);
     background.set_location(location);
     font.add_source(background);
     let before = font.clone();

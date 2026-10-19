@@ -132,7 +132,7 @@ impl UfoReader {
             }
             plist::Value::Dictionary(dict) => {
                 let mut map = BTreeMap::new();
-                for (k, v) in dict.iter() {
+                for (k, v) in dict {
                     map.insert(k.clone(), Self::convert_plist_to_lib_value(v));
                 }
                 LibValue::Dict(map)
@@ -179,7 +179,7 @@ impl UfoReader {
 
     pub(crate) fn convert_lib(lib: &plist::Dictionary) -> LibData {
         let mut data = BTreeMap::new();
-        for (k, v) in lib.iter() {
+        for (k, v) in lib {
             data.insert(k.clone(), Self::convert_plist_to_lib_value(v));
         }
         LibData::from_map(data)

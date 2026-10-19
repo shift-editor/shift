@@ -64,8 +64,7 @@ mod tests {
     use super::*;
 
     fn instance(name: &str, weight: f64) -> NamedInstance {
-        let mut location = ExternalLocation::new();
-        location.set(AxisId::from_raw("wght"), weight);
+        let location = ExternalLocation::from([(AxisId::from_raw("wght"), weight)]);
         NamedInstance::new(name.to_string(), location, None)
     }
 

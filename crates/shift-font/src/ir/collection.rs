@@ -182,6 +182,41 @@ where
     }
 }
 
+impl<T> FromIterator<T> for EntityList<T>
+where
+    T: Identified,
+{
+    /// Collects entities in order; a later entity replaces an earlier one with the same ID.
+    fn from_iter<I: IntoIterator<Item = T>>(entities: I) -> Self {
+        let mut list = Self::default();
+        list.extend(entities);
+        list
+    }
+}
+
+impl<T> Extend<T> for EntityList<T>
+where
+    T: Identified,
+{
+    fn extend<I: IntoIterator<Item = T>>(&mut self, entities: I) {
+        for entity in entities {
+            self.insert(entity);
+        }
+    }
+}
+
+impl<'a, T> IntoIterator for &'a EntityList<T>
+where
+    T: Identified,
+{
+    type Item = (&'a T::Id, &'a T);
+    type IntoIter = indexmap::map::Iter<'a, T::Id, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +268,18 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["new", "first"]
         );
+    }
+
+    #[test]
+    fn collecting_keeps_first_position_and_last_value() {
+        let list: EntityList<Item> = [item(2, "old"), item(1, "first"), item(2, "new")]
+            .into_iter()
+            .collect();
+
+        let mut entries = Vec::new();
+        for (id, item) in &list {
+            entries.push((*id, item.value.as_str()));
+        }
+        assert_eq!(entries, vec![(2, "new"), (1, "first")]);
     }
 }

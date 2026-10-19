@@ -138,10 +138,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
 /// non-finite values, invalid source authoring, or persistence failures.
 pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
     let font = glyph::load_font(&args.path)?;
-    let mut location = DesignLocation::new();
-    for axis in font.axes() {
-        location.set(axis.id(), axis.default());
-    }
+    let mut location = DesignLocation::at_defaults(font.axes());
     for (axis_id, value) in parse_location(&font, &args.location)? {
         location.set(axis_id, value);
     }

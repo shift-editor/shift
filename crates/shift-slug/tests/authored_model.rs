@@ -60,8 +60,7 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     let atlas = builder.finish();
 
     let axis_id = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis_id, 600.0);
+    let location = DesignLocation::from([(axis_id, 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -336,8 +335,7 @@ fn components_scaled_per_master_resolve_like_the_compiled_font() {
             .authored
             .default_glyph;
         for weight in [100.0, 200.0, 250.0, 400.0, 700.0] {
-            let mut location = DesignLocation::new();
-            location.set(axis.clone(), weight);
+            let location = DesignLocation::from([(axis.clone(), weight)]);
             let mut weights = vec![0.0_f32; page.weight_count() as usize];
             weights[0] = 1.0;
             for set in page.weight_sets() {
@@ -455,8 +453,7 @@ fn component_model_resolves_varying_decomposed_transform() {
             .unwrap();
     let atlas = builder.finish();
     let axis_id = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis_id, 600.0);
+    let location = DesignLocation::from([(axis_id, 600.0)]);
     let source_weights = projection
         .interpolation()
         .unwrap()
@@ -543,8 +540,7 @@ fn component_model_ignores_mark_anchors_when_placing_components() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 600.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -614,8 +610,7 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 650.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 650.0)]);
     let mut weights = vec![0.0_f32; next_weight_index as usize];
     weights[0] = 1.0;
     for set in &weight_sets {
@@ -726,8 +721,7 @@ fn decomposed_root_keeps_its_components_extra_master() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 650.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 650.0)]);
     let mut weights = vec![0.0_f32; weight_indices.len() + 1];
     weights[0] = 1.0;
     for (weight_index, weight) in weight_indices
