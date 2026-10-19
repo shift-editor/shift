@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "shift-bridge"
 version = "0.0.1"
 authors = ["Kostya Farber <kostya.farber@gmail.com>"]
