@@ -364,14 +364,21 @@ fn blend(outlines: &[OutlineParts], weights: &[f64]) -> Option<OutlineParts> {
     }
 
     let blended_point = |part: usize, contour: usize, index: usize, point: &Point| {
-        let (x, y) = outlines
-            .iter()
-            .zip(weights)
-            .fold((0.0, 0.0), |(x, y), (outline, weight)| {
-                let source = &outline[part][contour].points[index];
-                (x + weight * source.x(), y + weight * source.y())
-            });
-        Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
+        let blended =
+            outlines
+                .iter()
+                .zip(weights)
+                .fold(kurbo::Vec2::ZERO, |sum, (outline, weight)| {
+                    let source = &outline[part][contour].points[index];
+                    sum + *weight * source.position().to_vec2()
+                });
+        Point::new(
+            PointId::new(),
+            blended.x,
+            blended.y,
+            point.point_type(),
+            point.is_smooth(),
+        )
     };
     let blended_contour = |part: usize, contour: usize, first: &ResolvedContour| ResolvedContour {
         points: first
@@ -436,7 +443,7 @@ fn placed(
                 .get(placed_point_index(index, shape, reversing))
         })
         .map(|point| {
-            let (x, y) = transform.transform_point(point.x(), point.y());
+            let kurbo::Point { x, y } = transform.transform_point(point.position());
             Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
         })
         .collect();

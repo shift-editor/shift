@@ -1800,13 +1800,7 @@ impl Font {
                     .map(|base_layer| (component.matrix(), base_layer))
             })
             .collect();
-        Ok(
-            anchor_aligned_offset(&placed, component_layer).map(|(dx, dy)| DecomposedTransform {
-                translate_x: dx,
-                translate_y: dy,
-                ..Default::default()
-            }),
-        )
+        Ok(anchor_aligned_offset(&placed, component_layer).map(DecomposedTransform::translation))
     }
 }
 

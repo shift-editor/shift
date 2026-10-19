@@ -153,8 +153,12 @@ pub fn transform_point(
 ) -> Result<Ts<ReferencePoint>, JsError> {
     let transform = DecomposedTransform::from(transform.to_rust()?);
     let point = point.to_rust()?;
-    let (x, y) = transform.transform_point(point.x, point.y);
-    Ok(ReferencePoint { x, y }.into_ts()?)
+    let moved = transform.transform_point(shift_font::kurbo::Point::new(point.x, point.y));
+    Ok(ReferencePoint {
+        x: moved.x,
+        y: moved.y,
+    }
+    .into_ts()?)
 }
 
 /// `DecomposedTransform::from_matrix`.

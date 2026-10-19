@@ -359,14 +359,14 @@ impl GlyphLayer {
     pub fn transform_layer(&mut self, transform: &Transform) {
         for contour in self.contours_iter_mut() {
             for point in contour.points_mut() {
-                let (x, y) = transform.transform_point(point.x(), point.y());
-                point.set_position(x, y);
+                let moved = transform.transform_point(point.position());
+                point.set_position(moved.x, moved.y);
             }
         }
 
         for anchor in self.anchors_iter_mut() {
-            let (x, y) = transform.transform_point(anchor.x(), anchor.y());
-            anchor.set_position(x, y);
+            let moved = transform.transform_point(anchor.position());
+            anchor.set_position(moved.x, moved.y);
         }
 
         let translation_only = *transform == Transform::translate(transform.dx, transform.dy);

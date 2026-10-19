@@ -59,6 +59,10 @@ impl Point {
         self.id.clone()
     }
 
+    pub fn position(&self) -> kurbo::Point {
+        kurbo::Point::new(self.x, self.y)
+    }
+
     pub fn x(&self) -> f64 {
         self.x
     }

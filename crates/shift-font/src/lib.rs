@@ -59,4 +59,6 @@ pub use ir::{
     glyph_name, guideline, kerning, lib_data, metrics, named_instance, point, segment, source,
     variation,
 };
+/// Points, vectors, and affine maps in the font model's signatures.
+pub use kurbo;
 pub use projection::*;

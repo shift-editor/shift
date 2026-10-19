@@ -203,7 +203,7 @@ fn invalid_component(component: &ComponentGlyph) -> CoreError {
 pub fn anchor_aligned_offset(
     placed: &[(Transform, &GlyphLayer)],
     component_layer: &GlyphLayer,
-) -> Option<(f64, f64)> {
+) -> Option<kurbo::Vec2> {
     let placed: Vec<_> = placed
         .iter()
         .map(|(transform, layer)| (*transform, layer.anchors()))
@@ -216,7 +216,7 @@ fn transform_contour_points(contour: &Contour, transform: Transform) -> Resolved
         .points()
         .iter()
         .map(|point| {
-            let (x, y) = transform.transform_point(point.x(), point.y());
+            let kurbo::Point { x, y } = transform.transform_point(point.position());
             Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
         })
         .collect();
@@ -844,10 +844,13 @@ mod tests {
             (Transform::translate(20.0, 0.0), &second),
         ];
 
-        assert_eq!(anchor_aligned_offset(&placed, &mark), Some((65.0, 290.0)));
+        assert_eq!(
+            anchor_aligned_offset(&placed, &mark),
+            Some(kurbo::Vec2::new(65.0, 290.0))
+        );
         assert_eq!(
             anchor_aligned_offset(&placed[..1], &mark),
-            Some((95.0, 190.0))
+            Some(kurbo::Vec2::new(95.0, 190.0))
         );
         assert_eq!(anchor_aligned_offset(&[], &mark), None);
     }
@@ -977,12 +980,15 @@ mod tests {
         mark.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 20.0));
 
         let first = anchor_aligned_offset(&[(Transform::identity(), &base)], &mark).unwrap();
-        assert_eq!(first, (95.0, 200.0));
+        assert_eq!(first, kurbo::Vec2::new(95.0, 200.0));
 
         let placed = [
             (Transform::identity(), &base),
-            (Transform::translate(first.0, first.1), &mark),
+            (Transform::translate(first.x, first.y), &mark),
         ];
-        assert_eq!(anchor_aligned_offset(&placed, &mark), Some((95.0, 220.0)));
+        assert_eq!(
+            anchor_aligned_offset(&placed, &mark),
+            Some(kurbo::Vec2::new(95.0, 220.0))
+        );
     }
 }
