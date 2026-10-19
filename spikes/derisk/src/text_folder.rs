@@ -160,6 +160,19 @@ pub fn parse_glyph(
     current: Option<&Glyph>,
     known_glyphs: &HashSet<GlyphId>,
 ) -> Result<Glyph, Invalid> {
+    let sources: HashSet<SourceId> = font.sources().iter().map(|s| s.id()).collect();
+    parse_glyph_with_sources(file, bytes, font, current, known_glyphs, &sources)
+}
+
+/// [`parse_glyph`] against the sources the font will have after a pull.
+pub fn parse_glyph_with_sources(
+    file: &str,
+    bytes: &[u8],
+    font: &Font,
+    current: Option<&Glyph>,
+    known_glyphs: &HashSet<GlyphId>,
+    sources: &HashSet<SourceId>,
+) -> Result<Glyph, Invalid> {
     let doc: GlyphDoc = serde_json::from_slice(bytes).map_err(|e| Invalid::Syntax(e.to_string()))?;
     let id = GlyphId::from_raw(&doc.id);
     if file_name(&id) != file {
@@ -184,7 +197,7 @@ pub fn parse_glyph(
     glyph.set_unicodes(unicodes);
     for (layer_key, layer_doc) in doc.layers {
         let source_id = SourceId::from_raw(&layer_doc.source);
-        if font.source(&source_id).is_none() {
+        if !sources.contains(&source_id) {
             return Err(Invalid::UnknownSource(layer_doc.source));
         }
         let mut layer = GlyphLayer::with_width(LayerId::from_raw(&layer_key), source_id, layer_doc.advance);
@@ -363,6 +376,11 @@ impl FolderSync {
     /// Sync in: classify `paths`, parse and validate, and build one change set.
     /// Conflicting and invalid files are reported and left out.
     pub fn plan(&self, paths: &HashSet<PathBuf>, font: &Font) -> (FontChangeSet, SyncInReport, HashMap<String, Option<u64>>) {
+        let sources: HashSet<SourceId> = font.sources().iter().map(|s| s.id()).collect();
+        self.plan_with_sources(paths, font, &sources)
+    }
+
+    pub fn plan_with_sources(&self, paths: &HashSet<PathBuf>, font: &Font, sources: &HashSet<SourceId>) -> (FontChangeSet, SyncInReport, HashMap<String, Option<u64>>) {
         let mut report = SyncInReport::default();
         let candidates: Vec<(String, &PathBuf)> = paths
             .iter()
@@ -397,7 +415,7 @@ impl FolderSync {
 
         let parsed: Vec<Option<Result<Glyph, Invalid>>> = parallel(&reads, |(file, bytes, _)| {
             let id = GlyphId::from_raw(file.trim_end_matches(".json"));
-            bytes.as_ref().map(|bytes| parse_glyph(file, bytes, font, font.glyph(&id), &known))
+            bytes.as_ref().map(|bytes| parse_glyph_with_sources(file, bytes, font, font.glyph(&id), &known, sources))
         });
 
         let mut changes = Vec::new();
@@ -490,4 +508,243 @@ fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R>
 
 pub fn all_json(dir: &Path) -> HashSet<PathBuf> {
     fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.extension().is_some_and(|e| e == "json")).collect()
+}
+
+// ---------------------------------------------------------------------------
+// Spike 11: font-level files, and "unsaved" as "differs from disk".
+
+use shift_font::{KerningGroupId, KerningPair, KerningSide, SourceCollection};
+
+fn pretty<T: serde::Serialize + ?Sized>(value: &T) -> String {
+    let mut text = serde_json::to_string_pretty(value).unwrap();
+    text.push('\n');
+    text
+}
+
+fn side_text(side: &KerningSide) -> String {
+    match side {
+        KerningSide::Glyph(id) => id.to_string(),
+        KerningSide::Group(id) => format!("@{id}"),
+    }
+}
+
+fn parse_side(text: &str) -> KerningSide {
+    match text.strip_prefix('@') {
+        Some(group) => KerningSide::Group(KerningGroupId::from_raw(group)),
+        None => KerningSide::Glyph(GlyphId::from_raw(text)),
+    }
+}
+
+/// Every font-level file, by path relative to the folder root.
+pub fn font_files(font: &Font) -> BTreeMap<String, String> {
+    let mut files = BTreeMap::new();
+    files.insert("font/metadata.json".into(), pretty(font.metadata()));
+    files.insert("font/axes.json".into(), pretty(font.axes()));
+    let sources = SourceCollection { sources: font.sources().to_vec(), default_source_id: font.default_source_id() };
+    files.insert("font/sources.json".into(), pretty(&sources));
+    let groups: BTreeMap<String, _> = font.kerning().all_groups().map(|(id, group)| (id.to_string(), group)).collect();
+    files.insert("font/kerning-groups.json".into(), pretty(&groups));
+    for (source_id, kerning) in font.kerning().sources() {
+        let mut text = String::new();
+        for (pair, value) in kerning.pairs() {
+            writeln!(text, "{}\t{}\t{}", side_text(&pair.first), side_text(&pair.second), num(value)).unwrap();
+        }
+        files.insert(format!("kerning/{source_id}.txt"), text);
+    }
+    if let Some(fea) = font.features().fea_source() {
+        files.insert("font/features.fea".into(), fea.to_string());
+    }
+    let order: String = font.glyphs().map(|g| format!("{}\n", g.id())).collect();
+    files.insert("font/glyph-order.txt".into(), order);
+    files
+}
+
+#[derive(Debug, Default)]
+pub struct FontLevelReport {
+    pub changed_files: Vec<String>,
+    /// Changes the engine has no way to apply.
+    pub unsupported: Vec<String>,
+    /// Kerning that names a glyph or group the pulled font doesn't have.
+    pub dangling_kerning: Vec<String>,
+    /// Feature code that names a glyph this pull renamed away.
+    pub stale_feature_names: Vec<String>,
+}
+
+impl FolderSync {
+    pub fn write_font_files(&mut self, font: &Font) {
+        for (rel, text) in font_files(font) {
+            let path = self.dir.join(&rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let tmp = path.with_extension("tmp");
+            fs::write(&tmp, text.as_bytes()).unwrap();
+            fs::rename(&tmp, &path).unwrap();
+            self.last_known.insert(rel, content_hash(text.as_bytes()));
+        }
+    }
+
+    fn read_changed(&self, rel: &str) -> Option<Option<Vec<u8>>> {
+        let bytes = fs::read(self.dir.join(rel)).ok();
+        let hash = bytes.as_deref().map(content_hash);
+        (hash != self.last_known.get(rel).copied()).then_some(bytes)
+    }
+
+    /// Plans a whole pull: font-level files first, then glyph files validated
+    /// against the font as the pull leaves it (its sources, its glyphs).
+    pub fn plan_pull(&self, glyph_paths: &HashSet<PathBuf>, font: &Font) -> (FontChangeSet, SyncInReport, FontLevelReport, HashMap<String, Option<u64>>) {
+        let mut report = FontLevelReport::default();
+        let mut changes = Vec::new();
+        let mut accepted = HashMap::new();
+        let mut post_sources: HashSet<SourceId> = font.sources().iter().map(|s| s.id()).collect();
+        let mut post_groups: HashSet<KerningGroupId> = font.kerning().all_groups().map(|(id, _)| id.clone()).collect();
+
+        let accept = |rel: &str, bytes: &Option<Vec<u8>>, accepted: &mut HashMap<String, Option<u64>>, report: &mut FontLevelReport| {
+            accepted.insert(rel.to_string(), bytes.as_deref().map(content_hash));
+            report.changed_files.push(rel.to_string());
+        };
+
+        if let Some(bytes) = self.read_changed("font/metadata.json") {
+            let after = serde_json::from_slice(bytes.as_deref().unwrap()).unwrap();
+            changes.push(FontChange::Metadata(Box::new(Replacement { before: font.metadata().clone(), after })));
+            accept("font/metadata.json", &bytes, &mut accepted, &mut report);
+        }
+        if let Some(bytes) = self.read_changed("font/axes.json") {
+            let after = serde_json::from_slice(bytes.as_deref().unwrap()).unwrap();
+            changes.push(FontChange::Axes(Replacement { before: font.axes().to_vec(), after }));
+            accept("font/axes.json", &bytes, &mut accepted, &mut report);
+        }
+        if let Some(bytes) = self.read_changed("font/sources.json") {
+            let after: SourceCollection = serde_json::from_slice(bytes.as_deref().unwrap()).unwrap();
+            post_sources = after.sources.iter().map(|s| s.id()).collect();
+            let before = SourceCollection { sources: font.sources().to_vec(), default_source_id: font.default_source_id() };
+            changes.push(FontChange::Sources(Replacement { before, after }));
+            accept("font/sources.json", &bytes, &mut accepted, &mut report);
+        }
+        if let Some(bytes) = self.read_changed("font/kerning-groups.json") {
+            let after: BTreeMap<String, shift_font::KerningGroup> = serde_json::from_slice(bytes.as_deref().unwrap()).unwrap();
+            let after: BTreeMap<KerningGroupId, _> = after.into_iter().map(|(id, g)| (KerningGroupId::from_raw(&id), g)).collect();
+            post_groups = after.keys().cloned().collect();
+            let mut ids: HashSet<KerningGroupId> = after.keys().cloned().collect();
+            ids.extend(font.kerning().all_groups().map(|(id, _)| id.clone()));
+            for id in ids {
+                let before = font.kerning().group(&id).cloned();
+                let after = after.get(&id).cloned();
+                if before != after {
+                    changes.push(FontChange::KerningGroup { group_id: id, group: Replacement { before, after } });
+                }
+            }
+            accept("font/kerning-groups.json", &bytes, &mut accepted, &mut report);
+        }
+        if let Some(bytes) = self.read_changed("font/features.fea") {
+            let after = bytes.as_deref().map(|b| String::from_utf8(b.to_vec()).unwrap()).filter(|t| !t.is_empty());
+            let before = font.features().fea_source().map(str::to_string);
+            changes.push(FontChange::FeatureSource(Replacement { before, after }));
+            accept("font/features.fea", &bytes, &mut accepted, &mut report);
+        }
+
+        // Glyph files, validated against the post-pull sources.
+        let (glyph_changes, glyph_report, glyph_accepted) = self.plan_with_sources(glyph_paths, font, &post_sources);
+        accepted.extend(glyph_accepted);
+
+        // The post-pull glyph set, for kerning validation and rename checks.
+        let mut post_glyphs: HashMap<GlyphId, String> = font.glyphs().map(|g| (g.id(), g.name().to_string())).collect();
+        for change in &glyph_changes.changes {
+            if let FontChange::Glyph(value) = change {
+                if let Some(before) = &value.before {
+                    post_glyphs.remove(&before.id());
+                }
+                if let Some(after) = &value.after {
+                    post_glyphs.insert(after.id(), after.name().to_string());
+                }
+            }
+        }
+
+        // Kerning per source: one file each, diffed pair by pair.
+        let kerning_dir = self.dir.join("kerning");
+        let mut kerning_files: HashSet<String> = self.last_known.keys().filter(|k| k.starts_with("kerning/")).cloned().collect();
+        if let Ok(entries) = fs::read_dir(&kerning_dir) {
+            kerning_files.extend(entries.filter_map(|e| e.ok()).map(|e| format!("kerning/{}", e.file_name().to_string_lossy())).filter(|f| f.ends_with(".txt")));
+        }
+        for rel in kerning_files {
+            let Some(bytes) = self.read_changed(&rel) else { continue };
+            let source_id = SourceId::from_raw(rel.trim_start_matches("kerning/").trim_end_matches(".txt"));
+            let mut after = BTreeMap::new();
+            for line in bytes.as_deref().map(|b| std::str::from_utf8(b).unwrap()).unwrap_or("").lines() {
+                let mut parts = line.split('\t');
+                let (first, second, value) = (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap());
+                let pair = KerningPair::new(parse_side(first), parse_side(second));
+                for side in [&pair.first, &pair.second] {
+                    let known = match side {
+                        KerningSide::Glyph(id) => post_glyphs.contains_key(id),
+                        KerningSide::Group(id) => post_groups.contains(id),
+                    };
+                    if !known {
+                        report.dangling_kerning.push(format!("{rel}: {}", side_text(side)));
+                    }
+                }
+                after.insert(pair, value.parse::<f64>().unwrap());
+            }
+            let before: BTreeMap<KerningPair, f64> = font.kerning().source(&source_id).map(|k| k.pairs().map(|(p, v)| (p.clone(), v)).collect()).unwrap_or_default();
+            let mut pairs: HashSet<&KerningPair> = before.keys().collect();
+            pairs.extend(after.keys());
+            for pair in pairs {
+                let (b, a) = (before.get(pair).copied(), after.get(pair).copied());
+                if b != a {
+                    changes.push(FontChange::KerningValue { source_id: source_id.clone(), pair: pair.clone(), value: Replacement { before: b, after: a } });
+                }
+            }
+            accept(&rel, &bytes, &mut accepted, &mut report);
+        }
+
+        // Glyph order: the engine can append new glyphs but not reorder.
+        if let Some(bytes) = self.read_changed("font/glyph-order.txt") {
+            let pulled: Vec<GlyphId> = bytes.as_deref().map(|b| std::str::from_utf8(b).unwrap()).unwrap_or("").lines().map(GlyphId::from_raw).collect();
+            let current: Vec<GlyphId> = font.glyphs().map(Glyph::id).collect();
+            let kept: Vec<&GlyphId> = pulled.iter().filter(|id| current.contains(id)).collect();
+            let current_kept: Vec<&GlyphId> = current.iter().filter(|id| pulled.contains(id)).collect();
+            if kept != current_kept {
+                report.unsupported.push("font/glyph-order.txt: glyphs reordered".into());
+            } else {
+                accept("font/glyph-order.txt", &bytes, &mut accepted, &mut report);
+            }
+        }
+
+        // Feature code that still names a glyph this pull renamed.
+        let fea = changes.iter().find_map(|c| match c {
+            FontChange::FeatureSource(v) => Some(v.after.clone()),
+            _ => None,
+        });
+        let fea = fea.unwrap_or_else(|| font.features().fea_source().map(str::to_string));
+        if let Some(fea) = fea {
+            let post_names: HashSet<&str> = post_glyphs.values().map(String::as_str).collect();
+            for glyph in font.glyphs() {
+                let renamed = post_glyphs.get(&glyph.id()).is_some_and(|name| name != glyph.name());
+                if renamed && !post_names.contains(glyph.name()) && fea_mentions(&fea, glyph.name()) {
+                    report.stale_feature_names.push(glyph.name().to_string());
+                }
+            }
+        }
+
+        changes.extend(glyph_changes.changes);
+        (FontChangeSet::new(changes), glyph_report, report, accepted)
+    }
+
+    /// "Unsaved" means "differs from disk": a glyph whose rendered text doesn't
+    /// match the file Shift last knew. Undoing a pull therefore makes exactly
+    /// the pulled glyphs unsaved, and redoing it makes them clean again.
+    pub fn refresh_unsaved(&mut self, font: &Font, glyph_ids: impl IntoIterator<Item = GlyphId>) {
+        for id in glyph_ids {
+            let file = file_name(&id);
+            let rendered = font.glyph(&id).map(|g| content_hash(glyph_text(g).as_bytes()));
+            if rendered == self.last_known.get(&file).copied() {
+                self.unsaved.remove(&id);
+            } else {
+                self.unsaved.insert(id);
+            }
+        }
+    }
+}
+
+/// Whether FEA text names `glyph` as a token (not as part of a longer name).
+fn fea_mentions(fea: &str, glyph: &str) -> bool {
+    fea.split(|c: char| c.is_whitespace() || "[]{};,'\\-".contains(c)).any(|token| token == glyph)
 }
