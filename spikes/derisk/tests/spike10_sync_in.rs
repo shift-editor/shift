@@ -94,15 +94,12 @@ fn watch(dir: &Path, action: impl FnOnce()) -> Watched {
     watched
 }
 
-/// Changed paths from a watch, or every path Shift knows plus every file on
-/// disk when the watcher lost events.
+/// Changed paths from a watch, or a stat rescan when the watcher lost events.
 fn changed_paths(sync: &FolderSync, watched: &Watched) -> HashSet<PathBuf> {
     if !watched.rescan {
         return watched.paths.clone();
     }
-    let mut paths = all_json(&sync.dir);
-    paths.extend(sync.last_known.keys().map(|file| sync.dir.join(file)));
-    paths
+    sync.rescan().0
 }
 
 /// Applies outside changes through the workspace, as another writer's edits.
@@ -438,7 +435,8 @@ fn cjk_change_shape_cost() {
     workspace.acquire_all_layers().unwrap();
     let font = workspace.font().clone();
     let glyphs: Vec<&Glyph> = font.glyphs().collect();
-    for n in [1usize, 10, 100, 1000] {
+    let sizes: Vec<usize> = std::env::var("SHAPE_SIZES").map(|v| v.split(',').map(|n| n.parse().unwrap()).collect()).unwrap_or(vec![1, 10, 100, 1000]);
+    for n in sizes {
         let picked: Vec<&Glyph> = glyphs.iter().step_by(glyphs.len() / n).take(n).copied().collect();
         let edited = |glyph: &Glyph| {
             let mut glyph = glyph.clone();
@@ -467,10 +465,190 @@ fn cjk_change_shape_cost() {
         let start = Instant::now();
         a.apply_change_set(&whole).unwrap();
         let whole_time = start.elapsed();
-        let mut b = font.clone();
-        let start = Instant::now();
-        b.apply_change_set(&layers).unwrap();
-        let layer_time = start.elapsed();
+        let layer_time = if std::env::var("SHAPE_WHOLE_ONLY").is_ok() {
+            Duration::ZERO
+        } else {
+            let mut b = font.clone();
+            let start = Instant::now();
+            b.apply_change_set(&layers).unwrap();
+            start.elapsed()
+        };
         eprintln!("{n:>4} glyphs: whole-glyph changes {}  layer changes {}", ms(whole_time), ms(layer_time));
     }
+}
+
+/// The index's entity ids move by difference on replacement; duplicates must
+/// still be caught exactly, including across glyphs in one batch.
+#[test]
+fn entity_id_diffing_still_catches_duplicates() {
+    use shift_font::{Contour, Point};
+    let mut fixture = open(MUTATOR);
+    let font = fixture.workspace.font().clone();
+    let a = font.glyphs().find(|g| g.name() == "A").unwrap().clone();
+    let b = font.glyphs().find(|g| g.name() == "B").unwrap().clone();
+    let first_point = |glyph: &Glyph| {
+        let layer = glyph.layers().values().next().unwrap();
+        (layer.id(), layer.contours_iter().next().unwrap().points()[0].clone())
+    };
+    let (_, a_point) = first_point(&a);
+    // B gains a contour whose point carries A's point id.
+    let with_point = |glyph: &Glyph, point: &Point| {
+        let mut glyph = glyph.clone();
+        let layer_id = glyph.layers().keys().next().unwrap().clone();
+        let mut layer = (**glyph.layers().get(&layer_id).unwrap()).clone();
+        let mut contour = Contour::new();
+        contour.push_point(point.clone());
+        layer.add_contour(contour);
+        glyph.set_layer(layer);
+        glyph
+    };
+    // A loses that point.
+    let without_point = |glyph: &Glyph, point: &Point| {
+        let mut glyph = glyph.clone();
+        for (layer_id, layer) in glyph.layers().clone() {
+            let mut layer = (*layer).clone();
+            let ids: Vec<_> = layer.contours_iter().filter(|c| c.points().iter().any(|p| p.id() == point.id())).map(|c| c.id()).collect();
+            for id in ids {
+                layer.remove_contour(id);
+            }
+            let _ = layer_id;
+            glyph.set_layer(layer);
+        }
+        glyph
+    };
+    let replace = |before: &Glyph, after: Glyph| FontChange::Glyph(Box::new(Replacement { before: Some(before.clone()), after: Some(after) }));
+
+    let steal = FontChangeSet::new(vec![replace(&b, with_point(&b, &a_point))]);
+    assert!(fixture.workspace.font().clone().apply_change_set(&steal).is_err(), "B can't take an id A still holds");
+
+    let a_after = without_point(&a, &a_point);
+    let b_after = with_point(&b, &a_point);
+    let hand_over = FontChangeSet::new(vec![replace(&a, a_after.clone()), replace(&b, b_after.clone())]);
+    fixture.workspace.persist_change_set(hand_over, false).unwrap();
+
+    let take_back = FontChangeSet::new(vec![replace(&a_after, with_point(&a_after, &a_point))]);
+    assert!(fixture.workspace.font().clone().apply_change_set(&take_back).is_err(), "the index records that B now holds the id");
+
+    let release = FontChangeSet::new(vec![replace(&b_after, without_point(&b_after, &a_point))]);
+    fixture.workspace.persist_change_set(release, false).unwrap();
+    let reclaim = FontChangeSet::new(vec![replace(&a_after, with_point(&a_after, &a_point))]);
+    assert!(fixture.workspace.font().clone().apply_change_set(&reclaim).is_ok(), "a released id is free again");
+}
+
+/// The reload path for a pull that touches most of the font: write every glyph
+/// into a fresh store with the importer's parallel batch writer.
+#[test]
+#[ignore = "65k-glyph font; run with --ignored"]
+fn cjk_reload_into_fresh_store() {
+    let store = tempfile::tempdir().unwrap();
+    let mut workspace = FontWorkspace::open(NOTO_CJK, store.path().join("store.sqlite")).unwrap();
+    workspace.acquire_all_layers().unwrap();
+    let font = workspace.font().clone();
+    let fresh_dir = tempfile::tempdir_in(spike_root()).unwrap();
+    let start = Instant::now();
+    let mut fresh = shift_store::ShiftStore::open_for_import(fresh_dir.path().join("fresh.sqlite")).unwrap();
+    let mut writer = fresh.begin_import(&font).unwrap();
+    let glyphs: Vec<Glyph> = font.glyphs().cloned().collect();
+    for batch in glyphs.chunks(2048) {
+        writer.write_glyph_batch(batch).unwrap();
+    }
+    writer.finish().unwrap();
+    fresh.finish_import().unwrap();
+    eprintln!("reload: wrote {} glyphs into a fresh store in {}", glyphs.len(), ms(start.elapsed()));
+}
+
+
+/// Sets a file's mtime back, as `cp -p` or `rsync -t` would.
+fn set_mtime(path: &Path, mtime_ns: i128) {
+    let file = std::fs::File::options().write(true).open(path).unwrap();
+    let time = std::time::UNIX_EPOCH + Duration::from_nanos(mtime_ns as u64);
+    file.set_modified(time).unwrap();
+}
+
+fn mtime_ns(path: &Path) -> i128 {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(path).unwrap();
+    i128::from(meta.mtime()) * 1_000_000_000 + i128::from(meta.mtime_nsec())
+}
+
+/// Shift was closed while the folder changed: a branch checkout plus an edit
+/// that kept the size and restored the mtime. A stat rescan finds exactly the
+/// changed files, and nothing else once the racy window has passed.
+#[test]
+fn rescan_finds_changes_made_while_closed() {
+    let mut fixture = open(MUTATOR);
+    let dir = fixture.sync.dir.clone();
+    git(&dir, &["checkout", "-qb", "teammate"]);
+    let edited: Vec<GlyphId> = ["B", "C", "D"].iter().map(|n| glyph_by_name(&fixture, n).id()).collect();
+    for id in &edited {
+        bump_advance(&dir.join(file_name(id)), 10.0);
+    }
+    git(&dir, &["commit", "-qam", "teammate"]);
+    git(&dir, &["checkout", "-q", "main"]);
+    // The font is open on main; its stats are recorded once the racy window passes.
+    let paths = all_json(&dir);
+    sync_in(&mut fixture, &paths);
+    fixture.sync.refresh_stats(&paths);
+    std::thread::sleep(Duration::from_millis(2100));
+    fixture.sync.refresh_stats(&paths);
+
+    let (quiet, report) = fixture.sync.rescan();
+    eprintln!("rescan with nothing changed: {} candidates, {report:?}", quiet.len());
+    assert!(quiet.is_empty());
+
+    // Closed: check out the teammate's branch, then a same-size edit that
+    // restores the mtime on E.
+    git(&dir, &["checkout", "-q", "teammate"]);
+    let e = glyph_by_name(&fixture, "E").id();
+    let e_path = dir.join(file_name(&e));
+    let before_mtime = mtime_ns(&e_path);
+    let text = std::fs::read_to_string(&e_path).unwrap();
+    let swapped = text.replacen("\"advance\": 1", "\"advance\": 2", 1);
+    assert_eq!(swapped.len(), text.len(), "same-size edit");
+    assert_ne!(swapped, text);
+    std::fs::write(&e_path, swapped).unwrap();
+    set_mtime(&e_path, before_mtime);
+
+    let start = Instant::now();
+    let (paths, report) = fixture.sync.rescan();
+    let scan = start.elapsed();
+    let (result, _, _, _) = sync_in(&mut fixture, &paths);
+    eprintln!("rescan after closed changes: {} candidates in {}, {report:?}; updated {}", paths.len(), ms(scan), result.updated.len());
+    let mut updated = result.updated.clone();
+    updated.sort();
+    let mut expected = edited.clone();
+    expected.push(e.clone());
+    expected.sort();
+    assert_eq!(updated, expected);
+    assert_font_matches_disk(&fixture);
+}
+
+/// The rescan's cost on 65k files when 1,000 changed while Shift was closed.
+#[test]
+#[ignore = "65k-glyph font; run with --ignored"]
+fn cjk_rescan_after_closed_pull() {
+    let mut fixture = open(NOTO_CJK);
+    let dir = fixture.sync.dir.clone();
+    let mut files: Vec<_> = all_json(&dir).into_iter().collect();
+    files.sort();
+    git(&dir, &["checkout", "-qb", "teammate"]);
+    for path in files.iter().step_by(files.len() / 1000).take(1000) {
+        bump_advance(path, 1.0);
+    }
+    git(&dir, &["commit", "-qam", "teammate"]);
+    git(&dir, &["checkout", "-q", "main"]);
+    let paths = all_json(&dir);
+    sync_in(&mut fixture, &paths);
+    std::thread::sleep(Duration::from_millis(2100));
+    let start = Instant::now();
+    fixture.sync.refresh_stats(&paths);
+    eprintln!("refresh stats of 65k files (hash all once): {}", ms(start.elapsed()));
+
+    git(&dir, &["checkout", "-q", "teammate"]);
+    let start = Instant::now();
+    let (paths, report) = fixture.sync.rescan();
+    let scan = start.elapsed();
+    let (result, _, plan, apply) = sync_in(&mut fixture, &paths);
+    eprintln!("CJK rescan: {} candidates in {} ({report:?}); plan {}, apply {}; updated {}", paths.len(), ms(scan), ms(plan), ms(apply), result.updated.len());
+    assert_eq!(result.updated.len(), 1000);
 }

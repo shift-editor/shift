@@ -228,12 +228,54 @@ pub fn parse_glyph(
     Ok(glyph)
 }
 
-/// What Shift knows about the folder: the hash of every file it last wrote or
-/// read, and which glyphs have unsaved local edits.
+/// A file's stat, as Git's index keeps it: a change to any field means the
+/// file may have changed. `ctime` catches edits that restore `mtime` (such as
+/// `cp -p`), because no tool can set it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileStat {
+    len: u64,
+    mtime_ns: i128,
+    ctime_ns: i128,
+    ino: u64,
+}
+
+impl FileStat {
+    pub fn of(path: &Path) -> Option<Self> {
+        use std::os::unix::fs::MetadataExt;
+        let meta = fs::symlink_metadata(path).ok()?;
+        Some(Self {
+            len: meta.len(),
+            mtime_ns: i128::from(meta.mtime()) * 1_000_000_000 + i128::from(meta.mtime_nsec()),
+            ctime_ns: i128::from(meta.ctime()) * 1_000_000_000 + i128::from(meta.ctime_nsec()),
+            ino: meta.ino(),
+        })
+    }
+}
+
+/// Files whose stat was recorded this close to the recording time are
+/// "racily clean" (Git's term): a same-size edit in the same timestamp tick
+/// would leave the stat unchanged, so a rescan hashes them anyway.
+const RACY_WINDOW_NS: i128 = 2_000_000_000;
+
+/// What Shift knows about the folder: the hash and stat of every file it last
+/// wrote or read, and which glyphs have unsaved local edits.
 pub struct FolderSync {
     pub dir: PathBuf,
     pub last_known: HashMap<String, u64>,
+    pub stats: HashMap<String, (FileStat, i128)>,
     pub unsaved: HashSet<GlyphId>,
+}
+
+#[derive(Debug, Default)]
+pub struct Rescan {
+    pub files_seen: usize,
+    pub stat_changed: usize,
+    pub racy: usize,
+    pub missing: usize,
+}
+
+fn now_ns() -> i128 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as i128
 }
 
 #[derive(Debug, Default)]
@@ -252,7 +294,56 @@ pub struct SyncInReport {
 
 impl FolderSync {
     pub fn new(dir: impl Into<PathBuf>) -> Self {
-        Self { dir: dir.into(), last_known: HashMap::new(), unsaved: HashSet::new() }
+        Self { dir: dir.into(), last_known: HashMap::new(), stats: HashMap::new(), unsaved: HashSet::new() }
+    }
+
+    fn record_stat(&mut self, file: &str) {
+        match FileStat::of(&self.dir.join(file)) {
+            Some(stat) => {
+                self.stats.insert(file.to_string(), (stat, now_ns()));
+            }
+            None => {
+                self.stats.remove(file);
+            }
+        }
+    }
+
+    /// The fallback when watcher events can't be trusted (queue overflow,
+    /// FSEvents coalescing, or the app was closed): stat every file and return
+    /// the paths that may have changed. `plan` then hashes only those.
+    pub fn rescan(&self) -> (HashSet<PathBuf>, Rescan) {
+        let mut report = Rescan::default();
+        let mut paths = HashSet::new();
+        let mut seen = HashSet::new();
+        for entry in fs::read_dir(&self.dir).unwrap() {
+            let path = entry.unwrap().path();
+            let Some(file) = path.file_name().and_then(|f| f.to_str()) else { continue };
+            if !file.ends_with(".json") || file.starts_with('.') {
+                continue;
+            }
+            report.files_seen += 1;
+            seen.insert(file.to_string());
+            let stat = FileStat::of(&path);
+            match (self.stats.get(file), stat) {
+                (Some((recorded, recorded_at)), Some(stat)) if *recorded == stat => {
+                    if recorded.mtime_ns > recorded_at - RACY_WINDOW_NS {
+                        report.racy += 1;
+                        paths.insert(path);
+                    }
+                }
+                _ => {
+                    report.stat_changed += 1;
+                    paths.insert(path);
+                }
+            }
+        }
+        for file in self.stats.keys() {
+            if !seen.contains(file) {
+                report.missing += 1;
+                paths.insert(self.dir.join(file));
+            }
+        }
+        (paths, report)
     }
 
     /// Sync out: write the given glyphs and remember their hashes.
@@ -263,7 +354,8 @@ impl FolderSync {
             let tmp = self.dir.join(format!(".{name}.tmp"));
             fs::write(&tmp, text.as_bytes()).unwrap();
             fs::rename(&tmp, self.dir.join(&name)).unwrap();
-            self.last_known.insert(name, content_hash(text.as_bytes()));
+            self.last_known.insert(name.clone(), content_hash(text.as_bytes()));
+            self.record_stat(&name);
             self.unsaved.remove(&glyph.id());
         }
     }
@@ -272,19 +364,26 @@ impl FolderSync {
     /// Conflicting and invalid files are reported and left out.
     pub fn plan(&self, paths: &HashSet<PathBuf>, font: &Font) -> (FontChangeSet, SyncInReport, HashMap<String, Option<u64>>) {
         let mut report = SyncInReport::default();
-        let mut reads = Vec::new();
-        for path in paths {
-            let Some(file) = path.file_name().and_then(|f| f.to_str()) else { continue };
-            if !file.ends_with(".json") || file.starts_with('.') {
-                continue;
-            }
+        let candidates: Vec<(String, &PathBuf)> = paths
+            .iter()
+            .filter_map(|path| {
+                let file = path.file_name()?.to_str()?;
+                (file.ends_with(".json") && !file.starts_with('.')).then(|| (file.to_string(), path))
+            })
+            .collect();
+        // Read and hash in parallel; most paths after a save are Shift's own.
+        let read: Vec<(String, Option<Vec<u8>>, Option<u64>)> = parallel(&candidates, |(file, path)| {
             let bytes = fs::read(path).ok();
             let hash = bytes.as_deref().map(content_hash);
-            if hash == self.last_known.get(file).copied() {
+            (file.clone(), bytes, hash)
+        });
+        let mut reads = Vec::new();
+        for (file, bytes, hash) in read {
+            if hash == self.last_known.get(&file).copied() {
                 report.ignored_own += 1;
                 continue;
             }
-            reads.push((file.to_string(), bytes, hash));
+            reads.push((file, bytes, hash));
         }
 
         let mut known: HashSet<GlyphId> = font.glyphs().map(Glyph::id).collect();
@@ -296,17 +395,22 @@ impl FolderSync {
             };
         }
 
+        let parsed: Vec<Option<Result<Glyph, Invalid>>> = parallel(&reads, |(file, bytes, _)| {
+            let id = GlyphId::from_raw(file.trim_end_matches(".json"));
+            bytes.as_ref().map(|bytes| parse_glyph(file, bytes, font, font.glyph(&id), &known))
+        });
+
         let mut changes = Vec::new();
         let mut accepted = HashMap::new();
         let mut deleted = HashSet::new();
-        for (file, bytes, hash) in reads {
+        for ((file, _, hash), parsed) in reads.into_iter().zip(parsed) {
             let id = GlyphId::from_raw(file.trim_end_matches(".json"));
             if self.unsaved.contains(&id) {
                 report.conflicts.push(id);
                 continue;
             }
             let current = font.glyph(&id);
-            match bytes {
+            match parsed {
                 None => {
                     if let Some(current) = current {
                         changes.push(FontChange::Glyph(Box::new(Replacement { before: Some(current.clone()), after: None })));
@@ -315,18 +419,16 @@ impl FolderSync {
                     }
                     accepted.insert(file, None);
                 }
-                Some(bytes) => match parse_glyph(&file, &bytes, font, current, &known) {
-                    Ok(glyph) => {
-                        if current.is_some() {
-                            report.updated.push(id);
-                        } else {
-                            report.added.push(id);
-                        }
-                        changes.push(FontChange::Glyph(Box::new(Replacement { before: current.cloned(), after: Some(glyph) })));
-                        accepted.insert(file, hash);
+                Some(Ok(glyph)) => {
+                    if current.is_some() {
+                        report.updated.push(id);
+                    } else {
+                        report.added.push(id);
                     }
-                    Err(invalid) => report.invalid.push((file, invalid)),
-                },
+                    changes.push(FontChange::Glyph(Box::new(Replacement { before: current.cloned(), after: Some(glyph) })));
+                    accepted.insert(file, hash);
+                }
+                Some(Err(invalid)) => report.invalid.push((file, invalid)),
             }
         }
 
@@ -351,11 +453,39 @@ impl FolderSync {
     pub fn accept(&mut self, accepted: HashMap<String, Option<u64>>) {
         for (file, hash) in accepted {
             match hash {
-                Some(hash) => self.last_known.insert(file, hash),
+                Some(hash) => self.last_known.insert(file.clone(), hash),
                 None => self.last_known.remove(&file),
             };
+            self.record_stat(&file);
         }
     }
+
+    /// Records the current stat of files whose content matched what Shift
+    /// knows, so later rescans skip them (clears racily clean entries).
+    pub fn refresh_stats(&mut self, paths: &HashSet<PathBuf>) {
+        for path in paths {
+            let Some(file) = path.file_name().and_then(|f| f.to_str()) else { continue };
+            let file = file.to_string();
+            let known = self.last_known.get(&file).copied();
+            let current = fs::read(path).ok().map(|bytes| content_hash(&bytes));
+            if known.is_some() && known == current {
+                self.record_stat(&file);
+            }
+        }
+    }
+}
+
+/// Maps `items` across a few threads, keeping order.
+fn parallel<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    const THREADS: usize = 8;
+    if items.len() < 64 {
+        return items.iter().map(&f).collect();
+    }
+    let chunk = items.len().div_ceil(THREADS);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = items.chunks(chunk).map(|part| scope.spawn(|| part.iter().map(&f).collect::<Vec<_>>())).collect();
+        handles.into_iter().flat_map(|h| h.join().unwrap()).collect()
+    })
 }
 
 pub fn all_json(dir: &Path) -> HashSet<PathBuf> {
