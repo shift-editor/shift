@@ -466,26 +466,39 @@ fn load_kerning(conn: &rusqlite::Connection) -> Result<font::Kerning, StoreError
         FROM kerning_pairs
         ",
     )?;
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, f64>(5)?,
-        ))
-    })?;
-    for row in rows {
-        let (source_id, first_kind, first_value, second_kind, second_value, value) = row?;
+    for row in stmt.query_map([], KerningPairRow::read)? {
+        let row = row?;
         let pair = font::KerningPair::new(
-            kerning_side(&first_kind, first_value)?,
-            kerning_side(&second_kind, second_value)?,
+            kerning_side(&row.first_kind, row.first_value)?,
+            kerning_side(&row.second_kind, row.second_value)?,
         );
-        kerning.set_value(font::SourceId::from_raw(source_id), pair, value);
+        kerning.set_value(row.source_id, pair, row.value);
     }
 
     Ok(kerning)
+}
+
+/// One `kerning_pairs` row.
+struct KerningPairRow {
+    source_id: font::SourceId,
+    first_kind: String,
+    first_value: String,
+    second_kind: String,
+    second_value: String,
+    value: f64,
+}
+
+impl KerningPairRow {
+    fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            source_id: row.get("source_id")?,
+            first_kind: row.get("first_kind")?,
+            first_value: row.get("first_value")?,
+            second_kind: row.get("second_kind")?,
+            second_value: row.get("second_value")?,
+            value: row.get("value")?,
+        })
+    }
 }
 
 fn load_kerning_groups(

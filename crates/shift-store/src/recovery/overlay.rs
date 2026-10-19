@@ -61,6 +61,14 @@ struct RecoveryMetadata {
     state: RecoveryState,
 }
 
+/// The `recovery_metadata` row as stored, before its ids are validated.
+struct StoredMetadata {
+    document_id: String,
+    base_commit_id: String,
+    pending_commit_id: Option<String>,
+    state: String,
+}
+
 impl RecoveryOverlay {
     pub fn create(
         path: impl AsRef<Path>,
@@ -245,30 +253,25 @@ impl RecoveryOverlay {
              FROM recovery_metadata WHERE id = 1",
             [],
             |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
+                Ok(StoredMetadata {
+                    document_id: row.get("document_id")?,
+                    base_commit_id: row.get("base_commit_id")?,
+                    pending_commit_id: row.get("pending_commit_id")?,
+                    state: row.get("state")?,
+                })
             },
         )?;
-        let document_id = DocumentId::from_stored(stored.0.clone())
-            .ok_or(StoreError::InvalidDocumentId(stored.0))?;
-        let base_commit_id =
-            CommitId::from_stored(stored.1.clone()).ok_or(StoreError::InvalidCommitId(stored.1))?;
-        let pending_commit_id = stored
-            .2
-            .map(|value| {
-                CommitId::from_stored(value.clone()).ok_or(StoreError::InvalidCommitId(value))
-            })
-            .transpose()?;
+        let commit_id = |value: String| {
+            CommitId::from_stored(value.clone()).ok_or(StoreError::InvalidCommitId(value))
+        };
+        let document_id = DocumentId::from_stored(stored.document_id.clone())
+            .ok_or(StoreError::InvalidDocumentId(stored.document_id))?;
 
         Ok(RecoveryMetadata {
             document_id,
-            base_commit_id,
-            pending_commit_id,
-            state: stored.3.parse()?,
+            base_commit_id: commit_id(stored.base_commit_id)?,
+            pending_commit_id: stored.pending_commit_id.map(commit_id).transpose()?,
+            state: stored.state.parse()?,
         })
     }
 }

@@ -39,6 +39,7 @@ use shift_slug::{
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
   retained::compile_page as compile_retained_page,
 };
+use shift_wire::bridges::napi::convert_all;
 use shift_wire::{
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
   ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
@@ -1546,7 +1547,7 @@ impl Bridge {
       });
     }
 
-    Ok(snapshots.into_iter().map(Into::into).collect())
+    Ok(convert_all(snapshots))
   }
 
   /// Reads exact authored layers by stable layer identity.
