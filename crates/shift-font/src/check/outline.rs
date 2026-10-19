@@ -121,7 +121,7 @@ pub(super) fn check(
             layer,
             thresholds,
         };
-        pair.check(&mut findings);
+        findings.extend(pair.findings());
     }
 
     if compatible > 0 && font.glyph_interpolation(glyph_id)?.is_none() {
@@ -220,54 +220,69 @@ struct Pair<'a> {
 }
 
 impl Pair<'_> {
-    fn check(&self, out: &mut Vec<Finding>) {
+    fn findings(&self) -> Vec<Finding> {
         let reference = self.reference.contours_iter().collect::<Vec<_>>();
         let target = self.layer.contours_iter().collect::<Vec<_>>();
 
-        let swapped = self.contour_order(&reference, &target, out);
-        for (index, (a, b)) in reference.iter().zip(&target).enumerate() {
-            if swapped.contains(&index) || !a.is_closed() {
-                continue;
-            }
+        let swaps = self.swapped_contours(&reference, &target);
+        let swapped = swaps.iter().flat_map(|&(i, j)| [i, j]).collect::<Vec<_>>();
+        let order = swaps.iter().map(|&(i, j)| {
+            self.finding(
+                Check::WrongContourOrder,
+                i,
+                &format!(
+                    "and contour {} are in each other's place in '{}'",
+                    j + 1,
+                    self.source.name()
+                ),
+            )
+        });
+        let contours = reference
+            .iter()
+            .zip(&target)
+            .enumerate()
+            .filter(|(index, (a, _))| !swapped.contains(index) && a.is_closed())
+            .filter_map(|(index, (a, b))| self.contour_finding(index, a, b));
+        order.chain(contours).collect()
+    }
 
-            let (area_a, area_b) = (signed_area(a), signed_area(b));
-            let collapsed = area_a.abs().min(area_b.abs()) < area_a.abs().max(area_b.abs()) * 0.01;
-            if collapsed {
-                continue;
-            }
-            if area_a * area_b < 0.0 {
-                out.push(self.finding(
-                    Check::WrongContourDirection,
-                    index,
-                    &format!("runs the other way in '{}'", self.source.name()),
-                ));
-                continue;
-            }
-            if let Some(shift) = self.start_point(a, b) {
-                out.push(self.finding(
-                    Check::WrongStartPoint,
-                    index,
-                    &format!(
-                        "starts {shift} point{} later in '{}' than in '{}'",
-                        if shift == 1 { "" } else { "s" },
-                        self.source.name(),
-                        self.reference_source.name()
-                    ),
-                ));
-                continue;
-            }
-            if let Some(t) = inside_out(a, b, area_a) {
-                out.push(self.finding(
-                    Check::ContourInsideOut,
-                    index,
-                    &format!(
-                        "turns inside out {}% of the way to '{}'",
-                        number(t * 100.0),
-                        self.source.name()
-                    ),
-                ));
-            }
+    /// The first problem with one contour pair that keeps its place: a
+    /// reversed direction, a moved start point, or turning inside out.
+    fn contour_finding(&self, index: usize, a: &Contour, b: &Contour) -> Option<Finding> {
+        let (area_a, area_b) = (signed_area(a), signed_area(b));
+        let collapsed = area_a.abs().min(area_b.abs()) < area_a.abs().max(area_b.abs()) * 0.01;
+        if collapsed {
+            return None;
         }
+        if area_a * area_b < 0.0 {
+            return Some(self.finding(
+                Check::WrongContourDirection,
+                index,
+                &format!("runs the other way in '{}'", self.source.name()),
+            ));
+        }
+        if let Some(shift) = self.start_point(a, b) {
+            return Some(self.finding(
+                Check::WrongStartPoint,
+                index,
+                &format!(
+                    "starts {shift} point{} later in '{}' than in '{}'",
+                    if shift == 1 { "" } else { "s" },
+                    self.source.name(),
+                    self.reference_source.name()
+                ),
+            ));
+        }
+        let t = inside_out(a, b, area_a)?;
+        Some(self.finding(
+            Check::ContourInsideOut,
+            index,
+            &format!(
+                "turns inside out {}% of the way to '{}'",
+                number(t * 100.0),
+                self.source.name()
+            ),
+        ))
     }
 
     fn finding(&self, check: Check, contour: usize, what: &str) -> Finding {
@@ -280,17 +295,12 @@ impl Pair<'_> {
         .in_contour(contour)
     }
 
-    /// Reports pairs of contours that sit in each other's place, and returns
-    /// their indices.
-    fn contour_order(
-        &self,
-        reference: &[&Contour],
-        target: &[&Contour],
-        out: &mut Vec<Finding>,
-    ) -> Vec<usize> {
+    /// Pairs of contours that sit in each other's place.
+    fn swapped_contours(&self, reference: &[&Contour], target: &[&Contour]) -> Vec<(usize, usize)> {
+        let mut swaps = Vec::new();
         let mut swapped = Vec::new();
         if reference.len() < 2 {
-            return swapped;
+            return swaps;
         }
 
         let a = descriptors(reference);
@@ -312,18 +322,10 @@ impl Pair<'_> {
                 }
 
                 swapped.extend([i, j]);
-                out.push(self.finding(
-                    Check::WrongContourOrder,
-                    i,
-                    &format!(
-                        "and contour {} are in each other's place in '{}'",
-                        j + 1,
-                        self.source.name()
-                    ),
-                ));
+                swaps.push((i, j));
             }
         }
-        swapped
+        swaps
     }
 
     /// Returns how many points later `b` starts than `a`, when starting

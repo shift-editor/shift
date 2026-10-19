@@ -93,7 +93,8 @@ fn range(line: &str) -> Option<std::ops::RangeInclusive<u32>> {
 
 /// Reports characters of `charset` the font doesn't map, or maps to a glyph a
 /// master doesn't draw.
-pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
+pub(super) fn charset(font: &Font, charset: &Charset) -> Vec<Finding> {
+    let mut findings = Vec::new();
     let mut missing = Vec::new();
     for &codepoint in charset.codepoints() {
         let Some(glyph) = font.glyphs_by_unicode(codepoint).next() else {
@@ -102,7 +103,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
         };
         for source in font.masters() {
             if glyph.layer_for_source(&source.id()).is_none() {
-                out.push(
+                findings.push(
                     Finding::glyph(
                         Check::CharsetMissingLayer,
                         glyph.id(),
@@ -118,7 +119,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
         }
     }
     if missing.is_empty() {
-        return;
+        return findings;
     }
 
     let shown = missing
@@ -131,7 +132,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
         .collect::<Vec<_>>()
         .join(", ");
     let more = missing.len().saturating_sub(20);
-    out.push(Finding::font(
+    findings.push(Finding::font(
         Check::CharsetMissingGlyph,
         format!(
             "the font doesn't map {} required character{}: {shown}{}",
@@ -144,6 +145,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
             }
         ),
     ));
+    findings
 }
 
 /// Reports, in each master, glyphs whose advance differs from the cell width
@@ -151,7 +153,8 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
 ///
 /// The cell width is `width` when given, otherwise the most common advance
 /// in that master. Marks and zero-width glyphs are skipped.
-pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>) {
+pub(super) fn monospace(font: &Font, width: Option<f64>) -> Vec<Finding> {
+    let mut findings = Vec::new();
     for source in font.masters() {
         let samples = font
             .glyphs()
@@ -170,7 +173,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
 
         for (glyph, layer, advance) in &samples {
             if (advance - cell).abs() > SAME_WIDTH {
-                out.push(at(
+                findings.push(at(
                     Check::MonoWidthMismatch,
                     glyph,
                     source,
@@ -185,7 +188,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
             if let Some(ink) = ink {
                 let ink_width = ink.max_x - ink.min_x;
                 if ink_width > advance + SAME_WIDTH {
-                    out.push(at(
+                    findings.push(at(
                         Check::MonoInkOverflow,
                         glyph,
                         source,
@@ -195,6 +198,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
             }
         }
     }
+    findings
 }
 
 fn at(check: Check, glyph: &Glyph, source: &Source, message: &str) -> Finding {

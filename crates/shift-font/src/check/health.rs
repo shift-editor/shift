@@ -17,20 +17,21 @@ use super::{Check, Finding};
 /// unencoded glyphs named with a leading `_`: they are drawing aids and
 /// component parts, such as Glyphs corner components, which are open on
 /// purpose.
-pub(super) fn check(font: &Font, glyph: &Glyph, out: &mut Vec<Finding>) {
+pub(super) fn check(font: &Font, glyph: &Glyph) -> Vec<Finding> {
     let part = glyph.name().starts_with('_') && glyph.unicodes().is_empty();
     if part || font.lib().skipped_export_glyphs().contains(glyph.name()) {
-        return;
+        return Vec::new();
     }
     let role = GlyphRole::of(glyph);
     let default = font.default_source().filter(|source| source.is_master());
     let encoded = !glyph.unicodes().is_empty() && !role.space_like;
 
+    let mut findings = Vec::new();
     if let Some(default) = default
         && encoded
         && glyph.layer_for_source(&default.id()).is_none()
     {
-        out.push(
+        findings.push(
             Finding::glyph(
                 Check::EmptyOutline,
                 glyph.id(),
@@ -48,172 +49,178 @@ pub(super) fn check(font: &Font, glyph: &Glyph, out: &mut Vec<Finding>) {
         let Some(layer) = glyph.layer_for_source(&source.id()) else {
             continue;
         };
-        let at = |check, message: String| {
-            Finding::glyph(
-                check,
-                glyph.id(),
-                format!("'{}' in '{}' {message}", glyph.name(), source.name()),
-            )
-            .in_source(source.id())
+        let layer = LayerCheck {
+            font,
+            glyph,
+            source,
+            layer,
+            role,
         };
 
-        let finite = points(layer, &at, out);
-        advance(layer, role, !glyph.unicodes().is_empty(), &at, out);
+        let points = layer.points();
+        let finite = !points
+            .iter()
+            .any(|finding| finding.check == Check::NonFinitePoint);
+        findings.extend(points);
+        findings.extend(layer.advance());
         if !finite {
             continue;
         }
-        direction(layer, &at, out);
+        findings.extend(layer.direction());
 
         let is_default = default.is_some_and(|default| default.id() == source.id());
-        resolved(font, glyph, source, role, encoded && is_default, &at, out);
+        findings.extend(layer.resolved(encoded && is_default));
     }
+    findings
 }
 
-fn points(
-    layer: &GlyphLayer,
-    at: &impl Fn(Check, String) -> Finding,
-    out: &mut Vec<Finding>,
-) -> bool {
-    let mut finite = true;
-    for (index, contour) in layer.contours_iter().enumerate() {
-        let count = contour.points().len();
-        // A lone open point is a stray node that compilers drop.
-        if !contour.is_closed() && count > 1 {
-            out.push(
-                at(
-                    Check::OpenContour,
-                    format!(
-                        "has an open contour {}, which won't fill; compilers close or drop it",
-                        index + 1
-                    ),
-                )
-                .in_contour(index),
-            );
+/// One glyph's layer in one master, as the drawing checks read it.
+struct LayerCheck<'a> {
+    font: &'a Font,
+    glyph: &'a Glyph,
+    source: &'a Source,
+    layer: &'a GlyphLayer,
+    role: GlyphRole,
+}
+
+impl LayerCheck<'_> {
+    fn at(&self, check: Check, message: &str) -> Finding {
+        Finding::glyph(
+            check,
+            self.glyph.id(),
+            format!(
+                "'{}' in '{}' {message}",
+                self.glyph.name(),
+                self.source.name()
+            ),
+        )
+        .in_source(self.source.id())
+    }
+
+    /// Reports open, degenerate, and non-finite contours.
+    fn points(&self) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        for (index, contour) in self.layer.contours_iter().enumerate() {
+            let count = contour.points().len();
+            // A lone open point is a stray node that compilers drop.
+            if !contour.is_closed() && count > 1 {
+                findings.push(
+                    self.at(
+                        Check::OpenContour,
+                        &format!(
+                            "has an open contour {}, which won't fill; compilers close or drop it",
+                            index + 1
+                        ),
+                    )
+                    .in_contour(index),
+                );
+            }
+            if count < 3 && contour.is_closed() {
+                findings.push(
+                    self.at(
+                        Check::DegenerateContour,
+                        &format!(
+                            "has a closed contour {} with only {count} point{}, which draws nothing",
+                            index + 1,
+                            if count == 1 { "" } else { "s" }
+                        ),
+                    )
+                    .in_contour(index),
+                );
+            }
+            if contour
+                .points()
+                .iter()
+                .any(|point| !point.x().is_finite() || !point.y().is_finite())
+            {
+                findings.push(
+                    self.at(
+                        Check::NonFinitePoint,
+                        &format!("has a point in contour {} that isn't a number", index + 1),
+                    )
+                    .in_contour(index),
+                );
+            }
         }
-        if count < 3 && contour.is_closed() {
-            out.push(
-                at(
-                    Check::DegenerateContour,
-                    format!(
-                        "has a closed contour {} with only {count} point{}, which draws nothing",
+        findings
+    }
+
+    /// Reports advances that can't compile, and zero advances on encoded glyphs
+    /// that should space.
+    ///
+    /// Unencoded glyphs may be zero-width: they are reached through features,
+    /// as marks, below-base forms, and ligature parts are.
+    fn advance(&self) -> Option<Finding> {
+        let advance = self.layer.width();
+        let encoded = !self.glyph.unicodes().is_empty();
+        let problem = if !advance.is_finite() {
+            "isn't a number"
+        } else if advance < 0.0 {
+            "is negative"
+        } else if advance == 0.0 && encoded && !self.role.zero_width_allowed && !self.role.mark {
+            "is zero, which only marks and format characters should have"
+        } else {
+            return None;
+        };
+        Some(self.at(
+            Check::InvalidAdvance,
+            &format!("has an advance width that {problem}"),
+        ))
+    }
+
+    /// Reports counters that wind the same way as the contour around them, so
+    /// they fill in instead of cutting a hole.
+    ///
+    /// Which way outer contours run is a convention, not an error: the fill rule
+    /// only cares that a counter runs opposite its container.
+    fn direction(&self) -> Vec<Finding> {
+        let closed = self
+            .layer
+            .contours_iter()
+            .enumerate()
+            .filter(|(_, contour)| contour.is_closed())
+            .collect::<Vec<_>>();
+        let outlines = closed
+            .iter()
+            // Within a quarter of a font unit.
+            .map(|(_, contour)| Polygon::flatten(&BezPath::from(*contour), 0.25))
+            .collect::<Vec<_>>();
+        filled_counters(&outlines)
+            .into_iter()
+            .map(|(position, container)| {
+                let (index, outer) = (closed[position].0, closed[container].0);
+                self.at(
+                    Check::ContourDirection,
+                    &format!(
+                        "has contour {} wholly inside contour {} and winding the same way, so it adds nothing; reverse it if it should cut a hole",
                         index + 1,
-                        if count == 1 { "" } else { "s" }
+                        outer + 1
                     ),
                 )
-                .in_contour(index),
-            );
-        }
-        if contour
-            .points()
-            .iter()
-            .any(|point| !point.x().is_finite() || !point.y().is_finite())
-        {
-            finite = false;
-            out.push(
-                at(
-                    Check::NonFinitePoint,
-                    format!("has a point in contour {} that isn't a number", index + 1),
-                )
-                .in_contour(index),
-            );
-        }
+                .in_contour(index)
+            })
+            .collect()
     }
-    finite
-}
 
-/// Reports advances that can't compile, and zero advances on encoded glyphs
-/// that should space.
-///
-/// Unencoded glyphs may be zero-width: they are reached through features,
-/// as marks, below-base forms, and ligature parts are.
-fn advance(
-    layer: &GlyphLayer,
-    role: GlyphRole,
-    encoded: bool,
-    at: &impl Fn(Check, String) -> Finding,
-    out: &mut Vec<Finding>,
-) {
-    let advance = layer.width();
-    let problem = if !advance.is_finite() {
-        "isn't a number"
-    } else if advance < 0.0 {
-        "is negative"
-    } else if advance == 0.0 && encoded && !role.zero_width_allowed && !role.mark {
-        "is zero, which only marks and format characters should have"
-    } else {
-        return;
-    };
-    out.push(at(
-        Check::InvalidAdvance,
-        format!("has an advance width that {problem}"),
-    ));
-}
-
-/// Reports counters that wind the same way as the contour around them, so
-/// they fill in instead of cutting a hole.
-///
-/// Which way outer contours run is a convention, not an error: the fill rule
-/// only cares that a counter runs opposite its container.
-fn direction(layer: &GlyphLayer, at: &impl Fn(Check, String) -> Finding, out: &mut Vec<Finding>) {
-    let closed = layer
-        .contours_iter()
-        .enumerate()
-        .filter(|(_, contour)| contour.is_closed())
-        .collect::<Vec<_>>();
-    let outlines = closed
-        .iter()
-        // Within a quarter of a font unit.
-        .map(|(_, contour)| Polygon::flatten(&BezPath::from(*contour), 0.25))
-        .collect::<Vec<_>>();
-    for (position, container) in filled_counters(&outlines) {
-        let (index, outer) = (closed[position].0, closed[container].0);
-        out.push(
-            at(
-                Check::ContourDirection,
-                format!(
-                    "has contour {} wholly inside contour {} and winding the same way, so it adds nothing; reverse it if it should cut a hole",
-                    index + 1,
-                    outer + 1
-                ),
-            )
-            .in_contour(index),
+    /// Reports a glyph that can't be drawn, or that should have ink and draws nothing.
+    fn resolved(&self, expect_ink: bool) -> Option<Finding> {
+        let location: &DesignLocation = self.source.location();
+        let resolved = match self.font.projection(location).glyph(&self.glyph.id()) {
+            Ok(Some(resolved)) => resolved,
+            Ok(None) => return None,
+            Err(error) => {
+                return Some(self.at(Check::UnresolvedGlyph, &format!("can't be drawn: {error}")));
+            }
+        };
+        let ink = extent(
+            resolved
+                .contours()
+                .iter()
+                .map(|contour| (contour.points.as_slice(), contour.closed)),
         );
-    }
-}
 
-fn resolved(
-    font: &Font,
-    glyph: &Glyph,
-    source: &Source,
-    role: GlyphRole,
-    expect_ink: bool,
-    at: &impl Fn(Check, String) -> Finding,
-    out: &mut Vec<Finding>,
-) {
-    let location: &DesignLocation = source.location();
-    let resolved = match font.projection(location).glyph(&glyph.id()) {
-        Ok(Some(resolved)) => resolved,
-        Ok(None) => return,
-        Err(error) => {
-            out.push(at(
-                Check::UnresolvedGlyph,
-                format!("can't be drawn: {error}"),
-            ));
-            return;
-        }
-    };
-    let ink = extent(
-        resolved
-            .contours()
-            .iter()
-            .map(|contour| (contour.points.as_slice(), contour.closed)),
-    );
-
-    if ink.is_none() && expect_ink && !role.space_like {
-        out.push(at(
-            Check::EmptyOutline,
-            "is encoded but draws nothing".to_string(),
-        ));
+        (ink.is_none() && expect_ink && !self.role.space_like)
+            .then(|| self.at(Check::EmptyOutline, "is encoded but draws nothing"))
     }
 }
 
