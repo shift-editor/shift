@@ -30,40 +30,22 @@ CREATE TABLE IF NOT EXISTS recovery_tombstones (
 );
 "#;
 
-/// Persisted lifecycle state of one sparse recovery overlay.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RecoveryState {
-    /// The overlay contains no unsaved authored changes.
-    Clean,
-    /// Sparse changes are based on the canonical saved commit.
-    Dirty,
-    /// A commit ID was persisted before applying changes to the canonical document.
-    SavePending,
-    /// The canonical saved commit changed from the overlay's base.
-    Conflict,
-}
-
-impl RecoveryState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Clean => "clean",
-            Self::Dirty => "dirty",
-            Self::SavePending => "save_pending",
-            Self::Conflict => "conflict",
-        }
+shift_font::string_enum! {
+    /// Persisted lifecycle state of one sparse recovery overlay.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum RecoveryState {
+        /// The overlay contains no unsaved authored changes.
+        Clean => "clean",
+        /// Sparse changes are based on the canonical saved commit.
+        Dirty => "dirty",
+        /// A commit ID was persisted before applying changes to the canonical document.
+        SavePending => "save_pending",
+        /// The canonical saved commit changed from the overlay's base.
+        Conflict => "conflict",
     }
-
-    fn parse(value: &str) -> Result<Self, StoreError> {
-        match value {
-            "clean" => Ok(Self::Clean),
-            "dirty" => Ok(Self::Dirty),
-            "save_pending" => Ok(Self::SavePending),
-            "conflict" => Ok(Self::Conflict),
-            other => Err(StoreError::InvalidDocument(format!(
-                "unknown recovery state {other:?}"
-            ))),
-        }
-    }
+    parse_error: StoreError = |value| {
+        StoreError::InvalidDocument(format!("unknown recovery state {value:?}"))
+    };
 }
 
 /// App-owned SQLite file containing only unsaved canonical row replacements and tombstones.
@@ -286,7 +268,7 @@ impl RecoveryOverlay {
             document_id,
             base_commit_id,
             pending_commit_id,
-            state: RecoveryState::parse(&stored.3)?,
+            state: stored.3.parse()?,
         })
     }
 }

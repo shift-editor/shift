@@ -10,31 +10,13 @@ thread_local! {
     static ZSTD_DECOMPRESSOR: RefCell<Option<zstd::bulk::Decompressor<'static>>> = const { RefCell::new(None) };
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum LayerPayloadCompression {
-    None,
-    ZstandardV1,
-}
-
-impl LayerPayloadCompression {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::ZstandardV1 => "zstd.v1",
-        }
+shift_font::string_enum! {
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub(crate) enum LayerPayloadCompression {
+        None => "none",
+        ZstandardV1 => "zstd.v1",
     }
-}
-
-impl TryFrom<&str> for LayerPayloadCompression {
-    type Error = StoreError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "none" => Ok(Self::None),
-            "zstd.v1" => Ok(Self::ZstandardV1),
-            value => Err(StoreError::UnsupportedLayerCompression(value.to_owned())),
-        }
-    }
+    parse_error: StoreError = |value| StoreError::UnsupportedLayerCompression(value.to_owned());
 }
 
 pub(crate) struct StoredLayerPayload {
@@ -202,7 +184,7 @@ mod tests {
     #[test]
     fn unsupported_compression_and_oversized_decode_are_rejected() {
         assert!(matches!(
-            LayerPayloadCompression::try_from("zstd.v2"),
+            "zstd.v2".parse::<LayerPayloadCompression>(),
             Err(StoreError::UnsupportedLayerCompression(_))
         ));
 
