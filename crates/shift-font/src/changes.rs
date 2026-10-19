@@ -3,9 +3,9 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
-    LANGUAGES_LIB_KEY,
+    Axis, AxisMapping, Component, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup,
+    KerningGroupId, KerningPair, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
+    SourceId, LANGUAGES_LIB_KEY,
 };
 
 bitflags! {
@@ -107,6 +107,17 @@ pub enum FontChange {
     },
 }
 
+/// Whether a layer replacement changes what its glyph's record lists.
+fn changes_glyph_record(layer: &Replacement<Option<Arc<GlyphLayer>>>) -> bool {
+    match (&layer.before, &layer.after) {
+        (Some(before), Some(after)) => !before
+            .components_iter()
+            .map(Component::base_glyph_id)
+            .eq(after.components_iter().map(Component::base_glyph_id)),
+        _ => true,
+    }
+}
+
 impl FontChange {
     /// Returns every domain projection invalidated by this replacement.
     pub fn impact(&self) -> FontChangeImpact {
@@ -137,9 +148,10 @@ impl FontChange {
                     | FontChangeImpact::KERNING
             }
             Self::Glyph(_) => FontChangeImpact::GLYPHS,
-            Self::Layer {
-                structural: true, ..
-            } => FontChangeImpact::GLYPHS,
+            // Glyph records list each glyph's layers and component bases; a
+            // layer replacement changes them only when it adds or removes the
+            // layer or changes which glyphs its components reference.
+            Self::Layer { layer, .. } if changes_glyph_record(layer) => FontChangeImpact::GLYPHS,
             Self::Layer { .. } => FontChangeImpact::empty(),
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
         }

@@ -156,10 +156,11 @@ impl DecomposedTransform {
     ///
     /// Order: translate to center → scale → skew → rotate → translate back → translate
     pub fn to_matrix(&self) -> Transform {
-        let cos_r = self.rotation.to_radians().cos();
-        let sin_r = self.rotation.to_radians().sin();
-        let tan_sx = self.skew_x.to_radians().tan();
-        let tan_sy = self.skew_y.to_radians().tan();
+        // Pure-Rust libm, not std: native and wasm32 then compute identical bits.
+        let cos_r = libm::cos(self.rotation.to_radians());
+        let sin_r = libm::sin(self.rotation.to_radians());
+        let tan_sx = libm::tan(self.skew_x.to_radians());
+        let tan_sy = libm::tan(self.skew_y.to_radians());
 
         let xx = self.scale_x * cos_r + self.scale_y * tan_sx * sin_r;
         let xy = self.scale_x * sin_r - self.scale_y * tan_sx * cos_r;
@@ -192,13 +193,11 @@ impl DecomposedTransform {
         let det = m.xx * m.yy - m.xy * m.yx;
         let scale_y = if det < 0.0 { -scale_y } else { scale_y };
 
-        let rotation = m.xy.atan2(m.xx).to_degrees();
+        let rotation = libm::atan2(m.xy, m.xx).to_degrees();
 
         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.
         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {
-            ((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y))
-                .atan()
-                .to_degrees()
+            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()
         } else {
             0.0
         };
@@ -541,5 +540,92 @@ mod tests {
         c.translate(10.0, 20.0);
         assert!((c.transform().translate_x - 10.0).abs() < 1e-10);
         assert!((c.transform().translate_y - 20.0).abs() < 1e-10);
+    }
+}
+
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+
+    /// Bits every target must produce, recorded on Linux x86-64 and checked
+    /// against wasm32: the editor engine and the workspace must agree exactly.
+    const GOLDEN: [[u64; 8]; 3] = [
+        [
+            0x3ff1943a4f9eaad5,
+            0x3fe3556f78dc1036,
+            0xbfdf9d3bbeee4ef4,
+            0x3fe43ee9321ae748,
+            0x406416f9f4030251,
+            0xc04f3dc6ba1ec020,
+            0x403cce8b15ac9c0f,
+            0xc0221e459325292d,
+        ],
+        [
+            0x3fe3754cd69866b7,
+            0x3fe9678002e06fe2,
+            0x3fe9678002e06fe2,
+            0xbfe3754cd69866b7,
+            0x0000000000000000,
+            0x0000000000000000,
+            0x404a466666666666,
+            0x8000000000000000,
+        ],
+        [
+            0xc0072d2e0fcdbcc6,
+            0x3fd550b34f51210c,
+            0xc007fffffff04cd6,
+            0x3f0b739fb19fed7e,
+            0x40c3880000000000,
+            0x0000000000000000,
+            0x4065ae24aeefba90,
+            0x404667ef55312069,
+        ],
+    ];
+
+    #[test]
+    fn transform_math_produces_the_same_bits_on_every_target() {
+        let inputs = [
+            DecomposedTransform {
+                translate_x: 12.5,
+                translate_y: -40.0,
+                rotation: 33.3,
+                scale_x: 1.25,
+                scale_y: 0.8,
+                skew_x: 7.0,
+                skew_y: -3.0,
+                t_center_x: 250.0,
+                t_center_y: 350.0,
+            },
+            DecomposedTransform {
+                rotation: -127.45,
+                scale_x: -1.0,
+                ..DecomposedTransform::identity()
+            },
+            DecomposedTransform {
+                translate_x: 1e4,
+                rotation: 89.999,
+                scale_x: 0.333,
+                scale_y: 3.0,
+                skew_x: -44.0,
+                ..DecomposedTransform::identity()
+            },
+        ];
+
+        for (input, expected) in inputs.iter().zip(GOLDEN) {
+            let m = input.to_matrix();
+            let back = DecomposedTransform::from_matrix(&m);
+            let bits = [
+                m.xx,
+                m.xy,
+                m.yx,
+                m.yy,
+                m.dx,
+                m.dy,
+                back.rotation,
+                back.skew_x,
+            ]
+            .map(f64::to_bits);
+            assert_eq!(bits, expected, "{input:?}");
+        }
     }
 }
