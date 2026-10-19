@@ -148,14 +148,26 @@ impl ShiftStore {
     }
 }
 
+/// Whether a persisted change leaves unsaved work.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SaveState {
+    /// The document now differs from what is saved; recovery keeps the change.
+    Unsaved,
+    /// The change returns the document to exactly its saved state, so the
+    /// recovery overlay is discarded. Pass this only when the font equals the
+    /// saved document, as an undo or redo onto the saved position does.
+    MatchesSaved,
+}
+
 pub(crate) fn mark_workspace_dirty_in_tx(tx: &Transaction<'_>) -> Result<(), StoreError> {
-    mark_workspace_changed_in_tx(tx, true)
+    mark_workspace_changed_in_tx(tx, SaveState::Unsaved)
 }
 
 pub(crate) fn mark_workspace_changed_in_tx(
     tx: &Transaction<'_>,
-    dirty: bool,
+    save_state: SaveState,
 ) -> Result<(), StoreError> {
+    let dirty = save_state == SaveState::Unsaved;
     tx.execute(
         "
         UPDATE workspace_state

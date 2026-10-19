@@ -680,7 +680,7 @@ fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
     }]);
 
     store
-        .apply_change_set_with_font(&changes, &post_font, true)
+        .apply_change_set_with_font(&changes, &post_font, crate::SaveState::Unsaved)
         .unwrap();
 
     assert_eq!(store.load_glyph_layer(&layer.id()).unwrap(), Some(layer));

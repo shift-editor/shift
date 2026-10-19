@@ -5,34 +5,41 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use shift_font as font;
 
 use crate::{
-    ShiftStore, StoreError, layer::write_layer_in_tx, source::SourceKind,
-    workspace_state::mark_workspace_changed_in_tx, write_mode::WriteMode,
+    ShiftStore, StoreError,
+    layer::write_layer_in_tx,
+    source::SourceKind,
+    workspace_state::{SaveState, mark_workspace_changed_in_tx},
+    write_mode::WriteMode,
 };
 
 impl ShiftStore {
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
-        self.apply_change_set_inner(change_set, None, true)
+        self.apply_change_set_inner(change_set, None, SaveState::Unsaved)
     }
 
     /// Applies relational changes and takes touched layer payloads from the
     /// committed post-edit font. This preserves complete clone/materialize
     /// results even when a compact change record only carries directory facts.
+    ///
+    /// In a document, [`SaveState::MatchesSaved`] discards the recovery
+    /// overlay instead of writing the change: the document is back to what is
+    /// saved, so there is no unsaved work left to keep.
     pub fn apply_change_set_with_font(
         &mut self,
         change_set: &font::FontChangeSet,
         post_font: &font::Font,
-        dirty: bool,
+        save_state: SaveState,
     ) -> Result<(), StoreError> {
-        self.apply_change_set_inner(change_set, Some(post_font), dirty)
+        self.apply_change_set_inner(change_set, Some(post_font), save_state)
     }
 
     fn apply_change_set_inner(
         &mut self,
         change_set: &font::FontChangeSet,
         post_font: Option<&font::Font>,
-        dirty: bool,
+        save_state: SaveState,
     ) -> Result<(), StoreError> {
-        if self.recovery.is_some() && !dirty {
+        if self.recovery.is_some() && save_state == SaveState::MatchesSaved {
             self.discard_recovery()?;
             return Ok(());
         }
@@ -78,7 +85,7 @@ impl ShiftStore {
             }
         }
         if tracks_workspace {
-            mark_workspace_changed_in_tx(&tx, dirty)?;
+            mark_workspace_changed_in_tx(&tx, save_state)?;
         }
 
         tx.commit()?;

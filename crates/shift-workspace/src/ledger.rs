@@ -6,6 +6,7 @@
 //! remains alive, but not a utility crash.
 
 use shift_font::{EntityChange, FontChangeSet, FontEntityChange, LayerId};
+use shift_store::SaveState;
 
 /// Maximum entries retained independently by each stack. The oldest entry on
 /// the stack being extended falls off first; a fresh apply also clears redo.
@@ -48,17 +49,18 @@ pub struct Ledger {
 
 impl Default for Ledger {
     fn default() -> Self {
-        Self::new(false)
+        Self::new(SaveState::MatchesSaved)
     }
 }
 
 impl Ledger {
-    pub fn new(dirty: bool) -> Self {
+    pub fn new(save_state: SaveState) -> Self {
         Self {
             undo: Vec::new(),
             redo: Vec::new(),
             base_position: HistoryPosition::default(),
-            saved_position: (!dirty).then_some(HistoryPosition::default()),
+            saved_position: (save_state == SaveState::MatchesSaved)
+                .then_some(HistoryPosition::default()),
             next_position: 1,
         }
     }
@@ -112,6 +114,24 @@ impl Ledger {
 
     pub fn is_dirty(&self) -> bool {
         self.saved_position != Some(self.current_position())
+    }
+
+    /// Where the current position stands relative to the last save.
+    pub fn save_state(&self) -> SaveState {
+        if self.is_dirty() {
+            SaveState::Unsaved
+        } else {
+            SaveState::MatchesSaved
+        }
+    }
+
+    /// Where redoing `entry` leaves the document relative to the last save.
+    pub fn save_state_after(&self, entry: &LedgerEntry) -> SaveState {
+        if self.is_entry_dirty(entry) {
+            SaveState::Unsaved
+        } else {
+            SaveState::MatchesSaved
+        }
     }
 
     pub fn is_entry_dirty(&self, entry: &LedgerEntry) -> bool {
@@ -204,12 +224,15 @@ mod tests {
         ledger.mark_saved();
         ledger.push(Some("after save".into()), FontChangeSet::default());
         assert!(ledger.is_dirty());
+        assert_eq!(ledger.save_state(), SaveState::Unsaved);
 
         let after_save = ledger.pop_undo().unwrap();
         assert!(!ledger.is_dirty());
+        assert_eq!(ledger.save_state(), SaveState::MatchesSaved);
         ledger.record_undone(after_save);
         let after_save = ledger.pop_redo().unwrap();
         assert!(ledger.is_entry_dirty(&after_save));
+        assert_eq!(ledger.save_state_after(&after_save), SaveState::Unsaved);
         ledger.record_redone(after_save);
 
         let after_save = ledger.pop_undo().unwrap();
