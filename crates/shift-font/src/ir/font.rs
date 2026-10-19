@@ -1,6 +1,6 @@
 use crate::axis::{Axis, AxisKind, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
-use crate::collection::EntityList;
+use crate::collection::PersistentEntityList;
 use crate::entity::{
     AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, LayerId, MetricId, PointId,
     SourceId,
@@ -116,7 +116,7 @@ struct FontData {
     sources: Vec<Source>,
     #[serde(default)]
     default_source_id: Option<SourceId>,
-    glyphs: EntityList<Arc<Glyph>>,
+    glyphs: PersistentEntityList<Arc<Glyph>>,
     kerning: Kerning,
     features: FeatureData,
     guidelines: Vec<Guideline>,
@@ -142,7 +142,7 @@ struct FontIndex {
 }
 
 impl FontIndex {
-    fn from_glyphs(glyphs: &EntityList<Arc<Glyph>>) -> CoreResult<Self> {
+    fn from_glyphs(glyphs: &PersistentEntityList<Arc<Glyph>>) -> CoreResult<Self> {
         let mut index = Self::default();
 
         for (glyph_id, glyph) in glyphs.iter() {
@@ -407,7 +407,7 @@ impl Default for Font {
                     named_instances: Vec::new(),
                     sources: vec![default_source],
                     default_source_id: Some(default_source_id),
-                    glyphs: EntityList::new(),
+                    glyphs: PersistentEntityList::new(),
                     kerning: Kerning::new(),
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
@@ -440,7 +440,7 @@ impl Font {
                     named_instances: Vec::new(),
                     sources: Vec::new(),
                     default_source_id: None,
-                    glyphs: EntityList::new(),
+                    glyphs: PersistentEntityList::new(),
                     kerning: Kerning::new(),
                     features: FeatureData::new(),
                     guidelines: Vec::new(),
@@ -1321,7 +1321,7 @@ impl Font {
         else {
             return Err(CoreError::GlyphNotFound(glyph_id));
         };
-        if tail_id != &glyph_id {
+        if tail_id != glyph_id {
             return Err(CoreError::InvalidEntityOrder {
                 kind: "glyph",
                 message: format!("identity {glyph_id} is not the directory tail"),
@@ -2649,7 +2649,7 @@ mod tests {
         let mut glyph = Glyph::new("A");
         glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id.clone()));
         glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id.clone()));
-        let mut glyphs = EntityList::new();
+        let mut glyphs = PersistentEntityList::new();
         glyphs.insert(Arc::new(glyph));
 
         let error = FontIndex::from_glyphs(&glyphs).unwrap_err();
