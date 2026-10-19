@@ -255,33 +255,25 @@ impl FontLoader {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use shift_font::test_support::fixtures;
 
     use super::{FontLoader, format_from_extension};
     use crate::ImportBatchLimit;
     use crate::font_source::OpenedFont;
     use crate::format::FontFormat;
 
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(name)
-    }
-
     #[test]
     fn retained_source_dispatch_preserves_import_capabilities() {
         let loader = FontLoader::new();
         let open_type = loader
-            .open_source(&fixture("mutatorsans/MutatorSans.ttf"))
+            .open_source(&fixtures::font("mutatorsans/MutatorSans.ttf"))
             .unwrap();
         let ufo = loader
-            .open_source(&fixture("mutatorsans/MutatorSansLightCondensed.ufo"))
+            .open_source(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo"))
             .unwrap();
-        let glyphs = loader.open_source(&fixture("Homenaje.glyphs")).unwrap();
+        let glyphs = loader
+            .open_source(&fixtures::font("Homenaje.glyphs"))
+            .unwrap();
 
         assert!(matches!(&open_type, OpenedFont::OpenType(_)));
         assert!(open_type.importer().is_none());

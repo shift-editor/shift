@@ -1,3 +1,4 @@
+use shift_font::test_support::fixtures;
 use shift_font::{
     AddAnchors, AddContour, AddPoints, ApplyBooleanOp, CreateAxis, CreateGlyph, CreateGlyphLayer,
     CreateNamedInstance, CreateSource, DeleteAxis, DeleteNamedInstance, DeleteSource, MoveAnchors,
@@ -400,7 +401,8 @@ fn native_document_save_as_adopts_new_identity_without_mutating_source() {
 #[test]
 fn imports_external_fonts_without_a_save_target() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let source_path = fixtures::repository_root()
+        .join("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
     let store_path = temp.path().join("working.sqlite");
 
     let workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -436,7 +438,8 @@ fn imports_external_fonts_without_a_save_target() {
 #[test]
 fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
+    let source_path = fixtures::repository_root()
+        .join("packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
     let store_path = temp.path().join("inter.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -575,7 +578,8 @@ fn configured_large_corpus_streams_resumes_and_acquires() {
 #[test]
 fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let source_path = fixtures::repository_root()
+        .join("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
     let store_path = temp.path().join("mutatorsans.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -639,7 +643,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
 #[test]
 fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/Homenaje.glyphs");
+    let source_path = fixtures::repository_root().join("fixtures/fonts/Homenaje.glyphs");
     let store_path = temp.path().join("homenaje.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -707,7 +711,8 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
 #[test]
 fn ufo_source_roundtrips_through_lazy_acquisition() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let source_path = fixtures::repository_root()
+        .join("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
     let store_path = temp.path().join("mutatorsans-ufo.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -795,7 +800,8 @@ fn failed_streaming_import_removes_staging_and_preserves_the_destination() {
 #[test]
 fn foreign_import_refuses_to_replace_a_published_workspace_store() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let source_path = fixtures::repository_root()
+        .join("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
     let store_path = temp.path().join("published.sqlite");
     let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     drop(workspace);
@@ -816,7 +822,8 @@ fn foreign_import_refuses_to_replace_a_published_workspace_store() {
 #[test]
 fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
+    let source_path = fixtures::repository_root()
+        .join("fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo");
     let store_path = temp.path().join("corrupt-acquisition.sqlite");
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
     let requested = workspace
@@ -884,7 +891,8 @@ fn save_requires_save_as_for_untitled_workspaces() {
 #[test]
 fn save_requires_save_as_for_imported_fonts() {
     let temp = tempfile::tempdir().unwrap();
-    let source_path = fixture("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let source_path = fixtures::repository_root()
+        .join("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
     let store_path = temp.path().join("working.sqlite");
 
     let mut workspace = FontWorkspace::open(&source_path, &store_path).unwrap();
@@ -2684,10 +2692,4 @@ fn ledger_trims_oldest_entries_beyond_max() {
     assert_eq!(undone, 100, "oldest entry should fall off the ledger");
     assert_eq!(workspace.font().glyph_count(), 1);
     assert!(workspace.font().glyph_id_by_name("g0").is_some());
-}
-
-fn fixture(path: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(path)
 }

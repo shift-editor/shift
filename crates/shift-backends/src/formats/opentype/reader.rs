@@ -300,22 +300,13 @@ fn glyph_from_skrifa(
 mod tests {
     use super::*;
     use crate::font_source::geometry::SMOOTH_ANGLE_TOLERANCE;
+    use shift_font::test_support::fixtures;
     use shift_font::{CurveSegment, MetricKind};
     use skrifa::outline::pen::PathElement;
-    use std::path::PathBuf;
-
-    fn mutatorsans_ttf_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts/mutatorsans/MutatorSans.ttf")
-    }
 
     #[test]
     fn canonical_retained_directory_matches_authored_header_metadata() {
-        let retained = OpenTypeFont::open(&mutatorsans_ttf_path()).unwrap();
+        let retained = OpenTypeFont::open(&fixtures::mutatorsans_ttf()).unwrap();
         let directory = retained.directory();
         let header = retained.header.clone();
         let default_source_id = header.default_source_id().unwrap();
@@ -450,7 +441,7 @@ mod tests {
 
     #[test]
     fn imported_quadratics_match_source_segments() {
-        let path = mutatorsans_ttf_path();
+        let path = fixtures::mutatorsans_ttf();
         let bytes = std::fs::read(&path).expect("MutatorSans.ttf fixture should exist");
         let font_ref = FontRef::new(&bytes).unwrap();
 

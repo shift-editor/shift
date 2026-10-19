@@ -165,23 +165,14 @@ impl FontImporter for DesignspaceFont {
 
 #[cfg(test)]
 mod tests {
+    use shift_font::test_support::fixtures;
     use std::fs;
 
     use super::*;
 
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
-
     #[test]
     fn directory_sources_keep_retained_ufo_order() {
-        let path = fixture("mutatorsans-variable/MutatorSans.designspace");
+        let path = fixtures::font("mutatorsans-variable/MutatorSans.designspace");
         let document = DesignSpaceDocument::load(&path).unwrap();
         let default_source = find_default_source_index(&document).unwrap();
         let expected_filenames = std::iter::once(default_source)
@@ -206,7 +197,7 @@ mod tests {
     fn designspace_nondefault_glyph_matches_authored_import() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("LayerOnlyDesignspace");
-        copy_directory(&fixture("mutatorsans-variable"), &copied);
+        copy_directory(&fixtures::font("mutatorsans-variable"), &copied);
         add_layer_only_glyph(
             &copied.join("MutatorSansBoldCondensed.ufo"),
             "glyphs",
@@ -221,7 +212,7 @@ mod tests {
     fn designspace_projection_retains_variation_after_source_removal() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("Removed");
-        copy_directory(&fixture("mutatorsans-variable"), &copied);
+        copy_directory(&fixtures::font("mutatorsans-variable"), &copied);
         let font = DesignspaceFont::open(&copied.join("MutatorSans.designspace")).unwrap();
         let glyph = font
             .directory()

@@ -2,6 +2,7 @@
 
 #![allow(clippy::unwrap_used, reason = "test fixtures fail loudly on bad input")]
 
+pub mod fixtures;
 pub mod generated;
 
 use crate::{

@@ -559,22 +559,12 @@ fn invalid(details: impl Into<String>) -> FontReadError {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use shift_font::test_support::fixtures;
 
     use super::*;
     use crate::font_source::{
         GlyphsFont, ProjectedGlyph, SourceAtlasPage, UfoFont, VariationCoordinate,
     };
-
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
 
     fn compile_page(
         font: &dyn FontSource,
@@ -589,7 +579,8 @@ mod tests {
 
     #[test]
     fn ufo_page_contains_resolvable_outline_geometry() {
-        let font = UfoFont::open(&fixture("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
+        let font =
+            UfoFont::open(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -688,7 +679,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn glyphs_page_flattens_component_closures() {
-        let font = GlyphsFont::open(&fixture("Homenaje.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("Homenaje.glyphs")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -714,13 +705,14 @@ unitsPerEm = 1000;
 
     #[test]
     fn every_drawable_glyphs_projection_has_default_atlas_curves() {
-        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("MutatorSansVariable.glyphs")).unwrap();
         assert_default_atlas_coverage(&font);
     }
 
     #[test]
     fn every_drawable_ufo_projection_has_default_atlas_curves() {
-        let font = UfoFont::open(&fixture("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
+        let font =
+            UfoFont::open(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
         assert_default_atlas_coverage(&font);
     }
 
