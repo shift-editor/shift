@@ -48,8 +48,13 @@ impl ShiftStore {
             .transpose()?
             .flatten();
 
+        let trace = std::env::var_os("SHIFT_TRACE_APPLY").is_some();
+        let t = std::time::Instant::now();
         if let Some(post_font) = post_font {
             validate_glyph_order(&self.conn, change_set, post_font)?;
+        }
+        if trace {
+            eprintln!("  store: validate_glyph_order {:?}", t.elapsed());
         }
 
         if let Some(recovery) = self.recovery.as_mut() {
@@ -61,11 +66,15 @@ impl ShiftStore {
         }
 
         let tracks_workspace = self.tracks_workspace();
+        let prepared = prepare_layer_payloads(change_set)?;
+        if trace {
+            eprintln!("  store: prepared payloads {:?}", t.elapsed());
+        }
         let tx = self.conn.transaction()?;
         for priority in 0..=10 {
             for change in &change_set.changes {
                 if change_priority(change) == priority {
-                    apply_change(&tx, change)?;
+                    apply_change(&tx, change, &prepared)?;
                 }
             }
             // A glyph is in one group per position, so every changed group's
@@ -77,11 +86,17 @@ impl ShiftStore {
                 }
             }
         }
+        if trace {
+            eprintln!("  store: statements {:?}", t.elapsed());
+        }
         if tracks_workspace {
             mark_workspace_changed_in_tx(&tx, dirty)?;
         }
 
         tx.commit()?;
+        if trace {
+            eprintln!("  store: committed {:?}", t.elapsed());
+        }
         Ok(())
     }
 
@@ -341,7 +356,53 @@ fn kerning_groups_after(
 /// When kerning group changes apply: after glyphs, before pair values.
 const KERNING_GROUP_PRIORITY: usize = 9;
 
-fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), StoreError> {
+/// Every layer a change set writes, encoded and compressed in parallel before
+/// the transaction, so a large batch doesn't encode one layer at a time.
+type PreparedLayers = std::collections::HashMap<font::LayerId, crate::layer::StoredLayerPayload>;
+
+fn prepare_layer_payloads(change_set: &font::FontChangeSet) -> Result<PreparedLayers, StoreError> {
+    use rayon::prelude::*;
+    let layers: Vec<&font::GlyphLayer> = change_set
+        .changes
+        .iter()
+        .flat_map(|change| -> Vec<&font::GlyphLayer> {
+            match change {
+                font::FontChange::Glyph(value) => value
+                    .after
+                    .iter()
+                    .flat_map(|glyph| glyph.layers().values().map(|layer| layer.as_ref()))
+                    .collect(),
+                font::FontChange::Layer { layer, .. } => layer.after.iter().map(|layer| layer.as_ref()).collect(),
+                _ => Vec::new(),
+            }
+        })
+        .collect();
+    layers
+        .par_iter()
+        .map(|layer| {
+            let encoded = crate::layer::encode_layer(layer)?;
+            Ok((layer.id(), crate::layer::compress_layer(&encoded)?))
+        })
+        .collect()
+}
+
+fn write_prepared_layer(
+    tx: &Transaction<'_>,
+    glyph_id: &font::GlyphId,
+    layer: &font::GlyphLayer,
+    prepared: &PreparedLayers,
+) -> Result<(), StoreError> {
+    match prepared.get(&layer.id()) {
+        Some(stored) => crate::layer::store_stored_layer_in_tx(tx, glyph_id, layer, stored, WriteMode::Upsert),
+        None => write_layer_in_tx(tx, glyph_id, layer),
+    }
+}
+
+fn apply_change(
+    tx: &Transaction<'_>,
+    change: &font::FontChange,
+    prepared: &PreparedLayers,
+) -> Result<(), StoreError> {
     match change {
         font::FontChange::Metadata(value) => update_font_metadata(tx, &value.after),
         font::FontChange::LibValue { key, value } => {
@@ -352,10 +413,10 @@ fn apply_change(tx: &Transaction<'_>, change: &font::FontChange) -> Result<(), S
         font::FontChange::MetricDefinitions(value) => replace_metric_definitions(tx, &value.after),
         font::FontChange::NamedInstances(value) => replace_named_instances(tx, &value.after),
         font::FontChange::Sources(value) => replace_sources(tx, &value.after),
-        font::FontChange::Glyph(value) => replace_glyph(tx, value),
+        font::FontChange::Glyph(value) => replace_glyph(tx, value, prepared),
         font::FontChange::Layer {
             glyph_id, layer, ..
-        } => replace_layer(tx, glyph_id, layer),
+        } => replace_layer(tx, glyph_id, layer, prepared),
         font::FontChange::KerningGroup { group_id, .. } => delete_kerning_group(tx, group_id),
         font::FontChange::KerningValue {
             source_id,
@@ -505,6 +566,7 @@ fn replace_sources(
 fn replace_glyph(
     tx: &Transaction<'_>,
     value: &font::Replacement<Option<font::Glyph>>,
+    prepared: &PreparedLayers,
 ) -> Result<(), StoreError> {
     let glyph_id = replacement_glyph_id(value)?;
     match &value.after {
@@ -516,25 +578,40 @@ fn replace_glyph(
                     |row| row.get::<_, i64>(0),
                 )
                 .optional()?;
-            let order_index = existing_order.unwrap_or(tx.query_row(
-                "SELECT COUNT(*) FROM glyphs",
-                [],
-                |row| row.get(0),
-            )?);
+            let order_index = match existing_order {
+                Some(order_index) => order_index,
+                None => tx.query_row("SELECT COUNT(*) FROM glyphs", [], |row| row.get(0))?,
+            };
             write_glyph_directory_in_tx(tx, glyph, order_index, WriteMode::Upsert)?;
 
-            let replaces_layers = value
-                .before
-                .as_ref()
-                .map(|before| before.layers() != glyph.layers())
-                .unwrap_or(true);
-            if replaces_layers {
-                tx.execute(
-                    "DELETE FROM glyph_layers WHERE glyph_id = ?1",
-                    [glyph_id.to_string()],
-                )?;
-                for layer in glyph.layers().values() {
-                    write_layer_in_tx(tx, &glyph_id, layer)?;
+            // Upsert only the layers that changed and delete only the ones that
+            // went away; deleting every layer cascades through payload and
+            // component rows and was most of a large batch's SQL.
+            match value.before.as_ref() {
+                Some(before) => {
+                    for layer_id in before.layers().keys() {
+                        if !glyph.layers().contains_key(layer_id) {
+                            tx.execute(
+                                "DELETE FROM glyph_layers WHERE id = ?1",
+                                [layer_row_id(layer_id)],
+                            )?;
+                        }
+                    }
+                    for (layer_id, layer) in glyph.layers() {
+                        let unchanged = before.layers().get(layer_id).is_some_and(|b| b == layer);
+                        if !unchanged {
+                            write_prepared_layer(tx, &glyph_id, layer, prepared)?;
+                        }
+                    }
+                }
+                None => {
+                    tx.execute(
+                        "DELETE FROM glyph_layers WHERE glyph_id = ?1",
+                        [glyph_id.to_string()],
+                    )?;
+                    for layer in glyph.layers().values() {
+                        write_prepared_layer(tx, &glyph_id, layer, prepared)?;
+                    }
                 }
             }
         }
@@ -564,10 +641,11 @@ fn replace_layer(
     tx: &Transaction<'_>,
     glyph_id: &font::GlyphId,
     value: &font::Replacement<Option<std::sync::Arc<font::GlyphLayer>>>,
+    prepared: &PreparedLayers,
 ) -> Result<(), StoreError> {
     let layer_id = replacement_layer_id(value)?;
     match &value.after {
-        Some(layer) => write_layer_in_tx(tx, glyph_id, layer),
+        Some(layer) => write_prepared_layer(tx, glyph_id, layer, prepared),
         None => {
             tx.execute(
                 "DELETE FROM glyph_layers WHERE id = ?1",

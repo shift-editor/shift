@@ -377,9 +377,17 @@ impl FontWorkspace {
                 }
             }
         }
+        let trace = std::env::var_os("SHIFT_TRACE_APPLY").is_some();
+        let t = std::time::Instant::now();
         self.acquire_layers(layer_ids)?;
+        if trace {
+            eprintln!("persist: acquire {:?}", t.elapsed());
+        }
         self.commit_edit(dirty, move |font| {
             font.apply_change_set(&change_set)?;
+            if trace {
+                eprintln!("persist: engine apply done at {:?}", t.elapsed());
+            }
             let layers = touched_layers(&change_set);
             let outcome = AppliedIntents {
                 changes: change_set.clone(),
@@ -427,8 +435,12 @@ impl FontWorkspace {
             return Err(WorkspaceError::UnloadedLayerMutation(layer_id.clone()));
         }
 
+        let t = std::time::Instant::now();
         self.store
             .apply_change_set_with_font(&change_set, &next_font, dirty)?;
+        if std::env::var_os("SHIFT_TRACE_APPLY").is_some() {
+            eprintln!("persist: store {:?}", t.elapsed());
+        }
         self.font = next_font;
         // Sweeping residency looks up every unloaded layer, so do it only when
         // a change could have removed layers from the directory.

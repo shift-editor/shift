@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::{FontChange, FontChangeSet, Replacement, Require, SourceCollection};
@@ -19,11 +19,18 @@ impl Font {
     /// original value, or a domain validation error when the complete target
     /// violates a persisted-state invariant. Failure leaves the font unchanged.
     pub fn apply_change_set(&mut self, change_set: &FontChangeSet) -> CoreResult<()> {
+        let trace = std::env::var_os("SHIFT_TRACE_APPLY").is_some();
+        let t = std::time::Instant::now();
         self.validate_change_origins(change_set)?;
+        let origins = t.elapsed();
 
         let mut target = self.clone();
         target.install_change_targets(change_set)?;
+        let install = t.elapsed();
         target.validate_change_target(change_set)?;
+        if trace {
+            eprintln!("apply: origins {origins:?}, install {:?}, target {:?}", install - origins, t.elapsed() - install);
+        }
         *self = target;
         Ok(())
     }
@@ -116,12 +123,23 @@ impl Font {
         // most of each undo and redo on a large font. Every touched glyph leaves the
         // index before any data changes and is validated against the rest when it
         // returns, so duplicates are caught exactly as a full rebuild would.
+        //
+        // Entity ids move by difference: a replaced glyph usually keeps every
+        // point, contour and anchor id, and removing then re-adding thousands of
+        // them in the persistent set was most of a large batch's cost.
+        let trace = std::env::var_os("SHIFT_TRACE_APPLY").is_some();
+        let t = std::time::Instant::now();
         let touched_glyph_ids = touched_glyph_ids(change_set);
         let state = self.state_mut();
+        let mut befores = HashMap::new();
         for glyph_id in &touched_glyph_ids {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
-                state.index.remove_glyph(glyph_id.clone(), glyph);
+                state.index.remove_glyph_records(glyph_id.clone(), glyph, false);
+                befores.insert(glyph_id.clone(), glyph.clone());
             }
+        }
+        if trace {
+            eprintln!("  install: release {:?}", t.elapsed());
         }
 
         for change in &change_set.changes {
@@ -232,15 +250,53 @@ impl Font {
             Arc::make_mut(glyph).set_layer(layer.clone());
         }
 
+        if trace {
+            eprintln!("  install: data {:?}", t.elapsed());
+        }
         let state = self.state_mut();
+        // Only glyphs whose entity ids changed release and claim ids; the rest
+        // keep theirs in the index, where other glyphs still can't take them.
+        let mut released = HashSet::new();
+        let mut entities_changed = HashSet::new();
+        for glyph_id in &touched_glyph_ids {
+            let before = befores.get(glyph_id);
+            if same_entity_ids(before.map(Arc::as_ref), state.data.glyphs.get(glyph_id).map(Arc::as_ref)) {
+                continue;
+            }
+            entities_changed.insert(glyph_id.clone());
+            if let Some(before) = before {
+                for layer in before.layers().values() {
+                    released.extend(glyph_entity_ids(layer));
+                }
+            }
+        }
         let mut touched_unicodes = HashSet::new();
+        let mut claimed = HashSet::new();
         for glyph_id in &touched_glyph_ids {
             let Some(glyph) = state.data.glyphs.get(glyph_id) else {
                 continue;
             };
-            state.index.validate_glyph_insert(glyph_id.clone(), glyph)?;
-            state.index.insert_glyph(glyph_id.clone(), glyph);
+            state.index.validate_glyph_return(
+                glyph_id.clone(),
+                glyph,
+                entities_changed.contains(glyph_id),
+                &released,
+                &mut claimed,
+            )?;
+            state.index.insert_glyph_records(glyph_id.clone(), glyph, false);
             touched_unicodes.extend(glyph.unicodes().iter().copied());
+        }
+        if trace {
+            eprintln!("  install: validate+insert records {:?}", t.elapsed());
+        }
+        for entity_id in released.difference(&claimed) {
+            state.index.entity_ids.remove(entity_id);
+        }
+        for entity_id in claimed.difference(&released) {
+            state.index.entity_ids.insert(entity_id.clone());
+        }
+        if trace {
+            eprintln!("  install: entity diff {:?}", t.elapsed());
         }
         // A full rebuild lists glyphs sharing a code point in glyph order; keep that.
         for unicode in touched_unicodes {
@@ -381,6 +437,23 @@ where
 }
 
 /// Glyphs whose own record or any layer `change_set` replaces, in first-touched order.
+/// Whether two versions of a glyph hold exactly the same entity ids, layer by
+/// layer, in order. Compares ids directly; nothing is hashed.
+fn same_entity_ids(before: Option<&Glyph>, after: Option<&Glyph>) -> bool {
+    let (Some(before), Some(after)) = (before, after) else {
+        return false;
+    };
+    if before.layers().len() != after.layers().len() {
+        return false;
+    }
+    before.layers().iter().all(|(layer_id, before_layer)| {
+        after
+            .layers()
+            .get(layer_id)
+            .is_some_and(|after_layer| glyph_entity_ids(before_layer).eq(glyph_entity_ids(after_layer)))
+    })
+}
+
 fn touched_glyph_ids(change_set: &FontChangeSet) -> Vec<GlyphId> {
     let mut seen = HashSet::new();
     change_set
