@@ -1,0 +1,10 @@
+[package]
+name="ws-wasm-check"
+version="0.0.0"
+edition="2021"
+[lib]
+crate-type=["cdylib"]
+[dependencies]
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+
+[workspace]

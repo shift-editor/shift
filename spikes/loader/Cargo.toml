@@ -1,0 +1,12 @@
+[package]
+name = "loader"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+shift-font = { path = "../../crates/shift-font" }
+shift-backends = { path = "../../crates/shift-backends" }
+serde_json = "1"
+
+[workspace]
