@@ -1,0 +1,12 @@
+[package]
+name = "shift-shape"
+version = "0.1.0"
+edition = "2021"
+description = "Shapes text with compiled OpenType features: bidi and script itemization, HarfRust shaping, and line-break opportunities"
+license.workspace = true
+
+[dependencies]
+harfrust = "0.13.3"
+thiserror = "2.0.18"
+unicode-linebreak = "0.1.5"
+unicode-script = "0.5"

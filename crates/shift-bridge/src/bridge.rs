@@ -2116,6 +2116,23 @@ impl Bridge {
     Ok(runs.into_iter().map(NapiShapedRun::from).collect())
   }
 
+  /// Returns the compiled shaping tables, for the editor to shape with
+  /// itself, or `null` when they are still at `known_revision`. Compiles
+  /// them first if the font changed in a way they depend on: glyph order,
+  /// glyph categories, feature code, or axes.
+  #[napi]
+  pub fn shaper_font(
+    &mut self,
+    known_revision: Option<u32>,
+  ) -> errors::Result<Option<crate::shaping::NapiShaperFont>> {
+    let font = self.live_shaper()?.font().clone();
+    let revision = self.shaper_fonts.revision();
+    if known_revision.is_some_and(|known| u64::from(known) == revision) {
+      return Ok(None);
+    }
+    Ok(Some(crate::shaping::NapiShaperFont::new(revision, &font)))
+  }
+
   #[napi]
   pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
     let external = shift_font::ExternalLocation::from_untyped(map_location(location)?);
@@ -2267,7 +2284,7 @@ impl Bridge {
           kind: "font",
           value: "it has no shaping tables".to_string(),
         })?;
-    Ok(LiveShaper::new(shaper_font, self.font()?))
+    Ok(LiveShaper::new(shaper_font, self.font()?)?)
   }
 
   fn mark_font_changed(&mut self) {

@@ -33,6 +33,7 @@ if (locked !== cli) {
 const variants = [
   { folder: "generated", features: [] },
   { folder: "generated-reference", features: ["reference"] },
+  { folder: "generated-shaping", features: ["shaping"] },
 ];
 
 for (const variant of variants) {

@@ -15,4 +15,5 @@ mod layout;
 pub mod names;
 #[cfg(feature = "reference")]
 pub mod reference;
+pub mod shaping;
 pub mod variation;

@@ -24,6 +24,7 @@
     "packages/editor/src/lib/wasm/generated",
     "packages/wasm/src/generated",
     "packages/wasm/src/generated-reference",
+    "packages/wasm/src/generated-shaping",
     "crates/shift-bridge/index.js",
     "crates/shift-bridge/index.d.ts",
     "**/vendor",

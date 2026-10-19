@@ -2296,12 +2296,12 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
+ "shift-shape",
  "shift-slug",
  "shift-store",
  "skrifa",
  "tempfile",
  "thiserror",
- "unicode-script",
  "write-fonts",
 ]
 
@@ -2372,6 +2372,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-shape"
+version = "0.1.0"
+dependencies = [
+ "harfrust",
+ "thiserror",
+ "unicode-linebreak",
+ "unicode-script",
+]
+
+[[package]]
 name = "shift-slug"
 version = "0.1.0"
 dependencies = [
@@ -2418,6 +2428,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "shift-font",
+ "shift-shape",
  "tsify",
  "wasm-bindgen",
 ]

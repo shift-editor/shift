@@ -35,9 +35,10 @@ export interface TextLayoutParams {
   externalLocation: Signal<ExternalAxisLocation>;
   /**
    * Each paragraph's shaped runs, from shaping these same items and indexed
-   * like {@link splitParagraphs}; null lays every paragraph out literally.
+   * like {@link splitParagraphs}; null lays every paragraph out literally,
+   * and a null paragraph lays out literally on its own.
    */
-  shaped?: readonly (readonly ShapedRun[])[] | null;
+  shaped?: readonly (readonly ShapedRun[] | null)[] | null;
 }
 
 /** One positioned glyph with its layout-local placement resolved. */

@@ -18,7 +18,6 @@
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
 mod diagnostics;
-mod itemize;
 mod shape;
 mod state;
 mod tables;
@@ -37,6 +36,7 @@ use fontdrasil::types::Axis as IrAxis;
 use fontdrasil::variations::VariationModelError;
 use fontir::ir::StaticMetadata;
 use shift_font::{AxisId, GlyphId};
+use shift_shape::AxisNormalization;
 use write_fonts::tables::gdef::GlyphClassDef;
 use write_fonts::types::Tag;
 use write_fonts::BuilderError;
@@ -212,6 +212,29 @@ impl ShaperFont {
     /// Returns the glyph name for each glyph id, with `.notdef` at id 0.
     pub fn glyph_names(&self) -> &[String] {
         &self.glyph_names
+    }
+
+    /// Returns the Shift glyph at each shaper glyph id, in glyph order;
+    /// `None` for a `.notdef` the font does not have.
+    pub fn glyph_ids(&self) -> &[Option<GlyphId>] {
+        &self.glyph_ids
+    }
+
+    /// Returns how each axis's user coordinates normalize, in `fvar` order,
+    /// from the axis's mapping points.
+    pub fn axis_normalizations(&self) -> Vec<(AxisId, AxisNormalization)> {
+        self.axes
+            .iter()
+            .zip(&self.axis_ids)
+            .map(|(axis, axis_id)| {
+                let points = axis
+                    .converter
+                    .iter()
+                    .map(|(user, _, normalized)| (user.to_f64(), normalized.to_f64()))
+                    .collect();
+                (axis_id.clone(), AxisNormalization::new(points))
+            })
+            .collect()
     }
 
     /// Returns where each generated feature belongs among the authored

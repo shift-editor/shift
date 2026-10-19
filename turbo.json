@@ -62,7 +62,7 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-reference/**"]
+      "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
     },
     "@shift/wasm#build:debug": {
       "inputs": [
@@ -75,7 +75,7 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-reference/**"]
+      "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
     },
     "@shift/wasm#build:e2e": {
       "inputs": [
@@ -88,7 +88,7 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-reference/**"]
+      "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
     },
     "generate:bridge-types": {
       "dependsOn": ["shift-bridge#build"],

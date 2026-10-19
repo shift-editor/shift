@@ -14,8 +14,33 @@ use shift_font::test_support::generated::assert_generated_file;
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
 use crate::decomposition::DecomposedGlyph;
+use crate::shaping::{ShapeParagraphs, ShapedRunOutput, ShaperGlyphs};
 
-const OUTPUT: &str = "packages/editor/src/lib/wasm/generated/layouts.ts";
+/// One WebAssembly module and the hot calls it exports, generated into one
+/// TypeScript file that imports only that module, so a module the editor
+/// loads lazily is never pulled in by another's calls.
+struct Module {
+    /// The generated file, relative to the repository root.
+    output: &'static str,
+    /// The package path the generated calls import.
+    import: &'static str,
+    calls: Vec<Call>,
+}
+
+fn modules() -> [Module; 2] {
+    [
+        Module {
+            output: "packages/editor/src/lib/wasm/generated/layouts.ts",
+            import: "@shift/wasm",
+            calls: calls(),
+        },
+        Module {
+            output: "packages/editor/src/lib/wasm/generated/shapingLayouts.ts",
+            import: "@shift/wasm/shaping",
+            calls: shaping_calls(),
+        },
+    ]
+}
 
 /// One exported hot call: its JavaScript name and its input and output layouts.
 struct Call {
@@ -48,9 +73,28 @@ fn calls() -> Vec<Call> {
     ]
 }
 
+fn shaping_calls() -> Vec<Call> {
+    vec![
+        Call {
+            name: "setShaperGlyphs",
+            doc: "Sets how a registered shaper's axes normalize and which glyph each character maps to.",
+            input: ShaperGlyphs::kind(),
+            output: bool::kind(),
+        },
+        Call {
+            name: "shapeParagraphs",
+            doc: "Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null.",
+            input: ShapeParagraphs::kind(),
+            output: Vec::<Option<Vec<ShapedRunOutput>>>::kind(),
+        },
+    ]
+}
+
 #[test]
 fn generated_file_wasm_layouts() {
-    assert_generated_file(OUTPUT, &render(&calls()));
+    for module in modules() {
+        assert_generated_file(module.output, &render(&module));
+    }
 }
 
 #[derive(Default)]
@@ -101,7 +145,8 @@ fn fields_signature(layout: &StructKind) -> String {
         .join(",")
 }
 
-fn render(calls: &[Call]) -> String {
+fn render(module: &Module) -> String {
+    let calls = &module.calls;
     // Inputs need writers and outputs readers; every named layout needs its
     // type, whichever way it crosses.
     let mut written = Named::default();
@@ -126,7 +171,7 @@ fn render(calls: &[Call]) -> String {
         .map(|call| format!("{} as {}Call", call.name, call.name))
         .collect::<Vec<_>>()
         .join(", ");
-    writeln!(out, "import {{ {imports} }} from \"@shift/wasm\";").unwrap();
+    writeln!(out, "import {{ {imports} }} from \"{}\";", module.import).unwrap();
     out.push_str("import { NumberReader, NumberWriter } from \"../numbers\";\n");
 
     for layout in named.enums.values() {
@@ -338,7 +383,11 @@ fn type_of(kind: &Kind) -> String {
 /// The TypeScript type a decoded value has: lists come back mutable.
 fn read_type_of(kind: &Kind) -> String {
     match kind {
-        Kind::List(item) => format!("{}[]", type_of(item)),
+        Kind::List(item) => match item.as_ref() {
+            // `readonly` and `|` bind looser than `[]`.
+            Kind::List(_) | Kind::Optional(_) => format!("({})[]", type_of(item)),
+            item => format!("{}[]", type_of(item)),
+        },
         kind => type_of(kind),
     }
 }

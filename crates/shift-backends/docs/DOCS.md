@@ -79,7 +79,7 @@ src/
     glyphs/           -- retained Glyphs source, conversion stream, fidelity report, and reader
   shift2fontir/       -- owned Shift FontView -> fontir/fontc adapter
   export.rs           -- direct fontc TTF compilation and atomic output write
-  shaper_font/        -- authored FEA -> minimal layout-only shaper font, diagnostics, last-good state
+  shaper_font/        -- authored FEA -> minimal layout-only shaper font, diagnostics, last-good state; LiveShaper over shift-shape
 ```
 
 ## Key Types
@@ -111,6 +111,7 @@ src/
 - `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
 - `ShaperFontRequest` / `ShaperFont::compile` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; `GDEF` glyph classes come from glyph categories unless the source declares its own; diagnostics carry UTF-16 ranges
 - `ShaperFontState` -- keeps the last successfully compiled shaper font active while later feature source has errors, and skips recompiling an unchanged request
+- `LiveShaper` -- shapes with `shift-shape` through `LiveGlyphs`, a `GlyphSource` mapping characters through the live font with zero advances; the request and result types are `shift-shape`'s, aliased over `GlyphId` and `ExternalLocation`
 
 ## How it works
 

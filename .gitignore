@@ -130,3 +130,4 @@ packages/sdk/THIRD_PARTY_LICENSES.txt
 # Built from crates/shift-wasm by packages/wasm/scripts/build.mjs
 packages/wasm/src/generated/
 packages/wasm/src/generated-reference/
+packages/wasm/src/generated-shaping/
