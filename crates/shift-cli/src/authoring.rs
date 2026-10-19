@@ -4,6 +4,7 @@
 //! cloned [`Font`]. The destination is written only after the complete intent
 //! set validates, so a failed command cannot partially mutate a package.
 
+use shift_font::{CreateAxis, CreateSource};
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -121,7 +122,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
         args.maximum,
     );
     let set = FontIntentSet {
-        intents: vec![FontIntent::CreateAxis { axis }],
+        intents: vec![FontIntent::CreateAxis(CreateAxis { axis })],
     };
 
     apply_mutation(&args.path, &args.mutation, &set)
@@ -144,11 +145,11 @@ pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
     }
     let source_id = SourceId::new();
     let set = FontIntentSet {
-        intents: vec![FontIntent::CreateSource {
+        intents: vec![FontIntent::CreateSource(CreateSource {
             source_id,
             name: args.name,
             location,
-        }],
+        })],
     };
 
     apply_mutation(&args.path, &args.mutation, &set)

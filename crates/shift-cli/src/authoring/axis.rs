@@ -1,6 +1,7 @@
 //! Axis edits preserve identity, role, labels, visibility, and dependent coordinates.
 
 use miette::{Result, bail, miette};
+use shift_font::UpdateAxis;
 use shift_font::{AxisKind, FontIntent, FontIntentSet};
 
 use crate::cli::SetAxisArgs;
@@ -55,7 +56,7 @@ pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
         &args.path,
         &args.mutation,
         &FontIntentSet {
-            intents: vec![FontIntent::UpdateAxis { axis }],
+            intents: vec![FontIntent::UpdateAxis(UpdateAxis { axis })],
         },
     )
 }

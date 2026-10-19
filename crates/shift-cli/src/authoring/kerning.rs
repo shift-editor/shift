@@ -3,6 +3,10 @@
 //! Selectors name glyphs and groups; Shift mints every new group id. A batch
 //! lowers to one intent set, so it saves completely or not at all.
 
+use shift_font::{
+    CreateKerningGroup, DeleteKerningGroup, RenameKerningGroup, SetKerningGroupMember,
+    SetKerningValues,
+};
 use std::collections::{HashMap, HashSet};
 
 use miette::{Result, WrapErr, bail, miette};
@@ -50,7 +54,9 @@ pub fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
                 pair: resolve_pair(&font, first, second)?,
                 value: Some(value),
             };
-            vec![FontIntent::SetKerningValues { edits: vec![edit] }]
+            vec![FontIntent::SetKerningValues(SetKerningValues {
+                edits: vec![edit],
+            })]
         }
     };
 
@@ -85,7 +91,7 @@ pub fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport> {
         &args.path,
         &args.mutation,
         &FontIntentSet {
-            intents: vec![FontIntent::SetKerningValues { edits }],
+            intents: vec![FontIntent::SetKerningValues(SetKerningValues { edits })],
         },
     )
 }
@@ -100,11 +106,11 @@ pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringRep
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = KerningGroupId::new();
-    let mut intents = vec![FontIntent::CreateKerningGroup {
+    let mut intents = vec![FontIntent::CreateKerningGroup(CreateKerningGroup {
         group_id: group_id.clone(),
         position,
         name: args.name,
-    }];
+    })];
     intents.extend(member_intents(
         &font,
         position,
@@ -125,10 +131,10 @@ pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringRep
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
     let set = FontIntentSet {
-        intents: vec![FontIntent::RenameKerningGroup {
+        intents: vec![FontIntent::RenameKerningGroup(RenameKerningGroup {
             group_id,
             name: args.name,
-        }],
+        })],
     };
 
     apply_mutation(&args.path, &args.mutation, &set)
@@ -143,7 +149,9 @@ pub fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringRe
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
     let set = FontIntentSet {
-        intents: vec![FontIntent::DeleteKerningGroup { group_id }],
+        intents: vec![FontIntent::DeleteKerningGroup(DeleteKerningGroup {
+            group_id,
+        })],
     };
 
     apply_mutation(&args.path, &args.mutation, &set)
@@ -242,11 +250,11 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             Some(group_id) => group_id,
             None => {
                 let group_id = KerningGroupId::new();
-                intents.push(FontIntent::CreateKerningGroup {
+                intents.push(FontIntent::CreateKerningGroup(CreateKerningGroup {
                     group_id: group_id.clone(),
                     position,
                     name: group.name.clone(),
-                });
+                }));
                 group_id
             }
         };
@@ -274,21 +282,21 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             current
                 .into_iter()
                 .filter(|glyph_id| !member_ids.contains(glyph_id))
-                .map(|glyph_id| FontIntent::SetKerningGroupMember {
-                    position,
-                    glyph_id,
-                    group_id: None,
+                .map(|glyph_id| {
+                    FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+                        position,
+                        glyph_id,
+                        group_id: None,
+                    })
                 }),
         );
-        intents.extend(
-            member_ids
-                .into_iter()
-                .map(|glyph_id| FontIntent::SetKerningGroupMember {
-                    position,
-                    glyph_id,
-                    group_id: Some(group_id.clone()),
-                }),
-        );
+        intents.extend(member_ids.into_iter().map(|glyph_id| {
+            FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+                position,
+                glyph_id,
+                group_id: Some(group_id.clone()),
+            })
+        }));
     }
 
     let mut edits = Vec::new();
@@ -329,7 +337,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
         });
     }
     if !edits.is_empty() {
-        intents.push(FontIntent::SetKerningValues { edits });
+        intents.push(FontIntent::SetKerningValues(SetKerningValues { edits }));
     }
 
     Ok(intents)
@@ -364,10 +372,12 @@ fn member_intents(
 ) -> Result<Vec<FontIntent>> {
     Ok(resolve_members(font, selectors)?
         .into_iter()
-        .map(|glyph_id| FontIntent::SetKerningGroupMember {
-            position,
-            glyph_id,
-            group_id: group_id.cloned(),
+        .map(|glyph_id| {
+            FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+                position,
+                glyph_id,
+                group_id: group_id.cloned(),
+            })
         })
         .collect())
 }

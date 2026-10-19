@@ -1,5 +1,6 @@
 //! Batch planning over directory facts; geometry is acquired by the workspace only when needed.
 
+use shift_font::{CreateGlyph, CreateGlyphLayer, UpdateGlyph};
 use std::collections::{HashMap, HashSet};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
@@ -91,11 +92,11 @@ pub fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
                 None => {
                     let glyph_id = GlyphId::new();
                     let values = requested_unicodes.clone().unwrap_or_default();
-                    intents.push(FontIntent::CreateGlyph {
+                    intents.push(FontIntent::CreateGlyph(CreateGlyph {
                         glyph_id: Some(glyph_id.clone()),
                         name: name.clone(),
                         unicodes: values.clone(),
-                    });
+                    }));
                     (glyph_id, values)
                 }
             };
@@ -105,11 +106,11 @@ pub fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         if let Some(values) = requested_unicodes
             && *current_unicodes != values
         {
-            intents.push(FontIntent::UpdateGlyph {
+            intents.push(FontIntent::UpdateGlyph(UpdateGlyph {
                 glyph_id: glyph_id.clone(),
                 new_name: glyph_name,
                 new_unicodes: values.clone(),
-            });
+            }));
             *current_unicodes = values;
         }
 
@@ -128,11 +129,11 @@ pub fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
         let layer_id = existing.clone().unwrap_or_else(LayerId::new);
         if existing.is_none() {
-            intents.push(FontIntent::CreateGlyphLayer {
+            intents.push(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
                 layer_id: layer_id.clone(),
                 glyph_id,
                 source_id,
-            });
+            }));
         }
         intents.push(
             input

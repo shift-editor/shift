@@ -1,3 +1,4 @@
+use shift_font::{AddComponent, DecomposeComponents, ReplaceGlyphLayerContent};
 use std::{
     collections::{HashMap, HashSet},
     io,
@@ -267,17 +268,20 @@ impl FontWorkspace {
         let mut component_roots = Vec::new();
         for intent in &set.intents {
             match intent {
-                FontIntent::AddComponent { base_glyph_id, .. } => {
+                FontIntent::AddComponent(AddComponent { base_glyph_id, .. }) => {
                     component_roots.push(base_glyph_id.clone());
                 }
-                FontIntent::ReplaceGlyphLayerContent { components, .. } => {
+                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
+                    components,
+                    ..
+                }) => {
                     component_roots
                         .extend(components.iter().map(shift_font::Component::base_glyph_id));
                 }
-                FontIntent::DecomposeComponents {
+                FontIntent::DecomposeComponents(DecomposeComponents {
                     layer_id,
                     component_ids,
-                } => {
+                }) => {
                     let Some(layer) = self.font.layer(layer_id) else {
                         continue;
                     };

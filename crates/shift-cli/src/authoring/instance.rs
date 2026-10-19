@@ -4,6 +4,7 @@ use miette::{Result, bail, miette};
 use shift_font::{
     AxisKind, AxisRole, ExternalLocation, Font, FontIntent, FontIntentSet, NamedInstance,
 };
+use shift_font::{CreateNamedInstance, DeleteNamedInstance, UpdateNamedInstance};
 
 use crate::cli::{AddInstanceArgs, RemoveInstanceArgs, SetInstanceArgs};
 
@@ -44,9 +45,9 @@ pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
         for (axis_id, value) in parse_location(&font, &args.location)? {
             location.set(axis_id, value);
         }
-        vec![FontIntent::CreateNamedInstance {
+        vec![FontIntent::CreateNamedInstance(CreateNamedInstance {
             instance: NamedInstance::new(name, location, args.postscript_name),
-        }]
+        })]
     };
     apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
@@ -86,7 +87,9 @@ pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
         &args.path,
         &args.mutation,
         &FontIntentSet {
-            intents: vec![FontIntent::UpdateNamedInstance { instance }],
+            intents: vec![FontIntent::UpdateNamedInstance(UpdateNamedInstance {
+                instance,
+            })],
         },
     )
 }
@@ -103,9 +106,9 @@ pub fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringReport> {
         &args.path,
         &args.mutation,
         &FontIntentSet {
-            intents: vec![FontIntent::DeleteNamedInstance {
+            intents: vec![FontIntent::DeleteNamedInstance(DeleteNamedInstance {
                 instance_id: instance.id(),
-            }],
+            })],
         },
     )
 }
@@ -165,9 +168,9 @@ fn standard_weights(font: &Font) -> Result<Vec<FontIntent>> {
         {
             continue;
         }
-        intents.push(FontIntent::CreateNamedInstance {
+        intents.push(FontIntent::CreateNamedInstance(CreateNamedInstance {
             instance: NamedInstance::new(name.to_string(), location, None),
-        });
+        }));
     }
     Ok(intents)
 }

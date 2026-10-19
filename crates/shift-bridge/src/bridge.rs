@@ -14,6 +14,17 @@ use shift_backends::{
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
+  AddAnchors, AddComponent, AddContour, AddPoints, ApplyBooleanOp, CloneGlyphLayer, CreateAxis,
+  CreateGlyph, CreateGlyphLayer, CreateKerningGroup, CreateNamedInstance, CreateSource,
+  DecomposeComponents, DeleteAxis, DeleteKerningGroup, DeleteNamedInstance, DeleteSource,
+  MaterializeGlyphLayer, MoveAnchors, MovePoints, RemoveAnchors, RemoveComponents, RemovePoints,
+  RenameAnchors, RenameKerningGroup, ReverseContour, SetAxisMappings, SetComponentAlignment,
+  SetComponentTransforms, SetContourClosed, SetContourStart, SetKerningGroupMember,
+  SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth, SetXAdvance,
+  TransformLayer, TranslatePoints, UpdateAxis, UpdateFontMetadata, UpdateGlyph,
+  UpdateNamedInstance, UpdateSource,
+};
+use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
   AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
@@ -2366,7 +2377,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
   match intent.kind.as_str() {
     "addPoints" => {
       let payload = intent.add_points.ok_or_else(|| missing("addPoints"))?;
-      Ok(FontIntent::AddPoints {
+      Ok(FontIntent::AddPoints(AddPoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         contour_id: payload
           .contour_id
@@ -2378,168 +2389,168 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           .into_iter()
           .map(map_point_seed)
           .collect::<errors::Result<Vec<_>>>()?,
-      })
+      }))
     }
     "addContour" => {
       let payload = intent.add_contour.ok_or_else(|| missing("addContour"))?;
-      Ok(FontIntent::AddContour {
+      Ok(FontIntent::AddContour(AddContour {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         contour_id: parse::<ContourId>(&payload.contour_id)?,
         closed: payload.closed,
-      })
+      }))
     }
     "setContourClosed" => {
       let payload = intent
         .set_contour_closed
         .ok_or_else(|| missing("setContourClosed"))?;
-      Ok(FontIntent::SetContourClosed {
+      Ok(FontIntent::SetContourClosed(SetContourClosed {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         contour_id: parse::<ContourId>(&payload.contour_id)?,
         closed: payload.closed,
-      })
+      }))
     }
     "movePoints" => {
       let payload = intent.move_points.ok_or_else(|| missing("movePoints"))?;
-      Ok(FontIntent::MovePoints {
+      Ok(FontIntent::MovePoints(MovePoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
         coords: payload.coords,
-      })
+      }))
     }
     "setPointSmooth" => {
       let payload = intent
         .set_point_smooth
         .ok_or_else(|| missing("setPointSmooth"))?;
-      Ok(FontIntent::SetPointSmooth {
+      Ok(FontIntent::SetPointSmooth(SetPointSmooth {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         point_id: parse::<PointId>(&payload.point_id)?,
         smooth: payload.smooth,
-      })
+      }))
     }
     "removePoints" => {
       let payload = intent
         .remove_points
         .ok_or_else(|| missing("removePoints"))?;
-      Ok(FontIntent::RemovePoints {
+      Ok(FontIntent::RemovePoints(RemovePoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
-      })
+      }))
     }
     "addAnchors" => {
       let payload = intent.add_anchors.ok_or_else(|| missing("addAnchors"))?;
-      Ok(FontIntent::AddAnchors {
+      Ok(FontIntent::AddAnchors(AddAnchors {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         anchors: payload
           .anchors
           .into_iter()
           .map(map_anchor_seed)
           .collect::<errors::Result<Vec<_>>>()?,
-      })
+      }))
     }
     "moveAnchors" => {
       let payload = intent.move_anchors.ok_or_else(|| missing("moveAnchors"))?;
-      Ok(FontIntent::MoveAnchors {
+      Ok(FontIntent::MoveAnchors(MoveAnchors {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
         coords: payload.coords,
-      })
+      }))
     }
     "removeAnchors" => {
       let payload = intent
         .remove_anchors
         .ok_or_else(|| missing("removeAnchors"))?;
-      Ok(FontIntent::RemoveAnchors {
+      Ok(FontIntent::RemoveAnchors(RemoveAnchors {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
-      })
+      }))
     }
     "renameAnchors" => {
       let payload = intent
         .rename_anchors
         .ok_or_else(|| missing("renameAnchors"))?;
-      Ok(FontIntent::RenameAnchors {
+      Ok(FontIntent::RenameAnchors(RenameAnchors {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
         names: payload.names,
-      })
+      }))
     }
     "addComponent" => {
       let payload = intent
         .add_component
         .ok_or_else(|| missing("addComponent"))?;
-      Ok(FontIntent::AddComponent {
+      Ok(FontIntent::AddComponent(AddComponent {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         component_id: parse::<ComponentId>(&payload.component_id)?,
         base_glyph_id: parse::<GlyphId>(&payload.base_glyph_id)?,
-      })
+      }))
     }
     "setComponentTransforms" => {
       let payload = intent
         .set_component_transforms
         .ok_or_else(|| missing("setComponentTransforms"))?;
-      Ok(FontIntent::SetComponentTransforms {
+      Ok(FontIntent::SetComponentTransforms(SetComponentTransforms {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
         transforms: payload.transforms,
-      })
+      }))
     }
     "setComponentAlignment" => {
       let payload = intent
         .set_component_alignment
         .ok_or_else(|| missing("setComponentAlignment"))?;
-      Ok(FontIntent::SetComponentAlignment {
+      Ok(FontIntent::SetComponentAlignment(SetComponentAlignment {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
         alignment: shift_wire::bridges::napi::parse_alignment(Some(&payload.alignment)),
-      })
+      }))
     }
     "removeComponents" => {
       let payload = intent
         .remove_components
         .ok_or_else(|| missing("removeComponents"))?;
-      Ok(FontIntent::RemoveComponents {
+      Ok(FontIntent::RemoveComponents(RemoveComponents {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
-      })
+      }))
     }
     "decomposeComponents" => {
       let payload = intent
         .decompose_components
         .ok_or_else(|| missing("decomposeComponents"))?;
-      Ok(FontIntent::DecomposeComponents {
+      Ok(FontIntent::DecomposeComponents(DecomposeComponents {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
-      })
+      }))
     }
     "reverseContour" => {
       let payload = intent
         .reverse_contour
         .ok_or_else(|| missing("reverseContour"))?;
-      Ok(FontIntent::ReverseContour {
+      Ok(FontIntent::ReverseContour(ReverseContour {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         contour_id: parse::<ContourId>(&payload.contour_id)?,
-      })
+      }))
     }
     "setContourStart" => {
       let payload = intent
         .set_contour_start
         .ok_or_else(|| missing("setContourStart"))?;
-      Ok(FontIntent::SetContourStart {
+      Ok(FontIntent::SetContourStart(SetContourStart {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         contour_id: parse::<ContourId>(&payload.contour_id)?,
         point_id: parse::<PointId>(&payload.point_id)?,
-      })
+      }))
     }
     "translatePoints" => {
       let payload = intent
         .translate_points
         .ok_or_else(|| missing("translatePoints"))?;
-      Ok(FontIntent::TranslatePoints {
+      Ok(FontIntent::TranslatePoints(TranslatePoints {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
         dx: payload.dx,
         dy: payload.dy,
-      })
+      }))
     }
     "transformLayer" => {
       let payload = intent
@@ -2550,7 +2561,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           kind: "transformLayer matrix value count",
           value: payload.matrix.len().to_string(),
         })?;
-      Ok(FontIntent::TransformLayer {
+      Ok(FontIntent::TransformLayer(TransformLayer {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         transform: Transform {
           xx,
@@ -2560,77 +2571,77 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           dx,
           dy,
         },
-      })
+      }))
     }
     "setXAdvance" => {
       let payload = intent.set_x_advance.ok_or_else(|| missing("setXAdvance"))?;
-      Ok(FontIntent::SetXAdvance {
+      Ok(FontIntent::SetXAdvance(SetXAdvance {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         width: payload.width,
-      })
+      }))
     }
     "applyBooleanOp" => {
       let payload = intent
         .apply_boolean_op
         .ok_or_else(|| missing("applyBooleanOp"))?;
-      Ok(FontIntent::ApplyBooleanOp {
+      Ok(FontIntent::ApplyBooleanOp(ApplyBooleanOp {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         contour_id_a: parse::<ContourId>(&payload.contour_id_a)?,
         contour_id_b: parse::<ContourId>(&payload.contour_id_b)?,
         operation: parse_boolean_op(&payload.operation)?,
-      })
+      }))
     }
     "createGlyph" => {
       let payload = intent.create_glyph.ok_or_else(|| missing("createGlyph"))?;
-      Ok(FontIntent::CreateGlyph {
+      Ok(FontIntent::CreateGlyph(CreateGlyph {
         glyph_id: Some(parse::<GlyphId>(&payload.glyph_id)?),
         name: payload.name,
         unicodes: payload.unicodes,
-      })
+      }))
     }
     "updateGlyph" => {
       let payload = intent.update_glyph.ok_or_else(|| missing("updateGlyph"))?;
-      Ok(FontIntent::UpdateGlyph {
+      Ok(FontIntent::UpdateGlyph(UpdateGlyph {
         glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
         new_name: payload.new_name.into(),
         new_unicodes: payload.new_unicodes,
-      })
+      }))
     }
     "updateFontMetadata" => {
       let payload = intent
         .update_font_metadata
         .ok_or_else(|| missing("updateFontMetadata"))?;
-      Ok(FontIntent::UpdateFontMetadata {
+      Ok(FontIntent::UpdateFontMetadata(UpdateFontMetadata {
         metadata: map_font_metadata(payload.metadata),
-      })
+      }))
     }
     "setKerningValues" => {
       let payload = intent
         .set_kerning_values
         .ok_or_else(|| missing("setKerningValues"))?;
-      Ok(FontIntent::SetKerningValues {
+      Ok(FontIntent::SetKerningValues(SetKerningValues {
         edits: payload
           .edits
           .into_iter()
           .map(map_kerning_value_edit)
           .collect::<errors::Result<Vec<_>>>()?,
-      })
+      }))
     }
     "createKerningGroup" => {
       let payload = intent
         .create_kerning_group
         .ok_or_else(|| missing("createKerningGroup"))?;
-      Ok(FontIntent::CreateKerningGroup {
+      Ok(FontIntent::CreateKerningGroup(CreateKerningGroup {
         group_id: parse::<KerningGroupId>(&payload.group_id)?,
         position: map_kerning_position(payload.position),
         name: payload.name,
-      })
+      }))
     }
     "setKerningGroupMember" => {
       let payload = intent
         .set_kerning_group_member
         .ok_or_else(|| missing("setKerningGroupMember"))?;
-      Ok(FontIntent::SetKerningGroupMember {
+      Ok(FontIntent::SetKerningGroupMember(SetKerningGroupMember {
         position: map_kerning_position(payload.position),
         glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
         group_id: payload
@@ -2638,116 +2649,116 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           .as_deref()
           .map(parse::<KerningGroupId>)
           .transpose()?,
-      })
+      }))
     }
     "renameKerningGroup" => {
       let payload = intent
         .rename_kerning_group
         .ok_or_else(|| missing("renameKerningGroup"))?;
-      Ok(FontIntent::RenameKerningGroup {
+      Ok(FontIntent::RenameKerningGroup(RenameKerningGroup {
         group_id: parse::<KerningGroupId>(&payload.group_id)?,
         name: payload.name,
-      })
+      }))
     }
     "deleteKerningGroup" => {
       let payload = intent
         .delete_kerning_group
         .ok_or_else(|| missing("deleteKerningGroup"))?;
-      Ok(FontIntent::DeleteKerningGroup {
+      Ok(FontIntent::DeleteKerningGroup(DeleteKerningGroup {
         group_id: parse::<KerningGroupId>(&payload.group_id)?,
-      })
+      }))
     }
     "setLanguages" => {
       let payload = intent
         .set_languages
         .ok_or_else(|| missing("setLanguages"))?;
-      Ok(FontIntent::SetLanguages {
+      Ok(FontIntent::SetLanguages(SetLanguages {
         language_ids: payload.language_ids,
-      })
+      }))
     }
     "createAxis" => {
       let payload = intent.create_axis.ok_or_else(|| missing("createAxis"))?;
-      Ok(FontIntent::CreateAxis {
+      Ok(FontIntent::CreateAxis(CreateAxis {
         axis: map_axis(payload.axis)?,
-      })
+      }))
     }
     "updateAxis" => {
       let payload = intent.update_axis.ok_or_else(|| missing("updateAxis"))?;
-      Ok(FontIntent::UpdateAxis {
+      Ok(FontIntent::UpdateAxis(UpdateAxis {
         axis: map_axis(payload.axis)?,
-      })
+      }))
     }
     "deleteAxis" => {
       let payload = intent.delete_axis.ok_or_else(|| missing("deleteAxis"))?;
-      Ok(FontIntent::DeleteAxis {
+      Ok(FontIntent::DeleteAxis(DeleteAxis {
         axis_id: parse::<AxisId>(&payload.axis_id)?,
-      })
+      }))
     }
     "setAxisMappings" => {
       let payload = intent
         .set_axis_mappings
         .ok_or_else(|| missing("setAxisMappings"))?;
-      Ok(FontIntent::SetAxisMappings {
+      Ok(FontIntent::SetAxisMappings(SetAxisMappings {
         mappings: payload
           .mappings
           .into_iter()
           .map(map_axis_mapping)
           .collect::<errors::Result<Vec<_>>>()?,
-      })
+      }))
     }
     "setMetricDefinitions" => {
       let payload = intent
         .set_metric_definitions
         .ok_or_else(|| missing("setMetricDefinitions"))?;
-      Ok(FontIntent::SetMetricDefinitions {
+      Ok(FontIntent::SetMetricDefinitions(SetMetricDefinitions {
         definitions: payload
           .definitions
           .into_iter()
           .map(map_metric_definition)
           .collect::<errors::Result<Vec<_>>>()?,
-      })
+      }))
     }
     "createNamedInstance" => {
       let payload = intent
         .create_named_instance
         .ok_or_else(|| missing("createNamedInstance"))?;
-      Ok(FontIntent::CreateNamedInstance {
+      Ok(FontIntent::CreateNamedInstance(CreateNamedInstance {
         instance: map_named_instance(payload.instance)?,
-      })
+      }))
     }
     "updateNamedInstance" => {
       let payload = intent
         .update_named_instance
         .ok_or_else(|| missing("updateNamedInstance"))?;
-      Ok(FontIntent::UpdateNamedInstance {
+      Ok(FontIntent::UpdateNamedInstance(UpdateNamedInstance {
         instance: map_named_instance(payload.instance)?,
-      })
+      }))
     }
     "deleteNamedInstance" => {
       let payload = intent
         .delete_named_instance
         .ok_or_else(|| missing("deleteNamedInstance"))?;
-      Ok(FontIntent::DeleteNamedInstance {
+      Ok(FontIntent::DeleteNamedInstance(DeleteNamedInstance {
         instance_id: parse::<NamedInstanceId>(&payload.instance_id)?,
-      })
+      }))
     }
     "deleteSource" => {
       let payload = intent
         .delete_source
         .ok_or_else(|| missing("deleteSource"))?;
-      Ok(FontIntent::DeleteSource {
+      Ok(FontIntent::DeleteSource(DeleteSource {
         source_id: parse::<SourceId>(&payload.source_id)?,
-      })
+      }))
     }
     "createSource" => {
       let payload = intent
         .create_source
         .ok_or_else(|| missing("createSource"))?;
-      Ok(FontIntent::CreateSource {
+      Ok(FontIntent::CreateSource(CreateSource {
         source_id: parse::<SourceId>(&payload.source_id)?,
         name: payload.name,
         location: shift_font::DesignLocation::from_untyped(map_location(payload.location)?),
-      })
+      }))
     }
     "updateSource" => {
       let payload = intent
@@ -2763,7 +2774,7 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
           ))
         })
         .collect::<errors::Result<_>>()?;
-      Ok(FontIntent::UpdateSource {
+      Ok(FontIntent::UpdateSource(UpdateSource {
         source_id: parse::<SourceId>(&payload.source_id)?,
         name: payload.name,
         location: shift_font::DesignLocation::from_untyped(map_location(payload.location)?),
@@ -2772,40 +2783,40 @@ fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
         line_gap: payload.line_gap,
         underline_position: payload.underline_position,
         underline_thickness: payload.underline_thickness,
-      })
+      }))
     }
     "createGlyphLayer" => {
       let payload = intent
         .create_glyph_layer
         .ok_or_else(|| missing("createGlyphLayer"))?;
-      Ok(FontIntent::CreateGlyphLayer {
+      Ok(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
         source_id: parse::<SourceId>(&payload.source_id)?,
-      })
+      }))
     }
     "cloneGlyphLayer" => {
       let payload = intent
         .clone_glyph_layer
         .ok_or_else(|| missing("cloneGlyphLayer"))?;
-      Ok(FontIntent::CloneGlyphLayer {
+      Ok(FontIntent::CloneGlyphLayer(CloneGlyphLayer {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
         source_id: parse::<SourceId>(&payload.source_id)?,
         from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
-      })
+      }))
     }
     "materializeGlyphLayer" => {
       let payload = intent
         .materialize_glyph_layer
         .ok_or_else(|| missing("materializeGlyphLayer"))?;
-      Ok(FontIntent::MaterializeGlyphLayer {
+      Ok(FontIntent::MaterializeGlyphLayer(MaterializeGlyphLayer {
         layer_id: parse::<LayerId>(&payload.layer_id)?,
         glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
         source_id: parse::<SourceId>(&payload.source_id)?,
         from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
         values: shift_font::GlyphInterpolationValues::new(payload.values.to_vec()),
-      })
+      }))
     }
     other => Err(BridgeError::InvalidInput {
       kind: "intent",

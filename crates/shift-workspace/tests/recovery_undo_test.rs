@@ -1,6 +1,7 @@
 //! Undoing font-level edits in a document must keep earlier unsaved edits,
 //! on disk as well as in memory.
 
+use shift_font::{AddAnchors, CreateSource, UpdateSource};
 use std::path::{Path, PathBuf};
 
 use shift_font::{AnchorId, AnchorSeed, DesignLocation, FontIntent, FontIntentSet, SourceId};
@@ -52,7 +53,7 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
 
     apply(
         &mut workspace,
-        FontIntent::AddAnchors {
+        FontIntent::AddAnchors(AddAnchors {
             layer_id: layer_id.clone(),
             anchors: vec![AnchorSeed {
                 id: AnchorId::new(),
@@ -60,12 +61,12 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
                 x: 10.0,
                 y: 700.0,
             }],
-        },
+        }),
     );
     let source = workspace.font().sources()[0].clone();
     apply(
         &mut workspace,
-        FontIntent::UpdateSource {
+        FontIntent::UpdateSource(UpdateSource {
             source_id: source.id(),
             name: "Renamed".into(),
             location: source.location().clone(),
@@ -74,7 +75,7 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
             line_gap: source.line_gap(),
             underline_position: Some(-111.0),
             underline_thickness: source.underline_thickness(),
-        },
+        }),
     );
     let mut location = DesignLocation::new();
     if let Some(axis) = workspace.font().axes().first() {
@@ -82,11 +83,11 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
     }
     apply(
         &mut workspace,
-        FontIntent::CreateSource {
+        FontIntent::CreateSource(CreateSource {
             source_id: SourceId::new(),
             name: "Added".into(),
             location,
-        },
+        }),
     );
 
     if evict_before_undo {
