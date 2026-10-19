@@ -28,7 +28,7 @@ pub use axis::{
 };
 pub use binary_data::BinaryData;
 pub use boolean::{boolean, BooleanOp};
-pub use component::{Component, ComponentAlignment, DecomposedTransform, Transform};
+pub use component::{AxisInheritance, Component, ComponentAlignment, ComponentLocation, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
@@ -36,7 +36,7 @@ pub use entity::{
 };
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata, LANGUAGES_LIB_KEY};
-pub use glyph::{Glyph, GlyphLayer};
+pub use glyph::{Glyph, GlyphAxis, GlyphLayer, LayerLocation};
 pub use glyph_category::{GlyphCategory, GlyphSubcategory, UnknownGlyphCategory};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};

@@ -273,7 +273,12 @@ fn compare_components(
         || reference
             .components_iter()
             .zip(source.components_iter())
-            .any(|(reference, source)| reference.base_glyph_id() != source.base_glyph_id());
+            .any(|(reference, source)| {
+                // A component interpolates its location too, so every layer must
+                // name the same axes for it.
+                reference.base_glyph_id() != source.base_glyph_id()
+                    || !reference.location().0.keys().eq(source.location().0.keys())
+            });
     if sequence_differs {
         differences.push(LayerDifference::ComponentSequence {
             reference: component_sequence(reference),

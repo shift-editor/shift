@@ -175,6 +175,7 @@ pub(crate) fn replace_font_header_in_tx(
     font: &font::Font,
 ) -> Result<(), StoreError> {
     tx.execute("DELETE FROM glyph_lib", [])?;
+    tx.execute("DELETE FROM glyph_axes", [])?;
     tx.execute("DELETE FROM font_lib", [])?;
     tx.execute("DELETE FROM fontinfo_remainder", [])?;
     tx.execute("DELETE FROM font_binaries", [])?;
@@ -308,7 +309,7 @@ pub(crate) fn write_glyph_directory_in_tx(
                     lib_value_json(value)?
                 ])?;
             }
-            Ok(())
+            write_glyph_axes(tx, glyph)
         }
         WriteMode::Upsert => {
             upsert_glyph(tx, glyph, order_index)?;
@@ -319,9 +320,22 @@ pub(crate) fn write_glyph_directory_in_tx(
                 "glyph_id",
                 Some(&glyph.id().to_string()),
                 glyph.lib(),
-            )
+            )?;
+            tx.prepare_cached("DELETE FROM glyph_axes WHERE glyph_id = ?1")?
+                .execute([glyph.id().to_string()])?;
+            write_glyph_axes(tx, glyph)
         }
     }
+}
+
+/// A part's own axes, one row each in authored order.
+fn write_glyph_axes(tx: &Transaction<'_>, glyph: &font::Glyph) -> Result<(), StoreError> {
+    for (order_index, axis) in glyph.axes().iter().enumerate() {
+        let axis_json = serde_json::to_string(axis).map_err(|error| StoreError::LayerEncoding(error.to_string()))?;
+        tx.prepare_cached("INSERT INTO glyph_axes (glyph_id, order_index, axis_json) VALUES (?1, ?2, ?3)")?
+            .execute(params![glyph.id().to_string(), order_index as i64, axis_json])?;
+    }
+    Ok(())
 }
 
 fn change_priority(change: &font::FontChange) -> usize {

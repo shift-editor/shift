@@ -54,6 +54,7 @@ impl GlyphInterpolationValues {
 
         for component in layer.components_iter() {
             values.extend(component.transform().to_values());
+            values.extend(component.location().0.values().copied());
         }
 
         Self { values }
@@ -92,7 +93,8 @@ impl GlyphLayer {
                 .map(|contour| contour.points().len() * GLYPH_POINT_VALUE_COUNT)
                 .sum::<usize>()
             + self.anchors().len() * GLYPH_ANCHOR_VALUE_COUNT
-            + self.components().len() * DecomposedTransform::VALUE_COUNT;
+            + self.components().len() * DecomposedTransform::VALUE_COUNT
+            + self.components_iter().map(|c| c.location().0.len()).sum::<usize>();
         let actual = values.as_slice().len();
         if actual < expected {
             return Err(CoreError::MissingGlyphValue { index: actual });
@@ -126,6 +128,11 @@ impl GlyphLayer {
                 *value = cursor.next()?;
             }
             component.set_transform(DecomposedTransform::from_values(transform));
+            let mut location = component.location().clone();
+            for value in location.0.values_mut() {
+                *value = cursor.next()?;
+            }
+            component.set_location(location);
         }
 
         cursor.finish()

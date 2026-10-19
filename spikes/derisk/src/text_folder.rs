@@ -43,11 +43,24 @@ pub fn content_hash(bytes: &[u8]) -> u64 {
 pub fn glyph_text(glyph: &Glyph) -> String {
     let mut out = String::new();
     let unicodes: Vec<String> = glyph.unicodes().iter().map(|u| format!("{u:04X}")).collect();
-    writeln!(out, "{{\n  \"id\": {},\n  \"name\": {},\n  \"unicodes\": {},\n  \"layers\": {{", json(&glyph.id().to_string()), json(glyph.name()), json(&unicodes)).unwrap();
+    writeln!(out, "{{\n  \"id\": {},\n  \"name\": {},\n  \"unicodes\": {},", json(&glyph.id().to_string()), json(glyph.name()), json(&unicodes)).unwrap();
+    if !glyph.axes().is_empty() {
+        out.push_str("  \"axes\": [\n");
+        for (i, axis) in glyph.axes().iter().enumerate() {
+            let comma = if i + 1 < glyph.axes().len() { "," } else { "" };
+            writeln!(out, "    {}{comma}", json(axis)).unwrap();
+        }
+        out.push_str("  ],\n");
+    }
+    out.push_str("  \"layers\": {\n");
     let mut layers: Vec<_> = glyph.layers().values().collect();
     layers.sort_by_key(|layer| layer.id().to_string());
     for (li, layer) in layers.iter().enumerate() {
-        writeln!(out, "    {}: {{\n      \"source\": {},\n      \"advance\": {},\n      \"contours\": [", json(&layer.id().to_string()), json(&layer.source_id().to_string()), num(layer.width())).unwrap();
+        writeln!(out, "    {}: {{\n      \"source\": {},", json(&layer.id().to_string()), json(&layer.source_id().to_string())).unwrap();
+        if !layer.location().is_empty() {
+            writeln!(out, "      \"at\": {},", json(&layer.location().0)).unwrap();
+        }
+        writeln!(out, "      \"advance\": {},\n      \"contours\": [", num(layer.width())).unwrap();
         let contours: Vec<_> = layer.contours_iter().collect();
         for (ci, contour) in contours.iter().enumerate() {
             writeln!(out, "        {{ \"id\": {}, \"closed\": {}, \"points\": [", json(&contour.id().to_string()), contour.is_closed()).unwrap();
@@ -63,7 +76,14 @@ pub fn glyph_text(glyph: &Glyph) -> String {
         let components: Vec<_> = layer.components_iter().collect();
         for (i, component) in components.iter().enumerate() {
             let comma = if i + 1 < components.len() { "," } else { "" };
-            writeln!(out, "        {{ \"id\": {}, \"base\": {}, \"transform\": {}, \"alignment\": {} }}{comma}", json(&component.id().to_string()), json(&component.base_glyph_id().to_string()), json(&component.transform().to_values().map(|v| v + 0.0).to_vec()), json(&component.alignment())).unwrap();
+            let mut extra = String::new();
+            if !component.location().is_empty() {
+                write!(extra, ", \"location\": {}", json(&component.location().0)).unwrap();
+            }
+            if component.inheritance() != shift_font::AxisInheritance::Parent {
+                write!(extra, ", \"inherit\": {}", json(&component.inheritance())).unwrap();
+            }
+            writeln!(out, "        {{ \"id\": {}, \"base\": {}, \"transform\": {}, \"alignment\": {}{extra} }}{comma}", json(&component.id().to_string()), json(&component.base_glyph_id().to_string()), json(&component.transform().to_values().map(|v| v + 0.0).to_vec()), json(&component.alignment())).unwrap();
         }
         out.push_str("      ],\n      \"anchors\": [\n");
         let anchors: Vec<_> = layer.anchors_iter().collect();
@@ -99,12 +119,16 @@ struct GlyphDoc {
     id: String,
     name: String,
     unicodes: Vec<String>,
+    #[serde(default)]
+    axes: Vec<shift_font::GlyphAxis>,
     layers: BTreeMap<String, LayerDoc>,
 }
 
 #[derive(Deserialize)]
 struct LayerDoc {
     source: String,
+    #[serde(default)]
+    at: BTreeMap<shift_font::AxisId, f64>,
     advance: f64,
     contours: Vec<ContourDoc>,
     components: Vec<ComponentDoc>,
@@ -130,6 +154,10 @@ struct ComponentDoc {
     base: String,
     transform: [f64; DecomposedTransform::VALUE_COUNT],
     alignment: ComponentAlignment,
+    #[serde(default)]
+    location: BTreeMap<shift_font::AxisId, f64>,
+    #[serde(default)]
+    inherit: shift_font::AxisInheritance,
 }
 
 #[derive(Deserialize)]
@@ -147,6 +175,9 @@ pub enum Invalid {
     FileIdMismatch { file: String, id: String },
     UnknownSource(String),
     UnknownComponentBase(String),
+    /// A layer or component location names an axis neither the font nor the
+    /// glyph (or the component's base glyph) has.
+    UnknownAxis(String),
     BadUnicode(String),
 }
 
@@ -195,12 +226,19 @@ pub fn parse_glyph_with_sources(
         .map(|u| u32::from_str_radix(u, 16).map_err(|_| Invalid::BadUnicode(u.clone())))
         .collect::<Result<Vec<_>, _>>()?;
     glyph.set_unicodes(unicodes);
+    let mut glyph_axes: HashSet<shift_font::AxisId> = font.axes().iter().map(|a| a.id()).collect();
+    glyph_axes.extend(doc.axes.iter().map(|a| a.id.clone()));
+    glyph.set_axes(doc.axes);
     for (layer_key, layer_doc) in doc.layers {
         let source_id = SourceId::from_raw(&layer_doc.source);
         if !sources.contains(&source_id) {
             return Err(Invalid::UnknownSource(layer_doc.source));
         }
         let mut layer = GlyphLayer::with_width(LayerId::from_raw(&layer_key), source_id, layer_doc.advance);
+        if let Some(axis) = layer_doc.at.keys().find(|axis| !glyph_axes.contains(*axis)) {
+            return Err(Invalid::UnknownAxis(axis.to_string()));
+        }
+        layer.set_location(shift_font::LayerLocation(layer_doc.at));
         for contour_doc in layer_doc.contours {
             let mut contour = Contour::with_id(ContourId::from_raw(&contour_doc.id));
             for (point_id, x, y, point_type, smooth) in contour_doc.points {
@@ -224,6 +262,16 @@ pub fn parse_glyph_with_sources(
                 DecomposedTransform::from_values(component_doc.transform),
             );
             component.set_alignment(component_doc.alignment);
+            // The base's own axes may be unknown here when it changes in the same
+            // pull; font axes and the base's current axes are checked.
+            if let Some(base) = font.glyph(&component.base_glyph_id()) {
+                let base_axes: HashSet<shift_font::AxisId> = font.axes().iter().map(|a| a.id()).chain(base.axes().iter().map(|a| a.id.clone())).collect();
+                if let Some(axis) = component_doc.location.keys().find(|axis| !base_axes.contains(*axis)) {
+                    return Err(Invalid::UnknownAxis(axis.to_string()));
+                }
+            }
+            component.set_location(shift_font::ComponentLocation(component_doc.location));
+            component.set_inheritance(component_doc.inherit);
             layer.add_component(component);
         }
         for anchor_doc in layer_doc.anchors {

@@ -12,8 +12,8 @@ use fontdrasil::variations::{
 };
 
 use crate::{
-    Axis, AxisId, CoreResult, DesignLocation, DesignNormalization, Font, GlyphId, GlyphLayer,
-    Location, SourceId,
+    Axis, AxisId, CoreResult, DesignLocation, DesignNormalization, Font, Glyph, GlyphId,
+    GlyphLayer, Location, SourceId,
 };
 
 mod kerning;
@@ -464,7 +464,7 @@ fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Ar
             if let Some(layer) = glyph
                 .layers()
                 .values()
-                .find(|layer| layer.source_id() == default_source_id)
+                .find(|layer| layer.is_at_source(&default_source_id))
             {
                 return Some(layer.clone());
             }
@@ -794,5 +794,132 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, crate::CoreError::AxisNotFound(_)));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spike: glyph-local axes and sources (boring expansion).
+//
+// A glyph's designspace is the font's axes plus its own glyph axes. Every
+// layer sits at its base font source plus its extra coordinates; interpolation
+// over that space reuses the same fontdrasil basis as font-wide interpolation.
+
+/// A glyph resolved at a location, components flattened into contours.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FlattenedGlyph {
+    pub advance: f64,
+    pub contours: Vec<Vec<(f64, f64)>>,
+}
+
+const MAX_RESOLVE_DEPTH: usize = 32;
+
+impl Font {
+    /// The glyph's design axes: the font's axes, then its own.
+    pub fn glyph_space_axes(&self, glyph: &Glyph) -> Vec<Axis> {
+        let mut axes = self.axes().to_vec();
+        axes.extend(glyph.axes().iter().map(|axis| {
+            Axis::continuous_with_id(axis.id.clone(), axis.tag.clone(), axis.name.clone(), axis.minimum, axis.default, axis.maximum)
+        }));
+        axes
+    }
+
+    fn glyph_space_normalization(&self, glyph: &Glyph) -> CoreResult<Vec<DesignNormalization>> {
+        let mut normalization = self.design_normalization()?;
+        normalization.extend(glyph.axes().iter().map(|axis| DesignNormalization {
+            axis_id: axis.id.clone(),
+            minimum: axis.minimum,
+            default: axis.default,
+            maximum: axis.maximum,
+        }));
+        Ok(normalization)
+    }
+
+    /// A layer's full location in its glyph's space: its source's font
+    /// coordinates, the glyph's axes at their defaults, then its extra coordinates.
+    pub fn layer_full_location(&self, glyph: &Glyph, layer: &GlyphLayer) -> CoreResult<DesignLocation> {
+        let mut location = self.require_source(&layer.source_id())?.location().clone();
+        for axis in glyph.axes() {
+            location.set(axis.id.clone(), axis.default);
+        }
+        for (axis_id, value) in &layer.location().0 {
+            location.set(axis_id.clone(), *value);
+        }
+        Ok(location)
+    }
+
+    /// Interpolation over the glyph's whole space from every compatible master
+    /// layer, including layers with extra coordinates. Glyphs without axes or
+    /// located layers use the ordinary font-wide interpolation.
+    pub fn glyph_space_interpolation(&self, glyph_id: &GlyphId) -> CoreResult<Option<GlyphInterpolation>> {
+        let glyph = self.require_glyph(glyph_id)?;
+        let located = glyph.layers().values().any(|layer| !layer.location().is_empty());
+        if glyph.axes().is_empty() && !located {
+            return self.glyph_interpolation(glyph_id);
+        }
+        let Some(reference_layer) = interpolation_reference_layer(self, glyph) else {
+            return Ok(None);
+        };
+        let axes = self.glyph_space_axes(glyph);
+        let normalization = self.glyph_space_normalization(glyph)?;
+        let mut locations = Vec::new();
+        let mut sources = Vec::new();
+        for layer in glyph.layers().values() {
+            let is_master = self.source(&layer.source_id()).is_some_and(crate::Source::is_master);
+            if !is_master || !reference_layer.match_with(layer).is_complete() {
+                continue;
+            }
+            // Spike: the basis is keyed by SourceId, so each layer stands in as
+            // one. A real implementation keys the basis by layer.
+            let key = SourceId::from_raw(layer.id());
+            locations.push((key.clone(), self.layer_full_location(glyph, layer)?));
+            sources.push(GlyphInterpolationSource { source_id: key, values: layer.interpolation_values() });
+        }
+        let Some(basis) = InterpolationBasis::from_source_locations(&locations, &axes, normalization) else {
+            return Ok(None);
+        };
+        // The basis orders its sources; align the values with it.
+        let by_key: HashMap<SourceId, GlyphInterpolationSource> = sources.into_iter().map(|s| (s.source_id.clone(), s)).collect();
+        let sources = basis.source_ids().iter().map(|id| by_key[id].clone()).collect();
+        Ok(Some(GlyphInterpolation { reference_layer, basis: Arc::new(basis), sources }))
+    }
+
+    /// Resolves a glyph at a font location: interpolates it over its own space
+    /// (its axes at their defaults unless `at` names them) and flattens its
+    /// components, each sampling its base glyph at the component's location.
+    pub fn resolve_glyph(&self, glyph_id: &GlyphId, at: &DesignLocation) -> CoreResult<FlattenedGlyph> {
+        self.resolve_glyph_at_depth(glyph_id, at, 0)
+    }
+
+    fn resolve_glyph_at_depth(&self, glyph_id: &GlyphId, at: &DesignLocation, depth: usize) -> CoreResult<FlattenedGlyph> {
+        if depth > MAX_RESOLVE_DEPTH {
+            return Err(crate::CoreError::InvalidEntityOrder { kind: "component", message: "components nest too deeply".into() });
+        }
+        let glyph = self.require_glyph(glyph_id)?;
+        let axes = self.glyph_space_axes(glyph);
+        let layer = match self.glyph_space_interpolation(glyph_id)? {
+            Some(interpolation) => interpolation.resolve(at, &axes)?,
+            None => interpolation_reference_layer(self, glyph).map(|l| l.as_ref().clone()).ok_or_else(|| crate::CoreError::GlyphNotFound(glyph_id.clone()))?,
+        };
+        let mut contours: Vec<Vec<(f64, f64)>> =
+            layer.contours_iter().map(|c| c.points().iter().map(|p| (p.x(), p.y())).collect()).collect();
+        let font_axes: HashSet<AxisId> = self.axes().iter().map(Axis::id).collect();
+        for component in layer.components_iter() {
+            // Font axes the location doesn't name follow the parent, or reset.
+            let mut base_at = DesignLocation::new();
+            if component.inheritance() == crate::AxisInheritance::Parent {
+                for (axis_id, value) in at.iter() {
+                    if font_axes.contains(axis_id) {
+                        base_at.set(axis_id.clone(), *value);
+                    }
+                }
+            }
+            for (axis_id, value) in &component.location().0 {
+                base_at.set(axis_id.clone(), *value);
+            }
+            let base = self.resolve_glyph_at_depth(&component.base_glyph_id(), &base_at, depth + 1)?;
+            let matrix = component.transform().to_matrix();
+            contours.extend(base.contours.into_iter().map(|c| c.into_iter().map(|(x, y)| matrix.transform_point(x, y)).collect()));
+        }
+        Ok(FlattenedGlyph { advance: layer.width(), contours })
     }
 }

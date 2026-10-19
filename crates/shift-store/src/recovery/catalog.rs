@@ -133,6 +133,8 @@ pub(super) const SOURCE_LIB: RecoveryTable =
     RecoveryTable::replace_collection("source_lib", Some("source_id"), false);
 pub(super) const GLYPH_LIB: RecoveryTable =
     RecoveryTable::replace_collection("glyph_lib", Some("glyph_id"), false);
+pub(super) const GLYPH_AXES: RecoveryTable =
+    RecoveryTable::replace_collection("glyph_axes", Some("glyph_id"), false);
 pub(super) const FONT_BINARIES: RecoveryTable = RecoveryTable::canonical_only("font_binaries");
 pub(super) const GLYPH_LAYERS: RecoveryTable =
     RecoveryTable::overlay_rows("glyph_layers", Some("layer"), NO_BASE_FALLBACK_COLUMNS);
@@ -163,6 +165,7 @@ const RECOVERY_TABLES: &[RecoveryTable] = &[
     FONTINFO_REMAINDER,
     SOURCE_LIB,
     GLYPH_LIB,
+    GLYPH_AXES,
     FONT_BINARIES,
     GLYPH_LAYERS,
     GLYPH_LAYER_PAYLOADS,

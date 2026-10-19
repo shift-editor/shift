@@ -7,7 +7,7 @@ use shift_font as font;
 use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
-        AXES, AXIS_MAPPINGS, FEATURE_TEXT, FONT_LIB, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB,
+        AXES, AXIS_MAPPINGS, FEATURE_TEXT, FONT_LIB, GLYPH_AXES, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB,
         GLYPH_UNICODES, GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS,
         METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
         SOURCE_METRIC_VALUES, SOURCES,
@@ -193,6 +193,7 @@ impl RecoveryOverlay {
                 write_glyph_directory_in_tx(&tx, glyph, order_index as i64, WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LIB, glyph_id.as_str())?;
+                mark_replaced(&tx, GLYPH_AXES, glyph_id.as_str())?;
             } else {
                 delete_glyph_override(&tx, &glyph_id)?;
                 mark_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
@@ -324,6 +325,7 @@ fn delete_glyph_override(tx: &Transaction<'_>, glyph_id: &font::GlyphId) -> Resu
     let id = glyph_id.to_string();
     tx.execute("DELETE FROM glyph_unicodes WHERE glyph_id = ?1", [&id])?;
     tx.execute("DELETE FROM glyph_lib WHERE glyph_id = ?1", [&id])?;
+    tx.execute("DELETE FROM glyph_axes WHERE glyph_id = ?1", [&id])?;
     tx.execute("DELETE FROM glyphs WHERE id = ?1", [&id])?;
     Ok(())
 }

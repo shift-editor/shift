@@ -56,17 +56,18 @@ pub(crate) fn store_stored_layer_in_tx(
     let decoded_byte_length = encoded_len(stored.decoded_byte_length)?;
     let layer_sql = match mode {
         WriteMode::Insert => {
-            "INSERT INTO glyph_layers (id, glyph_id, source_id, width, height) VALUES (?1, ?2, ?3, ?4, ?5)"
+            "INSERT INTO glyph_layers (id, glyph_id, source_id, width, height, location_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
         }
         WriteMode::Upsert => {
             "
-            INSERT INTO glyph_layers (id, glyph_id, source_id, width, height)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO glyph_layers (id, glyph_id, source_id, width, height, location_json)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(id) DO UPDATE SET
                 glyph_id = excluded.glyph_id,
                 source_id = excluded.source_id,
                 width = excluded.width,
-                height = excluded.height
+                height = excluded.height,
+                location_json = excluded.location_json
             "
         }
     };
@@ -76,6 +77,7 @@ pub(crate) fn store_stored_layer_in_tx(
         layer.source_id().to_string(),
         layer.width(),
         layer.height(),
+        layer_location_json(layer)?,
     ])?;
 
     let payload_sql = match mode {
@@ -111,6 +113,15 @@ pub(crate) fn store_stored_layer_in_tx(
         stored.decoded_blake3.as_slice(),
     ])?;
     write_component_index(tx, layer, mode)
+}
+
+fn layer_location_json(layer: &font::GlyphLayer) -> Result<Option<String>, StoreError> {
+    if layer.location().is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_string(&layer.location().0)
+        .map(Some)
+        .map_err(|error| StoreError::LayerEncoding(error.to_string()))
 }
 
 fn encoded_len(bytes: u64) -> Result<i64, StoreError> {

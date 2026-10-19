@@ -369,7 +369,7 @@ fn load_glyphs(
     let layer_rows = {
         let mut stmt = conn.prepare(
             "
-            SELECT id, glyph_id, source_id, width, height
+            SELECT id, glyph_id, source_id, width, height, location_json
             FROM glyph_layers
             ORDER BY glyph_id, source_id, id
             ",
@@ -381,6 +381,7 @@ fn load_glyphs(
                 font::SourceId::from_raw(row.get::<_, String>(2)?),
                 row.get::<_, f64>(3)?,
                 row.get::<_, Option<f64>>(4)?,
+                row.get::<_, Option<String>>(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?
@@ -389,7 +390,7 @@ fn load_glyphs(
     if include_layer_payloads {
         let layer_ids = layer_rows
             .iter()
-            .map(|(layer_id, _, _, _, _)| layer_id.clone())
+            .map(|(layer_id, _, _, _, _, _)| layer_id.clone())
             .collect::<Vec<_>>();
         for layer in crate::layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
             loaded_layers.insert(layer.id(), layer);
@@ -397,7 +398,7 @@ fn load_glyphs(
     }
 
     let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
-    for (layer_id, glyph_id, source_id, width, height) in layer_rows {
+    for (layer_id, glyph_id, source_id, width, height, location_json) in layer_rows {
         let layer = if include_layer_payloads {
             loaded_layers
                 .remove(&layer_id)
@@ -405,9 +406,24 @@ fn load_glyphs(
         } else {
             let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
             layer.set_height(height);
+            if let Some(json) = location_json {
+                let location = serde_json::from_str(&json).map_err(|error| StoreError::LayerDecoding(error.to_string()))?;
+                layer.set_location(font::LayerLocation(location));
+            }
             layer
         };
         layers.entry(glyph_id).or_default().push(layer);
+    }
+
+    let mut glyph_axes: HashMap<font::GlyphId, Vec<font::GlyphAxis>> = HashMap::new();
+    {
+        let mut stmt = conn.prepare("SELECT glyph_id, axis_json FROM glyph_axes ORDER BY glyph_id, order_index")?;
+        let rows = stmt.query_map([], |row| Ok((font::GlyphId::from_raw(row.get::<_, String>(0)?), row.get::<_, String>(1)?)))?;
+        for row in rows {
+            let (glyph_id, axis_json) = row?;
+            let axis = serde_json::from_str(&axis_json).map_err(|error| StoreError::LayerDecoding(error.to_string()))?;
+            glyph_axes.entry(glyph_id).or_default().push(axis);
+        }
     }
 
     let mut glyphs = Vec::with_capacity(glyph_rows.len());
@@ -428,6 +444,7 @@ fn load_glyphs(
         for layer in layers.remove(&glyph_id).unwrap_or_default() {
             glyph.set_layer(layer);
         }
+        glyph.set_axes(glyph_axes.remove(&glyph_id).unwrap_or_default());
         glyphs.push(glyph);
     }
     Ok(glyphs)

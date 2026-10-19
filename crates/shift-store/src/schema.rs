@@ -116,6 +116,9 @@ CREATE TABLE IF NOT EXISTS glyph_layers (
     source_id TEXT NOT NULL,
     width REAL NOT NULL DEFAULT 0,
     height REAL,
+    -- A glyph-local source's extra coordinates; NULL for a layer exactly at its
+    -- source. In the directory so lazy opens see where every layer sits.
+    location_json TEXT,
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
@@ -231,6 +234,14 @@ CREATE TABLE IF NOT EXISTS source_lib (
     value_json TEXT NOT NULL,
     PRIMARY KEY (source_id, key),
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS glyph_axes (
+    glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    axis_json TEXT NOT NULL,
+    PRIMARY KEY (glyph_id, order_index),
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS glyph_lib (

@@ -256,7 +256,7 @@ impl Font {
                 let layer = glyph
                     .layers()
                     .values()
-                    .find(|layer| layer.source_id() == source.id())?
+                    .find(|layer| layer.is_at_source(&source.id()))?
                     .clone();
                 if layer.id() == fallback.id() {
                     return None;
@@ -766,7 +766,7 @@ fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
             if let Some(layer) = glyph
                 .layers()
                 .values()
-                .find(|layer| layer.source_id() == default_source_id)
+                .find(|layer| layer.is_at_source(&default_source_id))
             {
                 return Some(layer.clone());
             }

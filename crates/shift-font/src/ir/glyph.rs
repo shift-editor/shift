@@ -14,6 +14,30 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+/// An axis only this glyph varies along, such as a radical's stroke weight. A
+/// glyph with axes is a part. Its id shares the font-axis namespace.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GlyphAxis {
+    pub id: crate::entity::AxisId,
+    pub tag: String,
+    pub name: String,
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+/// Sparse coordinates on top of a layer's base source. Keys are the glyph's own
+/// axes (a glyph-local source) or font axes (a glyph-specific intermediate).
+/// Empty means the layer sits exactly at its source, as every layer did before.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct LayerLocation(pub std::collections::BTreeMap<crate::entity::AxisId, f64>);
+
+impl LayerLocation {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Glyph {
     id: GlyphId,
@@ -26,6 +50,8 @@ pub struct Glyph {
     sub_category: Option<GlyphSubcategory>,
     layers: HashMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    axes: Vec<GlyphAxis>,
 }
 
 impl Identified for Glyph {
@@ -47,6 +73,9 @@ pub struct GlyphLayer {
     anchors: Vec<Anchor>,
     guidelines: Vec<Guideline>,
     lib: LibData,
+    // Trailing and defaulted, so layer payloads written before it still decode.
+    #[serde(default)]
+    location: LayerLocation,
 }
 
 impl GlyphLayer {
@@ -61,7 +90,22 @@ impl GlyphLayer {
             anchors: Vec::new(),
             guidelines: Vec::new(),
             lib: LibData::new(),
+            location: LayerLocation::default(),
         }
+    }
+
+    pub fn location(&self) -> &LayerLocation {
+        &self.location
+    }
+
+    pub fn set_location(&mut self, location: LayerLocation) {
+        self.location = location;
+    }
+
+    /// Whether this layer sits exactly at `source_id`: the layer existing
+    /// per-source lookups mean. Layers with extra coordinates never are.
+    pub fn is_at_source(&self, source_id: &SourceId) -> bool {
+        self.source_id == *source_id && self.location.is_empty()
     }
 
     pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
@@ -389,6 +433,7 @@ impl Glyph {
             sub_category: None,
             layers: HashMap::new(),
             lib: LibData::new(),
+            axes: Vec::new(),
         }
     }
 
@@ -401,11 +446,21 @@ impl Glyph {
             sub_category: None,
             layers: HashMap::new(),
             lib: LibData::new(),
+            axes: Vec::new(),
         }
     }
 
     pub fn id(&self) -> GlyphId {
         self.id.clone()
+    }
+
+    /// The glyph's own axes; empty unless the glyph is a part.
+    pub fn axes(&self) -> &[GlyphAxis] {
+        &self.axes
+    }
+
+    pub fn set_axes(&mut self, axes: Vec<GlyphAxis>) {
+        self.axes = axes;
     }
 
     pub fn name(&self) -> &str {
@@ -478,7 +533,7 @@ impl Glyph {
         if let Some(layer_id) = self
             .layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.is_at_source(&source_id))
             .map(|layer| layer.id())
         {
             return self.layer_mut(&layer_id).expect("layer id came from glyph");
@@ -501,14 +556,14 @@ impl Glyph {
     pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {
         self.layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.is_at_source(&source_id))
             .map(Arc::as_ref)
     }
 
     pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
         self.layers
             .values_mut()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.is_at_source(&source_id))
             .map(Arc::make_mut)
     }
 

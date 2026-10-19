@@ -1,5 +1,5 @@
 use crate::collection::Identified;
-use crate::entity::{ComponentId, GlyphId};
+use crate::entity::{AxisId, ComponentId, GlyphId};
 use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,30 @@ pub enum ComponentAlignment {
     Free,
 }
 
+/// Where a component samples its base glyph: sparse coordinates in the base
+/// glyph's space, on its glyph axes (which radical weight) or on font axes (an
+/// override such as "the bold radical here"). Sorted, so it serializes
+/// deterministically.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ComponentLocation(pub std::collections::BTreeMap<AxisId, f64>);
+
+impl ComponentLocation {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// What a component does with font axes its location doesn't name.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AxisInheritance {
+    /// They follow the parent glyph's location.
+    #[default]
+    Parent,
+    /// They reset to the font default (VARC's `RESET_UNSPECIFIED_AXES`).
+    Font,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Component {
     id: ComponentId,
@@ -25,6 +49,11 @@ pub struct Component {
     transform: DecomposedTransform,
     #[serde(default)]
     alignment: ComponentAlignment,
+    // Trailing and defaulted, so layer payloads written before them still decode.
+    #[serde(default)]
+    location: ComponentLocation,
+    #[serde(default)]
+    inheritance: AxisInheritance,
 }
 
 impl Identified for Component {
@@ -317,6 +346,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::identity(),
             alignment: ComponentAlignment::Unset,
+            location: ComponentLocation::default(),
+            inheritance: AxisInheritance::Parent,
         }
     }
 
@@ -331,6 +362,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
+            location: ComponentLocation::default(),
+            inheritance: AxisInheritance::Parent,
         }
     }
 
@@ -346,6 +379,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
+            location: ComponentLocation::default(),
+            inheritance: AxisInheritance::Parent,
         }
     }
 
@@ -360,6 +395,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::from_matrix(matrix),
             alignment: ComponentAlignment::Unset,
+            location: ComponentLocation::default(),
+            inheritance: AxisInheritance::Parent,
         }
     }
 
@@ -385,6 +422,22 @@ impl Component {
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
         self.transform = transform.canonical();
+    }
+
+    pub fn location(&self) -> &ComponentLocation {
+        &self.location
+    }
+
+    pub fn set_location(&mut self, location: ComponentLocation) {
+        self.location = location;
+    }
+
+    pub fn inheritance(&self) -> AxisInheritance {
+        self.inheritance
+    }
+
+    pub fn set_inheritance(&mut self, inheritance: AxisInheritance) {
+        self.inheritance = inheritance;
     }
 
     pub fn alignment(&self) -> ComponentAlignment {

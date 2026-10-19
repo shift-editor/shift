@@ -173,10 +173,11 @@ impl FontIndex {
                 return Err(CoreError::DuplicateLayerId(layer.id()));
             }
 
-            if self
-                .layer_by_glyph_source
-                .contains_key(&(glyph_id.clone(), layer.source_id()))
-                || !local_sources.insert(layer.source_id())
+            if (layer.location().is_empty()
+                && self
+                    .layer_by_glyph_source
+                    .contains_key(&(glyph_id.clone(), layer.source_id())))
+                || !local_sources.insert(layer_position_key(layer))
             {
                 return Err(CoreError::DuplicateGlyphLayer {
                     glyph_id: glyph_id.clone(),
@@ -200,9 +201,10 @@ impl FontIndex {
             return Err(CoreError::DuplicateLayerId(layer.id()));
         }
 
-        if self
-            .layer_by_glyph_source
-            .contains_key(&(glyph_id.clone(), layer.source_id()))
+        if layer.location().is_empty()
+            && self
+                .layer_by_glyph_source
+                .contains_key(&(glyph_id.clone(), layer.source_id()))
         {
             return Err(CoreError::DuplicateGlyphLayer {
                 glyph_id: glyph_id.clone(),
@@ -249,8 +251,10 @@ impl FontIndex {
 
     fn insert_layer_records(&mut self, glyph_id: GlyphId, layer: &GlyphLayer, entities: bool) {
         self.layer_owner.insert(layer.id(), glyph_id.clone());
-        self.layer_by_glyph_source
-            .insert((glyph_id, layer.source_id()), layer.id());
+        if layer.location().is_empty() {
+            self.layer_by_glyph_source
+                .insert((glyph_id, layer.source_id()), layer.id());
+        }
 
         if entities {
             self.entity_ids.extend(glyph_entity_ids(layer));
@@ -269,8 +273,10 @@ impl FontIndex {
 
     fn remove_layer_records(&mut self, glyph_id: GlyphId, layer: &GlyphLayer, entities: bool) {
         self.layer_owner.remove(&layer.id());
-        self.layer_by_glyph_source
-            .remove(&(glyph_id, layer.source_id()));
+        if layer.location().is_empty() {
+            self.layer_by_glyph_source
+                .remove(&(glyph_id, layer.source_id()));
+        }
 
         if entities {
             for entity_id in glyph_entity_ids(layer) {
@@ -353,10 +359,11 @@ impl FontIndex {
             if self.layer_owner.contains_key(&layer.id()) {
                 return Err(CoreError::DuplicateLayerId(layer.id()));
             }
-            if self
-                .layer_by_glyph_source
-                .contains_key(&(glyph_id.clone(), layer.source_id()))
-                || !local_sources.insert(layer.source_id())
+            if (layer.location().is_empty()
+                && self
+                    .layer_by_glyph_source
+                    .contains_key(&(glyph_id.clone(), layer.source_id())))
+                || !local_sources.insert(layer_position_key(layer))
             {
                 return Err(CoreError::DuplicateGlyphLayer { glyph_id: glyph_id.clone(), source_id: layer.source_id() });
             }
@@ -372,6 +379,13 @@ impl FontIndex {
         }
         Ok(())
     }
+}
+
+/// Where a layer sits in its glyph's space: its source plus its extra
+/// coordinates, compared bit for bit. No two layers of a glyph may share one.
+fn layer_position_key(layer: &GlyphLayer) -> (SourceId, Vec<(AxisId, u64)>) {
+    let location = layer.location().0.iter().map(|(axis, value)| (axis.clone(), (value + 0.0).to_bits())).collect();
+    (layer.source_id(), location)
 }
 
 fn glyph_entity_ids(layer: &GlyphLayer) -> impl Iterator<Item = GlyphEntityId> + '_ {
@@ -975,7 +989,7 @@ impl Font {
             let mut layers = glyph
                 .layers()
                 .values()
-                .filter(|layer| layer.source_id() == source.id())
+                .filter(|layer| layer.is_at_source(&source.id()))
                 .collect::<Vec<_>>();
             layers.sort_by(|left, right| left.id().as_str().cmp(right.id().as_str()));
             layers
