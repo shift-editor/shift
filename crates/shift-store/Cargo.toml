@@ -19,3 +19,6 @@ zstd = "0.13"
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

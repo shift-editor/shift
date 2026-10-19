@@ -3,6 +3,31 @@ resolver = "2"
 members = ["crates/*"]
 
 
+# Lints for every crate (each opts in with `[lints] workspace = true`). CI runs
+# clippy with `-D warnings`, so "warn" blocks merges. Add a lint here once the
+# workspace is clean for it; the planned ones are in the rust skill.
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+# `unwrap_used` and `print_stdout` are set in each library's lib.rs, so they
+# cover library code but not integration tests or examples.
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+undocumented_unsafe_blocks = "warn"
+# Say what the code means.
+fn_params_excessive_bools = "warn"
+manual_let_else = "warn"
+manual_assert = "warn"
+uninlined_format_args = "warn"
+implicit_clone = "warn"
+unnested_or_patterns = "warn"
+semicolon_if_nothing_returned = "warn"
+trivially_copy_pass_by_ref = "warn"
+large_types_passed_by_value = "warn"
+
 [workspace.package]
 license = "MIT OR Apache-2.0"
 

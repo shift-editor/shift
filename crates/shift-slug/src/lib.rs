@@ -5,6 +5,10 @@
 //! arrays suitable for native `wgpu` and browser WebGPU consumers. It owns no
 //! GPU device and contains no canonical authored font state.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 mod atlas;
 mod authored;
 mod curve;

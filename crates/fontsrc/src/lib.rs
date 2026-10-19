@@ -4,6 +4,10 @@
 //! source and sink abstractions that work with native files, in-memory maps, and
 //! browser-provided bytes without depending on Shift crates.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 /// Designspace document reading, writing, and format-native values.
 pub mod designspace {
     pub use norad::designspace::*;

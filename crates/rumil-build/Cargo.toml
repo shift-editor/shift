@@ -10,3 +10,6 @@ keywords = ["math", "opentype", "fonts", "font-compiler"]
 categories = ["text-processing"]
 
 [dependencies]
+
+[lints]
+workspace = true

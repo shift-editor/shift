@@ -15,6 +15,10 @@
 //! Outlines are returned in font units with the y axis pointing down, ready to
 //! use as SVG path data.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 use std::collections::HashMap;
 use std::fmt::Write as _;
 

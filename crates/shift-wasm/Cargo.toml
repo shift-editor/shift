@@ -31,3 +31,6 @@ wasm-bindgen = "=0.2.121"
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

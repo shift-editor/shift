@@ -3,6 +3,10 @@
 //! These types split stable glyph structure from mutable numeric values. The
 //! values layout is canonical and must stay in lockstep with every consumer.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};

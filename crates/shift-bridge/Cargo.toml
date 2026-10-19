@@ -27,3 +27,6 @@ tokio-stream = "0.1"
 
 [build-dependencies]
 napi-build = "2.1"
+
+[lints]
+workspace = true
