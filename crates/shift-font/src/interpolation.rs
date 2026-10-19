@@ -1,7 +1,7 @@
 //! Native glyph interpolation over Shift sources and internal locations.
 
 use crate::Require;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -23,13 +23,13 @@ mod values;
 
 pub use layer_match::{LayerDifference, LayerMatch};
 pub use metrics::{
-    ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
-    SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
-    SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+    ResolvedSourceMetrics, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,
+    SOURCE_METRIC_VALUE_COUNT, SOURCE_TECHNICAL_FIELD_VALUE_COUNT, SourceMetricField,
+    SourceMetricInterpolation, SourceMetricValues,
 };
 pub use values::{
-    GlyphInterpolationValues, GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET,
-    GLYPH_ANCHOR_VALUE_COUNT, GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
+    GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET, GLYPH_ANCHOR_VALUE_COUNT,
+    GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS, GlyphInterpolationValues,
 };
 
 /// Normalized support for one authoring axis within an interpolation region.
@@ -460,14 +460,13 @@ fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Ar
         let default_is_master = font
             .source(&default_source_id)
             .is_some_and(crate::Source::is_master);
-        if default_is_master {
-            if let Some(layer) = glyph
+        if default_is_master
+            && let Some(layer) = glyph
                 .layers()
                 .values()
                 .find(|layer| layer.source_id() == default_source_id)
-            {
-                return Some(layer.clone());
-            }
+        {
+            return Some(layer.clone());
         }
     }
 

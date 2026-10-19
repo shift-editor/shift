@@ -6,11 +6,11 @@
 
 use std::path::{Path, PathBuf};
 
+use write_fonts::FontBuilder;
 use write_fonts::from_obj::ToOwnedTable;
 use write_fonts::read::{FontRef, TableProvider};
 use write_fonts::tables::name::Name;
 use write_fonts::types::NameId;
-use write_fonts::FontBuilder;
 
 use crate::atomic::write_file_atomic;
 use crate::shift2fontir::{PropagatedGlyphAnchors, ShiftIrSource, ShiftIrSourceError};
@@ -276,10 +276,12 @@ mod tests {
         assert!(!bytes.is_empty());
 
         let exported = FontRef::new(&bytes).unwrap();
-        assert!(exported
-            .charmap()
-            .mappings()
-            .any(|(codepoint, _)| codepoint == 0x0041));
+        assert!(
+            exported
+                .charmap()
+                .mappings()
+                .any(|(codepoint, _)| codepoint == 0x0041)
+        );
     }
 
     fn add_glyph_on_every_master(font: &mut Font, name: &str, unicode: u32, anchor: &str) {
@@ -412,7 +414,7 @@ mod tests {
         categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::RecordCategory>,
     ) -> shift_font::anchor_propagation::PropagatedAnchors {
         use shift_font::anchor_propagation::{
-            compiled_anchors, PropagationAnchor, PropagationComponent, PropagationGlyph,
+            PropagationAnchor, PropagationComponent, PropagationGlyph, compiled_anchors,
         };
         let glyph = font.glyph(glyph_id).unwrap();
         let layer = glyph.layer_for_source(source_id.clone()).unwrap();

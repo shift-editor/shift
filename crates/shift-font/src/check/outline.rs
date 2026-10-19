@@ -11,7 +11,7 @@ use crate::{
     Contour, CoreResult, Font, Glyph, GlyphId, GlyphLayer, LayerDifference, PointType, Source,
 };
 
-use super::{designspace::number, Check, Finding};
+use super::{Check, Finding, designspace::number};
 
 /// Tolerances for the geometric checks.
 #[derive(Clone, Debug, PartialEq)]

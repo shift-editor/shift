@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use shift_font::{AxisId, ExternalLocation, GlyphId};
 use shift_shape::{
-    character_glyphs, AxisNormalization, GlyphSource, NormalizedCoord, Shaper, NOTDEF,
+    AxisNormalization, GlyphSource, NOTDEF, NormalizedCoord, Shaper, character_glyphs,
 };
 
 pub use shift_shape::{FeatureSetting, ShapeError, TextDirection};

@@ -227,9 +227,11 @@ mod tests {
             categories.lookup("jdotless", &[]).category,
             Some(GlyphCategory::Letter)
         );
-        assert!(categories
-            .lookup("dotaccentcomb", &[0x0307])
-            .is_nonspacing_mark());
+        assert!(
+            categories
+                .lookup("dotaccentcomb", &[0x0307])
+                .is_nonspacing_mark()
+        );
     }
 
     #[test]

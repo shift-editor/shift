@@ -217,9 +217,11 @@ fn state_shapes_without_features_until_the_source_first_compiles() {
     );
     let mut state = ShaperFontState::default();
 
-    assert!(state
-        .update(ShaperFontRequest::from_font(&font).unwrap())
-        .unwrap());
+    assert!(
+        state
+            .update(ShaperFontRequest::from_font(&font).unwrap())
+            .unwrap()
+    );
     assert!(!state.diagnostics().is_empty());
 
     let shaper = LiveShaper::new(state.font().cloned().unwrap(), &font).unwrap();

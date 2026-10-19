@@ -9,8 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use kurbo::{BezPath, Shape};
-use shift_backends::font_loader::FontLoader;
 use shift_backends::FontExporter;
+use shift_backends::font_loader::FontLoader;
 use shift_font::{Contour, ExternalLocation, Font};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};

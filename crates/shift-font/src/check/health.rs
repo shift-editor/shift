@@ -25,21 +25,22 @@ pub(super) fn check(font: &Font, glyph: &Glyph, out: &mut Vec<Finding>) {
     let default = font.default_source().filter(|source| source.is_master());
     let encoded = !glyph.unicodes().is_empty() && !role.space_like;
 
-    if let Some(default) = default {
-        if encoded && glyph.layer_for_source(default.id()).is_none() {
-            out.push(
-                Finding::glyph(
-                    Check::EmptyOutline,
-                    glyph.id(),
-                    format!(
-                        "'{}' is encoded but has no layer in the default master '{}'",
-                        glyph.name(),
-                        default.name()
-                    ),
-                )
-                .in_source(default.id()),
-            );
-        }
+    if let Some(default) = default
+        && encoded
+        && glyph.layer_for_source(default.id()).is_none()
+    {
+        out.push(
+            Finding::glyph(
+                Check::EmptyOutline,
+                glyph.id(),
+                format!(
+                    "'{}' is encoded but has no layer in the default master '{}'",
+                    glyph.name(),
+                    default.name()
+                ),
+            )
+            .in_source(default.id()),
+        );
     }
 
     for source in font.masters() {
@@ -304,10 +305,10 @@ fn filled_counters(outlines: &[Vec<(f64, f64)>]) -> Vec<(usize, usize)> {
             .filter(|other| *other != index && usable(*other))
             .filter(|other| inside(&outlines[index], &outlines[*other]))
             .min_by(|left, right| areas[*left].abs().total_cmp(&areas[*right].abs()));
-        if let Some(container) = innermost {
-            if (areas[index] > 0.0) == (areas[container] > 0.0) {
-                filled.push((index, container));
-            }
+        if let Some(container) = innermost
+            && (areas[index] > 0.0) == (areas[container] > 0.0)
+        {
+            filled.push((index, container));
         }
     }
     filled

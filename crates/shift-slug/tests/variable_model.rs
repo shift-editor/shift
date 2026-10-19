@@ -1,5 +1,5 @@
 use shift_font::{
-    test_support::sample_variable_font, CurveSegment, CurveSegmentIter, DesignLocation, GlyphId,
+    CurveSegment, CurveSegmentIter, DesignLocation, GlyphId, test_support::sample_variable_font,
 };
 use shift_slug::{AtlasBuilder, OutlineCommand, VariableAtlasBuilder};
 

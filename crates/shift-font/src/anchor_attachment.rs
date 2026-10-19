@@ -219,11 +219,11 @@ pub fn follow_anchors<A: AnchorLike>(components: &[FollowingComponent<'_, A>]) -
         };
 
         let mut transform = component.transform;
-        if alignment == ComponentAlignment::Anchored {
-            if let Some((dx, dy)) = aligned_offset(&placed_now, component.anchors) {
-                transform.translate_x = dx;
-                transform.translate_y = dy;
-            }
+        if alignment == ComponentAlignment::Anchored
+            && let Some((dx, dy)) = aligned_offset(&placed_now, component.anchors)
+        {
+            transform.translate_x = dx;
+            transform.translate_y = dy;
         }
         following.push(Following {
             transform,

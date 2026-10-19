@@ -4,7 +4,7 @@ use crate::{
     KerningPosition, KerningSide, PointType, SourceId,
 };
 
-use super::{check_font, check_font_with, check_glyph, Charset, Check, CheckOptions};
+use super::{Charset, Check, CheckOptions, check_font, check_font_with, check_glyph};
 
 fn checks(font: &Font) -> Vec<Check> {
     check_font(font)
@@ -240,10 +240,11 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
     };
 
     let with = check_font_with(&font, &options).unwrap();
-    assert!(with
-        .iter()
-        .any(|finding| finding.check == Check::CharsetMissingGlyph
-            && finding.message.contains("U+0042")));
+    assert!(
+        with.iter()
+            .any(|finding| finding.check == Check::CharsetMissingGlyph
+                && finding.message.contains("U+0042"))
+    );
     assert!(!checks(&font).contains(&Check::CharsetMissingGlyph));
 }
 
@@ -256,9 +257,11 @@ fn a_glyph_off_the_monospace_cell_is_reported() {
     };
 
     let found = check_font_with(&font, &options).unwrap();
-    assert!(found
-        .iter()
-        .any(|finding| finding.check == Check::MonoWidthMismatch));
+    assert!(
+        found
+            .iter()
+            .any(|finding| finding.check == Check::MonoWidthMismatch)
+    );
 }
 
 #[test]

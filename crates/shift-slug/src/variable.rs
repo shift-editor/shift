@@ -1,10 +1,10 @@
-use crate::length::{ensure_total, to_u32, within, OrOverflow};
+use crate::length::{OrOverflow, ensure_total, to_u32, within};
 use crate::{
+    Bounds, Curve, LINE_EPSILON, OutlineCommand, Point, Section, SlugError,
     curve::{
         cubic_subdivision_counts_from_commands,
         curves_and_line_flags_from_commands_with_subdivisions,
     },
-    Bounds, Curve, OutlineCommand, Point, Section, SlugError, LINE_EPSILON,
 };
 
 pub(crate) const CURVE_BYTES: usize = 24;

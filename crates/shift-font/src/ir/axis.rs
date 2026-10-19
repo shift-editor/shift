@@ -358,12 +358,12 @@ impl Axis {
                 if value < self.minimum() || value > self.maximum() {
                     return Err(label.invalid("values must be inside the axis range"));
                 }
-                if let AxisKind::Discrete { values, .. } = &self.kind {
-                    if !values.contains(&value) {
-                        return Err(
-                            label.invalid("discrete-axis values must be authored discrete values")
-                        );
-                    }
+                if let AxisKind::Discrete { values, .. } = &self.kind
+                    && !values.contains(&value)
+                {
+                    return Err(
+                        label.invalid("discrete-axis values must be authored discrete values")
+                    );
                 }
             }
             if self.labels[..index]

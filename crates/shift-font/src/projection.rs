@@ -9,8 +9,9 @@ pub use decomposed::{Decomposition, OutlineParts};
 use std::sync::Arc;
 
 use crate::composite::{
+    GlyphComponents, ResolvedContour, ResolvedLayerGeometry,
     flatten_selected_component_contours_from_layers, resolved_contours_from_layers,
-    resolved_layer_geometry_from_layers, GlyphComponents, ResolvedContour, ResolvedLayerGeometry,
+    resolved_layer_geometry_from_layers,
 };
 use crate::{
     Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId,
@@ -762,14 +763,13 @@ fn component_base_glyph_ids(
 fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(default_source_id) = font.default_source_id() {
         let is_master = source_for_id(font, &default_source_id).is_some_and(Source::is_master);
-        if is_master {
-            if let Some(layer) = glyph
+        if is_master
+            && let Some(layer) = glyph
                 .layers()
                 .values()
                 .find(|layer| layer.source_id() == default_source_id)
-            {
-                return Some(layer.clone());
-            }
+        {
+            return Some(layer.clone());
         }
     }
 

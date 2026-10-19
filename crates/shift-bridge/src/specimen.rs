@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
-use shift_backends::{font_loader::FontLoader, FontExporter, FontView, GlyphSubsetView};
+use shift_backends::{FontExporter, FontView, GlyphSubsetView, font_loader::FontLoader};
 use shift_font::{Glyph, GlyphId};
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
 

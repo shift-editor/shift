@@ -1,5 +1,5 @@
-use crate::length::OrOverflow;
 use crate::SlugError;
+use crate::length::OrOverflow;
 
 /// Byte stride of [`RenderInstance`] in the shared WGSL storage layout.
 pub const RENDER_INSTANCE_BYTES: usize = 48;

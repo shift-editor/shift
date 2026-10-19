@@ -9,10 +9,10 @@ use norad::{DataRequest, Font as NoradFont};
 use shift_font::{Font, GlyphId, LayerId, Source, SourceId};
 
 use crate::{
+    ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     kerning_import::KerningImport,
-    ImportReport,
 };
 
 use super::{UfoKerning, UfoReader};

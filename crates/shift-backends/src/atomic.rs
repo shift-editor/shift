@@ -6,10 +6,10 @@ use std::path::Path;
 /// Fsyncs the parent directory so a rename into it is durable.
 #[cfg(unix)]
 pub(crate) fn sync_parent(path: &Path) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::File::open(parent)?.sync_all()?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::File::open(parent)?.sync_all()?;
     }
     Ok(())
 }

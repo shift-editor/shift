@@ -95,8 +95,8 @@ fn replacement_rejects_duplicate_and_nonfinite_payloads_before_mutation() {
         (500.0, vec![contour.clone(), contour]),
         (f64::NAN, Vec::new()),
     ] {
-        assert!(font
-            .apply_intents(FontIntentSet {
+        assert!(
+            font.apply_intents(FontIntentSet {
                 intents: vec![FontIntent::ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width,
@@ -105,7 +105,8 @@ fn replacement_rejects_duplicate_and_nonfinite_payloads_before_mutation() {
                     components: Vec::new(),
                 }],
             })
-            .is_err());
+            .is_err()
+        );
         assert_eq!(font, before);
     }
 }
@@ -122,8 +123,8 @@ fn replacement_rejects_missing_and_cyclic_component_bases() {
         .id();
     let before = font.clone();
     for base_glyph_id in [GlyphId::new(), glyph_id] {
-        assert!(font
-            .apply_intents(FontIntentSet {
+        assert!(
+            font.apply_intents(FontIntentSet {
                 intents: vec![FontIntent::ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width: 500.0,
@@ -132,7 +133,8 @@ fn replacement_rejects_missing_and_cyclic_component_bases() {
                     components: vec![Component::new(base_glyph_id, "A")],
                 }],
             })
-            .is_err());
+            .is_err()
+        );
         assert_eq!(font, before);
     }
 }

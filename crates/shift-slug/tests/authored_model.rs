@@ -1,15 +1,15 @@
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    test_support::{sample_font, sample_variable_font},
     Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
     InterpolationBasis, LayerId, PointType, SourceId,
+    test_support::{sample_font, sample_variable_font},
 };
 use shift_slug::{
-    add_authored_component_projection_glyph, add_authored_glyph,
+    AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
+    VariableAtlasBuilder, add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
     authored_glyph_requirements, build_authored_atlas, build_authored_atlas_page,
-    curves_from_resolved_contours, AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError,
-    AuthoredWeightSet, Curve, VariableAtlasBuilder,
+    curves_from_resolved_contours,
 };
 
 #[test]
@@ -101,10 +101,12 @@ fn authored_atlas_keeps_layerless_glyphs_as_resident_blanks() {
     let glyph = builder.add_empty_glyph(0).unwrap();
     let atlas = builder.finish();
 
-    assert!(atlas
-        .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
-        .unwrap()
-        .is_empty());
+    assert!(
+        atlas
+            .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         atlas.resolve_advance_with_weights(glyph.default_glyph, &[1.0]),
         Ok(0.0)

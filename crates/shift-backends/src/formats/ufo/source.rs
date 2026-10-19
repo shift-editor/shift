@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
-    malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
+    FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
-use super::glif::{glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer};
-use super::{load_header, read_ufo_layer_directories, stream_retained, UfoLayerDirectory};
+use super::glif::{RetainedUfoLayer, glyph_directory, project_glif_glyph, retained_layer};
+use super::{UfoLayerDirectory, load_header, read_ufo_layer_directories, stream_retained};
 
 /// Retained paths and glyph bytes for one UFO.
 pub struct UfoFont {
@@ -129,18 +129,20 @@ mod tests {
 
         assert_eq!(projected.root.glyph, glyph.index);
         assert!(!projected.root.fallback.contours.is_empty());
-        assert!(projected
-            .root
-            .fallback
-            .contours
-            .iter()
-            .flat_map(|contour| contour.points.iter())
-            .all(|point| matches!(
-                point.provenance,
-                PointProvenance::Native {
-                    ttf_point_index: None
-                } | PointProvenance::Implied
-            )));
+        assert!(
+            projected
+                .root
+                .fallback
+                .contours
+                .iter()
+                .flat_map(|contour| contour.points.iter())
+                .all(|point| matches!(
+                    point.provenance,
+                    PointProvenance::Native {
+                        ttf_point_index: None
+                    } | PointProvenance::Implied
+                ))
+        );
     }
 
     #[test]
@@ -186,19 +188,23 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name == "layerOnly")
             .expect("retained directory should include the layer-only glyph");
-        assert!(!font
-            .glyph(glyph.index)
-            .unwrap()
-            .root
-            .fallback
-            .contours
-            .is_empty());
+        assert!(
+            !font
+                .glyph(glyph.index)
+                .unwrap()
+                .root
+                .fallback
+                .contours
+                .is_empty()
+        );
 
         let mut import = font.begin_import().unwrap();
-        assert!(import
-            .directory()
-            .iter()
-            .any(|glyph| glyph.name.as_str() == "layerOnly"));
+        assert!(
+            import
+                .directory()
+                .iter()
+                .any(|glyph| glyph.name.as_str() == "layerOnly")
+        );
         let glyphs = import
             .next_batch(crate::ImportBatchLimit::new(1_000, 10_000))
             .unwrap();
@@ -206,10 +212,12 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name() == "layerOnly")
             .expect("authored import should include the layer-only glyph");
-        assert!(glyph
-            .layers()
-            .values()
-            .any(|layer| !layer.contours().is_empty()));
+        assert!(
+            glyph
+                .layers()
+                .values()
+                .any(|layer| !layer.contours().is_empty())
+        );
     }
 
     fn add_layer_only_glyph(ufo: &Path, layer: &str, source_file: &str) {

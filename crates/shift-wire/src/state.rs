@@ -100,7 +100,7 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{values_from_layer, PointType};
+    use crate::{PointType, values_from_layer};
     use shift_font::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {

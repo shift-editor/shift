@@ -8,7 +8,7 @@ use shift_slug::retained::{
 use skrifa::raw::types::F2Dot14;
 
 use super::atlas::{
-    validate_roots, AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError,
+    AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError, validate_roots,
 };
 use super::interpolation::piecewise_map;
 use super::{
@@ -604,11 +604,13 @@ mod tests {
             .unwrap();
         let atlas_glyph = page.glyphs()[0].1;
 
-        assert!(!page
-            .atlas()
-            .resolve_glyph_with_weights(atlas_glyph, &weights)
-            .unwrap()
-            .is_empty());
+        assert!(
+            !page
+                .atlas()
+                .resolve_glyph_with_weights(atlas_glyph, &weights)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     const SMART_NEIGHBOUR_GLYPHS: &str = r#"{
@@ -701,11 +703,13 @@ unitsPerEm = 1000;
             .unwrap();
         let atlas_glyph = page.glyphs()[0].1;
 
-        assert!(!page
-            .atlas()
-            .resolve_glyph_with_weights(atlas_glyph, &weights)
-            .unwrap()
-            .is_empty());
+        assert!(
+            !page
+                .atlas()
+                .resolve_glyph_with_weights(atlas_glyph, &weights)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

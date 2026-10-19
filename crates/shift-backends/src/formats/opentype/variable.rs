@@ -102,9 +102,5 @@ pub(super) fn component_transform(
 pub(super) fn approximate_hypot(a: f64, b: f64) -> f64 {
     let a = a.abs();
     let b = b.abs();
-    if a > b {
-        a + 0.375 * b
-    } else {
-        b + 0.375 * a
-    }
+    if a > b { a + 0.375 * b } else { b + 0.375 * a }
 }

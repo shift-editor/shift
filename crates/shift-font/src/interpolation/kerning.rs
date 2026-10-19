@@ -148,10 +148,11 @@ mod tests {
                 crate::KerningGroupId::from_raw("second_A"),
             ),
         );
-        assert!(font
-            .kerning_interpolation_basis()
-            .unwrap()
-            .source_ids()
-            .contains(&default_source_id));
+        assert!(
+            font.kerning_interpolation_basis()
+                .unwrap()
+                .source_ids()
+                .contains(&default_source_id)
+        );
     }
 }

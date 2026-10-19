@@ -1,7 +1,7 @@
 //! Component outlines between masters of a glyph compilers decompose.
 
-use shift_font::placed_blend::{self, blend_decomposed_glyph, BlendedPoint, ContourShape};
 use shift_font::Transform;
+use shift_font::placed_blend::{self, BlendedPoint, ContourShape, blend_decomposed_glyph};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::layout::{call, foreign_layout, layout};

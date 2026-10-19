@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
-use shift_font::test_support::sample_variable_font;
 use shift_font::Font;
+use shift_font::test_support::sample_variable_font;
 use shift_store::ShiftStore;
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, MetadataProvider};

@@ -1,11 +1,11 @@
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::errors::FormatBackendResult;
-use crate::font_source::{piecewise_map, VariationAxisKind};
+use crate::font_source::{VariationAxisKind, piecewise_map};
 use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::designspace::DesignSpaceDocument;
-use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
+use quick_xml::events::{BytesStart, Event};
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, DesignLocation, ExternalLocation,
     Font, Location, NamedInstance,
@@ -296,7 +296,7 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
                 b"axis" => {
                     return Err(DesignspaceError::AxislessNotApplicable {
                         reason: "axes are present".to_string(),
-                    })
+                    });
                 }
                 b"source" => {
                     if let Some(filename) = xml_attr(&reader, &event, b"filename")? {
@@ -315,7 +315,7 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
             Err(error) => {
                 return Err(DesignspaceError::ParseAxislessXml {
                     details: error.to_string(),
-                })
+                });
             }
             _ => {}
         }

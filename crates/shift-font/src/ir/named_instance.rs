@@ -71,12 +71,12 @@ impl NamedInstance {
             return Err(self.invalid("name must not be blank"));
         }
 
-        if let Some(name) = &self.postscript_name {
-            if !valid_postscript_name(name) {
-                return Err(self.invalid(
+        if let Some(name) = &self.postscript_name
+            && !valid_postscript_name(name)
+        {
+            return Err(self.invalid(
                     "PostScript name must be 1..=63 printable ASCII characters without whitespace or [](){}<>/%",
                 ));
-            }
         }
 
         let axes_by_id = axes
@@ -126,12 +126,12 @@ pub(crate) fn validate_named_instances(
         if !ids.insert(instance.id()) {
             return Err(CoreError::DuplicateNamedInstanceId(instance.id()));
         }
-        if let Some(name) = instance.postscript_name() {
-            if !postscript_names.insert(name) {
-                return Err(CoreError::DuplicateNamedInstancePostscriptName(
-                    name.to_string(),
-                ));
-            }
+        if let Some(name) = instance.postscript_name()
+            && !postscript_names.insert(name)
+        {
+            return Err(CoreError::DuplicateNamedInstancePostscriptName(
+                name.to_string(),
+            ));
         }
         if let Some(existing) = instances[..index]
             .iter()

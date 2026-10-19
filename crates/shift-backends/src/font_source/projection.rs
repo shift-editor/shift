@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};

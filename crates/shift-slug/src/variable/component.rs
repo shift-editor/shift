@@ -1,9 +1,9 @@
-use crate::length::{ensure_total, to_u32, OrOverflow};
+use crate::length::{OrOverflow, ensure_total, to_u32};
 use crate::{Bounds, Curve, Point, SlugError};
 
 use super::{
-    component_glyph_index, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
-    VariableAtlasBuilder, VariableGlyph, COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK,
+    COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
+    VariableAtlasBuilder, VariableGlyph, component_glyph_index,
 };
 
 pub(crate) const VARIABLE_COMPONENT_GLYPH_BYTES: usize = 24;

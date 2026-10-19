@@ -14,13 +14,12 @@ use shift_font::{
 
 use super::families::InstanceFamilies;
 use crate::{
-    distinct_named_instances,
+    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport, distinct_named_instances,
     feature_includes::inline_feature_includes,
     font_source::piecewise_map,
     glyph_category::{GlyphCategories, ResolvedCategory},
     kerning_import::{KerningImport, NamedKerningSide},
     metrics::set_metric_position,
-    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";

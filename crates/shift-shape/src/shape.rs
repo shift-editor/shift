@@ -8,7 +8,7 @@ use harfrust::{
 };
 
 use crate::itemize::script_runs;
-use crate::{GlyphSource, Unit, NOTDEF};
+use crate::{GlyphSource, NOTDEF, Unit};
 
 /// The characters that stand in for glyphs inserted by name: Supplementary
 /// Private Use Area-B, which fonts rarely map.

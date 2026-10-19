@@ -1,6 +1,6 @@
+use crate::GlyphName;
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
-use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 
 /// Whether a component is placed by its anchors or by hand.
@@ -123,8 +123,17 @@ impl DecomposedTransform {
 
     /// Decodes values produced by [`Self::to_values`].
     pub fn from_values(values: [f64; Self::VALUE_COUNT]) -> Self {
-        let [translate_x, translate_y, rotation, scale_x, scale_y, skew_x, skew_y, t_center_x, t_center_y] =
-            values;
+        let [
+            translate_x,
+            translate_y,
+            rotation,
+            scale_x,
+            scale_y,
+            skew_x,
+            skew_y,
+            t_center_x,
+            t_center_y,
+        ] = values;
         Self {
             translate_x,
             translate_y,

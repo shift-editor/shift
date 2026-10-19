@@ -4,8 +4,8 @@ use bitflags::bitflags;
 
 use crate::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
-    LANGUAGES_LIB_KEY,
+    KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
+    SourceId,
 };
 
 bitflags! {
@@ -479,9 +479,11 @@ mod tests {
 
         assert!(changes.impact().contains(FontChangeImpact::AXES));
         assert!(changes.impact().contains(FontChangeImpact::SOURCES));
-        assert!(changes
-            .impact()
-            .contains(FontChangeImpact::AXIS_MAPPING_BASES));
+        assert!(
+            changes
+                .impact()
+                .contains(FontChangeImpact::AXIS_MAPPING_BASES)
+        );
         assert!(changes.impact().contains(FontChangeImpact::SOURCE_METRICS));
         assert!(changes.impact().contains(FontChangeImpact::NAMED_INSTANCES));
     }

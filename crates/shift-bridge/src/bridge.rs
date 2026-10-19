@@ -1,16 +1,16 @@
 use crate::errors::{self, BridgeError, BridgeResult};
-use crate::input::{parse, BridgeParse};
+use crate::input::{BridgeParse, parse};
 use crate::shaping::{NapiParagraphRequest, NapiShapedRun, ParsedParagraphRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_backends::{
-  build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
   AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
   FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
   ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind,
+  build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -24,11 +24,20 @@ use shift_font::{
 };
 use shift_slug::length::OrOverflow;
 use shift_slug::{
+  AuthoredAtlas, AuthoredAtlasProfile, Section as SlugSection, VariableAtlas, VariableLayout,
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
-  retained::compile_page as compile_retained_page, AuthoredAtlas, AuthoredAtlasProfile,
-  Section as SlugSection, VariableAtlas, VariableLayout,
+  retained::compile_page as compile_retained_page,
 };
 use shift_wire::{
+  AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
+  ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
+  GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerRecord, GlyphLayerShape,
+  GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
+  GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
+  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
+  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition,
+  MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source, SourceMetricValue,
+  SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
@@ -42,15 +51,6 @@ use shift_wire::{
     NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
     NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
   },
-  AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
-  ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
-  GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerRecord, GlyphLayerShape,
-  GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
-  GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
-  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
-  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition,
-  MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source, SourceMetricValue,
-  SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
@@ -936,10 +936,10 @@ impl FontView for FontSaveSnapshot {
   }
 
   fn glyph(&self, name: &str) -> Option<&Glyph> {
-    if let Some(active_glyph) = self.active_glyph_override.as_ref() {
-      if active_glyph.name() == name {
-        return Some(active_glyph.as_ref());
-      }
+    if let Some(active_glyph) = self.active_glyph_override.as_ref()
+      && active_glyph.name() == name
+    {
+      return Some(active_glyph.as_ref());
     }
 
     self.font.glyph_by_name(name)
@@ -1842,10 +1842,8 @@ impl Bridge {
             }
             receiver_closed = sender.blocking_send(Ok(chunk.bytes.to_vec())).is_err();
           });
-      if !receiver_closed {
-        if let Err(error) = result {
-          let _ = sender.blocking_send(Err(Error::new(Status::GenericFailure, error.to_string())));
-        }
+      if !receiver_closed && let Err(error) = result {
+        let _ = sender.blocking_send(Err(Error::new(Status::GenericFailure, error.to_string())));
       }
     });
 
@@ -2933,7 +2931,7 @@ fn map_axis(axis: NapiAxis) -> errors::Result<FontAxis> {
         return Err(BridgeError::InvalidInput {
           kind: "axis label range",
           value: "minimum and maximum must be provided together".to_string(),
-        })
+        });
       }
     };
     labels.push(AxisLabel::with_id(
@@ -3198,9 +3196,11 @@ mod tests {
   fn apply_rejects_unknown_intent_kinds() {
     let mut bridge = bridge_with_workspace();
 
-    assert!(bridge
-      .apply(vec![skeleton_intent("explodeFont")], None)
-      .is_err());
+    assert!(
+      bridge
+        .apply(vec![skeleton_intent("explodeFont")], None)
+        .is_err()
+    );
   }
 
   fn pen_setup(bridge: &mut Bridge) -> (String, String) {
@@ -4210,12 +4210,14 @@ mod tests {
         None,
       )
       .unwrap();
-    assert!(deleted
-      .next
-      .expect("instance deletion must echo font replacements")
-      .named_instances
-      .expect("instance deletion must echo the collection")
-      .is_empty());
+    assert!(
+      deleted
+        .next
+        .expect("instance deletion must echo font replacements")
+        .named_instances
+        .expect("instance deletion must echo the collection")
+        .is_empty()
+    );
   }
 
   #[test]
@@ -4233,9 +4235,11 @@ mod tests {
     let axes = next.axes.expect("deleteAxis must echo axes");
     assert!(axes.is_empty());
     let sources = next.sources.expect("deleteAxis must echo sources");
-    assert!(sources
-      .iter()
-      .all(|source| source.location.values.is_empty()));
+    assert!(
+      sources
+        .iter()
+        .all(|source| source.location.values.is_empty())
+    );
     assert!(!bridge.is_variable().unwrap());
   }
 
@@ -4665,10 +4669,12 @@ mod tests {
         .len(),
       1
     );
-    assert!(applied
-      .layers
-      .iter()
-      .any(|layer| layer.layer_id == layer_id));
+    assert!(
+      applied
+        .layers
+        .iter()
+        .any(|layer| layer.layer_id == layer_id)
+    );
 
     let undone = bridge.undo().unwrap().expect("mixed set should undo");
     assert!(bridge.get_axes().unwrap().is_empty());
@@ -4837,11 +4843,13 @@ mod tests {
       resolved[0].authored.state.structure.components.len(),
     );
     assert!(!resolved[0].resolved.components.is_empty());
-    assert!(resolved[0]
-      .resolved
-      .components
-      .iter()
-      .all(|component| component.outline.bounds.is_some()));
+    assert!(
+      resolved[0]
+        .resolved
+        .components
+        .iter()
+        .all(|component| component.outline.bounds.is_some())
+    );
     assert!(!resolved[0].resolved.outline.svg_path.is_empty());
     assert!(resolved[1].resolved.components.is_empty());
   }
@@ -4852,9 +4860,11 @@ mod tests {
     let layer_id = create_default_glyph_layer(&mut bridge, "A", Some(65));
     let missing = LayerId::new().to_string();
 
-    assert!(bridge
-      .read_layers(vec![layer_id.clone(), missing.clone()])
-      .is_err());
+    assert!(
+      bridge
+        .read_layers(vec![layer_id.clone(), missing.clone()])
+        .is_err()
+    );
     assert!(bridge.resolve_layers(vec![layer_id, missing]).is_err());
   }
 

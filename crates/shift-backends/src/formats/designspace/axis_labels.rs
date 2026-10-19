@@ -113,7 +113,7 @@ fn push_label(
                 details: format!(
                     "axis label {name:?} must provide both userminimum and usermaximum"
                 ),
-            })
+            });
         }
     };
     let linked_value = number_attribute(reader, event, b"linkeduservalue")?;

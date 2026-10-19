@@ -7,10 +7,10 @@ use norad::designspace::DesignSpaceDocument;
 use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
-    malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
+    FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
 use crate::formats::ufo::glif::{
-    glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer,
+    RetainedUfoLayer, glyph_directory, project_glif_glyph, retained_layer,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
@@ -236,11 +236,13 @@ mod tests {
             .variation
             .expect("variable designspace glyph should retain deltas");
 
-        assert!(variation
-            .deltas
-            .iter()
-            .flat_map(|delta| delta.values.iter())
-            .any(|value| *value != 0.0));
+        assert!(
+            variation
+                .deltas
+                .iter()
+                .flat_map(|delta| delta.values.iter())
+                .any(|value| *value != 0.0)
+        );
     }
 
     fn assert_projection_and_import_contain_layer_only(font: &impl FontImporter) {
@@ -250,19 +252,23 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name == "layerOnly")
             .expect("retained directory should include the layer-only glyph");
-        assert!(!font
-            .glyph(glyph.index)
-            .unwrap()
-            .root
-            .fallback
-            .contours
-            .is_empty());
+        assert!(
+            !font
+                .glyph(glyph.index)
+                .unwrap()
+                .root
+                .fallback
+                .contours
+                .is_empty()
+        );
 
         let mut import = font.begin_import().unwrap();
-        assert!(import
-            .directory()
-            .iter()
-            .any(|glyph| glyph.name.as_str() == "layerOnly"));
+        assert!(
+            import
+                .directory()
+                .iter()
+                .any(|glyph| glyph.name.as_str() == "layerOnly")
+        );
         let glyphs = import
             .next_batch(crate::ImportBatchLimit::new(1_000, 10_000))
             .unwrap();
@@ -270,10 +276,12 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name() == "layerOnly")
             .expect("authored import should include the layer-only glyph");
-        assert!(glyph
-            .layers()
-            .values()
-            .any(|layer| !layer.contours().is_empty()));
+        assert!(
+            glyph
+                .layers()
+                .values()
+                .any(|layer| !layer.contours().is_empty())
+        );
     }
 
     fn add_layer_only_glyph(ufo: &Path, layer: &str, source_file: &str) {

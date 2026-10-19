@@ -10,8 +10,8 @@ use skrifa::raw::types::GlyphId;
 use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider};
 
-use crate::font_source::atlas::{AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError};
 use crate::font_source::GlyphIndex;
+use crate::font_source::atlas::{AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError};
 
 use crate::font_source::malformed;
 
@@ -70,7 +70,7 @@ pub(super) fn advance_contributions(
             }
         }
         Err(error) => {
-            return Err(malformed(path, format!("failed to read HVAR table: {error}")).into())
+            return Err(malformed(path, format!("failed to read HVAR table: {error}")).into());
         }
     }
     Ok(advances)

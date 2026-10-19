@@ -5,7 +5,7 @@ use std::{
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    test_support::sample_font, DesignLocation, ExternalLocation, Font, LibValue, MetricKind,
+    DesignLocation, ExternalLocation, Font, LibValue, MetricKind, test_support::sample_font,
 };
 use shift_store::ShiftStore;
 

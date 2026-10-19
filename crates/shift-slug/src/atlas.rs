@@ -1,9 +1,9 @@
-use crate::length::{ensure_total, to_u32, OrOverflow};
+use crate::length::{OrOverflow, ensure_total, to_u32};
 use std::cmp::Ordering;
 
 use crate::{
-    curve::curves_from_commands, Bounds, Curve, CurveIndexEncoding, Layout, OutlineCommand,
-    PackedAtlas, SlugError,
+    Bounds, Curve, CurveIndexEncoding, Layout, OutlineCommand, PackedAtlas, SlugError,
+    curve::curves_from_commands,
 };
 
 pub const DEFAULT_BAND_COUNT: u32 = 8;

@@ -1,6 +1,6 @@
 use crate::length::OrOverflow;
 use shift_font::Require;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::time::Instant;
 
 use shift_font::{
@@ -15,10 +15,9 @@ use crate::{
 };
 
 use super::{
-    add_default_projection_glyph, add_resolved_sources_glyph, authored_advance,
-    curves_from_resolved_contours, source_location, AuthoredDefaultGlyphs, AuthoredDefaultKey,
-    AuthoredGlyph, AuthoredGlyphCompilation, AuthoredSlugError, AuthoredSourceGlyph,
-    ResolvedCurveTopology,
+    AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredGlyphCompilation,
+    AuthoredSlugError, AuthoredSourceGlyph, ResolvedCurveTopology, add_default_projection_glyph,
+    add_resolved_sources_glyph, authored_advance, curves_from_resolved_contours, source_location,
 };
 
 /// One deduplicated interpolation basis and its per-frame weight-buffer indexes.
