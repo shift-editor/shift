@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeatureSubstitution, FontFeature, GlyphId } from "@shift/types";
 import type { Editor } from "@shift/editor";
-import type { TextRunRecord } from "@shift/editor/text";
+import { characterTextItem, type TextItem, type TextRunRecord } from "@shift/editor/text";
 import { useSignalState } from "@shift/editor/signals";
 import {
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuPopup,
+  ContextMenuPortal,
+  ContextMenuPositioner,
+  ContextMenuTrigger,
   Popover,
   PopoverClose,
   PopoverPopup,
@@ -17,6 +23,9 @@ import {
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { GlyphThumbnail } from "../../kerning/groups/GlyphThumbnail";
 import { glyphName } from "../../kerning/groups/previewGlyphs";
+import { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import { copyGlyphNames } from "../../glyph-grid/glyphNames";
+import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import { featureName } from "../featureNames";
 import { onByDefault } from "./fontFeatures";
 import { sidebarBlock } from "./SidebarPicker";
@@ -36,10 +45,13 @@ const PREVIEW_GLYPH_PX = 32;
  * button. Clicking another tag while it is open switches it to that feature.
  */
 export function FeaturePreviewPopover({
+  run,
   feature,
   anchor,
   onClose,
 }: {
+  /** The proof text the features apply to, which Insert into Text adds to. */
+  readonly run: TextRunRecord;
   /** The feature to preview; null while closed. */
   readonly feature: FontFeature | null;
   /** The tag that opened it; the popover sits beside the Features section holding it. */
@@ -84,7 +96,7 @@ export function FeaturePreviewPopover({
                 </span>
                 <CloseButton />
               </div>
-              <FeaturePreview key={feature.tag} tag={feature.tag} />
+              <FeaturePreview key={feature.tag} run={run} tag={feature.tag} />
             </PopoverPopup>
           ) : null}
         </PopoverPositioner>
@@ -159,64 +171,142 @@ interface FeatureGlyph {
   readonly replaces: readonly (readonly GlyphId[])[];
 }
 
+const NO_GLYPHS: readonly GlyphId[] = [];
+
 /**
  * Every glyph a feature brings in, drawn in the font, as kerning previews a
- * group's members. Clicking a glyph selects it, for actions on the glyph.
+ * group's members. Glyphs select as in a group preview: click, Shift-click
+ * or drag for a range, ⌘-click to add or remove one, and the arrow keys.
+ * The context menu copies the selection's names (also ⌘C) or inserts what
+ * it replaces into the text, so the feature shapes it there.
  */
-const FeaturePreview = ({ tag }: { readonly tag: string }) => {
+const FeaturePreview = ({ run, tag }: { readonly run: TextRunRecord; readonly tag: string }) => {
+  const editor = useEditor();
   const glyphs = useFeatureGlyphs(tag);
-  // Remembers its feature, so previewing another drops the selection.
-  const [picked, setPicked] = useState<{ tag: string; glyph: GlyphId } | null>(null);
-  const selected = picked !== null && picked.tag === tag ? picked.glyph : null;
-  const shown = glyphs.slice(0, MAX_PREVIEW_GLYPHS);
+  const shown = useMemo(
+    () => glyphs.slice(0, MAX_PREVIEW_GLYPHS).map(({ glyph }) => glyph),
+    [glyphs],
+  );
+  const [selection, setSelection] = useState(() => GlyphSelection.empty(NO_GLYPHS));
+  const current = selection.withGlyphs(shown);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const copy = () => void copyGlyphNames(editor, current.ids);
+  const insert = () => {
+    const replaced = new Map(glyphs.map((entry) => [entry.glyph, entry.replaces[0] ?? []]));
+    insertIntoRun(
+      editor,
+      run,
+      inputItems(
+        editor,
+        current.ids.map((id) => replaced.get(id) ?? []),
+      ),
+    );
+  };
+  const select = useGlyphSelection({
+    selection: current,
+    onSelect: setSelection,
+    containerRef,
+    glyphAt: (clientX, clientY) => {
+      const cell = document.elementFromPoint(clientX, clientY)?.closest("[data-preview-glyph]");
+      if (!cell || !containerRef.current?.contains(cell)) return null;
+      return shown[Number(cell.getAttribute("data-preview-glyph"))] ?? null;
+    },
+    onCopy: copy,
+  });
 
   return (
     <div className="p-2">
-      <div className="scrollbar-hidden flex h-32 flex-wrap content-start items-center gap-1.5 overflow-y-auto rounded-md bg-input p-2">
-        {shown.length === 0 ? (
-          <p className="flex h-full w-full items-center justify-center text-ui text-secondary">
-            No glyph changes to show
-          </p>
-        ) : (
-          shown.map(({ glyph }) => (
-            <PreviewGlyphButton
-              key={glyph}
-              glyph={glyph}
-              selected={glyph === selected}
-              onClick={() => setPicked(glyph === selected ? null : { tag, glyph })}
-            />
-          ))
-        )}
-      </div>
+      {shown.length === 0 ? (
+        <p className="flex h-32 items-center justify-center rounded-md bg-input text-ui text-secondary">
+          No glyph changes to show
+        </p>
+      ) : (
+        <ContextMenu>
+          <ContextMenuTrigger
+            className="contents"
+            onContextMenu={(event) => {
+              // A right-click on a glyph outside the selection acts on that glyph alone.
+              const glyph = document
+                .elementFromPoint(event.clientX, event.clientY)
+                ?.closest("[data-preview-glyph]");
+              const id = glyph ? shown[Number(glyph.getAttribute("data-preview-glyph"))] : null;
+              if (id && !current.has(id)) setSelection(current.click(id, PLAIN_CLICK));
+            }}
+          >
+            <div
+              ref={containerRef}
+              tabIndex={0}
+              role="listbox"
+              aria-multiselectable
+              aria-label={`Glyphs ${tag} brings in`}
+              className="scrollbar-hidden flex h-32 flex-wrap content-start items-center gap-1.5 overflow-y-auto rounded-md bg-input p-2 outline-none select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
+              {...select}
+            >
+              {shown.map((glyph, index) => (
+                <div
+                  key={glyph}
+                  role="option"
+                  aria-label={glyphName(editor, glyph)}
+                  aria-selected={current.has(glyph)}
+                  data-preview-glyph={index}
+                  className={cn(
+                    "flex cursor-pointer rounded p-0.5",
+                    current.has(glyph) ? "bg-accent/20" : "hover:bg-hover",
+                  )}
+                >
+                  <GlyphThumbnail glyphId={glyph} size={PREVIEW_GLYPH_PX} />
+                </div>
+              ))}
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuPortal>
+            <ContextMenuPositioner>
+              <ContextMenuPopup className="w-auto">
+                <ContextMenuItem disabled={current.isEmpty} onClick={copy}>
+                  Copy Names
+                  <span className="ml-auto pl-3 text-secondary">⌘C</span>
+                </ContextMenuItem>
+                <ContextMenuItem disabled={current.isEmpty} onClick={insert}>
+                  Insert into Text
+                </ContextMenuItem>
+              </ContextMenuPopup>
+            </ContextMenuPositioner>
+          </ContextMenuPortal>
+        </ContextMenu>
+      )}
     </div>
   );
 };
 
-const PreviewGlyphButton = ({
-  glyph,
-  selected,
-  onClick,
-}: {
-  readonly glyph: GlyphId;
-  readonly selected: boolean;
-  readonly onClick: () => void;
-}) => {
-  const editor = useEditor();
-  return (
-    <button
-      type="button"
-      aria-label={glyphName(editor, glyph)}
-      aria-pressed={selected}
-      className={cn(
-        "flex rounded p-0.5 outline-none focus-visible:ring-1 focus-visible:ring-accent",
-        selected ? "bg-accent/20" : "hover:bg-hover",
-      )}
-      onClick={onClick}
-    >
-      <GlyphThumbnail glyphId={glyph} size={PREVIEW_GLYPH_PX} />
-    </button>
+const PLAIN_CLICK = { range: false, toggle: false };
+
+/**
+ * The items for glyph sequences, a space apart so one sequence's rules do
+ * not reach into the next; a glyph the font maps a character to becomes
+ * that character, so it shapes like typed text.
+ */
+function inputItems(editor: Editor, sequences: readonly (readonly GlyphId[])[]): TextItem[] {
+  return sequences
+    .filter((sequence) => sequence.length > 0)
+    .flatMap((sequence, index) => {
+      const glyphs = sequence.flatMap((id) => editor.text.glyphItem(id) ?? []);
+      return index === 0 ? glyphs : [characterTextItem(SPACE), ...glyphs];
+    });
+}
+
+const SPACE = 0x20;
+
+/** Inserts items at the caret while typing in the run, otherwise at its end. */
+function insertIntoRun(editor: Editor, run: TextRunRecord, items: readonly TextItem[]): void {
+  if (items.length === 0) return;
+  if (editor.textEditing.state) {
+    editor.textEditing.insert(items);
+    return;
+  }
+  editor.history.capture("Insert glyphs", () =>
+    editor.text.setItems(run.id, [...run.items, ...items]),
   );
-};
+}
 
 /** Each feature's preview glyphs per editor, at the feature code revision they were read at. */
 const previewed = new WeakMap<
