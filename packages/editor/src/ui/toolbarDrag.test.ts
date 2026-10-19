@@ -123,12 +123,13 @@ describe("each edge claims a region of the frame", () => {
     expect(dragTo(start, { x: 500, y: 100 }).target).toBe("top");
     expect(dragTo(start, { x: 900, y: 350 }).target).toBe("right");
     expect(dragTo(start, { x: 500, y: 600 }).target).toBe("bottom");
-    expect(dragTo(startFrom("right"), { x: 100, y: 350 }).target).toBe("left");
+    // Low in the strip, so a standing bar's tip, 286px above the handle, is in the strip too.
+    expect(dragTo(startFrom("right"), { x: 100, y: 450 }).target).toBe("left");
   });
 
   it("splits a corner on its diagonal, so a handle hugging a side edge keeps that side", () => {
     expect(dragTo(start, { x: 30, y: 120 }).target).toBe("left");
-    expect(dragTo(start, { x: 400, y: 30 }).target).toBe("top");
+    expect(dragTo(start, { x: 600, y: 30 }).target).toBe("top");
   });
 
   it("targets a slot without moving or turning the bar", () => {
@@ -156,29 +157,29 @@ describe("each edge claims a region of the frame", () => {
 });
 
 describe("the centre square splits across the axis of the seat the bar was carried from", () => {
-  it("lets a flat bar choose between top and bottom by how high its handle is, whatever its x", () => {
+  it("lets a flat bar choose between top and bottom by how high its handle is", () => {
     const start = startFrom("bottom");
 
-    // Handles far enough right that the bar's far end is still inside the square.
-    expect(dragTo(start, { x: 600, y: 300 }).target).toBe("top");
-    expect(dragTo(start, { x: 500, y: 300 }).target).toBe("top");
-    expect(dragTo(start, { x: 600, y: 400 }).target).toBe("bottom");
-    expect(dragTo(start, { x: 500, y: 400 }).target).toBe("bottom");
+    // The handle is at the far right of the square, so the bar's tip is still inside it.
+    expect(dragTo(start, { x: 643, y: 300 }).target).toBe("top");
+    expect(dragTo(start, { x: 655, y: 300 }).target).toBe("top");
+    expect(dragTo(start, { x: 643, y: 400 }).target).toBe("bottom");
+    expect(dragTo(start, { x: 655, y: 400 }).target).toBe("bottom");
   });
 
-  it("lets a standing bar choose between left and right by how far across its handle is, whatever its y", () => {
+  it("lets a standing bar choose between left and right by how far across its handle is", () => {
     const start = startFrom("left");
 
-    // Handles low enough that the bar's far end is still inside the square.
-    expect(dragTo(start, { x: 400, y: 450 }).target).toBe("left");
-    expect(dragTo(start, { x: 400, y: 500 }).target).toBe("left");
-    expect(dragTo(start, { x: 600, y: 450 }).target).toBe("right");
-    expect(dragTo(start, { x: 600, y: 500 }).target).toBe("right");
+    // The handle is at the bottom of the square, so the bar's tip is still inside it.
+    expect(dragTo(start, { x: 400, y: 505 }).target).toBe("left");
+    expect(dragTo(start, { x: 400, y: 508 }).target).toBe("left");
+    expect(dragTo(start, { x: 600, y: 505 }).target).toBe("right");
+    expect(dragTo(start, { x: 600, y: 508 }).target).toBe("right");
   });
 
   it("splits the same way from the opposite seat of the axis", () => {
-    expect(dragTo(startFrom("top"), { x: 600, y: 400 }).target).toBe("bottom");
-    expect(dragTo(startFrom("right"), { x: 400, y: 450 }).target).toBe("left");
+    expect(dragTo(startFrom("top"), { x: 643, y: 400 }).target).toBe("bottom");
+    expect(dragTo(startFrom("right"), { x: 400, y: 505 }).target).toBe("left");
   });
 
   it("takes a straight pull from the top to the bottom once the handle is a margin past the middle", () => {
@@ -212,7 +213,7 @@ describe("the end of the bar that leads steers", () => {
     const start = startFrom("bottom");
 
     // The bottom target keeps claiming for a margin past the square, which is its bottom half.
-    expect(dragTo(start, { x: 600, y: 350 }).target).toBe("bottom");
+    expect(dragTo(start, { x: 643, y: 350 }).target).toBe("bottom");
     expect(dragTo(start, { x: 660 + REGION_MARGIN, y: 350 }).target).toBe("bottom");
     expect(dragTo(start, { x: 661 + REGION_MARGIN, y: 350 }).target).toBe("right");
   });
@@ -251,17 +252,49 @@ describe("a corner catches the destination before the diagonal does", () => {
   });
 });
 
-describe("a far end hanging off the canvas does not steer", () => {
-  it("keeps a standing bar on the left when its handle is in the left edge's corner, though the body hangs past the top", () => {
-    const start = startFrom("left");
+describe("the tip of the bar leads toward the facing sides", () => {
+  // The tip is the handle reflected through the bar's centre, so it sits as far from its end as the handle does from its own.
+  const TIP_REACH = LENGTH - 2 * 17;
 
-    expect(dragTo(start, { x: 100, y: 100 }).target).toBe("left");
+  it("switches a flat bar to the left once its tip is a margin inside the left strip, however far back the handle is", () => {
+    const start = startFrom("bottom");
+    // The left strip starts at x = 340.
+    const handleX = (tipX: number) => tipX + TIP_REACH;
+
+    expect(dragTo(start, { x: handleX(340 - REGION_MARGIN - 1), y: 450 }).target).toBe("left");
+    expect(dragTo(start, { x: handleX(340 - REGION_MARGIN), y: 450 }).target).toBe("bottom");
   });
 
-  it("lets the body steer again once its centre is back on the canvas", () => {
+  it("switches a standing bar to the top once its tip is a margin inside the top strip", () => {
+    const start = startFrom("left");
+    // The top strip ends at y = 190.
+    const handleY = (tipY: number) => tipY + TIP_REACH;
+
+    expect(dragTo(start, { x: 400, y: handleY(190 - REGION_MARGIN - 1) }).target).toBe("top");
+    expect(dragTo(start, { x: 400, y: handleY(190 - REGION_MARGIN) }).target).toBe("left");
+  });
+
+  it("asks the tip for the same margin the handle needs toward the right", () => {
     const start = startFrom("bottom");
 
-    expect(dragTo(start, { x: 160, y: 30 }).target).toBe("left");
+    // The handle must be a margin past the right strip's edge at x = 660, as the tip must be inside the left.
+    expect(dragTo(start, { x: 660 + REGION_MARGIN, y: 450 }).target).toBe("bottom");
+    expect(dragTo(start, { x: 661 + REGION_MARGIN, y: 450 }).target).toBe("right");
+  });
+
+  it("steers a tip past the canvas edge as it would from the edge it is past", () => {
+    // The standing bar's tip is 286px above the handle, off the top of the canvas: it meets the edge at (100, 0), in the top-left corner rectangle.
+    expect(dragTo(startFrom("left"), { x: 100, y: 100 }).target).toBe("top");
+    // The flat bar's tip is off the left edge and meets it at (0, 400), in the left strip.
+    expect(dragTo(startFrom("bottom"), { x: 150, y: 400 }).target).toBe("left");
+  });
+
+  it("keeps a bar whose tip hangs off the canvas on the edge it holds while the handle is clear of the others", () => {
+    const start = startFrom("bottom");
+    const onLeft = dragTo(start, { x: 150, y: 400 });
+
+    expect(dragTo(onLeft, { x: 150, y: 420 }).target).toBe("left");
+    expect(dragTo(onLeft, { x: 150, y: 380 }).target).toBe("left");
   });
 });
 
@@ -270,14 +303,14 @@ describe("the far end takes the bar while the handle is still in the current reg
     const drag = dragTo(startFrom("left"), { x: 250, y: 243 });
 
     expect(drag.target).toBe("top");
-    expect(dragTo(startFrom("left"), { x: 250, y: 330 }).target).toBe("left");
+    expect(dragTo(startFrom("left"), { x: 250, y: 460 }).target).toBe("left");
   });
 
   it("turns a flat bar to the left while its handle is still in the bottom strip", () => {
-    const drag = dragTo(startFrom("bottom"), { x: 250, y: 600 });
+    const drag = dragTo(startFrom("bottom"), { x: 430, y: 600 });
 
     expect(drag.target).toBe("left");
-    expect(dragTo(startFrom("bottom"), { x: 330, y: 600 }).target).toBe("bottom");
+    expect(dragTo(startFrom("bottom"), { x: 450, y: 600 }).target).toBe("bottom");
   });
 });
 
@@ -386,8 +419,9 @@ describe("every edge can be reached from every other", () => {
   const inStrip: Record<ToolbarDock, Point2D> = {
     top: { x: 500, y: 40 },
     bottom: { x: 500, y: 660 },
-    left: { x: 40, y: 350 },
-    right: { x: 960, y: 350 },
+    // Low in the side strips, so a standing bar's tip is in the strip as well.
+    left: { x: 40, y: 480 },
+    right: { x: 960, y: 480 },
   };
 
   for (const seat of TOOLBAR_DOCKS) {
@@ -522,7 +556,7 @@ describe("the tools dim while the target would turn the bar", () => {
   it("stay fully visible moving between the two sides of a standing bar", () => {
     const side = startFrom("left");
 
-    expect(toolbarToolOpacity(dragTo(side, { x: 900, y: 300 }))).toBe(1);
+    expect(toolbarToolOpacity(dragTo(side, { x: 900, y: 500 }))).toBe(1);
   });
 });
 

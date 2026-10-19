@@ -41,27 +41,43 @@ export function startToolbarDrag(start: ToolbarDragStart): ToolbarDragState {
 export function toolbarBarCentre(drag: ToolbarDragState): Point2D {
   const origin = toolbarBarOrigin(drag);
   const stands = poseForDock(drag.seatDock) === "stand";
-  const width = stands ? BAR_THICKNESS : drag.length;
-  const height = stands ? drag.length : BAR_THICKNESS;
+  const size = stands
+    ? Vec2.create(BAR_THICKNESS, drag.length)
+    : Vec2.create(drag.length, BAR_THICKNESS);
 
-  return { x: origin.x + width / 2, y: origin.y + height / 2 };
+  return Vec2.add(origin, Vec2.scale(size, 0.5));
 }
 
 /**
- * Whether the bar's body, not its handle, leads toward `dock`.
+ * Tip of the carried bar: the end opposite the handle, as far from its end as
+ * the handle is from its own, so the handle reflected through the bar's centre.
+ */
+export function toolbarBarTip(drag: ToolbarDragState): Point2D {
+  return Vec2.mirror(drag.handle, toolbarBarCentre(drag));
+}
+
+/**
+ * Whether the bar's tip, not its handle, leads toward `dock`.
  *
  * @remarks
  * The handle is the end of the bar that leads toward the bottom and right. A
- * standing bar's body leads toward the top and a flat bar's toward the left,
+ * standing bar's tip leads toward the top and a flat bar's toward the left,
  * because the handle trails in those directions.
  */
-function bodyLeads(dock: ToolbarDock, seatDock: ToolbarDock): boolean {
+function tipLeads(dock: ToolbarDock, seatDock: ToolbarDock): boolean {
   return poseForDock(seatDock) === "stand" ? dock === "top" : dock === "left";
 }
 
-/** Whether `point` is on the canvas. */
-function isInFrame(point: Point2D, frame: ToolbarFrame): boolean {
-  return point.x >= 0 && point.x <= frame.width && point.y >= 0 && point.y <= frame.height;
+/** The point and the four points `margin` away from it along an axis. */
+function probesAround(point: Point2D, margin: number): Point2D[] {
+  const offsets = [
+    Vec2.fromAxis("x", margin),
+    Vec2.fromAxis("x", -margin),
+    Vec2.fromAxis("y", margin),
+    Vec2.fromAxis("y", -margin),
+  ];
+
+  return [point, ...offsets.map((offset) => Vec2.add(point, offset))];
 }
 
 /** Whether `point`, or any point within `margin` of it along an axis, is in the region of `dock` for a bar carried from `seatDock`. */
@@ -74,64 +90,99 @@ function isInRegion(
   margin: number,
   seatDock: ToolbarDock,
 ): boolean {
-  const probes = [
-    point,
-    { x: point.x + margin, y: point.y },
-    { x: point.x - margin, y: point.y },
-    { x: point.x, y: point.y + margin },
-    { x: point.x, y: point.y - margin },
-  ];
+  return probesAround(point, margin).some(
+    (probe) => dockRegionAt(probe, frame, length, flatOnly, seatDock) === dock,
+  );
+}
 
-  return probes.some((probe) => dockRegionAt(probe, frame, length, flatOnly, seatDock) === dock);
+/** Whether `point` and every point within `margin` of it along an axis are in the region of `dock`. */
+function isDeepInRegion(
+  dock: ToolbarDock,
+  point: Point2D,
+  frame: ToolbarFrame,
+  length: number,
+  flatOnly: boolean,
+  margin: number,
+  seatDock: ToolbarDock,
+): boolean {
+  return probesAround(point, margin).every(
+    (probe) => dockRegionAt(probe, frame, length, flatOnly, seatDock) === dock,
+  );
+}
+
+/**
+ * The docks that claim the bar, given the target it holds.
+ *
+ * @remarks
+ * Each dock the frame has room for claims the bar when its leading point is
+ * in its region: the tip for the docks it leads toward, and the handle for the
+ * rest. The handle's docks need only the handle in the region to take the
+ * bar over, since the target keeps its own claim through a `REGION_MARGIN`; the
+ * tip's docks need the tip a margin inside, so both ends wait the same distance.
+ */
+function claimingDocks(
+  handle: Point2D,
+  tip: Point2D,
+  frame: ToolbarFrame,
+  length: number,
+  seatDock: ToolbarDock,
+  target: ToolbarDock,
+): ToolbarDock[] {
+  const flatOnly = isShortToolbarFrame(frame, length);
+
+  return allowedDocksInFrame(frame, length).filter((dock) => {
+    const margin = dock === target ? REGION_MARGIN : 0;
+    if (!tipLeads(dock, seatDock)) {
+      return isInRegion(dock, handle, frame, length, flatOnly, margin, seatDock);
+    }
+    if (dock === target) return isInRegion(dock, tip, frame, length, flatOnly, margin, seatDock);
+
+    return isDeepInRegion(dock, tip, frame, length, flatOnly, REGION_MARGIN, seatDock);
+  });
+}
+
+/** The docks claiming the carried bar where it is now, for the debug overlay. */
+export function toolbarClaims(drag: ToolbarDragState): ToolbarDock[] {
+  return claimingDocks(
+    drag.handle,
+    toolbarBarTip(drag),
+    drag.frame,
+    drag.length,
+    drag.seatDock,
+    drag.target,
+  );
 }
 
 /**
  * Edge the carried bar is steering toward.
  *
  * @remarks
- * Each dock the frame has room for claims the bar when its leading point is
- * in its region: the bar's centre for the docks its body leads toward, and the
- * handle for the rest. The current target claims with a `REGION_MARGIN`, so a
- * shaking pointer cannot flip it. With no claim, as when the region belongs
- * to a dock the frame has no room for, the target stays. When the body claims a dock the handle does not, the body
- * wins, so the far end switches the target as soon as it arrives; otherwise
- * the current target is kept if it still claims. A far end hanging off the
- * canvas cannot start a claim, so the handle decides, but it keeps the claim
- * of the target it already holds.
+ * The target keeps its claim through a `REGION_MARGIN`, so a shaking pointer
+ * cannot flip it. With no claim, as when the region belongs to a dock the frame
+ * has no room for, the target stays. When the tip claims a dock the handle
+ * does not, the tip wins, so the far end switches the target as soon as it is
+ * a margin inside; otherwise the current target is kept if it still claims.
  *
  * The claims depend only on the bar's position, and the current target is
  * always among them once chosen, so a held pointer settles on its first step.
  */
 function steeredDock(
   handle: Point2D,
-  centre: Point2D,
+  tip: Point2D,
   frame: ToolbarFrame,
   length: number,
   seatDock: ToolbarDock,
   previousTarget: ToolbarDock,
 ): ToolbarDock {
-  const allowed = allowedDocksInFrame(frame, length);
-  const flatOnly = isShortToolbarFrame(frame, length);
-  const targetAllowed = allowed.includes(previousTarget);
-  const bodyOnCanvas = isInFrame(centre, frame);
-  // Off the canvas the far end cannot start a claim, but it keeps the one it holds, so crossing the frame's edge never hands the target back.
-  const leadsByBody = (dock: ToolbarDock) => bodyOnCanvas && bodyLeads(dock, seatDock);
-  const claimsBar = (dock: ToolbarDock): boolean => {
-    const margin = dock === previousTarget ? REGION_MARGIN : 0;
-    const byHandle = isInRegion(dock, handle, frame, length, flatOnly, margin, seatDock);
-    if (!bodyLeads(dock, seatDock)) return byHandle;
+  const claims = claimingDocks(handle, tip, frame, length, seatDock, previousTarget);
+  if (claims.length === 0) {
+    const allowed = allowedDocksInFrame(frame, length);
 
-    const byBody = isInRegion(dock, centre, frame, length, flatOnly, margin, seatDock);
-    if (bodyOnCanvas) return byBody;
-    if (dock === previousTarget) return byBody || byHandle;
+    return allowed.includes(previousTarget) ? previousTarget : allowed[0];
+  }
 
-    return byHandle;
-  };
-  const claims = allowed.filter(claimsBar);
-  if (claims.length === 0) return targetAllowed ? previousTarget : allowed[0];
-
-  const bodyClaims = claims.filter(leadsByBody);
-  const contenders = bodyClaims.length > 0 ? bodyClaims : claims;
+  const tipClaims = claims.filter((dock) => tipLeads(dock, seatDock));
+  const contenders = tipClaims.length > 0 ? tipClaims : claims;
   if (contenders.includes(previousTarget)) return previousTarget;
 
   return contenders[0];
@@ -165,7 +216,7 @@ export function nextToolbarDrag(
   const moved = { ...previous, pointer, handle, frame, tether: null };
   const target = steeredDock(
     handle,
-    toolbarBarCentre(moved),
+    toolbarBarTip(moved),
     frame,
     previous.length,
     previous.seatDock,
