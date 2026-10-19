@@ -508,7 +508,14 @@ export class Font {
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
+    featureCodeSettings(): Promise<FeatureCodeSettings>;
+    featureDiagnostics(): Promise<FeatureDiagnostic[]>;
+    get featureRevisionCell(): Signal<number>;
     features(): Promise<FontFeature[]>;
+    featureSource(): Promise<string | null>;
+    featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null>;
+    formatFeatureCode(text: string): Promise<string>;
+    generatedFeatures(): Promise<GeneratedFeature[]>;
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
     getAxisMappings(): AxisMapping[];
@@ -534,6 +541,7 @@ export class Font {
     layerIdForPoint(pointId: PointId): LayerId | null;
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     layerState(layerId: LayerId): GlyphLayerState | null;
+    lintFeatureCode(text: string): Promise<FeatureDiagnostic[]>;
     // (undocumented)
     get loaded(): boolean;
     get loadedCell(): Signal<boolean>;
@@ -565,9 +573,13 @@ export class Font {
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
+    renameFeatureSymbol(text: string, offset: number, newName: string): Promise<FeatureEdit[] | null>;
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setFeatureCodeSettings(settings: FeatureCodeSettings): void;
+    setFeatureSource(source: string | null): void;
+    setGeneratedFeatureOn(tag: string, on: boolean): void;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
