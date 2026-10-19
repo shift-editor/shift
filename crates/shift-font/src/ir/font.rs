@@ -131,11 +131,11 @@ struct FontData {
 
 #[derive(Clone, Debug, Default)]
 struct FontIndex {
-    glyph_by_name: HashMap<GlyphName, GlyphId>,
-    layer_owner: HashMap<LayerId, GlyphId>,
-    layer_by_glyph_source: HashMap<(GlyphId, SourceId), LayerId>,
-    glyphs_by_unicode: HashMap<u32, Vec<GlyphId>>,
-    entity_ids: HashSet<GlyphEntityId>,
+    glyph_by_name: imbl::HashMap<GlyphName, GlyphId>,
+    layer_owner: imbl::HashMap<LayerId, GlyphId>,
+    layer_by_glyph_source: imbl::HashMap<(GlyphId, SourceId), LayerId>,
+    glyphs_by_unicode: imbl::HashMap<u32, Vec<GlyphId>>,
+    entity_ids: imbl::HashSet<GlyphEntityId>,
 }
 
 impl FontIndex {

@@ -28,6 +28,8 @@ import {
   type WritableSignal,
 } from "../signals/signal";
 import { LayerBuffers, type LayerChangeToken } from "./LayerBuffers";
+import { applyInEngine, installEngineLayer, wasmEngineEnabled } from "../wasm/engine";
+import type { FontIntent } from "@shift/types";
 
 /**
  * Reactive state and pending-confirmation lifecycle for one authored layer.
@@ -217,11 +219,42 @@ export class GlyphLayerState {
   }
 
   removePoints(editId: PendingEditId, pointIds: readonly PointId[]): boolean {
+    if (wasmEngineEnabled()) {
+      return this.#applyEdit(editId, () =>
+        this.#applyInEngine({
+          kind: "removePoints",
+          removePoints: { layerId: this.#layerId, pointIds: [...pointIds] },
+        }),
+      );
+    }
     return this.#applyEdit(editId, () => this.#buffers.peek().removePoints(pointIds));
   }
 
   reverseContour(editId: PendingEditId, contourId: ContourId): boolean {
+    if (wasmEngineEnabled()) {
+      return this.#applyEdit(editId, () =>
+        this.#applyInEngine({
+          kind: "reverseContour",
+          reverseContour: { layerId: this.#layerId, contourId },
+        }),
+      );
+    }
     return this.#applyEdit(editId, () => this.#buffers.peek().reverseContour(contourId));
+  }
+
+  /**
+   * SPIKE: applies one intent with shift-font in the renderer engine and
+   * publishes the result the way a workspace echo is published.
+   */
+  #applyInEngine(intent: FontIntent): boolean {
+    // Unrouted edits (drags, other ops) still run in TypeScript, so sync first.
+    installEngineLayer(this.state);
+    const layers = applyInEngine([intent]);
+    const touched = layers?.find((layer) => layer.state.layerId === this.#layerId);
+    if (!touched) return false;
+
+    this.#publish(touched.state);
+    return true;
   }
 
   setContourStart(editId: PendingEditId, contourId: ContourId, pointId: PointId): boolean {

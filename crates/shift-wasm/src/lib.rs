@@ -10,6 +10,7 @@
 //! each, as interned ids ([`names`]).
 
 pub mod anchors;
+pub mod engine;
 pub mod names;
 mod reader;
 #[cfg(feature = "reference")]

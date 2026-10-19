@@ -40,6 +40,7 @@ import { GlyphLayerState } from "./GlyphLayerState";
 import { Kerning } from "./Kerning";
 import { PendingState } from "./PendingState";
 import type { Glyph } from "./Glyph";
+import { openEngine, wasmEngineEnabled } from "../wasm/engine";
 
 /**
  * Renderer-local owner for font records, concrete glyph layer state, glyphs, and views.
@@ -55,6 +56,18 @@ import type { Glyph } from "./Glyph";
 export interface GlyphInvalidation {
   /** Changed glyph roots and their dependents, or `null` when every glyph may have changed. */
   readonly glyphIds: readonly GlyphId[] | null;
+}
+
+/** SPIKE: whether glyph, layer, or source identities differ, so the engine directory must rebuild. */
+function engineDirectoryChanged(current: WorkspaceSnapshot, next: WorkspaceSnapshot): boolean {
+  if (current.sources !== next.sources && current.sources.length !== next.sources.length)
+    return true;
+  if (current.glyphs === next.glyphs) return false;
+  if (current.glyphs.length !== next.glyphs.length) return true;
+  return next.glyphs.some((glyph, index) => {
+    const before = current.glyphs[index]!;
+    return glyph.id !== before.id || glyph.layers.length !== before.layers.length;
+  });
 }
 
 export class FontStore {
@@ -106,6 +119,7 @@ export class FontStore {
       { name: "fontStore.invalidGlyphs" },
     );
     if (workspace) {
+      if (wasmEngineEnabled()) openEngine(workspace);
       this.#indexCell.set(workspaceRecordIndex(workspace));
     } else if (font) {
       this.#indexCell.set(fontRecordIndex(font, records));
@@ -189,6 +203,7 @@ export class FontStore {
   }
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
+    if (snapshot && wasmEngineEnabled()) openEngine(snapshot);
     batch(() => {
       this.#kerning.reset();
       this.#indexCell.set(workspaceRecordIndex(snapshot));
@@ -337,6 +352,10 @@ export class FontStore {
         : current;
 
       if (nextWorkspace !== current) {
+        // SPIKE: identity changes rebuild the engine directory; routed edits resync their layer.
+        if (wasmEngineEnabled() && engineDirectoryChanged(current, nextWorkspace)) {
+          openEngine(nextWorkspace);
+        }
         this.#indexCell.set(workspaceRecordIndex(nextWorkspace));
         this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
         this.#workspace.set(nextWorkspace);

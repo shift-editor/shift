@@ -52,9 +52,29 @@ pub(crate) fn realign_attached_components<'a>(
         return Vec::new();
     }
 
+    // Glyph::layers is a HashMap: visit each glyph's layers in source order so
+    // every engine produces the same changeset order.
+    let source_rank: std::collections::HashMap<_, usize> = after
+        .sources()
+        .iter()
+        .enumerate()
+        .map(|(rank, source)| (source.id(), rank))
+        .collect();
     let candidates: Vec<LayerId> = after
         .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
+        .flat_map(|glyph| {
+            let mut layers: Vec<_> = glyph.layers().values().collect();
+            layers.sort_by(|a, b| {
+                let rank = |l: &GlyphLayer| {
+                    source_rank
+                        .get(&l.source_id())
+                        .copied()
+                        .unwrap_or(usize::MAX)
+                };
+                rank(a).cmp(&rank(b)).then_with(|| a.id().cmp(&b.id()))
+            });
+            layers
+        })
         .filter(|layer| layer.components_iter().nth(1).is_some())
         .filter(|layer| {
             touched.contains(&layer.id())

@@ -12,6 +12,7 @@ crate-type = ["rlib"]
 test-support = []
 
 [dependencies]
+imbl = "6"
 bitflags = "2"
 fontdrasil = "1.0.0"
 indexmap = { version = "2", features = ["serde"] }
