@@ -455,8 +455,7 @@ impl GlyphLayer {
         let a = self.contour(contour_id_a).require(&contour_id_a)?.clone();
         let b = self.contour(contour_id_b).require(&contour_id_b)?.clone();
 
-        let result =
-            boolean(op, &a, &b).map_err(|e| CoreError::BooleanOperationFailed(e.to_string()))?;
+        let result = boolean(op, &a, &b).map_err(CoreError::BooleanOperationFailed)?;
 
         self.remove_contour_checked(contour_id_a)?;
         self.remove_contour_checked(contour_id_b)?;

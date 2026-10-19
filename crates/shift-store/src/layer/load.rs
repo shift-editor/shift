@@ -1,4 +1,4 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
 use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
@@ -225,7 +225,12 @@ fn read_layer_directory(
 
     let decoded_byte_lengths = keys
         .iter()
-        .map(|key| facts.get(key).or_missing("glyph layer", key)?.validate())
+        .map(|key| {
+            facts
+                .get(key)
+                .or_missing(StoreEntity::GlyphLayer, key)?
+                .validate()
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(LayerDirectoryRead {

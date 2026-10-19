@@ -12,8 +12,7 @@ const MAX_LIB_VALUES: usize = 1_000_000;
 
 pub(crate) fn encode_layer(layer: &font::GlyphLayer) -> Result<Vec<u8>, StoreError> {
     validate_layer(layer).map_err(StoreError::InvalidLayerPayload)?;
-    let bytes =
-        rmp_serde::to_vec(layer).map_err(|error| StoreError::LayerEncoding(error.to_string()))?;
+    let bytes = rmp_serde::to_vec(layer)?;
     check_layer_length(bytes.len() as u64)?;
     Ok(bytes)
 }
@@ -22,14 +21,10 @@ pub(crate) fn decode_layer(bytes: &[u8]) -> Result<font::GlyphLayer, StoreError>
     check_layer_length(bytes.len() as u64)?;
     let mut decoder = rmp_serde::Deserializer::new(Cursor::new(bytes));
     decoder.set_max_depth(MAX_NESTING_DEPTH);
-    let layer = font::GlyphLayer::deserialize(&mut decoder)
-        .map_err(|error| StoreError::LayerDecoding(error.to_string()))?;
+    let layer = font::GlyphLayer::deserialize(&mut decoder)?;
     let consumed = decoder.position() as usize;
     if consumed != bytes.len() {
-        return Err(StoreError::LayerDecoding(format!(
-            "payload has {} trailing bytes",
-            bytes.len() - consumed
-        )));
+        return Err(StoreError::TrailingLayerBytes(bytes.len() - consumed));
     }
     validate_layer(&layer).map_err(StoreError::InvalidLayerPayload)?;
     Ok(layer)

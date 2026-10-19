@@ -1,4 +1,4 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
 use std::time::Instant;
 
 use rayon::prelude::*;
@@ -115,7 +115,7 @@ impl FontImportWriter<'_> {
             let layer = glyph
                 .layers()
                 .get(layer_id)
-                .or_missing("glyph layer", &layer_id)?;
+                .or_missing(StoreEntity::GlyphLayer, &layer_id)?;
             store_stored_layer_in_tx(&self.tx, &glyph.id(), layer, stored, WriteMode::Insert)?;
         }
         self.next_glyph_order += 1;

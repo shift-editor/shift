@@ -52,13 +52,13 @@ pub(crate) fn compress_layer(decoded: &[u8]) -> Result<StoredLayerPayload, Store
         if slot.is_none() {
             *slot = Some(
                 zstd::bulk::Compressor::new(ZSTD_COMPRESSION_LEVEL)
-                    .map_err(|error| StoreError::LayerCompression(error.to_string()))?,
+                    .map_err(StoreError::LayerCompression)?,
             );
         }
         slot.as_mut()
             .expect("compressor was initialized")
             .compress(decoded)
-            .map_err(|error| StoreError::LayerCompression(error.to_string()))
+            .map_err(StoreError::LayerCompression)
     })?;
     let decoded_byte_length = decoded.len() as u64;
     let decoded_blake3 = *blake3::hash(decoded).as_bytes();
@@ -104,7 +104,8 @@ pub(crate) fn decompress_layer(
         LayerPayloadCompression::ZstandardV1 => {
             let frame_length =
                 zstd::zstd_safe::find_frame_compressed_size(&stored.bytes).map_err(|code| {
-                    StoreError::LayerDecompression(zstd::zstd_safe::get_error_name(code).to_owned())
+                    let reason = zstd::zstd_safe::get_error_name(code);
+                    StoreError::LayerDecompression(std::io::Error::other(reason))
                 })?;
             if frame_length != stored.bytes.len() {
                 return Err(directory_mismatch(
@@ -125,14 +126,13 @@ pub(crate) fn decompress_layer(
                 let mut slot = slot.borrow_mut();
                 if slot.is_none() {
                     *slot = Some(
-                        zstd::bulk::Decompressor::new()
-                            .map_err(|error| StoreError::LayerDecompression(error.to_string()))?,
+                        zstd::bulk::Decompressor::new().map_err(StoreError::LayerDecompression)?,
                     );
                 }
                 slot.as_mut()
                     .expect("decompressor was initialized")
                     .decompress(&stored.bytes, decoded_capacity)
-                    .map_err(|error| StoreError::LayerDecompression(error.to_string()))
+                    .map_err(StoreError::LayerDecompression)
             })?
         }
     };

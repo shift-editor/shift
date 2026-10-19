@@ -20,7 +20,7 @@ mod workspace_state;
 mod write_mode;
 
 pub use document::DocumentMetadata;
-pub use error::StoreError;
+pub use error::{StoreEntity, StoreError};
 pub use font::FontInfo;
 pub use glyph::{GlyphRecord, NewGlyph};
 pub use import_writer::{FontImportWriter, encode_glyph_batch};

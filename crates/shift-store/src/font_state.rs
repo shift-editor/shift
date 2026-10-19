@@ -1,4 +1,4 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
 use std::collections::{BTreeMap, HashMap};
 
 use shift_font as font;
@@ -55,7 +55,7 @@ impl ShiftStore {
         }
 
         for glyph in load_glyphs(&self.conn, include_layer_payloads)? {
-            font.insert_glyph(glyph).map_err(StoreError::from)?;
+            font.insert_glyph(glyph)?;
         }
 
         *font.kerning_mut() = load_kerning(&self.conn)?;
@@ -247,9 +247,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
         Ok(source)
     })?;
 
-    let mut sources = rows
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)?;
+    let mut sources = rows.collect::<Result<Vec<_>, _>>()?;
 
     for source in &mut sources {
         *source.lib_mut() = load_lib_data(
@@ -401,7 +399,7 @@ fn load_glyphs(
         let layer = if include_layer_payloads {
             loaded_layers
                 .remove(&layer_id)
-                .or_missing("glyph layer payload", &layer_id)?
+                .or_missing(StoreEntity::GlyphLayerPayload, &layer_id)?
         } else {
             let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
             layer.set_height(height);

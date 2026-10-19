@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use crate::{FontChange, FontChangeSet, Replacement, Require, SourceCollection};
+use crate::{FontChange, FontChangeSet, Require, SourceCollection};
 
 use super::*;
 
@@ -55,14 +55,14 @@ impl Font {
                     value.require_before(&current, "sources")?;
                 }
                 FontChange::Glyph(value) => {
-                    let glyph_id = replacement_glyph_id(value)?;
+                    let glyph_id = value.glyph_id()?;
                     let current = self.glyph(&glyph_id).cloned();
                     value.require_before(&current, "glyph")?;
                 }
                 FontChange::Layer {
                     glyph_id, layer, ..
                 } => {
-                    let layer_id = replacement_layer_id(layer)?;
+                    let layer_id = layer.layer_id()?;
                     let current = self
                         .glyph(glyph_id)
                         .and_then(|glyph| glyph.layers().get(&layer_id))
@@ -155,7 +155,7 @@ impl Font {
                 continue;
             };
             if layer.before.is_some() && layer.after.is_none() {
-                let layer_id = replacement_layer_id(layer)?;
+                let layer_id = layer.layer_id()?;
                 let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
                 Arc::make_mut(glyph).remove_layer(&layer_id);
             }
@@ -166,7 +166,7 @@ impl Font {
                 continue;
             };
             if value.before.is_some() && value.after.is_none() {
-                let glyph_id = replacement_glyph_id(value)?;
+                let glyph_id = value.glyph_id()?;
                 let glyphs = &mut self.data_mut().glyphs;
                 let tail_id = glyphs
                     .len()
@@ -174,10 +174,7 @@ impl Font {
                     .and_then(|index| glyphs.get_index(index))
                     .map(|(id, _)| id);
                 if tail_id != Some(&glyph_id) {
-                    return Err(CoreError::InvalidEntityOrder {
-                        kind: "glyph",
-                        message: format!("identity {glyph_id} is not the directory tail"),
-                    });
+                    return Err(CoreError::GlyphNotAtTail(glyph_id));
                 }
                 glyphs.shift_remove(&glyph_id);
             }
@@ -231,10 +228,7 @@ impl Font {
         for axis in self.axes() {
             axis.validate()?;
             if !axis_ids.insert(axis.id()) {
-                return Err(CoreError::InvalidEntityOrder {
-                    kind: "axis",
-                    message: format!("identity {} is repeated", axis.id()),
-                });
+                return Err(CoreError::RepeatedAxisId(axis.id()));
             }
             if !axis_tags.insert(axis.tag()) {
                 return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
@@ -257,17 +251,11 @@ impl Font {
             Some(source_id) => {
                 let source = self.require_source(&source_id)?;
                 if !source.is_master() {
-                    return Err(CoreError::InvalidEntityOrder {
-                        kind: "source",
-                        message: "default identity must name a master".to_string(),
-                    });
+                    return Err(CoreError::DefaultSourceNotMaster);
                 }
             }
             None if !self.sources().is_empty() => {
-                return Err(CoreError::InvalidEntityOrder {
-                    kind: "source",
-                    message: "non-empty source collection has no default identity".to_string(),
-                });
+                return Err(CoreError::MissingDefaultSource);
             }
             None => {}
         }
@@ -287,38 +275,6 @@ impl Font {
             sources: self.sources().to_vec(),
             default_source_id: self.default_source_id(),
         }
-    }
-}
-
-fn replacement_glyph_id(value: &Replacement<Option<Glyph>>) -> CoreResult<GlyphId> {
-    let before_id = value.before.as_ref().map(Glyph::id);
-    let after_id = value.after.as_ref().map(Glyph::id);
-    match (before_id, after_id) {
-        (Some(before), Some(after)) if before != after => Err(CoreError::InvalidEntityOrder {
-            kind: "changeset",
-            message: format!("glyph identity changes from {before} to {after}"),
-        }),
-        (Some(id), _) | (_, Some(id)) => Ok(id),
-        (None, None) => Err(CoreError::InvalidEntityOrder {
-            kind: "changeset",
-            message: "glyph replacement has no value on either side".to_string(),
-        }),
-    }
-}
-
-fn replacement_layer_id(value: &Replacement<Option<Arc<GlyphLayer>>>) -> CoreResult<LayerId> {
-    let before_id = value.before.as_ref().map(|layer| layer.id());
-    let after_id = value.after.as_ref().map(|layer| layer.id());
-    match (before_id, after_id) {
-        (Some(before), Some(after)) if before != after => Err(CoreError::InvalidEntityOrder {
-            kind: "changeset",
-            message: format!("layer identity changes from {before} to {after}"),
-        }),
-        (Some(id), _) | (_, Some(id)) => Ok(id),
-        (None, None) => Err(CoreError::InvalidEntityOrder {
-            kind: "changeset",
-            message: "layer replacement has no value on either side".to_string(),
-        }),
     }
 }
 
@@ -345,7 +301,7 @@ fn touched_glyph_ids(change_set: &FontChangeSet) -> Vec<GlyphId> {
 mod tests {
     use crate::{
         CreateGlyph, CreateGlyphLayer, DeleteAxis, EntityChange, FontEntityChange, FontIntent,
-        FontIntentSet, UpdateFontMetadata,
+        FontIntentSet, Replacement, UpdateFontMetadata,
     };
 
     use super::*;

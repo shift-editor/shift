@@ -1,4 +1,4 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
 use std::collections::HashSet;
 
 use rusqlite::{OptionalExtension, Transaction, params};
@@ -124,21 +124,13 @@ fn validate_glyph_order(
         }
     }
     if !appended.is_empty() && !popped.is_empty() {
-        return Err(font::CoreError::InvalidEntityOrder {
-            kind: "glyph",
-            message: "one committed change set cannot both append and pop glyphs".into(),
-        }
-        .into());
+        return Err(StoreError::AppendAndPopGlyphs);
     }
 
     let first_appended_order = post_font.glyph_count().saturating_sub(appended.len());
     for (offset, glyph_id) in appended.iter().enumerate() {
         if post_font.glyph_order(glyph_id) != Some(first_appended_order + offset) {
-            return Err(font::CoreError::InvalidEntityOrder {
-                kind: "glyph",
-                message: format!("appended identity {glyph_id} is not in the tail segment"),
-            }
-            .into());
+            return Err(StoreError::AppendedGlyphNotAtTail(glyph_id.clone()));
         }
     }
     for (offset, glyph_id) in popped.iter().enumerate() {
@@ -149,14 +141,10 @@ fn validate_glyph_order(
                 |row| row.get::<_, i64>(0),
             )
             .optional()?
-            .or_missing("glyph", glyph_id)?;
+            .or_missing(StoreEntity::Glyph, glyph_id)?;
         let expected = post_font.glyph_count() + popped.len() - offset - 1;
         if order_index != expected as i64 {
-            return Err(font::CoreError::InvalidEntityOrder {
-                kind: "glyph",
-                message: format!("popped identity {glyph_id} is not the directory tail"),
-            }
-            .into());
+            return Err(StoreError::PoppedGlyphNotAtTail(glyph_id.clone()));
         }
     }
     Ok(())
@@ -503,7 +491,7 @@ fn replace_glyph(
     tx: &Transaction<'_>,
     value: &font::Replacement<Option<font::Glyph>>,
 ) -> Result<(), StoreError> {
-    let glyph_id = replacement_glyph_id(value)?;
+    let glyph_id = value.glyph_id()?;
     match &value.after {
         Some(glyph) => {
             let existing_order = tx
@@ -540,13 +528,9 @@ fn replace_glyph(
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
                 )
                 .optional()?
-                .or_missing("glyph", &glyph_id)?;
+                .or_missing(StoreEntity::Glyph, &glyph_id)?;
             if order_index + 1 != count {
-                return Err(font::CoreError::InvalidEntityOrder {
-                    kind: "glyph",
-                    message: format!("identity {glyph_id} is not the directory tail"),
-                }
-                .into());
+                return Err(StoreError::GlyphNotAtTail(glyph_id));
             }
             tx.execute("DELETE FROM glyphs WHERE id = ?1", [&glyph_id])?;
         }
@@ -559,7 +543,7 @@ fn replace_layer(
     glyph_id: &font::GlyphId,
     value: &font::Replacement<Option<std::sync::Arc<font::GlyphLayer>>>,
 ) -> Result<(), StoreError> {
-    let layer_id = replacement_layer_id(value)?;
+    let layer_id = value.layer_id()?;
     match &value.after {
         Some(layer) => write_layer_in_tx(tx, glyph_id, layer),
         None => {
@@ -567,40 +551,6 @@ fn replace_layer(
             Ok(())
         }
     }
-}
-
-fn replacement_glyph_id(
-    value: &font::Replacement<Option<font::Glyph>>,
-) -> Result<font::GlyphId, StoreError> {
-    value
-        .before
-        .as_ref()
-        .map(font::Glyph::id)
-        .or_else(|| value.after.as_ref().map(font::Glyph::id))
-        .ok_or_else(|| {
-            font::CoreError::InvalidEntityOrder {
-                kind: "changeset",
-                message: "glyph replacement has no value on either side".to_string(),
-            }
-            .into()
-        })
-}
-
-fn replacement_layer_id(
-    value: &font::Replacement<Option<std::sync::Arc<font::GlyphLayer>>>,
-) -> Result<font::LayerId, StoreError> {
-    value
-        .before
-        .as_ref()
-        .map(|layer| layer.id())
-        .or_else(|| value.after.as_ref().map(|layer| layer.id()))
-        .ok_or_else(|| {
-            font::CoreError::InvalidEntityOrder {
-                kind: "changeset",
-                message: "layer replacement has no value on either side".to_string(),
-            }
-            .into()
-        })
 }
 
 /// Every id stored in `table`, as the id type the caller compares against.
@@ -943,7 +893,7 @@ fn update_font_metadata(
             metadata.version_minor.map(i64::from),
         ],
     )?;
-    require_changed(rows_changed, "font info", "1")
+    require_changed(rows_changed, StoreEntity::FontInfo, "1")
 }
 
 /// Persists the live font's default source identity without changing other font fields.
@@ -955,7 +905,7 @@ pub(crate) fn set_default_source_id(
         "UPDATE font_info SET default_source_id = ?1 WHERE id = 1",
         [source_id.map(font::SourceId::as_str)],
     )?;
-    require_changed(rows_changed, "font info", "1")
+    require_changed(rows_changed, StoreEntity::FontInfo, "1")
 }
 
 pub(crate) fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), StoreError> {
@@ -1257,6 +1207,6 @@ fn typed_json(kind: &'static str, value: impl serde::Serialize) -> serde_json::V
     })
 }
 
-fn require_changed(rows_changed: usize, kind: &'static str, id: &str) -> Result<(), StoreError> {
+fn require_changed(rows_changed: usize, kind: StoreEntity, id: &str) -> Result<(), StoreError> {
     (rows_changed > 0).then_some(()).or_missing(kind, &id)
 }
