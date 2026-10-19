@@ -15,7 +15,7 @@ pub(crate) fn malformed(path: &Path, details: String) -> FontReadError {
         Some("designspace") => FontFormat::Designspace,
         Some("shift") => FontFormat::Shift,
         Some("otf") => FontFormat::Otf,
-        Some("ttf") | None | Some(_) => FontFormat::Ttf,
+        Some("ttf" | _) | None => FontFormat::Ttf,
     };
     FontReadError::MalformedSource {
         format,

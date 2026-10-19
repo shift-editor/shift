@@ -153,11 +153,17 @@ fn millis(duration: Duration) -> f64 {
 }
 
 #[cfg(unix)]
+#[allow(
+    unsafe_code,
+    reason = "peak memory is only available through getrusage"
+)]
 fn peak_rss_mebibytes() -> Option<f64> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
+    // SAFETY: `usage` is a valid, writable `rusage` for the call to fill.
     if unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) } != 0 {
         return None;
     }
+    // SAFETY: `getrusage` returned 0, so it initialized `usage`.
     let rss = unsafe { usage.assume_init() }.ru_maxrss as f64;
     #[cfg(target_os = "macos")]
     return Some(rss / 1_048_576.0);

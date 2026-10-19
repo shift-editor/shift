@@ -55,7 +55,7 @@ impl UfoReader {
         Self
     }
 
-    fn convert_point_type(typ: &norad::PointType) -> PointType {
+    fn convert_point_type(typ: norad::PointType) -> PointType {
         match typ {
             norad::PointType::Move => PointType::OnCurve,
             norad::PointType::Line => PointType::OnCurve,
@@ -70,7 +70,7 @@ impl UfoReader {
         let is_closed = contour.is_closed();
 
         for point in &contour.points {
-            let point_type = Self::convert_point_type(&point.typ);
+            let point_type = Self::convert_point_type(point.typ);
             shift_contour.add_point(point.x, point.y, point_type, point.smooth);
         }
 

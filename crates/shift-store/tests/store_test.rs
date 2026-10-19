@@ -1336,9 +1336,8 @@ fn create_document_never_clobbers_an_existing_destination() {
     let path = temp.path().join("Existing.shift");
     std::fs::write(&path, b"retain me").expect("write destination");
 
-    let error = match ShiftStore::create_document(&path, &sample_font()) {
-        Ok(_) => panic!("existing destination must not be replaced"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::create_document(&path, &sample_font()) else {
+        panic!("existing destination must not be replaced");
     };
 
     assert!(matches!(
@@ -1359,9 +1358,8 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
     let future_path = temp.path().join("Future.shift");
 
     rusqlite::Connection::open(&plain_path).expect("create plain sqlite");
-    let plain_error = match ShiftStore::open_document(&plain_path) {
-        Ok(_) => panic!("plain SQLite must not open as Shift"),
-        Err(error) => error,
+    let Err(plain_error) = ShiftStore::open_document(&plain_path) else {
+        panic!("plain SQLite must not open as Shift");
     };
     assert!(matches!(
         plain_error,
@@ -1377,9 +1375,8 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
     conn.pragma_update(None, "user_version", 999)
         .expect("stamp future schema");
     drop(conn);
-    let future_error = match ShiftStore::open_document(&future_path) {
-        Ok(_) => panic!("future document must be refused"),
-        Err(error) => error,
+    let Err(future_error) = ShiftStore::open_document(&future_path) else {
+        panic!("future document must be refused");
     };
     assert!(matches!(
         future_error,
@@ -1407,9 +1404,8 @@ fn document_open_rejects_foreign_key_corruption_before_write_access() {
     .expect("break a glyph foreign key");
     drop(conn);
 
-    let error = match ShiftStore::open_document(&path) {
-        Ok(_) => panic!("foreign-key corruption must be refused"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open_document(&path) else {
+        panic!("foreign-key corruption must be refused");
     };
     assert!(matches!(
         error,
@@ -1424,9 +1420,8 @@ fn canonical_document_requires_document_open_posture() {
     let path = temp.path().join("Canonical.shift");
     drop(ShiftStore::create_document(&path, &sample_font()).expect("create document"));
 
-    let error = match ShiftStore::open(&path) {
-        Ok(_) => panic!("canonical document must not use working-store WAL posture"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open(&path) else {
+        panic!("canonical document must not use working-store WAL posture");
     };
     assert!(matches!(
         error,
@@ -1446,7 +1441,7 @@ fn canonical_document_requires_document_open_posture() {
 #[test]
 fn completed_import_store_restores_durable_wal_mode() {
     let path = temp_store_path("import-pragmas");
-    let font = shift_font::test_support::sample_font();
+    let font = sample_font();
     let mut store = ShiftStore::open_for_import(&path).expect("open import store");
     let mut writer = store.begin_import(&font).expect("begin import");
     for glyph in font.glyphs() {
@@ -1478,9 +1473,8 @@ fn import_mode_refuses_a_published_workspace_destination() {
         .expect("publish workspace");
     drop(store);
 
-    let error = match ShiftStore::open_for_import(&path) {
-        Ok(_) => panic!("published store must be retained"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open_for_import(&path) else {
+        panic!("published store must be retained");
     };
     assert!(matches!(
         error,

@@ -93,11 +93,10 @@ fn native_documents_require_an_explicit_recovery_path() {
     let temp = tempfile::tempdir().unwrap();
     let document_path = temp.path().join("TestFont.shift");
     let store_path = temp.path().join("working.sqlite");
-    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+    drop(ShiftStore::create_document(&document_path, &Font::new()).unwrap());
 
-    let error = match FontWorkspace::open(&document_path, &store_path) {
-        Ok(_) => panic!("native document should require an explicit recovery path"),
-        Err(error) => error,
+    let Err(error) = FontWorkspace::open(&document_path, &store_path) else {
+        panic!("native document should require an explicit recovery path");
     };
 
     assert!(matches!(
@@ -111,7 +110,7 @@ fn native_document_reopens_sparse_recovery_and_saves_to_canonical() {
     let temp = tempfile::tempdir().unwrap();
     let document_path = temp.path().join("Dogfood.shift");
     let recovery_path = temp.path().join("recovery.sqlite");
-    let original = shift_font::Font::new();
+    let original = Font::new();
     drop(ShiftStore::create_document(&document_path, &original).unwrap());
 
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
@@ -278,16 +277,15 @@ fn default_source_delete_is_rejected_without_live_or_durable_mutation() {
     drop(ShiftStore::create_document(&document_path, &font).unwrap());
 
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
-    let error = match workspace.apply(
+    let Err(error) = workspace.apply(
         FontIntentSet {
             intents: vec![FontIntent::DeleteSource {
                 source_id: default_source_id.clone(),
             }],
         },
         Some("Delete Default".to_string()),
-    ) {
-        Ok(_) => panic!("default source deletion should be rejected"),
-        Err(error) => error,
+    ) else {
+        panic!("default source deletion should be rejected");
     };
 
     assert!(matches!(
@@ -310,7 +308,7 @@ fn native_document_undo_to_saved_clears_recovery_across_reopen() {
     let temp = tempfile::tempdir().unwrap();
     let document_path = temp.path().join("Dogfood.shift");
     let recovery_path = temp.path().join("recovery.sqlite");
-    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+    drop(ShiftStore::create_document(&document_path, &Font::new()).unwrap());
 
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
     create_glyph(&mut workspace, "B", vec![66]);
@@ -331,7 +329,7 @@ fn native_document_redo_restores_recovery_across_reopen() {
     let temp = tempfile::tempdir().unwrap();
     let document_path = temp.path().join("Dogfood.shift");
     let recovery_path = temp.path().join("recovery.sqlite");
-    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+    drop(ShiftStore::create_document(&document_path, &Font::new()).unwrap());
 
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
     create_glyph(&mut workspace, "B", vec![66]);
@@ -358,7 +356,7 @@ fn native_document_save_as_adopts_new_identity_without_mutating_source() {
     let source_recovery = temp.path().join("source-recovery.sqlite");
     let destination_path = temp.path().join("Destination.shift");
     let destination_recovery = temp.path().join("destination-recovery.sqlite");
-    drop(ShiftStore::create_document(&source_path, &shift_font::Font::new()).unwrap());
+    drop(ShiftStore::create_document(&source_path, &Font::new()).unwrap());
     let source_id = ShiftStore::open_document(&source_path)
         .unwrap()
         .document_metadata()
@@ -765,14 +763,14 @@ fn failed_streaming_import_removes_staging_and_preserves_the_destination() {
         })
         .unwrap();
     fs::remove_file(glif_path).unwrap();
-    drop(shift_store::ShiftStore::open(&store_path).unwrap());
+    drop(ShiftStore::open(&store_path).unwrap());
     let destination_before = fs::read(&store_path).unwrap();
 
     assert!(FontWorkspace::open(&source_path, &store_path).is_err());
 
     assert_eq!(fs::read(&store_path).unwrap(), destination_before);
     assert!(
-        shift_store::ShiftStore::open(&store_path)
+        ShiftStore::open(&store_path)
             .unwrap()
             .workspace_state()
             .unwrap()
@@ -795,9 +793,8 @@ fn foreign_import_refuses_to_replace_a_published_workspace_store() {
     let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     drop(workspace);
 
-    let error = match FontWorkspace::open(&source_path, &store_path) {
-        Ok(_) => panic!("foreign import must not replace a published workspace"),
-        Err(error) => error,
+    let Err(error) = FontWorkspace::open(&source_path, &store_path) else {
+        panic!("foreign import must not replace a published workspace");
     };
 
     assert!(matches!(
@@ -1592,9 +1589,8 @@ fn apply_set_x_advance_rejects_missing_layer() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let layer_id = LayerId::new();
 
-    let error = match workspace.apply(set_x_advance_intents(layer_id.clone(), 640.0), None) {
-        Ok(_) => panic!("apply should reject a missing layer id"),
-        Err(error) => error,
+    let Err(error) = workspace.apply(set_x_advance_intents(layer_id.clone(), 640.0), None) else {
+        panic!("apply should reject a missing layer id");
     };
 
     assert!(matches!(
@@ -2247,7 +2243,7 @@ fn tracked_languages_survive_document_recovery_and_save() {
     let temp = tempfile::tempdir().unwrap();
     let document_path = temp.path().join("Languages.shift");
     let recovery_path = temp.path().join("recovery.sqlite");
-    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+    drop(ShiftStore::create_document(&document_path, &Font::new()).unwrap());
 
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
     set_languages(&mut workspace, &["eng-latin", "fra-latin"]);
@@ -2278,7 +2274,7 @@ fn undoing_a_saved_language_list_removes_it_from_document_recovery() {
     let temp = tempfile::tempdir().unwrap();
     let document_path = temp.path().join("Languages.shift");
     let recovery_path = temp.path().join("recovery.sqlite");
-    drop(ShiftStore::create_document(&document_path, &shift_font::Font::new()).unwrap());
+    drop(ShiftStore::create_document(&document_path, &Font::new()).unwrap());
 
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
     set_languages(&mut workspace, &["eng-latin"]);
@@ -2573,12 +2569,11 @@ fn failed_undo_replay_hands_the_entry_back_for_retry() {
     // row to pop and the replay fails at the persistence step.
     workspace
         .store_mut()
-        .replace_font_state(&shift_font::Font::new())
+        .replace_font_state(&Font::new())
         .unwrap();
 
-    let error = match workspace.undo() {
-        Ok(_) => panic!("undo should fail when the store rejects the replay"),
-        Err(error) => error,
+    let Err(error) = workspace.undo() else {
+        panic!("undo should fail when the store rejects the replay");
     };
     assert!(matches!(error, WorkspaceError::Store(_)));
     assert!(workspace.font().glyph_id_by_name("A").is_some());
@@ -2630,12 +2625,11 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
     // row to delete and the replay fails at the persistence step.
     workspace
         .store_mut()
-        .replace_font_state(&shift_font::Font::new())
+        .replace_font_state(&Font::new())
         .unwrap();
 
-    let error = match workspace.redo() {
-        Ok(_) => panic!("redo should fail when the store rejects the replay"),
-        Err(error) => error,
+    let Err(error) = workspace.redo() else {
+        panic!("redo should fail when the store rejects the replay");
     };
     assert!(matches!(error, WorkspaceError::Store(_)));
     assert!(

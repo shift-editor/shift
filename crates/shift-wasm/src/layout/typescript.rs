@@ -322,7 +322,7 @@ fn write_value(out: &mut String, kind: &Kind, expr: &str, indent: &str, depth: u
         Kind::Count => writeln!(out, "{indent}write.count({expr});").unwrap(),
         Kind::Name => writeln!(out, "{indent}write.name({expr});").unwrap(),
         Kind::Struct(layout) => {
-            writeln!(out, "{indent}write{}(write, {expr});", layout.name).unwrap()
+            writeln!(out, "{indent}write{}(write, {expr});", layout.name).unwrap();
         }
         Kind::Enum(layout) => writeln!(
             out,

@@ -1143,21 +1143,21 @@ fn arguments() -> Result<Arguments> {
             "--width" => arguments.width = required_value(&mut values, "--width")?.parse()?,
             "--height" => arguments.height = required_value(&mut values, "--height")?.parse()?,
             "--cell-size" => {
-                arguments.cell_size = required_value(&mut values, "--cell-size")?.parse()?
+                arguments.cell_size = required_value(&mut values, "--cell-size")?.parse()?;
             }
             "--iterations" => {
-                arguments.iterations = required_value(&mut values, "--iterations")?.parse()?
+                arguments.iterations = required_value(&mut values, "--iterations")?.parse()?;
             }
             "--full-cell-quads" => arguments.full_cell_quads = true,
             "--compact-indices" => arguments.compact_indices = true,
             "--output" => {
-                arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?))
+                arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?));
             }
             "--comparison-output" => {
                 arguments.comparison_output = Some(PathBuf::from(required_value(
                     &mut values,
                     "--comparison-output",
-                )?))
+                )?));
             }
             _ => arguments.settings.push(parse_setting(&value)?),
         }

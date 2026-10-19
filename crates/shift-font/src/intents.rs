@@ -1859,13 +1859,12 @@ mod tests {
         font.add_source(Source::new("Bold".to_string(), location));
         let original = font.clone();
 
-        let error = match font.apply_intents(FontIntentSet {
+        let Err(error) = font.apply_intents(FontIntentSet {
             intents: vec![FontIntent::DeleteSource {
                 source_id: default_source_id.clone(),
             }],
-        }) {
-            Ok(_) => panic!("default source deletion should be rejected"),
-            Err(error) => error,
+        }) else {
+            panic!("default source deletion should be rejected");
         };
 
         assert!(matches!(
@@ -2025,7 +2024,7 @@ mod tests {
 
         let layer = font.layer(&root_layer_id).unwrap();
         let mark = layer.component(&mark_component_id).unwrap();
-        assert_eq!(mark.matrix(), crate::Transform::translate(321.0, 0.0));
+        assert_eq!(mark.matrix(), Transform::translate(321.0, 0.0));
     }
 
     #[test]
@@ -2192,7 +2191,7 @@ mod tests {
         middle_layer.add_component(Component::with_transform(
             leaf_id,
             "leaf",
-            crate::DecomposedTransform {
+            DecomposedTransform {
                 translate_y: 5.0,
                 ..Default::default()
             },
@@ -2208,7 +2207,7 @@ mod tests {
             root_component_id.clone(),
             middle_id,
             "middle",
-            crate::DecomposedTransform {
+            DecomposedTransform {
                 translate_x: 30.0,
                 ..Default::default()
             },
