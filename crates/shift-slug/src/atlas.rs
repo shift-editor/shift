@@ -156,18 +156,19 @@ impl AtlasBuilder {
         let band_start = to_u32(self.atlas.bands.len())?;
         let glyph_index = to_u32(self.atlas.glyphs.len())?;
 
-        let mut bands = Vec::with_capacity(local_bands.len());
-        for band in local_bands {
-            bands.push(Band {
-                start: index_start.checked_add(band.start).or_overflow()?,
-                count: band.count,
-            });
-        }
-
-        let mut indices = Vec::with_capacity(local_indices.len());
-        for local_index in local_indices {
-            indices.push(curve_start.checked_add(local_index).or_overflow()?);
-        }
+        let bands = local_bands
+            .into_iter()
+            .map(|band| {
+                Ok(Band {
+                    start: index_start.checked_add(band.start).or_overflow()?,
+                    count: band.count,
+                })
+            })
+            .collect::<Result<Vec<_>, SlugError>>()?;
+        let indices = local_indices
+            .into_iter()
+            .map(|local_index| curve_start.checked_add(local_index).or_overflow())
+            .collect::<Result<Vec<_>, _>>()?;
 
         ensure_total(self.atlas.curves.len(), curves.len())?;
         ensure_total(self.atlas.curve_indices.len(), indices.len())?;

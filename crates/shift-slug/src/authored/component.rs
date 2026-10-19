@@ -443,13 +443,16 @@ impl AuthoredComponentSourceContext<'_> {
             )]);
         };
         let weight_indices = projection_weight_indices(projection, self.weight_sets)?;
-        let mut layers = Vec::with_capacity(interpolation.sources().len());
-        for (source, weight_index) in interpolation.sources().iter().zip(weight_indices) {
-            let mut layer = interpolation.reference_layer().clone();
-            layer.apply_interpolation_values(source.values())?;
-            layers.push((*weight_index, layer));
-        }
-        Ok(layers)
+        interpolation
+            .sources()
+            .iter()
+            .zip(weight_indices)
+            .map(|(source, weight_index)| {
+                let mut layer = interpolation.reference_layer().clone();
+                layer.apply_interpolation_values(source.values())?;
+                Ok((*weight_index, layer))
+            })
+            .collect()
     }
 }
 

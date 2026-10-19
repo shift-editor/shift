@@ -520,17 +520,18 @@ fn load_kerning_groups(
         ORDER BY order_index
         ",
     )?;
-    let mut groups = Vec::with_capacity(group_rows.len());
-    for (group_id, position, name) in group_rows {
-        let members = member_stmt
-            .query_map([&group_id], |row| row.get::<_, font::GlyphId>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        groups.push((
-            font::KerningGroupId::from_raw(group_id),
-            font::KerningGroup::new(kerning_position(position)?, name, members),
-        ));
-    }
-    Ok(groups)
+    group_rows
+        .into_iter()
+        .map(|(group_id, position, name)| {
+            let members = member_stmt
+                .query_map([&group_id], |row| row.get::<_, font::GlyphId>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((
+                font::KerningGroupId::from_raw(group_id),
+                font::KerningGroup::new(kerning_position(position)?, name, members),
+            ))
+        })
+        .collect()
 }
 
 fn kerning_position(column: i64) -> Result<font::KerningPosition, StoreError> {

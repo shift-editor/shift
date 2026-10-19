@@ -654,13 +654,10 @@ impl FontProjection<'_> {
     /// Returns the first interpolation error encountered while resolving a
     /// requested glyph or one of its component branches.
     pub fn glyphs(&mut self, glyph_ids: &[GlyphId]) -> CoreResult<Vec<ResolvedGlyph>> {
-        let mut glyphs = Vec::new();
-        for glyph_id in glyph_ids {
-            if let Some(glyph) = self.glyph(glyph_id)? {
-                glyphs.push(glyph);
-            }
-        }
-        Ok(glyphs)
+        glyph_ids
+            .iter()
+            .filter_map(|glyph_id| self.glyph(glyph_id).transpose())
+            .collect()
     }
 
     fn prepare_layer_tree(&mut self, glyph_id: &GlyphId) -> CoreResult<bool> {
