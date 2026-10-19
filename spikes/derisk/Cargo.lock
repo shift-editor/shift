@@ -527,6 +527,7 @@ dependencies = [
  "notify",
  "postcard",
  "rmp-serde",
+ "rusqlite",
  "serde",
  "serde_json",
  "shift-backends",
