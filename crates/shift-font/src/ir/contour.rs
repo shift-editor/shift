@@ -368,11 +368,7 @@ mod tests {
 
     #[test]
     fn closed_triangle_to_bezpath() {
-        let mut c = Contour::new();
-        c.add_point(0.0, 0.0, PointType::OnCurve, false);
-        c.add_point(100.0, 0.0, PointType::OnCurve, false);
-        c.add_point(50.0, 100.0, PointType::OnCurve, false);
-        c.close();
+        let c = crate::contour![(0.0, 0.0), (100.0, 0.0), (50.0, 100.0)];
 
         let path = BezPath::from(&c);
         let els = path.elements();

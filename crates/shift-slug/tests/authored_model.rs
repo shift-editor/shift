@@ -859,11 +859,7 @@ fn triangle_layer_for_source(source_id: SourceId) -> GlyphLayer {
 
 fn triangle_layer_for_source_shifted(source_id: SourceId, shift: f64) -> GlyphLayer {
     let mut layer = GlyphLayer::new(LayerId::new(), source_id);
-    let mut contour = Contour::new();
-    contour.add_point(shift, 0.0, PointType::OnCurve, false);
-    contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);
-    contour.add_point(100.0 + shift, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(shift, 0.0), (50.0 + shift, 100.0), (100.0 + shift, 0.0)];
     layer.add_contour(contour);
     layer
 }

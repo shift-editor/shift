@@ -86,11 +86,7 @@ fn simple_geometry_font() -> Font {
     let source_id = font.default_source_id().unwrap();
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
     let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), source_id, 640.0);
-    let mut contour = Contour::new();
-    contour.add_point(100.0, 0.0, PointType::OnCurve, false);
-    contour.add_point(320.0, 700.0, PointType::OnCurve, false);
-    contour.add_point(540.0, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(100.0, 0.0), (320.0, 700.0), (540.0, 0.0)];
     layer.add_contour(contour);
     glyph.set_layer(layer);
     font.insert_glyph(glyph).unwrap();

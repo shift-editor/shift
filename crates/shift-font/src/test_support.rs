@@ -15,6 +15,27 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
+/// A closed contour of on-curve corner points, in order.
+///
+/// The [`contour!`](crate::contour) macro writes the same shape with integer
+/// or float coordinates.
+pub fn closed_contour(points: &[(f64, f64)]) -> Contour {
+    let mut contour = Contour::new();
+    for &(x, y) in points {
+        contour.add_point(x, y, PointType::OnCurve, false);
+    }
+    contour.close();
+    contour
+}
+
+/// A closed contour of on-curve points: `contour![(0, 0), (40, 0), (40, 700)]`.
+#[macro_export]
+macro_rules! contour {
+    ($(($x:expr, $y:expr)),+ $(,)?) => {
+        $crate::test_support::closed_contour(&[$((f64::from($x), f64::from($y))),+])
+    };
+}
+
 /// Builds a kitchen-sink font corpus for semantic round-trip tests.
 ///
 /// Checklist when adding a new `FontData` field: populate it here with a
