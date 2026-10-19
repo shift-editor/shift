@@ -2,3 +2,4 @@
 pub mod engine;
 pub mod fixtures;
 pub mod shaping;
+pub mod text_folder;
