@@ -193,7 +193,7 @@ fn selected_components<'a>(
         .exact_source_components()
         .iter()
         .find(|candidate| candidate.source_id() == source.id())
-        .map(|candidate| candidate.components())
+        .map(shift_font::GlyphSourceComponents::components)
         .unwrap_or_else(|| projection.components())
 }
 
@@ -329,7 +329,7 @@ fn inspect_sources(
                 layer: layer.map(inspect_layer),
                 compatible_with_reference: layer_match
                     .as_ref()
-                    .map(|layer_match| layer_match.is_complete()),
+                    .map(shift_font::LayerMatch::is_complete),
                 differences: layer_match
                     .map(|layer_match| {
                         layer_match

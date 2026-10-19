@@ -605,7 +605,7 @@ mod tests {
         let a1 = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 20.0));
         let a2 = layer.add_anchor(Anchor::new(Some("bottom".to_string()), 30.0, 40.0));
 
-        let ids: Vec<_> = layer.anchors_iter().map(|a| a.id()).collect();
+        let ids: Vec<_> = layer.anchors_iter().map(crate::Anchor::id).collect();
         assert_eq!(ids, vec![a1, a2]);
     }
 }

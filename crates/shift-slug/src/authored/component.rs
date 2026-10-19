@@ -176,7 +176,7 @@ pub(super) fn add_default_component_projection_glyph(
             .components()
             .components()
             .iter()
-            .map(|component| component.base_glyph_id()),
+            .map(shift_font::composite::ComponentGlyph::base_glyph_id),
     ) {
         if direct_glyphs.contains_key(&glyph_id) {
             continue;

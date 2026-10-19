@@ -255,7 +255,7 @@ pub(crate) fn write_glyph_in_tx(
 ) -> Result<(), StoreError> {
     write_glyph_directory_in_tx(tx, glyph, order_index, WriteMode::Upsert)?;
 
-    for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
+    for layer in glyph.layers().values().map(AsRef::as_ref) {
         write_layer_in_tx(tx, &glyph.id(), layer)?;
     }
     Ok(())

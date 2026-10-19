@@ -450,7 +450,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
         .glyphs()
         .filter(|glyph| !glyph.layers().is_empty())
         .take(520)
-        .map(|glyph| glyph.id())
+        .map(Glyph::id)
         .collect::<Vec<_>>();
     assert!(requested.len() > 512);
     assert_eq!(workspace.loaded_layer_count(), 0);
@@ -525,7 +525,7 @@ fn configured_large_corpus_streams_resumes_and_acquires() {
         .glyphs()
         .filter(|glyph| !glyph.layers().is_empty())
         .take(16)
-        .map(|glyph| glyph.id())
+        .map(Glyph::id)
         .collect::<Vec<_>>();
     workspace
         .acquire_glyphs(&glyph_ids, AcquireScope::Glyphs)
@@ -817,7 +817,7 @@ fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
         .glyphs()
         .filter(|glyph| !glyph.layers().is_empty())
         .take(2)
-        .map(|glyph| glyph.id())
+        .map(Glyph::id)
         .collect::<Vec<_>>();
     assert_eq!(requested.len(), 2);
     let corrupt_layer_id = workspace
@@ -2165,7 +2165,7 @@ fn set_languages(workspace: &mut FontWorkspace, language_ids: &[&str]) {
         .apply(
             &FontIntentSet {
                 intents: vec![FontIntent::SetLanguages {
-                    language_ids: language_ids.iter().map(|id| id.to_string()).collect(),
+                    language_ids: language_ids.iter().map(ToString::to_string).collect(),
                 }],
             },
             Some("Set Languages".to_string()),
@@ -2174,7 +2174,7 @@ fn set_languages(workspace: &mut FontWorkspace, language_ids: &[&str]) {
 }
 
 fn language_ids(ids: &[&str]) -> Option<Vec<String>> {
-    Some(ids.iter().map(|id| id.to_string()).collect())
+    Some(ids.iter().map(ToString::to_string).collect())
 }
 
 #[test]

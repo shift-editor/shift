@@ -272,7 +272,7 @@ impl FontWorkspace {
                 }
                 FontIntent::ReplaceGlyphLayerContent { components, .. } => {
                     component_roots
-                        .extend(components.iter().map(|component| component.base_glyph_id()));
+                        .extend(components.iter().map(shift_font::Component::base_glyph_id));
                 }
                 FontIntent::DecomposeComponents {
                     layer_id,
@@ -284,7 +284,7 @@ impl FontWorkspace {
                     component_roots.extend(component_ids.iter().filter_map(|component_id| {
                         layer
                             .component(component_id)
-                            .map(|component| component.base_glyph_id())
+                            .map(shift_font::Component::base_glyph_id)
                     }));
                 }
                 _ => {}
@@ -575,7 +575,7 @@ impl FontWorkspace {
             let Some(glyph) = self.font.glyph(glyph_id) else {
                 continue;
             };
-            for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
+            for layer in glyph.layers().values().map(AsRef::as_ref) {
                 if self.residency.is_unloaded(&layer.id()) || !seen_layer_ids.insert(layer.id()) {
                     continue;
                 }

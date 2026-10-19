@@ -2273,7 +2273,7 @@ mod tests {
                 .contours_iter()
                 .next()
                 .and_then(|contour| contour.points().first())
-                .map(|point| point.id()),
+                .map(crate::Point::id),
             Some(source_point_id)
         );
     }

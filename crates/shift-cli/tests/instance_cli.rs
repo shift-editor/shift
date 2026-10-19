@@ -133,7 +133,7 @@ fn in_range_standard_weights_are_additive_preserve_existing_names_and_are_idempo
         after
             .named_instances()
             .iter()
-            .map(|instance| instance.name())
+            .map(NamedInstance::name)
             .collect::<Vec<_>>(),
         vec!["Keep This Name", "Light", "Medium", "SemiBold", "Bold"]
     );

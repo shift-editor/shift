@@ -983,10 +983,7 @@ mod tests {
 
         session.translate_layer(4.0, 0.0);
 
-        let order: Vec<_> = session
-            .components_iter()
-            .map(|component| component.id())
-            .collect();
+        let order: Vec<_> = session.components_iter().map(Component::id).collect();
         assert_eq!(order, vec![first.clone(), second]);
         let transform = session.component(&first).unwrap().transform();
         assert_eq!(transform.rotation, 33.0);

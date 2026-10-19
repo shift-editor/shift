@@ -154,7 +154,7 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
                         let kinds = contour
                             .points
                             .iter()
-                            .map(|p| p.point_type())
+                            .map(crate::Point::point_type)
                             .collect::<Vec<_>>();
                         (contour.closed, kinds)
                     })
@@ -339,7 +339,7 @@ impl Pair<'_> {
         let types = b
             .points()
             .iter()
-            .map(|p| p.point_type())
+            .map(crate::Point::point_type)
             .collect::<Vec<_>>();
         let a_types = a.iter().map(|p| p.2).collect::<Vec<_>>();
         let cost = |shift: usize| {

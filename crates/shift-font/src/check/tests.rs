@@ -226,7 +226,7 @@ fn reports_a_negative_advance() {
 #[test]
 fn reports_an_encoded_glyph_that_draws_nothing() {
     let mut font = sample_variable_font();
-    edit_layer(&mut font, "Regular", |layer| layer.clear_contours());
+    edit_layer(&mut font, "Regular", GlyphLayer::clear_contours);
 
     assert!(glyph_a_findings(&font).contains(&Check::EmptyOutline));
 }

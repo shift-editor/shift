@@ -551,7 +551,10 @@ fn creates_and_reads_glyph_layer() {
 
     assert_eq!(layer.glyph_id.as_str(), glyph_id.as_str());
     assert_eq!(layer.source_id.as_str(), source_id.as_str());
-    assert_eq!(layer.name.as_ref().map(|name| name.as_str()), Some("A"));
+    assert_eq!(
+        layer.name.as_ref().map(shift_font::GlyphName::as_str),
+        Some("A")
+    );
 }
 
 #[test]

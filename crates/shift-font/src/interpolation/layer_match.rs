@@ -285,7 +285,7 @@ fn compare_components(
 fn component_sequence(layer: &GlyphLayer) -> Vec<GlyphId> {
     layer
         .components_iter()
-        .map(|component| component.base_glyph_id())
+        .map(crate::Component::base_glyph_id)
         .collect()
 }
 

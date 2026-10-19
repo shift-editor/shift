@@ -29,6 +29,7 @@ trivially_copy_pass_by_ref = "warn"
 # Borrow what isn't consumed: ids and collections by reference.
 needless_pass_by_value = "warn"
 redundant_clone = "warn"
+redundant_closure_for_method_calls = "warn"
 large_types_passed_by_value = "warn"
 
 [workspace.package]

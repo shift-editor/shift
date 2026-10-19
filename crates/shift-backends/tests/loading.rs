@@ -154,7 +154,7 @@ fn loads_ufo_metadata_metrics_and_geometry() {
     let glyph_o = font.glyph_by_name("O").expect("O glyph should exist");
     let has_off_curve = main_layer(glyph_o)
         .contours_iter()
-        .flat_map(|contour| contour.points())
+        .flat_map(Contour::points)
         .any(|point| point.point_type() == PointType::OffCurve);
     assert!(has_off_curve, "O should contain curve control points");
 }
@@ -183,7 +183,11 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
         .collect();
     assert!(anchor_names.contains(&"top"));
 
-    let source_names: Vec<_> = font.sources().iter().map(|source| source.name()).collect();
+    let source_names: Vec<_> = font
+        .sources()
+        .iter()
+        .map(shift_font::Source::name)
+        .collect();
     assert!(source_names.contains(&"Regular"));
     assert!(font.sources().len() >= 2);
     assert!(

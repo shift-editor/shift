@@ -286,7 +286,7 @@ fn recovery_save_replaces_reordered_component_collections() {
     layer.add_component(first);
     let reordered = layer
         .components_iter()
-        .map(|component| component.id())
+        .map(shift_font::Component::id)
         .collect::<Vec<_>>();
     document.replace_glyph_layer(&layer).unwrap();
     document.save_document().unwrap();
@@ -297,7 +297,7 @@ fn recovery_save_replaces_reordered_component_collections() {
     assert_eq!(
         saved_layer
             .components_iter()
-            .map(|component| component.id())
+            .map(shift_font::Component::id)
             .collect::<Vec<_>>(),
         reordered
     );

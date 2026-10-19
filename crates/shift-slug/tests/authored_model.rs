@@ -164,7 +164,7 @@ fn authored_atlas_page_compiles_only_ordered_unique_roots_and_component_closures
 
     let component_root = font
         .glyphs()
-        .map(|glyph| glyph.id())
+        .map(Glyph::id)
         .find(|glyph_id| {
             font.glyph_projection(glyph_id)
                 .unwrap()

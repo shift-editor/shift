@@ -295,7 +295,7 @@ fn imports_missing_source_names_from_ufo_metadata_and_filenames() {
     let source_names = font
         .sources()
         .iter()
-        .map(|source| source.name())
+        .map(shift_font::Source::name)
         .collect::<Vec<_>>();
 
     assert_eq!(source_names, ["Text", "Grouped-Text-Alt", "Editorial"]);

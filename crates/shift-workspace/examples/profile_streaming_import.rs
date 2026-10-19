@@ -136,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let first_glyph_id = workspace
         .font()
         .glyph_id_by_name(".notdef")
-        .or_else(|| workspace.font().glyphs().next().map(|glyph| glyph.id()));
+        .or_else(|| workspace.font().glyphs().next().map(shift_font::Glyph::id));
     if let Some(glyph_id) = first_glyph_id {
         let layer_ids = workspace
             .font()

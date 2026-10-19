@@ -156,7 +156,7 @@ fn detect_smooth_points(contours: &mut [Contour]) {
             contour.points(),
             contour.is_closed(),
             |point| (point.x(), point.y()),
-            |point| point.is_on_curve(),
+            shift_font::Point::is_on_curve,
         );
         for index in smooth {
             contour
@@ -348,7 +348,11 @@ mod tests {
     }
 
     fn point_types(contour: &Contour) -> Vec<PointType> {
-        contour.points().iter().map(|p| p.point_type()).collect()
+        contour
+            .points()
+            .iter()
+            .map(shift_font::Point::point_type)
+            .collect()
     }
 
     fn deterministic_pen_contours() -> Vec<Contour> {

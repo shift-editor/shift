@@ -638,7 +638,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
         let contour_ends = simple
             .end_pts_of_contours()
             .iter()
-            .map(|end| end.get())
+            .map(skrifa::raw::types::BigEndian::get)
             .collect::<Vec<_>>();
         let mut points = raw_points
             .iter()

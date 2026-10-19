@@ -37,7 +37,7 @@ impl UfoKerning {
             let Some((position, bare)) = group_position(name.as_str()) else {
                 continue;
             };
-            import.add_group(position, bare, members.iter().map(|member| member.as_str()));
+            import.add_group(position, bare, members.iter().map(norad::Name::as_str));
         }
     }
 
@@ -132,7 +132,7 @@ fn ufo_side(
     glyph_names: &HashMap<GlyphId, &str>,
 ) -> Option<String> {
     match side {
-        KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).map(|name| name.to_string()),
+        KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).map(ToString::to_string),
         KerningSide::Group(group_id) => kerning
             .group(group_id)
             .map(|group| format!("{group_prefix}{}", group.name)),

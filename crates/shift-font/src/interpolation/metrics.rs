@@ -199,7 +199,7 @@ impl Font {
         let metric_ids = self
             .metric_definitions()
             .iter()
-            .map(|definition| definition.id())
+            .map(crate::MetricDefinition::id)
             .collect::<Vec<_>>();
         let technical_fields = [
             SourceMetricField::ItalicAngle,
