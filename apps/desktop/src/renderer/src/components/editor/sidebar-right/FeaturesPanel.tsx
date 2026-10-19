@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeatureSubstitution, FontFeature, GlyphId } from "@shift/types";
 import type { Editor } from "@shift/editor";
 import type { TextRunRecord } from "@shift/editor/text";
@@ -42,11 +42,14 @@ export function FeaturePreviewPopover({
 }: {
   /** The feature to preview; null while closed. */
   readonly feature: FontFeature | null;
-  /** The tag that opened it; the popover sits beside the sidebar block holding it. */
+  /** The tag that opened it; the popover sits beside the Features section holding it. */
   readonly anchor: HTMLElement | null;
   readonly onClose: () => void;
 }) {
   const name = feature ? featureName(feature) : null;
+  const section = anchor?.closest("section") ?? null;
+  // One object per section: the positioner re-anchors only when its anchor changes, not when a function's result does.
+  const reference = useMemo(() => besideSection(section), [section]);
   return (
     <Popover
       open={feature !== null}
@@ -62,9 +65,11 @@ export function FeaturePreviewPopover({
     >
       <PopoverPortal>
         <PopoverPositioner
-          anchor={() => sidebarBlock(anchor)}
+          anchor={reference}
           side="left"
           align="start"
+          // Shift to stay on screen rather than flip, so its top stays level with the section's where it can.
+          collisionAvoidance={{ side: "none", align: "shift", fallbackAxisSide: "none" }}
           sideOffset={-1}
           alignOffset={-1}
         >
@@ -86,6 +91,27 @@ export function FeaturePreviewPopover({
       </PopoverPortal>
     </Popover>
   );
+}
+
+/**
+ * Returns where the preview sits: against the sidebar block's edge, level
+ * with the top of the Features section, so scrolling the feature list or
+ * switching features leaves it in place.
+ */
+function besideSection(
+  section: HTMLElement | null,
+): { contextElement: Element; getBoundingClientRect(): DOMRect } | null {
+  const block = sidebarBlock(section);
+  if (!section || !block) return null;
+  return {
+    // Follows the section when the sidebar itself scrolls.
+    contextElement: section,
+    getBoundingClientRect: () => {
+      const edge = block.getBoundingClientRect();
+      const { top, height } = section.getBoundingClientRect();
+      return new DOMRect(edge.left, top, edge.width, height);
+    },
+  };
 }
 
 const CloseButton = () => (

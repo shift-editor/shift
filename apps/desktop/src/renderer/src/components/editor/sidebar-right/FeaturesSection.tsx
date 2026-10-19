@@ -62,7 +62,12 @@ export const FeaturesSection = () => {
         // Eight rows, then the list scrolls.
         <div className="scrollbar-hidden flex max-h-62 flex-col gap-2 overflow-y-auto">
           {groupFeatures(shown).map((group) => (
-            <section key={group.title} aria-label={group.title} className="flex flex-col gap-2">
+            <div
+              key={group.title}
+              role="group"
+              aria-label={group.title}
+              className="flex flex-col gap-2"
+            >
               <h4 className="flex h-5 items-end text-ui text-secondary">{group.title}</h4>
               {group.features.map((feature) => (
                 <FeatureRow
@@ -77,7 +82,7 @@ export const FeaturesSection = () => {
                   }
                 />
               ))}
-            </section>
+            </div>
           ))}
         </div>
       )}
@@ -165,7 +170,7 @@ const FeatureRow = ({
           aria-pressed={previewing}
           className={cn(
             TAG_PILL,
-            "cursor-default",
+            "cursor-pointer",
             "text-primary",
             previewing ? "bg-icon-button-hover" : "hover:bg-hover",
           )}
@@ -181,7 +186,7 @@ const FeatureRow = ({
         <button
           type="button"
           aria-label={`${feature.tag}${name ? `, ${name}` : ""}, ${state}`}
-          className="group flex size-6 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          className="group flex size-6 shrink-0 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-1 focus-visible:ring-accent"
           onClick={(event) => cycle(event.altKey)}
         >
           <span
