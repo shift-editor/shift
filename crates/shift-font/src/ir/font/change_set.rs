@@ -192,7 +192,7 @@ impl Font {
                     .checked_sub(1)
                     .and_then(|index| glyphs.get_index(index))
                     .map(|(id, _)| id);
-                if tail_id != Some(&glyph_id) {
+                if tail_id.as_ref() != Some(&glyph_id) {
                     return Err(CoreError::InvalidEntityOrder {
                         kind: "glyph",
                         message: format!("identity {glyph_id} is not the directory tail"),
