@@ -18,6 +18,7 @@ use crate::font_source::{
 use super::inputs::tuple_region;
 use super::variable::{approximate_hypot, component_transform, infer_tuple_deltas};
 use crate::font_source::malformed;
+use crate::numeric::lossy_f32;
 
 pub(super) struct VariableCurves {
     pub(super) base: Vec<Curve>,
@@ -333,7 +334,7 @@ impl VariablePosition {
             .and_then(|weight| self.deltas.get(&weight))
             .copied()
             .unwrap_or_default();
-        Point::new((self.x + delta.0) as f32, (self.y + delta.1) as f32)
+        Point::new(lossy_f32(self.x + delta.0), lossy_f32(self.y + delta.1))
     }
 
     fn transformed(&self, transform: AffineTransform) -> Self {
@@ -653,7 +654,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                 },
                 smooth: false,
                 provenance: PointProvenance::Native {
-                    ttf_point_index: Some(TrueTypePointIndex::new(index as u32)),
+                    ttf_point_index: Some(TrueTypePointIndex::at(index)),
                 },
             })
             .collect::<Vec<_>>();

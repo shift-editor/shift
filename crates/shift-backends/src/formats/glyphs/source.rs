@@ -106,7 +106,7 @@ impl GlyphsFont {
                 .get(glyph.to_usize())
                 .ok_or(FontReadError::GlyphOutOfRange {
                     glyph,
-                    glyph_count: self.directory.glyphs.len() as u32,
+                    glyph_count: self.directory.glyph_count(),
                 })?;
         self.source.glyphs.get(entry.name.as_str()).ok_or_else(|| {
             FontReadError::InvalidProjection {
@@ -160,14 +160,14 @@ fn project_glyphs_glyph(
         };
         let converted = convert_glyphs_layer(font, glyph, layer)?;
         layers.push((
-            SourceIndex::new(master_index as u32),
+            SourceIndex::at(master_index),
             font.master_locations[master_index].clone(),
             converted,
         ));
     }
     if layers.is_empty() {
         layers.push((
-            SourceIndex::new(font.source.default_master_idx as u32),
+            SourceIndex::at(font.source.default_master_idx),
             font.master_locations
                 .get(font.source.default_master_idx)
                 .cloned()
@@ -178,7 +178,7 @@ fn project_glyphs_glyph(
     project_layers(
         layers,
         &font.interpolation_axes,
-        SourceIndex::new(font.source.default_master_idx as u32),
+        SourceIndex::at(font.source.default_master_idx),
     )
 }
 
@@ -408,7 +408,7 @@ unitsPerEm = 1000;
             .zip(&font.master_locations)
             .enumerate()
         {
-            assert_eq!(source.index, SourceIndex::new(index as u32));
+            assert_eq!(source.index, SourceIndex::at(index));
             assert_eq!(source.location.as_ref(), location);
         }
     }

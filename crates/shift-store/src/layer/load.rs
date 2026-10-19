@@ -1,4 +1,5 @@
 use crate::error::{OrMissing, StoreEntity};
+use crate::numeric::sql_int;
 use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
@@ -6,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shift_font as font;
 
 use super::{
-    MAX_LAYER_PAYLOAD_BYTES,
+    MAX_LAYER_PAYLOAD_BYTES_SQL,
     directory::{map_directory_facts_row, validate_directory_facts},
     format::decode_layer,
     payload::decompress_layer,
@@ -16,7 +17,6 @@ use crate::{ShiftStore, StoreError};
 
 pub const MAX_LAYER_READ_BATCH_COUNT: usize = 512;
 pub const MAX_LAYER_READ_BATCH_DECODED_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_LAYER_PAYLOAD_BYTES_SQL: i64 = MAX_LAYER_PAYLOAD_BYTES as i64;
 
 struct LayerDirectoryRead {
     facts: HashMap<String, super::directory::DirectoryFacts>,
@@ -283,7 +283,7 @@ fn load_glyph_layer_batch_with_directory(
                 detail: "payload has no directory row".to_string(),
             })?;
         if actual_len != facts.actual_stored_byte_length
-            || payload.len() as i64 != facts.actual_stored_byte_length
+            || sql_int(payload.len()) != facts.actual_stored_byte_length
         {
             return Err(StoreError::LayerDirectoryMismatch {
                 layer_id,

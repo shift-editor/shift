@@ -309,6 +309,10 @@ fn apply_mapping(coordinate: i16, mapping: &[(i16, i16)]) -> i16 {
     quantize_f2dot14(mapped / 16384.0)
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "clamped to the i16 range first"
+)]
 fn quantize_f2dot14(value: f64) -> i16 {
     (value * 16384.0)
         .round()

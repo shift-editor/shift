@@ -22,7 +22,7 @@ impl ShiftStore {
         let mut font = font::Font::empty();
 
         if let Some(info) = self.get_font_info()? {
-            apply_font_info(&mut font, info);
+            apply_font_info(&mut font, info)?;
         }
 
         let metric_definitions = load_metric_definitions(&self.conn)?;
@@ -64,7 +64,7 @@ impl ShiftStore {
     }
 }
 
-fn apply_font_info(font: &mut font::Font, info: FontInfo) {
+fn apply_font_info(font: &mut font::Font, info: FontInfo) -> Result<(), StoreError> {
     font.metadata_mut().family_name = info.family_name;
     font.metadata_mut().style_name = info.style_name;
     font.metadata_mut().copyright = info.copyright;
@@ -77,10 +77,11 @@ fn apply_font_info(font: &mut font::Font, info: FontInfo) {
     font.metadata_mut().manufacturer_url = info.manufacturer_url;
     font.metadata_mut().license = info.license_description;
     font.metadata_mut().license_url = info.license_info_url;
-    font.metadata_mut().version_major = info.version_major.map(|value| value as i32);
-    font.metadata_mut().version_minor = info.version_minor.map(|value| value as i32);
+    font.metadata_mut().version_major = info.version_major.map(i32::try_from).transpose()?;
+    font.metadata_mut().version_minor = info.version_minor.map(i32::try_from).transpose()?;
 
     font.metrics_mut().units_per_em = info.units_per_em;
+    Ok(())
 }
 
 fn load_metric_definitions(
@@ -331,7 +332,7 @@ fn load_glyphs(
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, font::GlyphId>(0)?,
-                row.get::<_, i64>(1)? as u32,
+                row.get::<_, u32>(1)?,
                 row.get::<_, i64>(2)?,
             ))
         })?;

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::env;
 use std::error::Error;
 use std::path::PathBuf;

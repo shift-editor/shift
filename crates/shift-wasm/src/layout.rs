@@ -41,6 +41,11 @@ impl<'a> Reader<'a> {
         value
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a count read as f64; negatives clamp to 0 and `as` saturates"
+    )]
     pub fn count(&mut self) -> usize {
         self.number().max(0.0) as usize
     }

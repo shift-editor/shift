@@ -8,7 +8,7 @@ use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, FontMetrics, Glyph, Kerning, MetricDefinition, NamedInstance,
+    Axis, FeatureData, FontMetadata, Glyph, Kerning, MetricDefinition, NamedInstance,
     Source as ShiftSource, SourceId,
 };
 
@@ -31,6 +31,11 @@ const MAX_UNITS_PER_EM: f64 = 16_384.0;
 pub(crate) fn units_per_em(value: f64) -> Option<u16> {
     let valid = value.fract() == 0.0 && (MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&value);
     // In range and whole, so the conversion is exact.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "checked whole and within 16..=16384 above"
+    )]
     valid.then_some(value as u16)
 }
 
@@ -66,7 +71,8 @@ pub(crate) struct ShiftIrSource {
 #[derive(Debug)]
 pub(super) struct ShiftSnapshot {
     pub metadata: FontMetadata,
-    pub metrics: FontMetrics,
+    /// The `head` units per em, validated from the font's metrics.
+    pub units_per_em: u16,
     pub metric_definitions: Vec<MetricDefinition>,
     pub axes: Vec<Axis>,
     pub ir_axes: Vec<fontdrasil::types::Axis>,
@@ -139,19 +145,17 @@ impl ShiftIrSource {
         let default_source_id = font
             .default_source_id()
             .ok_or(ShiftIrSourceError::MissingDefaultSource)?;
-        let units_per_em = font.metrics().units_per_em;
-        if self::units_per_em(units_per_em).is_none() {
-            return Err(ShiftIrSourceError::InvalidUnitsPerEm {
-                value: units_per_em,
-            });
-        }
+        let value = font.metrics().units_per_em;
+        let Some(units_per_em) = units_per_em(value) else {
+            return Err(ShiftIrSourceError::InvalidUnitsPerEm { value });
+        };
 
         let ir_axes = to_ir_axes(font.axes(), font.axis_mappings())?;
 
         Ok(Self {
             snapshot: Arc::new(ShiftSnapshot {
                 metadata: font.metadata().clone(),
-                metrics: *font.metrics(),
+                units_per_em,
                 metric_definitions: font.metric_definitions().to_vec(),
                 axes: font.axes().to_vec(),
                 ir_axes,

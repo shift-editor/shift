@@ -4,6 +4,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 const SHORT_ID_ALPHABET: &[u8; 64] =
     b"useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 const SHORT_ID_SUFFIX_LENGTH: usize = 10;
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the alphabet has 64 characters"
+)]
 const SHORT_ID_ALPHABET_MASK: u8 = (SHORT_ID_ALPHABET.len() - 1) as u8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -165,6 +169,10 @@ fn derived_id_suffix(namespace: &str, name: &str) -> String {
 
     (0..SHORT_ID_SUFFIX_LENGTH)
         .map(|index| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "keeps the low byte, which the mask cuts to six bits"
+            )]
             let bits = (hash >> (index * 6)) as u8 & SHORT_ID_ALPHABET_MASK;
             SHORT_ID_ALPHABET[bits as usize] as char
         })

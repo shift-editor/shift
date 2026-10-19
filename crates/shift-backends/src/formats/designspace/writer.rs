@@ -3,6 +3,7 @@ use super::error::{DesignspaceError, DesignspaceResult};
 use crate::atomic::write_file_atomic;
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::formats::ufo::UfoWriter;
+use crate::numeric::lossy_f32;
 use crate::traits::{FontView, FontWriter};
 use norad::designspace::{
     Axis as DsAxis, AxisMapping as DsAxisMapping, AxisMappingEntry as DsAxisMappingEntry,
@@ -262,8 +263,8 @@ impl DesignspaceWriter {
                     .iter()
                     .filter_map(|point| {
                         Some(DsAxisMapping {
-                            input: point.input.get(&axis.id())? as f32,
-                            output: point.output.get(&axis.id())? as f32,
+                            input: lossy_f32(point.input.get(&axis.id())?),
+                            output: lossy_f32(point.output.get(&axis.id())?),
                         })
                     })
                     .collect()
@@ -272,11 +273,11 @@ impl DesignspaceWriter {
         let (minimum, maximum, values) = match axis.kind() {
             AxisKind::Continuous {
                 minimum, maximum, ..
-            } => (Some(*minimum as f32), Some(*maximum as f32), None),
+            } => (Some(lossy_f32(*minimum)), Some(lossy_f32(*maximum)), None),
             AxisKind::Discrete { values, .. } => (
                 None,
                 None,
-                Some(values.iter().map(|value| *value as f32).collect()),
+                Some(values.iter().map(|value| lossy_f32(*value)).collect()),
             ),
         };
 
@@ -284,7 +285,7 @@ impl DesignspaceWriter {
             name: axis.name().to_string(),
             tag: axis.tag().to_string(),
             minimum,
-            default: axis.default() as f32,
+            default: lossy_f32(axis.default()),
             maximum,
             values,
             map,
@@ -300,7 +301,7 @@ impl DesignspaceWriter {
                 let axis = axes.iter().find(|axis| axis.id() == *axis_id)?;
                 Some(Dimension {
                     name: axis.name().to_string(),
-                    xvalue: Some(*value as f32),
+                    xvalue: Some(lossy_f32(*value)),
                     ..Default::default()
                 })
             })
@@ -334,7 +335,9 @@ impl DesignspaceWriter {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
-                xvalue: Some(location.get(&axis.id()).unwrap_or(axis.default()) as f32),
+                xvalue: Some(lossy_f32(
+                    location.get(&axis.id()).unwrap_or(axis.default()),
+                )),
                 ..Default::default()
             })
             .collect()
@@ -344,7 +347,9 @@ impl DesignspaceWriter {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
-                uservalue: Some(location.get(&axis.id()).unwrap_or(axis.default()) as f32),
+                uservalue: Some(lossy_f32(
+                    location.get(&axis.id()).unwrap_or(axis.default()),
+                )),
                 ..Default::default()
             })
             .collect()

@@ -1,4 +1,5 @@
 use crate::length::OrOverflow;
+use crate::numeric::lossy_f32;
 use shift_font::Require;
 use std::collections::{HashMap, hash_map::Entry};
 use std::time::Instant;
@@ -487,7 +488,7 @@ fn append_component_sources(
         ];
         if values
             .iter()
-            .any(|value| !value.is_finite() || !(*value as f32).is_finite())
+            .any(|value| !value.is_finite() || !lossy_f32(*value).is_finite())
         {
             return Err(AuthoredSlugError::NonFiniteComponentValue {
                 component_index: context.component_index,
@@ -497,15 +498,15 @@ fn append_component_sources(
         }
         output.push(VariableComponentSource {
             weight_index,
-            translate_x: values[0] as f32,
-            translate_y: values[1] as f32,
-            rotation: values[2] as f32,
-            scale_x: values[3] as f32,
-            scale_y: values[4] as f32,
-            skew_x: values[5] as f32,
-            skew_y: values[6] as f32,
-            center_x: values[7] as f32,
-            center_y: values[8] as f32,
+            translate_x: lossy_f32(values[0]),
+            translate_y: lossy_f32(values[1]),
+            rotation: lossy_f32(values[2]),
+            scale_x: lossy_f32(values[3]),
+            scale_y: lossy_f32(values[4]),
+            skew_x: lossy_f32(values[5]),
+            skew_y: lossy_f32(values[6]),
+            center_x: lossy_f32(values[7]),
+            center_y: lossy_f32(values[8]),
         });
     }
     Ok(())

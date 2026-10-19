@@ -1,4 +1,5 @@
 use crate::length::OrOverflow;
+use crate::numeric::lossy_f32;
 use crate::{Curve, Point, SlugError, SlugPreviewExtents, VariableAtlas, VariableAtlasBuilder};
 
 mod weights;
@@ -332,7 +333,7 @@ fn outline(
             actual: values.len(),
         });
     }
-    let advance = values[0] as f32;
+    let advance = lossy_f32(values[0]);
     if !values[0].is_finite() || !advance.is_finite() {
         return Err(SlugError::NonFiniteVariableAdvance {
             glyph_index,
@@ -351,8 +352,8 @@ fn outline(
             cursor += 2;
             if !point.x.is_finite()
                 || !point.y.is_finite()
-                || !(point.x as f32).is_finite()
-                || !(point.y as f32).is_finite()
+                || !lossy_f32(point.x).is_finite()
+                || !lossy_f32(point.y).is_finite()
             {
                 return Err(SlugError::NonFiniteCoordinate {
                     command_index: segment_index,
@@ -484,7 +485,7 @@ fn cubic_subdivision_count(segment: &ProjectedSegment) -> usize {
 }
 
 fn point(value: ProjectedPoint) -> Point {
-    Point::new(value.x as f32, value.y as f32)
+    Point::new(lossy_f32(value.x), lossy_f32(value.y))
 }
 
 #[cfg(test)]

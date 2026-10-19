@@ -5,6 +5,7 @@
 //! one topology from the interpolation reference layer, then evaluates every
 //! compatible source through the same contour, point, and segment indexes.
 
+use crate::numeric::lossy_f32;
 use shift_font::Require;
 use std::{collections::HashMap, error::Error, fmt};
 
@@ -1008,7 +1009,7 @@ fn segment_start(segment: SegmentTopology) -> usize {
 }
 
 fn authored_advance(value: f64, source_index: usize) -> Result<f32, AuthoredSlugError> {
-    let advance = value as f32;
+    let advance = lossy_f32(value);
     if value.is_finite() && advance.is_finite() {
         Ok(advance)
     } else {
@@ -1017,7 +1018,7 @@ fn authored_advance(value: f64, source_index: usize) -> Result<f32, AuthoredSlug
 }
 
 fn slug_point_unchecked(point: &FontPoint) -> Point {
-    Point::new(point.x() as f32, point.y() as f32)
+    Point::new(lossy_f32(point.x()), lossy_f32(point.y()))
 }
 
 fn slug_point(
@@ -1025,8 +1026,8 @@ fn slug_point(
     contour_index: usize,
     point_index: usize,
 ) -> Result<Point, AuthoredSlugError> {
-    let x = point.x() as f32;
-    let y = point.y() as f32;
+    let x = lossy_f32(point.x());
+    let y = lossy_f32(point.y());
     if point.x().is_finite() && point.y().is_finite() && x.is_finite() && y.is_finite() {
         Ok(Point::new(x, y))
     } else {

@@ -20,6 +20,15 @@ macro_rules! index_type {
             pub const fn to_usize(self) -> usize {
                 self.0 as usize
             }
+
+            /// The index of the item at `position` in a directory list.
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "directory lists are far shorter than u32::MAX; OpenType caps glyphs at 65,535"
+            )]
+            pub const fn at(position: usize) -> Self {
+                Self(position as u32)
+            }
         }
     };
 }
@@ -214,6 +223,11 @@ pub struct FontDirectory {
 }
 
 impl FontDirectory {
+    /// The number of glyphs, saturating at `u32::MAX` for error messages.
+    pub fn glyph_count(&self) -> u32 {
+        u32::try_from(self.glyphs.len()).unwrap_or(u32::MAX)
+    }
+
     pub fn format(&self) -> FontFormat {
         self.format
     }

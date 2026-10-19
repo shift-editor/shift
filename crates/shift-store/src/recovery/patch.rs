@@ -1,4 +1,5 @@
 use crate::error::{OrMissing, StoreEntity};
+use crate::numeric::sql_int;
 use std::collections::HashSet;
 
 use rusqlite::{Transaction, params};
@@ -154,7 +155,7 @@ impl RecoveryOverlay {
                 .find(|(_, axis)| axis.id() == axis_id)
             {
                 clear_tombstone(&tx, AXES, axis_id.as_str())?;
-                upsert_axis_with_order(&tx, axis, order_index as i64)?;
+                upsert_axis_with_order(&tx, axis, sql_int(order_index))?;
             } else {
                 delete_axis_override(&tx, &axis_id)?;
                 mark_tombstone(&tx, AXES, axis_id.as_str())?;
@@ -169,7 +170,7 @@ impl RecoveryOverlay {
                 .find(|(_, source)| source.id() == source_id)
             {
                 clear_tombstone(&tx, SOURCES, source_id.as_str())?;
-                write_source_snapshot_in_tx(&tx, source, order_index as i64)?;
+                write_source_snapshot_in_tx(&tx, source, sql_int(order_index))?;
                 mark_replaced(&tx, SOURCE_LOCATIONS, source_id.as_str())?;
                 mark_replaced(&tx, SOURCE_METRIC_VALUES, source_id.as_str())?;
                 mark_replaced(&tx, SOURCE_LIB, source_id.as_str())?;
@@ -185,7 +186,7 @@ impl RecoveryOverlay {
                     .glyph_order(&glyph_id)
                     .or_missing(StoreEntity::GlyphOrder, &glyph_id)?;
                 clear_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
-                write_glyph_directory_in_tx(&tx, glyph, order_index as i64, WriteMode::Upsert)?;
+                write_glyph_directory_in_tx(&tx, glyph, sql_int(order_index), WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LIB, glyph_id.as_str())?;
             } else {

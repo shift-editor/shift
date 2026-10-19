@@ -31,6 +31,9 @@ needless_pass_by_value = "warn"
 redundant_clone = "warn"
 redundant_closure_for_method_calls = "warn"
 explicit_iter_loop = "warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
 large_types_passed_by_value = "warn"
 
 [workspace.package]

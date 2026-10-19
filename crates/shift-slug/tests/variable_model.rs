@@ -1,3 +1,7 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use shift_font::{
     CurveSegment, CurveSegmentIter, DesignLocation, GlyphId, test_support::sample_variable_font,
 };

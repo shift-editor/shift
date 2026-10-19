@@ -14,6 +14,7 @@ mod authored;
 mod curve;
 mod error;
 pub mod length;
+mod numeric;
 mod outline;
 mod pack;
 mod render;

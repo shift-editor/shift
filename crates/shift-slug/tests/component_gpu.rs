@@ -1,3 +1,7 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 #![cfg(feature = "wgpu-benchmark")]
 
 use std::sync::mpsc;

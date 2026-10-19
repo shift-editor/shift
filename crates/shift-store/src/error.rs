@@ -114,6 +114,9 @@ pub enum StoreError {
     #[error("invalid glyph order: identity {0} is not the directory tail")]
     GlyphNotAtTail(shift_font::GlyphId),
 
+    #[error("integer out of range: {0}")]
+    IntegerOutOfRange(#[from] std::num::TryFromIntError),
+
     #[error("missing {kind}: {id}")]
     MissingEntity { kind: StoreEntity, id: String },
 

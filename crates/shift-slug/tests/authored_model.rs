@@ -1,3 +1,7 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
     Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,

@@ -50,9 +50,7 @@ impl ShiftStore {
             ",
         )?;
 
-        let rows = stmt.query_map([id.as_str()], |row| {
-            row.get::<_, i64>(0).map(|unicode| unicode as u32)
-        })?;
+        let rows = stmt.query_map([id.as_str()], |row| row.get::<_, u32>(0))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }

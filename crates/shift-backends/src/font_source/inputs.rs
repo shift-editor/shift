@@ -331,9 +331,9 @@ fn atlas_region(
             return Err(invalid("source atlas region repeats an axis").into());
         }
         *axis = RegionAxis {
-            start: F2Dot14::from_f32(support.lower as f32).to_bits(),
-            peak: F2Dot14::from_f32(support.peak as f32).to_bits(),
-            end: F2Dot14::from_f32(support.upper as f32).to_bits(),
+            start: F2Dot14::from_f32(crate::numeric::lossy_f32(support.lower)).to_bits(),
+            peak: F2Dot14::from_f32(crate::numeric::lossy_f32(support.peak)).to_bits(),
+            end: F2Dot14::from_f32(crate::numeric::lossy_f32(support.upper)).to_bits(),
         };
     }
     Ok(AtlasRegion::new(axes))
@@ -862,7 +862,7 @@ unitsPerEm = 1000;
             .enumerate()
             .map(|(axis_index, design_value)| {
                 let mut mapping = directory
-                    .independent_mapping(super::super::AxisIndex::new(axis_index as u32))
+                    .independent_mapping(super::super::AxisIndex::at(axis_index))
                     .map(|mapping| {
                         mapping
                             .points
@@ -875,7 +875,7 @@ unitsPerEm = 1000;
                     .unwrap_or_default();
                 mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
                 VariationCoordinate {
-                    axis: super::super::AxisIndex::new(axis_index as u32),
+                    axis: super::super::AxisIndex::at(axis_index),
                     value: piecewise_map(*design_value, &mapping),
                 }
             })
