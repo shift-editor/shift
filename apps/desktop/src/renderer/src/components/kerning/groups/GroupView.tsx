@@ -8,7 +8,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { AddMembersPanel } from "./AddMembersPanel";
 import { GroupPreview } from "./GroupPreview";
 import { GroupsSidePanel } from "./GroupsSidePanel";
-import { MemberSelection } from "./MemberSelection";
+import { GlyphSelection } from "../../glyph-grid/GlyphSelection";
 import { glyphName } from "./previewGlyphs";
 
 /** The glyph edge a pair position kerns through: a first glyph's right edge, a second's left. */
@@ -34,7 +34,7 @@ export function GroupView({ position, glyphId, otherGlyphId }: GroupViewProps) {
   const [picked, setPicked] = useState<KerningGroupId | null>(null);
   const [sidePanel, setSidePanel] = useState<"groups" | "add" | null>(null);
   const [hovered, setHovered] = useState<GlyphId | null>(null);
-  const [selection, setSelection] = useState(() => MemberSelection.empty(NO_MEMBERS));
+  const [selection, setSelection] = useState(() => GlyphSelection.empty(NO_MEMBERS));
 
   const own = kerning.groupOf(position, glyphId);
   const shownId = picked !== null && kerning.groups.group(picked) ? picked : own;
@@ -42,7 +42,7 @@ export function GroupView({ position, glyphId, otherGlyphId }: GroupViewProps) {
   const shown = shownGroup?.name ?? null;
   const members = shownGroup?.glyphIds ?? NO_MEMBERS;
   // A member removed or moved elsewhere is no longer selected.
-  const current = selection.withMembers(members);
+  const current = selection.withGlyphs(members);
   const removeSelected = () => void editor.font.assignKerningGroup(position, current.ids, null);
 
   // A press anywhere but the preview and its selection row, in or out of the
