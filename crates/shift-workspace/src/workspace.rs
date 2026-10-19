@@ -351,6 +351,44 @@ impl FontWorkspace {
         self.ledger.discard_redo();
     }
 
+    /// SPIKE: persists a changeset the renderer's engine already applied.
+    ///
+    /// The renderer owns the edit and its history, so nothing is replayed and
+    /// no ledger entry is recorded. The changeset is validated against this
+    /// font's current values (every `before` must match) and written in one
+    /// transaction with the renderer's `dirty` state. Layers it touches, and
+    /// every layer of a glyph it replaces whole, are acquired first, so a
+    /// glyph-level `before` compares complete glyphs on both sides.
+    pub fn persist_change_set(
+        &mut self,
+        change_set: FontChangeSet,
+        dirty: bool,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        let mut layer_ids = LedgerEntry::change_set_layer_ids(&change_set);
+        for change in &change_set.changes {
+            if let FontChange::Glyph(value) = change {
+                let glyph_id = value
+                    .before
+                    .as_ref()
+                    .or(value.after.as_ref())
+                    .map(shift_font::Glyph::id);
+                if let Some(glyph) = glyph_id.and_then(|id| self.font.glyph(&id)) {
+                    layer_ids.extend(glyph.layers().keys().cloned());
+                }
+            }
+        }
+        self.acquire_layers(layer_ids)?;
+        self.commit_edit(dirty, move |font| {
+            font.apply_change_set(&change_set)?;
+            let layers = touched_layers(&change_set);
+            let outcome = AppliedIntents {
+                changes: change_set.clone(),
+                layers,
+            };
+            Ok((outcome, change_set))
+        })
+    }
+
     fn replay(
         &mut self,
         entry: &LedgerEntry,

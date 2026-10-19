@@ -1002,6 +1002,7 @@ dependencies = [
  "imbl-sized-chunks",
  "rand_core 0.9.5",
  "rand_xoshiro",
+ "serde",
  "version_check",
 ]
 

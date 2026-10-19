@@ -299,3 +299,79 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
         }
     }
 }
+
+#[test]
+fn negative_zero_is_stored_as_zero() {
+    let mut font = sample_font();
+    let layer_id = LayerId::from_raw("A_regular");
+    let positive = |value: f64| value.to_bits() == 0.0_f64.to_bits();
+    apply(
+        &mut font,
+        vec![
+            FontIntent::MovePoints {
+                layer_id: layer_id.clone(),
+                point_ids: vec![PointId::from_raw("A_0")],
+                coords: vec![-0.0, -0.0],
+            },
+            FontIntent::AddAnchors {
+                layer_id: layer_id.clone(),
+                anchors: vec![AnchorSeed {
+                    id: AnchorId::from_raw("zero"),
+                    name: Some("bottom".to_string()),
+                    x: -0.0,
+                    y: -0.0,
+                }],
+            },
+            FontIntent::SetXAdvance {
+                layer_id: layer_id.clone(),
+                width: -0.0,
+            },
+            FontIntent::SetComponentTransforms {
+                layer_id: layer_id.clone(),
+                component_ids: vec![ComponentId::from_raw("a_second")],
+                transforms: vec![-0.0, -0.0, -0.0, 1.0, 1.0, -0.0, -0.0, -0.0, -0.0],
+            },
+        ],
+    );
+
+    let layer = font.layer(&layer_id).unwrap();
+    let point = layer
+        .contours_iter()
+        .flat_map(|c| c.points())
+        .find(|p| p.id() == PointId::from_raw("A_0"))
+        .unwrap();
+    assert!(positive(point.x()) && positive(point.y()));
+    let anchor = layer.anchor(&AnchorId::from_raw("zero")).unwrap();
+    assert!(positive(anchor.x()) && positive(anchor.y()));
+    assert!(positive(layer.width()));
+    let transform = layer
+        .component(&ComponentId::from_raw("a_second"))
+        .unwrap()
+        .transform();
+    for value in [
+        transform.translate_x,
+        transform.translate_y,
+        transform.rotation,
+        transform.skew_x,
+        transform.skew_y,
+    ] {
+        assert!(positive(value), "{transform:?}");
+    }
+
+    // Values installed in bulk (a load, an echo) are stored the same way.
+    let mut values = shift_wire_like_values(layer);
+    values
+        .iter_mut()
+        .filter(|value| **value == 0.0)
+        .for_each(|value| *value = -0.0);
+    let mut reloaded = layer.clone();
+    reloaded
+        .apply_interpolation_values(&crate::GlyphInterpolationValues::new(values))
+        .unwrap();
+    assert_eq!(reloaded, *layer);
+}
+
+/// The layer's values in interpolation order, as a transport would carry them.
+fn shift_wire_like_values(layer: &crate::GlyphLayer) -> Vec<f64> {
+    crate::GlyphInterpolationValues::from_layer(layer).into_vec()
+}

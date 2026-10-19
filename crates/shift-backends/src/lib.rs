@@ -32,7 +32,7 @@ pub use font_source::{
 };
 pub use format::FontFormat;
 pub use glyph_category::{
-    record_categories, GlyphCategories, PropagationLigature, RecordCategory, ResolvedCategory,
+    gdef_class, record_categories, GlyphCategories, OPENTYPE_CATEGORIES_KEY, PropagationLigature, RecordCategory, ResolvedCategory,
 };
 pub use glyph_subset::GlyphSubsetView;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};

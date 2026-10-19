@@ -24,7 +24,12 @@ pub struct LedgerEntry {
 impl LedgerEntry {
     /// Layers whose current payloads must be resident before replay.
     pub(crate) fn layer_ids(&self) -> Vec<LayerId> {
-        self.change_set
+        Self::change_set_layer_ids(&self.change_set)
+    }
+
+    /// Layers a changeset creates, updates, or deletes.
+    pub(crate) fn change_set_layer_ids(change_set: &shift_font::FontChangeSet) -> Vec<LayerId> {
+        change_set
             .entity_changes()
             .into_iter()
             .filter_map(|entity| match entity {

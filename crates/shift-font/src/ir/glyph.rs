@@ -66,7 +66,7 @@ impl GlyphLayer {
 
     pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
         Self {
-            width,
+            width: crate::ir::point::canonical_zero(width),
             ..Self::new(id, source_id)
         }
     }
@@ -223,7 +223,7 @@ impl GlyphLayer {
     }
 
     pub fn set_width(&mut self, width: f64) {
-        self.width = width;
+        self.width = crate::ir::point::canonical_zero(width);
     }
 
     pub fn set_height(&mut self, height: Option<f64>) {

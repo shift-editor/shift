@@ -13,7 +13,8 @@ use shift_font::{Glyph, GlyphCategory, GlyphId, GlyphSubcategory, LibData, LibVa
 use write_fonts::tables::gdef::GlyphClassDef;
 
 /// Font lib key a UFO uses for explicit GDEF classes.
-const OPENTYPE_CATEGORIES_KEY: &str = "public.openTypeCategories";
+/// Font lib key of the explicit OpenType category of each glyph, by name.
+pub const OPENTYPE_CATEGORIES_KEY: &str = "public.openTypeCategories";
 
 /// A glyph's effective category: its own where set, glyph data otherwise.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -151,13 +152,32 @@ pub(crate) fn gdef_classes<'a>(
     glyphs
         .into_iter()
         .filter_map(|glyph| {
-            let class = match explicit.get(glyph.name()) {
-                Some(class) => *class,
-                None => class_for(categories.resolve(glyph), has_attaching_anchor(glyph))?,
-            };
+            let class = class_of(&categories, &explicit, glyph)?;
             Some((glyph.name().to_string(), class))
         })
         .collect()
+}
+
+/// The `GDEF` glyph class the shaper font gives one glyph: the font lib's
+/// explicit OpenType category, else its resolved category and whether it
+/// carries an anchor something can attach to. `None` when it has no class.
+pub fn gdef_class(
+    categories: &GlyphCategories,
+    glyph: &Glyph,
+    font_lib: &LibData,
+) -> Option<GlyphClassDef> {
+    class_of(categories, &opentype_categories(font_lib), glyph)
+}
+
+fn class_of(
+    categories: &GlyphCategories,
+    explicit: &BTreeMap<&str, GlyphClassDef>,
+    glyph: &Glyph,
+) -> Option<GlyphClassDef> {
+    match explicit.get(glyph.name()) {
+        Some(class) => Some(*class),
+        None => class_for(categories.resolve(glyph), has_attaching_anchor(glyph)),
+    }
 }
 
 /// fontc's Glyphs rule: marks by category, and bases and ligatures only when

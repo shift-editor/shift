@@ -152,6 +152,22 @@ impl DecomposedTransform {
             && self.skew_y.abs() < f64::EPSILON
     }
 
+    /// The same transform with `-0.0` stored as `0.0` in every field.
+    pub fn canonical(self) -> Self {
+        use crate::ir::point::canonical_zero;
+        Self {
+            translate_x: canonical_zero(self.translate_x),
+            translate_y: canonical_zero(self.translate_y),
+            rotation: canonical_zero(self.rotation),
+            scale_x: canonical_zero(self.scale_x),
+            scale_y: canonical_zero(self.scale_y),
+            skew_x: canonical_zero(self.skew_x),
+            skew_y: canonical_zero(self.skew_y),
+            t_center_x: canonical_zero(self.t_center_x),
+            t_center_y: canonical_zero(self.t_center_y),
+        }
+    }
+
     /// Compose the decomposed transform into a raw affine matrix.
     ///
     /// Order: translate to center → scale → skew → rotate → translate back → translate
@@ -313,7 +329,7 @@ impl Component {
             id: ComponentId::new(),
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform,
+            transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -328,7 +344,7 @@ impl Component {
             id,
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform,
+            transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -368,7 +384,7 @@ impl Component {
     }
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
-        self.transform = transform;
+        self.transform = transform.canonical();
     }
 
     pub fn alignment(&self) -> ComponentAlignment {
@@ -380,8 +396,10 @@ impl Component {
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
-        self.transform.translate_x += dx;
-        self.transform.translate_y += dy;
+        let mut transform = self.transform;
+        transform.translate_x += dx;
+        transform.translate_y += dy;
+        self.set_transform(transform);
     }
 }
 

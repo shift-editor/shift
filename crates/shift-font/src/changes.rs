@@ -31,7 +31,7 @@ bitflags! {
 }
 
 /// Original and replacement values for one authored scope.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Replacement<T> {
     pub before: T,
     pub after: T,
@@ -44,7 +44,7 @@ impl<T> Replacement<T> {
 }
 
 /// Ordered sources and the identity of their authored default.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SourceCollection {
     pub sources: Vec<Source>,
     pub default_source_id: Option<SourceId>,
@@ -78,7 +78,7 @@ pub enum FontEntityChange<'a> {
 /// Collection variants retain authored order. A changeset installs every
 /// replacement as one target, so references between variants are never
 /// validated in an intermediate state.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum FontChange {
     Metadata(Box<Replacement<FontMetadata>>),
     LibValue {
@@ -248,7 +248,7 @@ impl FontChange {
 }
 
 /// Reversible authored replacements produced by one atomic edit.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FontChangeSet {
     pub changes: Vec<FontChange>,
 }

@@ -32,12 +32,21 @@ pub struct Point {
     smooth: bool,
 }
 
+/// Stores `-0.0` as `0.0`, leaving every other value as is.
+///
+/// Both mean the same coordinate, but they differ bit for bit, and transports
+/// that read numbers generically drop the sign. Storing one form keeps every
+/// copy of the font identical however its values arrived.
+pub(crate) fn canonical_zero(value: f64) -> f64 {
+    value + 0.0
+}
+
 impl Point {
     pub fn new(id: PointId, x: f64, y: f64, point_type: PointType, smooth: bool) -> Self {
         Self {
             id,
-            x,
-            y,
+            x: canonical_zero(x),
+            y: canonical_zero(y),
             point_type,
             smooth,
         }
@@ -80,13 +89,12 @@ impl Point {
     }
 
     pub fn set_position(&mut self, x: f64, y: f64) {
-        self.x = x;
-        self.y = y;
+        self.x = canonical_zero(x);
+        self.y = canonical_zero(y);
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
-        self.x += dx;
-        self.y += dy;
+        self.set_position(self.x + dx, self.y + dy);
     }
 
     pub fn set_smooth(&mut self, smooth: bool) {
