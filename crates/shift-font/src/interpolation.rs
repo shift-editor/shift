@@ -1154,3 +1154,102 @@ fn midpoints(samples: &[(DesignLocation, Vec<(f64, f64)>)]) -> Vec<DesignLocatio
     out
 }
 
+impl Font {
+    /// Checks the glyph-local axes rules for `glyph_ids` and for composites
+    /// that use them: axis ids don't collide with font axes, tags are unique
+    /// font-wide, ranges are ordered, layer and component locations name axes
+    /// that exist and stay in range, no two layers share a full location, and
+    /// no axis is removed while a layer or component still uses it.
+    pub fn validate_glyph_spaces(&self, glyph_ids: &[GlyphId]) -> CoreResult<()> {
+        let font_axes: HashMap<AxisId, (f64, f64)> = self.axes().iter().map(|a| (a.id(), (a.minimum(), a.maximum()))).collect();
+        let font_tags: HashSet<String> = self.axes().iter().map(|a| a.tag().to_string()).collect();
+        let mut checked = HashSet::new();
+        for glyph_id in glyph_ids {
+            let Some(glyph) = self.glyph(glyph_id) else { continue };
+            let problem = |problem: String| crate::CoreError::GlyphSpace { glyph_id: glyph_id.clone(), problem };
+            let mut ranges: HashMap<AxisId, (f64, f64)> = font_axes.clone();
+            let mut tags = HashSet::new();
+            for axis in glyph.axes() {
+                if font_axes.contains_key(&axis.id) || ranges.insert(axis.id.clone(), (axis.minimum, axis.maximum)).is_some() {
+                    return Err(problem(format!("axis id {} is already used", axis.id)));
+                }
+                if font_tags.contains(&axis.tag) || !tags.insert(axis.tag.clone()) {
+                    return Err(problem(format!("axis tag {} is already used", axis.tag)));
+                }
+                if !(axis.minimum <= axis.default && axis.default <= axis.maximum) {
+                    return Err(problem(format!("axis {} has min > default or default > max", axis.tag)));
+                }
+            }
+            // Tags are unique across every part, not only within one.
+            if !tags.is_empty() {
+                for other in self.glyphs() {
+                    if other.id() != *glyph_id && other.axes().iter().any(|a| tags.contains(&a.tag)) {
+                        return Err(problem(format!("an axis tag is already used by {}", other.name())));
+                    }
+                }
+            }
+            // Compare full locations: a layer at a glyph axis's default sits
+            // where the plain layer does. Only collisions involving a located
+            // layer are rejected, so fonts accepted before keep working.
+            let mut positions: HashMap<Vec<(AxisId, u64)>, bool> = HashMap::new();
+            for layer in glyph.layers().values() {
+                check_location(&layer.location().0, &ranges).map_err(|p| problem(format!("layer {}: {p}", layer.id())))?;
+                let full = self.layer_full_location(glyph, layer)?;
+                let mut key: Vec<(AxisId, u64)> = full.iter().map(|(a, v)| (a.clone(), (v + 0.0).to_bits())).collect();
+                key.sort();
+                let is_master = self.source(&layer.source_id()).is_some_and(crate::Source::is_master);
+                let located = !layer.location().is_empty();
+                if is_master {
+                    if let Some(other_located) = positions.insert(key, located) {
+                        if located || other_located {
+                            return Err(problem(format!("two layers sit at the same location (layer {})", layer.id())));
+                        }
+                    }
+                }
+                self.check_components(glyph_id, layer, &font_axes)?;
+            }
+            checked.insert(glyph_id.clone());
+            // Composites that use this glyph must still name axes it has.
+            for layer_id in self.dependent_glyph_layer_ids(glyph_id) {
+                let Some(owner) = self.glyph_id_by_layer(&layer_id) else { continue };
+                if checked.contains(&owner) {
+                    continue;
+                }
+                if let Ok(layer) = self.require_layer(&layer_id) {
+                    self.check_components(&owner, layer, &font_axes)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn check_components(&self, glyph_id: &GlyphId, layer: &GlyphLayer, font_axes: &HashMap<AxisId, (f64, f64)>) -> CoreResult<()> {
+        for component in layer.components_iter() {
+            if component.location().is_empty() {
+                continue;
+            }
+            let mut ranges = font_axes.clone();
+            if let Some(base) = self.glyph(&component.base_glyph_id()) {
+                ranges.extend(base.axes().iter().map(|a| (a.id.clone(), (a.minimum, a.maximum))));
+            }
+            check_location(&component.location().0, &ranges).map_err(|problem| crate::CoreError::GlyphSpace {
+                glyph_id: glyph_id.clone(),
+                problem: format!("component {}: {problem}", component.id()),
+            })?;
+        }
+        Ok(())
+    }
+}
+
+fn check_location(location: &std::collections::BTreeMap<AxisId, f64>, ranges: &HashMap<AxisId, (f64, f64)>) -> Result<(), String> {
+    for (axis_id, value) in location {
+        let Some((minimum, maximum)) = ranges.get(axis_id) else {
+            return Err(format!("names axis {axis_id}, which isn't there"));
+        };
+        if !value.is_finite() || value < minimum || value > maximum {
+            return Err(format!("{value} is outside {axis_id}'s range {minimum}..{maximum}"));
+        }
+    }
+    Ok(())
+}
+

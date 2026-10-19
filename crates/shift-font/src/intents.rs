@@ -133,6 +133,38 @@ pub enum FontIntent {
         layer_id: LayerId,
         component_ids: Vec<ComponentId>,
     },
+    /// Sets where components sample their base glyphs, one location each.
+    SetComponentLocations {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+        locations: Vec<crate::ComponentLocation>,
+    },
+    /// Sets what components do with font axes their location doesn't name.
+    SetComponentInheritance {
+        layer_id: LayerId,
+        component_ids: Vec<ComponentId>,
+        inheritance: crate::AxisInheritance,
+    },
+    /// Moves a layer to other extra coordinates on top of its source.
+    SetLayerLocation {
+        layer_id: LayerId,
+        location: crate::LayerLocation,
+    },
+    /// Replaces a glyph's own axes. Removing an axis that layers or components
+    /// still use is rejected.
+    SetGlyphAxes {
+        glyph_id: GlyphId,
+        axes: Vec<crate::GlyphAxis>,
+    },
+    /// Adds a glyph-local source: a copy of `from_layer_id` with fresh ids at
+    /// `location` on top of `source_id`.
+    CreateGlyphSource {
+        layer_id: LayerId,
+        glyph_id: GlyphId,
+        source_id: SourceId,
+        from_layer_id: LayerId,
+        location: crate::LayerLocation,
+    },
     DecomposeComponents {
         layer_id: LayerId,
         component_ids: Vec<ComponentId>,
@@ -338,6 +370,9 @@ impl FontIntent {
             | Self::SetComponentTransforms { layer_id, .. }
             | Self::SetComponentAlignment { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
+            | Self::SetComponentLocations { layer_id, .. }
+            | Self::SetComponentInheritance { layer_id, .. }
+            | Self::SetLayerLocation { layer_id, .. }
             | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
             | Self::SetContourStart { layer_id, .. }
@@ -370,6 +405,8 @@ impl FontIntent {
             | Self::CreateKerningGroup { .. }
             | Self::SetKerningGroupMember { .. }
             | Self::RenameKerningGroup { .. }
+            | Self::CreateGlyphSource { .. }
+            | Self::SetGlyphAxes { .. }
             | Self::DeleteKerningGroup { .. } => None,
         }
     }
@@ -396,6 +433,9 @@ impl FontIntent {
             | Self::SetComponentTransforms { layer_id, .. }
             | Self::SetComponentAlignment { layer_id, .. }
             | Self::RemoveComponents { layer_id, .. }
+            | Self::SetComponentLocations { layer_id, .. }
+            | Self::SetComponentInheritance { layer_id, .. }
+            | Self::SetLayerLocation { layer_id, .. }
             | Self::DecomposeComponents { layer_id, .. }
             | Self::ReverseContour { layer_id, .. }
             | Self::SetContourStart { layer_id, .. }
@@ -415,6 +455,15 @@ impl FontIntent {
                         .layer_for_source(source_id.clone())
                         .map(GlyphLayer::id)
                 })
+                .collect(),
+            Self::CreateGlyphSource { from_layer_id, .. } => vec![from_layer_id.clone()],
+            // Every layer of the part, and of composites that use it, so
+            // removing an axis in use is caught against complete layers.
+            Self::SetGlyphAxes { glyph_id, .. } => font
+                .glyph(glyph_id)
+                .into_iter()
+                .flat_map(|glyph| glyph.layers().keys().cloned())
+                .chain(font.dependent_glyph_layer_ids(glyph_id))
                 .collect(),
             Self::CreateGlyph { .. }
             | Self::UpdateGlyph { .. }
@@ -644,6 +693,16 @@ impl Font {
         {
             touched.touch(layer_id, structural);
         }
+
+        let mut validated: Vec<GlyphId> = glyph_ids.clone();
+        for layer_id in touched.ids() {
+            if let Some(glyph_id) = after.glyph_id_by_layer(&layer_id) {
+                if !validated.contains(&glyph_id) {
+                    validated.push(glyph_id);
+                }
+            }
+        }
+        after.validate_glyph_spaces(&validated)?;
 
         let mut changes = FontChangeSet::default();
         if before.metadata() != after.metadata() {
@@ -983,6 +1042,23 @@ impl Font {
                     values,
                 )?;
                 Ok((layer_ids, None))
+            }
+            FontIntent::SetGlyphAxes { glyph_id, axes } => {
+                self.set_glyph_axes(glyph_id, axes.clone())?;
+                Ok((Vec::new(), Some(glyph_id.clone())))
+            }
+            FontIntent::CreateGlyphSource { layer_id, glyph_id, source_id, from_layer_id, location } => {
+                if self.glyph_id_by_layer(layer_id).is_some() {
+                    return Err(CoreError::DuplicateLayerId(layer_id.clone()));
+                }
+                let from_glyph_id = self.require_layer_owner(from_layer_id)?;
+                if from_glyph_id != *glyph_id {
+                    return Err(CoreError::LayerGlyphMismatch { layer_id: from_layer_id.clone(), glyph_id: glyph_id.clone(), actual_glyph_id: from_glyph_id });
+                }
+                let mut layer = self.require_layer(from_layer_id)?.clone_with_fresh_ids(layer_id.clone(), source_id.clone());
+                layer.set_location(location.clone());
+                self.insert_glyph_layer(glyph_id.clone(), layer)?;
+                Ok((vec![layer_id.clone()], None))
             }
             _ => unreachable!("editing intents take the layer path"),
         }
@@ -1590,6 +1666,48 @@ impl Font {
                 self.reindex_layer(layer_id, &before)?;
                 Ok(())
             }
+            FontIntent::SetComponentLocations { layer_id, component_ids, locations } => {
+                if component_ids.len() != locations.len() {
+                    return Err(CoreError::InvalidPositionUpdateInput {
+                        kind: "component locations",
+                        message: format!("{} components but {} locations", component_ids.len(), locations.len()),
+                    });
+                }
+                require_finite("component locations", locations.iter().flat_map(|l| l.0.values().copied()))?;
+                let layer = self.require_layer_mut(layer_id)?;
+                for component_id in component_ids {
+                    if layer.component(component_id).is_none() {
+                        return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                    }
+                }
+                for component in layer.components_iter_mut() {
+                    if let Some(index) = component_ids.iter().position(|id| *id == component.id()) {
+                        component.set_location(locations[index].clone());
+                    }
+                }
+                Ok(())
+            }
+            FontIntent::SetComponentInheritance { layer_id, component_ids, inheritance } => {
+                let layer = self.require_layer_mut(layer_id)?;
+                for component_id in component_ids {
+                    if layer.component(component_id).is_none() {
+                        return Err(CoreError::InvalidComponentId(component_id.to_string()));
+                    }
+                }
+                for component in layer.components_iter_mut() {
+                    if component_ids.contains(&component.id()) {
+                        component.set_inheritance(*inheritance);
+                    }
+                }
+                Ok(())
+            }
+            FontIntent::SetLayerLocation { layer_id, location } => {
+                require_finite("layer location", location.0.values().copied())?;
+                let before = self.require_layer(layer_id)?.clone();
+                self.require_layer_mut(layer_id)?.set_location(location.clone());
+                self.reindex_layer(layer_id, &before)?;
+                Ok(())
+            }
             FontIntent::SetComponentAlignment {
                 layer_id,
                 component_ids,
@@ -1839,6 +1957,8 @@ impl Font {
             | FontIntent::CreateKerningGroup { .. }
             | FontIntent::SetKerningGroupMember { .. }
             | FontIntent::RenameKerningGroup { .. }
+            | FontIntent::SetGlyphAxes { .. }
+            | FontIntent::CreateGlyphSource { .. }
             | FontIntent::DeleteKerningGroup { .. } => {
                 unreachable!("font-level intents take the apply_font_intent path")
             }

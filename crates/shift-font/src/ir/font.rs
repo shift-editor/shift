@@ -1422,6 +1422,23 @@ impl Font {
         Ok(())
     }
 
+    /// Replaces a glyph's own axes. Glyph axes aren't indexed; validation
+    /// runs when a change set installs the glyph.
+    pub fn set_glyph_axes(&mut self, glyph_id: &GlyphId, axes: Vec<crate::GlyphAxis>) -> CoreResult<()> {
+        let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
+        Arc::make_mut(glyph).set_axes(axes);
+        Ok(())
+    }
+
+    /// Layers of other glyphs with a component of `glyph_id`.
+    pub fn dependent_glyph_layer_ids(&self, glyph_id: &GlyphId) -> Vec<LayerId> {
+        self.index()
+            .layers_by_component_base
+            .get(glyph_id)
+            .map(|layers| layers.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
     pub fn set_glyph_unicodes(&mut self, glyph_id: GlyphId, unicodes: Vec<u32>) -> CoreResult<()> {
         let mut state = (*self.state).clone();
         let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;

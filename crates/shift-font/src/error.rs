@@ -109,6 +109,10 @@ pub enum CoreError {
     #[error("duplicate glyph name {0}")]
     DuplicateGlyphName(GlyphName),
 
+    /// A glyph's own axes, a layer location or a component location is invalid.
+    #[error("glyph {glyph_id}: {problem}")]
+    GlyphSpace { glyph_id: GlyphId, problem: String },
+
     #[error("duplicate glyph layer for glyph {glyph_id} and source {source_id}")]
     DuplicateGlyphLayer {
         glyph_id: GlyphId,

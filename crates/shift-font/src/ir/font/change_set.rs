@@ -28,6 +28,7 @@ impl Font {
         target.install_change_targets(change_set)?;
         let install = t.elapsed();
         target.validate_change_target(change_set)?;
+        target.validate_glyph_spaces(&touched_glyph_ids(change_set))?;
         if trace {
             eprintln!("apply: origins {origins:?}, install {:?}, target {:?}", install - origins, t.elapsed() - install);
         }
