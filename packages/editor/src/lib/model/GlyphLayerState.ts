@@ -28,6 +28,15 @@ import {
   type WritableSignal,
 } from "../signals/signal";
 import { LayerBuffers, type LayerChangeToken } from "./LayerBuffers";
+import {
+  applyPushedIntent,
+  checkEcho,
+  engineOwnsEdit,
+  engineWriterEnabled,
+  installEngineLayer,
+  registerEngineLayer,
+  rollbackInEngine,
+} from "../wasm/engine";
 
 /**
  * Reactive state and pending-confirmation lifecycle for one authored layer.
@@ -86,6 +95,16 @@ export class GlyphLayerState {
       },
       { name: "glyphLayer.acceptedGeometry" },
     );
+
+    // SPIKE: in writer mode the renderer engine holds this layer and publishes its edits.
+    if (engineWriterEnabled()) {
+      registerEngineLayer(
+        this.#layerId,
+        (engineState) => this.#publish(engineState, true),
+        () => this.#structure.peek(),
+      );
+      installEngineLayer(state);
+    }
   }
 
   get structure(): GlyphStructure {
@@ -270,6 +289,11 @@ export class GlyphLayerState {
     );
   }
 
+  /** SPIKE: reinstalls this layer after the engine rebuilt its directory. */
+  syncEngine(): void {
+    installEngineLayer(this.state);
+  }
+
   replace(state: GlyphState): void {
     this.#confirmedState.set(null);
     this.#pendingStates.clear();
@@ -285,6 +309,11 @@ export class GlyphLayerState {
   }
 
   rollbackEdit(editId: PendingEditId): void {
+    if (engineOwnsEdit(editId)) {
+      rollbackInEngine(editId);
+      return;
+    }
+
     const state = this.#pendingStates.get(editId);
     if (!state) return;
 
@@ -294,6 +323,12 @@ export class GlyphLayerState {
   }
 
   foldWorkspaceState(editId: PendingEditId | null, replacement: LayerReplaced): void {
+    // SPIKE: an engine-applied edit is already final; its echo only confirms persistence.
+    if (editId !== null && engineOwnsEdit(editId)) {
+      checkEcho(editId, this.#layerId, replacement.values);
+      return;
+    }
+
     const confirmed = this.#confirmedState.peek() ?? this.#editBaseState.peek() ?? this.state;
     const state = {
       layerId: this.#layerId,
@@ -356,6 +391,11 @@ export class GlyphLayerState {
    * so their first successful closure owns the rollback snapshot.
    */
   #applyEdit(editId: PendingEditId, operation: () => boolean): boolean {
+    if (engineWriterEnabled()) {
+      const applied = applyPushedIntent(editId);
+      if (applied !== null) return applied;
+    }
+
     const alreadyPending = this.#pendingStates.has(editId);
     const before = alreadyPending ? null : this.state;
 
@@ -375,7 +415,9 @@ export class GlyphLayerState {
     });
   }
 
-  #publish(state: GlyphState): void {
+  #publish(state: GlyphState, fromEngine = false): void {
+    // Anything the engine did not produce (loads, native undo, agent edits) must reach it.
+    if (!fromEngine && engineWriterEnabled()) installEngineLayer(state);
     batch(() => {
       const buffers = this.#buffers.peek();
       if (GlyphGeometry.structuresEqual(buffers.structure, state.structure)) {

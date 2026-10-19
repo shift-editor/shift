@@ -2,7 +2,7 @@
  * Global test setup — provides browser API polyfills for Node.js test environment
  * and a per-file temporary directory.
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll } from "vitest";
@@ -85,4 +85,18 @@ if (typeof globalThis.Path2D === "undefined") {
     }
   };
   globalThis.Path2D = Path2DStub as unknown as typeof Path2D;
+}
+
+// SPIKE: report how the renderer engine's edits matched what the workspace persisted.
+if (process.env.SHIFT_WASM_ENGINE === "writer") {
+  const { afterAll, expect } = await import("vitest");
+  afterAll(() => {
+    const engine = (globalThis as { __shiftEngine?: { stats: object; mismatches: object[] } })
+      .__shiftEngine;
+    const file = process.env.SPIKE_ENGINE_STATS_FILE;
+    if (engine && file) appendFileSync(
+        file,
+        `${JSON.stringify({ file: expect.getState().testPath, ...engine.stats, mismatches: engine.mismatches })}\n`,
+      );
+  });
 }

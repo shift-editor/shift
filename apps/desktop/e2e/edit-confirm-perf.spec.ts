@@ -62,32 +62,45 @@ function stats(values: number[]) {
   };
 }
 
-test("reverse contour is confirmed quickly on a real font", async ({
-  page,
-  editor,
-  electronApp,
-}) => {
-  test.setTimeout(600_000);
-  await editor.openGlyphByUnicode(CODEPOINT);
+for (const mode of ["typescript", "writer"] as const) {
+  test(`reverse contour on a real font — ${mode}`, async ({ page, editor, electronApp }) => {
+    test.setTimeout(600_000);
+    await page.evaluate((writer) => {
+      if (writer) localStorage.setItem("shift.wasmEngine", "writer");
+      else localStorage.removeItem("shift.wasmEngine");
+    }, mode === "writer");
+    // The flag is read when the workspace opens; reload so it opens again with it.
+    await page.reload();
+    await page.waitForURL(/#\/home/, { timeout: 60_000 });
+    await editor.openGlyphByUnicode(CODEPOINT);
 
-  const result = await measure(page, SAMPLES);
-  const metrics = await electronApp.evaluate(({ app }) =>
-    app.getAppMetrics().map((m) => ({
-      type: m.type,
-      name: m.name,
-      workingSetMb: Math.round(m.memory.workingSetSize / 1024),
-    })),
-  );
-  const report = {
-    font: path.basename(process.env.SPIKE_FONT ?? FONT_PATH),
-    layerPoints: result.points,
-    local: stats(result.rows.map((r) => r.local)),
-    frame: stats(result.rows.map((r) => r.frame)),
-    settled: stats(result.rows.map((r) => r.settled)),
-    processes: metrics,
-  };
-  fs.mkdirSync(RESULTS, { recursive: true });
-  fs.writeFileSync(path.join(RESULTS, "edit-confirm.json"), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report));
-  expect(report.settled.p50).toBeGreaterThan(0);
-});
+    const result = await measure(page, SAMPLES);
+    const engine = await page.evaluate(() => {
+      const engine = (
+        globalThis as { __shiftEngine?: { stats: object; memory: () => object } }
+      ).__shiftEngine;
+      return engine ? { stats: { ...engine.stats }, memory: engine.memory() } : null;
+    });
+    const metrics = await electronApp.evaluate(({ app }) =>
+      app.getAppMetrics().map((m) => ({
+        type: m.type,
+        name: m.name,
+        workingSetMb: Math.round(m.memory.workingSetSize / 1024),
+      })),
+    );
+    const report = {
+      mode,
+      font: path.basename(process.env.SPIKE_FONT ?? FONT_PATH),
+      layerPoints: result.points,
+      local: stats(result.rows.map((r) => r.local)),
+      frame: stats(result.rows.map((r) => r.frame)),
+      settled: stats(result.rows.map((r) => r.settled)),
+      engine,
+      processes: metrics,
+    };
+    fs.mkdirSync(RESULTS, { recursive: true });
+    fs.writeFileSync(path.join(RESULTS, `edit-confirm-${mode}.json`), JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(report));
+    expect(report.settled.p50).toBeGreaterThan(0);
+  });
+}

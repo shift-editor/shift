@@ -10,6 +10,7 @@
 //! generated, and strings cross once each, as interned ids ([`names`]).
 
 pub mod anchors;
+pub mod engine;
 pub mod decomposition;
 mod layout;
 pub mod names;
