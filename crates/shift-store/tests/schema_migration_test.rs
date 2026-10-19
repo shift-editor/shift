@@ -12,7 +12,9 @@ use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 fn downgrade_to_version_2(path: &Path) {
     let conn = rusqlite::Connection::open(path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE glyphs DROP COLUMN category;
+        "DROP TABLE glyph_axes;
+         ALTER TABLE glyph_layers DROP COLUMN location_json;
+         ALTER TABLE glyphs DROP COLUMN category;
          ALTER TABLE glyphs DROP COLUMN sub_category;
          PRAGMA user_version = 2;",
     )

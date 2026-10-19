@@ -88,7 +88,7 @@ fn insert(glyph: Glyph) -> FontChange {
 
 fn stem_width(font: &Font, glyph: &str, at: &DesignLocation) -> f64 {
     let flat = font.resolve_glyph(&GlyphId::from_raw(glyph), at).unwrap();
-    let xs: Vec<f64> = flat.contours.iter().flatten().map(|p| p.0).collect();
+    let xs: Vec<f64> = flat.points().iter().map(|p| p.0).collect();
     xs.iter().cloned().fold(f64::MIN, f64::max) - xs.iter().cloned().fold(f64::MAX, f64::min)
 }
 

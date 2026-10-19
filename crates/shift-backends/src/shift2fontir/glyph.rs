@@ -88,6 +88,24 @@ impl Work<Context, WorkId, Error> for GlyphWork {
             add_anchors(&mut anchors, layer, &location)?;
         }
 
+        // Layers placed on font axes are glyph-specific intermediate masters.
+        // Layers on a part's own axes have no compiled counterpart.
+        for layer in self.glyph.layers().values() {
+            if layer.location().is_empty() {
+                continue;
+            }
+            let on_font_axes = layer.location().0.keys().all(|axis| self.snapshot.axes.iter().any(|a| a.id() == *axis));
+            let Some(source) = self.snapshot.sources.iter().find(|s| s.id() == layer.source_id()) else {
+                continue;
+            };
+            if !on_font_axes {
+                continue;
+            }
+            let location = super::axes::normalized_layer_location(source, layer, &self.snapshot.axes, &metadata.all_source_axes)?;
+            builder.try_add_source(&location, to_glyph_instance(layer))?;
+            add_anchors(&mut anchors, layer, &location)?;
+        }
+
         context.anchors.set(anchors.build()?);
         context.glyphs.set(builder.build()?);
         Ok(())

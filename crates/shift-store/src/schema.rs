@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 3;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 4;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -406,9 +406,23 @@ ALTER TABLE glyphs ADD COLUMN category TEXT;
 ALTER TABLE glyphs ADD COLUMN sub_category TEXT;
 "#;
 
+/// Version 3 to 4: glyph-local axes and sources. Parts gain their own axes, and
+/// a layer may sit at extra coordinates on top of its source; existing layers
+/// sit exactly at their source (NULL). This SQL is frozen.
+const MIGRATE_V3_TO_V4: &str = r#"
+CREATE TABLE glyph_axes (
+    glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    axis_json TEXT NOT NULL,
+    PRIMARY KEY (glyph_id, order_index),
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+ALTER TABLE glyph_layers ADD COLUMN location_json TEXT;
+"#;
+
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 2] = [(2, MIGRATE_V1_TO_V2), (3, MIGRATE_V2_TO_V3)];
+const MIGRATIONS: [(i64, &str); 3] = [(2, MIGRATE_V1_TO_V2), (3, MIGRATE_V2_TO_V3), (4, MIGRATE_V3_TO_V4)];
 
 /// Upgrades the authored tables of a store at `version` to
 /// [`SHIFT_DOCUMENT_SCHEMA_VERSION`] in one transaction, stamping

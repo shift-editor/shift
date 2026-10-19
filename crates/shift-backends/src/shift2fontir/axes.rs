@@ -280,6 +280,33 @@ pub(super) fn normalized_source_location(
     Ok(design_location.to_normalized(ir_axes)?)
 }
 
+/// The normalized location of a layer placed on font axes on top of its base
+/// source: a glyph-specific intermediate master, such as a Glyphs brace layer
+/// or a sample added when parts are decomposed for export.
+pub(super) fn normalized_layer_location(
+    source: &Source,
+    layer: &shift_font::GlyphLayer,
+    shift_axes: &[Axis],
+    ir_axes: &Axes,
+) -> Result<NormalizedLocation, Error> {
+    let design_location: DesignLocation = shift_axes
+        .iter()
+        .map(|axis| {
+            let tag = Tag::from_str(axis.tag()).expect("Shift axes were validated in the snapshot");
+            let ir_axis = ir_axes.get(&tag).expect("Shift and fontir axes were created together");
+            let value = layer
+                .location()
+                .0
+                .get(&axis.id())
+                .copied()
+                .or_else(|| source.location().get(&axis.id()))
+                .unwrap_or_else(|| ir_axis.default.to_design(&ir_axis.converter).to_f64());
+            (tag, DesignCoord::new(value))
+        })
+        .collect();
+    Ok(design_location.to_normalized(ir_axes)?)
+}
+
 #[cfg(test)]
 mod tests {
     use shift_font::{AxisMappingPoint, Location};

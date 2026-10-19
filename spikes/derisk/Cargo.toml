@@ -19,6 +19,7 @@ rmp-serde = "1"
 postcard = { version = "1", features = ["use-std"] }
 tempfile = "3"
 libc = "0.2"
+skrifa = "0.32.0"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 notify = "8"
 

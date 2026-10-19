@@ -536,6 +536,7 @@ dependencies = [
  "shift-store",
  "shift-wire",
  "shift-workspace",
+ "skrifa",
  "tempfile",
 ]
 

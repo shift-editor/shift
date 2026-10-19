@@ -13,7 +13,7 @@ use fontdrasil::variations::{
 
 use crate::{
     Axis, AxisId, CoreResult, DesignLocation, DesignNormalization, Font, Glyph, GlyphId,
-    GlyphLayer, Location, SourceId,
+    GlyphLayer, LayerId, Location, SourceId,
 };
 
 mod kerning;
@@ -491,6 +491,18 @@ fn interpolation_basis(
     axes: &[Axis],
     design_normalization: Vec<DesignNormalization>,
 ) -> Option<InterpolationBasis> {
+    let basis = keyed_variation_basis(sources, axes)?;
+    Some(InterpolationBasis {
+        source_ids: sources.iter().map(|(source_id, _)| source_id.clone()).collect(),
+        design_normalization,
+        basis,
+    })
+}
+
+/// The fontdrasil basis for any ordered set of locations. Rows follow
+/// `sources`' order; the keys only label them, so the same model serves font
+/// sources, a glyph's layers, or export samples.
+fn keyed_variation_basis<K>(sources: &[(K, NormalizedLocation)], axes: &[Axis]) -> Option<VariationBasis> {
     if sources.is_empty() {
         return None;
     }
@@ -530,14 +542,7 @@ fn interpolation_basis(
     let model_coefficients = model
         .deltas_with_rounding::<f64, f64>(&points, RoundingBehaviour::None)
         .ok()?;
-    Some(InterpolationBasis {
-        source_ids: sources
-            .iter()
-            .map(|(source_id, _)| source_id.clone())
-            .collect(),
-        design_normalization,
-        basis: VariationBasis::from_fontdrasil(model_coefficients, &axis_ids_by_tag),
-    })
+    Some(VariationBasis::from_fontdrasil(model_coefficients, &axis_ids_by_tag))
 }
 
 /// Derives a virtual default only when two masters bracket it on one axis.
@@ -546,7 +551,7 @@ fn interpolation_basis(
 /// sparse glyph may omit the font's default master while still providing a
 /// well-defined one-axis interpolation on opposite sides of it. More complex
 /// sparse layouts remain nonviable and use the caller's static master fallback.
-fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> Option<Vec<f64>> {
+fn virtual_default_coefficients<K>(sources: &[(K, NormalizedLocation)]) -> Option<Vec<f64>> {
     let mut negative: Option<(usize, Tag, f64)> = None;
     let mut positive: Option<(usize, Tag, f64)> = None;
 
@@ -804,11 +809,58 @@ mod tests {
 // layer sits at its base font source plus its extra coordinates; interpolation
 // over that space reuses the same fontdrasil basis as font-wide interpolation.
 
-/// A glyph resolved at a location, components flattened into contours.
+/// Interpolation over one glyph's own space (font axes plus its glyph axes),
+/// with one member per compatible layer. Keyed by layer: glyph-local sources
+/// are layers, not font sources.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GlyphSpaceInterpolation {
+    reference_layer: Arc<GlyphLayer>,
+    layer_ids: Vec<LayerId>,
+    values: Vec<GlyphInterpolationValues>,
+    basis: VariationBasis,
+    design_normalization: Vec<DesignNormalization>,
+}
+
+impl GlyphSpaceInterpolation {
+    /// The layers whose values the basis combines, in its row order.
+    pub fn layer_ids(&self) -> &[LayerId] {
+        &self.layer_ids
+    }
+
+    /// Resolves a derived layer at `location`; glyph axes it doesn't name sit
+    /// at their defaults.
+    pub fn resolve(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<GlyphLayer> {
+        let weights = self.basis.evaluate(location.as_untyped(), axes, Some(&self.design_normalization))?;
+        let count = self.values.first().map_or(0, |v| v.as_slice().len());
+        let mut values = vec![0.0; count];
+        for (member, weight) in self.values.iter().zip(weights) {
+            if weight == 0.0 {
+                continue;
+            }
+            for (value, member_value) in values.iter_mut().zip(member.as_slice()) {
+                *value += weight * member_value;
+            }
+        }
+        let mut layer = self.reference_layer.as_ref().clone();
+        layer.apply_interpolation_values(&GlyphInterpolationValues::new(values))?;
+        Ok(layer)
+    }
+}
+
+/// A glyph resolved at a location, components flattened into contours. The
+/// contours keep their point types; their ids are not unique and must be
+/// re-minted before the contours go into a font.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FlattenedGlyph {
     pub advance: f64,
-    pub contours: Vec<Vec<(f64, f64)>>,
+    pub contours: Vec<crate::Contour>,
+}
+
+impl FlattenedGlyph {
+    /// Every point in order, as coordinates.
+    pub fn points(&self) -> Vec<(f64, f64)> {
+        self.contours.iter().flat_map(|c| c.points().iter().map(|p| (p.x(), p.y()))).collect()
+    }
 }
 
 const MAX_RESOLVE_DEPTH: usize = 32;
@@ -848,39 +900,34 @@ impl Font {
     }
 
     /// Interpolation over the glyph's whole space from every compatible master
-    /// layer, including layers with extra coordinates. Glyphs without axes or
-    /// located layers use the ordinary font-wide interpolation.
-    pub fn glyph_space_interpolation(&self, glyph_id: &GlyphId) -> CoreResult<Option<GlyphInterpolation>> {
+    /// layer, including layers with extra coordinates, keyed by layer.
+    pub fn glyph_space_interpolation(&self, glyph_id: &GlyphId) -> CoreResult<Option<GlyphSpaceInterpolation>> {
         let glyph = self.require_glyph(glyph_id)?;
-        let located = glyph.layers().values().any(|layer| !layer.location().is_empty());
-        if glyph.axes().is_empty() && !located {
-            return self.glyph_interpolation(glyph_id);
-        }
         let Some(reference_layer) = interpolation_reference_layer(self, glyph) else {
             return Ok(None);
         };
         let axes = self.glyph_space_axes(glyph);
         let normalization = self.glyph_space_normalization(glyph)?;
-        let mut locations = Vec::new();
-        let mut sources = Vec::new();
+        let mut members = Vec::new();
         for layer in glyph.layers().values() {
             let is_master = self.source(&layer.source_id()).is_some_and(crate::Source::is_master);
             if !is_master || !reference_layer.match_with(layer).is_complete() {
                 continue;
             }
-            // Spike: the basis is keyed by SourceId, so each layer stands in as
-            // one. A real implementation keys the basis by layer.
-            let key = SourceId::from_raw(layer.id());
-            locations.push((key.clone(), self.layer_full_location(glyph, layer)?));
-            sources.push(GlyphInterpolationSource { source_id: key, values: layer.interpolation_values() });
+            let location = normalized_location(&self.layer_full_location(glyph, layer)?, &axes, &normalization);
+            members.push((layer.id(), location, layer.interpolation_values()));
         }
-        let Some(basis) = InterpolationBasis::from_source_locations(&locations, &axes, normalization) else {
+        let keyed: Vec<(LayerId, NormalizedLocation)> = members.iter().map(|(id, loc, _)| (id.clone(), loc.clone())).collect();
+        let Some(basis) = keyed_variation_basis(&keyed, &axes) else {
             return Ok(None);
         };
-        // The basis orders its sources; align the values with it.
-        let by_key: HashMap<SourceId, GlyphInterpolationSource> = sources.into_iter().map(|s| (s.source_id.clone(), s)).collect();
-        let sources = basis.source_ids().iter().map(|id| by_key[id].clone()).collect();
-        Ok(Some(GlyphInterpolation { reference_layer, basis: Arc::new(basis), sources }))
+        Ok(Some(GlyphSpaceInterpolation {
+            reference_layer,
+            layer_ids: keyed.into_iter().map(|(id, _)| id).collect(),
+            values: members.into_iter().map(|(_, _, values)| values).collect(),
+            basis,
+            design_normalization: normalization,
+        }))
     }
 
     /// Resolves a glyph at a font location: interpolates it over its own space
@@ -896,12 +943,17 @@ impl Font {
         }
         let glyph = self.require_glyph(glyph_id)?;
         let axes = self.glyph_space_axes(glyph);
-        let layer = match self.glyph_space_interpolation(glyph_id)? {
-            Some(interpolation) => interpolation.resolve(at, &axes)?,
+        let font_wide = glyph.axes().is_empty() && glyph.layers().values().all(|layer| layer.location().is_empty());
+        let resolved = if font_wide {
+            self.glyph_interpolation(glyph_id)?.map(|i| i.resolve(at, &axes)).transpose()?
+        } else {
+            self.glyph_space_interpolation(glyph_id)?.map(|i| i.resolve(at, &axes)).transpose()?
+        };
+        let layer = match resolved {
+            Some(layer) => layer,
             None => interpolation_reference_layer(self, glyph).map(|l| l.as_ref().clone()).ok_or_else(|| crate::CoreError::GlyphNotFound(glyph_id.clone()))?,
         };
-        let mut contours: Vec<Vec<(f64, f64)>> =
-            layer.contours_iter().map(|c| c.points().iter().map(|p| (p.x(), p.y())).collect()).collect();
+        let mut contours: Vec<crate::Contour> = layer.contours_iter().cloned().collect();
         let font_axes: HashSet<AxisId> = self.axes().iter().map(Axis::id).collect();
         for component in layer.components_iter() {
             // Font axes the location doesn't name follow the parent, or reset.
@@ -918,8 +970,187 @@ impl Font {
             }
             let base = self.resolve_glyph_at_depth(&component.base_glyph_id(), &base_at, depth + 1)?;
             let matrix = component.transform().to_matrix();
-            contours.extend(base.contours.into_iter().map(|c| c.into_iter().map(|(x, y)| matrix.transform_point(x, y)).collect()));
+            for mut contour in base.contours {
+                for point in contour.points_mut() {
+                    let (x, y) = matrix.transform_point(point.x(), point.y());
+                    point.set_position(x, y);
+                }
+                contours.push(contour);
+            }
         }
         Ok(FlattenedGlyph { advance: layer.width(), contours })
     }
 }
+
+/// What decomposing one glyph's parts for export did.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartDecomposition {
+    pub glyph_name: String,
+    pub masters: usize,
+    /// The worst distance, in font units, between the preview and a font that
+    /// interpolates the flattened masters linearly, before any intermediates.
+    pub worst_gap_before: f64,
+    pub intermediates: usize,
+    pub worst_gap_after: f64,
+}
+
+const MAX_INTERMEDIATES: usize = 24;
+
+impl Font {
+    /// Whether a glyph's outline depends on parts: it, or a component in its
+    /// closure, samples a glyph with its own axes or at a location.
+    fn uses_parts(&self, glyph: &Glyph, depth: usize) -> bool {
+        if depth > MAX_RESOLVE_DEPTH {
+            return false;
+        }
+        glyph.layers().values().any(|layer| {
+            layer.components_iter().any(|component| {
+                !component.location().is_empty()
+                    || self.glyph(&component.base_glyph_id()).is_some_and(|base| {
+                        !base.axes().is_empty() || self.uses_parts(base, depth + 1)
+                    })
+            })
+        })
+    }
+
+    /// An export copy of the font in which every glyph that uses parts is plain
+    /// outlines: flattened at each master, plus glyph-specific intermediate
+    /// masters (layers located on font axes) wherever a font interpolating the
+    /// flattened masters would drift from the preview by more than `tolerance`
+    /// units. Parts keep only their font-axis layers and lose their own axes.
+    ///
+    /// The prediction uses the same fontdrasil model a compiler builds for a
+    /// glyph with its own set of locations.
+    pub fn decompose_parts(&self, tolerance: f64) -> CoreResult<(Font, Vec<PartDecomposition>)> {
+        let axes = self.axes().to_vec();
+        let normalization = self.design_normalization()?;
+        let default_source = self.default_source_id().ok_or_else(|| crate::CoreError::InvalidEntityOrder { kind: "source", message: "no default source".into() })?;
+        let mut changes = Vec::new();
+        let mut reports = Vec::new();
+        for glyph in self.glyphs() {
+            if !glyph.axes().is_empty() {
+                let mut part = glyph.clone();
+                part.set_axes(Vec::new());
+                for (layer_id, layer) in glyph.layers() {
+                    if !layer.location().is_empty() {
+                        part.remove_layer(layer_id.clone());
+                    }
+                }
+                changes.push(crate::FontChange::Glyph(Box::new(crate::Replacement { before: Some(glyph.clone()), after: Some(part) })));
+                continue;
+            }
+            if !self.uses_parts(glyph, 0) {
+                continue;
+            }
+
+            // Flatten at each master the glyph has a plain layer for.
+            let mut flattened = glyph.clone();
+            let mut samples: Vec<(DesignLocation, Vec<(f64, f64)>)> = Vec::new();
+            for (layer_id, layer) in glyph.layers() {
+                flattened.remove_layer(layer_id.clone());
+                let Some(source) = self.source(&layer.source_id()).filter(|s| s.is_master()) else { continue };
+                if !layer.location().is_empty() {
+                    continue;
+                }
+                let location = source.location().clone();
+                let flat = self.resolve_glyph(&glyph.id(), &location)?;
+                samples.push((location, flat.points()));
+                flattened.set_layer(flattened_layer(layer.id(), layer.source_id(), &flat, layer, None));
+            }
+            let masters = samples.len();
+
+            // Add intermediates where the linear font drifts from the preview.
+            let mut worst_before = None;
+            let mut worst_after = 0.0;
+            let mut intermediates = 0;
+            loop {
+                let model: Vec<(usize, NormalizedLocation)> = samples.iter().enumerate().map(|(i, (loc, _))| (i, normalized_location(loc, &axes, &normalization))).collect();
+                let Some(basis) = keyed_variation_basis(&model, &axes) else { break };
+                let mut worst: Option<(f64, DesignLocation, crate::FlattenedGlyph)> = None;
+                for candidate in midpoints(&samples) {
+                    let weights = basis.evaluate(candidate.as_untyped(), &axes, Some(&normalization))?;
+                    let preview = self.resolve_glyph(&glyph.id(), &candidate)?;
+                    let expected = preview.points();
+                    let mut predicted = vec![(0.0, 0.0); expected.len()];
+                    for ((_, points), weight) in samples.iter().zip(weights) {
+                        for (p, q) in predicted.iter_mut().zip(points) {
+                            p.0 += weight * q.0;
+                            p.1 += weight * q.1;
+                        }
+                    }
+                    let gap = predicted.iter().zip(&expected).map(|(p, q)| ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt()).fold(0.0, f64::max);
+                    if worst.as_ref().is_none_or(|(g, _, _)| gap > *g) {
+                        worst = Some((gap, candidate, preview));
+                    }
+                }
+                let Some((gap, location, preview)) = worst else { break };
+                worst_before.get_or_insert(gap);
+                worst_after = gap;
+                if gap <= tolerance || intermediates >= MAX_INTERMEDIATES {
+                    break;
+                }
+                // A glyph-specific intermediate: every font axis pinned.
+                let reference = glyph.layer_for_source(default_source.clone()).cloned();
+                let mut layer_location = crate::LayerLocation::default();
+                for axis in self.axes() {
+                    let value = location.get(&axis.id()).unwrap_or(axis.default());
+                    layer_location.0.insert(axis.id(), value);
+                }
+                let layer = flattened_layer(LayerId::new(), default_source.clone(), &preview, reference.as_ref().unwrap_or(&GlyphLayer::new(LayerId::new(), default_source.clone())), Some(layer_location));
+                flattened.set_layer(layer);
+                samples.push((location, preview.points()));
+                intermediates += 1;
+            }
+            reports.push(PartDecomposition { glyph_name: glyph.name().to_string(), masters, worst_gap_before: worst_before.unwrap_or(0.0), intermediates, worst_gap_after: worst_after });
+            changes.push(crate::FontChange::Glyph(Box::new(crate::Replacement { before: Some(glyph.clone()), after: Some(flattened) })));
+        }
+        let mut export = self.clone();
+        export.apply_change_set(&crate::FontChangeSet::new(changes))?;
+        Ok((export, reports))
+    }
+}
+
+/// A layer holding a flattened outline with freshly minted ids, keeping the
+/// original layer's anchors.
+fn flattened_layer(id: LayerId, source_id: SourceId, flat: &crate::FlattenedGlyph, original: &GlyphLayer, location: Option<crate::LayerLocation>) -> GlyphLayer {
+    let mut layer = GlyphLayer::with_width(id, source_id, flat.advance);
+    for contour in &flat.contours {
+        let mut fresh = crate::Contour::new();
+        for point in contour.points() {
+            fresh.add_point(point.x(), point.y(), point.point_type(), point.is_smooth());
+        }
+        if contour.is_closed() {
+            fresh.close();
+        }
+        layer.add_contour(fresh);
+    }
+    if location.is_none() {
+        for anchor in original.anchors_iter() {
+            layer.add_anchor(anchor.clone());
+        }
+    }
+    if let Some(location) = location {
+        layer.set_location(location);
+    }
+    layer
+}
+
+/// Midpoints between every pair of sample locations: where a linear font
+/// drifts most from a curved preview.
+fn midpoints(samples: &[(DesignLocation, Vec<(f64, f64)>)]) -> Vec<DesignLocation> {
+    let mut out = Vec::new();
+    for i in 0..samples.len() {
+        for j in i + 1..samples.len() {
+            let (a, b) = (&samples[i].0, &samples[j].0);
+            let mut mid = DesignLocation::new();
+            let ids: HashSet<&AxisId> = a.iter().map(|(id, _)| id).chain(b.iter().map(|(id, _)| id)).collect();
+            for id in ids {
+                let (x, y) = (a.get(id).unwrap_or(0.0), b.get(id).unwrap_or(0.0));
+                mid.set(id.clone(), (x + y) / 2.0);
+            }
+            out.push(mid);
+        }
+    }
+    out
+}
+
