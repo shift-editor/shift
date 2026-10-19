@@ -49,13 +49,25 @@ function Dot({ at, className }: { at: Point2D; className: string }) {
   );
 }
 
-/** Square of `±REGION_MARGIN` around `at`: how far a claim from that point reaches into a region. */
-function MarginBox({ at, className }: { at: Point2D; className: string }) {
+/**
+ * The points a claim from `at` tests: `at` itself and one `REGION_MARGIN` away
+ * along each axis, drawn as a cross because the corners of the square they span
+ * are not tested.
+ */
+function MarginCross({ at, className }: { at: Point2D; className: string }) {
+  const reach = REGION_MARGIN * 2;
+
   return (
-    <div
-      className={cn("absolute -translate-1/2 border border-dashed", className)}
-      style={{ left: at.x, top: at.y, width: REGION_MARGIN * 2, height: REGION_MARGIN * 2 }}
-    />
+    <>
+      <div
+        className={cn("absolute -translate-1/2 border-t border-dashed", className)}
+        style={{ left: at.x, top: at.y, width: reach }}
+      />
+      <div
+        className={cn("absolute -translate-1/2 border-l border-dashed", className)}
+        style={{ left: at.x, top: at.y, height: reach }}
+      />
+    </>
   );
 }
 
@@ -97,8 +109,8 @@ function DragSteering({
           className="stroke-fuchsia-600 stroke-2 [stroke-dasharray:2_4]"
         />
       </svg>
-      <MarginBox at={drag.handle} className="border-fuchsia-600/70" />
-      <MarginBox at={tip} className="border-fuchsia-600/70" />
+      <MarginCross at={drag.handle} className="border-fuchsia-600/70" />
+      <MarginCross at={tip} className="border-fuchsia-600/70" />
       <Dot at={centre} className="size-2 bg-fuchsia-600/50" />
       <Dot at={drag.handle} className="border-2 border-fuchsia-600 bg-white" />
       <Dot at={tip} className="size-4 bg-fuchsia-600 ring-4 ring-fuchsia-600/30" />
@@ -123,7 +135,7 @@ export interface ToolbarZonesOverlayProps {
  * Debug view of how the carried bar steers the floating toolbar: the region
  * each dock owns, the target's region highlighted, the two halves the centre
  * square splits into across the seat's axis, the carried bar with the two
- * points that steer (handle and tip) and their margins, and which docks claim
+ * points that steer (handle and tip) with the cross each tests, and which docks claim
  * the bar right now.
  *
  * @remarks
@@ -195,8 +207,8 @@ export function ToolbarZonesOverlay({ frame, barLength, dock, drag }: ToolbarZon
           ◉ tip (handle reflected through the bar centre) leads to top (standing) and left (flat)
         </span>
         <span>
-          ┄ ±{REGION_MARGIN}px margin: the target keeps a region through it, a tip must be that deep
-          to take it
+          ┄ ±{REGION_MARGIN}px cross: the points a claim tests along each axis; the target keeps a
+          region through it, a tip must have all of them inside to take one
         </span>
         <span>thick outline: dock claims the bar now (tip claims beat handle claims)</span>
         <span>▨ centre square splits across the seat axis</span>

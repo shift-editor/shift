@@ -401,7 +401,16 @@ describe("holding the pointer still settles on one target", () => {
     });
   }
 
-  for (const frame of [FRAME, { width: 1440, height: 800 }, { width: 700, height: 600 }]) {
+  const frames: ToolbarFrame[] = [
+    FRAME,
+    { width: 1440, height: 800 },
+    { width: 700, height: 600 },
+    { width: 600, height: 900 },
+    { width: 1800, height: 500 },
+    { width: 1000, height: 300 },
+  ];
+
+  for (const frame of frames) {
     for (const seat of TOOLBAR_DOCKS) {
       for (const previousTarget of TOOLBAR_DOCKS) {
         it(`from a ${seat} seat that targeted ${previousTarget}, in ${frame.width}x${frame.height}`, () => {
@@ -522,6 +531,24 @@ describe("a short frame keeps the bar flat", () => {
     const wasTall: ToolbarDragState = { ...start, tether: null, target: "left" };
 
     expect(dragTo(wasTall, { x: 50, y: 200 }, frame).target).toBe("bottom");
+    expect(dragTo(wasTall, { x: 50, y: 100 }, frame).target).toBe("top");
+  });
+
+  it("settles on the half the pointer is in when the frame shrinks under a held side target", () => {
+    const tall = dragTo(start, { x: 400, y: 350 }, FRAME);
+    const shrunk = dragTo(tall, { x: 400, y: 100 }, frame);
+
+    expect(tall.target).toBe("left");
+    expect(shrunk.target).toBe("top");
+    expect(dragTo(shrunk, { x: 400, y: 100 }, frame).target).toBe("top");
+  });
+
+  it("keeps the bar in its slot when the frame resizes before it has torn loose", () => {
+    const resized = dragTo(start, start.pointer, frame);
+
+    expect(resized.tether).not.toBeNull();
+    expect(resized.target).toBe(start.target);
+    expect(resized.frame).toEqual(frame);
   });
 });
 

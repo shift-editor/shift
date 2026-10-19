@@ -163,7 +163,8 @@ export function toolbarClaims(drag: ToolbarDragState): ToolbarDock[] {
  * a margin inside; otherwise the current target is kept if it still claims.
  *
  * The claims depend only on the bar's position, and the current target is
- * always among them once chosen, so a held pointer settles on its first step.
+ * among them once chosen whenever anything claims, so a held pointer settles
+ * on its first step. When nothing claims, the target is held unchanged.
  */
 function steeredDock(
   handle: Point2D,
