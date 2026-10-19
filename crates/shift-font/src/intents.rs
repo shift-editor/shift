@@ -474,6 +474,51 @@ impl FontIntent {
     }
 }
 
+impl FontIntent {
+    /// Rejects coordinates that are NaN or infinite before anything is mutated.
+    ///
+    /// A stored non-finite coordinate poisons every later geometry operation;
+    /// boolean operations on such a contour can overflow the stack.
+    fn require_finite_coordinates(&self) -> CoreResult<()> {
+        match self {
+            Self::AddPoints { points, .. } => require_finite(
+                "new points",
+                points.iter().flat_map(|point| [point.x, point.y]),
+            ),
+            Self::MovePoints { coords, .. } => {
+                require_finite("point positions", coords.iter().copied())
+            }
+            Self::TranslatePoints { dx, dy, .. } => require_finite("point translation", [*dx, *dy]),
+            Self::AddAnchors { anchors, .. } => require_finite(
+                "new anchors",
+                anchors.iter().flat_map(|anchor| [anchor.x, anchor.y]),
+            ),
+            Self::MoveAnchors { coords, .. } => {
+                require_finite("anchor positions", coords.iter().copied())
+            }
+            Self::SetXAdvance { width, .. } => require_finite("advance width", [*width]),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// Requires every value to be finite.
+///
+/// # Errors
+///
+/// Returns [`CoreError::InvalidPositionUpdateInput`] naming `kind` when any
+/// value is NaN or infinite.
+fn require_finite(kind: &'static str, values: impl IntoIterator<Item = f64>) -> CoreResult<()> {
+    if values.into_iter().all(f64::is_finite) {
+        return Ok(());
+    }
+
+    Err(CoreError::InvalidPositionUpdateInput {
+        kind,
+        message: "values must be finite".to_string(),
+    })
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct FontIntentSet {
     pub intents: Vec<FontIntent>,
@@ -1256,6 +1301,7 @@ impl Font {
     }
 
     fn apply_intent(&mut self, intent: &FontIntent) -> CoreResult<()> {
+        intent.require_finite_coordinates()?;
         match intent {
             FontIntent::AddPoints {
                 layer_id,
@@ -1388,6 +1434,7 @@ impl Font {
                 layer_id,
                 point_ids,
             } => {
+                let before = self.layer_snapshot(layer_id)?;
                 let empty_contours = {
                     let layer = self.require_layer_mut(layer_id)?;
                     layer.remove_points(point_ids)?
@@ -1396,7 +1443,7 @@ impl Font {
                 if empty_contours.is_empty() {
                     self.forget_point_ids(point_ids);
                 } else {
-                    self.rebuild_structure_index()?;
+                    self.reindex_layer(layer_id, &before)?;
                 }
 
                 Ok(())
@@ -1506,6 +1553,7 @@ impl Font {
                 }
 
                 let aligned = self.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
+                let before = self.layer_snapshot(layer_id)?;
                 {
                     let layer = self.require_layer_mut(layer_id)?;
                     let mut component = Component::with_id(
@@ -1522,7 +1570,7 @@ impl Font {
                     layer.add_component(component);
                 }
 
-                self.rebuild_structure_index()?;
+                self.reindex_layer(layer_id, &before)?;
                 Ok(())
             }
             FontIntent::SetComponentAlignment {
@@ -1560,12 +1608,7 @@ impl Font {
                         ),
                     });
                 }
-                if transforms.iter().any(|value| !value.is_finite()) {
-                    return Err(CoreError::InvalidPositionUpdateInput {
-                        kind: "component transforms",
-                        message: "values must be finite".to_string(),
-                    });
-                }
+                require_finite("component transforms", transforms.iter().copied())?;
 
                 let layer = self.require_layer_mut(layer_id)?;
                 for component_id in component_ids {
@@ -1589,6 +1632,7 @@ impl Font {
                 component_ids,
             } => {
                 let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
+                let before = self.layer_snapshot(layer_id)?;
                 {
                     let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
@@ -1601,7 +1645,7 @@ impl Font {
                     }
                 }
 
-                self.rebuild_structure_index()?;
+                self.reindex_layer(layer_id, &before)?;
                 Ok(())
             }
             FontIntent::DecomposeComponents {
@@ -1626,6 +1670,7 @@ impl Font {
                     projection.component_contours(&glyph_id, &component_ids)?
                 };
 
+                let before = self.layer_snapshot(layer_id)?;
                 {
                     let layer = self.require_layer_mut(layer_id)?;
                     for component_id in &component_ids {
@@ -1643,7 +1688,7 @@ impl Font {
                     }
                 }
 
-                self.rebuild_structure_index()?;
+                self.reindex_layer(layer_id, &before)?;
                 Ok(())
             }
             FontIntent::ReverseContour {
@@ -1688,12 +1733,7 @@ impl Font {
                     transform.dx,
                     transform.dy,
                 ];
-                if values.iter().any(|value| !value.is_finite()) {
-                    return Err(CoreError::InvalidPositionUpdateInput {
-                        kind: "layer transform",
-                        message: "values must be finite".to_string(),
-                    });
-                }
+                require_finite("layer transform", values)?;
 
                 self.require_layer_mut(layer_id)?.transform_layer(transform);
                 Ok(())
@@ -1746,6 +1786,7 @@ impl Font {
                 contour_id_b,
                 operation,
             } => {
+                let before = self.layer_snapshot(layer_id)?;
                 {
                     let layer = self.require_layer_mut(layer_id)?;
                     layer.apply_boolean_op(
@@ -1755,7 +1796,7 @@ impl Font {
                     )?;
                 }
 
-                self.rebuild_structure_index()?;
+                self.reindex_layer(layer_id, &before)?;
                 Ok(())
             }
             FontIntent::CreateGlyph { .. }
@@ -1828,6 +1869,9 @@ mod replacement_tests;
 
 #[cfg(test)]
 mod kerning_tests;
+
+#[cfg(test)]
+mod consistency_tests;
 
 /// A kerning group name trimmed of surrounding space.
 ///

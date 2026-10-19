@@ -10,11 +10,11 @@
 //! again from the new anchors, in component order, so a mark stacked on a
 //! moved mark follows it too.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::ir::{
     Anchor, Component, ComponentAlignment, DecomposedTransform, Font, GlyphLayer, LayerId,
-    Transform,
+    SourceId, Transform,
 };
 
 /// Placements that differ by less than this are the same.
@@ -52,18 +52,38 @@ pub(crate) fn realign_attached_components<'a>(
         return Vec::new();
     }
 
-    let candidates: Vec<LayerId> = after
-        .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
+    // Composites that stack components on a moved base, found through the
+    // component index rather than a scan of every layer, plus touched layers.
+    let mut candidates: Vec<&GlyphLayer> = touched
+        .iter()
+        .copied()
+        .chain(
+            anchor_glyphs
+                .iter()
+                .flat_map(|glyph_id| after.layers_using_component_base(glyph_id)),
+        )
+        .collect::<HashSet<&LayerId>>()
+        .into_iter()
+        .filter_map(|layer_id| after.layer(layer_id))
         .filter(|layer| layer.components_iter().nth(1).is_some())
-        .filter(|layer| {
-            touched.contains(&layer.id())
-                || layer
-                    .components_iter()
-                    .any(|component| anchor_glyphs.contains(&component.base_glyph_id()))
-        })
-        .map(|layer| layer.id())
         .collect();
+    // Every engine must emit the same changeset order: glyph order, then source
+    // order, then layer identity.
+    let source_rank: HashMap<SourceId, usize> = after
+        .sources()
+        .iter()
+        .enumerate()
+        .map(|(rank, source)| (source.id(), rank))
+        .collect();
+    let order = |layer: &GlyphLayer| {
+        let glyph_rank = after
+            .glyph_id_by_layer(&layer.id())
+            .and_then(|glyph_id| after.glyph_order(&glyph_id));
+        let source = source_rank.get(&layer.source_id()).copied();
+        (glyph_rank, source, layer.id())
+    };
+    candidates.sort_by_cached_key(|layer| order(layer));
+    let candidates: Vec<LayerId> = candidates.into_iter().map(GlyphLayer::id).collect();
 
     let mut changed_layers = Vec::new();
     for layer_id in candidates {

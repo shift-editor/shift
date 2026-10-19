@@ -6,7 +6,7 @@ use std::ops::Deref;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
-pub struct GlyphName(String);
+pub struct GlyphName(std::sync::Arc<str>);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GlyphNameError {
@@ -19,7 +19,7 @@ impl GlyphName {
         if value.is_empty() {
             return Err(GlyphNameError::Empty);
         }
-        Ok(Self(value))
+        Ok(Self(value.into()))
     }
 
     pub fn as_str(&self) -> &str {
@@ -27,7 +27,7 @@ impl GlyphName {
     }
 
     pub fn into_string(self) -> String {
-        self.0
+        self.0.to_string()
     }
 }
 
@@ -55,7 +55,7 @@ impl From<&str> for GlyphName {
 
 impl From<GlyphName> for String {
     fn from(value: GlyphName) -> Self {
-        value.0
+        value.0.to_string()
     }
 }
 

@@ -1184,7 +1184,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(structure?.contours[0].id).toBe(contourId);
     expect(structure?.contours[0].closed).toBe(true);
     expect(structure?.contours[0].points.map((point) => point.id)).toEqual([p1, p2]);
-    expect(applied.next?.glyphs).toEqual([
+    // Drawing changes no glyph record (layers and component bases stay the
+    // same), so the echo does not resend the directory.
+    expect(applied.next?.glyphs).toBeUndefined();
+    expect(created.next?.glyphs).toEqual([
       {
         id: glyphId,
         name: "A",
