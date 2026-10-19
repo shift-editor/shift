@@ -270,7 +270,7 @@ pub(crate) fn font_header(
         let source_id = font.add_source(Source::new(master.name.clone(), location));
         let metric_definitions = font.metric_definitions().to_vec();
         let source = font
-            .source_mut(source_id.clone())
+            .source_mut(&source_id)
             .expect("a newly added source should exist");
         set_metric_position(
             &metric_definitions,
@@ -664,8 +664,8 @@ mod tests {
         assert_eq!(imported_layer_count(&glyphs_font.glyphs["a"], &sources), 2);
         for glyph in [&a, &b] {
             assert_eq!(glyph.layers().len(), 2);
-            assert!(glyph.layer_for_source(master_source_id.clone()).is_some());
-            assert!(glyph.layer_for_source(brace.id()).is_some());
+            assert!(glyph.layer_for_source(&master_source_id).is_some());
+            assert!(glyph.layer_for_source(&brace.id()).is_some());
         }
     }
 

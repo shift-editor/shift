@@ -114,7 +114,7 @@ fn base_anchors<'font>(
     layer: &GlyphLayer,
 ) -> &'font [Anchor] {
     font.glyph(&component.base_glyph_id())
-        .and_then(|glyph| glyph.layer_for_source(layer.source_id()))
+        .and_then(|glyph| glyph.layer_for_source(&layer.source_id()))
         .map_or(&[], GlyphLayer::anchors)
 }
 

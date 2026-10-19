@@ -46,7 +46,7 @@ impl UfoFont {
             FontDirectory::from_font(FontFormat::Ufo, &header, glyph_directory(&glyph_layers)?)?;
         let retained_layers = layers
             .iter()
-            .map(|layer| retained_layer(&directory, layer.glyphs.clone()))
+            .map(|layer| retained_layer(&directory, &layer.glyphs))
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();
 
@@ -86,7 +86,7 @@ impl FontSource for UfoFont {
 
 impl FontImporter for UfoFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream, report) = stream_retained(&self.path, self.layers.clone())
+        let (header, stream, report) = stream_retained(&self.path, &self.layers)
             .map_err(|source| BackendError::load(FontFormat::Ufo, self.path.clone(), source))?;
         Ok(FontImport::new(
             header,

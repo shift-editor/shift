@@ -17,7 +17,7 @@ pub(super) fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Na
     })
 }
 
-fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendError {
+fn io_error(action: &str, path: &Path, error: &std::io::Error) -> FormatBackendError {
     FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
 }
 
@@ -437,7 +437,7 @@ impl UfoWriter {
             let Some(ref source_id) = default_source_id else {
                 continue;
             };
-            if let Some(layer_data) = glyph.layer_for_source(source_id.clone()) {
+            if let Some(layer_data) = glyph.layer_for_source(source_id) {
                 let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                 default_layer.insert_glyph(norad_glyph);
             }
@@ -466,7 +466,7 @@ impl UfoWriter {
             Self::apply_layer_metadata(source, norad_layer)?;
 
             for glyph in font.glyphs() {
-                if let Some(layer_data) = glyph.layer_for_source(source.id()) {
+                if let Some(layer_data) = glyph.layer_for_source(&source.id()) {
                     let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }
@@ -511,27 +511,27 @@ impl UfoWriter {
             _ => Path::new("."),
         };
         std::fs::create_dir_all(parent)
-            .map_err(|e| io_error("create parent directory for", target, e))?;
+            .map_err(|e| io_error("create parent directory for", target, &e))?;
 
         // Staged in the target's parent so the swap is a same-filesystem rename.
         let staging = tempfile::Builder::new()
             .prefix(".shift-ufo-staging-")
             .tempdir_in(parent)
-            .map_err(|e| io_error("create staging directory for", target, e))?;
+            .map_err(|e| io_error("create staging directory for", target, &e))?;
         let staged_ufo = staging.path().join(file_name);
         norad_font
             .save(&staged_ufo)
             .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
-        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
+        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, &e))?;
 
         if target.exists() {
             Self::exchange_or_swap(target, &staged_ufo, staging)?;
         } else {
             std::fs::rename(&staged_ufo, target)
-                .map_err(|e| io_error("move new UFO into place at", target, e))?;
+                .map_err(|e| io_error("move new UFO into place at", target, &e))?;
         }
 
-        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, e))?;
+        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, &e))?;
         Ok(())
     }
 
@@ -547,7 +547,7 @@ impl UfoWriter {
             Err(error) if exchange_unsupported(&error) => {
                 Self::swap_with_backup(target, staged, staging)
             }
-            Err(error) => Err(io_error("swap new UFO into place at", target, error)),
+            Err(error) => Err(io_error("swap new UFO into place at", target, &error)),
         }
     }
 
@@ -558,7 +558,7 @@ impl UfoWriter {
     ) -> FormatBackendResult<()> {
         let backup = staging.path().join("previous");
         std::fs::rename(target, &backup)
-            .map_err(|e| io_error("move aside existing UFO at", target, e))?;
+            .map_err(|e| io_error("move aside existing UFO at", target, &e))?;
 
         if let Err(error) = std::fs::rename(staged, target) {
             if std::fs::rename(&backup, target).is_err() {
@@ -570,7 +570,7 @@ impl UfoWriter {
                     staging_path.join("previous").display(),
                 )));
             }
-            return Err(io_error("move new UFO into place at", target, error));
+            return Err(io_error("move new UFO into place at", target, &error));
         }
 
         Ok(())

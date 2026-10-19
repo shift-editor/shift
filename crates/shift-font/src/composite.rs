@@ -716,7 +716,7 @@ mod tests {
         font.glyphs()
             .filter_map(|glyph| {
                 glyph
-                    .layer_for_source(source_id.clone())
+                    .layer_for_source(&source_id)
                     .map(|layer| (glyph.id(), layer.clone()))
             })
             .collect()
@@ -736,7 +736,7 @@ mod tests {
 
         let mut composite = Glyph::new("comp".to_string());
         let composite_id = composite.id();
-        let mut composite_layer = test_layer(source_id.clone(), 500.0);
+        let mut composite_layer = test_layer(source_id, 500.0);
         composite_layer.add_component(Component::new(base_id, "base".to_string()));
         composite.set_layer(composite_layer);
         font.insert_glyph(composite).unwrap();
@@ -824,7 +824,7 @@ mod tests {
         font.insert_glyph(b).unwrap();
 
         let mut c = Glyph::with_id(c_id, "C".to_string());
-        let mut c_layer = test_layer(source_id.clone(), 500.0);
+        let mut c_layer = test_layer(source_id, 500.0);
         c_layer.add_contour(two_point_contour(10.0, 0.0, 30.0, 20.0));
         c.set_layer(c_layer);
         font.insert_glyph(c).unwrap();
@@ -881,7 +881,7 @@ mod tests {
 
         let mut comp = Glyph::new("comp".to_string());
         let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        let mut comp_layer = test_layer(source_id, 500.0);
         comp_layer.add_component(Component::new(base_id, "base".to_string()));
         comp_layer.add_component(Component::with_matrix(
             mark_id,
@@ -916,7 +916,7 @@ mod tests {
 
         let mut comp = Glyph::new("comp".to_string());
         let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        let mut comp_layer = test_layer(source_id, 500.0);
         let matrix = Transform::translate(30.0, 40.0);
         comp_layer.add_component(Component::with_matrix(mark_id, "mark".to_string(), &matrix));
         comp.set_layer(comp_layer);
@@ -955,7 +955,7 @@ mod tests {
 
         let mut comp = Glyph::new("comp".to_string());
         let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        let mut comp_layer = test_layer(source_id, 500.0);
         comp_layer.add_anchor(Anchor::new(Some("parent_top".to_string()), 0.0, 0.0));
         comp_layer.add_component(Component::new(base_id, "base".to_string()));
         comp_layer.add_component(Component::new(mark_id, "mark".to_string()));

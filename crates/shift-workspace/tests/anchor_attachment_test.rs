@@ -5,7 +5,7 @@ use shift_font::{
 use shift_workspace::{FontWorkspace, NewWorkspace};
 
 fn apply(workspace: &mut FontWorkspace, intents: Vec<FontIntent>) {
-    workspace.apply(FontIntentSet { intents }, None).unwrap();
+    workspace.apply(&FontIntentSet { intents }, None).unwrap();
 }
 
 /// Creates a glyph with one layer at `source_id` holding `anchors`.

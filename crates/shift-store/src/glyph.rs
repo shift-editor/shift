@@ -12,7 +12,7 @@ pub struct GlyphRecord {
 }
 
 impl ShiftStore {
-    pub fn create_glyph(&mut self, glyph: NewGlyph) -> Result<(), StoreError> {
+    pub fn create_glyph(&mut self, glyph: &NewGlyph) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO glyphs (id, name)

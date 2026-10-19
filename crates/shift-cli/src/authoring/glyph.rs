@@ -37,7 +37,7 @@ pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Adds one sparse authored layer from a semantic JSON payload.
@@ -51,7 +51,7 @@ pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
 /// Returns an error for unreadable or invalid JSON, unsupported payload
 /// fields, non-finite values, unresolved selectors, invalid authoring, or
 /// persistence failures.
-pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
+pub fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let source_id = resolve_source_id(&font, &args.source)?;
@@ -68,7 +68,7 @@ pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
         ],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Creates or replaces one layer's drawing, preserving an existing layer's identity.
@@ -79,7 +79,7 @@ pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
 /// # Errors
 ///
 /// Rejects invalid payloads or selectors without writing; persistence failures are reported.
-pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
+pub fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let source_id = resolve_source_id(&font, &args.source)?;
@@ -96,7 +96,7 @@ pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
     }
     intents.push(input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?);
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Copies one glyph layer to another source with fresh internal identities.
@@ -109,13 +109,13 @@ pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
 ///
 /// Returns an error when selectors cannot be resolved, the origin layer is
 /// absent, the destination already owns a layer for the glyph, or saving fails.
-pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
+pub fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let from_source_id = resolve_source_id(&font, &args.from_source)?;
     let source_id = resolve_source_id(&font, &args.source)?;
     let from_layer_id = font
-        .layer_id_for_glyph_source(glyph_id.clone(), from_source_id.clone())
+        .layer_id_for_glyph_source(glyph_id.clone(), from_source_id)
         .ok_or_else(|| {
             miette!(
                 "glyph {:?} has no authored layer at source {:?}",
@@ -133,7 +133,7 @@ pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 pub(crate) fn load_font(path: &Path) -> Result<Font> {

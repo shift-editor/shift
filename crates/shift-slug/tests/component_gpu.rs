@@ -276,7 +276,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     let mut font = sample_variable_font();
     let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let layers = font
-        .glyph(&root_id.clone())
+        .glyph(&root_id)
         .unwrap()
         .layers()
         .values()

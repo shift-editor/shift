@@ -319,7 +319,7 @@ fn inspect_sources(
     font.sources()
         .iter()
         .map(|source| {
-            let layer = glyph.layer_for_source(source.id());
+            let layer = glyph.layer_for_source(&source.id());
             let layer_match = layer.map(|layer| reference.match_with(layer));
             SourceInspection {
                 id: source.id().to_string(),
@@ -434,7 +434,7 @@ fn inspect_variation(
                 .collect()
         })
         .unwrap_or_default();
-    let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(source.id()));
+    let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(&source.id()));
     let selection = if exact_layer.is_some() {
         "exactSource"
     } else if interpolation.is_some() {

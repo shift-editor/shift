@@ -406,7 +406,7 @@ impl Font {
         let mut compatible_sources = Vec::new();
 
         for source in self.masters() {
-            let Some(layer) = glyph.layer_for_source(source.id()) else {
+            let Some(layer) = glyph.layer_for_source(&source.id()) else {
                 continue;
             };
             if !reference_layer.match_with(layer).is_complete() {
@@ -667,7 +667,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let layer = glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -684,7 +684,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -702,7 +702,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
         let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
@@ -724,7 +724,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let reference_layer = glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut candidate = reference_layer.clone();
         let point = candidate

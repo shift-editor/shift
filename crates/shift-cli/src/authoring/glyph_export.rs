@@ -55,7 +55,7 @@ pub fn export_glyphs(path: &Path, names: &[String], sources: &ExportSources) -> 
             .ok_or_else(|| miette!("glyph {name:?} does not exist in {}", path.display()))?;
         let mut wrote_layer = false;
         for source_id in &source_ids {
-            let Some(layer) = glyph.layer_for_source(source_id.clone()) else {
+            let Some(layer) = glyph.layer_for_source(source_id) else {
                 continue;
             };
             for (_, component) in layer.components().iter() {

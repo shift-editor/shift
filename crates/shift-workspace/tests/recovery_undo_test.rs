@@ -16,7 +16,7 @@ fn fixture(name: &str) -> PathBuf {
 fn apply(workspace: &mut FontWorkspace, intent: FontIntent) {
     workspace
         .apply(
-            FontIntentSet {
+            &FontIntentSet {
                 intents: vec![intent],
             },
             None,

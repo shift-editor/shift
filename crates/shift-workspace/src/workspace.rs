@@ -98,11 +98,11 @@ impl FontWorkspace {
         new_workspace: NewWorkspace,
     ) -> Result<Self, WorkspaceError> {
         let mut store = ShiftStore::open(store_path)?;
-        store.set_font_info(new_workspace.font_info())?;
+        store.set_font_info(&new_workspace.font_info())?;
 
         let font = new_font(new_workspace);
         store.replace_font_state(&font)?;
-        store.set_workspace_state(WorkspaceState::untitled(None))?;
+        store.set_workspace_state(&WorkspaceState::untitled(None))?;
 
         Ok(Self::from_store(
             font,
@@ -254,7 +254,7 @@ impl FontWorkspace {
     /// sets that batch several create intents.
     pub fn apply(
         &mut self,
-        set: FontIntentSet,
+        set: &FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
         let required_layers = set
@@ -384,7 +384,7 @@ impl FontWorkspace {
     fn commit_font(
         &mut self,
         next_font: shift_font::Font,
-        change_set: FontChangeSet,
+        change_set: &FontChangeSet,
         save_state: SaveState,
     ) -> Result<(), WorkspaceError> {
         if let Some(layer_id) = change_set
@@ -393,11 +393,11 @@ impl FontWorkspace {
             .filter_map(FontChange::layer_id)
             .find(|layer_id| self.residency.is_unloaded(layer_id))
         {
-            return Err(WorkspaceError::UnloadedLayerMutation(layer_id.clone()));
+            return Err(WorkspaceError::UnloadedLayerMutation(layer_id));
         }
 
         self.store
-            .apply_change_set_with_font(&change_set, &next_font, save_state)?;
+            .apply_change_set_with_font(change_set, &next_font, save_state)?;
         self.font = next_font;
         self.residency.retain_directory_layers(&self.font);
         Ok(())
@@ -409,7 +409,7 @@ impl FontWorkspace {
     {
         let mut next_font = self.font.clone();
         let (result, change_set) = edit(&mut next_font)?;
-        self.commit_font(next_font, change_set, save_state)?;
+        self.commit_font(next_font, &change_set, save_state)?;
 
         Ok(result)
     }
@@ -441,7 +441,7 @@ impl FontWorkspace {
                 let mut writer = store.begin_import(import.header())?;
                 stream_into(import, &mut writer, ImportBatchLimit::default(), |_| {})?;
                 writer.finish()?;
-                store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+                store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
                 store.finish_import()?;
                 let font = store.load_font_directory()?;
                 let residency = LayerResidency::with_unloaded(
@@ -468,9 +468,9 @@ impl FontWorkspace {
 
         let font = loader.read_font(import_path_str)?;
         let mut store = ShiftStore::open(store_path)?;
-        store.set_font_info(font_info_from_font(&font))?;
+        store.set_font_info(&font_info_from_font(&font))?;
         store.replace_font_state(&font)?;
-        store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+        store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
 
         Ok(Self::from_store(
             font,
@@ -686,7 +686,7 @@ impl FontWorkspace {
         Ok(state.revision.to_string())
     }
 
-    pub fn set_workspace_id(&mut self, workspace_id: String) -> Result<(), WorkspaceError> {
+    pub fn set_workspace_id(&mut self, workspace_id: &str) -> Result<(), WorkspaceError> {
         if matches!(&self.source, WorkspaceSource::Document { .. }) {
             return Ok(());
         }

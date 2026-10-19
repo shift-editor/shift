@@ -124,7 +124,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
         intents: vec![FontIntent::CreateAxis { axis }],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Adds one master source after resolving axis tags to stable identities.
@@ -154,13 +154,13 @@ pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 pub(super) fn apply_mutation(
     path: &Path,
     options: &MutationArgs,
-    set: FontIntentSet,
+    set: &FontIntentSet,
 ) -> Result<AuthoringReport> {
     let destination = mutation_destination(path, options.output.as_deref())?;
     let recovery = tempfile::tempdir()

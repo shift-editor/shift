@@ -50,7 +50,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     info.sample_text = Some("Store sample".to_string());
     info.vendor_id = Some("SHFT".to_string());
     working
-        .set_font_info(info)
+        .set_font_info(&info)
         .expect("write store-only sentinels");
     drop(working);
     let conn = rusqlite::Connection::open(&working_path).expect("open raw working store");
@@ -69,7 +69,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     let mut post = original.clone();
     post.metadata_mut().family_name = Some("Recovered Sans".to_string());
     let source_id = shift_font::SourceId::from_raw("regular");
-    post.source_mut(source_id.clone())
+    post.source_mut(&source_id)
         .expect("regular source")
         .set_line_gap(Some(99.0));
     let change = shift_font::FontChangeSet::new(vec![
@@ -130,7 +130,7 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     post.replace_axis(weight.clone())
         .expect("replace weight axis");
     let regular_source_id = shift_font::SourceId::from_raw("regular");
-    post.source_mut(regular_source_id.clone())
+    post.source_mut(&regular_source_id)
         .expect("regular source")
         .set_line_gap(Some(99.0));
     post.set_axis_mappings(Vec::new()).expect("clear mappings");
@@ -282,7 +282,7 @@ fn recovery_save_replaces_reordered_component_collections() {
         .expect("open with recovery");
     let mut layer = document.load_glyph_layer(&layer_id).unwrap().unwrap();
     let first_id = layer.components_iter().next().unwrap().id();
-    let first = layer.remove_component(first_id).unwrap();
+    let first = layer.remove_component(&first_id).unwrap();
     layer.add_component(first);
     let reordered = layer
         .components_iter()
@@ -354,7 +354,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
         shift_font::SourceId::from_raw("regular"),
         620.0,
     );
-    glyph.set_layer(layer.clone());
+    glyph.set_layer(layer);
     let mut post = original.clone();
     post.insert_glyph(glyph.clone()).expect("insert glyph");
     let changes = shift_font::FontChangeSet::from(glyph_created(&glyph));
@@ -426,7 +426,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     drop(recovery);
 
     let mut reverted = post.clone();
-    reverted.pop_glyph(glyph_id.clone()).expect("pop glyph");
+    reverted.pop_glyph(glyph_id).expect("pop glyph");
     document
         .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, SaveState::Unsaved)
         .unwrap();
@@ -511,10 +511,9 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
 
     let mut post = original.clone();
     let removed_layer = post
-        .remove_glyph_layer(layer_id.clone())
+        .remove_glyph_layer(&layer_id)
         .expect("remove glyph layer");
-    post.remove_source(source_id.clone())
-        .expect("remove source");
+    post.remove_source(source_id).expect("remove source");
     let changes = shift_font::FontChangeSet::new(vec![
         layer_deleted(glyph_id, &removed_layer),
         shift_font::FontChange::Sources(shift_font::Replacement::new(
@@ -539,7 +538,7 @@ fn kerning_edit(
     source_id: &str,
     value: Option<f64>,
 ) -> shift_font::FontChangeSet {
-    font.apply_intents(shift_font::FontIntentSet {
+    font.apply_intents(&shift_font::FontIntentSet {
         intents: vec![shift_font::FontIntent::SetKerningValues {
             edits: vec![shift_font::KerningValueEdit {
                 source_id: shift_font::SourceId::from_raw(source_id),
@@ -627,7 +626,7 @@ fn edit_groups(font: &mut shift_font::Font) -> shift_font::FontChangeSet {
     // Sorts before `first_A`, so its insert comes first unless the store
     // deletes every changed group before inserting any.
     let round = shift_font::KerningGroupId::from_raw("a_round");
-    font.apply_intents(shift_font::FontIntentSet {
+    font.apply_intents(&shift_font::FontIntentSet {
         intents: vec![
             shift_font::FontIntent::CreateKerningGroup {
                 group_id: round.clone(),

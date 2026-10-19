@@ -99,9 +99,7 @@ fn a_default_master_reached_through_a_fractional_mapping_interpolates_to_itself(
         let mut location = DesignLocation::new();
         location.set(axis.clone(), design);
         let source_id = if index == 0 {
-            font.source_mut(default_id.clone())
-                .unwrap()
-                .set_location(location);
+            font.source_mut(&default_id).unwrap().set_location(location);
             default_id.clone()
         } else {
             font.add_source(Source::new(format!("Master {index}"), location))

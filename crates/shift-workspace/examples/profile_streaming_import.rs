@@ -99,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let started = Instant::now();
     store.finish_import()?;
     println!("finalize_import_ms={:.3}", ms(started.elapsed()));
-    store.set_workspace_state(WorkspaceState::imported(&source, None))?;
+    store.set_workspace_state(&WorkspaceState::imported(&source, None))?;
 
     let started = Instant::now();
     let directory = store.load_font_directory()?;
@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(glyph_id) = first_glyph_id {
         let layer_ids = workspace
             .font()
-            .glyph(&glyph_id.clone())
+            .glyph(&glyph_id)
             .unwrap()
             .layers()
             .keys()

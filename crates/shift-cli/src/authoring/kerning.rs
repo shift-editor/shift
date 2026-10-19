@@ -32,7 +32,7 @@ use super::{AuthoringReport, apply_mutation, require_finite};
 ///
 /// Rejects non-finite values, unresolved selectors, invalid batches, and
 /// invalid kerning edits without writing. Reports persistence failures.
-pub fn set_kerning(args: SetKerningArgs) -> Result<AuthoringReport> {
+pub fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = match &args.input {
         Some(input) => {
@@ -54,7 +54,7 @@ pub fn set_kerning(args: SetKerningArgs) -> Result<AuthoringReport> {
         }
     };
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Removes one pair's value at one master.
@@ -63,7 +63,7 @@ pub fn set_kerning(args: SetKerningArgs) -> Result<AuthoringReport> {
 ///
 /// Rejects unresolved selectors and a pair with no value at that master.
 /// Reports persistence failures.
-pub fn remove_kerning(args: RemoveKerningArgs) -> Result<AuthoringReport> {
+pub fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let pair = resolve_pair(&font, &args.first, &args.second)?;
@@ -84,7 +84,7 @@ pub fn remove_kerning(args: RemoveKerningArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
+        &FontIntentSet {
             intents: vec![FontIntent::SetKerningValues { edits }],
         },
     )
@@ -112,7 +112,7 @@ pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringRep
         Some(&group_id),
     )?);
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Renames a group; pairs reference it by id, so its kerning is unchanged.
@@ -131,7 +131,7 @@ pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringRep
         }],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Deletes a group. Pairs that reference it are kept but no longer apply.
@@ -139,14 +139,14 @@ pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringRep
 /// # Errors
 ///
 /// Rejects an unresolved group. Reports persistence failures.
-pub fn delete_kerning_group(args: DeleteKerningGroupArgs) -> Result<AuthoringReport> {
+pub fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
     let set = FontIntentSet {
         intents: vec![FontIntent::DeleteKerningGroup { group_id }],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Moves glyphs into a group, out of any other group at its position.
@@ -155,13 +155,13 @@ pub fn delete_kerning_group(args: DeleteKerningGroupArgs) -> Result<AuthoringRep
 ///
 /// Rejects an unresolved group or glyph, and a repeated glyph. Reports
 /// persistence failures.
-pub fn assign_kerning_group(args: AssignKerningGroupArgs) -> Result<AuthoringReport> {
+pub fn assign_kerning_group(args: &AssignKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = resolve_group_id(&font, position, &args.group)?;
     let intents = member_intents(&font, position, &args.members, Some(&group_id))?;
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Takes glyphs out of their group at one position.
@@ -169,11 +169,11 @@ pub fn assign_kerning_group(args: AssignKerningGroupArgs) -> Result<AuthoringRep
 /// # Errors
 ///
 /// Rejects an unresolved or repeated glyph. Reports persistence failures.
-pub fn unassign_kerning_group(args: UnassignKerningGroupArgs) -> Result<AuthoringReport> {
+pub fn unassign_kerning_group(args: &UnassignKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = member_intents(&font, args.position.into(), &args.members, None)?;
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// A JSON batch of kerning edits, applied atomically.

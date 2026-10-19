@@ -28,7 +28,7 @@ fn axis_and_product_batch_has_one_exact_undo_step_without_loading_geometry() {
     let book = NamedInstance::new("Book".to_string(), location, None);
     workspace
         .apply(
-            FontIntentSet {
+            &FontIntentSet {
                 intents: vec![
                     FontIntent::UpdateAxis { axis },
                     FontIntent::CreateNamedInstance {
@@ -89,7 +89,7 @@ fn invalid_origin_edit_rolls_back_earlier_metadata_and_preserves_ledger_and_stor
     let mut metadata = before.metadata().clone();
     metadata.family_name = Some("Must Not Persist".to_string());
     let result = workspace.apply(
-        FontIntentSet {
+        &FontIntentSet {
             intents: vec![
                 FontIntent::UpdateFontMetadata { metadata },
                 FontIntent::UpdateAxis { axis },
@@ -129,7 +129,7 @@ fn explicit_origin_relocation_batch_restores_the_complete_pair_on_undo_and_redo(
     );
     workspace
         .apply(
-            FontIntentSet {
+            &FontIntentSet {
                 intents: vec![
                     FontIntent::UpdateSource {
                         source_id: source.id(),

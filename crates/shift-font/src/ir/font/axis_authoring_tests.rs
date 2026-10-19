@@ -35,7 +35,7 @@ fn default_origin_is_preserved_for_both_explicit_and_implicit_master_coordinates
             let mut location = DesignLocation::new();
             location.set(axis.id(), 400.0);
             let source_id = font.default_source_id().unwrap();
-            font.source_mut(source_id).unwrap().set_location(location);
+            font.source_mut(&source_id).unwrap().set_location(location);
         }
         let before = font.clone();
         let replacement = Axis::with_id(

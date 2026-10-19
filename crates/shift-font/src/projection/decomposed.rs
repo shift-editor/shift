@@ -247,7 +247,7 @@ impl Font {
         }
         let mut layers = Vec::with_capacity(source_ids.len());
         for source_id in source_ids {
-            let Some(layer) = glyph.layer_for_source(source_id.clone()) else {
+            let Some(layer) = glyph.layer_for_source(source_id) else {
                 return Ok(None);
             };
             layers.push(layer);

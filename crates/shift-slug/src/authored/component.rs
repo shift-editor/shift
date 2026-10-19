@@ -216,8 +216,8 @@ pub(super) fn add_default_component_projection_glyph(
         append_component_sources(
             &mut component_sources,
             parent_projection,
-            occurrence.component_id(),
-            occurrence.base_glyph_id(),
+            &occurrence.component_id(),
+            &occurrence.base_glyph_id(),
             &source_context,
         )?;
         let source_count = u32::try_from(component_sources.len())
@@ -456,8 +456,8 @@ impl AuthoredComponentSourceContext<'_> {
 fn append_component_sources(
     output: &mut Vec<VariableComponentSource>,
     parent_projection: &GlyphProjection,
-    component_id: ComponentId,
-    base_glyph_id: GlyphId,
+    component_id: &ComponentId,
+    base_glyph_id: &GlyphId,
     context: &AuthoredComponentSourceContext<'_>,
 ) -> Result<(), AuthoredSlugError> {
     for (source_index, (weight_index, layer)) in context
@@ -467,8 +467,8 @@ fn append_component_sources(
     {
         let component = layer
             .components_iter()
-            .find(|component| component.id() == component_id)
-            .filter(|component| component.base_glyph_id() == base_glyph_id)
+            .find(|component| component.id() == *component_id)
+            .filter(|component| component.base_glyph_id() == *base_glyph_id)
             .ok_or_else(|| shift_font::CoreError::InvalidComponentId(component_id.to_string()))?;
         let transform = component.transform();
         let values = [

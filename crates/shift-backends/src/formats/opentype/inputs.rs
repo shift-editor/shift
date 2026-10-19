@@ -48,9 +48,9 @@ pub(super) fn project_binary_glyph(
     let advances = metrics::advance_contributions(
         &source.path,
         &font,
-        loca.clone(),
-        glyf.clone(),
-        gvar.clone(),
+        &loca,
+        &glyf,
+        gvar.as_ref(),
         &mut registry,
         &glyph_indices,
     )
@@ -429,9 +429,9 @@ pub fn build_binary_atlas_page(
     let advances = metrics::advance_contributions(
         &source.path,
         &font,
-        loca,
-        glyf,
-        gvar,
+        &loca,
+        &glyf,
+        gvar.as_ref(),
         &mut registry,
         roots,
     )?;

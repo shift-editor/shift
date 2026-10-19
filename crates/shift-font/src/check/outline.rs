@@ -167,7 +167,7 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
 /// Returns one layer per master that draws `glyph`, in source order.
 fn master_layers<'a>(font: &'a Font, glyph: &'a Glyph) -> Vec<(&'a Source, &'a GlyphLayer)> {
     font.masters()
-        .filter_map(|source| Some((source, glyph.layer_for_source(source.id())?)))
+        .filter_map(|source| Some((source, glyph.layer_for_source(&source.id())?)))
         .collect()
 }
 
@@ -238,7 +238,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::WrongContourDirection,
                     index,
-                    format!("runs the other way in '{}'", self.source.name()),
+                    &format!("runs the other way in '{}'", self.source.name()),
                 ));
                 continue;
             }
@@ -246,7 +246,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::WrongStartPoint,
                     index,
-                    format!(
+                    &format!(
                         "starts {shift} point{} later in '{}' than in '{}'",
                         if shift == 1 { "" } else { "s" },
                         self.source.name(),
@@ -259,7 +259,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::ContourInsideOut,
                     index,
-                    format!(
+                    &format!(
                         "turns inside out {}% of the way to '{}'",
                         number(t * 100.0),
                         self.source.name()
@@ -269,7 +269,7 @@ impl Pair<'_> {
         }
     }
 
-    fn finding(&self, check: Check, contour: usize, what: String) -> Finding {
+    fn finding(&self, check: Check, contour: usize, what: &str) -> Finding {
         Finding::glyph(
             check,
             self.glyph.id(),
@@ -314,7 +314,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::WrongContourOrder,
                     i,
-                    format!(
+                    &format!(
                         "and contour {} are in each other's place in '{}'",
                         j + 1,
                         self.source.name()

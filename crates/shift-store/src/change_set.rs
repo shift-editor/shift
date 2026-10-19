@@ -215,7 +215,7 @@ pub(crate) fn replace_font_header_in_tx(
         upsert_source(
             tx,
             &source.id(),
-            SourceRow {
+            &SourceRow {
                 name: Some(source.name()),
                 filename: source.filename(),
                 color: source.color(),
@@ -228,7 +228,7 @@ pub(crate) fn replace_font_header_in_tx(
                 order_index: order_index as i64,
             },
         )?;
-        replace_source_metric_values(tx, source.id(), source.metric_values().iter())?;
+        replace_source_metric_values(tx, &source.id(), source.metric_values().iter())?;
         replace_lib_data(
             tx,
             "source_lib",
@@ -725,7 +725,7 @@ pub(crate) fn replace_metric_definitions(
 
 fn replace_source_metric_values<'a>(
     tx: &Transaction<'_>,
-    source_id: font::SourceId,
+    source_id: &font::SourceId,
     values: impl IntoIterator<Item = (&'a font::MetricId, &'a font::MetricValue)>,
 ) -> Result<(), StoreError> {
     tx.execute(
@@ -778,7 +778,7 @@ struct SourceRow<'a> {
 fn upsert_source(
     tx: &Transaction<'_>,
     source_id: &font::SourceId,
-    row: SourceRow<'_>,
+    row: &SourceRow<'_>,
 ) -> Result<(), StoreError> {
     tx.execute(
         "
@@ -824,7 +824,7 @@ pub(crate) fn write_source_snapshot_in_tx(
     upsert_source(
         tx,
         &source.id(),
-        SourceRow {
+        &SourceRow {
             name: Some(source.name()),
             filename: source.filename(),
             color: source.color(),
@@ -844,7 +844,7 @@ pub(crate) fn write_source_snapshot_in_tx(
     for (axis_id, value) in source.location().iter() {
         upsert_source_location(tx, &source.id(), axis_id, *value)?;
     }
-    replace_source_metric_values(tx, source.id(), source.metric_values().iter())?;
+    replace_source_metric_values(tx, &source.id(), source.metric_values().iter())?;
     replace_lib_data(
         tx,
         "source_lib",
@@ -943,7 +943,7 @@ fn update_font_metadata(
             metadata.version_minor.map(i64::from),
         ],
     )?;
-    require_changed(rows_changed, "font info", "1".to_string())
+    require_changed(rows_changed, "font info", "1")
 }
 
 /// Persists the live font's default source identity without changing other font fields.
@@ -955,7 +955,7 @@ pub(crate) fn set_default_source_id(
         "UPDATE font_info SET default_source_id = ?1 WHERE id = 1",
         [source_id.map(font::SourceId::as_str)],
     )?;
-    require_changed(rows_changed, "font info", "1".to_string())
+    require_changed(rows_changed, "font info", "1")
 }
 
 pub(crate) fn upsert_font_info(tx: &Transaction<'_>, font: &font::Font) -> Result<(), StoreError> {
@@ -1226,15 +1226,11 @@ fn lib_value_json(value: &font::LibValue) -> Result<String, StoreError> {
 
 fn lib_value_to_json(value: &font::LibValue) -> serde_json::Value {
     match value {
-        font::LibValue::String(value) => {
-            typed_json("string", serde_json::Value::String(value.clone()))
-        }
-        font::LibValue::Integer(value) => typed_json("integer", serde_json::json!(value)),
-        font::LibValue::UnsignedInteger(value) => {
-            typed_json("unsignedInteger", serde_json::json!(value))
-        }
-        font::LibValue::Float(value) => typed_json("float", serde_json::json!(value)),
-        font::LibValue::Boolean(value) => typed_json("boolean", serde_json::json!(value)),
+        font::LibValue::String(value) => typed_json("string", value),
+        font::LibValue::Integer(value) => typed_json("integer", value),
+        font::LibValue::UnsignedInteger(value) => typed_json("unsignedInteger", value),
+        font::LibValue::Float(value) => typed_json("float", value),
+        font::LibValue::Boolean(value) => typed_json("boolean", value),
         font::LibValue::Array(values) => typed_json(
             "array",
             serde_json::Value::Array(values.iter().map(lib_value_to_json).collect()),
@@ -1248,19 +1244,19 @@ fn lib_value_to_json(value: &font::LibValue) -> serde_json::Value {
                     .collect(),
             ),
         ),
-        font::LibValue::Data(values) => typed_json("data", serde_json::json!(values)),
-        font::LibValue::Date(value) => typed_json("date", serde_json::Value::String(value.clone())),
-        font::LibValue::Uid(value) => typed_json("uid", serde_json::json!(value)),
+        font::LibValue::Data(values) => typed_json("data", values),
+        font::LibValue::Date(value) => typed_json("date", value),
+        font::LibValue::Uid(value) => typed_json("uid", value),
     }
 }
 
-fn typed_json(kind: &'static str, value: serde_json::Value) -> serde_json::Value {
+fn typed_json(kind: &'static str, value: impl serde::Serialize) -> serde_json::Value {
     serde_json::json!({
         "type": kind,
         "value": value,
     })
 }
 
-fn require_changed(rows_changed: usize, kind: &'static str, id: String) -> Result<(), StoreError> {
+fn require_changed(rows_changed: usize, kind: &'static str, id: &str) -> Result<(), StoreError> {
     (rows_changed > 0).then_some(()).or_missing(kind, &id)
 }

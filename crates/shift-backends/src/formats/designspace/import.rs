@@ -56,9 +56,9 @@ pub(crate) fn stream_font(path: &str) -> FormatBackendResult<DesignspaceStream> 
 
 pub(crate) fn stream_retained(
     path: &Path,
-    glyph_paths: Arc<[BTreeMap<String, PathBuf>]>,
+    glyph_paths: &Arc<[BTreeMap<String, PathBuf>]>,
 ) -> FormatBackendResult<DesignspaceStream> {
-    stream_designspace(path, Some(&glyph_paths)).map_err(FormatBackendError::from)
+    stream_designspace(path, Some(glyph_paths)).map_err(FormatBackendError::from)
 }
 
 fn stream_designspace(

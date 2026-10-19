@@ -14,7 +14,7 @@ fn populated_store() -> (ShiftStore, font::Font) {
     let font = font::test_support::sample_font();
     store.replace_font_state(&font).unwrap();
     store
-        .set_workspace_state(WorkspaceState::untitled(None))
+        .set_workspace_state(&WorkspaceState::untitled(None))
         .unwrap();
     (store, font)
 }

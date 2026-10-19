@@ -146,28 +146,28 @@ impl Contour {
         self.points.get_mut(index)
     }
 
-    pub fn remove_point(&mut self, id: PointId) -> Option<Point> {
-        let index = self.points.iter().position(|p| p.id() == id)?;
+    pub fn remove_point(&mut self, id: &PointId) -> Option<Point> {
+        let index = self.points.iter().position(|p| p.id() == *id)?;
         Some(self.points.remove(index))
     }
 
     pub fn insert_point_before(
         &mut self,
-        before_id: PointId,
+        before_id: &PointId,
         x: f64,
         y: f64,
         point_type: PointType,
         smooth: bool,
     ) -> Option<PointId> {
-        let index = self.points.iter().position(|p| p.id() == before_id)?;
+        let index = self.points.iter().position(|p| p.id() == *before_id)?;
         let id = PointId::new();
         let point = Point::new(id.clone(), x, y, point_type, smooth);
         self.points.insert(index, point);
         Some(id)
     }
 
-    pub fn point_index(&self, id: PointId) -> Option<usize> {
-        self.points.iter().position(|p| p.id() == id)
+    pub fn point_index(&self, id: &PointId) -> Option<usize> {
+        self.points.iter().position(|p| p.id() == *id)
     }
 
     pub fn first_point(&self) -> Option<&Point> {
@@ -317,7 +317,7 @@ mod tests {
         let id = c.add_point(10.0, 20.0, PointType::OnCurve, false);
         assert_eq!(c.len(), 1);
 
-        let removed = c.remove_point(id);
+        let removed = c.remove_point(&id);
         assert!(removed.is_some());
         assert!(c.is_empty());
     }

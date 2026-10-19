@@ -249,7 +249,7 @@ fn push_cubic(
     }
 }
 
-fn normalize_contour(points: Vec<VariablePoint>) -> Result<VariableContour, SourceAtlasError> {
+fn normalize_contour(points: &[VariablePoint]) -> Result<VariableContour, SourceAtlasError> {
     if points.is_empty() {
         return Err(invalid_geometry("binary atlas contour has no points"));
     }
@@ -704,7 +704,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                 )
                 .into());
             }
-            contours.push(normalize_contour(points[start..=end].to_vec())?);
+            contours.push(normalize_contour(&points[start..=end])?);
             start = end + 1;
         }
 

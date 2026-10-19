@@ -23,7 +23,7 @@ pub struct FontInfo {
 }
 
 impl ShiftStore {
-    pub fn set_font_info(&mut self, font_info: FontInfo) -> Result<(), StoreError> {
+    pub fn set_font_info(&mut self, font_info: &FontInfo) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO font_info (

@@ -107,7 +107,7 @@ impl DecomposedTransform {
     ];
 
     /// Encodes the transform in [`Self::VALUE_FIELDS`] order.
-    pub fn to_values(&self) -> [f64; Self::VALUE_COUNT] {
+    pub fn to_values(self) -> [f64; Self::VALUE_COUNT] {
         [
             self.translate_x,
             self.translate_y,
@@ -164,7 +164,7 @@ impl DecomposedTransform {
     /// Compose the decomposed transform into a raw affine matrix.
     ///
     /// Order: translate to center → scale → skew → rotate → translate back → translate
-    pub fn to_matrix(&self) -> Transform {
+    pub fn to_matrix(self) -> Transform {
         let cos_r = self.rotation.to_radians().cos();
         let sin_r = self.rotation.to_radians().sin();
         let tan_sx = self.skew_x.to_radians().tan();
@@ -243,7 +243,7 @@ impl Transform {
         ["xx", "xy", "yx", "yy", "dx", "dy"];
 
     /// Encodes the matrix in [`Self::VALUE_FIELDS`] order.
-    pub fn to_values(&self) -> [f64; Self::VALUE_COUNT] {
+    pub fn to_values(self) -> [f64; Self::VALUE_COUNT] {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
     }
 

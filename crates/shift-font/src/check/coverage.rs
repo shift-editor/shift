@@ -101,7 +101,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
             continue;
         };
         for source in font.masters() {
-            if glyph.layer_for_source(source.id()).is_none() {
+            if glyph.layer_for_source(&source.id()).is_none() {
                 out.push(
                     Finding::glyph(
                         Check::CharsetMissingLayer,
@@ -157,7 +157,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
             .glyphs()
             .filter(|glyph| !GlyphRole::of(glyph).mark)
             .filter_map(|glyph| {
-                let layer = glyph.layer_for_source(source.id())?;
+                let layer = glyph.layer_for_source(&source.id())?;
                 let advance = layer.width();
                 (advance.is_finite() && advance > 0.0).then_some((glyph, layer, advance))
             })
@@ -174,7 +174,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
                     Check::MonoWidthMismatch,
                     glyph,
                     source,
-                    format!("is {advance} wide instead of the cell width {cell}"),
+                    &format!("is {advance} wide instead of the cell width {cell}"),
                 ));
             }
             let ink = extent(
@@ -189,7 +189,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
                         Check::MonoInkOverflow,
                         glyph,
                         source,
-                        format!("has ink {} wide in a {advance} cell", ink_width.round()),
+                        &format!("has ink {} wide in a {advance} cell", ink_width.round()),
                     ));
                 }
             }
@@ -197,7 +197,7 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
     }
 }
 
-fn at(check: Check, glyph: &Glyph, source: &Source, message: String) -> Finding {
+fn at(check: Check, glyph: &Glyph, source: &Source, message: &str) -> Finding {
     Finding::glyph(
         check,
         glyph.id(),

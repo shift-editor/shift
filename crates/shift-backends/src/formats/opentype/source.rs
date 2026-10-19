@@ -108,7 +108,7 @@ fn binary_directory(
         .expect("new font should have a default source");
     let metric_definitions = header.metric_definitions().to_vec();
     let default_source = header
-        .source_mut(default_source_id.clone())
+        .source_mut(&default_source_id)
         .expect("new font should contain its default source");
     default_source.set_name(style_name.unwrap_or_else(|| "Default".to_string()));
     for (kind, value) in [
@@ -147,7 +147,7 @@ fn binary_directory(
         axis_ids.push(axis_id);
     }
     header
-        .source_mut(default_source_id)
+        .source_mut(&default_source_id)
         .expect("new font should contain its default source")
         .set_location(default_location);
 

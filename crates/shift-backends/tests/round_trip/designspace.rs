@@ -228,7 +228,7 @@ fn layer_width(font: &Font, source_name: &str, glyph_name: &str) -> f64 {
         .unwrap_or_else(|| panic!("source {source_name} should exist"));
     font.glyph_by_name(glyph_name)
         .unwrap_or_else(|| panic!("glyph {glyph_name} should exist"))
-        .layer_for_source(source.id())
+        .layer_for_source(&source.id())
         .unwrap_or_else(|| panic!("{glyph_name} should have a layer for {source_name}"))
         .width()
 }

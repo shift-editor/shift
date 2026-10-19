@@ -54,7 +54,7 @@ pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
+        &FontIntentSet {
             intents: vec![FontIntent::UpdateAxis { axis }],
         },
     )
