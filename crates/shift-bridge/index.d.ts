@@ -62,6 +62,11 @@ export declare class Bridge {
    */
   apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
   /**
+   * SPIKE: persists layer states the renderer engine computed, with the
+   * renderer's dirty state, without replaying intents or recording undo.
+   */
+  persistLayers(states: Array<NapiGlyphState>, dirty: boolean): NapiAppliedChange
+  /**
    * Applies the most recent ledger entry's inverse changeset; `null` when
    * the undo stack is empty.
    */

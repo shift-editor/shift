@@ -52,6 +52,35 @@ async function measure(page: Page, samples: number) {
   }, samples);
 }
 
+async function measureUndo(page: Page, samples: number) {
+  return page.evaluate(async (count) => {
+    const workspace = window.shift;
+    const editor = workspace?.editor;
+    const node = editor?.scene.nodesOfKind("glyph")[0];
+    const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
+    if (!workspace || !editor || !layer) throw new Error("Expected an authored layer");
+
+    const contourId = layer.contours[0]!.id;
+    const order = () => layer.contours[0]!.points.map((point) => point.id).join(",");
+    const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const rows: { shown: number; saved: number }[] = [];
+    for (let i = 0; i < count; i++) {
+      const original = order();
+      layer.reverseContour(contourId);
+      await workspace.font.editCoordinator.settled();
+
+      const start = performance.now();
+      const done = editor.undo();
+      while (order() !== original) await nextFrame();
+      const shown = performance.now() - start;
+      await done;
+      await workspace.font.editCoordinator.settled();
+      rows.push({ shown, saved: performance.now() - start });
+    }
+    return rows;
+  }, samples);
+}
+
 function stats(values: number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
@@ -75,6 +104,7 @@ for (const mode of ["typescript", "writer"] as const) {
     await editor.openGlyphByUnicode(CODEPOINT);
 
     const result = await measure(page, SAMPLES);
+    const undoRows = await measureUndo(page, SAMPLES);
     const engine = await page.evaluate(() => {
       const engine = (
         globalThis as { __shiftEngine?: { stats: object; memory: () => object } }
@@ -95,6 +125,8 @@ for (const mode of ["typescript", "writer"] as const) {
       local: stats(result.rows.map((r) => r.local)),
       frame: stats(result.rows.map((r) => r.frame)),
       settled: stats(result.rows.map((r) => r.settled)),
+      undoShown: stats(undoRows.map((r) => r.shown)),
+      undoSaved: stats(undoRows.map((r) => r.saved)),
       engine,
       processes: metrics,
     };

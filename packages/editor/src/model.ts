@@ -22,3 +22,15 @@ export {
   PositionReference,
   SnapSet,
 } from "./lib/model/positions";
+
+// SPIKE: renderer engine hooks the desktop edit coordinator calls.
+export {
+  discardRedoInEngine,
+  engineAppliedWholeEdit,
+  engineDocumentDirty,
+  engineWriterEnabled,
+  markSavedInEngine,
+  persistStatesFor,
+  recordEditForUndo,
+  stepHistoryInEngine,
+} from "./lib/wasm/engine";

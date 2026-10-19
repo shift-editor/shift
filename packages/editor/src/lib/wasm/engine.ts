@@ -7,10 +7,16 @@
 // never published. One engine per module instance.
 import {
   engineApply,
+  engineDirty,
+  engineDiscardRedo,
+  engineMarkSaved,
   engineInstallLayer,
   engineOpen,
   enginePersisted,
+  engineRecordEdit,
+  engineRedo,
   engineRollback,
+  engineUndo,
   engineStats,
 } from "@shift/wasm";
 import type { FontIntent, GlyphState, GlyphStructure, LayerId } from "@shift/types";
@@ -39,14 +45,17 @@ export const engineStatsLive = {
   echoMismatches: 0,
   installFailures: 0,
   signedZeroOnly: 0,
+  engineUndos: 0,
+  workspaceUndos: 0,
+  undo: 0,
 };
 
 // non-reactive: identities of loaded layers, read only to route engine results
 const publishers = new Map<LayerId, { publish: EnginePublisher; structure: () => GlyphStructure }>();
 // non-reactive: intents pushed to the workspace, consumed by the matching local edit
 const pushed = new Map<PendingEditId, FontIntent[]>();
-// non-reactive: what the engine produced per edit and layer, compared with the echo
-const expected = new Map<PendingEditId, Map<LayerId, Float64Array>>();
+// non-reactive: what the engine produced per edit and layer, persisted and compared with the echo
+const expected = new Map<PendingEditId, Map<LayerId, GlyphState>>();
 // non-reactive: the intents each engine edit applied, for mismatch reports
 const appliedIntents = new Map<PendingEditId, FontIntent[]>();
 
@@ -157,23 +166,39 @@ export function applyPushedIntent(editId: PendingEditId): boolean | null {
     produced = new Map();
     expected.set(editId, produced);
   }
-  for (const layer of layers) produced.set(layer.layerId, layer.values);
   appliedIntents.set(editId, [...(appliedIntents.get(editId) ?? []), intent]);
-  publishLayers(layers);
+  for (const state of publishLayers(layers)) produced.set(state.layerId, state);
   return true;
 }
 
-function publishLayers(layers: readonly EngineLayer[]): void {
+/** Publishes engine layers and returns their complete states, for persistence. */
+function publishLayers(layers: readonly EngineLayer[]): GlyphState[] {
+  const states: GlyphState[] = [];
   for (const layer of layers) {
     const target = publishers.get(layer.layerId);
-    if (!target) continue;
+    const structure = layer.structure ?? target?.structure();
+    if (!structure) continue;
 
-    target.publish({
-      layerId: layer.layerId,
-      structure: layer.structure ?? target.structure(),
-      values: layer.values,
-    });
+    const state = { layerId: layer.layerId, structure, values: layer.values };
+    target?.publish(state);
+    states.push(state);
   }
+  return states;
+}
+
+/** The layer states an engine edit or history step produced, to persist as-is. */
+export function persistStatesFor(editId: PendingEditId): GlyphState[] {
+  return [...(expected.get(editId)?.values() ?? [])];
+}
+
+/** Whether the document differs from its last save, by the engine's timeline. */
+export function engineDocumentDirty(): boolean {
+  return engineDirty();
+}
+
+/** Marks the current timeline position as saved. */
+export function markSavedInEngine(): void {
+  engineMarkSaved();
 }
 
 /** Reverts an engine-applied edit whose transaction threw before reaching the workspace. */
@@ -181,6 +206,58 @@ export function rollbackInEngine(editId: PendingEditId): void {
   if (!expected.delete(editId)) return;
 
   publishLayers(engineRollback(editId) as EngineLayer[]);
+}
+
+/**
+ * Records a committed edit in the engine's timeline.
+ *
+ * @returns Whether workspace entries left the redo branch, so the workspace
+ * must discard its redo too.
+ */
+export function recordEditForUndo(editId: PendingEditId, intents: readonly FontIntent[]): boolean {
+  return engineRecordEdit(editId, intents.every((intent) => ROUTED_KINDS.has(intent.kind)));
+}
+
+/** Whether every intent of an edit applied in the engine, so it persists as layer states. */
+export function engineAppliedWholeEdit(
+  editId: PendingEditId,
+  intents: readonly FontIntent[],
+): boolean {
+  return expected.has(editId) && intents.every((intent) => ROUTED_KINDS.has(intent.kind));
+}
+
+/**
+ * Steps the timeline synchronously.
+ *
+ * @param receiptId - Identity under which the step's layers persist and its echo is checked.
+ * @returns `"engine"` when the engine stepped (the screen already shows it),
+ * `"workspace"` when the workspace ledger must step, or `null` when nothing steps.
+ */
+export function stepHistoryInEngine(
+  direction: "undo" | "redo",
+  receiptId: PendingEditId,
+): "engine" | "workspace" | null {
+  const start = performance.now();
+  const step = (direction === "undo" ? engineUndo() : engineRedo()) as
+    | { kind: "engine"; layers: EngineLayer[] }
+    | { kind: "workspace" }
+    | null;
+  engineStatsLive.undo += performance.now() - start;
+  if (!step) return null;
+  if (step.kind === "workspace") {
+    engineStatsLive.workspaceUndos += 1;
+    return "workspace";
+  }
+
+  engineStatsLive.engineUndos += 1;
+  const states = publishLayers(step.layers);
+  expected.set(receiptId, new Map(states.map((state) => [state.layerId, state])));
+  return "engine";
+}
+
+/** Drops the engine's redo branch alongside the workspace's. */
+export function discardRedoInEngine(): void {
+  engineDiscardRedo();
 }
 
 /** Whether the engine applied `editId`, so its echo is a persistence receipt. */
@@ -204,7 +281,7 @@ export function checkEcho(editId: PendingEditId, layerId: LayerId, values: Float
   if (!produced) return;
 
   engineStatsLive.echoesChecked += 1;
-  const mine = produced.get(layerId);
+  const mine = produced.get(layerId)?.values;
   if (!mine) {
     engineStatsLive.echoMismatches += 1;
     return;

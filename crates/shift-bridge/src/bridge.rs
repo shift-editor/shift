@@ -1464,6 +1464,30 @@ impl Bridge {
     })
   }
 
+  /// SPIKE: persists layer states the renderer engine computed, with the
+  /// renderer's dirty state, without replaying intents or recording undo.
+  #[napi]
+  pub fn persist_layers(
+    &mut self,
+    states: Vec<shift_wire::bridges::napi::NapiGlyphState>,
+    dirty: bool,
+  ) -> errors::Result<NapiAppliedChange> {
+    let mut layers = Vec::with_capacity(states.len());
+    for state in states {
+      let layer_id = parse::<LayerId>(&state.layer_id)?;
+      let source_id = self.workspace()?.font().require_layer(&layer_id)?.source_id();
+      let structure = shift_wire::GlyphStructure::from(state.structure);
+      let values: Vec<f64> = state.values.to_vec();
+      layers.push(shift_wire::state::layer_from_state(
+        layer_id, source_id, &structure, &values,
+      )?);
+    }
+
+    let outcome = self.workspace_mut()?.persist_layers(layers, dirty)?;
+    self.mark_font_changed();
+    self.applied_echo(outcome)
+  }
+
   /// Applies the most recent ledger entry's inverse changeset; `null` when
   /// the undo stack is empty.
   #[napi]

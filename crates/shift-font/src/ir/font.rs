@@ -1259,7 +1259,7 @@ impl Font {
     }
 
     /// The shared snapshot of one layer, kept to re-index it after an in-place edit.
-    pub(crate) fn layer_snapshot(&self, layer_id: &LayerId) -> CoreResult<Arc<GlyphLayer>> {
+    pub fn layer_snapshot(&self, layer_id: &LayerId) -> CoreResult<Arc<GlyphLayer>> {
         let glyph_id = self.require_layer_owner(layer_id)?;
         self.require_glyph(&glyph_id)?
             .layers()

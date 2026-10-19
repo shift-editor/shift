@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{
     collections::{HashMap, HashSet},
     io,
@@ -10,7 +11,7 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, GlyphId, GlyphLayer,
-    LayerId, TouchedLayer, error::CoreError,
+    LayerId, Replacement, TouchedLayer, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -301,6 +302,43 @@ impl FontWorkspace {
 
         self.ledger.push(label, outcome.changes.clone());
         Ok(outcome)
+    }
+
+    /// SPIKE: persists layer states the renderer's engine already computed.
+    ///
+    /// The renderer owns the edit and its history, so nothing is replayed and
+    /// no ledger entry is recorded: the layers are installed exactly as sent
+    /// and written in one transaction with the renderer's `dirty` state. The
+    /// outcome carries the same replace-grade shape as [`Self::apply`] so the
+    /// renderer can refresh projections that depend on these layers.
+    pub fn persist_layers(
+        &mut self,
+        layers: Vec<GlyphLayer>,
+        dirty: bool,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        self.acquire_layers(layers.iter().map(GlyphLayer::id).collect::<Vec<_>>())?;
+        self.commit_edit(dirty, move |font| {
+            let mut changes = FontChangeSet::default();
+            let mut touched = Vec::with_capacity(layers.len());
+            for layer in layers {
+                let layer = Arc::new(layer);
+                let glyph_id = font.require_layer_owner(&layer.id())?;
+                let before = font.layer_snapshot(&layer.id())?;
+                let structural = !same_structure(&before, &layer);
+                font.replace_glyph_layers(vec![layer.clone()])?;
+                changes.push(FontChange::Layer {
+                    glyph_id,
+                    layer: Replacement::new(Some(before), Some(layer.clone())),
+                    structural,
+                });
+                touched.push(TouchedLayer { layer, structural });
+            }
+            let outcome = AppliedIntents {
+                changes: changes.clone(),
+                layers: touched,
+            };
+            Ok((outcome, changes))
+        })
     }
 
     /// Applies the inverse of the most recent reversible changeset.
@@ -773,6 +811,37 @@ fn source_from_workspace_state(state: &WorkspaceState) -> Result<WorkspaceSource
             Ok(WorkspaceSource::Imported { original_path })
         }
     }
+}
+
+/// Whether two layers have the same identities and topology: contours, point
+/// types and smoothness, anchors, and components, ignoring coordinates.
+fn same_structure(a: &GlyphLayer, b: &GlyphLayer) -> bool {
+    let contours = |layer: &GlyphLayer| {
+        layer
+            .contours_iter()
+            .map(|contour| {
+                let points: Vec<_> = contour
+                    .points()
+                    .iter()
+                    .map(|point| (point.id(), point.point_type(), point.is_smooth()))
+                    .collect();
+                (contour.id(), contour.is_closed(), points)
+            })
+            .collect::<Vec<_>>()
+    };
+    let anchors = |layer: &GlyphLayer| {
+        layer
+            .anchors_iter()
+            .map(|anchor| (anchor.id(), anchor.name().map(str::to_string)))
+            .collect::<Vec<_>>()
+    };
+    let components = |layer: &GlyphLayer| {
+        layer
+            .components_iter()
+            .map(|component| (component.id(), component.base_glyph_id(), component.alignment()))
+            .collect::<Vec<_>>()
+    };
+    contours(a) == contours(b) && anchors(a) == anchors(b) && components(a) == components(b)
 }
 
 /// Whether a changeset can remove layers from the directory: only glyph or

@@ -1,3 +1,4 @@
+import type { GlyphState } from "@shift/types";
 import type {
   AppliedChange,
   CatalogAtlasPage,
@@ -213,6 +214,14 @@ export type SyncCallMap = {
    */
   "workspace.apply": {
     request: { intents: FontIntent[]; label?: string };
+    response: { applied: AppliedChange; documentState: WorkspaceDocumentState };
+  };
+  /**
+   * SPIKE: persists layer states the renderer engine computed, with its dirty
+   * state; nothing replays and no ledger entry is recorded.
+   */
+  "workspace.persistLayers": {
+    request: { states: GlyphState[]; dirty: boolean };
     response: { applied: AppliedChange; documentState: WorkspaceDocumentState };
   };
   /** Replays the most recent ledger entry; null when the stack is empty. */

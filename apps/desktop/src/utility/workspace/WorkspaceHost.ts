@@ -162,6 +162,12 @@ export class WorkspaceHost {
           this.#atlasCacheRevision = null;
           return { applied, documentState: this.#emitDocumentChanged() };
         }),
+      "workspace.persistLayers": ({ states, dirty }) =>
+        this.#serialize(() => {
+          const applied = this.#bridge.persistLayers(states, dirty);
+          this.#atlasCacheRevision = null;
+          return { applied, documentState: this.#emitDocumentChanged() };
+        }),
       "workspace.undo": () =>
         this.#serialize(() => {
           const applied = this.#bridge.undo();

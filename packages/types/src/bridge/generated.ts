@@ -77,6 +77,11 @@ export interface BridgeApi {
    */
   apply(intents: Array<FontIntent>, label?: string | undefined | null): AppliedChange
   /**
+   * SPIKE: persists layer states the renderer engine computed, with the
+   * renderer's dirty state, without replaying intents or recording undo.
+   */
+  persistLayers(states: Array<GlyphState>, dirty: boolean): AppliedChange
+  /**
    * Applies the most recent ledger entry's inverse changeset; `null` when
    * the undo stack is empty.
    */

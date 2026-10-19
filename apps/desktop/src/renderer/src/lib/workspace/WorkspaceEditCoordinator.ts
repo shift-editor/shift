@@ -23,7 +23,17 @@ import type {
   WorkspaceSlugAtlasPageRequest,
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
-import type { FontStore } from "@shift/editor/model";
+import {
+  discardRedoInEngine,
+  engineAppliedWholeEdit,
+  engineDocumentDirty,
+  engineWriterEnabled,
+  markSavedInEngine,
+  persistStatesFor,
+  recordEditForUndo,
+  stepHistoryInEngine,
+  type FontStore,
+} from "@shift/editor/model";
 import type { PendingEditId, WorkspaceEditEvent, WorkspaceEditListener } from "@shift/editor/types";
 import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
@@ -196,6 +206,9 @@ export class WorkspaceEditCoordinator {
 
   /** Replays the latest undo entry after pending pushes flush. */
   undo(): Promise<AppliedChange | null> {
+    const engineStepped = this.#stepHistoryInEngine("undo");
+    if (engineStepped) return engineStepped;
+
     return this.#withFlush(async () => {
       const applied = await this.#session.undo();
       if (applied) {
@@ -312,6 +325,9 @@ export class WorkspaceEditCoordinator {
 
   /** Replays the latest redo entry after pending pushes flush. */
   redo(): Promise<AppliedChange | null> {
+    const engineStepped = this.#stepHistoryInEngine("redo");
+    if (engineStepped) return engineStepped;
+
     return this.#withFlush(async () => {
       const applied = await this.#session.redo();
       if (applied) {
@@ -324,6 +340,7 @@ export class WorkspaceEditCoordinator {
 
   /** Permanently removes the current redo branch after pending operations settle. */
   discardRedo(): Promise<void> {
+    if (engineWriterEnabled()) discardRedoInEngine();
     return this.#withFlush(() => this.#session.discardRedo());
   }
 
@@ -338,9 +355,11 @@ export class WorkspaceEditCoordinator {
    * @param path - target path for Save As, or null to save the current target.
    */
   save(path: string | null): Promise<WorkspaceDocumentState> {
-    return this.#withFlush(() =>
-      path === null ? this.#session.save() : this.#session.saveAs(path),
-    );
+    return this.#withFlush(async () => {
+      const state = await (path === null ? this.#session.save() : this.#session.saveAs(path));
+      if (engineWriterEnabled()) markSavedInEngine();
+      return state;
+    });
   }
 
   /**
@@ -353,6 +372,33 @@ export class WorkspaceEditCoordinator {
   async export(path: string): Promise<WorkspaceExportResult> {
     const { completion } = await this.#withFlush(() => this.#session.startExport(path));
     return completion;
+  }
+
+  /**
+   * SPIKE: steps the editor's single undo timeline, kept by the renderer engine.
+   *
+   * An engine entry changes the screen now and persists its layer states
+   * behind pending edits; the workspace records no history for it. A
+   * workspace entry (an edit the engine did not apply) is stepped by the
+   * workspace ledger, which holds only those entries, in the same order.
+   */
+  #stepHistoryInEngine(direction: "undo" | "redo"): Promise<AppliedChange | null> | null {
+    if (!engineWriterEnabled() || this.#transaction) return null;
+
+    const receiptId = this.#mintPendingEditId();
+    const step = stepHistoryInEngine(direction, receiptId);
+    if (step !== "engine") return null;
+
+    this.#settledCell.set(false);
+    return this.#serialize(async () => {
+      const applied = await this.#session.persistLayers(
+        persistStatesFor(receiptId),
+        engineDocumentDirty(),
+      );
+      await this.#applyChange(applied, receiptId);
+      this.#advanceAuthoredRevision();
+      return applied;
+    });
   }
 
   #withFlush<T>(job: () => Promise<T>): Promise<T> {
@@ -390,6 +436,9 @@ export class WorkspaceEditCoordinator {
         this.#applyStatus.set("queued");
       }
     });
+    if (engineWriterEnabled() && recordEditForUndo(id, edit.intents)) {
+      void this.#serialize(() => this.#session.discardRedo());
+    }
     this.#notifyEdit({ kind: "accepted", id });
     return edit;
   }
@@ -428,9 +477,23 @@ export class WorkspaceEditCoordinator {
 
   async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
     this.#applyStatus.set("applying");
-    const applied = await this.#session.apply(edit.intents, edit.label);
+    const applied = await this.#persistOrApply(edit);
     await this.#applyChange(applied, edit.id);
     return applied;
+  }
+
+  /**
+   * SPIKE: an edit the renderer engine applied whole persists as its layer
+   * states with no workspace history; anything else applies in the workspace.
+   */
+  async #persistOrApply(edit: WorkspaceEdit): Promise<AppliedChange> {
+    if (!engineWriterEnabled() || !engineAppliedWholeEdit(edit.id, edit.intents)) {
+      return this.#session.apply(edit.intents, edit.label);
+    }
+
+    const states = persistStatesFor(edit.id);
+    if (states.length === 0) return { layers: [], dependents: [] };
+    return this.#session.persistLayers(states, engineDocumentDirty());
   }
 
   #notifyEdit(event: WorkspaceEditEvent): void {

@@ -16,9 +16,8 @@ use js_sys::{Array, Float64Array, Object, Reflect};
 use serde::Deserialize;
 use shift_font::{
     AnchorId, AnchorSeed, ComponentId, ContourId, DesignLocation, Font, FontChange, FontChangeSet,
-    FontIntent,
-    FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, PointId, PointSeed, Source, SourceId,
-    Transform,
+    FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, PointId, PointSeed, Source,
+    SourceId, Transform,
 };
 use shift_wire::{state::layer_from_state, values_from_layer, GlyphStructure, PointType};
 use wasm_bindgen::prelude::*;
@@ -28,6 +27,72 @@ thread_local! {
     /// Changesets of edits the workspace has not yet persisted, by renderer
     /// edit id, so a throwing transaction can roll them back.
     static UNPERSISTED: RefCell<HashMap<u32, Vec<FontChangeSet>>> = RefCell::new(HashMap::new());
+    /// Undo history kept entry for entry with the workspace's ledger.
+    static HISTORY: RefCell<History> = RefCell::new(History::default());
+}
+
+/// Matches the workspace ledger's bound.
+const MAX_HISTORY_ENTRIES: usize = 100;
+
+/// One committed renderer edit in the editor's single undo timeline.
+struct HistoryEntry {
+    edit_id: u32,
+    /// Timeline position after this entry, for dirty tracking.
+    position: u64,
+    /// The edit's changesets, oldest first; `None` when part of it was not
+    /// applied by this engine, so the workspace ledger holds and undoes it.
+    changes: Option<Vec<FontChangeSet>>,
+}
+
+/// The editor's undo timeline. Engine entries undo here and are persisted as
+/// layer states; workspace entries appear as markers, in order, so stepping
+/// over one hands that step to the workspace ledger, which holds only those.
+#[derive(Default)]
+struct History {
+    undo: Vec<HistoryEntry>,
+    redo: Vec<HistoryEntry>,
+    next_position: u64,
+    /// Position of the saved document; `None` when unknown, which keeps the
+    /// document dirty until the next save.
+    saved: Option<u64>,
+}
+
+impl History {
+    fn current_position(&self) -> u64 {
+        self.undo.last().map_or(0, |entry| entry.position)
+    }
+
+    fn dirty(&self) -> bool {
+        self.saved != Some(self.current_position())
+    }
+
+    /// The entry for `edit_id`, created at the top of the undo stack if new.
+    /// Returns whether creating it dropped workspace entries from the redo
+    /// branch, which the workspace must then discard too.
+    fn entry(&mut self, edit_id: u32) -> (&mut HistoryEntry, bool) {
+        let mut dropped_workspace_redo = false;
+        if self
+            .undo
+            .last()
+            .is_none_or(|entry| entry.edit_id != edit_id)
+        {
+            dropped_workspace_redo = self.redo.iter().any(|entry| entry.changes.is_none());
+            self.redo.clear();
+            self.next_position += 1;
+            self.undo.push(HistoryEntry {
+                edit_id,
+                position: self.next_position,
+                changes: Some(Vec::new()),
+            });
+            if self.undo.len() > MAX_HISTORY_ENTRIES {
+                self.undo.remove(0);
+            }
+        }
+        (
+            self.undo.last_mut().expect("an entry was just ensured"),
+            dropped_workspace_redo,
+        )
+    }
 }
 
 fn js_error(error: impl std::fmt::Display) -> JsError {
@@ -51,7 +116,9 @@ where
 fn with_font<R>(body: impl FnOnce(&mut Font) -> Result<R, JsError>) -> Result<R, JsError> {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
-        let font = engine.as_mut().ok_or_else(|| js_error("engine is not open"))?;
+        let font = engine
+            .as_mut()
+            .ok_or_else(|| js_error("engine is not open"))?;
         body(font)
     })
 }
@@ -114,6 +181,8 @@ pub fn engine_open(snapshot: JsValue) -> Result<(), JsError> {
         }
         font.insert_glyph(glyph).map_err(js_error)?;
     }
+    // The history survives a rebuild: its changesets compare layers by
+    // content, and loaded layers are reinstalled after a rebuild.
     ENGINE.with(|engine| *engine.borrow_mut() = Some(font));
     Ok(())
 }
@@ -356,11 +425,16 @@ fn layer_result(layer: &GlyphLayer, structural: bool) -> Result<Object, JsError>
     let result = Object::new();
     set(&result, "layerId", &JsValue::from_str(layer.id().as_str()))?;
     if structural {
-        let structure = serde_wasm_bindgen::to_value(&GlyphStructure::from(layer)).map_err(js_error)?;
+        let structure =
+            serde_wasm_bindgen::to_value(&GlyphStructure::from(layer)).map_err(js_error)?;
         set(&result, "structure", &structure)?;
     }
     let values = values_from_layer(layer);
-    set(&result, "values", &Float64Array::from(values.as_slice()).into())?;
+    set(
+        &result,
+        "values",
+        &Float64Array::from(values.as_slice()).into(),
+    )?;
     Ok(result)
 }
 
@@ -384,8 +458,18 @@ pub fn engine_apply(edit_id: u32, intents: JsValue) -> Result<Array, JsError> {
         for touched in &applied.layers {
             result.push(&layer_result(&touched.layer, touched.structural)?.into());
         }
+        HISTORY.with(|history| {
+            let mut history = history.borrow_mut();
+            if let Some(changes) = &mut history.entry(edit_id).0.changes {
+                changes.push(applied.changes.clone());
+            }
+        });
         UNPERSISTED.with(|edits| {
-            edits.borrow_mut().entry(edit_id).or_default().push(applied.changes);
+            edits
+                .borrow_mut()
+                .entry(edit_id)
+                .or_default()
+                .push(applied.changes);
         });
         Ok(result)
     })
@@ -404,13 +488,29 @@ pub fn engine_rollback(edit_id: u32) -> Result<Array, JsError> {
     let changes = UNPERSISTED
         .with(|edits| edits.borrow_mut().remove(&edit_id))
         .unwrap_or_default();
+    // The transaction never reached the workspace, so its entry leaves the history too.
+    HISTORY.with(|history| {
+        let mut history = history.borrow_mut();
+        if history
+            .undo
+            .last()
+            .is_some_and(|entry| entry.edit_id == edit_id)
+        {
+            history.undo.pop();
+        }
+    });
     with_font(|font| {
         let mut layer_ids = Vec::new();
         for change_set in changes.iter().rev() {
-            font.apply_change_set(&change_set.inverted()).map_err(js_error)?;
+            font.apply_change_set(&change_set.inverted())
+                .map_err(js_error)?;
             for change in &change_set.changes {
                 if let FontChange::Layer { layer, .. } = change {
-                    let id = layer.before.as_ref().or(layer.after.as_ref()).map(|layer| layer.id());
+                    let id = layer
+                        .before
+                        .as_ref()
+                        .or(layer.after.as_ref())
+                        .map(|layer| layer.id());
                     if let Some(id) = id.filter(|id| !layer_ids.contains(id)) {
                         layer_ids.push(id);
                     }
@@ -427,6 +527,146 @@ pub fn engine_rollback(edit_id: u32) -> Result<Array, JsError> {
     })
 }
 
+/// Records committed renderer edit `edit_id` in the timeline;
+/// `engine_applied` is false when it carries intents this engine did not
+/// apply, so the workspace ledger holds and undoes it.
+///
+/// Returns whether workspace entries left the redo branch, which the
+/// workspace must then discard too.
+#[wasm_bindgen(js_name = engineRecordEdit)]
+pub fn engine_record_edit(edit_id: u32, engine_applied: bool) -> bool {
+    HISTORY.with(|history| {
+        let mut history = history.borrow_mut();
+        let (entry, dropped_workspace_redo) = history.entry(edit_id);
+        if !engine_applied {
+            entry.changes = None;
+        }
+        dropped_workspace_redo
+    })
+}
+
+/// Whether the document differs from its last save, by timeline position.
+#[wasm_bindgen(js_name = engineDirty)]
+pub fn engine_dirty() -> bool {
+    HISTORY.with(|history| history.borrow().dirty())
+}
+
+/// Marks the current timeline position as the saved document.
+#[wasm_bindgen(js_name = engineMarkSaved)]
+pub fn engine_mark_saved() {
+    HISTORY.with(|history| {
+        let mut history = history.borrow_mut();
+        history.saved = Some(history.current_position());
+    });
+}
+
+/// The layers a history step changed, read after the step applied.
+fn changed_layers(font: &Font, changes: &[FontChangeSet]) -> Result<Array, JsError> {
+    let mut layer_ids = Vec::new();
+    for change_set in changes {
+        for change in &change_set.changes {
+            if let FontChange::Layer { layer, .. } = change {
+                let id = layer
+                    .before
+                    .as_ref()
+                    .or(layer.after.as_ref())
+                    .map(|layer| layer.id());
+                if let Some(id) = id.filter(|id| !layer_ids.contains(id)) {
+                    layer_ids.push(id);
+                }
+            }
+        }
+    }
+    let result = Array::new();
+    for layer_id in &layer_ids {
+        if let Some(layer) = font.layer(layer_id) {
+            result.push(&layer_result(layer, true)?.into());
+        }
+    }
+    Ok(result)
+}
+
+/// Steps the timeline one entry in `direction`, synchronously.
+///
+/// Returns `{ kind: "engine", layers }` when this engine applied the entry
+/// (the layers to publish and persist), `{ kind: "workspace" }` when the
+/// workspace ledger must step instead (the marker moves across either way),
+/// or `null` when there is nothing to step or the history no longer applies.
+fn step_history(undo: bool) -> Result<JsValue, JsError> {
+    let entry = HISTORY.with(|history| {
+        let mut history = history.borrow_mut();
+        if undo {
+            history.undo.pop()
+        } else {
+            history.redo.pop()
+        }
+    });
+    let Some(entry) = entry else {
+        return Ok(JsValue::NULL);
+    };
+    let finish = |entry: HistoryEntry| {
+        HISTORY.with(|history| {
+            let mut history = history.borrow_mut();
+            if undo {
+                history.redo.push(entry)
+            } else {
+                history.undo.push(entry)
+            }
+        });
+    };
+    let result = Object::new();
+    let Some(changes) = &entry.changes else {
+        finish(entry);
+        set(&result, "kind", &JsValue::from_str("workspace"))?;
+        return Ok(result.into());
+    };
+
+    let stepped = with_font(|font| {
+        if undo {
+            for change_set in changes.iter().rev() {
+                font.apply_change_set(&change_set.inverted())
+                    .map_err(js_error)?;
+            }
+        } else {
+            for change_set in changes {
+                font.apply_change_set(change_set).map_err(js_error)?;
+            }
+        }
+        changed_layers(font, changes)
+    });
+    match stepped {
+        Ok(layers) => {
+            finish(entry);
+            set(&result, "kind", &JsValue::from_str("engine"))?;
+            set(&result, "layers", &layers.into())?;
+            Ok(result.into())
+        }
+        Err(_) => {
+            // The engine's copy no longer matches its history; drop the history.
+            HISTORY.with(|history| *history.borrow_mut() = History::default());
+            Ok(JsValue::NULL)
+        }
+    }
+}
+
+/// Drops the redo branch, as the workspace ledger's `discard_redo` does.
+#[wasm_bindgen(js_name = engineDiscardRedo)]
+pub fn engine_discard_redo() {
+    HISTORY.with(|history| history.borrow_mut().redo.clear());
+}
+
+/// Undoes the latest edit synchronously when this engine applied it.
+#[wasm_bindgen(js_name = engineUndo)]
+pub fn engine_undo() -> Result<JsValue, JsError> {
+    step_history(true)
+}
+
+/// Redoes the latest undone edit synchronously when this engine applied it.
+#[wasm_bindgen(js_name = engineRedo)]
+pub fn engine_redo() -> Result<JsValue, JsError> {
+    step_history(false)
+}
+
 /// Glyph count and wasm memory, for the spike's measurements.
 #[wasm_bindgen(js_name = engineStats)]
 pub fn engine_stats() -> Result<Object, JsError> {
@@ -437,6 +677,10 @@ pub fn engine_stats() -> Result<Object, JsError> {
     let pages = 0;
     let stats = Object::new();
     set(&stats, "glyphs", &JsValue::from(glyphs as u32))?;
-    set(&stats, "wasmMemoryMb", &JsValue::from(pages as f64 * 64.0 / 1024.0))?;
+    set(
+        &stats,
+        "wasmMemoryMb",
+        &JsValue::from(pages as f64 * 64.0 / 1024.0),
+    )?;
     Ok(stats)
 }

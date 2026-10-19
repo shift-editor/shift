@@ -1,5 +1,6 @@
 import { Channel, domPortTransport, type Transport } from "@shared/workspace/channel";
 import { PortByteStream } from "@shared/workspace/PortByteStream";
+import type { GlyphState } from "@shift/types";
 import type {
   FontSessionMode,
   FontSourceAtlasPageRequest,
@@ -107,6 +108,18 @@ export class FontSessionClient {
     const { applied, documentState } = await this.#require().call("workspace.apply", {
       intents,
       label,
+    });
+    this.#setDocumentState(documentState);
+    return this.#fold(applied);
+  }
+
+  /** SPIKE: persists layer states the renderer engine computed; records no undo entry. */
+  async persistLayers(states: GlyphState[], dirty: boolean): Promise<AppliedChange> {
+    await this.connect();
+
+    const { applied, documentState } = await this.#require().call("workspace.persistLayers", {
+      states,
+      dirty,
     });
     this.#setDocumentState(documentState);
     return this.#fold(applied);

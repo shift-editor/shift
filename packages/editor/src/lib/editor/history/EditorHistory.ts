@@ -18,6 +18,7 @@ import type { ShiftEditorRecord, ShiftRecordId } from "../../../types/records";
 import type { StoreChange } from "../../../types/store";
 import { HistoryCapture } from "./HistoryCapture";
 import { editorRecordsEqual, recordChanges } from "./recordChanges";
+import { engineWriterEnabled } from "../../wasm/engine";
 
 /** Bounds how many rounds of finishing listeners one capture runs; each round only sees new changes. */
 const MAX_FINISHING_PASSES = 4;
@@ -176,7 +177,8 @@ export class EditorHistory {
   /** Reverses the latest editor action after all pending workspace edits settle. */
   async undo(): Promise<boolean> {
     this.#assertNoCapture("undo");
-    await this.#settled();
+    // SPIKE: the renderer engine undoes synchronously; the workspace persists behind it.
+    if (!engineWriterEnabled()) await this.#settled();
 
     const entry = this.#undoEntries.pop();
     if (!entry) return this.#undoWorkspaceOnly();
@@ -202,7 +204,7 @@ export class EditorHistory {
   /** Reapplies the latest editor action after all pending workspace edits settle. */
   async redo(): Promise<boolean> {
     this.#assertNoCapture("redo");
-    await this.#settled();
+    if (!engineWriterEnabled()) await this.#settled();
 
     const entry = this.#redoEntries.pop();
     if (!entry) return this.#redoWorkspaceOnly();
