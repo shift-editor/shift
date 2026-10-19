@@ -479,7 +479,7 @@ impl Glyph {
             .layers
             .values()
             .find(|layer| layer.source_id() == source_id)
-            .map(|layer| layer.id())
+            .map(Identified::id)
         {
             return self.layer_mut(&layer_id).expect("layer id came from glyph");
         }

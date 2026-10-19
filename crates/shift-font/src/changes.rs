@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use bitflags::bitflags;
 
+use crate::collection::Identified;
+use crate::error::{CoreError, CoreResult};
+
 use crate::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
     KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
@@ -38,6 +41,43 @@ pub struct Replacement<T> {
 impl<T> Replacement<T> {
     pub fn new(before: T, after: T) -> Self {
         Self { before, after }
+    }
+
+    /// Checks that `current` still equals the original value, so the
+    /// replacement applies to the state it was recorded against.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidEntityOrder`] naming `target` when it differs.
+    pub fn require_before<C>(&self, current: &C, target: &'static str) -> CoreResult<()>
+    where
+        C: PartialEq<T> + ?Sized,
+    {
+        if current == &self.before {
+            return Ok(());
+        }
+
+        Err(CoreError::InvalidEntityOrder {
+            kind: "changeset",
+            message: format!("current {target} does not match its expected original value"),
+        })
+    }
+}
+
+impl<T> Replacement<Vec<T>>
+where
+    T: Identified + PartialEq,
+{
+    /// The entities this replacement creates, updates, and deletes; reordering alone is not a change.
+    pub fn entity_changes(&self) -> impl Iterator<Item = EntityChange<'_, T>> {
+        collection_entity_changes(&self.before, &self.after, Identified::id).into_iter()
+    }
+}
+
+impl Replacement<SourceCollection> {
+    /// The sources this replacement creates, updates, and deletes.
+    pub fn entity_changes(&self) -> impl Iterator<Item = EntityChange<'_, Source>> {
+        collection_entity_changes(&self.before.sources, &self.after.sources, Source::id).into_iter()
     }
 }
 
@@ -207,7 +247,7 @@ impl FontChange {
                 .iter()
                 .chain(layer.after.iter())
                 .next()
-                .map(|layer| layer.id()),
+                .map(Identified::id),
             _ => None,
         }
     }
@@ -263,35 +303,25 @@ impl FontChangeSet {
         let mut entities = Vec::new();
         for change in &self.changes {
             match change {
-                FontChange::Axes(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, Axis::id)
-                        .into_iter()
-                        .map(FontEntityChange::Axis),
-                ),
-                FontChange::AxisMappings(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, AxisMapping::id)
-                        .into_iter()
-                        .map(FontEntityChange::AxisMapping),
-                ),
-                FontChange::MetricDefinitions(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, MetricDefinition::id)
-                        .into_iter()
-                        .map(FontEntityChange::MetricDefinition),
-                ),
-                FontChange::NamedInstances(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, NamedInstance::id)
-                        .into_iter()
-                        .map(FontEntityChange::NamedInstance),
-                ),
-                FontChange::Sources(value) => entities.extend(
-                    collection_entity_changes(
-                        &value.before.sources,
-                        &value.after.sources,
-                        Source::id,
-                    )
-                    .into_iter()
-                    .map(FontEntityChange::Source),
-                ),
+                FontChange::Axes(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::Axis));
+                }
+                FontChange::AxisMappings(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::AxisMapping));
+                }
+                FontChange::MetricDefinitions(value) => {
+                    entities.extend(
+                        value
+                            .entity_changes()
+                            .map(FontEntityChange::MetricDefinition),
+                    );
+                }
+                FontChange::NamedInstances(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::NamedInstance));
+                }
+                FontChange::Sources(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::Source));
+                }
                 FontChange::Glyph(value) => {
                     entities.extend(
                         optional_entity_changes(
@@ -454,6 +484,44 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn collection_replacements_report_created_updated_and_deleted_entities() {
+        let kept = Axis::weight();
+        let removed = Axis::width();
+        let mut renamed = kept.clone();
+        renamed.set_name("Heaviness".to_string());
+        let added = Axis::new("opsz".into(), "Optical size".into(), 6.0, 12.0, 72.0);
+        let replacement = Replacement::new(
+            vec![kept.clone(), removed.clone()],
+            vec![added.clone(), renamed.clone()],
+        );
+
+        let changes = replacement.entity_changes().collect::<Vec<_>>();
+
+        assert_eq!(
+            changes,
+            vec![
+                EntityChange::Updated {
+                    before: &kept,
+                    after: &renamed,
+                },
+                EntityChange::Deleted(&removed),
+                EntityChange::Created(&added),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_replacement_applies_only_to_its_original_value() {
+        let replacement = Replacement::new(vec![1, 2], vec![2, 1]);
+
+        replacement.require_before(&[1, 2][..], "order").unwrap();
+        let Err(error) = replacement.require_before(&[2, 1][..], "order") else {
+            panic!("a changed original must be rejected");
+        };
+        assert!(matches!(error, CoreError::InvalidEntityOrder { .. }));
+    }
 
     #[test]
     fn double_inversion_recovers_the_original_changeset() {

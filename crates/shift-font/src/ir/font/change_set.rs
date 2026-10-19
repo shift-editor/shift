@@ -32,44 +32,32 @@ impl Font {
         for change in &change_set.changes {
             match change {
                 FontChange::Metadata(value) => {
-                    require_original(self.metadata(), &value.before, "metadata")?;
+                    value.require_before(self.metadata(), "metadata")?;
                 }
                 FontChange::LibValue { key, value } => {
                     let current = self.lib().get(key).cloned();
-                    require_original(&current, &value.before, "font lib value")?;
+                    value.require_before(&current, "font lib value")?;
                 }
                 FontChange::Axes(value) => {
-                    require_original(self.axes(), value.before.as_slice(), "axes")?;
+                    value.require_before(self.axes(), "axes")?;
                 }
                 FontChange::AxisMappings(value) => {
-                    require_original(
-                        self.axis_mappings(),
-                        value.before.as_slice(),
-                        "axis mappings",
-                    )?;
+                    value.require_before(self.axis_mappings(), "axis mappings")?;
                 }
                 FontChange::MetricDefinitions(value) => {
-                    require_original(
-                        self.metric_definitions(),
-                        value.before.as_slice(),
-                        "metric definitions",
-                    )?;
+                    value.require_before(self.metric_definitions(), "metric definitions")?;
                 }
                 FontChange::NamedInstances(value) => {
-                    require_original(
-                        self.named_instances(),
-                        value.before.as_slice(),
-                        "named instances",
-                    )?;
+                    value.require_before(self.named_instances(), "named instances")?;
                 }
                 FontChange::Sources(value) => {
                     let current = self.source_collection();
-                    require_original(&current, &value.before, "sources")?;
+                    value.require_before(&current, "sources")?;
                 }
                 FontChange::Glyph(value) => {
                     let glyph_id = replacement_glyph_id(value)?;
                     let current = self.glyph(&glyph_id).cloned();
-                    require_original(&current, &value.before, "glyph")?;
+                    value.require_before(&current, "glyph")?;
                 }
                 FontChange::Layer {
                     glyph_id, layer, ..
@@ -79,11 +67,11 @@ impl Font {
                         .glyph(glyph_id)
                         .and_then(|glyph| glyph.layers().get(&layer_id))
                         .cloned();
-                    require_original(&current, &layer.before, "glyph layer")?;
+                    layer.require_before(&current, "glyph layer")?;
                 }
                 FontChange::KerningGroup { group_id, group } => {
                     let current = self.kerning().group(group_id).cloned();
-                    require_original(&current, &group.before, "kerning group")?;
+                    group.require_before(&current, "kerning group")?;
                 }
                 FontChange::KerningValue {
                     source_id,
@@ -91,7 +79,7 @@ impl Font {
                     value,
                 } => {
                     let current = self.kerning().value(source_id, pair);
-                    require_original(&current, &value.before, "kerning value")?;
+                    value.require_before(&current, "kerning value")?;
                 }
             }
         }
@@ -332,20 +320,6 @@ fn replacement_layer_id(value: &Replacement<Option<Arc<GlyphLayer>>>) -> CoreRes
             message: "layer replacement has no value on either side".to_string(),
         }),
     }
-}
-
-fn require_original<T>(current: &T, expected: &T, target: &'static str) -> CoreResult<()>
-where
-    T: PartialEq + ?Sized,
-{
-    if current == expected {
-        return Ok(());
-    }
-
-    Err(CoreError::InvalidEntityOrder {
-        kind: "changeset",
-        message: format!("current {target} does not match its expected original value"),
-    })
 }
 
 /// Glyphs whose own record or any layer `change_set` replaces, in first-touched order.
