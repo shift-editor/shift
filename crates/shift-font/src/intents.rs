@@ -211,6 +211,10 @@ pub enum FontIntent {
     SetLanguages {
         language_ids: Vec<String>,
     },
+    /// Replaces the authored feature code; `None` removes it.
+    SetFeatureSource {
+        source: Option<String>,
+    },
     CreateAxis {
         axis: Axis,
     },
@@ -347,6 +351,7 @@ impl FontIntent {
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
             | Self::SetLanguages { .. }
+            | Self::SetFeatureSource { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -415,6 +420,7 @@ impl FontIntent {
             | Self::UpdateGlyph { .. }
             | Self::UpdateFontMetadata { .. }
             | Self::SetLanguages { .. }
+            | Self::SetFeatureSource { .. }
             | Self::CreateAxis { .. }
             | Self::UpdateAxis { .. }
             | Self::DeleteAxis { .. }
@@ -664,6 +670,13 @@ impl Font {
             }
         }
 
+        if before.features().fea_source() != after.features().fea_source() {
+            changes.push(FontChange::FeatureSource(Replacement::new(
+                before.features().fea_source().map(str::to_string),
+                after.features().fea_source().map(str::to_string),
+            )));
+        }
+
         if before.axes() != after.axes() {
             changes.push(FontChange::Axes(Replacement::new(
                 before.axes().to_vec(),
@@ -820,6 +833,10 @@ impl Font {
             }
             FontIntent::SetLanguages { language_ids } => {
                 self.apply_set_languages(language_ids);
+                Ok((Vec::new(), None))
+            }
+            FontIntent::SetFeatureSource { source } => {
+                self.features_mut().set_fea_source(source.clone());
                 Ok((Vec::new(), None))
             }
             FontIntent::SetKerningValues { edits } => {
@@ -1803,6 +1820,7 @@ impl Font {
             | FontIntent::UpdateGlyph { .. }
             | FontIntent::UpdateFontMetadata { .. }
             | FontIntent::SetLanguages { .. }
+            | FontIntent::SetFeatureSource { .. }
             | FontIntent::CreateAxis { .. }
             | FontIntent::UpdateAxis { .. }
             | FontIntent::DeleteAxis { .. }

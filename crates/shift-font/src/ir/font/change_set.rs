@@ -100,6 +100,10 @@ impl Font {
                     let current = self.kerning().value(source_id, pair);
                     require_original(&current, &value.before, "kerning value")?;
                 }
+                FontChange::FeatureSource(value) => {
+                    let current = self.features().fea_source().map(str::to_string);
+                    require_original(&current, &value.before, "feature source")?;
+                }
             }
         }
 
@@ -162,6 +166,9 @@ impl Font {
                         self.kerning_mut().remove_value(source_id, pair);
                     }
                 },
+                FontChange::FeatureSource(value) => {
+                    self.features_mut().set_fea_source(value.after.clone());
+                }
                 FontChange::Glyph(_) | FontChange::Layer { .. } => {}
             }
         }

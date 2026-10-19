@@ -25,6 +25,8 @@ bitflags! {
         /// Kerning values or the sources, axes, and mappings its
         /// interpolation basis is built from.
         const KERNING = 1 << 10;
+        /// The authored feature code.
+        const FEATURES = 1 << 11;
     }
 }
 
@@ -105,6 +107,8 @@ pub enum FontChange {
         pair: KerningPair,
         value: Replacement<Option<f64>>,
     },
+    /// The authored feature code; `None` is no feature code.
+    FeatureSource(Replacement<Option<String>>),
 }
 
 /// Whether a layer replacement changes what its glyph's record lists.
@@ -154,6 +158,7 @@ impl FontChange {
             Self::Layer { layer, .. } if changes_glyph_record(layer) => FontChangeImpact::GLYPHS,
             Self::Layer { .. } => FontChangeImpact::empty(),
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
+            Self::FeatureSource(_) => FontChangeImpact::FEATURES,
         }
     }
 
@@ -208,6 +213,9 @@ impl FontChange {
                 pair: pair.clone(),
                 value: Replacement::new(value.after, value.before),
             },
+            Self::FeatureSource(value) => {
+                Self::FeatureSource(Replacement::new(value.after.clone(), value.before.clone()))
+            }
         }
     }
 
@@ -337,7 +345,8 @@ impl FontChangeSet {
                 FontChange::Metadata(_)
                 | FontChange::LibValue { .. }
                 | FontChange::KerningGroup { .. }
-                | FontChange::KerningValue { .. } => {}
+                | FontChange::KerningValue { .. }
+                | FontChange::FeatureSource(_) => {}
             }
         }
         entities

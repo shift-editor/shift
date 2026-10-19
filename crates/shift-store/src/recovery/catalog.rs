@@ -117,7 +117,8 @@ pub(super) const SOURCE_LOCATIONS: RecoveryTable =
     RecoveryTable::replace_collection("source_locations", Some("source_id"), false);
 pub(super) const SOURCE_METRIC_VALUES: RecoveryTable =
     RecoveryTable::replace_collection("source_metric_values", Some("source_id"), false);
-pub(super) const FEATURE_TEXT: RecoveryTable = RecoveryTable::canonical_only("feature_text");
+pub(super) const FEATURE_TEXT: RecoveryTable =
+    RecoveryTable::replace_collection("feature_text", None, false);
 pub(super) const KERNING_GROUPS: RecoveryTable =
     RecoveryTable::replace_collection("kerning_groups", None, true);
 pub(super) const KERNING_GROUP_MEMBERS: RecoveryTable =

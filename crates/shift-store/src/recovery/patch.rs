@@ -7,16 +7,16 @@ use shift_font as font;
 use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
-        AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES,
-        GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS, METRIC_DEFINITIONS,
-        NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS, SOURCE_METRIC_VALUES,
-        SOURCES,
+        AXES, AXIS_MAPPINGS, FEATURE_TEXT, FONT_LIB, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB,
+        GLYPH_UNICODES, GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS,
+        METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS,
+        SOURCE_METRIC_VALUES, SOURCES,
     },
 };
 use crate::{
     FontInfo, StoreError,
     change_set::{
-        replace_axis_mappings, replace_kerning_groups, replace_lib_data,
+        replace_axis_mappings, replace_feature_text, replace_kerning_groups, replace_lib_data,
         replace_metric_definitions, replace_named_instances, replace_source_kerning,
         upsert_axis_with_order, upsert_font_info, write_glyph_directory_in_tx,
         write_source_snapshot_in_tx,
@@ -53,6 +53,7 @@ impl RecoveryOverlay {
             .iter()
             .any(|change| matches!(change, font::FontChange::LibValue { .. }));
         let mappings_changed = impact.contains(font::FontChangeImpact::AXIS_MAPPINGS);
+        let features_changed = impact.contains(font::FontChangeImpact::FEATURES);
         let definitions_changed = impact.contains(font::FontChangeImpact::METRIC_DEFINITIONS);
         let instances_changed = impact.contains(font::FontChangeImpact::NAMED_INSTANCES);
         let mut axis_ids = HashSet::new();
@@ -132,6 +133,10 @@ impl RecoveryOverlay {
         if font_lib_changed {
             replace_lib_data(&tx, "font_lib", "key", None, post_font.lib())?;
             mark_replaced(&tx, FONT_LIB, GLOBAL_OWNER)?;
+        }
+        if features_changed {
+            replace_feature_text(&tx, post_font.features().fea_source())?;
+            mark_replaced(&tx, FEATURE_TEXT, GLOBAL_OWNER)?;
         }
         if mappings_changed {
             replace_axis_mappings(&tx, post_font.axis_mappings())?;
