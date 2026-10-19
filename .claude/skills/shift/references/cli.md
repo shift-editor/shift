@@ -57,6 +57,16 @@ shift-cli kerning group create Lab.shift O O Q --position first
 - **Kerning sides**: `first` is the left glyph, and its first-position group kerns its right edge; `second` is the right glyph. A side is a glyph name or `@GROUP` for a group at that position. Values are per master and default to the default source; set every master you mean to change.
 - **`kerning set --input`** applies `groups` (created if missing; `members` replaces membership) and then `pairs` (`value: null` removes) atomically, so pairs can name groups the batch creates.
 
+## Check
+
+```sh
+shift-cli check Family.glyphs                       # problems in masters, axes, outlines, kerning
+shift-cli check Family.designspace --json           # findings with stable codes for scripts and CI
+shift-cli check Lab.shift --charset latin1 --mono   # opt-in character-set and monospace checks
+```
+
+- Run `check` after authoring and before compiling. Errors (exit status 1) mean the font won't build or a glyph renders wrongly somewhere in the design space; fix those first. Codes starting with `I` are interpolation problems between a master and the default master, and name the glyph, master, and contour.
+
 ## Compile
 
 ```sh
