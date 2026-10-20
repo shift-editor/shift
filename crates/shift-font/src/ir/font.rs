@@ -17,7 +17,6 @@ use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
 use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::Source;
-use crate::source::source_locations_equal;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -1016,7 +1015,7 @@ impl Font {
     }
 
     pub fn default_source(&self) -> Option<&Source> {
-        self.source(&self.data().default_source_id.clone()?)
+        self.source(self.data().default_source_id.as_ref()?)
     }
 
     pub fn is_variable(&self) -> bool {
@@ -1587,7 +1586,7 @@ fn validate_source(
         current.id() != source.id()
             && current.is_master()
             && source.is_master()
-            && source_locations_equal(current.location(), source.location(), axes)
+            && current.location().is_equivalent_to(source.location(), axes)
     }) {
         return Err(CoreError::DuplicateSourceLocation {
             first: existing.id(),

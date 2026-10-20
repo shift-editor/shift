@@ -470,8 +470,7 @@ fn append_component_sources(
         .enumerate()
     {
         let component = layer
-            .components_iter()
-            .find(|component| component.id() == *component_id)
+            .component(component_id)
             .filter(|component| component.base_glyph_id() == *base_glyph_id)
             .ok_or_else(|| shift_font::CoreError::InvalidComponentId(component_id.to_string()))?;
         let transform = component.transform();

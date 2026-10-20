@@ -19,7 +19,6 @@ use crate::ir::{
     Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
-use crate::source::source_locations_equal;
 use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -526,7 +525,7 @@ impl Font {
             return Err(CoreError::DuplicateSourceId(source_id));
         }
         if let Some(existing) = self.sources().iter().find(|source| {
-            source.is_master() && source_locations_equal(source.location(), location, self.axes())
+            source.is_master() && source.location().is_equivalent_to(location, self.axes())
         }) {
             return Err(CoreError::DuplicateSourceLocation {
                 first: existing.id(),

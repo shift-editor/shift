@@ -228,7 +228,7 @@ pub(crate) fn replace_font_header_in_tx(
 
         for (axis_id, value) in source.location() {
             // Location entries on undefined axes have no row to reference.
-            if font.axes().iter().any(|axis| axis.id() == *axis_id) {
+            if font.axis(axis_id).is_some() {
                 upsert_source_location(tx, &source.id(), axis_id, *value)?;
             }
         }

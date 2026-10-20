@@ -711,11 +711,7 @@ impl From<LayerMatch> for NapiLayerMatch {
             points: convert_all(layer_match.points),
             anchors: convert_all(layer_match.anchors),
             components: convert_all(layer_match.components),
-            differences: layer_match
-                .differences
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            differences: convert_all(layer_match.differences),
         }
     }
 }
@@ -830,26 +826,14 @@ impl From<FontSnapshot> for NapiFontSnapshot {
         Self {
             metadata: snapshot.metadata.into(),
             metrics: snapshot.metrics.into(),
-            metric_definitions: snapshot
-                .metric_definitions
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            metric_definitions: convert_all(snapshot.metric_definitions),
             source_metrics_interpolation: snapshot.source_metrics_interpolation.map(Into::into),
             glyphs: convert_all(snapshot.glyphs),
             sources: convert_all(snapshot.sources),
             axes: convert_all(snapshot.axes),
             axis_mappings: convert_all(snapshot.axis_mappings),
-            axis_mapping_bases: snapshot
-                .axis_mapping_bases
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            named_instances: snapshot
-                .named_instances
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            axis_mapping_bases: convert_all(snapshot.axis_mapping_bases),
+            named_instances: convert_all(snapshot.named_instances),
             language_ids: snapshot.language_ids,
             kerning: snapshot.kerning.into(),
         }
@@ -967,11 +951,7 @@ impl From<InterpolationBasis> for NapiInterpolationBasis {
                 .map(|source_id| source_id.to_string())
                 .collect(),
             basis: basis.basis.into(),
-            design_normalization: basis
-                .design_normalization
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            design_normalization: convert_all(basis.design_normalization),
         }
     }
 }
@@ -1128,17 +1108,9 @@ impl From<GlyphProjection> for NapiGlyphProjection {
             interpolation: projection.interpolation.map(Into::into),
             decomposition: projection.decomposition.map(Into::into),
             variation: projection.variation.map(Into::into),
-            exact_source_shapes: projection
-                .exact_source_shapes
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            exact_source_shapes: convert_all(projection.exact_source_shapes),
             components: projection.components.into(),
-            exact_source_components: projection
-                .exact_source_components
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            exact_source_components: convert_all(projection.exact_source_components),
             component_glyph_ids: projection
                 .component_glyph_ids
                 .into_iter()
@@ -1281,12 +1253,12 @@ impl From<ComponentData> for NapiComponentData {
     }
 }
 
-/// The wire name of a component alignment.
 /// Converts every value, as [`From`] converts one.
 pub fn convert_all<T, U: From<T>>(values: impl IntoIterator<Item = T>) -> Vec<U> {
     values.into_iter().map(U::from).collect()
 }
 
+/// The wire name of a component alignment.
 pub fn alignment_name(alignment: ComponentAlignment) -> &'static str {
     match alignment {
         ComponentAlignment::Unset => "unset",
@@ -1546,11 +1518,7 @@ impl From<SourceMetricsInterpolationSnapshot> for NapiSourceMetricsInterpolation
                 .into_iter()
                 .map(|metric_id| metric_id.to_string())
                 .collect(),
-            technical_fields: snapshot
-                .technical_fields
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            technical_fields: convert_all(snapshot.technical_fields),
             basis: snapshot.basis.into(),
             sources: convert_all(snapshot.sources),
         }

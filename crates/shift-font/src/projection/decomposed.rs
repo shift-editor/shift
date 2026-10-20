@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::FontProjection;
-use crate::placed_blend::{ContourShape, mirrors, placed_point_index, shapes_match};
+use crate::placed_blend::{ContourShape, mirrors, placed_point_index};
 
 /// A glyph's flattened outline split by where each contour comes from: the
 /// glyph's own contours first, then one part per component occurrence in
@@ -312,7 +312,7 @@ fn same_structure(a: &OutlineParts, b: &OutlineParts) -> bool {
     a.len() == b.len()
         && a.iter()
             .zip(b)
-            .all(|(a, b)| shapes_match(&contour_shapes(a), &contour_shapes(b)))
+            .all(|(a, b)| contour_shapes(a) == contour_shapes(b))
 }
 
 fn contour_shapes(contours: &[ResolvedContour]) -> Vec<ContourShape> {

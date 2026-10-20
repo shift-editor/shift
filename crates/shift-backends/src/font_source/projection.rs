@@ -4,7 +4,7 @@ use std::str::FromStr;
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::{RoundingBehaviour, VariationModel};
-use shift_font::{AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource, SourceRole};
+use shift_font::{AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource};
 
 use super::geometry::SourceGeometry;
 use super::interpolation::InterpolationAxis;
@@ -87,11 +87,7 @@ impl FontDirectory {
             glyphs,
             axes,
         )?;
-        let font_sources = font
-            .sources()
-            .iter()
-            .filter(|source| source.role() == SourceRole::Master)
-            .collect::<Vec<_>>();
+        let font_sources = font.masters().collect::<Vec<_>>();
         let default_source_id = font.default_source_id();
         let default_source = font_sources
             .iter()
