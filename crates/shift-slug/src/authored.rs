@@ -10,8 +10,8 @@ use shift_font::Require;
 use std::{collections::HashMap, error::Error, fmt};
 
 use shift_font::{
-    ContourId, CoreError, CurveSegment, CurveSegmentIter, Font, GlyphLayer, GlyphProjection,
-    GlyphProjectionSet, Point as FontPoint, PointId, PointType, SourceId,
+    Contour, ContourId, CoreError, CurveSegment, CurveSegmentIter, Font, GlyphLayer,
+    GlyphProjection, GlyphProjectionSet, Point as FontPoint, PointId, PointType, SourceId,
     composite::ResolvedContour,
 };
 
@@ -318,30 +318,48 @@ impl From<SlugError> for AuthoredSlugError {
 /// A location-independent quadratic conversion topology tied to authored points.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredCurveTopology {
+    curves: CurveTopology,
+    identities: Vec<ContourIdentity>,
+}
+
+/// The ids an authored contour must keep for its topology to apply.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ContourIdentity {
+    contour_id: ContourId,
+    point_ids: Vec<PointId>,
+}
+
+impl ContourIdentity {
+    fn of(contour: &Contour) -> Self {
+        Self {
+            contour_id: contour.id(),
+            point_ids: contour.points().iter().map(FontPoint::id).collect(),
+        }
+    }
+
+    fn matches(&self, contour: &Contour) -> bool {
+        contour.id() == self.contour_id
+            && contour
+                .points()
+                .iter()
+                .map(FontPoint::id)
+                .eq(self.point_ids.iter().cloned())
+    }
+}
+
+/// Segment-to-point correspondence for a set of contours, shared by every
+/// compatible source of one glyph.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CurveTopology {
     contours: Vec<ContourTopology>,
     curve_count: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ContourTopology {
-    contour_id: ContourId,
-    closed: bool,
-    point_ids: Vec<PointId>,
-    point_types: Vec<PointType>,
-    segments: Vec<SegmentTopology>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct ResolvedContourTopology {
     closed: bool,
     point_types: Vec<PointType>,
     segments: Vec<SegmentTopology>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct ResolvedCurveTopology {
-    contours: Vec<ResolvedContourTopology>,
-    curve_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -354,7 +372,83 @@ enum SegmentTopology {
     },
 }
 
+/// A contour a topology can read: its points and whether it closes.
+pub(crate) trait ContourPoints {
+    fn contour_points(&self) -> &[FontPoint];
+    fn closes(&self) -> bool;
+
+    /// Converts the contour's points, rejecting non-finite coordinates.
+    fn slug_points(&self, contour_index: usize) -> Result<Vec<Point>, AuthoredSlugError> {
+        self.contour_points()
+            .iter()
+            .enumerate()
+            .map(|(point_index, point)| slug_point(point, contour_index, point_index))
+            .collect()
+    }
+}
+
+impl<C: ContourPoints> ContourPoints for &C {
+    fn contour_points(&self) -> &[FontPoint] {
+        (**self).contour_points()
+    }
+
+    fn closes(&self) -> bool {
+        (**self).closes()
+    }
+}
+
+impl ContourPoints for Contour {
+    fn contour_points(&self) -> &[FontPoint] {
+        self.points()
+    }
+
+    fn closes(&self) -> bool {
+        self.is_closed()
+    }
+}
+
+impl ContourPoints for ResolvedContour {
+    fn contour_points(&self) -> &[FontPoint] {
+        &self.points
+    }
+
+    fn closes(&self) -> bool {
+        self.closed
+    }
+}
+
 impl SegmentTopology {
+    /// Records which of `points` a segment of their contour uses.
+    fn of(points: &[FontPoint], segment: &CurveSegment<'_>) -> Self {
+        let index = |target: &FontPoint| {
+            points
+                .iter()
+                .position(|point| std::ptr::eq(point, target))
+                .expect("curve segment points borrow their source contour")
+        };
+        match segment {
+            CurveSegment::Line(p0, p1) => Self::Line([index(p0), index(p1)]),
+            CurveSegment::Quad(p0, p1, p2) => Self::Quad([index(p0), index(p1), index(p2)]),
+            CurveSegment::Cubic(p0, p1, p2, p3) => Self::Cubic {
+                points: [index(p0), index(p1), index(p2), index(p3)],
+                subdivision_count: Curve::cubic_subdivision_count(
+                    slug_point_unchecked(p0),
+                    slug_point_unchecked(p1),
+                    slug_point_unchecked(p2),
+                    slug_point_unchecked(p3),
+                ),
+            },
+        }
+    }
+
+    fn start(self) -> usize {
+        match self {
+            Self::Line(points) => points[0],
+            Self::Quad(points) => points[0],
+            Self::Cubic { points, .. } => points[0],
+        }
+    }
+
     fn end(self) -> usize {
         match self {
             Self::Line(points) => points[1],
@@ -371,47 +465,185 @@ impl SegmentTopology {
             Self::Line(_) | Self::Quad(_) => 1,
         }
     }
+
+    /// Returns one flag per output quadratic, set when it comes from a line.
+    fn line_flags(self) -> impl Iterator<Item = bool> {
+        std::iter::repeat_n(matches!(self, Self::Line(_)), self.curve_count())
+    }
+
+    /// Raises a cubic's subdivision count to what `points` need.
+    ///
+    /// Returns `None` when the segment indexes past `points`.
+    fn widen_subdivisions(&mut self, points: &[Point]) -> Option<()> {
+        let Self::Cubic {
+            points: [p0, p1, p2, p3],
+            subdivision_count,
+        } = self
+        else {
+            return Some(());
+        };
+        let count = Curve::cubic_subdivision_count(
+            *points.get(*p0)?,
+            *points.get(*p1)?,
+            *points.get(*p2)?,
+            *points.get(*p3)?,
+        );
+        *subdivision_count = (*subdivision_count).max(count);
+        Some(())
+    }
+
+    fn append_curves(self, curves: &mut Vec<Curve>, points: &[Point]) {
+        match self {
+            Self::Line([p0, p1]) => {
+                curves.push(Curve::from_line(points[p0], points[p1]));
+            }
+            Self::Quad([p0, p1, p2]) => curves.push(Curve {
+                p0: points[p0],
+                p1: points[p1],
+                p2: points[p2],
+            }),
+            Self::Cubic {
+                points: [p0, p1, p2, p3],
+                subdivision_count,
+            } => curves.extend(Curve::from_cubic_with_subdivisions(
+                points[p0],
+                points[p1],
+                points[p2],
+                points[p3],
+                subdivision_count,
+            )),
+        }
+    }
+}
+
+impl ContourTopology {
+    fn of(contour: &impl ContourPoints) -> Self {
+        let points = contour.contour_points();
+        let mut segments = CurveSegmentIter::new(points, contour.closes())
+            .map(|segment| SegmentTopology::of(points, &segment))
+            .collect::<Vec<_>>();
+        if let (Some(first), Some(last)) = (segments.first().copied(), segments.last().copied()) {
+            let start = first.start();
+            let end = last.end();
+            if start != end {
+                segments.push(SegmentTopology::Line([end, start]));
+            }
+        }
+        Self {
+            closed: contour.closes(),
+            point_types: points.iter().map(FontPoint::point_type).collect(),
+            segments,
+        }
+    }
+
+    /// Returns whether `contour` has this topology's closure and point kinds.
+    fn matches(&self, contour: &impl ContourPoints) -> bool {
+        contour.closes() == self.closed
+            && contour
+                .contour_points()
+                .iter()
+                .map(FontPoint::point_type)
+                .eq(self.point_types.iter().copied())
+    }
+}
+
+impl CurveTopology {
+    fn from_contours<'a, C: ContourPoints + 'a>(contours: impl IntoIterator<Item = &'a C>) -> Self {
+        let mut topology = Self {
+            contours: contours.into_iter().map(ContourTopology::of).collect(),
+            curve_count: 0,
+        };
+        topology.recount();
+        topology
+    }
+
+    /// Freezes one cubic subdivision count large enough for every compatible
+    /// contour set.
+    pub(crate) fn from_compatible_contours<'a>(
+        reference: &[ResolvedContour],
+        compatible: impl IntoIterator<Item = &'a [ResolvedContour]>,
+    ) -> Result<Self, AuthoredSlugError> {
+        let mut topology = Self::from_contours(reference);
+        for contours in compatible {
+            topology.include_cubic_subdivisions(contours)?;
+        }
+        Ok(topology)
+    }
+
+    /// Returns one flag per output quadratic whose control is derived from a line.
+    pub(crate) fn line_flags(&self) -> Vec<bool> {
+        self.contours
+            .iter()
+            .flat_map(|contour| &contour.segments)
+            .flat_map(|segment| segment.line_flags())
+            .collect()
+    }
+
+    /// Evaluates this topology against topology-compatible contours.
+    pub(crate) fn curves_from_contours<C: ContourPoints>(
+        &self,
+        contours: &[C],
+    ) -> Result<Vec<Curve>, AuthoredSlugError> {
+        self.ensure_contour_count(contours.len())?;
+        let mut curves = Vec::with_capacity(self.curve_count);
+        for (contour_index, (topology, contour)) in self.contours.iter().zip(contours).enumerate() {
+            if !topology.matches(contour) {
+                return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
+            }
+            let points = contour.slug_points(contour_index)?;
+            for segment in &topology.segments {
+                segment.append_curves(&mut curves, &points);
+            }
+        }
+        debug_assert_eq!(curves.len(), self.curve_count);
+        Ok(curves)
+    }
+
+    fn include_cubic_subdivisions<C: ContourPoints>(
+        &mut self,
+        contours: &[C],
+    ) -> Result<(), AuthoredSlugError> {
+        self.ensure_contour_count(contours.len())?;
+        for (contour_index, (topology, contour)) in
+            self.contours.iter_mut().zip(contours).enumerate()
+        {
+            let points = contour.slug_points(contour_index)?;
+            for segment in &mut topology.segments {
+                segment
+                    .widen_subdivisions(&points)
+                    .ok_or(AuthoredSlugError::ContourTopologyMismatch { contour_index })?;
+            }
+        }
+        self.recount();
+        Ok(())
+    }
+
+    fn ensure_contour_count(&self, actual: usize) -> Result<(), AuthoredSlugError> {
+        if actual == self.contours.len() {
+            return Ok(());
+        }
+        Err(AuthoredSlugError::ContourCountMismatch {
+            expected: self.contours.len(),
+            actual,
+        })
+    }
+
+    fn recount(&mut self) {
+        self.curve_count = self
+            .contours
+            .iter()
+            .flat_map(|contour| &contour.segments)
+            .map(|segment| segment.curve_count())
+            .sum();
+    }
 }
 
 impl AuthoredCurveTopology {
     /// Captures contour order, point kinds, and segment-to-point correspondence.
     pub fn from_layer(layer: &GlyphLayer) -> Self {
-        let contours = layer
-            .contours_iter()
-            .map(|contour| {
-                let points = contour.points();
-                let mut segments = CurveSegmentIter::new(points, contour.is_closed())
-                    .map(|segment| segment_topology(points, &segment))
-                    .collect::<Vec<_>>();
-
-                if let (Some(first), Some(last)) =
-                    (segments.first().copied(), segments.last().copied())
-                {
-                    let start = segment_start(first);
-                    let end = last.end();
-                    if start != end {
-                        segments.push(SegmentTopology::Line([end, start]));
-                    }
-                }
-
-                ContourTopology {
-                    contour_id: contour.id(),
-                    closed: contour.is_closed(),
-                    point_ids: points.iter().map(FontPoint::id).collect(),
-                    point_types: points.iter().map(FontPoint::point_type).collect(),
-                    segments,
-                }
-            })
-            .collect::<Vec<_>>();
-        let curve_count = contours
-            .iter()
-            .flat_map(|contour| &contour.segments)
-            .map(|segment| segment.curve_count())
-            .sum();
-
         Self {
-            contours,
-            curve_count,
+            curves: CurveTopology::from_contours(layer.contours_iter()),
+            identities: layer.contours_iter().map(ContourIdentity::of).collect(),
         }
     }
 
@@ -422,254 +654,47 @@ impl AuthoredCurveTopology {
     ) -> Result<Self, AuthoredSlugError> {
         let mut topology = Self::from_layer(reference_layer);
         for layer in compatible_layers {
-            topology.include_layer_cubic_subdivisions(layer)?;
+            let contours = topology.matching_contours(layer)?;
+            topology.curves.include_cubic_subdivisions(&contours)?;
         }
         Ok(topology)
     }
 
-    fn include_layer_cubic_subdivisions(
-        &mut self,
-        layer: &GlyphLayer,
-    ) -> Result<(), AuthoredSlugError> {
-        let contours = layer.contours_iter().collect::<Vec<_>>();
-        if contours.len() != self.contours.len() {
-            return Err(AuthoredSlugError::ContourCountMismatch {
-                expected: self.contours.len(),
-                actual: contours.len(),
-            });
-        }
-
-        for (contour_index, (topology, contour)) in
-            self.contours.iter_mut().zip(contours).enumerate()
-        {
-            let point_ids = contour
-                .points()
-                .iter()
-                .map(FontPoint::id)
-                .collect::<Vec<_>>();
-            let point_types = contour
-                .points()
-                .iter()
-                .map(FontPoint::point_type)
-                .collect::<Vec<_>>();
-            if contour.id() != topology.contour_id
-                || contour.is_closed() != topology.closed
-                || point_ids != topology.point_ids
-                || point_types != topology.point_types
-            {
-                return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
-            }
-
-            let points = contour
-                .points()
-                .iter()
-                .enumerate()
-                .map(|(point_index, point)| slug_point(point, contour_index, point_index))
-                .collect::<Result<Vec<_>, _>>()?;
-            for segment in &mut topology.segments {
-                let SegmentTopology::Cubic {
-                    points: [p0, p1, p2, p3],
-                    subdivision_count,
-                } = segment
-                else {
-                    continue;
-                };
-                *subdivision_count = (*subdivision_count).max(Curve::cubic_subdivision_count(
-                    points[*p0],
-                    points[*p1],
-                    points[*p2],
-                    points[*p3],
-                ));
-            }
-        }
-        self.curve_count = self
-            .contours
-            .iter()
-            .flat_map(|contour| &contour.segments)
-            .map(|segment| segment.curve_count())
-            .sum();
-        Ok(())
-    }
-
     pub fn curve_count(&self) -> usize {
-        self.curve_count
+        self.curves.curve_count
     }
 
     /// Returns one flag per output quadratic whose control is derived from a line.
     pub fn line_flags(&self) -> Vec<bool> {
-        line_flags(self.contours.iter().flat_map(|contour| &contour.segments))
+        self.curves.line_flags()
     }
 
     /// Evaluates this exact topology against a topology-compatible layer.
     pub fn curves_from_layer(&self, layer: &GlyphLayer) -> Result<Vec<Curve>, AuthoredSlugError> {
-        let contours = layer.contours_iter().collect::<Vec<_>>();
-        if contours.len() != self.contours.len() {
-            return Err(AuthoredSlugError::ContourCountMismatch {
-                expected: self.contours.len(),
-                actual: contours.len(),
-            });
-        }
-
-        let mut curves = Vec::with_capacity(self.curve_count);
-        for (contour_index, (topology, contour)) in self.contours.iter().zip(contours).enumerate() {
-            let point_ids = contour
-                .points()
-                .iter()
-                .map(FontPoint::id)
-                .collect::<Vec<_>>();
-            let point_types = contour
-                .points()
-                .iter()
-                .map(FontPoint::point_type)
-                .collect::<Vec<_>>();
-            if contour.id() != topology.contour_id
-                || contour.is_closed() != topology.closed
-                || point_ids != topology.point_ids
-                || point_types != topology.point_types
-            {
-                return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
-            }
-
-            let points = contour
-                .points()
-                .iter()
-                .enumerate()
-                .map(|(point_index, point)| slug_point(point, contour_index, point_index))
-                .collect::<Result<Vec<_>, _>>()?;
-            for segment in &topology.segments {
-                append_segment(&mut curves, *segment, &points);
-            }
-        }
-        debug_assert_eq!(curves.len(), self.curve_count);
-        Ok(curves)
-    }
-}
-
-impl ResolvedCurveTopology {
-    /// Freezes one cubic subdivision count large enough for every compatible
-    /// contour set.
-    fn from_compatible_contours<'a>(
-        reference: &[ResolvedContour],
-        compatible: impl IntoIterator<Item = &'a [ResolvedContour]>,
-    ) -> Result<Self, AuthoredSlugError> {
-        let mut topology = Self::from_contours(reference);
-        for contours in compatible {
-            if contours.len() != topology.contours.len() {
-                return Err(AuthoredSlugError::ContourCountMismatch {
-                    expected: topology.contours.len(),
-                    actual: contours.len(),
-                });
-            }
-            for (contour_index, (contour_topology, contour)) in
-                topology.contours.iter_mut().zip(contours).enumerate()
-            {
-                let points = contour
-                    .points
-                    .iter()
-                    .enumerate()
-                    .map(|(point_index, point)| slug_point(point, contour_index, point_index))
-                    .collect::<Result<Vec<_>, _>>()?;
-                for segment in &mut contour_topology.segments {
-                    let SegmentTopology::Cubic {
-                        points: [p0, p1, p2, p3],
-                        subdivision_count,
-                    } = segment
-                    else {
-                        continue;
-                    };
-                    let (Some(&a), Some(&b), Some(&c), Some(&d)) = (
-                        points.get(*p0),
-                        points.get(*p1),
-                        points.get(*p2),
-                        points.get(*p3),
-                    ) else {
-                        return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
-                    };
-                    *subdivision_count =
-                        (*subdivision_count).max(Curve::cubic_subdivision_count(a, b, c, d));
-                }
-            }
-        }
-        topology.curve_count = topology
-            .contours
-            .iter()
-            .flat_map(|contour| &contour.segments)
-            .map(|segment| segment.curve_count())
-            .sum();
-        Ok(topology)
+        let contours = self.matching_contours(layer)?;
+        self.curves.curves_from_contours(&contours)
     }
 
-    fn from_contours(contours: &[ResolvedContour]) -> Self {
-        let contours = contours
-            .iter()
-            .map(|contour| {
-                let points = &contour.points;
-                let mut segments = CurveSegmentIter::new(points, contour.closed)
-                    .map(|segment| segment_topology(points, &segment))
-                    .collect::<Vec<_>>();
-                if let (Some(first), Some(last)) =
-                    (segments.first().copied(), segments.last().copied())
-                {
-                    let start = segment_start(first);
-                    let end = last.end();
-                    if start != end {
-                        segments.push(SegmentTopology::Line([end, start]));
-                    }
-                }
-                ResolvedContourTopology {
-                    closed: contour.closed,
-                    point_types: points.iter().map(FontPoint::point_type).collect(),
-                    segments,
-                }
-            })
-            .collect::<Vec<_>>();
-        let curve_count = contours
-            .iter()
-            .flat_map(|contour| &contour.segments)
-            .map(|segment| segment.curve_count())
-            .sum();
-        Self {
-            contours,
-            curve_count,
-        }
-    }
-
-    fn line_flags(&self) -> Vec<bool> {
-        line_flags(self.contours.iter().flat_map(|contour| &contour.segments))
-    }
-
-    fn curves_from_contours(
+    /// Returns `layer`'s contours when each keeps this topology's ids,
+    /// closure, and point kinds.
+    fn matching_contours<'a>(
         &self,
-        contours: &[ResolvedContour],
-    ) -> Result<Vec<Curve>, AuthoredSlugError> {
-        if contours.len() != self.contours.len() {
-            return Err(AuthoredSlugError::ContourCountMismatch {
-                expected: self.contours.len(),
-                actual: contours.len(),
-            });
-        }
-        let mut curves = Vec::with_capacity(self.curve_count);
-        for (contour_index, (topology, contour)) in self.contours.iter().zip(contours).enumerate() {
-            let point_types = contour
-                .points
-                .iter()
-                .map(FontPoint::point_type)
-                .collect::<Vec<_>>();
-            if contour.closed != topology.closed || point_types != topology.point_types {
+        layer: &'a GlyphLayer,
+    ) -> Result<Vec<&'a Contour>, AuthoredSlugError> {
+        let contours = layer.contours_iter().collect::<Vec<_>>();
+        self.curves.ensure_contour_count(contours.len())?;
+        for (contour_index, ((identity, topology), contour)) in self
+            .identities
+            .iter()
+            .zip(&self.curves.contours)
+            .zip(&contours)
+            .enumerate()
+        {
+            if !identity.matches(contour) || !topology.matches(*contour) {
                 return Err(AuthoredSlugError::ContourTopologyMismatch { contour_index });
             }
-            let points = contour
-                .points
-                .iter()
-                .enumerate()
-                .map(|(point_index, point)| slug_point(point, contour_index, point_index))
-                .collect::<Result<Vec<_>, _>>()?;
-            for segment in &topology.segments {
-                append_segment(&mut curves, *segment, &points);
-            }
         }
-        debug_assert_eq!(curves.len(), self.curve_count);
-        Ok(curves)
+        Ok(contours)
     }
 }
 
@@ -687,10 +712,8 @@ pub(crate) fn add_resolved_sources_glyph(
     let ((base_weight_index, base), rest) = sources
         .split_first()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    let topology = ResolvedCurveTopology::from_compatible_contours(
-        base,
-        rest.iter().map(|(_, contours)| *contours),
-    )?;
+    let topology =
+        CurveTopology::from_compatible_contours(base, rest.iter().map(|(_, contours)| *contours))?;
     let base_curves = topology.curves_from_contours(base)?;
     let source_curves = rest
         .iter()
@@ -712,7 +735,7 @@ pub(crate) fn add_resolved_sources_glyph(
 pub fn curves_from_resolved_contours(
     contours: &[ResolvedContour],
 ) -> Result<Vec<Curve>, AuthoredSlugError> {
-    let topology = ResolvedCurveTopology::from_contours(contours);
+    let topology = CurveTopology::from_contours(contours);
     topology.curves_from_contours(contours)
 }
 
@@ -945,67 +968,6 @@ fn source_location<'a>(
         .ok_or_else(|| AuthoredSlugError::MissingSourceLocation(source_id.clone()))
 }
 
-fn line_flags<'a>(segments: impl IntoIterator<Item = &'a SegmentTopology>) -> Vec<bool> {
-    segments
-        .into_iter()
-        .flat_map(|segment| {
-            let (is_line, count) = match segment {
-                SegmentTopology::Line(_) => (true, 1),
-                SegmentTopology::Quad(_) => (false, 1),
-                SegmentTopology::Cubic {
-                    subdivision_count, ..
-                } => (false, *subdivision_count),
-            };
-            std::iter::repeat_n(is_line, count)
-        })
-        .collect()
-}
-
-fn segment_topology(points: &[FontPoint], segment: &CurveSegment<'_>) -> SegmentTopology {
-    match segment {
-        CurveSegment::Line(p0, p1) => {
-            SegmentTopology::Line([point_index(points, p0), point_index(points, p1)])
-        }
-        CurveSegment::Quad(p0, p1, p2) => SegmentTopology::Quad([
-            point_index(points, p0),
-            point_index(points, p1),
-            point_index(points, p2),
-        ]),
-        CurveSegment::Cubic(p0, p1, p2, p3) => {
-            let points = [
-                point_index(points, p0),
-                point_index(points, p1),
-                point_index(points, p2),
-                point_index(points, p3),
-            ];
-            SegmentTopology::Cubic {
-                subdivision_count: Curve::cubic_subdivision_count(
-                    slug_point_unchecked(p0),
-                    slug_point_unchecked(p1),
-                    slug_point_unchecked(p2),
-                    slug_point_unchecked(p3),
-                ),
-                points,
-            }
-        }
-    }
-}
-
-fn point_index(points: &[FontPoint], target: &FontPoint) -> usize {
-    points
-        .iter()
-        .position(|point| std::ptr::eq(point, target))
-        .expect("curve segment points borrow their source contour")
-}
-
-fn segment_start(segment: SegmentTopology) -> usize {
-    match segment {
-        SegmentTopology::Line(points) => points[0],
-        SegmentTopology::Quad(points) => points[0],
-        SegmentTopology::Cubic { points, .. } => points[0],
-    }
-}
-
 fn authored_advance(value: f64, source_index: usize) -> Result<f32, AuthoredSlugError> {
     let advance = lossy_f32(value);
     if value.is_finite() && advance.is_finite() {
@@ -1033,28 +995,5 @@ fn slug_point(
             contour_index,
             point_index,
         })
-    }
-}
-
-fn append_segment(curves: &mut Vec<Curve>, segment: SegmentTopology, points: &[Point]) {
-    match segment {
-        SegmentTopology::Line([p0, p1]) => {
-            curves.push(Curve::from_line(points[p0], points[p1]));
-        }
-        SegmentTopology::Quad([p0, p1, p2]) => curves.push(Curve {
-            p0: points[p0],
-            p1: points[p1],
-            p2: points[p2],
-        }),
-        SegmentTopology::Cubic {
-            points: [p0, p1, p2, p3],
-            subdivision_count,
-        } => curves.extend(Curve::from_cubic_with_subdivisions(
-            points[p0],
-            points[p1],
-            points[p2],
-            points[p3],
-            subdivision_count,
-        )),
     }
 }

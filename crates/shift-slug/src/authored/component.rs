@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredGlyphCompilation,
-    AuthoredSlugError, AuthoredSourceGlyph, ResolvedCurveTopology, add_default_projection_glyph,
+    AuthoredSlugError, AuthoredSourceGlyph, CurveTopology, add_default_projection_glyph,
     add_resolved_sources_glyph, authored_advance, curves_from_resolved_contours, source_location,
 };
 
@@ -134,7 +134,7 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
             projection,
             &source_id,
         )?;
-        let topology = ResolvedCurveTopology::from_contours(resolved.contours());
+        let topology = CurveTopology::from_contours(resolved.contours());
         let advance = authored_advance(resolved.x_advance(), 0)?;
         let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
             topology.curves_from_contours(resolved.contours())?,
