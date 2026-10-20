@@ -2472,19 +2472,22 @@ impl IntoDomain for NapiAddPointsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::AddPoints(AddPoints {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      contour_id: self
-        .contour_id
-        .map(|id| parse::<ContourId>(&id))
-        .transpose()?,
-      before: self.before.map(|id| parse::<PointId>(&id)).transpose()?,
-      points: self
-        .points
-        .into_iter()
-        .map(IntoDomain::into_domain)
-        .collect::<errors::Result<Vec<_>>>()?,
-    }))
+    Ok(
+      AddPoints {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        contour_id: self
+          .contour_id
+          .map(|id| parse::<ContourId>(&id))
+          .transpose()?,
+        before: self.before.map(|id| parse::<PointId>(&id)).transpose()?,
+        points: self
+          .points
+          .into_iter()
+          .map(IntoDomain::into_domain)
+          .collect::<errors::Result<Vec<_>>>()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2492,11 +2495,14 @@ impl IntoDomain for NapiAddContourIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::AddContour(AddContour {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      contour_id: parse::<ContourId>(&self.contour_id)?,
-      closed: self.closed,
-    }))
+    Ok(
+      AddContour {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        contour_id: parse::<ContourId>(&self.contour_id)?,
+        closed: self.closed,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2504,11 +2510,14 @@ impl IntoDomain for NapiSetContourClosedIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetContourClosed(SetContourClosed {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      contour_id: parse::<ContourId>(&self.contour_id)?,
-      closed: self.closed,
-    }))
+    Ok(
+      SetContourClosed {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        contour_id: parse::<ContourId>(&self.contour_id)?,
+        closed: self.closed,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2516,11 +2525,14 @@ impl IntoDomain for NapiMovePointsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::MovePoints(MovePoints {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      point_ids: parse_id_list::<PointId>(&self.point_ids)?,
-      coords: self.coords,
-    }))
+    Ok(
+      MovePoints {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        point_ids: parse_id_list::<PointId>(&self.point_ids)?,
+        coords: self.coords,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2528,11 +2540,14 @@ impl IntoDomain for NapiSetPointSmoothIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetPointSmooth(SetPointSmooth {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      point_id: parse::<PointId>(&self.point_id)?,
-      smooth: self.smooth,
-    }))
+    Ok(
+      SetPointSmooth {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        point_id: parse::<PointId>(&self.point_id)?,
+        smooth: self.smooth,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2540,10 +2555,13 @@ impl IntoDomain for NapiRemovePointsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::RemovePoints(RemovePoints {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      point_ids: parse_id_list::<PointId>(&self.point_ids)?,
-    }))
+    Ok(
+      RemovePoints {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        point_ids: parse_id_list::<PointId>(&self.point_ids)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2551,14 +2569,17 @@ impl IntoDomain for NapiAddAnchorsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::AddAnchors(AddAnchors {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      anchors: self
-        .anchors
-        .into_iter()
-        .map(IntoDomain::into_domain)
-        .collect::<errors::Result<Vec<_>>>()?,
-    }))
+    Ok(
+      AddAnchors {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        anchors: self
+          .anchors
+          .into_iter()
+          .map(IntoDomain::into_domain)
+          .collect::<errors::Result<Vec<_>>>()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2566,11 +2587,14 @@ impl IntoDomain for NapiMoveAnchorsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::MoveAnchors(MoveAnchors {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
-      coords: self.coords,
-    }))
+    Ok(
+      MoveAnchors {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
+        coords: self.coords,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2578,10 +2602,13 @@ impl IntoDomain for NapiRemoveAnchorsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::RemoveAnchors(RemoveAnchors {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
-    }))
+    Ok(
+      RemoveAnchors {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2589,11 +2616,14 @@ impl IntoDomain for NapiRenameAnchorsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::RenameAnchors(RenameAnchors {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
-      names: self.names,
-    }))
+    Ok(
+      RenameAnchors {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
+        names: self.names,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2601,11 +2631,14 @@ impl IntoDomain for NapiAddComponentIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::AddComponent(AddComponent {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      component_id: parse::<ComponentId>(&self.component_id)?,
-      base_glyph_id: parse::<GlyphId>(&self.base_glyph_id)?,
-    }))
+    Ok(
+      AddComponent {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        component_id: parse::<ComponentId>(&self.component_id)?,
+        base_glyph_id: parse::<GlyphId>(&self.base_glyph_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2613,11 +2646,14 @@ impl IntoDomain for NapiSetComponentTransformsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetComponentTransforms(SetComponentTransforms {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-      transforms: self.transforms,
-    }))
+    Ok(
+      SetComponentTransforms {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+        transforms: self.transforms,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2625,11 +2661,14 @@ impl IntoDomain for NapiSetComponentAlignmentIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetComponentAlignment(SetComponentAlignment {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-      alignment: shift_wire::bridges::napi::parse_alignment(Some(&self.alignment)),
-    }))
+    Ok(
+      SetComponentAlignment {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+        alignment: shift_wire::bridges::napi::parse_alignment(Some(&self.alignment)),
+      }
+      .into(),
+    )
   }
 }
 
@@ -2637,10 +2676,13 @@ impl IntoDomain for NapiRemoveComponentsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::RemoveComponents(RemoveComponents {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-    }))
+    Ok(
+      RemoveComponents {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2648,10 +2690,13 @@ impl IntoDomain for NapiDecomposeComponentsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::DecomposeComponents(DecomposeComponents {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-    }))
+    Ok(
+      DecomposeComponents {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2659,10 +2704,13 @@ impl IntoDomain for NapiReverseContourIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::ReverseContour(ReverseContour {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      contour_id: parse::<ContourId>(&self.contour_id)?,
-    }))
+    Ok(
+      ReverseContour {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        contour_id: parse::<ContourId>(&self.contour_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2670,11 +2718,14 @@ impl IntoDomain for NapiSetContourStartIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetContourStart(SetContourStart {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      contour_id: parse::<ContourId>(&self.contour_id)?,
-      point_id: parse::<PointId>(&self.point_id)?,
-    }))
+    Ok(
+      SetContourStart {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        contour_id: parse::<ContourId>(&self.contour_id)?,
+        point_id: parse::<PointId>(&self.point_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2682,12 +2733,15 @@ impl IntoDomain for NapiTranslatePointsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::TranslatePoints(TranslatePoints {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      point_ids: parse_id_list::<PointId>(&self.point_ids)?,
-      dx: self.dx,
-      dy: self.dy,
-    }))
+    Ok(
+      TranslatePoints {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        point_ids: parse_id_list::<PointId>(&self.point_ids)?,
+        dx: self.dx,
+        dy: self.dy,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2700,17 +2754,20 @@ impl IntoDomain for NapiTransformLayerIntent {
         kind: "transformLayer matrix value count",
         value: self.matrix.len().to_string(),
       })?;
-    Ok(FontIntent::TransformLayer(TransformLayer {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      transform: Transform {
-        xx,
-        xy,
-        yx,
-        yy,
-        dx,
-        dy,
-      },
-    }))
+    Ok(
+      TransformLayer {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        transform: Transform {
+          xx,
+          xy,
+          yx,
+          yy,
+          dx,
+          dy,
+        },
+      }
+      .into(),
+    )
   }
 }
 
@@ -2718,10 +2775,13 @@ impl IntoDomain for NapiSetXAdvanceIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetXAdvance(SetXAdvance {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      width: self.width,
-    }))
+    Ok(
+      SetXAdvance {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        width: self.width,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2729,18 +2789,21 @@ impl IntoDomain for NapiBooleanOpIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::ApplyBooleanOp(ApplyBooleanOp {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      contour_id_a: parse::<ContourId>(&self.contour_id_a)?,
-      contour_id_b: parse::<ContourId>(&self.contour_id_b)?,
-      operation: self
-        .operation
-        .parse()
-        .map_err(|value| BridgeError::InvalidInput {
-          kind: "intent",
-          value,
-        })?,
-    }))
+    Ok(
+      ApplyBooleanOp {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        contour_id_a: parse::<ContourId>(&self.contour_id_a)?,
+        contour_id_b: parse::<ContourId>(&self.contour_id_b)?,
+        operation: self
+          .operation
+          .parse()
+          .map_err(|value| BridgeError::InvalidInput {
+            kind: "intent",
+            value,
+          })?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2748,11 +2811,14 @@ impl IntoDomain for NapiCreateGlyphIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CreateGlyph(CreateGlyph {
-      glyph_id: Some(parse::<GlyphId>(&self.glyph_id)?),
-      name: self.name,
-      unicodes: self.unicodes,
-    }))
+    Ok(
+      CreateGlyph {
+        glyph_id: Some(parse::<GlyphId>(&self.glyph_id)?),
+        name: self.name,
+        unicodes: self.unicodes,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2760,11 +2826,14 @@ impl IntoDomain for NapiUpdateGlyphIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::UpdateGlyph(UpdateGlyph {
-      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-      new_name: self.new_name.into(),
-      new_unicodes: self.new_unicodes,
-    }))
+    Ok(
+      UpdateGlyph {
+        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+        new_name: self.new_name.into(),
+        new_unicodes: self.new_unicodes,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2772,9 +2841,12 @@ impl IntoDomain for NapiUpdateFontMetadataIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::UpdateFontMetadata(UpdateFontMetadata {
-      metadata: self.metadata.into_domain()?,
-    }))
+    Ok(
+      UpdateFontMetadata {
+        metadata: self.metadata.into_domain()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2782,13 +2854,16 @@ impl IntoDomain for NapiSetKerningValuesIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetKerningValues(SetKerningValues {
-      edits: self
-        .edits
-        .into_iter()
-        .map(IntoDomain::into_domain)
-        .collect::<errors::Result<Vec<_>>>()?,
-    }))
+    Ok(
+      SetKerningValues {
+        edits: self
+          .edits
+          .into_iter()
+          .map(IntoDomain::into_domain)
+          .collect::<errors::Result<Vec<_>>>()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2796,11 +2871,14 @@ impl IntoDomain for NapiCreateKerningGroupIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CreateKerningGroup(CreateKerningGroup {
-      group_id: parse::<KerningGroupId>(&self.group_id)?,
-      position: self.position.into_domain()?,
-      name: self.name,
-    }))
+    Ok(
+      CreateKerningGroup {
+        group_id: parse::<KerningGroupId>(&self.group_id)?,
+        position: self.position.into_domain()?,
+        name: self.name,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2808,15 +2886,18 @@ impl IntoDomain for NapiSetKerningGroupMemberIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetKerningGroupMember(SetKerningGroupMember {
-      position: self.position.into_domain()?,
-      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-      group_id: self
-        .group_id
-        .as_deref()
-        .map(parse::<KerningGroupId>)
-        .transpose()?,
-    }))
+    Ok(
+      SetKerningGroupMember {
+        position: self.position.into_domain()?,
+        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+        group_id: self
+          .group_id
+          .as_deref()
+          .map(parse::<KerningGroupId>)
+          .transpose()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2824,10 +2905,13 @@ impl IntoDomain for NapiRenameKerningGroupIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::RenameKerningGroup(RenameKerningGroup {
-      group_id: parse::<KerningGroupId>(&self.group_id)?,
-      name: self.name,
-    }))
+    Ok(
+      RenameKerningGroup {
+        group_id: parse::<KerningGroupId>(&self.group_id)?,
+        name: self.name,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2835,9 +2919,12 @@ impl IntoDomain for NapiDeleteKerningGroupIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::DeleteKerningGroup(DeleteKerningGroup {
-      group_id: parse::<KerningGroupId>(&self.group_id)?,
-    }))
+    Ok(
+      DeleteKerningGroup {
+        group_id: parse::<KerningGroupId>(&self.group_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2845,9 +2932,12 @@ impl IntoDomain for NapiSetLanguagesIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetLanguages(SetLanguages {
-      language_ids: self.language_ids,
-    }))
+    Ok(
+      SetLanguages {
+        language_ids: self.language_ids,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2855,9 +2945,12 @@ impl IntoDomain for NapiCreateAxisIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CreateAxis(CreateAxis {
-      axis: self.axis.into_domain()?,
-    }))
+    Ok(
+      CreateAxis {
+        axis: self.axis.into_domain()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2865,9 +2958,12 @@ impl IntoDomain for NapiUpdateAxisIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::UpdateAxis(UpdateAxis {
-      axis: self.axis.into_domain()?,
-    }))
+    Ok(
+      UpdateAxis {
+        axis: self.axis.into_domain()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2875,9 +2971,12 @@ impl IntoDomain for NapiDeleteAxisIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::DeleteAxis(DeleteAxis {
-      axis_id: parse::<AxisId>(&self.axis_id)?,
-    }))
+    Ok(
+      DeleteAxis {
+        axis_id: parse::<AxisId>(&self.axis_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2885,13 +2984,16 @@ impl IntoDomain for NapiSetAxisMappingsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetAxisMappings(SetAxisMappings {
-      mappings: self
-        .mappings
-        .into_iter()
-        .map(IntoDomain::into_domain)
-        .collect::<errors::Result<Vec<_>>>()?,
-    }))
+    Ok(
+      SetAxisMappings {
+        mappings: self
+          .mappings
+          .into_iter()
+          .map(IntoDomain::into_domain)
+          .collect::<errors::Result<Vec<_>>>()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2899,13 +3001,16 @@ impl IntoDomain for NapiSetMetricDefinitionsIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::SetMetricDefinitions(SetMetricDefinitions {
-      definitions: self
-        .definitions
-        .into_iter()
-        .map(IntoDomain::into_domain)
-        .collect::<errors::Result<Vec<_>>>()?,
-    }))
+    Ok(
+      SetMetricDefinitions {
+        definitions: self
+          .definitions
+          .into_iter()
+          .map(IntoDomain::into_domain)
+          .collect::<errors::Result<Vec<_>>>()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2913,9 +3018,12 @@ impl IntoDomain for NapiCreateNamedInstanceIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CreateNamedInstance(CreateNamedInstance {
-      instance: self.instance.into_domain()?,
-    }))
+    Ok(
+      CreateNamedInstance {
+        instance: self.instance.into_domain()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2923,9 +3031,12 @@ impl IntoDomain for NapiUpdateNamedInstanceIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::UpdateNamedInstance(UpdateNamedInstance {
-      instance: self.instance.into_domain()?,
-    }))
+    Ok(
+      UpdateNamedInstance {
+        instance: self.instance.into_domain()?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2933,9 +3044,12 @@ impl IntoDomain for NapiDeleteNamedInstanceIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::DeleteNamedInstance(DeleteNamedInstance {
-      instance_id: parse::<NamedInstanceId>(&self.instance_id)?,
-    }))
+    Ok(
+      DeleteNamedInstance {
+        instance_id: parse::<NamedInstanceId>(&self.instance_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2943,9 +3057,12 @@ impl IntoDomain for NapiDeleteSourceIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::DeleteSource(DeleteSource {
-      source_id: parse::<SourceId>(&self.source_id)?,
-    }))
+    Ok(
+      DeleteSource {
+        source_id: parse::<SourceId>(&self.source_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2953,11 +3070,14 @@ impl IntoDomain for NapiCreateSourceIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CreateSource(CreateSource {
-      source_id: parse::<SourceId>(&self.source_id)?,
-      name: self.name,
-      location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
-    }))
+    Ok(
+      CreateSource {
+        source_id: parse::<SourceId>(&self.source_id)?,
+        name: self.name,
+        location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
+      }
+      .into(),
+    )
   }
 }
 
@@ -2975,16 +3095,19 @@ impl IntoDomain for NapiUpdateSourceIntent {
         ))
       })
       .collect::<errors::Result<_>>()?;
-    Ok(FontIntent::UpdateSource(UpdateSource {
-      source_id: parse::<SourceId>(&self.source_id)?,
-      name: self.name,
-      location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
-      metric_values,
-      italic_angle: self.italic_angle,
-      line_gap: self.line_gap,
-      underline_position: self.underline_position,
-      underline_thickness: self.underline_thickness,
-    }))
+    Ok(
+      UpdateSource {
+        source_id: parse::<SourceId>(&self.source_id)?,
+        name: self.name,
+        location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
+        metric_values,
+        italic_angle: self.italic_angle,
+        line_gap: self.line_gap,
+        underline_position: self.underline_position,
+        underline_thickness: self.underline_thickness,
+      }
+      .into(),
+    )
   }
 }
 
@@ -2992,11 +3115,14 @@ impl IntoDomain for NapiCreateGlyphLayerIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-      source_id: parse::<SourceId>(&self.source_id)?,
-    }))
+    Ok(
+      CreateGlyphLayer {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+        source_id: parse::<SourceId>(&self.source_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -3004,12 +3130,15 @@ impl IntoDomain for NapiCloneGlyphLayerIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::CloneGlyphLayer(CloneGlyphLayer {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-      source_id: parse::<SourceId>(&self.source_id)?,
-      from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
-    }))
+    Ok(
+      CloneGlyphLayer {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+        source_id: parse::<SourceId>(&self.source_id)?,
+        from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
+      }
+      .into(),
+    )
   }
 }
 
@@ -3017,13 +3146,16 @@ impl IntoDomain for NapiMaterializeGlyphLayerIntent {
   type Domain = FontIntent;
 
   fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(FontIntent::MaterializeGlyphLayer(MaterializeGlyphLayer {
-      layer_id: parse::<LayerId>(&self.layer_id)?,
-      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-      source_id: parse::<SourceId>(&self.source_id)?,
-      from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
-      values: shift_font::GlyphInterpolationValues::new(self.values.to_vec()),
-    }))
+    Ok(
+      MaterializeGlyphLayer {
+        layer_id: parse::<LayerId>(&self.layer_id)?,
+        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+        source_id: parse::<SourceId>(&self.source_id)?,
+        from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
+        values: shift_font::GlyphInterpolationValues::new(self.values.to_vec()),
+      }
+      .into(),
+    )
   }
 }
 

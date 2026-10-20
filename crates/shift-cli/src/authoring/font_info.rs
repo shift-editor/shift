@@ -94,9 +94,7 @@ pub(crate) fn set_font(args: &SetFontArgs) -> Result<AuthoringReport> {
         metadata.version_minor = Some(version.minor);
     }
     if has_metadata {
-        intents.push(FontIntent::UpdateFontMetadata(UpdateFontMetadata {
-            metadata,
-        }));
+        intents.push(UpdateFontMetadata { metadata }.into());
     }
 
     let has_metrics = args.ascender.is_some()
@@ -186,20 +184,21 @@ fn source_metric_intents(
 
     let mut intents = Vec::new();
     if definitions.len() != font.metric_definitions().len() {
-        intents.push(FontIntent::SetMetricDefinitions(SetMetricDefinitions {
-            definitions,
-        }));
+        intents.push(SetMetricDefinitions { definitions }.into());
     }
-    intents.push(FontIntent::UpdateSource(UpdateSource {
-        source_id,
-        name: source.name().to_string(),
-        location: source.location().clone(),
-        metric_values,
-        italic_angle: args.italic_angle.or_else(|| source.italic_angle()),
-        line_gap: args.line_gap.or_else(|| source.line_gap()),
-        underline_position: source.underline_position(),
-        underline_thickness: source.underline_thickness(),
-    }));
+    intents.push(
+        UpdateSource {
+            source_id,
+            name: source.name().to_string(),
+            location: source.location().clone(),
+            metric_values,
+            italic_angle: args.italic_angle.or_else(|| source.italic_angle()),
+            line_gap: args.line_gap.or_else(|| source.line_gap()),
+            underline_position: source.underline_position(),
+            underline_thickness: source.underline_thickness(),
+        }
+        .into(),
+    );
     Ok(intents)
 }
 

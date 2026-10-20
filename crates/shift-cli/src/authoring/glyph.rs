@@ -11,7 +11,7 @@ use std::path::Path;
 
 use crate::selector::FontSelectors;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use shift_font::{Font, FontIntent, FontIntentSet, LayerId};
+use shift_font::{Font, FontIntentSet, LayerId};
 use shift_store::ShiftStore;
 
 use crate::cli::{AddGlyphArgs, CopyLayerArgs, LayerPayloadArgs};
@@ -59,11 +59,12 @@ pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
     let set = FontIntentSet {
         intents: vec![
-            FontIntent::CreateGlyphLayer(CreateGlyphLayer {
+            CreateGlyphLayer {
                 layer_id: layer_id.clone(),
                 glyph_id,
                 source_id,
-            }),
+            }
+            .into(),
             input.into_intent(layer_id, &|name| font.glyph_id_for(name))?,
         ],
     };
@@ -88,11 +89,14 @@ pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let layer_id = existing.clone().unwrap_or_default();
     let mut intents = Vec::new();
     if existing.is_none() {
-        intents.push(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
-            layer_id: layer_id.clone(),
-            glyph_id,
-            source_id,
-        }));
+        intents.push(
+            CreateGlyphLayer {
+                layer_id: layer_id.clone(),
+                glyph_id,
+                source_id,
+            }
+            .into(),
+        );
     }
     intents.push(input.into_intent(layer_id, &|name| font.glyph_id_for(name))?);
 

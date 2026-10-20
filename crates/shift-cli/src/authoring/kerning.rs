@@ -55,9 +55,7 @@ pub(crate) fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
                 pair: resolve_pair(&font, first, second)?,
                 value: Some(value),
             };
-            vec![FontIntent::SetKerningValues(SetKerningValues {
-                edits: vec![edit],
-            })]
+            vec![SetKerningValues { edits: vec![edit] }.into()]
         }
     };
 
@@ -105,7 +103,7 @@ pub(crate) fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<Autho
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = KerningGroupId::new();
-    let mut intents = vec![FontIntent::CreateKerningGroup(CreateKerningGroup {
+    let mut intents = vec![FontIntent::from(CreateKerningGroup {
         group_id: group_id.clone(),
         position,
         name: args.name,
@@ -243,11 +241,14 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             Some(group_id) => group_id,
             None => {
                 let group_id = KerningGroupId::new();
-                intents.push(FontIntent::CreateKerningGroup(CreateKerningGroup {
-                    group_id: group_id.clone(),
-                    position,
-                    name: group.name.clone(),
-                }));
+                intents.push(
+                    CreateKerningGroup {
+                        group_id: group_id.clone(),
+                        position,
+                        name: group.name.clone(),
+                    }
+                    .into(),
+                );
                 group_id
             }
         };
@@ -276,19 +277,21 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
                 .into_iter()
                 .filter(|glyph_id| !member_ids.contains(glyph_id))
                 .map(|glyph_id| {
-                    FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+                    SetKerningGroupMember {
                         position,
                         glyph_id,
                         group_id: None,
-                    })
+                    }
+                    .into()
                 }),
         );
         intents.extend(member_ids.into_iter().map(|glyph_id| {
-            FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+            SetKerningGroupMember {
                 position,
                 glyph_id,
                 group_id: Some(group_id.clone()),
-            })
+            }
+            .into()
         }));
     }
 
@@ -330,7 +333,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
         });
     }
     if !edits.is_empty() {
-        intents.push(FontIntent::SetKerningValues(SetKerningValues { edits }));
+        intents.push(SetKerningValues { edits }.into());
     }
 
     Ok(intents)
@@ -366,11 +369,12 @@ fn member_intents(
     Ok(resolve_members(font, selectors)?
         .into_iter()
         .map(|glyph_id| {
-            FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+            SetKerningGroupMember {
                 position,
                 glyph_id,
                 group_id: group_id.cloned(),
-            })
+            }
+            .into()
         })
         .collect())
 }

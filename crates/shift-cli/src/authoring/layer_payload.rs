@@ -108,15 +108,14 @@ impl LayerInput {
             ));
         }
 
-        Ok(FontIntent::ReplaceGlyphLayerContent(
-            ReplaceGlyphLayerContent {
-                layer_id,
-                width: self.advance,
-                contours,
-                anchors,
-                components,
-            },
-        ))
+        Ok(ReplaceGlyphLayerContent {
+            layer_id,
+            width: self.advance,
+            contours,
+            anchors,
+            components,
+        }
+        .into())
     }
 }
 

@@ -43,9 +43,12 @@ pub(crate) fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
         for (axis_id, value) in parse_location(&font, &args.location)? {
             location.set(axis_id, value);
         }
-        vec![FontIntent::CreateNamedInstance(CreateNamedInstance {
-            instance: NamedInstance::new(name, location, args.postscript_name),
-        })]
+        vec![
+            CreateNamedInstance {
+                instance: NamedInstance::new(name, location, args.postscript_name),
+            }
+            .into(),
+        ]
     };
     apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
@@ -154,9 +157,12 @@ fn standard_weights(font: &Font) -> Result<Vec<FontIntent>> {
         {
             continue;
         }
-        intents.push(FontIntent::CreateNamedInstance(CreateNamedInstance {
-            instance: NamedInstance::new(name.to_string(), location, None),
-        }));
+        intents.push(
+            CreateNamedInstance {
+                instance: NamedInstance::new(name.to_string(), location, None),
+            }
+            .into(),
+        );
     }
     Ok(intents)
 }

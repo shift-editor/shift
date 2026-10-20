@@ -1042,16 +1042,18 @@ mod tests {
         let mut candidate = font.clone();
         let result = candidate.apply_intents(&FontIntentSet {
             intents: vec![
-                FontIntent::CreateGlyphLayer(CreateGlyphLayer {
+                CreateGlyphLayer {
                     layer_id: layer_id.clone(),
                     glyph_id,
                     source_id,
-                }),
-                FontIntent::AddContour(AddContour {
+                }
+                .into(),
+                AddContour {
                     layer_id,
                     contour_id: contour_id.clone(),
                     closed: true,
-                }),
+                }
+                .into(),
             ],
         });
 
@@ -1149,16 +1151,18 @@ mod tests {
 
         font.apply_intents(&FontIntentSet {
             intents: vec![
-                FontIntent::AddComponent(AddComponent {
+                AddComponent {
                     layer_id: root_layer_id.clone(),
                     component_id: ComponentId::new(),
                     base_glyph_id: base_id,
-                }),
-                FontIntent::AddComponent(AddComponent {
+                }
+                .into(),
+                AddComponent {
                     layer_id: root_layer_id.clone(),
                     component_id: mark_component_id.clone(),
                     base_glyph_id: mark_id,
-                }),
+                }
+                .into(),
             ],
         })
         .unwrap();

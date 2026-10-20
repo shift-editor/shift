@@ -1,5 +1,5 @@
 use shift_font::{
-    Anchor, Component, Contour, FontIntent, FontIntentSet, GlyphId, LayerId, PointType,
+    Anchor, Component, Contour, FontIntentSet, GlyphId, LayerId, PointType,
     test_support::sample_font,
 };
 use shift_font::{CreateGlyph, CreateGlyphLayer, ReplaceGlyphLayerContent, UpdateGlyph};
@@ -33,35 +33,40 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
+                    ReplaceGlyphLayerContent {
                         layer_id: layer_id.clone(),
                         width: 720.0,
                         contours: vec![contour.clone()],
                         anchors: vec![Anchor::new(Some("top".to_string()), 20.0, 90.0)],
                         components: Vec::new(),
-                    }),
-                    FontIntent::UpdateGlyph(UpdateGlyph {
+                    }
+                    .into(),
+                    UpdateGlyph {
                         glyph_id: glyph_id.clone(),
                         new_name: "A".into(),
                         new_unicodes: vec![0x41],
-                    }),
-                    FontIntent::CreateGlyph(CreateGlyph {
+                    }
+                    .into(),
+                    CreateGlyph {
                         glyph_id: Some(new_glyph_id.clone()),
                         name: "B".to_string(),
                         unicodes: vec![0x42],
-                    }),
-                    FontIntent::CreateGlyphLayer(CreateGlyphLayer {
+                    }
+                    .into(),
+                    CreateGlyphLayer {
                         layer_id: new_layer_id.clone(),
                         glyph_id: new_glyph_id,
                         source_id,
-                    }),
-                    FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
+                    }
+                    .into(),
+                    ReplaceGlyphLayerContent {
                         layer_id: new_layer_id.clone(),
                         width: 620.0,
                         contours: Vec::new(),
                         anchors: Vec::new(),
                         components: Vec::new(),
-                    }),
+                    }
+                    .into(),
                 ],
             },
             None,
@@ -141,20 +146,22 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
     let result = workspace.apply(
         &FontIntentSet {
             intents: vec![
-                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
+                ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width: 720.0,
                     contours: Vec::new(),
                     anchors: Vec::new(),
                     components: Vec::new(),
-                }),
-                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
+                }
+                .into(),
+                ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width: f64::INFINITY,
                     contours: Vec::new(),
                     anchors: Vec::new(),
                     components: Vec::new(),
-                }),
+                }
+                .into(),
             ],
         },
         None,

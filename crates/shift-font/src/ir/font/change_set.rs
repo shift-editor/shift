@@ -281,8 +281,8 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CreateGlyph, CreateGlyphLayer, DeleteAxis, EntityChange, FontEntityChange, FontIntent,
-        FontIntentSet, Replacement, UpdateFontMetadata,
+        CreateGlyph, CreateGlyphLayer, DeleteAxis, EntityChange, FontEntityChange, FontIntentSet,
+        Replacement, UpdateFontMetadata,
     };
 
     use super::*;
@@ -401,16 +401,18 @@ mod tests {
         let outcome = font
             .apply_intents(&FontIntentSet {
                 intents: vec![
-                    FontIntent::CreateGlyph(CreateGlyph {
+                    CreateGlyph {
                         glyph_id: Some(glyph_id.clone()),
                         name: "created".to_string(),
                         unicodes: vec![0x63],
-                    }),
-                    FontIntent::CreateGlyphLayer(CreateGlyphLayer {
+                    }
+                    .into(),
+                    CreateGlyphLayer {
                         layer_id: layer_id.clone(),
                         glyph_id,
                         source_id,
-                    }),
+                    }
+                    .into(),
                 ],
             })
             .unwrap();

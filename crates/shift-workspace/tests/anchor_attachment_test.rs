@@ -21,11 +21,14 @@ fn glyph(
 ) -> (GlyphId, LayerId, Vec<AnchorId>) {
     apply(
         workspace,
-        vec![FontIntent::CreateGlyph(CreateGlyph {
-            glyph_id: None,
-            name: name.to_string(),
-            unicodes: Vec::new(),
-        })],
+        vec![
+            CreateGlyph {
+                glyph_id: None,
+                name: name.to_string(),
+                unicodes: Vec::new(),
+            }
+            .into(),
+        ],
     );
     let glyph_id = workspace.font().glyph_id_by_name(name).unwrap();
     let layer_id = LayerId::new();
@@ -33,12 +36,13 @@ fn glyph(
     apply(
         workspace,
         vec![
-            FontIntent::CreateGlyphLayer(CreateGlyphLayer {
+            CreateGlyphLayer {
                 layer_id: layer_id.clone(),
                 glyph_id: glyph_id.clone(),
                 source_id: source_id.clone(),
-            }),
-            FontIntent::AddAnchors(AddAnchors {
+            }
+            .into(),
+            AddAnchors {
                 layer_id: layer_id.clone(),
                 anchors: anchors
                     .iter()
@@ -50,7 +54,8 @@ fn glyph(
                         y,
                     })
                     .collect(),
-            }),
+            }
+            .into(),
         ],
     );
     (glyph_id, layer_id, anchor_ids)
@@ -61,11 +66,14 @@ fn add_component(workspace: &mut FontWorkspace, layer_id: &LayerId, base: &Glyph
     let component_id = ComponentId::new();
     apply(
         workspace,
-        vec![FontIntent::AddComponent(AddComponent {
-            layer_id: layer_id.clone(),
-            component_id: component_id.clone(),
-            base_glyph_id: base.clone(),
-        })],
+        vec![
+            AddComponent {
+                layer_id: layer_id.clone(),
+                component_id: component_id.clone(),
+                base_glyph_id: base.clone(),
+            }
+            .into(),
+        ],
     );
     component_id
 }
@@ -129,11 +137,14 @@ fn fixture() -> Fixture {
     let off_acute = add_component(&mut workspace, &off_anchor, &acutecomb);
     apply(
         &mut workspace,
-        vec![FontIntent::SetComponentTransforms(SetComponentTransforms {
-            layer_id: off_anchor.clone(),
-            component_ids: vec![off_acute.clone()],
-            transforms: vec![160.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-        })],
+        vec![
+            SetComponentTransforms {
+                layer_id: off_anchor.clone(),
+                component_ids: vec![off_acute.clone()],
+                transforms: vec![160.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            }
+            .into(),
+        ],
     );
 
     // The composites are not in memory when the base anchor moves.
@@ -158,11 +169,14 @@ fn components_on_a_moved_anchor_follow_it_and_marks_stacked_on_them_too() {
 
     apply(
         &mut f.workspace,
-        vec![FontIntent::MoveAnchors(MoveAnchors {
-            layer_id: f.a_layer.clone(),
-            anchor_ids: vec![f.a_top.clone()],
-            coords: vec![300.0, 520.0],
-        })],
+        vec![
+            MoveAnchors {
+                layer_id: f.a_layer.clone(),
+                anchor_ids: vec![f.a_top.clone()],
+                coords: vec![300.0, 520.0],
+            }
+            .into(),
+        ],
     );
 
     assert_eq!(
@@ -185,11 +199,14 @@ fn undo_puts_followers_back_with_the_anchor() {
     let mut f = fixture();
     apply(
         &mut f.workspace,
-        vec![FontIntent::MoveAnchors(MoveAnchors {
-            layer_id: f.a_layer.clone(),
-            anchor_ids: vec![f.a_top.clone()],
-            coords: vec![300.0, 520.0],
-        })],
+        vec![
+            MoveAnchors {
+                layer_id: f.a_layer.clone(),
+                anchor_ids: vec![f.a_top.clone()],
+                coords: vec![300.0, 520.0],
+            }
+            .into(),
+        ],
     );
 
     f.workspace.undo().unwrap();
@@ -206,11 +223,14 @@ fn moving_an_attached_component_by_hand_detaches_it_and_carries_marks_stacked_on
     let mut f = fixture();
     apply(
         &mut f.workspace,
-        vec![FontIntent::SetComponentTransforms(SetComponentTransforms {
-            layer_id: f.aacute.clone(),
-            component_ids: vec![f.acute.clone()],
-            transforms: vec![170.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-        })],
+        vec![
+            SetComponentTransforms {
+                layer_id: f.aacute.clone(),
+                component_ids: vec![f.acute.clone()],
+                transforms: vec![170.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            }
+            .into(),
+        ],
     );
     assert_eq!(translation(&f.workspace, &f.aacute, &f.acute), (170.0, 0.0));
     assert_eq!(
@@ -220,11 +240,14 @@ fn moving_an_attached_component_by_hand_detaches_it_and_carries_marks_stacked_on
 
     apply(
         &mut f.workspace,
-        vec![FontIntent::MoveAnchors(MoveAnchors {
-            layer_id: f.a_layer.clone(),
-            anchor_ids: vec![f.a_top.clone()],
-            coords: vec![300.0, 520.0],
-        })],
+        vec![
+            MoveAnchors {
+                layer_id: f.a_layer.clone(),
+                anchor_ids: vec![f.a_top.clone()],
+                coords: vec![300.0, 520.0],
+            }
+            .into(),
+        ],
     );
     assert_eq!(translation(&f.workspace, &f.aacute, &f.acute), (170.0, 0.0));
 }
@@ -246,11 +269,14 @@ fn alignment(
 fn move_a_top(f: &mut Fixture, x: f64, y: f64) {
     apply(
         &mut f.workspace,
-        vec![FontIntent::MoveAnchors(MoveAnchors {
-            layer_id: f.a_layer.clone(),
-            anchor_ids: vec![f.a_top.clone()],
-            coords: vec![x, y],
-        })],
+        vec![
+            MoveAnchors {
+                layer_id: f.a_layer.clone(),
+                anchor_ids: vec![f.a_top.clone()],
+                coords: vec![x, y],
+            }
+            .into(),
+        ],
     );
 }
 
@@ -273,11 +299,14 @@ fn anchoring_a_free_component_puts_it_back_on_its_anchors_and_it_follows_again()
     let mut f = fixture();
     apply(
         &mut f.workspace,
-        vec![FontIntent::SetComponentAlignment(SetComponentAlignment {
-            layer_id: f.off_anchor.clone(),
-            component_ids: vec![f.off_acute.clone()],
-            alignment: ComponentAlignment::Anchored,
-        })],
+        vec![
+            SetComponentAlignment {
+                layer_id: f.off_anchor.clone(),
+                component_ids: vec![f.off_acute.clone()],
+                alignment: ComponentAlignment::Anchored,
+            }
+            .into(),
+        ],
     );
     assert_eq!(
         translation(&f.workspace, &f.off_anchor, &f.off_acute),
@@ -296,11 +325,14 @@ fn an_unrecorded_component_follows_while_it_sits_on_its_anchors_and_is_then_reco
     let mut f = fixture();
     apply(
         &mut f.workspace,
-        vec![FontIntent::SetComponentAlignment(SetComponentAlignment {
-            layer_id: f.aacute.clone(),
-            component_ids: vec![f.acute.clone(), f.tilde.clone()],
-            alignment: ComponentAlignment::Unset,
-        })],
+        vec![
+            SetComponentAlignment {
+                layer_id: f.aacute.clone(),
+                component_ids: vec![f.acute.clone(), f.tilde.clone()],
+                alignment: ComponentAlignment::Unset,
+            }
+            .into(),
+        ],
     );
 
     move_a_top(&mut f, 300.0, 520.0);
