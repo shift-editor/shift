@@ -1374,5 +1374,63 @@ export default {
         };
       },
     },
+
+    /**
+     * Ban copying an iterator into an array only to query it.
+     *
+     * `[...map.values()].filter(...)` builds a throwaway array before the
+     * query runs. Iterator helpers query the iterator directly:
+     * `map.values().filter(...).toArray()`, and `.some`, `.every` and
+     * `.find` need no array at all.
+     */
+    "prefer-iterator-helpers": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useIteratorHelper:
+            "Query the iterator directly: `{{source}}.{{method}}(...)` (add `.toArray()` when you need an array) instead of spreading it into an array first.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const QUERIES = new Set([
+          "filter",
+          "map",
+          "flatMap",
+          "some",
+          "every",
+          "find",
+          "reduce",
+          "forEach",
+        ]);
+        const ITERATORS = new Set(["values", "keys", "entries"]);
+        const source = context.sourceCode ?? context.getSourceCode();
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee || callee.type !== "MemberExpression" || callee.computed) return;
+            if (!callee.property || !QUERIES.has(callee.property.name)) return;
+
+            const array = callee.object;
+            if (!array || array.type !== "ArrayExpression" || array.elements.length !== 1) return;
+
+            const spread = array.elements[0];
+            if (!spread || spread.type !== "SpreadElement") return;
+
+            const iterator = spread.argument;
+            if (iterator.type !== "CallExpression" || iterator.arguments.length !== 0) return;
+            if (iterator.callee.type !== "MemberExpression") return;
+            if (!ITERATORS.has(iterator.callee.property?.name)) return;
+
+            context.report({
+              node: callee,
+              messageId: "useIteratorHelper",
+              data: { source: source.getText(iterator), method: callee.property.name },
+            });
+          },
+        };
+      },
+    },
   },
 };

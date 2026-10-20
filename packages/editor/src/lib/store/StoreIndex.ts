@@ -65,7 +65,7 @@ export class StoreIndex<K, V extends ShiftRecord> {
       for (const key of newKeys) this.#file(key, after);
     }
 
-    for (const key of new Set([...oldKeys, ...newKeys])) {
+    for (const key of oldKeys.union(newKeys)) {
       this.#cells.get(key)?.set(this.#snapshot(key));
     }
   }

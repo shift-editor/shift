@@ -103,8 +103,10 @@ export class KerningGroups {
   }
   /** The groups at a pair position, in name order. */
   atPosition(position: KerningPairPosition): KerningGroup[] {
-    return [...this.#byId.values()]
+    return this.#byId
+      .values()
       .filter((group) => group.position === position)
+      .toArray()
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -273,7 +275,10 @@ export class Kerning {
 
   /** Sources with at least one authored value. */
   get sourceIds(): SourceId[] {
-    return [...this.#sources.keys()].filter((sourceId) => this.authors(sourceId));
+    return this.#sources
+      .keys()
+      .filter((sourceId) => this.authors(sourceId))
+      .toArray();
   }
 
   /** Whether `sourceId` authors at least one pair value. */

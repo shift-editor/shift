@@ -202,7 +202,10 @@ function uniqueCodepoints(value: string): number[] {
     if (codepoint === undefined || codepoint === DOTTED_CIRCLE || /\s/u.test(character)) continue;
     codepoints.add(codepoint);
   }
-  return [...codepoints].sort((left, right) => left - right);
+  return codepoints
+    .values()
+    .toArray()
+    .sort((left, right) => left - right);
 }
 
 function slugify(value: string): string {
