@@ -19,6 +19,8 @@ export interface ParagraphInput {
   readonly units: readonly number[];
   /** The user coordinate on each shaper axis, in order; NaN for the axis default. */
   readonly location: readonly number[];
+  /** An ISO 15924 script tag's four bytes, big-endian, to shape every run in; 0 for each run's own script. */
+  readonly script: number;
   /** A BCP 47 language tag as UTF-16 code units; empty for the default language system. */
   readonly language: readonly number[];
   readonly features: readonly FeatureInput[];
@@ -111,6 +113,7 @@ function writeParagraphInput(write: NumberWriter, value: ParagraphInput): void {
   for (const item0 of value.location) {
     write.number(item0);
   }
+  write.number(value.script);
   write.count(value.language.length);
   for (const item0 of value.language) {
     write.number(item0);

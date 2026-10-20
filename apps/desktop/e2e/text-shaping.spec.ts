@@ -28,52 +28,84 @@ function runGlyphNames(page: Page): Promise<string[]> {
   });
 }
 
-/** The feature switches the Features section shows, by accessible name. */
-async function featureSwitchNames(page: Page): Promise<string[]> {
-  const switches = glyphProperties(page).getByRole("switch");
-  const names = await switches.evaluateAll((elements) =>
-    elements.map((element) => element.getAttribute("aria-label") ?? ""),
-  );
-  return names.filter((name) => name !== "Shaping");
-}
-
-test("shapes proof text through the workspace and turns liga off from the Features panel", async ({
+test("shapes proof text through the workspace and cycles liga from the Features section", async ({
   page,
+  editor,
 }) => {
   await navigateToEditor(page, "0066");
+  // The Text and Features sections show in Text mode only.
+  await editor.selectTool("text");
   await setRunText(page, "fi");
   await expect.poll(() => runGlyphNames(page)).toEqual(["f_i"]);
 
-  const liga = glyphProperties(page).getByRole("switch", { name: "liga, Standard Ligatures" });
-  await expect(liga).toBeChecked();
-  await liga.click();
-
+  // Each click moves liga on: the font's default, forced on, forced off, then back.
+  const sidebar = glyphProperties(page);
+  await sidebar.getByRole("button", { name: "liga, Standard Ligatures, Default (on)" }).click();
+  await sidebar.getByRole("button", { name: "liga, Standard Ligatures, On" }).click();
   await expect.poll(() => runGlyphNames(page)).toEqual(["f", "i"]);
-  await expect(liga).not.toBeChecked();
+
+  await sidebar.getByRole("button", { name: "liga, Standard Ligatures, Off" }).click();
+  await expect.poll(() => runGlyphNames(page)).toEqual(["f_i"]);
   await expect(
-    glyphProperties(page).getByRole("button", {
-      name: "Reset liga, Standard Ligatures to font default",
-    }),
+    sidebar.getByRole("button", { name: "liga, Standard Ligatures, Default (on)" }),
   ).toBeVisible();
 });
 
-test("feature search narrows the list by tag or name", async ({ page }) => {
+test("the shaping toggle sets the text unshaped and back", async ({ page, editor }) => {
   await navigateToEditor(page, "0066");
-  await expect
-    .poll(() => featureSwitchNames(page))
-    .toEqual(["dlig, Discretionary Ligatures", "liga, Standard Ligatures"]);
+  // The Text section shows in Text mode only.
+  await editor.selectTool("text");
+  await setRunText(page, "fi");
+  await expect.poll(() => runGlyphNames(page)).toEqual(["f_i"]);
 
-  await glyphProperties(page).getByRole("button", { name: "Search features" }).click();
-  const search = glyphProperties(page).getByRole("textbox", { name: "Search features" });
+  const shaping = glyphProperties(page).getByRole("button", { name: "Shaping" });
+  await expect(shaping).toHaveAttribute("aria-pressed", "true");
+  await shaping.click();
+
+  await expect.poll(() => runGlyphNames(page)).toEqual(["f", "i"]);
+  await expect(shaping).toHaveAttribute("aria-pressed", "false");
+
+  await shaping.click();
+  await expect.poll(() => runGlyphNames(page)).toEqual(["f_i"]);
+});
+
+test("clicking a feature tag previews the glyphs it brings in", async ({ page, editor }) => {
+  await navigateToEditor(page, "0066");
+  // The Features section shows in Text mode only.
+  await editor.selectTool("text");
+
+  await glyphProperties(page).getByRole("button", { name: "Preview liga" }).click();
+  // The preview is titled with the feature's name.
+  const preview = page.getByRole("dialog", { name: "Standard Ligatures" });
+  await expect(preview).toBeVisible();
+  await expect(preview.getByRole("option", { name: "f_i" })).toBeVisible();
+
+  await preview.getByRole("button", { name: "Close" }).click();
+  await expect(preview).toBeHidden();
+});
+
+test("the Features search narrows the list by tag or name", async ({ page, editor }) => {
+  await navigateToEditor(page, "0066");
+  // The Features section shows in Text mode only.
+  await editor.selectTool("text");
+  const sidebar = glyphProperties(page);
+  const liga = sidebar.getByRole("button", { name: "liga, Standard Ligatures, Default (on)" });
+  const dlig = sidebar.getByRole("button", { name: /^dlig, Discretionary Ligatures, / });
+
+  await sidebar.getByRole("button", { name: "Search features" }).click();
+  const search = sidebar.getByRole("textbox", { name: "Search features" });
   await expect(search).toBeFocused();
 
   await search.fill("stand");
-  await expect.poll(() => featureSwitchNames(page)).toEqual(["liga, Standard Ligatures"]);
+  await expect(liga).toBeVisible();
+  await expect(dlig).toBeHidden();
 
   await search.fill("dlig");
-  await expect.poll(() => featureSwitchNames(page)).toEqual(["dlig, Discretionary Ligatures"]);
+  await expect(dlig).toBeVisible();
+  await expect(liga).toBeHidden();
 
-  await search.press("Escape");
+  await sidebar.getByRole("button", { name: "Close search" }).click();
   await expect(search).toBeHidden();
-  await expect.poll(() => featureSwitchNames(page)).toHaveLength(2);
+  await expect(liga).toBeVisible();
+  await expect(dlig).toBeVisible();
 });

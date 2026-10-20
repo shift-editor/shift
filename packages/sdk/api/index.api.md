@@ -270,6 +270,7 @@ export class Editor {
     readonly history: EditorHistory;
     // (undocumented)
     get hitRadius(): number;
+    hitRadiusIn(node: ShiftNode): number;
     // (undocumented)
     readonly hover: Hover;
     // (undocumented)
@@ -513,6 +514,7 @@ export class Font {
     get featureRevisionCell(): Signal<number>;
     features(): Promise<FontFeature[]>;
     featureSource(): Promise<string | null>;
+    featureSubstitutions(tag: string): Promise<FeatureSubstitution[]>;
     featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null>;
     formatFeatureCode(text: string): Promise<string>;
     generatedFeatures(): Promise<GeneratedFeature[]>;

@@ -1,5 +1,6 @@
 import { NodeDefinition } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
+import type { PathBatch } from "../editor/rendering/Canvas";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
@@ -38,8 +39,16 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly #outline = new OutlineRenderer();
 
   unitsTransform(node: TextRunNode): Mat {
-    const scale = this.#scale(node);
+    const scale = this.emScale(node);
     return Mat.Scale(scale, -scale);
+  }
+
+  /**
+   * Returns how many scene units one font unit of the run spans: its size over
+   * the font's units per em, 1 when the run is set at the font's own size.
+   */
+  emScale(node: TextRunNode): number {
+    return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
 
   /**
@@ -293,7 +302,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const radius = this.editor.hitRadius / this.#scale(node);
+    const radius = this.editor.hitRadiusIn(node);
     let target: PointerTarget | null = null;
     this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
       const local = {
@@ -325,7 +334,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     let nearest: SpacingGap | null = null;
     for (const gap of this.#gaps(node, layout)) {
       if (point.y < gap.bottom - padding || point.y > gap.top + padding) continue;
@@ -443,7 +452,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const run = this.editor.text.run(node.runId);
     if (!layout || !run) return null;
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     const cluster = layout.caretAtPoint(point, padding);
     if (cluster !== null) return cluster;
 
@@ -506,19 +515,38 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const style = this.#editsAGlyph(node)
       ? { ...canvas.theme.glyph, fill: canvas.theme.textRun.contextFill }
       : canvas.theme.glyph;
+    track(this.editor.text.highlightCell);
+    const highlight = this.editor.text.highlightCell.peek();
+    const highlighted = highlight?.runId === node.runId ? highlight.glyphs : null;
     const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
+    const paint = (
+      batch: PathBatch,
+      placed: PlacedGlyph,
+      itemId: TextItemId,
+      model: GlyphRenderModel,
+    ) => {
+      let glyph = distinct.get(model);
+      if (!glyph) {
+        glyph = distinctGlyph(model);
+        distinct.set(model, glyph);
+      }
+      batch.offset(placed.origin.x, placed.origin.y);
+      batch.fill(glyph.closed);
+      if (glyph.open) batch.stroke(glyph.open);
+      if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
+    };
+    // Glyphs a feature preview highlights paint after the rest, in their own batch.
+    const later: [PlacedGlyph, TextItemId, GlyphRenderModel][] = [];
     canvas.withPathBatch(style, (batch) => {
       this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
-        let glyph = distinct.get(model);
-        if (!glyph) {
-          glyph = distinctGlyph(model);
-          distinct.set(model, glyph);
-        }
-        batch.offset(placed.origin.x, placed.origin.y);
-        batch.fill(glyph.closed);
-        if (glyph.open) batch.stroke(glyph.open);
-        if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
+        const glyphId = placed.glyph.glyphId;
+        if (glyphId && highlighted?.has(glyphId)) later.push([placed, itemId, model]);
+        else paint(batch, placed, itemId, model);
       });
+    });
+    if (later.length === 0) return;
+    canvas.withPathBatch({ ...style, fill: canvas.theme.textRun.hoverOutline }, (batch) => {
+      for (const [placed, itemId, model] of later) paint(batch, placed, itemId, model);
     });
   }
 
@@ -616,10 +644,6 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (isTextItemId(id)) ids.add(id);
     }
     return ids;
-  }
-
-  #scale(node: TextRunNode): number {
-    return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
 }
 
