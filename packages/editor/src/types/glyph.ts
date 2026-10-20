@@ -11,6 +11,7 @@ import type {
   PointId,
   SegmentId,
   SourceId,
+  ReadonlyEntityMap,
 } from "@shift/types";
 import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
@@ -40,13 +41,13 @@ export interface GlyphObjectSegment {
 }
 
 export interface GlyphObjectIndex {
-  readonly layerIdByPointId: ReadonlyMap<PointId, LayerId>;
-  readonly contourIdByPointId: ReadonlyMap<PointId, ContourId>;
-  readonly layerIdByContourId: ReadonlyMap<ContourId, LayerId>;
-  readonly layerIdByAnchorId: ReadonlyMap<AnchorId, LayerId>;
-  readonly layerIdBySegmentId: ReadonlyMap<SegmentId, LayerId>;
-  readonly contourIdBySegmentId: ReadonlyMap<SegmentId, ContourId>;
-  readonly pointIdsBySegmentId: ReadonlyMap<SegmentId, readonly PointId[]>;
+  readonly layerIdByPointId: ReadonlyEntityMap<PointId, LayerId>;
+  readonly contourIdByPointId: ReadonlyEntityMap<PointId, ContourId>;
+  readonly layerIdByContourId: ReadonlyEntityMap<ContourId, LayerId>;
+  readonly layerIdByAnchorId: ReadonlyEntityMap<AnchorId, LayerId>;
+  readonly layerIdBySegmentId: ReadonlyEntityMap<SegmentId, LayerId>;
+  readonly contourIdBySegmentId: ReadonlyEntityMap<SegmentId, ContourId>;
+  readonly pointIdsBySegmentId: ReadonlyEntityMap<SegmentId, readonly PointId[]>;
 }
 
 export interface GlyphGeometrySelection {

@@ -184,7 +184,7 @@ function isIteratorValueRead(node) {
 }
 
 const SIGNAL_PRIMITIVES = new Set(["signal", "computed", "effect", "track"]);
-const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet"]);
+const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet", "EntityMap"]);
 const COLLECTION_MUTATORS = new Set(["set", "delete", "clear", "add"]);
 const SIGNAL_TYPES = new Set(["Signal", "WritableSignal", "ComputedSignal", "ReadonlySignal"]);
 const NON_REACTIVE_ANNOTATION = /^\s*non-reactive:\s*\S/;
@@ -228,7 +228,7 @@ function typeArgumentsOf(node) {
 function collectionShape(kind, typeArgs) {
   if (!MUTABLE_COLLECTIONS.has(kind)) return null;
 
-  const valueIndex = kind === "Map" || kind === "WeakMap" ? 1 : 0;
+  const valueIndex = kind === "Map" || kind === "WeakMap" || kind === "EntityMap" ? 1 : 0;
   const valueType = typeArgs[valueIndex];
   const holdsSignals = SIGNAL_TYPES.has(typeReferenceName(valueType));
   return { kind, holdsSignals };
@@ -1535,6 +1535,51 @@ export default {
         function source(key) {
           return (context.sourceCode ?? context.getSourceCode()).getText(key);
         }
+      },
+    },
+
+    /**
+     * Ban `this.#map.get(key) ?? null` on a class's own collections.
+     *
+     * Shift's lookups return `null` for a missing entity, while `Map.get`
+     * returns `undefined`, so each lookup method converted by hand. Hold the
+     * collection in an `EntityMap` from `@shift/types`: its `get` returns
+     * `null`, and its `require` throws a named not-found error.
+     */
+    "no-map-get-to-null": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useEntityMap:
+            "Hold `{{field}}` in an EntityMap from @shift/types, whose get returns null, instead of converting Map.get with `?? null`.",
+        },
+        schema: [],
+      },
+      create(context) {
+        if (context.getFilename().replace(/\\/g, "/").endsWith("packages/types/src/EntityMap.ts")) {
+          return {};
+        }
+
+        return {
+          LogicalExpression(node) {
+            if (node.operator !== "??") return;
+            if (node.right.type !== "Literal" || node.right.value !== null) return;
+
+            const call = node.left;
+            if (call.type !== "CallExpression" || call.callee.type !== "MemberExpression") return;
+            if (call.callee.property?.name !== "get") return;
+
+            const field = call.callee.object;
+            if (field.type !== "MemberExpression" || field.object.type !== "ThisExpression") return;
+            if (field.property.type !== "PrivateIdentifier") return;
+
+            context.report({
+              node,
+              messageId: "useEntityMap",
+              data: { field: `#${field.property.name}` },
+            });
+          },
+        };
       },
     },
   },

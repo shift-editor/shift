@@ -1,3 +1,4 @@
+import { EntityMap } from "@shift/types";
 import { BrowserWindow } from "electron";
 import type { Window } from "./Window";
 
@@ -10,7 +11,7 @@ import type { Window } from "./Window";
  * and lookup questions.
  */
 export class WindowManager {
-  readonly #windows = new Map<number, Window>();
+  readonly #windows = new EntityMap<number, Window>("window");
 
   add(window: Window): void {
     this.#windows.set(window.window.id, window);
@@ -26,11 +27,11 @@ export class WindowManager {
   }
 
   windowForBrowserWindow(window: BrowserWindow): Window | null {
-    return this.#windows.get(window.id) ?? null;
+    return this.#windows.get(window.id);
   }
 
   windowForId(windowId: number): Window | null {
-    return this.#windows.get(windowId) ?? null;
+    return this.#windows.get(windowId);
   }
 
   allWindows(): readonly Window[] {

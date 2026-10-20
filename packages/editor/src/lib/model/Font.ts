@@ -131,7 +131,7 @@ class GlyphDirectory {
   }
 
   entryForName(name: GlyphName): GlyphEntry | null {
-    return this.#index.entryByName.get(name) ?? null;
+    return this.#index.entryByName.get(name);
   }
 
   entryForUnicode(unicode: Unicode): GlyphEntry | null {
@@ -140,15 +140,15 @@ class GlyphDirectory {
   }
 
   recordForName(name: GlyphName): GlyphRecord | null {
-    return this.#index.recordByName.get(name) ?? null;
+    return this.#index.recordByName.get(name);
   }
 
   entryForId(glyphId: GlyphId): GlyphEntry | null {
-    return this.#index.glyphById.get(glyphId) ?? null;
+    return this.#index.glyphById.get(glyphId);
   }
 
   recordForId(glyphId: GlyphId): GlyphRecord | null {
-    return this.#index.recordsById.get(glyphId) ?? null;
+    return this.#index.recordsById.get(glyphId);
   }
 
   unicodesForName(name: GlyphName): readonly Unicode[] {
