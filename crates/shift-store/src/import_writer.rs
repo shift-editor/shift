@@ -7,7 +7,7 @@ use shift_font as font;
 
 use crate::{
     GlyphWriteBatch, LayerBatchTiming, ShiftStore, StoreError,
-    change_set::{replace_font_header_in_tx, write_glyph_directory_in_tx},
+    change_set::StoreWriter,
     layer::{StoredLayerPayload, compress_layer, encode_layer, store_stored_layer_in_tx},
     schema::{defer_import_indexes, restore_import_indexes},
     types::{EncodedGlyphLayers, PackedGlyph},
@@ -31,7 +31,7 @@ impl ShiftStore {
         font_header: &font::Font,
     ) -> Result<FontImportWriter<'_>, StoreError> {
         let tx = self.conn.transaction()?;
-        replace_font_header_in_tx(&tx, font_header)?;
+        StoreWriter::new(&tx).replace_font_header(font_header)?;
         defer_import_indexes(&tx)?;
         Ok(FontImportWriter {
             tx,
@@ -110,7 +110,11 @@ impl FontImportWriter<'_> {
         glyph: &font::Glyph,
         layers: &[(font::LayerId, StoredLayerPayload)],
     ) -> Result<(), StoreError> {
-        write_glyph_directory_in_tx(&self.tx, glyph, self.next_glyph_order, WriteMode::Insert)?;
+        StoreWriter::new(&self.tx).write_glyph_directory(
+            glyph,
+            self.next_glyph_order,
+            WriteMode::Insert,
+        )?;
         for (layer_id, stored) in layers {
             let layer = glyph
                 .layers()
