@@ -1,5 +1,5 @@
 use crate::Require;
-use crate::axis::{Axis, AxisKind, AxisList, AxisMapping, DesignLocation};
+use crate::axis::{Axis, AxisList, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
@@ -180,7 +180,7 @@ impl FontIndex {
                 });
             }
 
-            for entity_id in glyph_entity_ids(layer) {
+            for entity_id in layer.entity_ids() {
                 if self.entity_ids.contains(&entity_id) || !local_entities.insert(entity_id.clone())
                 {
                     return Err(duplicate_entity_error(entity_id));
@@ -207,7 +207,7 @@ impl FontIndex {
         }
 
         let mut local_entities = HashSet::new();
-        for entity_id in glyph_entity_ids(layer) {
+        for entity_id in layer.entity_ids() {
             if self.entity_ids.contains(&entity_id) || !local_entities.insert(entity_id.clone()) {
                 return Err(duplicate_entity_error(entity_id));
             }
@@ -222,12 +222,12 @@ impl FontIndex {
     ) -> CoreResult<HashSet<GlyphEntityId>> {
         let removed_ids = replacements
             .iter()
-            .flat_map(|(_, previous, _)| glyph_entity_ids(previous))
+            .flat_map(|(_, previous, _)| previous.entity_ids())
             .collect::<HashSet<_>>();
         let mut replacement_ids = HashSet::new();
 
         for (_, _, replacement) in replacements {
-            for entity_id in glyph_entity_ids(replacement) {
+            for entity_id in replacement.entity_ids() {
                 if (self.entity_ids.contains(&entity_id) && !removed_ids.contains(&entity_id))
                     || !replacement_ids.insert(entity_id.clone())
                 {
@@ -244,7 +244,7 @@ impl FontIndex {
         self.layer_by_glyph_source
             .insert((glyph_id, layer.source_id()), layer.id());
 
-        self.entity_ids.extend(glyph_entity_ids(layer));
+        self.entity_ids.extend(layer.entity_ids());
     }
 
     fn remove_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
@@ -252,7 +252,7 @@ impl FontIndex {
         self.layer_by_glyph_source
             .remove(&(glyph_id, layer.source_id()));
 
-        for entity_id in glyph_entity_ids(layer) {
+        for entity_id in layer.entity_ids() {
             self.entity_ids.remove(&entity_id);
         }
     }
@@ -289,34 +289,6 @@ impl FontIndex {
             self.remove_layer(glyph_id.clone(), layer);
         }
     }
-}
-
-fn glyph_entity_ids(layer: &GlyphLayer) -> impl Iterator<Item = GlyphEntityId> + '_ {
-    layer
-        .contours_iter()
-        .map(|contour| GlyphEntityId::from(contour.id()))
-        .chain(
-            layer
-                .contours_iter()
-                .flat_map(|contour| contour.points().iter())
-                .map(|point| GlyphEntityId::from(point.id())),
-        )
-        .chain(
-            layer
-                .components_iter()
-                .map(|component| GlyphEntityId::from(component.id())),
-        )
-        .chain(
-            layer
-                .anchors_iter()
-                .map(|anchor| GlyphEntityId::from(anchor.id())),
-        )
-        .chain(
-            layer
-                .guidelines()
-                .iter()
-                .map(|guideline| GlyphEntityId::from(guideline.id())),
-        )
 }
 
 fn duplicate_entity_error(id: GlyphEntityId) -> CoreError {
@@ -1706,13 +1678,7 @@ fn validate_source_axis(
     value: f64,
     is_default: bool,
 ) -> CoreResult<()> {
-    let valid_value = match axis.kind() {
-        AxisKind::Continuous {
-            minimum, maximum, ..
-        } => value.is_finite() && value >= *minimum && value <= *maximum,
-        AxisKind::Discrete { values, .. } => values.contains(&value),
-    };
-    if !valid_value {
+    if !axis.accepts(value) {
         return Err(CoreError::InvalidAxis {
             axis_id: axis.id(),
             message: format!(

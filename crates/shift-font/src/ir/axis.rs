@@ -161,6 +161,17 @@ impl AxisList for [Axis] {
 }
 
 impl Axis {
+    /// Returns whether `value` is a position this axis allows: finite and
+    /// inside its range, or one of its discrete values.
+    pub fn accepts(&self, value: f64) -> bool {
+        match self.kind() {
+            AxisKind::Continuous {
+                minimum, maximum, ..
+            } => value.is_finite() && value >= *minimum && value <= *maximum,
+            AxisKind::Discrete { values, .. } => values.contains(&value),
+        }
+    }
+
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
         Self::with_id(AxisId::new(), tag, name, minimum, default, maximum)
     }
@@ -1013,5 +1024,24 @@ mod tests {
         assert_eq!(axes.axis(&weight.id()), Some(&weight));
         assert!(axes.contains_axis(&weight.id()));
         assert!(!axes.contains_axis(&Axis::width().id()));
+    }
+
+    #[test]
+    fn accepts_values_inside_the_range_or_among_discrete_values() {
+        let weight = Axis::weight();
+        let italic = Axis::discrete_with_id(
+            AxisId::from_raw("ital"),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+
+        assert!(weight.accepts(weight.minimum()));
+        assert!(weight.accepts(weight.maximum()));
+        assert!(!weight.accepts(weight.maximum() + 1.0));
+        assert!(!weight.accepts(f64::NAN));
+        assert!(italic.accepts(1.0));
+        assert!(!italic.accepts(0.5));
     }
 }

@@ -11,7 +11,7 @@ use shift_backends::{
 };
 use shift_font::{
     AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId,
-    GlyphLayer, LayerId, TouchedLayer, error::CoreError,
+    GlyphLayer, LayerId, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -367,7 +367,7 @@ impl FontWorkspace {
         };
         self.commit_edit(save_state, move |font| {
             font.apply_change_set(&change_set)?;
-            let layers = touched_layers(&change_set);
+            let layers = change_set.touched_layers();
             let outcome = AppliedIntents {
                 changes: change_set.clone(),
                 layers,
@@ -693,35 +693,6 @@ impl FontWorkspace {
 enum ReplaySide {
     Pre,
     Post,
-}
-
-fn touched_layers(change_set: &FontChangeSet) -> Vec<TouchedLayer> {
-    change_set
-        .changes
-        .iter()
-        .flat_map(|change| match change {
-            FontChange::Layer {
-                layer, structural, ..
-            } => layer
-                .after
-                .iter()
-                .map(|layer| TouchedLayer {
-                    layer: layer.clone(),
-                    structural: *structural,
-                })
-                .collect(),
-            FontChange::Glyph(value) if value.before.is_none() => value
-                .after
-                .iter()
-                .flat_map(|glyph| glyph.layers().values())
-                .map(|layer| TouchedLayer {
-                    layer: layer.clone(),
-                    structural: true,
-                })
-                .collect(),
-            _ => Vec::new(),
-        })
-        .collect()
 }
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {

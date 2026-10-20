@@ -2,7 +2,9 @@ use crate::anchor::Anchor;
 use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
-use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, SourceId};
+use crate::entity::{
+    AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, SourceId,
+};
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
@@ -48,6 +50,31 @@ pub struct GlyphLayer {
 }
 
 impl GlyphLayer {
+    /// Returns the id of every contour, point, component, anchor, and guideline
+    /// in the layer.
+    pub(crate) fn entity_ids(&self) -> impl Iterator<Item = GlyphEntityId> + '_ {
+        self.contours_iter()
+            .map(|contour| GlyphEntityId::from(contour.id()))
+            .chain(
+                self.contours_iter()
+                    .flat_map(|contour| contour.points().iter())
+                    .map(|point| GlyphEntityId::from(point.id())),
+            )
+            .chain(
+                self.components_iter()
+                    .map(|component| GlyphEntityId::from(component.id())),
+            )
+            .chain(
+                self.anchors_iter()
+                    .map(|anchor| GlyphEntityId::from(anchor.id())),
+            )
+            .chain(
+                self.guidelines()
+                    .iter()
+                    .map(|guideline| GlyphEntityId::from(guideline.id())),
+            )
+    }
+
     pub fn new(id: LayerId, source_id: SourceId) -> Self {
         Self {
             id,

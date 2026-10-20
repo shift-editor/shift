@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use bitflags::bitflags;
@@ -8,7 +9,7 @@ use crate::error::{CoreError, CoreResult, EntityKind};
 use crate::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
     KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId,
+    SourceId, TouchedLayer,
 };
 
 bitflags! {
@@ -333,6 +334,55 @@ impl FontChangeSet {
 
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
+    }
+
+    /// Returns the glyphs whose own record or any layer this changeset
+    /// replaces, in first-touched order.
+    pub fn touched_glyph_ids(&self) -> Vec<GlyphId> {
+        let mut seen = HashSet::new();
+        self.changes
+            .iter()
+            .flat_map(|change| match change {
+                FontChange::Glyph(value) => [value.before.as_ref(), value.after.as_ref()]
+                    .into_iter()
+                    .flatten()
+                    .map(Glyph::id)
+                    .collect::<Vec<_>>(),
+                FontChange::Layer { glyph_id, .. } => vec![glyph_id.clone()],
+                _ => Vec::new(),
+            })
+            .filter(|glyph_id| seen.insert(glyph_id.clone()))
+            .collect()
+    }
+
+    /// Returns the layers this changeset leaves behind: each replaced layer,
+    /// and every layer of a glyph it creates, which counts as structural.
+    pub fn touched_layers(&self) -> Vec<TouchedLayer> {
+        self.changes
+            .iter()
+            .flat_map(|change| match change {
+                FontChange::Layer {
+                    layer, structural, ..
+                } => layer
+                    .after
+                    .iter()
+                    .map(|layer| TouchedLayer {
+                        layer: layer.clone(),
+                        structural: *structural,
+                    })
+                    .collect(),
+                FontChange::Glyph(value) if value.before.is_none() => value
+                    .after
+                    .iter()
+                    .flat_map(|glyph| glyph.layers().values())
+                    .map(|layer| TouchedLayer {
+                        layer: layer.clone(),
+                        structural: true,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            })
+            .collect()
     }
 
     /// Returns the union of domain projections invalidated by this changeset.

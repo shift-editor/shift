@@ -93,7 +93,7 @@ impl Font {
         // most of each undo and redo on a large font. Every touched glyph leaves the
         // index before any data changes and is validated against the rest when it
         // returns, so duplicates are caught exactly as a full rebuild would.
-        let touched_glyph_ids = touched_glyph_ids(change_set);
+        let touched_glyph_ids = change_set.touched_glyph_ids();
         let state = self.state_mut();
         for glyph_id in &touched_glyph_ids {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
@@ -276,25 +276,6 @@ impl Font {
             default_source_id: self.default_source_id(),
         }
     }
-}
-
-/// Glyphs whose own record or any layer `change_set` replaces, in first-touched order.
-fn touched_glyph_ids(change_set: &FontChangeSet) -> Vec<GlyphId> {
-    let mut seen = HashSet::new();
-    change_set
-        .changes
-        .iter()
-        .flat_map(|change| match change {
-            FontChange::Glyph(value) => [value.before.as_ref(), value.after.as_ref()]
-                .into_iter()
-                .flatten()
-                .map(Glyph::id)
-                .collect::<Vec<_>>(),
-            FontChange::Layer { glyph_id, .. } => vec![glyph_id.clone()],
-            _ => Vec::new(),
-        })
-        .filter(|glyph_id| seen.insert(glyph_id.clone()))
-        .collect()
 }
 
 #[cfg(test)]
