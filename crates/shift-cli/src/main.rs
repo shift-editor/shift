@@ -1,6 +1,7 @@
 mod authoring;
 mod check;
 mod cli;
+mod format;
 mod glyph_inspect;
 mod inspect;
 mod kerning;

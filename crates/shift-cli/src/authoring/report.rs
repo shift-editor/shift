@@ -9,8 +9,9 @@ use shift_font::{
     FontMetadata, GlyphLayer, KerningGroup, KerningGroupId, KerningPair, SourceId,
 };
 
-use super::font_info::report::{SourceMetrics, format_version};
+use super::font_info::report::SourceMetrics;
 use super::instance::report::InstanceReport;
+use crate::format::FontVersion;
 use crate::kerning::selector::position_label;
 use crate::kerning::{GroupReport, PairReport, SideReport};
 
@@ -303,7 +304,8 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
     if impact.contains(FontChangeImpact::METADATA) {
         let metadata = font.metadata().clone();
         report.push(AuthoringChange::FontMetadataUpdated {
-            version: format_version(metadata.version_major, metadata.version_minor),
+            version: FontVersion::from_metadata(metadata.version_major, metadata.version_minor)
+                .map(|version| version.to_string()),
             metadata,
         });
     }
