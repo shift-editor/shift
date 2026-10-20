@@ -4,8 +4,8 @@ use crate::errors::FormatBackendResult;
 use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::designspace::DesignSpaceDocument;
-use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
+use quick_xml::{Reader, XmlVersion};
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, DesignLocation, ExternalLocation,
     Font, Location, NamedInstance,
@@ -242,19 +242,19 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
     loop {
         match reader.read_event() {
             Ok(Event::Start(event) | Event::Empty(event)) => match event.name().as_ref() {
-                b"axis" => {
+                "axis" => {
                     return Err(DesignspaceError::AxislessNotApplicable {
                         reason: "axes are present".to_string(),
                     });
                 }
-                b"source" => {
-                    if let Some(filename) = xml_attr(&reader, &event, b"filename")? {
+                "source" => {
+                    if let Some(filename) = xml_attr(&event, "filename")? {
                         sources.push(AxislessSource {
                             filename,
-                            familyname: xml_attr(&reader, &event, b"familyname")?,
-                            stylename: xml_attr(&reader, &event, b"stylename")?,
-                            name: xml_attr(&reader, &event, b"name")?,
-                            layer: xml_attr(&reader, &event, b"layer")?,
+                            familyname: xml_attr(&event, "familyname")?,
+                            stylename: xml_attr(&event, "stylename")?,
+                            name: xml_attr(&event, "name")?,
+                            layer: xml_attr(&event, "layer")?,
                         });
                     }
                 }
@@ -273,18 +273,14 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
     Ok(sources)
 }
 
-fn xml_attr(
-    reader: &Reader<&[u8]>,
-    event: &BytesStart,
-    name: &[u8],
-) -> DesignspaceResult<Option<String>> {
+fn xml_attr(event: &BytesStart, name: &str) -> DesignspaceResult<Option<String>> {
     for attribute in event.attributes() {
         let attribute = attribute.map_err(|error| DesignspaceError::ParseAxislessXml {
             details: error.to_string(),
         })?;
         if attribute.key.as_ref() == name {
             return attribute
-                .decode_and_unescape_value(reader.decoder())
+                .normalized_value(XmlVersion::Implicit1_0)
                 .map(|value| Some(value.into_owned()))
                 .map_err(|error| DesignspaceError::ParseAxislessXml {
                     details: error.to_string(),
