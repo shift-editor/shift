@@ -165,10 +165,10 @@ impl DecomposedTransform {
     ///
     /// Order: translate to center → scale → skew → rotate → translate back → translate
     pub fn to_matrix(self) -> Transform {
-        let cos_r = self.rotation.to_radians().cos();
-        let sin_r = self.rotation.to_radians().sin();
-        let tan_sx = self.skew_x.to_radians().tan();
-        let tan_sy = self.skew_y.to_radians().tan();
+        let cos_r = libm::cos(self.rotation.to_radians());
+        let sin_r = libm::sin(self.rotation.to_radians());
+        let tan_sx = libm::tan(self.skew_x.to_radians());
+        let tan_sy = libm::tan(self.skew_y.to_radians());
 
         let xx = self.scale_x * cos_r + self.scale_y * tan_sx * sin_r;
         let xy = self.scale_x * sin_r - self.scale_y * tan_sx * cos_r;
@@ -201,13 +201,11 @@ impl DecomposedTransform {
         let det = m.xx * m.yy - m.xy * m.yx;
         let scale_y = if det < 0.0 { -scale_y } else { scale_y };
 
-        let rotation = m.xy.atan2(m.xx).to_degrees();
+        let rotation = libm::atan2(m.xy, m.xx).to_degrees();
 
         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.
         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {
-            ((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y))
-                .atan()
-                .to_degrees()
+            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()
         } else {
             0.0
         };
