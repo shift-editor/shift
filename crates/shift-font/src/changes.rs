@@ -3,9 +3,9 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId,
+    Axis, AxisMapping, FEATURE_CODE_SETTINGS_LIB_KEY, FontMetadata, GENERATED_FEATURES_OFF_LIB_KEY,
+    Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId, KerningPair, LANGUAGES_LIB_KEY,
+    LayerId, LibValue, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 bitflags! {
@@ -25,6 +25,8 @@ bitflags! {
         /// Kerning values or the sources, axes, and mappings its
         /// interpolation basis is built from.
         const KERNING = 1 << 10;
+        /// The authored feature code.
+        const FEATURES = 1 << 11;
     }
 }
 
@@ -105,6 +107,8 @@ pub enum FontChange {
         pair: KerningPair,
         value: Replacement<Option<f64>>,
     },
+    /// The authored feature code; `None` is no feature code.
+    FeatureSource(Replacement<Option<String>>),
 }
 
 impl FontChange {
@@ -113,6 +117,12 @@ impl FontChange {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
+            Self::LibValue { key, .. }
+                if key == FEATURE_CODE_SETTINGS_LIB_KEY
+                    || key == GENERATED_FEATURES_OFF_LIB_KEY =>
+            {
+                FontChangeImpact::FEATURES
+            }
             Self::LibValue { .. } => FontChangeImpact::empty(),
             Self::Axes(_) => {
                 FontChangeImpact::AXES
@@ -142,6 +152,7 @@ impl FontChange {
             } => FontChangeImpact::GLYPHS,
             Self::Layer { .. } => FontChangeImpact::empty(),
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
+            Self::FeatureSource(_) => FontChangeImpact::FEATURES,
         }
     }
 
@@ -196,6 +207,9 @@ impl FontChange {
                 pair: pair.clone(),
                 value: Replacement::new(value.after, value.before),
             },
+            Self::FeatureSource(value) => {
+                Self::FeatureSource(Replacement::new(value.after.clone(), value.before.clone()))
+            }
         }
     }
 
@@ -325,7 +339,8 @@ impl FontChangeSet {
                 FontChange::Metadata(_)
                 | FontChange::LibValue { .. }
                 | FontChange::KerningGroup { .. }
-                | FontChange::KerningValue { .. } => {}
+                | FontChange::KerningValue { .. }
+                | FontChange::FeatureSource(_) => {}
             }
         }
         entities

@@ -165,7 +165,10 @@ A payload's `components` name their base glyph and may give a transform, either 
 `tCenterY`), which `glyph export` writes:
 
 ```json
-{ "advance": 600, "components": [{ "base": "A" }, { "base": "acute", "transform": [1, 0, 0, 1, 99, 20] }] }
+{
+  "advance": 600,
+  "components": [{ "base": "A" }, { "base": "acute", "transform": [1, 0, 0, 1, 99, 20] }]
+}
 ```
 
 Both `layer add` and `layer set` accept `svgPath` instead of `contours`:
@@ -227,6 +230,7 @@ shift glyph export Inter.glyphspackage --glyphs aacute | shift glyph set Lab.shi
 `--source NAME` exports one master and `--source all` every master, each layer named after its
 source (the target document needs sources with those names); the default exports the default
 source for the target's default source. `--output PATH` writes a file instead of stdout.
+
 - Omitted `layer` authors identity only; it does not create or clear a layer.
 - Omitted `source` selects the default source. Explicit selectors accept source names or full IDs.
 - A name may repeat for distinct sources. Repeated glyph/source pairs and conflicting
@@ -238,6 +242,18 @@ All entries are planned before one atomic workspace application; the CLI does no
 scratch font or load unrelated geometry. Entry errors identify the glyph and one-based entry
 number; malformed JSON reports its line and column. An invalid entry leaves every canonical
 byte unchanged, including otherwise valid entries earlier in the batch.
+
+### Feature code
+
+`features show` prints a document's OpenType feature code and `features set` replaces it with a
+`.fea` file's text, as **Edit Feature Code** does in the app. Empty input removes it. The code is
+stored as written; compile or open the document to see problems in it.
+
+```sh
+shift features show Lab.shift > lab.fea
+shift features set Lab.shift --input lab.fea
+shift features set Lab.shift --input - --dry-run < lab.fea
+```
 
 ### Font metadata and source metrics
 

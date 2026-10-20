@@ -16,9 +16,12 @@ import {
   Switch,
   Tooltip,
 } from "@shift/ui";
+import ErrorIcon from "@/assets/general/error.svg";
 import HorizontalEllipsis from "@/assets/general/horizontal-ellipsis.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarSection } from "./SidebarSection";
+import { featureName } from "../featureNames";
+import { featureCodeOpenCell } from "../feature-code/featureCodeState";
 
 /** Features a script's shaping needs or export generates; they stay out of the list. */
 const REQUIRED_FEATURES = new Set([
@@ -65,35 +68,6 @@ const REQUIRED_FEATURES = new Set([
   "vatu",
 ]);
 
-/** Registered names for common features, shown when the font names none. */
-const FEATURE_NAMES: Readonly<Record<string, string>> = {
-  afrc: "Alternative Fractions",
-  c2sc: "Small Capitals From Capitals",
-  calt: "Contextual Alternates",
-  case: "Case-Sensitive Forms",
-  clig: "Contextual Ligatures",
-  cpsp: "Capital Spacing",
-  dlig: "Discretionary Ligatures",
-  dnom: "Denominators",
-  frac: "Fractions",
-  hist: "Historical Forms",
-  liga: "Standard Ligatures",
-  lnum: "Lining Figures",
-  numr: "Numerators",
-  onum: "Oldstyle Figures",
-  ordn: "Ordinals",
-  pnum: "Proportional Figures",
-  salt: "Stylistic Alternates",
-  sinf: "Scientific Inferiors",
-  smcp: "Small Capitals",
-  subs: "Subscript",
-  sups: "Superscript",
-  swsh: "Swash",
-  titl: "Titling",
-  tnum: "Tabular Figures",
-  zero: "Slashed Zero",
-};
-
 /** Features a shaper applies unless told otherwise; every other listed feature starts off. */
 const ON_BY_DEFAULT = new Set(["calt", "clig", "liga"]);
 
@@ -106,9 +80,26 @@ export const FeaturesSection = () => {
   const editor = useEditor();
   const run = useSignalState(editor.text.currentRunCell);
   const features = useFontFeatures();
+  const errorCount = useFeatureErrorCount();
   // null while the search field is closed.
   const [query, setQuery] = useState<string | null>(null);
-  if (!run || features.length === 0) return null;
+  // The section always offers the feature code; its switches need proof text to apply to.
+  if (!run || features.length === 0) {
+    const hint = features.length === 0 ? "No features yet" : "Select proof text to set features";
+    return (
+      <SidebarSection
+        title="Features"
+        actions={
+          <div className="flex items-center">
+            {errorCount > 0 ? <FeatureErrorBadge count={errorCount} /> : null}
+            <FeaturesMenu canReset={false} onReset={() => {}} />
+          </div>
+        }
+      >
+        <p className="flex h-6 items-center text-ui text-secondary">{hint}</p>
+      </SidebarSection>
+    );
+  }
 
   const overridden = Object.keys(run.features).length > 0;
   const needle = query?.trim().toLowerCase() ?? "";
@@ -132,6 +123,7 @@ export const FeaturesSection = () => {
       title="Features"
       actions={
         <div className="flex items-center">
+          {errorCount > 0 ? <FeatureErrorBadge count={errorCount} /> : null}
           <Tooltip content="Search features">
             <Button
               variant="ghost"
@@ -215,6 +207,7 @@ const FeaturesMenu = ({ canReset, onReset }: FeaturesMenuProps) => (
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">
         <MenuPopup>
+          <MenuItem onClick={() => featureCodeOpenCell.set(true)}>Edit Feature Code…</MenuItem>
           <MenuItem disabled={!canReset} onClick={onReset}>
             Reset All Features
           </MenuItem>
@@ -308,6 +301,9 @@ const InheritedControl = ({ label, on, override, onChange }: ControlProps & { on
 /** Lists the font's user-facing features; empty in a preview, which has no shaping. */
 function useFontFeatures(): readonly FontFeature[] {
   const editor = useEditor();
+  const featureRevision = useSignalState(editor.font.featureRevisionCell);
+  // Glyph names generate features too: a new `a.ss04` adds ss04.
+  const glyphs = useSignalState(editor.font.glyphEntriesCell);
   const [features, setFeatures] = useState<readonly FontFeature[]>([]);
   useEffect(() => {
     if (editor.sessionMode !== "workspace") return;
@@ -321,19 +317,51 @@ function useFontFeatures(): readonly FontFeature[] {
     return () => {
       current = false;
     };
-  }, [editor]);
+  }, [editor, featureRevision, glyphs]);
   return features;
 }
 
-/** The name a feature is shown by: the font's, the registered one, or a numbered set's. */
-function featureName(feature: FontFeature): string | null {
-  return feature.name ?? FEATURE_NAMES[feature.tag] ?? featureFamilyName(feature.tag);
+/** How many errors the compiler reports in the font's feature code. */
+function useFeatureErrorCount(): number {
+  const editor = useEditor();
+  const featureRevision = useSignalState(editor.font.featureRevisionCell);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (editor.sessionMode !== "workspace") return;
+    let current = true;
+    editor.font
+      .featureDiagnostics()
+      .then((diagnostics) => {
+        if (!current) return;
+        setCount(diagnostics.filter((diagnostic) => diagnostic.severity === "error").length);
+      })
+      .catch((error: unknown) => console.error("failed to read feature diagnostics", error));
+    return () => {
+      current = false;
+    };
+  }, [editor, featureRevision]);
+  return count;
 }
 
-/** Names numbered stylistic sets and character variants, such as "Stylistic Set 1". */
-function featureFamilyName(tag: string): string | null {
-  const number = Number.parseInt(tag.slice(2), 10);
-  if (tag.startsWith("ss") && number > 0) return `Stylistic Set ${number}`;
-  if (tag.startsWith("cv") && number > 0) return `Character Variant ${number}`;
-  return null;
-}
+/**
+ * The count of feature code errors, as IDEs mark a file with problems: the
+ * error icon and the number. Opens the feature code window to fix them.
+ */
+const FeatureErrorBadge = ({ count }: { readonly count: number }) => {
+  const label = count === 1 ? "1 error in feature code" : `${count} errors in feature code`;
+  return (
+    <Tooltip content={label}>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={label}
+        onClick={() => featureCodeOpenCell.set(true)}
+      >
+        <span className="flex items-center gap-1 text-error tabular-nums">
+          <ErrorIcon aria-hidden className="size-3.5" />
+          {count}
+        </span>
+      </Button>
+    </Tooltip>
+  );
+};

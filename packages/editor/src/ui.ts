@@ -11,6 +11,7 @@ export { GlyphSidebar, type GlyphSidebarHost, type GlyphSidebarProps } from "./u
 export { ShiftEditor, type ShiftEditorProps } from "./ui/ShiftEditor";
 export { ShiftEditorChrome, type ShiftEditorChromeProps } from "./ui/ShiftEditorChrome";
 export { ShiftEditorRoot, type ShiftEditorRootProps } from "./ui/ShiftEditorRoot";
+export { ShiftIcon, type ShiftIconName } from "./ui/ShiftIcon";
 export {
   SidebarActionButton,
   SidebarActionRow,

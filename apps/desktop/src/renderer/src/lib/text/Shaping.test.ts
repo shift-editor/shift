@@ -329,6 +329,55 @@ describe("features can be turned on or off per proof text", () => {
   });
 });
 
+describe("editing feature code reshapes proof text", () => {
+  it("follows a changed rule, and undo brings the old shaping back", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()
+        ?.placedGlyphs.map((glyph) => glyph.glyph.glyphName) ?? [];
+    await expect.poll(names).toEqual(["f_i"]);
+    const original = await editor.font.featureSource();
+
+    editor.history.capture("Edit Feature Code", () =>
+      editor.font.setFeatureSource(
+        "languagesystem DFLT dflt;\nfeature liga { sub i by f_i; } liga;\n",
+      ),
+    );
+    await expect.poll(names).toEqual(["f", "f_i"]);
+
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
+    expect(await editor.font.featureSource()).toBe(original);
+  });
+});
+
+describe("glyph names generate features", () => {
+  it("a new alternate's suffix adds its feature, and turning it on substitutes the alternate", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    expect((await editor.font.features()).map((feature) => feature.tag)).not.toContain("ss02");
+
+    editor.history.capture("Add alternate", () => editor.font.createGlyph("f.ss02" as GlyphName));
+    await editor.settle();
+
+    expect((await editor.font.features()).map((feature) => feature.tag)).toContain("ss02");
+    const runId = editor.text.createRun(editor.text.itemsFromText("f")).id;
+    editor.history.capture("Set ss02", () => editor.text.setFeature(runId, "ss02", true));
+    await expect
+      .poll(() =>
+        editor.text
+          .layoutCell(runId)
+          .peek()
+          ?.placedGlyphs.map((g) => g.glyph.glyphName),
+      )
+      .toEqual(["f.ss02"]);
+  });
+});
+
 describe("a substituted glyph appears only once it has loaded", () => {
   it("never shows the ligature before its outline and advance are there", async () => {
     const editor = new TestEditor();
@@ -530,5 +579,26 @@ describe("editing several glyphs at once", () => {
 
     await editor.undo();
     expect(definition.childGlyphs(run)).toHaveLength(2);
+  });
+});
+
+describe("switching a generated feature off", () => {
+  it("stops it shaping proof text, and undo brings it back", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    editor.history.capture("Edit Feature Code", () => editor.font.setFeatureSource(null));
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()
+        ?.placedGlyphs.map((glyph) => glyph.glyph.glyphName) ?? [];
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Turn Off liga", () => editor.font.setGeneratedFeatureOn("liga", false));
+
+    await expect.poll(names).toEqual(["f", "i"]);
+    await editor.undo();
+    await expect.poll(names).toEqual(["f_i"]);
   });
 });

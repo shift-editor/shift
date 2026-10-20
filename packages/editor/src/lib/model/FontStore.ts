@@ -62,6 +62,7 @@ export class FontStore {
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
   readonly #kerning: PendingState<Kerning, KerningValueEdit>;
   readonly #committedRevision: WritableSignal<number>;
+  readonly #featureRevision = signal(0, { name: "fontStore.featureRevision" });
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
   /**
@@ -145,6 +146,11 @@ export class FontStore {
     return this.#committedRevision;
   }
 
+  /** Ticks whenever the authored feature code may have changed: an edit, undo, redo, or new workspace. */
+  get featureRevisionCell(): Signal<number> {
+    return this.#featureRevision;
+  }
+
   /** Glyph roots whose resident atlas entries no longer match the committed font. */
   get invalidGlyphsCell(): Signal<GlyphInvalidation> {
     return this.#invalidGlyphs;
@@ -194,6 +200,7 @@ export class FontStore {
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
+      this.#featureRevision.set(this.#featureRevision.peek() + 1);
       this.#clearLayerStates();
       this.#clearProjections();
       this.#interpolationBases.clear();
@@ -341,6 +348,7 @@ export class FontStore {
         this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
         this.#workspace.set(nextWorkspace);
       }
+      if (next?.featureSource) this.#featureRevision.set(this.#featureRevision.peek() + 1);
       // The echo now carries this edit's kerning values, if it had any.
       if (editId !== null) this.#kerning.confirm(editId);
 

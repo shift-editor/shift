@@ -50,6 +50,13 @@ Follow these rules:
 - Use `cn` from `@shift/ui` or the package-local utility for conditional classes and consumer overrides. Shared wrappers must merge `className` through `cn` so `tailwind-merge` resolves conflicts.
 - Keep reusable visual defaults in the shared wrapper. Do not restyle the same primitive independently at many call sites.
 
+## Icons
+
+- First look for the same concept elsewhere in the app and reuse that icon, so one idea always has one icon.
+- Otherwise use a Google Material Symbols icon (outlined, 24px viewBox, `fill="currentColor"`), saved in `apps/desktop/src/renderer/src/assets/general/` and imported as a component. Fetch the real SVG (for example `https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/<name>/materialsymbolsoutlined/<name>_24px.svg`); never hand-draw or approximate a path.
+- Lucide icons re-exported from `@shift/ui` are acceptable where the app already uses them for that concept. Do not mix a lucide and a Material icon for the same idea, and ask before adding new lucide icons.
+- Size and color icons from their surroundings (`h-4 w-4`, `text-muted`, `text-icon-subtle`), not per icon.
+
 ## Matching a visual reference
 
 Before changing styles, identify the reference's:

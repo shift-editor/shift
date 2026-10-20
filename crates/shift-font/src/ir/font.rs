@@ -1298,6 +1298,20 @@ impl Font {
         Ok(())
     }
 
+    /// Chooses a glyph's relationships explicitly; `None` returns it to what
+    /// its name implies.
+    pub fn set_glyph_relationships(
+        &mut self,
+        glyph_id: &GlyphId,
+        relationships: Option<&[crate::GlyphRelationship]>,
+    ) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = state.data.glyphs.get_mut(glyph_id).require(glyph_id)?;
+        Arc::make_mut(glyph).set_stored_relationships(relationships);
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
     /// Sets or clears the glyph's category overrides; `None` falls back to
     /// glyph data.
     pub fn set_glyph_category(
@@ -1463,6 +1477,11 @@ impl Font {
 
     pub fn kerning_mut(&mut self) -> &mut Kerning {
         &mut self.data_mut().kerning
+    }
+
+    /// How this font's feature code is linted and formatted.
+    pub fn feature_code_settings(&self) -> crate::FeatureCodeSettings {
+        crate::FeatureCodeSettings::from_lib(self.lib())
     }
 
     pub fn features(&self) -> &FeatureData {

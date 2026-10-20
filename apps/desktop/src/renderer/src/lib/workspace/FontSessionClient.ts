@@ -28,6 +28,11 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureCodeSettings,
+  FeatureDiagnostic,
+  FeatureEdit,
+  FeatureSymbol,
+  GeneratedFeature,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -436,6 +441,66 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.features", null);
+  }
+
+  /** Returns the features the current font's glyph relationships generate. */
+  async generatedFeatures(): Promise<GeneratedFeature[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.generatedFeatures", null);
+  }
+
+  /** Returns the problems the compiler found in the current font's feature code. */
+  async featureDiagnostics(): Promise<FeatureDiagnostic[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureDiagnostics", null);
+  }
+
+  /** Returns the linter's and compiler's problems in feature code being edited. */
+  async lintFeatureCode(text: string): Promise<FeatureDiagnostic[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.lintFeatureCode", { text });
+  }
+
+  /** Returns feature code laid out with the current font's feature code settings. */
+  async formatFeatureCode(text: string): Promise<string> {
+    await this.connect();
+
+    return this.#require().call("workspace.formatFeatureCode", { text });
+  }
+
+  /** Returns how the current font's feature code is linted and formatted. */
+  async featureCodeSettings(): Promise<FeatureCodeSettings> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureCodeSettings", null);
+  }
+
+  /** Returns the class, lookup, or glyph name at a UTF-16 offset in feature code. */
+  async featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureSymbolAt", { text, offset });
+  }
+
+  /** Returns the edits that rename the class or lookup at a UTF-16 offset, or null. */
+  async renameFeatureSymbol(
+    text: string,
+    offset: number,
+    newName: string,
+  ): Promise<FeatureEdit[] | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.renameFeatureSymbol", { text, offset, newName });
+  }
+
+  /** Returns the current font's authored feature code, or null when it has none. */
+  async featureSource(): Promise<string | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.featureSource", null);
   }
 
   #fold(applied: AppliedChange): AppliedChange {

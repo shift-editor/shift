@@ -16,6 +16,7 @@ shift-wire = { workspace = true, features = ["napi"] }
 shift-backends = { workspace = true }
 shift-config = { workspace = true }
 shift-workspace = { workspace = true }
+feanor = "0.2.0"
 
 napi = { version = "=3.8.6", default-features = false, features = ["napi6", "web_stream"] }
 napi-derive = "=3.5.5"

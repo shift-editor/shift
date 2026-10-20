@@ -27,6 +27,11 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FeatureCodeSettings,
+  FeatureDiagnostic,
+  FeatureEdit,
+  FeatureSymbol,
+  GeneratedFeature,
   FontFeature,
   Location,
   ParagraphRequest,
@@ -1337,6 +1342,69 @@ export class Font {
     return this.editCoordinator.features();
   }
 
+  /** Returns the features the font's glyph relationships generate, in compile order, after pending edits settle. */
+  generatedFeatures(): Promise<GeneratedFeature[]> {
+    return this.editCoordinator.generatedFeatures();
+  }
+
+  /** Switches a generated feature on or off as one edit; off, it is listed but not compiled. */
+  setGeneratedFeatureOn(tag: string, on: boolean): void {
+    this.editCoordinator.push({
+      kind: "setGeneratedFeatureOn",
+      setGeneratedFeatureOn: { tag, on },
+    });
+  }
+
+  /** Returns the problems the compiler found in the font's feature code, after pending edits settle. */
+  featureDiagnostics(): Promise<FeatureDiagnostic[]> {
+    return this.editCoordinator.featureDiagnostics();
+  }
+
+  /**
+   * Returns the problems in `text`, feature code being edited: the linter's,
+   * and the compiler's too when `text` is the font's feature code.
+   */
+  lintFeatureCode(text: string): Promise<FeatureDiagnostic[]> {
+    return this.editCoordinator.lintFeatureCode(text);
+  }
+
+  /** Returns `text` laid out with the font's feature code settings; only layout changes. */
+  formatFeatureCode(text: string): Promise<string> {
+    return this.editCoordinator.formatFeatureCode(text);
+  }
+
+  /** Returns how the font's feature code is linted and formatted, after pending edits settle. */
+  featureCodeSettings(): Promise<FeatureCodeSettings> {
+    return this.editCoordinator.featureCodeSettings();
+  }
+
+  /** Returns the class, mark class, lookup, or glyph name at UTF-16 `offset` in `text`, with where it's defined and used. */
+  featureSymbolAt(text: string, offset: number): Promise<FeatureSymbol | null> {
+    return this.editCoordinator.featureSymbolAt(text, offset);
+  }
+
+  /** Returns the edits that rename the class or lookup at UTF-16 `offset` in `text`; null when nothing renameable is there. */
+  renameFeatureSymbol(
+    text: string,
+    offset: number,
+    newName: string,
+  ): Promise<FeatureEdit[] | null> {
+    return this.editCoordinator.renameFeatureSymbol(text, offset, newName);
+  }
+
+  /** Replaces how the font's feature code is linted and formatted, as one undoable edit. */
+  setFeatureCodeSettings(settings: FeatureCodeSettings): void {
+    this.editCoordinator.push({
+      kind: "setFeatureCodeSettings",
+      setFeatureCodeSettings: { settings },
+    });
+  }
+
+  /** Returns the font's authored feature code, after pending edits settle; null when it has none. */
+  featureSource(): Promise<string | null> {
+    return this.editCoordinator.featureSource();
+  }
+
   /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
     return this.getAxes().length > 0;
@@ -1415,6 +1483,27 @@ export class Font {
       kind: "setLanguages",
       setLanguages: { languageIds: [...languageIds] },
     });
+  }
+
+  /**
+   * Queues replacement of the authored feature code on the workspace edit lane.
+   *
+   * @remarks
+   * {@link featureRevisionCell} ticks once the workspace echo is folded. Call
+   * inside an edit-coordinator transaction to control the undo step label.
+   *
+   * @param source - The complete feature code; null removes it.
+   */
+  setFeatureSource(source: string | null): void {
+    this.editCoordinator.push({
+      kind: "setFeatureSource",
+      setFeatureSource: source === null ? {} : { source },
+    });
+  }
+
+  /** Ticks whenever the authored feature code may have changed, including through undo and redo. */
+  get featureRevisionCell(): Signal<number> {
+    return this.#store.featureRevisionCell;
   }
 
   /**
