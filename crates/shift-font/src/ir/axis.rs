@@ -1,7 +1,7 @@
 use crate::entity::{AxisId, AxisLabelId, AxisMappingId};
 use crate::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -584,7 +584,8 @@ fn has_duplicates(ids: &[AxisId]) -> bool {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Location {
-    values: HashMap<AxisId, f64>,
+    /// Sorted by axis id, so a location serializes to the same bytes every time.
+    values: BTreeMap<AxisId, f64>,
 }
 
 impl Location {
@@ -592,8 +593,8 @@ impl Location {
         Self::default()
     }
 
-    pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
-        Self { values }
+    pub fn from_map(values: impl IntoIterator<Item = (AxisId, f64)>) -> Self {
+        values.into_iter().collect()
     }
 
     /// Places every axis in `axes` at its default value.
@@ -624,13 +625,12 @@ impl Location {
     }
 
     pub fn normalize(&self, axes: &[Axis]) -> Location {
-        let mut normalized = HashMap::new();
-        for axis in axes {
-            if let Some(&value) = self.values.get(&axis.id()) {
-                normalized.insert(axis.id(), axis.normalize(value));
-            }
-        }
-        Location::from_map(normalized)
+        axes.iter()
+            .filter_map(|axis| {
+                let value = self.values.get(&axis.id())?;
+                Some((axis.id(), axis.normalize(*value)))
+            })
+            .collect()
     }
 
     pub fn is_default_axis(&self, axes: &[Axis]) -> bool {
@@ -676,7 +676,7 @@ impl<const N: usize> From<[(AxisId, f64); N]> for Location {
 
 impl<'a> IntoIterator for &'a Location {
     type Item = (&'a AxisId, &'a f64);
-    type IntoIter = std::collections::hash_map::Iter<'a, AxisId, f64>;
+    type IntoIter = std::collections::btree_map::Iter<'a, AxisId, f64>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.values.iter()
@@ -694,7 +694,7 @@ macro_rules! typed_location {
                 Self::default()
             }
 
-            pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
+            pub fn from_map(values: impl IntoIterator<Item = (AxisId, f64)>) -> Self {
                 Self(Location::from_map(values))
             }
 
@@ -756,7 +756,7 @@ macro_rules! typed_location {
 
         impl<'a> IntoIterator for &'a $name {
             type Item = (&'a AxisId, &'a f64);
-            type IntoIter = std::collections::hash_map::Iter<'a, AxisId, f64>;
+            type IntoIter = std::collections::btree_map::Iter<'a, AxisId, f64>;
 
             fn into_iter(self) -> Self::IntoIter {
                 self.0.values.iter()

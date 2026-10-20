@@ -438,15 +438,13 @@ fn source_axis_mappings(
             input_axis_ids
               .iter()
               .cloned()
-              .zip(point.input.iter().copied())
-              .collect(),
+              .zip(point.input.iter().copied()),
           ),
           output: FontLocation::from_map(
             output_axis_ids
               .iter()
               .cloned()
-              .zip(point.output.iter().copied())
-              .collect(),
+              .zip(point.output.iter().copied()),
           ),
         })
         .collect();
@@ -475,9 +473,8 @@ fn source_location(
     });
   }
 
-  let external = shift_font::ExternalLocation::from_map(
-    identity.axis_ids.iter().cloned().zip(coordinates).collect(),
-  );
+  let external =
+    shift_font::ExternalLocation::from_map(identity.axis_ids.iter().cloned().zip(coordinates));
   let design = shift_font::ir::variation::map_location_with_bases(
     &external,
     &identity.font_axes,
@@ -2890,12 +2887,11 @@ fn map_anchor_seed(seed: NapiAnchorSeed) -> errors::Result<AnchorSeed> {
 }
 
 pub(crate) fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
-  let values = location
+  location
     .values
     .into_iter()
     .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
-    .collect::<errors::Result<_>>()?;
-  Ok(FontLocation::from_map(values))
+    .collect()
 }
 
 fn map_font_metadata(metadata: NapiFontMetadata) -> FontMetadataModel {

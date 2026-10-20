@@ -232,8 +232,7 @@ fn binary_directory(
                 axis_ids
                     .iter()
                     .cloned()
-                    .zip(instance.user_coords().map(|coordinate| coordinate as f64))
-                    .collect(),
+                    .zip(instance.user_coords().map(|coordinate| coordinate as f64)),
             );
             NamedInstance::new(
                 localized_string(font, instance.subfamily_name_id())
