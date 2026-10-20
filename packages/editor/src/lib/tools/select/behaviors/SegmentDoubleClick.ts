@@ -11,8 +11,8 @@ export class SegmentDoubleClick implements SelectBehavior {
     if (state.type !== "ready") return false;
     if (event.target.kind != "segment") return false;
 
-    const node = ctx.editor.scene.node(event.target.nodeId);
-    if (node?.kind !== "glyph") return false;
+    const node = ctx.editor.scene.nodeOfKind(event.target.nodeId, "glyph");
+    if (!node) return false;
 
     const glyphId = ctx.editor.glyphIdOf(node);
     const layer = glyphId ? ctx.editor.layerForGlyph(glyphId, node.sourceId) : null;

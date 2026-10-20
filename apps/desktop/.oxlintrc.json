@@ -1,6 +1,9 @@
 {
   "jsPlugins": [
-    { "name": "eslint-js", "specifier": "oxlint-plugin-eslint" },
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    },
     "@shadcn/lint",
     "../../scripts/oxlint/shift-plugin.mjs"
   ],
@@ -61,7 +64,12 @@
     "shift/no-raw-editor-in-tests": "error",
     "shift/no-vi-stub-global-in-tests": "error",
     "shift/no-vitest-mock-primitives": "error",
-    "shadcn/no-unknown-classes": ["error", { "allow": ["shift-editor-shell"] }],
+    "shadcn/no-unknown-classes": [
+      "error",
+      {
+        "allow": ["shift-editor-shell"]
+      }
+    ],
     "shadcn/no-arbitrary-values": [
       "error",
       {
@@ -278,7 +286,8 @@
           }
         ]
       }
-    ]
+    ],
+    "shift/prefer-scene-only": "error"
   },
   "overrides": [
     {

@@ -1,6 +1,9 @@
 {
   "jsPlugins": [
-    { "name": "eslint-js", "specifier": "oxlint-plugin-eslint" },
+    {
+      "name": "eslint-js",
+      "specifier": "oxlint-plugin-eslint"
+    },
     "../../scripts/oxlint/shift-plugin.mjs"
   ],
   "rules": {
@@ -57,7 +60,8 @@
     "shift/no-reference-module-outside-tests": "error",
     "shift/no-raw-editor-in-tests": "error",
     "shift/no-vi-stub-global-in-tests": "error",
-    "shift/no-vitest-mock-primitives": "error"
+    "shift/no-vitest-mock-primitives": "error",
+    "shift/prefer-scene-only": "error"
   },
   "overrides": [
     {

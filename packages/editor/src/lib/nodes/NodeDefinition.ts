@@ -7,6 +7,7 @@ import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { SelectableId } from "@shift/types";
 import type { TransformTarget } from "../../types/transformTarget";
+import type { TextItem } from "../text/layout/types";
 
 /** How a double-click edits what it hits. */
 export interface DoubleClickOptions {
@@ -111,6 +112,15 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @returns the referenced ids; empty when the node depends on nothing outside itself.
    */
   references?(node: N): readonly NodeReference[];
+
+  /**
+   * Returns the text items this node lays out, in reading order.
+   *
+   * @remarks
+   * Lets commands such as select-all reach the text in any kind of node
+   * without knowing the kind. Nodes that hold no text leave this out.
+   */
+  textItems?(node: N): readonly TextItem[];
 
   /**
    * Resolves selected objects inside this node into something the transform box can move, scale, and rotate.

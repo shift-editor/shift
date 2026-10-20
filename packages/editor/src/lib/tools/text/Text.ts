@@ -57,6 +57,6 @@ export class TextTool extends BaseTool<TextState> {
       const run = this.editor.scene.nodeOfKind(this.editor.scene.parent(id)?.id ?? null, "textRun");
       if (run) return run;
     }
-    return this.editor.scene.nodesOfKind("textRun")[0] ?? null;
+    return this.editor.scene.first("textRun");
   }
 }

@@ -92,6 +92,27 @@ describe("Editor scene bootstrap", () => {
     expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
   });
 
+  it("names the one glyph node only while the scene shows exactly one", () => {
+    const [firstRun, firstChild] = editor.scene.nodes();
+
+    expect(editor.scene.only("glyph")).toBe(firstChild);
+    expect(editor.scene.first("textRun")).toBe(firstRun);
+
+    const record = editor.font.recordForName("A")!;
+    const item = editor.text.glyphItem(record.id)!;
+    const run = editor.scene.createNode<TextRunNode>({
+      kind: "textRun",
+      runId: editor.text.createRun([item]).id,
+      size: editor.font.metricsCell.peek().unitsPerEm,
+      position: { x: 700, y: 0 },
+    });
+    editor.nodeDefinition("textRun").editItem(run, item.id);
+
+    expect(editor.scene.nodesOfKind("glyph")).toHaveLength(2);
+    expect(editor.scene.only("glyph")).toBeNull();
+    expect(editor.scene.first("glyph")).toBe(firstChild);
+  });
+
   it("can place the same glyph twice with distinct node ids", () => {
     const record = editor.font.recordForName("A")!;
     const place = (x: number) => {

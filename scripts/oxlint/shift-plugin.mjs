@@ -1361,5 +1361,57 @@ export default {
         };
       },
     },
+
+    /**
+     * Ban picking one node out of a `nodesOfKind` list by hand.
+     *
+     * `scene.only(kind)` names "the one node of this kind" (null with none or
+     * several) and `scene.first(kind)` names "the first in scene order". Flags
+     * `nodesOfKind(kind)[0]`, `const [node] = scene.nodesOfKind(kind)` and
+     * `nodesOfKind(kind).length === 1`.
+     */
+    "prefer-scene-only": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useOnly:
+            "Use scene.only(kind) for the one node of a kind, or scene.first(kind) for the first, instead of indexing nodesOfKind(kind).",
+        },
+        schema: [],
+      },
+      create(context) {
+        if (context.getFilename().replace(/\\/g, "/").endsWith("lib/editor/Scene.ts")) return {};
+
+        const isNodesOfKind = (node) =>
+          node &&
+          node.type === "CallExpression" &&
+          node.callee.type === "MemberExpression" &&
+          node.callee.property &&
+          node.callee.property.name === "nodesOfKind";
+
+        return {
+          MemberExpression(node) {
+            if (!node.computed || !isNodesOfKind(node.object)) return;
+            if (node.property.type !== "Literal" || node.property.value !== 0) return;
+
+            context.report({ node, messageId: "useOnly" });
+          },
+          VariableDeclarator(node) {
+            if (node.id.type !== "ArrayPattern" || !isNodesOfKind(node.init)) return;
+
+            context.report({ node, messageId: "useOnly" });
+          },
+          BinaryExpression(node) {
+            if (node.operator !== "===" && node.operator !== "!==") return;
+            const length = node.left;
+            if (length.type !== "MemberExpression" || length.property?.name !== "length") return;
+            if (!isNodesOfKind(length.object)) return;
+            if (node.right.type !== "Literal" || node.right.value !== 1) return;
+
+            context.report({ node, messageId: "useOnly" });
+          },
+        };
+      },
+    },
   },
 };
