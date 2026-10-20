@@ -30,8 +30,8 @@ impl ShiftStore {
         )?;
         let rows = stmt.query_map([], |row| {
             Ok((
-                font::GlyphId::from_raw(row.get::<_, String>(0)?),
-                font::GlyphId::from_raw(row.get::<_, String>(1)?),
+                row.get::<_, font::GlyphId>(0)?,
+                row.get::<_, font::GlyphId>(1)?,
             ))
         })?;
         let mut references = HashMap::new();
@@ -83,7 +83,7 @@ impl ShiftStore {
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(
                 rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-                |row| Ok(font::GlyphId::from_raw(row.get::<_, String>(0)?)),
+                |row| row.get::<_, font::GlyphId>(0),
             )?;
             for row in rows {
                 result.insert(row?);
@@ -152,7 +152,7 @@ impl ShiftStore {
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(
                 rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-                |row| Ok(font::GlyphId::from_raw(row.get::<_, String>(0)?)),
+                |row| row.get::<_, font::GlyphId>(0),
             )?;
             for row in rows {
                 result.insert(row?);
@@ -177,7 +177,7 @@ pub(super) fn validate_component_index(
         ",
     )?;
     let indexed = stmt
-        .query_map([layer.id().to_string()], |row| {
+        .query_map([layer.id()], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,

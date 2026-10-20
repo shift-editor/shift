@@ -145,7 +145,7 @@ fn validate_glyph_order(
         let order_index = conn
             .query_row(
                 "SELECT order_index FROM glyphs WHERE id = ?1",
-                [glyph_id.to_string()],
+                [&glyph_id],
                 |row| row.get::<_, i64>(0),
             )
             .optional()?
@@ -233,7 +233,7 @@ pub(crate) fn replace_font_header_in_tx(
             tx,
             "source_lib",
             "source_id",
-            Some(&source.id().to_string()),
+            Some(source.id().as_str()),
             source.lib(),
         )?;
 
@@ -274,7 +274,7 @@ pub(crate) fn write_glyph_directory_in_tx(
                  VALUES (?1, ?2, ?3, ?4, ?5)",
             )?
             .execute(params![
-                glyph.id().to_string(),
+                glyph.id(),
                 glyph.glyph_name().as_str(),
                 order_index,
                 glyph.category().map(font::GlyphCategory::as_str),
@@ -285,7 +285,7 @@ pub(crate) fn write_glyph_directory_in_tx(
                     "INSERT INTO glyph_unicodes (glyph_id, unicode, order_index) VALUES (?1, ?2, ?3)",
                 )?
                 .execute(params![
-                    glyph.id().to_string(),
+                    glyph.id(),
                     i64::from(*unicode),
                     unicode_order as i64
                 ])?;
@@ -294,11 +294,7 @@ pub(crate) fn write_glyph_directory_in_tx(
                 tx.prepare_cached(
                     "INSERT INTO glyph_lib (glyph_id, key, value_json) VALUES (?1, ?2, ?3)",
                 )?
-                .execute(params![
-                    glyph.id().to_string(),
-                    key,
-                    lib_value_json(value)?
-                ])?;
+                .execute(params![glyph.id(), key, lib_value_json(value)?])?;
             }
             Ok(())
         }
@@ -309,7 +305,7 @@ pub(crate) fn write_glyph_directory_in_tx(
                 tx,
                 "glyph_lib",
                 "glyph_id",
-                Some(&glyph.id().to_string()),
+                Some(glyph.id().as_str()),
                 glyph.lib(),
             )
         }
@@ -471,14 +467,11 @@ pub(crate) fn replace_source_kerning(
 }
 
 fn replace_axes(tx: &Transaction<'_>, axes: &[font::Axis]) -> Result<(), StoreError> {
-    let retained_ids = axes
-        .iter()
-        .map(|axis| axis.id().to_string())
-        .collect::<HashSet<_>>();
+    let retained_ids = axes.iter().map(font::Axis::id).collect::<HashSet<_>>();
     for (order_index, axis) in axes.iter().enumerate() {
         upsert_axis_with_order(tx, axis, order_index as i64)?;
     }
-    for axis_id in table_ids(tx, "axes")? {
+    for axis_id in table_ids::<font::AxisId>(tx, "axes")? {
         if !retained_ids.contains(&axis_id) {
             tx.execute("DELETE FROM axes WHERE id = ?1", [&axis_id])?;
         }
@@ -493,12 +486,12 @@ fn replace_sources(
     let retained_ids = sources
         .sources
         .iter()
-        .map(|source| source.id().to_string())
+        .map(font::Source::id)
         .collect::<HashSet<_>>();
     for (order_index, source) in sources.sources.iter().enumerate() {
         write_source_snapshot_in_tx(tx, source, order_index as i64)?;
     }
-    for source_id in table_ids(tx, "sources")? {
+    for source_id in table_ids::<font::SourceId>(tx, "sources")? {
         if !retained_ids.contains(&source_id) {
             tx.execute("DELETE FROM sources WHERE id = ?1", [&source_id])?;
         }
@@ -516,7 +509,7 @@ fn replace_glyph(
             let existing_order = tx
                 .query_row(
                     "SELECT order_index FROM glyphs WHERE id = ?1",
-                    [glyph_id.to_string()],
+                    [&glyph_id],
                     |row| row.get::<_, i64>(0),
                 )
                 .optional()?;
@@ -533,10 +526,7 @@ fn replace_glyph(
                 .map(|before| before.layers() != glyph.layers())
                 .unwrap_or(true);
             if replaces_layers {
-                tx.execute(
-                    "DELETE FROM glyph_layers WHERE glyph_id = ?1",
-                    [glyph_id.to_string()],
-                )?;
+                tx.execute("DELETE FROM glyph_layers WHERE glyph_id = ?1", [&glyph_id])?;
                 for layer in glyph.layers().values() {
                     write_layer_in_tx(tx, &glyph_id, layer)?;
                 }
@@ -546,7 +536,7 @@ fn replace_glyph(
             let (order_index, count) = tx
                 .query_row(
                     "SELECT order_index, (SELECT COUNT(*) FROM glyphs) FROM glyphs WHERE id = ?1",
-                    [glyph_id.to_string()],
+                    [&glyph_id],
                     |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
                 )
                 .optional()?
@@ -558,7 +548,7 @@ fn replace_glyph(
                 }
                 .into());
             }
-            tx.execute("DELETE FROM glyphs WHERE id = ?1", [glyph_id.to_string()])?;
+            tx.execute("DELETE FROM glyphs WHERE id = ?1", [&glyph_id])?;
         }
     }
     Ok(())
@@ -573,10 +563,7 @@ fn replace_layer(
     match &value.after {
         Some(layer) => write_layer_in_tx(tx, glyph_id, layer),
         None => {
-            tx.execute(
-                "DELETE FROM glyph_layers WHERE id = ?1",
-                [layer_row_id(&layer_id)],
-            )?;
+            tx.execute("DELETE FROM glyph_layers WHERE id = ?1", [&layer_id])?;
             Ok(())
         }
     }
@@ -616,10 +603,14 @@ fn replacement_layer_id(
         })
 }
 
-fn table_ids(tx: &Transaction<'_>, table: &str) -> Result<HashSet<String>, StoreError> {
+/// Every id stored in `table`, as the id type the caller compares against.
+fn table_ids<Id>(tx: &Transaction<'_>, table: &str) -> Result<HashSet<Id>, StoreError>
+where
+    Id: rusqlite::types::FromSql + Eq + std::hash::Hash,
+{
     let mut statement = tx.prepare(&format!("SELECT id FROM {table}"))?;
     let ids = statement
-        .query_map([], |row| row.get::<_, String>(0))?
+        .query_map([], |row| row.get::<_, Id>(0))?
         .collect::<Result<HashSet<_>, _>>()?;
     Ok(ids)
 }
@@ -658,7 +649,7 @@ fn insert_axis(
     tx.execute(
         &statement,
         params![
-            axis.id().to_string(),
+            axis.id(),
             axis.tag(),
             axis.name(),
             axis.minimum(),
@@ -683,7 +674,7 @@ pub(crate) fn replace_axis_mappings(
         tx.execute(
             "INSERT INTO axis_mappings (id, mapping_json, order_index) VALUES (?1, ?2, ?3)",
             params![
-                mapping.id().to_string(),
+                mapping.id(),
                 serde_json::to_string(mapping)?,
                 order_index as i64,
             ],
@@ -701,7 +692,7 @@ pub(crate) fn replace_named_instances(
         tx.execute(
             "INSERT INTO named_instances (id, instance_json, order_index) VALUES (?1, ?2, ?3)",
             params![
-                instance.id().to_string(),
+                instance.id(),
                 serde_json::to_string(instance)?,
                 order_index as i64,
             ],
@@ -726,12 +717,7 @@ pub(crate) fn replace_metric_definitions(
         };
         tx.execute(
             "INSERT INTO metric_definitions (id, kind, name, order_index) VALUES (?1, ?2, ?3, ?4)",
-            params![
-                definition.id().to_string(),
-                kind,
-                definition.name(),
-                order_index as i64,
-            ],
+            params![definition.id(), kind, definition.name(), order_index as i64,],
         )?;
     }
     Ok(())
@@ -744,7 +730,7 @@ fn replace_source_metric_values<'a>(
 ) -> Result<(), StoreError> {
     tx.execute(
         "DELETE FROM source_metric_values WHERE source_id = ?1",
-        [source_id.to_string()],
+        [&source_id],
     )?;
     for (metric_id, value) in values {
         tx.execute(
@@ -752,12 +738,7 @@ fn replace_source_metric_values<'a>(
             INSERT INTO source_metric_values (source_id, metric_id, position, overshoot)
             VALUES (?1, ?2, ?3, ?4)
             ",
-            params![
-                source_id.to_string(),
-                metric_id.to_string(),
-                value.position,
-                value.overshoot,
-            ],
+            params![source_id, metric_id, value.position, value.overshoot,],
         )?;
     }
     Ok(())
@@ -776,7 +757,7 @@ fn upsert_source_location(
         ON CONFLICT(source_id, axis_id) DO UPDATE SET
             value = excluded.value
         ",
-        params![source_id.to_string(), axis_id.to_string(), value],
+        params![source_id, axis_id, value],
     )?;
     Ok(())
 }
@@ -819,7 +800,7 @@ fn upsert_source(
             order_index = excluded.order_index
         ",
         params![
-            source_id.to_string(),
+            source_id,
             row.name,
             row.filename,
             row.color,
@@ -858,7 +839,7 @@ pub(crate) fn write_source_snapshot_in_tx(
     )?;
     tx.execute(
         "DELETE FROM source_locations WHERE source_id = ?1",
-        [source.id().to_string()],
+        [source.id()],
     )?;
     for (axis_id, value) in source.location().iter() {
         upsert_source_location(tx, &source.id(), axis_id, *value)?;
@@ -868,7 +849,7 @@ pub(crate) fn write_source_snapshot_in_tx(
         tx,
         "source_lib",
         "source_id",
-        Some(&source.id().to_string()),
+        Some(source.id().as_str()),
         source.lib(),
     )?;
     Ok(())
@@ -891,7 +872,7 @@ fn upsert_glyph(
         ",
     )?
     .execute(params![
-        glyph.id().to_string(),
+        glyph.id(),
         glyph.glyph_name().as_str(),
         order_index,
         glyph.category().map(font::GlyphCategory::as_str),
@@ -906,7 +887,7 @@ fn replace_glyph_unicodes(
     unicodes: &[u32],
 ) -> Result<(), StoreError> {
     tx.prepare_cached("DELETE FROM glyph_unicodes WHERE glyph_id = ?1")?
-        .execute([glyph_id.to_string()])?;
+        .execute([&glyph_id])?;
 
     for (order_index, unicode) in unicodes.iter().enumerate() {
         tx.prepare_cached(
@@ -915,11 +896,7 @@ fn replace_glyph_unicodes(
             VALUES (?1, ?2, ?3)
             ",
         )?
-        .execute(params![
-            glyph_id.to_string(),
-            *unicode as i64,
-            order_index as i64
-        ])?;
+        .execute(params![glyph_id, *unicode as i64, order_index as i64])?;
     }
 
     Ok(())
@@ -1079,7 +1056,7 @@ fn replace_font_guidelines(
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             ",
             params![
-                guideline.id().to_string(),
+                guideline.id(),
                 guideline.x(),
                 guideline.y(),
                 guideline.angle(),
@@ -1286,8 +1263,4 @@ fn typed_json(kind: &'static str, value: serde_json::Value) -> serde_json::Value
 
 fn require_changed(rows_changed: usize, kind: &'static str, id: String) -> Result<(), StoreError> {
     (rows_changed > 0).then_some(()).or_missing(kind, &id)
-}
-
-fn layer_row_id(layer_id: &font::LayerId) -> String {
-    layer_id.to_string()
 }

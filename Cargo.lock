@@ -2366,6 +2366,7 @@ dependencies = [
  "indexmap",
  "kurbo",
  "linesweeper",
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
