@@ -27,7 +27,7 @@ use shift_font::{
 use shift_font::{
   AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
   AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
-  AxisRole, BooleanOp, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
+  AxisRole, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
   FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, KerningGroupId, KerningPair,
   KerningPosition, KerningSide, KerningValueEdit, LayerId, Location as FontLocation,
   MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
@@ -1393,7 +1393,7 @@ impl Bridge {
   }
 
   /// Applies one intent set as a single atomic workspace apply: every kind
-  /// — editing and create alike — decodes through `map_intent` into one
+  /// — editing and create alike — decodes into one
   /// `FontWorkspace::apply` call. One call = one SQLite transaction = one
   /// undo step, however many intents the set batches.
   #[napi]
@@ -1412,7 +1412,7 @@ impl Bridge {
 
     let mut set = FontIntentSet::default();
     for intent in intents {
-      set.intents.push(map_intent(intent)?);
+      set.intents.push(intent.into_domain()?);
     }
 
     let outcome = self.workspace_mut()?.apply(&set, label)?;
@@ -1735,7 +1735,7 @@ impl Bridge {
     location: NapiLocation,
   ) -> errors::Result<Vec<NapiGlyphPreview>> {
     let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
-    let location = shift_font::DesignLocation::from_untyped(map_location(location)?);
+    let location = shift_font::DesignLocation::from_untyped(location.into_domain()?);
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projection = font.projection(&location);
     let previews = projection
@@ -2165,7 +2165,7 @@ impl Bridge {
 
   #[napi]
   pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
-    let external = shift_font::ExternalLocation::from_untyped(map_location(location)?);
+    let external = shift_font::ExternalLocation::from_untyped(location.into_domain()?);
     let mapped = self.font()?.mapped_location(&external)?;
     Ok(shift_wire::Location::from(mapped.as_untyped()).into())
   }
@@ -2342,666 +2342,880 @@ fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
   ids.iter().map(|id| parse::<T>(id)).collect()
 }
 
-fn map_kerning_value_edit(edit: NapiKerningValueEdit) -> errors::Result<KerningValueEdit> {
-  Ok(KerningValueEdit {
-    source_id: parse::<SourceId>(&edit.source_id)?,
-    pair: KerningPair::new(
-      map_kerning_side(edit.first)?,
-      map_kerning_side(edit.second)?,
-    ),
-    value: edit.amount,
-  })
+/// Converts a value the editor sent over NAPI into the domain value it
+/// describes.
+pub(crate) trait IntoDomain {
+  type Domain;
+
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] when an id or field the domain
+  /// value needs does not parse.
+  fn into_domain(self) -> BridgeResult<Self::Domain>;
 }
 
-fn map_kerning_position(position: NapiKerningPosition) -> KerningPosition {
-  match position {
-    NapiKerningPosition::First => KerningPosition::First,
-    NapiKerningPosition::Second => KerningPosition::Second,
-  }
-}
+impl IntoDomain for NapiKerningValueEdit {
+  type Domain = KerningValueEdit;
 
-fn map_kerning_side(side: NapiKerningSide) -> errors::Result<KerningSide> {
-  Ok(match side.kind {
-    NapiKerningSideKind::Glyph => KerningSide::Glyph(parse::<GlyphId>(&side.id)?),
-    NapiKerningSideKind::Group => KerningSide::Group(parse::<KerningGroupId>(&side.id)?),
-  })
-}
-
-fn map_intent(intent: NapiFontIntent) -> errors::Result<FontIntent> {
-  let kind = intent.kind.as_str();
-  let missing = || BridgeError::InvalidInput {
-    kind: "intent",
-    value: format!("{kind} requires its payload field"),
-  };
-
-  match kind {
-    "addPoints" => map_add_points(intent.add_points.ok_or_else(missing)?),
-    "addContour" => map_add_contour(intent.add_contour.ok_or_else(missing)?),
-    "setContourClosed" => map_set_contour_closed(intent.set_contour_closed.ok_or_else(missing)?),
-    "movePoints" => map_move_points(intent.move_points.ok_or_else(missing)?),
-    "setPointSmooth" => map_set_point_smooth(intent.set_point_smooth.ok_or_else(missing)?),
-    "removePoints" => map_remove_points(intent.remove_points.ok_or_else(missing)?),
-    "addAnchors" => map_add_anchors(intent.add_anchors.ok_or_else(missing)?),
-    "moveAnchors" => map_move_anchors(intent.move_anchors.ok_or_else(missing)?),
-    "removeAnchors" => map_remove_anchors(intent.remove_anchors.ok_or_else(missing)?),
-    "renameAnchors" => map_rename_anchors(intent.rename_anchors.ok_or_else(missing)?),
-    "addComponent" => map_add_component(intent.add_component.ok_or_else(missing)?),
-    "setComponentTransforms" => {
-      map_set_component_transforms(intent.set_component_transforms.ok_or_else(missing)?)
-    }
-    "setComponentAlignment" => {
-      map_set_component_alignment(intent.set_component_alignment.ok_or_else(missing)?)
-    }
-    "removeComponents" => map_remove_components(intent.remove_components.ok_or_else(missing)?),
-    "decomposeComponents" => {
-      map_decompose_components(intent.decompose_components.ok_or_else(missing)?)
-    }
-    "reverseContour" => map_reverse_contour(intent.reverse_contour.ok_or_else(missing)?),
-    "setContourStart" => map_set_contour_start(intent.set_contour_start.ok_or_else(missing)?),
-    "translatePoints" => map_translate_points(intent.translate_points.ok_or_else(missing)?),
-    "transformLayer" => map_transform_layer(intent.transform_layer.ok_or_else(missing)?),
-    "setXAdvance" => map_set_x_advance(intent.set_x_advance.ok_or_else(missing)?),
-    "applyBooleanOp" => map_apply_boolean_op(intent.apply_boolean_op.ok_or_else(missing)?),
-    "createGlyph" => map_create_glyph(intent.create_glyph.ok_or_else(missing)?),
-    "updateGlyph" => map_update_glyph(intent.update_glyph.ok_or_else(missing)?),
-    "updateFontMetadata" => {
-      map_update_font_metadata(intent.update_font_metadata.ok_or_else(missing)?)
-    }
-    "setKerningValues" => map_set_kerning_values(intent.set_kerning_values.ok_or_else(missing)?),
-    "createKerningGroup" => {
-      map_create_kerning_group(intent.create_kerning_group.ok_or_else(missing)?)
-    }
-    "setKerningGroupMember" => {
-      map_set_kerning_group_member(intent.set_kerning_group_member.ok_or_else(missing)?)
-    }
-    "renameKerningGroup" => {
-      map_rename_kerning_group(intent.rename_kerning_group.ok_or_else(missing)?)
-    }
-    "deleteKerningGroup" => {
-      map_delete_kerning_group(intent.delete_kerning_group.ok_or_else(missing)?)
-    }
-    "setLanguages" => map_set_languages(intent.set_languages.ok_or_else(missing)?),
-    "createAxis" => map_create_axis(intent.create_axis.ok_or_else(missing)?),
-    "updateAxis" => map_update_axis(intent.update_axis.ok_or_else(missing)?),
-    "deleteAxis" => map_delete_axis(intent.delete_axis.ok_or_else(missing)?),
-    "setAxisMappings" => map_set_axis_mappings(intent.set_axis_mappings.ok_or_else(missing)?),
-    "setMetricDefinitions" => {
-      map_set_metric_definitions(intent.set_metric_definitions.ok_or_else(missing)?)
-    }
-    "createNamedInstance" => {
-      map_create_named_instance(intent.create_named_instance.ok_or_else(missing)?)
-    }
-    "updateNamedInstance" => {
-      map_update_named_instance(intent.update_named_instance.ok_or_else(missing)?)
-    }
-    "deleteNamedInstance" => {
-      map_delete_named_instance(intent.delete_named_instance.ok_or_else(missing)?)
-    }
-    "deleteSource" => map_delete_source(intent.delete_source.ok_or_else(missing)?),
-    "createSource" => map_create_source(intent.create_source.ok_or_else(missing)?),
-    "updateSource" => map_update_source(intent.update_source.ok_or_else(missing)?),
-    "createGlyphLayer" => map_create_glyph_layer(intent.create_glyph_layer.ok_or_else(missing)?),
-    "cloneGlyphLayer" => map_clone_glyph_layer(intent.clone_glyph_layer.ok_or_else(missing)?),
-    "materializeGlyphLayer" => {
-      map_materialize_glyph_layer(intent.materialize_glyph_layer.ok_or_else(missing)?)
-    }
-    other => Err(BridgeError::InvalidInput {
-      kind: "intent",
-      value: format!("unknown intent kind \"{other}\""),
-    }),
-  }
-}
-
-fn map_add_points(payload: NapiAddPointsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::AddPoints(AddPoints {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    contour_id: payload
-      .contour_id
-      .map(|id| parse::<ContourId>(&id))
-      .transpose()?,
-    before: payload.before.map(|id| parse::<PointId>(&id)).transpose()?,
-    points: payload
-      .points
-      .into_iter()
-      .map(map_point_seed)
-      .collect::<errors::Result<Vec<_>>>()?,
-  }))
-}
-
-fn map_add_contour(payload: NapiAddContourIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::AddContour(AddContour {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    contour_id: parse::<ContourId>(&payload.contour_id)?,
-    closed: payload.closed,
-  }))
-}
-
-fn map_set_contour_closed(payload: NapiSetContourClosedIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetContourClosed(SetContourClosed {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    contour_id: parse::<ContourId>(&payload.contour_id)?,
-    closed: payload.closed,
-  }))
-}
-
-fn map_move_points(payload: NapiMovePointsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::MovePoints(MovePoints {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
-    coords: payload.coords,
-  }))
-}
-
-fn map_set_point_smooth(payload: NapiSetPointSmoothIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetPointSmooth(SetPointSmooth {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    point_id: parse::<PointId>(&payload.point_id)?,
-    smooth: payload.smooth,
-  }))
-}
-
-fn map_remove_points(payload: NapiRemovePointsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::RemovePoints(RemovePoints {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
-  }))
-}
-
-fn map_add_anchors(payload: NapiAddAnchorsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::AddAnchors(AddAnchors {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    anchors: payload
-      .anchors
-      .into_iter()
-      .map(map_anchor_seed)
-      .collect::<errors::Result<Vec<_>>>()?,
-  }))
-}
-
-fn map_move_anchors(payload: NapiMoveAnchorsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::MoveAnchors(MoveAnchors {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
-    coords: payload.coords,
-  }))
-}
-
-fn map_remove_anchors(payload: NapiRemoveAnchorsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::RemoveAnchors(RemoveAnchors {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
-  }))
-}
-
-fn map_rename_anchors(payload: NapiRenameAnchorsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::RenameAnchors(RenameAnchors {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    anchor_ids: parse_id_list::<AnchorId>(&payload.anchor_ids)?,
-    names: payload.names,
-  }))
-}
-
-fn map_add_component(payload: NapiAddComponentIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::AddComponent(AddComponent {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    component_id: parse::<ComponentId>(&payload.component_id)?,
-    base_glyph_id: parse::<GlyphId>(&payload.base_glyph_id)?,
-  }))
-}
-
-fn map_set_component_transforms(
-  payload: NapiSetComponentTransformsIntent,
-) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetComponentTransforms(SetComponentTransforms {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
-    transforms: payload.transforms,
-  }))
-}
-
-fn map_set_component_alignment(
-  payload: NapiSetComponentAlignmentIntent,
-) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetComponentAlignment(SetComponentAlignment {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
-    alignment: shift_wire::bridges::napi::parse_alignment(Some(&payload.alignment)),
-  }))
-}
-
-fn map_remove_components(payload: NapiRemoveComponentsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::RemoveComponents(RemoveComponents {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
-  }))
-}
-
-fn map_decompose_components(payload: NapiDecomposeComponentsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::DecomposeComponents(DecomposeComponents {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    component_ids: parse_id_list::<ComponentId>(&payload.component_ids)?,
-  }))
-}
-
-fn map_reverse_contour(payload: NapiReverseContourIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::ReverseContour(ReverseContour {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    contour_id: parse::<ContourId>(&payload.contour_id)?,
-  }))
-}
-
-fn map_set_contour_start(payload: NapiSetContourStartIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetContourStart(SetContourStart {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    contour_id: parse::<ContourId>(&payload.contour_id)?,
-    point_id: parse::<PointId>(&payload.point_id)?,
-  }))
-}
-
-fn map_translate_points(payload: NapiTranslatePointsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::TranslatePoints(TranslatePoints {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    point_ids: parse_id_list::<PointId>(&payload.point_ids)?,
-    dx: payload.dx,
-    dy: payload.dy,
-  }))
-}
-
-fn map_transform_layer(payload: NapiTransformLayerIntent) -> errors::Result<FontIntent> {
-  let [xx, xy, yx, yy, dx, dy] =
-    <[f64; 6]>::try_from(payload.matrix.as_slice()).map_err(|_| BridgeError::InvalidInput {
-      kind: "transformLayer matrix value count",
-      value: payload.matrix.len().to_string(),
-    })?;
-  Ok(FontIntent::TransformLayer(TransformLayer {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    transform: Transform {
-      xx,
-      xy,
-      yx,
-      yy,
-      dx,
-      dy,
-    },
-  }))
-}
-
-fn map_set_x_advance(payload: NapiSetXAdvanceIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetXAdvance(SetXAdvance {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    width: payload.width,
-  }))
-}
-
-fn map_apply_boolean_op(payload: NapiBooleanOpIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::ApplyBooleanOp(ApplyBooleanOp {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    contour_id_a: parse::<ContourId>(&payload.contour_id_a)?,
-    contour_id_b: parse::<ContourId>(&payload.contour_id_b)?,
-    operation: parse_boolean_op(&payload.operation)?,
-  }))
-}
-
-fn map_create_glyph(payload: NapiCreateGlyphIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CreateGlyph(CreateGlyph {
-    glyph_id: Some(parse::<GlyphId>(&payload.glyph_id)?),
-    name: payload.name,
-    unicodes: payload.unicodes,
-  }))
-}
-
-fn map_update_glyph(payload: NapiUpdateGlyphIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::UpdateGlyph(UpdateGlyph {
-    glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
-    new_name: payload.new_name.into(),
-    new_unicodes: payload.new_unicodes,
-  }))
-}
-
-fn map_update_font_metadata(payload: NapiUpdateFontMetadataIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::UpdateFontMetadata(UpdateFontMetadata {
-    metadata: map_font_metadata(payload.metadata),
-  }))
-}
-
-fn map_set_kerning_values(payload: NapiSetKerningValuesIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetKerningValues(SetKerningValues {
-    edits: payload
-      .edits
-      .into_iter()
-      .map(map_kerning_value_edit)
-      .collect::<errors::Result<Vec<_>>>()?,
-  }))
-}
-
-fn map_create_kerning_group(payload: NapiCreateKerningGroupIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CreateKerningGroup(CreateKerningGroup {
-    group_id: parse::<KerningGroupId>(&payload.group_id)?,
-    position: map_kerning_position(payload.position),
-    name: payload.name,
-  }))
-}
-
-fn map_set_kerning_group_member(
-  payload: NapiSetKerningGroupMemberIntent,
-) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetKerningGroupMember(SetKerningGroupMember {
-    position: map_kerning_position(payload.position),
-    glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
-    group_id: payload
-      .group_id
-      .as_deref()
-      .map(parse::<KerningGroupId>)
-      .transpose()?,
-  }))
-}
-
-fn map_rename_kerning_group(payload: NapiRenameKerningGroupIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::RenameKerningGroup(RenameKerningGroup {
-    group_id: parse::<KerningGroupId>(&payload.group_id)?,
-    name: payload.name,
-  }))
-}
-
-fn map_delete_kerning_group(payload: NapiDeleteKerningGroupIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::DeleteKerningGroup(DeleteKerningGroup {
-    group_id: parse::<KerningGroupId>(&payload.group_id)?,
-  }))
-}
-
-fn map_set_languages(payload: NapiSetLanguagesIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetLanguages(SetLanguages {
-    language_ids: payload.language_ids,
-  }))
-}
-
-fn map_create_axis(payload: NapiCreateAxisIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CreateAxis(CreateAxis {
-    axis: map_axis(payload.axis)?,
-  }))
-}
-
-fn map_update_axis(payload: NapiUpdateAxisIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::UpdateAxis(UpdateAxis {
-    axis: map_axis(payload.axis)?,
-  }))
-}
-
-fn map_delete_axis(payload: NapiDeleteAxisIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::DeleteAxis(DeleteAxis {
-    axis_id: parse::<AxisId>(&payload.axis_id)?,
-  }))
-}
-
-fn map_set_axis_mappings(payload: NapiSetAxisMappingsIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetAxisMappings(SetAxisMappings {
-    mappings: payload
-      .mappings
-      .into_iter()
-      .map(map_axis_mapping)
-      .collect::<errors::Result<Vec<_>>>()?,
-  }))
-}
-
-fn map_set_metric_definitions(
-  payload: NapiSetMetricDefinitionsIntent,
-) -> errors::Result<FontIntent> {
-  Ok(FontIntent::SetMetricDefinitions(SetMetricDefinitions {
-    definitions: payload
-      .definitions
-      .into_iter()
-      .map(map_metric_definition)
-      .collect::<errors::Result<Vec<_>>>()?,
-  }))
-}
-
-fn map_create_named_instance(payload: NapiCreateNamedInstanceIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CreateNamedInstance(CreateNamedInstance {
-    instance: map_named_instance(payload.instance)?,
-  }))
-}
-
-fn map_update_named_instance(payload: NapiUpdateNamedInstanceIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::UpdateNamedInstance(UpdateNamedInstance {
-    instance: map_named_instance(payload.instance)?,
-  }))
-}
-
-fn map_delete_named_instance(payload: NapiDeleteNamedInstanceIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::DeleteNamedInstance(DeleteNamedInstance {
-    instance_id: parse::<NamedInstanceId>(&payload.instance_id)?,
-  }))
-}
-
-fn map_delete_source(payload: NapiDeleteSourceIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::DeleteSource(DeleteSource {
-    source_id: parse::<SourceId>(&payload.source_id)?,
-  }))
-}
-
-fn map_create_source(payload: NapiCreateSourceIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CreateSource(CreateSource {
-    source_id: parse::<SourceId>(&payload.source_id)?,
-    name: payload.name,
-    location: shift_font::DesignLocation::from_untyped(map_location(payload.location)?),
-  }))
-}
-
-fn map_update_source(payload: NapiUpdateSourceIntent) -> errors::Result<FontIntent> {
-  let metric_values = payload
-    .metric_values
-    .into_iter()
-    .map(|value| {
-      Ok((
-        parse::<MetricId>(&value.metric_id)?,
-        MetricValue::new(value.position, value.overshoot),
-      ))
+  fn into_domain(self) -> BridgeResult<KerningValueEdit> {
+    Ok(KerningValueEdit {
+      source_id: parse::<SourceId>(&self.source_id)?,
+      pair: KerningPair::new(self.first.into_domain()?, self.second.into_domain()?),
+      value: self.amount,
     })
-    .collect::<errors::Result<_>>()?;
-  Ok(FontIntent::UpdateSource(UpdateSource {
-    source_id: parse::<SourceId>(&payload.source_id)?,
-    name: payload.name,
-    location: shift_font::DesignLocation::from_untyped(map_location(payload.location)?),
-    metric_values,
-    italic_angle: payload.italic_angle,
-    line_gap: payload.line_gap,
-    underline_position: payload.underline_position,
-    underline_thickness: payload.underline_thickness,
-  }))
+  }
 }
 
-fn map_create_glyph_layer(payload: NapiCreateGlyphLayerIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
-    source_id: parse::<SourceId>(&payload.source_id)?,
-  }))
+impl IntoDomain for NapiKerningPosition {
+  type Domain = KerningPosition;
+
+  fn into_domain(self) -> BridgeResult<KerningPosition> {
+    Ok(match self {
+      NapiKerningPosition::First => KerningPosition::First,
+      NapiKerningPosition::Second => KerningPosition::Second,
+    })
+  }
 }
 
-fn map_clone_glyph_layer(payload: NapiCloneGlyphLayerIntent) -> errors::Result<FontIntent> {
-  Ok(FontIntent::CloneGlyphLayer(CloneGlyphLayer {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
-    source_id: parse::<SourceId>(&payload.source_id)?,
-    from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
-  }))
+impl IntoDomain for NapiKerningSide {
+  type Domain = KerningSide;
+
+  fn into_domain(self) -> BridgeResult<KerningSide> {
+    Ok(match self.kind {
+      NapiKerningSideKind::Glyph => KerningSide::Glyph(parse::<GlyphId>(&self.id)?),
+      NapiKerningSideKind::Group => KerningSide::Group(parse::<KerningGroupId>(&self.id)?),
+    })
+  }
 }
 
-fn map_materialize_glyph_layer(
-  payload: NapiMaterializeGlyphLayerIntent,
-) -> errors::Result<FontIntent> {
-  Ok(FontIntent::MaterializeGlyphLayer(MaterializeGlyphLayer {
-    layer_id: parse::<LayerId>(&payload.layer_id)?,
-    glyph_id: parse::<GlyphId>(&payload.glyph_id)?,
-    source_id: parse::<SourceId>(&payload.source_id)?,
-    from_layer_id: parse::<LayerId>(&payload.from_layer_id)?,
-    values: shift_font::GlyphInterpolationValues::new(payload.values.to_vec()),
-  }))
-}
+impl IntoDomain for NapiFontIntent {
+  type Domain = FontIntent;
 
-fn parse_boolean_op(operation: &str) -> errors::Result<BooleanOp> {
-  match operation {
-    "union" => Ok(BooleanOp::Union),
-    "subtract" => Ok(BooleanOp::Subtract),
-    "intersect" => Ok(BooleanOp::Intersect),
-    "difference" => Ok(BooleanOp::Difference),
-    other => Err(BridgeError::InvalidInput {
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    let kind = self.kind.as_str();
+    let missing = || BridgeError::InvalidInput {
       kind: "intent",
-      value: format!("unknown boolean operation \"{other}\""),
-    }),
-  }
-}
-
-fn map_point_seed(seed: NapiPointSeed) -> errors::Result<PointSeed> {
-  Ok(PointSeed {
-    id: parse::<PointId>(&seed.id)?,
-    x: seed.x,
-    y: seed.y,
-    point_type: seed.point_type.into(),
-    smooth: seed.smooth,
-  })
-}
-
-fn map_anchor_seed(seed: NapiAnchorSeed) -> errors::Result<AnchorSeed> {
-  Ok(AnchorSeed {
-    id: parse::<AnchorId>(&seed.id)?,
-    name: seed.name,
-    x: seed.x,
-    y: seed.y,
-  })
-}
-
-pub(crate) fn map_location(location: NapiLocation) -> errors::Result<FontLocation> {
-  location
-    .values
-    .into_iter()
-    .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
-    .collect()
-}
-
-fn map_font_metadata(metadata: NapiFontMetadata) -> FontMetadataModel {
-  FontMetadataModel {
-    family_name: metadata.family_name,
-    style_name: metadata.style_name,
-    version_major: metadata.version_major,
-    version_minor: metadata.version_minor,
-    copyright: metadata.copyright,
-    trademark: metadata.trademark,
-    designer: metadata.designer,
-    designer_url: metadata.designer_url,
-    manufacturer: metadata.manufacturer,
-    manufacturer_url: metadata.manufacturer_url,
-    license: metadata.license,
-    license_url: metadata.license_url,
-    description: metadata.description,
-    note: metadata.note,
-  }
-}
-
-fn map_metric_definition(definition: NapiMetricDefinition) -> errors::Result<FontMetricDefinition> {
-  let kind = match definition.kind {
-    NapiMetricKind::Ascender => MetricKind::Ascender,
-    NapiMetricKind::CapHeight => MetricKind::CapHeight,
-    NapiMetricKind::XHeight => MetricKind::XHeight,
-    NapiMetricKind::Baseline => MetricKind::Baseline,
-    NapiMetricKind::Descender => MetricKind::Descender,
-    NapiMetricKind::Custom => MetricKind::Custom,
-  };
-  Ok(FontMetricDefinition::with_id(
-    parse::<MetricId>(&definition.id)?,
-    kind,
-    definition.name,
-  ))
-}
-
-fn map_axis(axis: NapiAxis) -> errors::Result<FontAxis> {
-  let axis_id = parse::<AxisId>(&axis.id)?;
-  let mut mapped = match axis.axis_type {
-    NapiAxisType::Continuous => FontAxis::continuous_with_id(
-      axis_id,
-      axis.tag,
-      axis.name,
-      axis.minimum.ok_or_else(|| BridgeError::InvalidInput {
-        kind: "continuous axis minimum",
-        value: "missing".to_string(),
-      })?,
-      axis.default,
-      axis.maximum.ok_or_else(|| BridgeError::InvalidInput {
-        kind: "continuous axis maximum",
-        value: "missing".to_string(),
-      })?,
-    ),
-    NapiAxisType::Discrete => FontAxis::discrete_with_id(
-      axis_id,
-      axis.tag,
-      axis.name,
-      axis.values.ok_or_else(|| BridgeError::InvalidInput {
-        kind: "discrete axis values",
-        value: "missing".to_string(),
-      })?,
-      axis.default,
-    ),
-  };
-  mapped.set_role(match axis.role {
-    NapiAxisRole::External => AxisRole::External,
-    NapiAxisRole::Internal => AxisRole::Internal,
-  });
-  let mut labels = Vec::new();
-  for label in axis.labels {
-    let range = match (label.minimum, label.maximum) {
-      (None, None) => None,
-      (Some(minimum), Some(maximum)) => Some(AxisLabelRange { minimum, maximum }),
-      _ => {
-        return Err(BridgeError::InvalidInput {
-          kind: "axis label range",
-          value: "minimum and maximum must be provided together".to_string(),
-        });
-      }
+      value: format!("{kind} requires its payload field"),
     };
-    labels.push(AxisLabel::with_id(
-      parse::<AxisLabelId>(&label.id)?,
-      label.name,
-      label.value,
-      range,
-      label.linked_value,
-      label.elidable,
-    ));
+
+    match kind {
+      "addPoints" => self.add_points.ok_or_else(missing)?.into_domain(),
+      "addContour" => self.add_contour.ok_or_else(missing)?.into_domain(),
+      "setContourClosed" => self.set_contour_closed.ok_or_else(missing)?.into_domain(),
+      "movePoints" => self.move_points.ok_or_else(missing)?.into_domain(),
+      "setPointSmooth" => self.set_point_smooth.ok_or_else(missing)?.into_domain(),
+      "removePoints" => self.remove_points.ok_or_else(missing)?.into_domain(),
+      "addAnchors" => self.add_anchors.ok_or_else(missing)?.into_domain(),
+      "moveAnchors" => self.move_anchors.ok_or_else(missing)?.into_domain(),
+      "removeAnchors" => self.remove_anchors.ok_or_else(missing)?.into_domain(),
+      "renameAnchors" => self.rename_anchors.ok_or_else(missing)?.into_domain(),
+      "addComponent" => self.add_component.ok_or_else(missing)?.into_domain(),
+      "setComponentTransforms" => self
+        .set_component_transforms
+        .ok_or_else(missing)?
+        .into_domain(),
+      "setComponentAlignment" => self
+        .set_component_alignment
+        .ok_or_else(missing)?
+        .into_domain(),
+      "removeComponents" => self.remove_components.ok_or_else(missing)?.into_domain(),
+      "decomposeComponents" => self.decompose_components.ok_or_else(missing)?.into_domain(),
+      "reverseContour" => self.reverse_contour.ok_or_else(missing)?.into_domain(),
+      "setContourStart" => self.set_contour_start.ok_or_else(missing)?.into_domain(),
+      "translatePoints" => self.translate_points.ok_or_else(missing)?.into_domain(),
+      "transformLayer" => self.transform_layer.ok_or_else(missing)?.into_domain(),
+      "setXAdvance" => self.set_x_advance.ok_or_else(missing)?.into_domain(),
+      "applyBooleanOp" => self.apply_boolean_op.ok_or_else(missing)?.into_domain(),
+      "createGlyph" => self.create_glyph.ok_or_else(missing)?.into_domain(),
+      "updateGlyph" => self.update_glyph.ok_or_else(missing)?.into_domain(),
+      "updateFontMetadata" => self.update_font_metadata.ok_or_else(missing)?.into_domain(),
+      "setKerningValues" => self.set_kerning_values.ok_or_else(missing)?.into_domain(),
+      "createKerningGroup" => self.create_kerning_group.ok_or_else(missing)?.into_domain(),
+      "setKerningGroupMember" => self
+        .set_kerning_group_member
+        .ok_or_else(missing)?
+        .into_domain(),
+      "renameKerningGroup" => self.rename_kerning_group.ok_or_else(missing)?.into_domain(),
+      "deleteKerningGroup" => self.delete_kerning_group.ok_or_else(missing)?.into_domain(),
+      "setLanguages" => self.set_languages.ok_or_else(missing)?.into_domain(),
+      "createAxis" => self.create_axis.ok_or_else(missing)?.into_domain(),
+      "updateAxis" => self.update_axis.ok_or_else(missing)?.into_domain(),
+      "deleteAxis" => self.delete_axis.ok_or_else(missing)?.into_domain(),
+      "setAxisMappings" => self.set_axis_mappings.ok_or_else(missing)?.into_domain(),
+      "setMetricDefinitions" => self
+        .set_metric_definitions
+        .ok_or_else(missing)?
+        .into_domain(),
+      "createNamedInstance" => self
+        .create_named_instance
+        .ok_or_else(missing)?
+        .into_domain(),
+      "updateNamedInstance" => self
+        .update_named_instance
+        .ok_or_else(missing)?
+        .into_domain(),
+      "deleteNamedInstance" => self
+        .delete_named_instance
+        .ok_or_else(missing)?
+        .into_domain(),
+      "deleteSource" => self.delete_source.ok_or_else(missing)?.into_domain(),
+      "createSource" => self.create_source.ok_or_else(missing)?.into_domain(),
+      "updateSource" => self.update_source.ok_or_else(missing)?.into_domain(),
+      "createGlyphLayer" => self.create_glyph_layer.ok_or_else(missing)?.into_domain(),
+      "cloneGlyphLayer" => self.clone_glyph_layer.ok_or_else(missing)?.into_domain(),
+      "materializeGlyphLayer" => self
+        .materialize_glyph_layer
+        .ok_or_else(missing)?
+        .into_domain(),
+      other => Err(BridgeError::InvalidInput {
+        kind: "intent",
+        value: format!("unknown intent kind \"{other}\""),
+      }),
+    }
   }
-  mapped.set_labels(labels);
-  mapped.set_hidden(axis.hidden);
-  mapped.validate()?;
-  Ok(mapped)
 }
 
-fn map_named_instance(instance: NapiNamedInstance) -> errors::Result<FontNamedInstance> {
-  Ok(FontNamedInstance::with_id(
-    parse::<NamedInstanceId>(&instance.id)?,
-    instance.name,
-    shift_font::ExternalLocation::from_untyped(map_location(instance.location)?),
-    instance.postscript_name,
-  ))
+impl IntoDomain for NapiAddPointsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::AddPoints(AddPoints {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      contour_id: self
+        .contour_id
+        .map(|id| parse::<ContourId>(&id))
+        .transpose()?,
+      before: self.before.map(|id| parse::<PointId>(&id)).transpose()?,
+      points: self
+        .points
+        .into_iter()
+        .map(IntoDomain::into_domain)
+        .collect::<errors::Result<Vec<_>>>()?,
+    }))
+  }
 }
 
-fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping> {
-  let mut mapped = FontAxisMapping::with_id(
-    parse::<AxisMappingId>(&mapping.id)?,
-    mapping.name,
-    parse_id_list::<AxisId>(&mapping.inputs)?,
-    parse_id_list::<AxisId>(&mapping.outputs)?,
-    mapping
-      .points
+impl IntoDomain for NapiAddContourIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::AddContour(AddContour {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      contour_id: parse::<ContourId>(&self.contour_id)?,
+      closed: self.closed,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetContourClosedIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetContourClosed(SetContourClosed {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      contour_id: parse::<ContourId>(&self.contour_id)?,
+      closed: self.closed,
+    }))
+  }
+}
+
+impl IntoDomain for NapiMovePointsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::MovePoints(MovePoints {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      point_ids: parse_id_list::<PointId>(&self.point_ids)?,
+      coords: self.coords,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetPointSmoothIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetPointSmooth(SetPointSmooth {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      point_id: parse::<PointId>(&self.point_id)?,
+      smooth: self.smooth,
+    }))
+  }
+}
+
+impl IntoDomain for NapiRemovePointsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::RemovePoints(RemovePoints {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      point_ids: parse_id_list::<PointId>(&self.point_ids)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiAddAnchorsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::AddAnchors(AddAnchors {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      anchors: self
+        .anchors
+        .into_iter()
+        .map(IntoDomain::into_domain)
+        .collect::<errors::Result<Vec<_>>>()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiMoveAnchorsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::MoveAnchors(MoveAnchors {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
+      coords: self.coords,
+    }))
+  }
+}
+
+impl IntoDomain for NapiRemoveAnchorsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::RemoveAnchors(RemoveAnchors {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiRenameAnchorsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::RenameAnchors(RenameAnchors {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
+      names: self.names,
+    }))
+  }
+}
+
+impl IntoDomain for NapiAddComponentIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::AddComponent(AddComponent {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      component_id: parse::<ComponentId>(&self.component_id)?,
+      base_glyph_id: parse::<GlyphId>(&self.base_glyph_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetComponentTransformsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetComponentTransforms(SetComponentTransforms {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+      transforms: self.transforms,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetComponentAlignmentIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetComponentAlignment(SetComponentAlignment {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+      alignment: shift_wire::bridges::napi::parse_alignment(Some(&self.alignment)),
+    }))
+  }
+}
+
+impl IntoDomain for NapiRemoveComponentsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::RemoveComponents(RemoveComponents {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiDecomposeComponentsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::DecomposeComponents(DecomposeComponents {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiReverseContourIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::ReverseContour(ReverseContour {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      contour_id: parse::<ContourId>(&self.contour_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetContourStartIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetContourStart(SetContourStart {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      contour_id: parse::<ContourId>(&self.contour_id)?,
+      point_id: parse::<PointId>(&self.point_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiTranslatePointsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::TranslatePoints(TranslatePoints {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      point_ids: parse_id_list::<PointId>(&self.point_ids)?,
+      dx: self.dx,
+      dy: self.dy,
+    }))
+  }
+}
+
+impl IntoDomain for NapiTransformLayerIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    let [xx, xy, yx, yy, dx, dy] =
+      <[f64; 6]>::try_from(self.matrix.as_slice()).map_err(|_| BridgeError::InvalidInput {
+        kind: "transformLayer matrix value count",
+        value: self.matrix.len().to_string(),
+      })?;
+    Ok(FontIntent::TransformLayer(TransformLayer {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      transform: Transform {
+        xx,
+        xy,
+        yx,
+        yy,
+        dx,
+        dy,
+      },
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetXAdvanceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetXAdvance(SetXAdvance {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      width: self.width,
+    }))
+  }
+}
+
+impl IntoDomain for NapiBooleanOpIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::ApplyBooleanOp(ApplyBooleanOp {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      contour_id_a: parse::<ContourId>(&self.contour_id_a)?,
+      contour_id_b: parse::<ContourId>(&self.contour_id_b)?,
+      operation: self
+        .operation
+        .parse()
+        .map_err(|value| BridgeError::InvalidInput {
+          kind: "intent",
+          value,
+        })?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCreateGlyphIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CreateGlyph(CreateGlyph {
+      glyph_id: Some(parse::<GlyphId>(&self.glyph_id)?),
+      name: self.name,
+      unicodes: self.unicodes,
+    }))
+  }
+}
+
+impl IntoDomain for NapiUpdateGlyphIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::UpdateGlyph(UpdateGlyph {
+      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+      new_name: self.new_name.into(),
+      new_unicodes: self.new_unicodes,
+    }))
+  }
+}
+
+impl IntoDomain for NapiUpdateFontMetadataIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::UpdateFontMetadata(UpdateFontMetadata {
+      metadata: self.metadata.into_domain()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetKerningValuesIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetKerningValues(SetKerningValues {
+      edits: self
+        .edits
+        .into_iter()
+        .map(IntoDomain::into_domain)
+        .collect::<errors::Result<Vec<_>>>()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCreateKerningGroupIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CreateKerningGroup(CreateKerningGroup {
+      group_id: parse::<KerningGroupId>(&self.group_id)?,
+      position: self.position.into_domain()?,
+      name: self.name,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetKerningGroupMemberIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+      position: self.position.into_domain()?,
+      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+      group_id: self
+        .group_id
+        .as_deref()
+        .map(parse::<KerningGroupId>)
+        .transpose()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiRenameKerningGroupIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::RenameKerningGroup(RenameKerningGroup {
+      group_id: parse::<KerningGroupId>(&self.group_id)?,
+      name: self.name,
+    }))
+  }
+}
+
+impl IntoDomain for NapiDeleteKerningGroupIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::DeleteKerningGroup(DeleteKerningGroup {
+      group_id: parse::<KerningGroupId>(&self.group_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetLanguagesIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetLanguages(SetLanguages {
+      language_ids: self.language_ids,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCreateAxisIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CreateAxis(CreateAxis {
+      axis: self.axis.into_domain()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiUpdateAxisIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::UpdateAxis(UpdateAxis {
+      axis: self.axis.into_domain()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiDeleteAxisIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::DeleteAxis(DeleteAxis {
+      axis_id: parse::<AxisId>(&self.axis_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetAxisMappingsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetAxisMappings(SetAxisMappings {
+      mappings: self
+        .mappings
+        .into_iter()
+        .map(IntoDomain::into_domain)
+        .collect::<errors::Result<Vec<_>>>()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiSetMetricDefinitionsIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::SetMetricDefinitions(SetMetricDefinitions {
+      definitions: self
+        .definitions
+        .into_iter()
+        .map(IntoDomain::into_domain)
+        .collect::<errors::Result<Vec<_>>>()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCreateNamedInstanceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CreateNamedInstance(CreateNamedInstance {
+      instance: self.instance.into_domain()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiUpdateNamedInstanceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::UpdateNamedInstance(UpdateNamedInstance {
+      instance: self.instance.into_domain()?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiDeleteNamedInstanceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::DeleteNamedInstance(DeleteNamedInstance {
+      instance_id: parse::<NamedInstanceId>(&self.instance_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiDeleteSourceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::DeleteSource(DeleteSource {
+      source_id: parse::<SourceId>(&self.source_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCreateSourceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CreateSource(CreateSource {
+      source_id: parse::<SourceId>(&self.source_id)?,
+      name: self.name,
+      location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
+    }))
+  }
+}
+
+impl IntoDomain for NapiUpdateSourceIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    let metric_values = self
+      .metric_values
       .into_iter()
-      .map(|point| {
-        Ok(FontAxisMappingPoint {
-          description: point.description,
-          input: map_location(point.input)?,
-          output: map_location(point.output)?,
-        })
+      .map(|value| {
+        Ok((
+          parse::<MetricId>(&value.metric_id)?,
+          MetricValue::new(value.position, value.overshoot),
+        ))
       })
-      .collect::<errors::Result<Vec<_>>>()?,
-  );
-  mapped.set_description(mapping.description);
-  Ok(mapped)
+      .collect::<errors::Result<_>>()?;
+    Ok(FontIntent::UpdateSource(UpdateSource {
+      source_id: parse::<SourceId>(&self.source_id)?,
+      name: self.name,
+      location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
+      metric_values,
+      italic_angle: self.italic_angle,
+      line_gap: self.line_gap,
+      underline_position: self.underline_position,
+      underline_thickness: self.underline_thickness,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCreateGlyphLayerIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+      source_id: parse::<SourceId>(&self.source_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiCloneGlyphLayerIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::CloneGlyphLayer(CloneGlyphLayer {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+      source_id: parse::<SourceId>(&self.source_id)?,
+      from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
+    }))
+  }
+}
+
+impl IntoDomain for NapiMaterializeGlyphLayerIntent {
+  type Domain = FontIntent;
+
+  fn into_domain(self) -> BridgeResult<FontIntent> {
+    Ok(FontIntent::MaterializeGlyphLayer(MaterializeGlyphLayer {
+      layer_id: parse::<LayerId>(&self.layer_id)?,
+      glyph_id: parse::<GlyphId>(&self.glyph_id)?,
+      source_id: parse::<SourceId>(&self.source_id)?,
+      from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
+      values: shift_font::GlyphInterpolationValues::new(self.values.to_vec()),
+    }))
+  }
+}
+
+impl IntoDomain for NapiPointSeed {
+  type Domain = PointSeed;
+
+  fn into_domain(self) -> BridgeResult<PointSeed> {
+    Ok(PointSeed {
+      id: parse::<PointId>(&self.id)?,
+      x: self.x,
+      y: self.y,
+      point_type: self.point_type.into(),
+      smooth: self.smooth,
+    })
+  }
+}
+
+impl IntoDomain for NapiAnchorSeed {
+  type Domain = AnchorSeed;
+
+  fn into_domain(self) -> BridgeResult<AnchorSeed> {
+    Ok(AnchorSeed {
+      id: parse::<AnchorId>(&self.id)?,
+      name: self.name,
+      x: self.x,
+      y: self.y,
+    })
+  }
+}
+
+impl IntoDomain for NapiLocation {
+  type Domain = FontLocation;
+
+  fn into_domain(self) -> BridgeResult<FontLocation> {
+    self
+      .values
+      .into_iter()
+      .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
+      .collect()
+  }
+}
+
+impl IntoDomain for NapiFontMetadata {
+  type Domain = FontMetadataModel;
+
+  fn into_domain(self) -> BridgeResult<FontMetadataModel> {
+    Ok(FontMetadataModel {
+      family_name: self.family_name,
+      style_name: self.style_name,
+      version_major: self.version_major,
+      version_minor: self.version_minor,
+      copyright: self.copyright,
+      trademark: self.trademark,
+      designer: self.designer,
+      designer_url: self.designer_url,
+      manufacturer: self.manufacturer,
+      manufacturer_url: self.manufacturer_url,
+      license: self.license,
+      license_url: self.license_url,
+      description: self.description,
+      note: self.note,
+    })
+  }
+}
+
+impl IntoDomain for NapiMetricDefinition {
+  type Domain = FontMetricDefinition;
+
+  fn into_domain(self) -> BridgeResult<FontMetricDefinition> {
+    let kind = match self.kind {
+      NapiMetricKind::Ascender => MetricKind::Ascender,
+      NapiMetricKind::CapHeight => MetricKind::CapHeight,
+      NapiMetricKind::XHeight => MetricKind::XHeight,
+      NapiMetricKind::Baseline => MetricKind::Baseline,
+      NapiMetricKind::Descender => MetricKind::Descender,
+      NapiMetricKind::Custom => MetricKind::Custom,
+    };
+    Ok(FontMetricDefinition::with_id(
+      parse::<MetricId>(&self.id)?,
+      kind,
+      self.name,
+    ))
+  }
+}
+
+impl IntoDomain for NapiAxis {
+  type Domain = FontAxis;
+
+  fn into_domain(self) -> BridgeResult<FontAxis> {
+    let axis_id = parse::<AxisId>(&self.id)?;
+    let mut mapped = match self.axis_type {
+      NapiAxisType::Continuous => FontAxis::continuous_with_id(
+        axis_id,
+        self.tag,
+        self.name,
+        self.minimum.ok_or_else(|| BridgeError::InvalidInput {
+          kind: "continuous axis minimum",
+          value: "missing".to_string(),
+        })?,
+        self.default,
+        self.maximum.ok_or_else(|| BridgeError::InvalidInput {
+          kind: "continuous axis maximum",
+          value: "missing".to_string(),
+        })?,
+      ),
+      NapiAxisType::Discrete => FontAxis::discrete_with_id(
+        axis_id,
+        self.tag,
+        self.name,
+        self.values.ok_or_else(|| BridgeError::InvalidInput {
+          kind: "discrete axis values",
+          value: "missing".to_string(),
+        })?,
+        self.default,
+      ),
+    };
+    mapped.set_role(match self.role {
+      NapiAxisRole::External => AxisRole::External,
+      NapiAxisRole::Internal => AxisRole::Internal,
+    });
+    let mut labels = Vec::new();
+    for label in self.labels {
+      let range = match (label.minimum, label.maximum) {
+        (None, None) => None,
+        (Some(minimum), Some(maximum)) => Some(AxisLabelRange { minimum, maximum }),
+        _ => {
+          return Err(BridgeError::InvalidInput {
+            kind: "axis label range",
+            value: "minimum and maximum must be provided together".to_string(),
+          });
+        }
+      };
+      labels.push(AxisLabel::with_id(
+        parse::<AxisLabelId>(&label.id)?,
+        label.name,
+        label.value,
+        range,
+        label.linked_value,
+        label.elidable,
+      ));
+    }
+    mapped.set_labels(labels);
+    mapped.set_hidden(self.hidden);
+    mapped.validate()?;
+    Ok(mapped)
+  }
+}
+
+impl IntoDomain for NapiNamedInstance {
+  type Domain = FontNamedInstance;
+
+  fn into_domain(self) -> BridgeResult<FontNamedInstance> {
+    Ok(FontNamedInstance::with_id(
+      parse::<NamedInstanceId>(&self.id)?,
+      self.name,
+      shift_font::ExternalLocation::from_untyped(self.location.into_domain()?),
+      self.postscript_name,
+    ))
+  }
+}
+
+impl IntoDomain for NapiAxisMapping {
+  type Domain = FontAxisMapping;
+
+  fn into_domain(self) -> BridgeResult<FontAxisMapping> {
+    let mut mapped = FontAxisMapping::with_id(
+      parse::<AxisMappingId>(&self.id)?,
+      self.name,
+      parse_id_list::<AxisId>(&self.inputs)?,
+      parse_id_list::<AxisId>(&self.outputs)?,
+      self
+        .points
+        .into_iter()
+        .map(|point| {
+          Ok(FontAxisMappingPoint {
+            description: point.description,
+            input: point.input.into_domain()?,
+            output: point.output.into_domain()?,
+          })
+        })
+        .collect::<errors::Result<Vec<_>>>()?,
+    );
+    mapped.set_description(self.description);
+    Ok(mapped)
+  }
 }
 
 fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
