@@ -22,6 +22,10 @@ impl MemorySource {
 
     pub(crate) fn from_files(files: HashMap<PathBuf, Vec<u8>>) -> Self {
         let mut directories = HashMap::<PathBuf, BTreeSet<DirEntry>>::new();
+        #[allow(
+            clippy::iter_over_hash_type,
+            reason = "fills ordered sets; the visiting order does not matter"
+        )]
         for path in files.keys() {
             let parent = path.parent().unwrap_or_else(|| Path::new(""));
             let name = path.file_name().expect("file path should have a name");

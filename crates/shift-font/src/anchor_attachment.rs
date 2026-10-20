@@ -10,7 +10,7 @@
 //! again from the new anchors, in component order, so a mark stacked on a
 //! moved mark follows it too.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use kurbo::{Point, Vec2};
 
@@ -33,7 +33,7 @@ pub(crate) fn realign_attached_components<'a>(
     after: &mut Font,
     touched: impl IntoIterator<Item = &'a LayerId>,
 ) -> Vec<(LayerId, bool)> {
-    let touched: HashSet<&LayerId> = touched.into_iter().collect();
+    let touched: BTreeSet<&LayerId> = touched.into_iter().collect();
     let mut anchor_glyphs = HashSet::new();
     for &layer_id in &touched {
         let (Some(old), Some(new)) = (before.layer(layer_id), after.layer(layer_id)) else {

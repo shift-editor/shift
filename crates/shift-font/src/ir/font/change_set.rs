@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
 use crate::{FontChange, FontChangeSet, Require, SourceCollection};
@@ -204,7 +204,7 @@ impl Font {
         }
 
         let state = self.state_mut();
-        let mut touched_unicodes = HashSet::new();
+        let mut touched_unicodes = BTreeSet::new();
         for glyph_id in &touched_glyph_ids {
             let Some(glyph) = state.data.glyphs.get(glyph_id) else {
                 continue;

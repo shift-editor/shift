@@ -1,6 +1,6 @@
 use crate::error::{OrMissing, StoreEntity};
 use crate::numeric::sql_int;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use rusqlite::{Transaction, params};
 use shift_font as font;
@@ -48,11 +48,11 @@ impl RecoveryOverlay {
         let mappings_changed = impact.contains(font::FontChangeImpact::AXIS_MAPPINGS);
         let definitions_changed = impact.contains(font::FontChangeImpact::METRIC_DEFINITIONS);
         let instances_changed = impact.contains(font::FontChangeImpact::NAMED_INSTANCES);
-        let mut axis_ids = HashSet::new();
-        let mut source_ids = HashSet::new();
-        let mut glyph_ids = HashSet::new();
-        let mut layer_ids = HashSet::new();
-        let mut kerning_source_ids = HashSet::new();
+        let mut axis_ids = BTreeSet::new();
+        let mut source_ids = BTreeSet::new();
+        let mut glyph_ids = BTreeSet::new();
+        let mut layer_ids = BTreeSet::new();
+        let mut kerning_source_ids = BTreeSet::new();
         let mut kerning_groups_changed = false;
 
         // Entity lifecycle omits pure reordering by design. Ordered relational

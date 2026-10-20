@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::{BTreeSet, HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
@@ -289,7 +289,7 @@ where
                     .iter()
                     .map(|component| component.glyph)
             }))
-            .collect::<HashSet<_>>();
+            .collect::<BTreeSet<_>>();
         for dependency in dependencies {
             self.resolve(dependency)?;
         }

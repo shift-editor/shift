@@ -1098,6 +1098,27 @@ mod tests {
     }
 
     #[test]
+    fn removing_unknown_components_reports_the_first_one_requested() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let layer_id = LayerId::new();
+        let mut glyph = Glyph::with_id(GlyphId::new(), "a");
+        glyph.set_layer(GlyphLayer::new(layer_id.clone(), source_id));
+        font.insert_glyph(glyph).unwrap();
+        let unknown = (0..8).map(|_| ComponentId::new()).collect::<Vec<_>>();
+
+        let result = font.apply_intents(&FontIntentSet::from(RemoveComponents {
+            layer_id,
+            component_ids: unknown.clone(),
+        }));
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidComponentId(id)) if id == unknown[0].to_string()
+        ));
+    }
+
+    #[test]
     fn adding_a_mark_stores_its_anchor_aligned_position() {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();

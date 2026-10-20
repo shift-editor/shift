@@ -575,15 +575,14 @@ impl LayerIntent for RemoveComponents {
             layer_id,
             component_ids,
         } = self;
-        let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
         {
             let layer = font.require_layer_mut(layer_id)?;
-            for component_id in &component_ids {
+            for component_id in component_ids {
                 if layer.component(component_id).is_none() {
                     return Err(CoreError::InvalidComponentId(component_id.to_string()));
                 }
             }
-            for component_id in &component_ids {
+            for component_id in component_ids {
                 layer.remove_component(component_id);
             }
         }
@@ -609,11 +608,10 @@ impl LayerIntent for DecomposeComponents {
             layer_id,
             component_ids,
         } = self;
-        let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
         let (glyph_id, location) = {
             let glyph_id = font.require_layer_owner(layer_id)?;
             let layer = font.require_layer_mut(layer_id)?;
-            for component_id in &component_ids {
+            for component_id in component_ids {
                 if layer.component(component_id).is_none() {
                     return Err(CoreError::InvalidComponentId(component_id.to_string()));
                 }
@@ -624,12 +622,13 @@ impl LayerIntent for DecomposeComponents {
         };
         let resolved_contours = {
             let mut projection = font.projection(&location);
+            let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
             projection.component_contours(&glyph_id, &component_ids)?
         };
 
         {
             let layer = font.require_layer_mut(layer_id)?;
-            for component_id in &component_ids {
+            for component_id in component_ids {
                 layer.remove_component(component_id);
             }
             for resolved in resolved_contours {
