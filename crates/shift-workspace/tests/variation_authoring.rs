@@ -2,6 +2,7 @@ use shift_font::{
     Axis, ExternalLocation, FontIntent, FontIntentSet, NamedInstance,
     test_support::sample_variable_font,
 };
+use shift_font::{CreateNamedInstance, UpdateAxis, UpdateFontMetadata, UpdateSource};
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
 
@@ -29,10 +30,10 @@ fn axis_and_product_batch_has_one_exact_undo_step_without_loading_geometry() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::UpdateAxis { axis },
-                    FontIntent::CreateNamedInstance {
+                    FontIntent::UpdateAxis(UpdateAxis { axis }),
+                    FontIntent::CreateNamedInstance(CreateNamedInstance {
                         instance: book.clone(),
-                    },
+                    }),
                 ],
             },
             None,
@@ -90,8 +91,8 @@ fn invalid_origin_edit_rolls_back_earlier_metadata_and_preserves_ledger_and_stor
     let result = workspace.apply(
         &FontIntentSet {
             intents: vec![
-                FontIntent::UpdateFontMetadata { metadata },
-                FontIntent::UpdateAxis { axis },
+                FontIntent::UpdateFontMetadata(UpdateFontMetadata { metadata }),
+                FontIntent::UpdateAxis(UpdateAxis { axis }),
             ],
         },
         None,
@@ -130,7 +131,7 @@ fn explicit_origin_relocation_batch_restores_the_complete_pair_on_undo_and_redo(
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::UpdateSource {
+                    FontIntent::UpdateSource(UpdateSource {
                         source_id: source.id(),
                         name: source.name().to_string(),
                         location,
@@ -139,8 +140,8 @@ fn explicit_origin_relocation_batch_restores_the_complete_pair_on_undo_and_redo(
                         line_gap: source.line_gap(),
                         underline_position: source.underline_position(),
                         underline_thickness: source.underline_thickness(),
-                    },
-                    FontIntent::UpdateAxis { axis },
+                    }),
+                    FontIntent::UpdateAxis(UpdateAxis { axis }),
                 ],
             },
             None,

@@ -35,7 +35,7 @@ impl FontWriter for UfoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Contour, Glyph, GlyphLayer, LayerId, PointType};
+    use shift_font::{Contour, Glyph, GlyphLayer, LayerId, PointType, SetLanguages};
     use std::fs;
 
     fn create_test_font() -> Font {
@@ -179,9 +179,9 @@ mod tests {
     fn tracked_languages_round_trip_through_font_lib_plist() {
         let mut font = create_test_font();
         font.apply_intents(&shift_font::FontIntentSet {
-            intents: vec![shift_font::FontIntent::SetLanguages {
+            intents: vec![shift_font::FontIntent::SetLanguages(SetLanguages {
                 language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
-            }],
+            })],
         })
         .unwrap();
 

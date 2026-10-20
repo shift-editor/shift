@@ -2,6 +2,7 @@ use shift_font::{
     Anchor, Component, Contour, FontIntent, FontIntentSet, GlyphId, LayerId, PointType,
     test_support::sample_font,
 };
+use shift_font::{CreateGlyph, CreateGlyphLayer, ReplaceGlyphLayerContent, UpdateGlyph};
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
 
@@ -32,35 +33,35 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::ReplaceGlyphLayerContent {
+                    FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
                         layer_id: layer_id.clone(),
                         width: 720.0,
                         contours: vec![contour.clone()],
                         anchors: vec![Anchor::new(Some("top".to_string()), 20.0, 90.0)],
                         components: Vec::new(),
-                    },
-                    FontIntent::UpdateGlyph {
+                    }),
+                    FontIntent::UpdateGlyph(UpdateGlyph {
                         glyph_id: glyph_id.clone(),
                         new_name: "A".into(),
                         new_unicodes: vec![0x41],
-                    },
-                    FontIntent::CreateGlyph {
+                    }),
+                    FontIntent::CreateGlyph(CreateGlyph {
                         glyph_id: Some(new_glyph_id.clone()),
                         name: "B".to_string(),
                         unicodes: vec![0x42],
-                    },
-                    FontIntent::CreateGlyphLayer {
+                    }),
+                    FontIntent::CreateGlyphLayer(CreateGlyphLayer {
                         layer_id: new_layer_id.clone(),
                         glyph_id: new_glyph_id,
                         source_id,
-                    },
-                    FontIntent::ReplaceGlyphLayerContent {
+                    }),
+                    FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
                         layer_id: new_layer_id.clone(),
                         width: 620.0,
                         contours: Vec::new(),
                         anchors: Vec::new(),
                         components: Vec::new(),
-                    },
+                    }),
                 ],
             },
             None,
@@ -140,20 +141,20 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
     let result = workspace.apply(
         &FontIntentSet {
             intents: vec![
-                FontIntent::ReplaceGlyphLayerContent {
+                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width: 720.0,
                     contours: Vec::new(),
                     anchors: Vec::new(),
                     components: Vec::new(),
-                },
-                FontIntent::ReplaceGlyphLayerContent {
+                }),
+                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width: f64::INFINITY,
                     contours: Vec::new(),
                     anchors: Vec::new(),
                     components: Vec::new(),
-                },
+                }),
             ],
         },
         None,
@@ -185,13 +186,15 @@ fn component_replacement_acquires_the_dependency_closure_before_cycle_validation
         workspace
             .apply(
                 &FontIntentSet {
-                    intents: vec![FontIntent::ReplaceGlyphLayerContent {
-                        layer_id,
-                        width: 200.0,
-                        contours: Vec::new(),
-                        anchors: Vec::new(),
-                        components: vec![Component::new(glyph_id, "A")],
-                    }],
+                    intents: vec![FontIntent::ReplaceGlyphLayerContent(
+                        ReplaceGlyphLayerContent {
+                            layer_id,
+                            width: 200.0,
+                            contours: Vec::new(),
+                            anchors: Vec::new(),
+                            components: vec![Component::new(glyph_id, "A")],
+                        }
+                    )],
                 },
                 None
             )

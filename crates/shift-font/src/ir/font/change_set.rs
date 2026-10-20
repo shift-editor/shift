@@ -369,7 +369,10 @@ fn touched_glyph_ids(change_set: &FontChangeSet) -> Vec<GlyphId> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{EntityChange, FontEntityChange, FontIntent, FontIntentSet};
+    use crate::{
+        CreateGlyph, CreateGlyphLayer, DeleteAxis, EntityChange, FontEntityChange, FontIntent,
+        FontIntentSet, UpdateFontMetadata,
+    };
 
     use super::*;
 
@@ -435,7 +438,7 @@ mod tests {
         let mut font = original.clone();
         let outcome = font
             .apply_intents(&FontIntentSet {
-                intents: vec![FontIntent::DeleteAxis { axis_id }],
+                intents: vec![FontIntent::DeleteAxis(DeleteAxis { axis_id })],
             })
             .unwrap();
         let edited = font.clone();
@@ -455,7 +458,9 @@ mod tests {
         metadata.family_name = Some("Edited".to_string());
         let changes = edited
             .apply_intents(&FontIntentSet {
-                intents: vec![FontIntent::UpdateFontMetadata { metadata }],
+                intents: vec![FontIntent::UpdateFontMetadata(UpdateFontMetadata {
+                    metadata,
+                })],
             })
             .unwrap()
             .changes;
@@ -491,16 +496,16 @@ mod tests {
         let outcome = font
             .apply_intents(&FontIntentSet {
                 intents: vec![
-                    FontIntent::CreateGlyph {
+                    FontIntent::CreateGlyph(CreateGlyph {
                         glyph_id: Some(glyph_id.clone()),
                         name: "created".to_string(),
                         unicodes: vec![0x63],
-                    },
-                    FontIntent::CreateGlyphLayer {
+                    }),
+                    FontIntent::CreateGlyphLayer(CreateGlyphLayer {
                         layer_id: layer_id.clone(),
                         glyph_id,
                         source_id,
-                    },
+                    }),
                 ],
             })
             .unwrap();

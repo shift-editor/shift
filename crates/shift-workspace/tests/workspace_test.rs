@@ -1,3 +1,10 @@
+use shift_font::{
+    AddAnchors, AddContour, AddPoints, ApplyBooleanOp, CreateAxis, CreateGlyph, CreateGlyphLayer,
+    CreateNamedInstance, CreateSource, DeleteAxis, DeleteNamedInstance, DeleteSource, MoveAnchors,
+    MovePoints, RemoveAnchors, RemovePoints, RenameAnchors, ReverseContour, SetContourClosed,
+    SetContourStart, SetLanguages, SetPointSmooth, SetXAdvance, TranslatePoints,
+    UpdateFontMetadata, UpdateGlyph, UpdateNamedInstance,
+};
 use std::{fs, path::PathBuf};
 
 use shift_font::{
@@ -10,11 +17,11 @@ use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
 
 fn create_glyph_intent(name: &str, unicodes: Vec<u32>) -> FontIntent {
-    FontIntent::CreateGlyph {
+    FontIntent::CreateGlyph(CreateGlyph {
         glyph_id: None,
         name: name.to_string(),
         unicodes,
-    }
+    })
 }
 
 fn create_glyph(workspace: &mut FontWorkspace, name: &str, unicodes: Vec<u32>) -> GlyphId {
@@ -39,11 +46,11 @@ fn create_glyph_layer(
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateGlyphLayer {
+                intents: vec![FontIntent::CreateGlyphLayer(CreateGlyphLayer {
                     layer_id: layer_id.clone(),
                     glyph_id,
                     source_id,
-                }],
+                })],
             },
             None,
         )
@@ -198,9 +205,9 @@ fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::DeleteSource {
+                intents: vec![FontIntent::DeleteSource(DeleteSource {
                     source_id: middle_id,
-                }],
+                })],
             },
             Some("Delete Middle".to_string()),
         )
@@ -279,9 +286,9 @@ fn default_source_delete_is_rejected_without_live_or_durable_mutation() {
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
     let Err(error) = workspace.apply(
         &FontIntentSet {
-            intents: vec![FontIntent::DeleteSource {
+            intents: vec![FontIntent::DeleteSource(DeleteSource {
                 source_id: default_source_id.clone(),
-            }],
+            })],
         },
         Some("Delete Default".to_string()),
     ) else {
@@ -973,10 +980,10 @@ fn intent_on_directory_layer_acquires_before_persisting() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::SetXAdvance {
+                intents: vec![FontIntent::SetXAdvance(SetXAdvance {
                     layer_id: layer_id.clone(),
                     width: 777.0,
-                }],
+                })],
             },
             None,
         )
@@ -1011,10 +1018,10 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::SetXAdvance {
+                intents: vec![FontIntent::SetXAdvance(SetXAdvance {
                     layer_id: layer_id.clone(),
                     width: 777.0,
-                }],
+                })],
             },
             Some("Change advance".to_string()),
         )
@@ -1034,7 +1041,7 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
 
 fn set_x_advance_intents(layer_id: LayerId, width: f64) -> FontIntentSet {
     FontIntentSet {
-        intents: vec![FontIntent::SetXAdvance { layer_id, width }],
+        intents: vec![FontIntent::SetXAdvance(SetXAdvance { layer_id, width })],
     }
 }
 
@@ -1112,11 +1119,11 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     let applied = workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateGlyphLayer {
+                intents: vec![FontIntent::CreateGlyphLayer(CreateGlyphLayer {
                     layer_id: layer_id.clone(),
                     glyph_id: glyph_id.clone(),
                     source_id: source_id.clone(),
-                }],
+                })],
             },
             Some("Create Layer".to_string()),
         )
@@ -1195,11 +1202,11 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateSource {
+                intents: vec![FontIntent::CreateSource(CreateSource {
                     source_id: source_id.clone(),
                     name: "Alt".to_string(),
                     location: weight_location(axis_id, 700.0),
-                }],
+                })],
             },
             Some("Create Source".to_string()),
         )
@@ -1218,9 +1225,9 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::DeleteSource {
+                intents: vec![FontIntent::DeleteSource(DeleteSource {
                     source_id: source_id.clone(),
-                }],
+                })],
             },
             Some("Delete Source".to_string()),
         )
@@ -1328,22 +1335,22 @@ fn axis_source_delete_batches_replay_in_both_orders() {
         workspace
             .apply(
                 &FontIntentSet {
-                    intents: vec![FontIntent::CreateSource {
+                    intents: vec![FontIntent::CreateSource(CreateSource {
                         source_id: source_id.clone(),
                         name: "Bold".to_string(),
                         location: weight_location(axis_id.clone(), 700.0),
-                    }],
+                    })],
                 },
                 None,
             )
             .unwrap();
 
-        let delete_axis = FontIntent::DeleteAxis {
+        let delete_axis = FontIntent::DeleteAxis(DeleteAxis {
             axis_id: axis_id.clone(),
-        };
-        let delete_source = FontIntent::DeleteSource {
+        });
+        let delete_source = FontIntent::DeleteSource(DeleteSource {
             source_id: source_id.clone(),
-        };
+        });
         workspace
             .apply(
                 &FontIntentSet {
@@ -1398,21 +1405,21 @@ fn batched_source_deletes_restore_order_and_default_on_every_replay() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::CreateSource {
+                    FontIntent::CreateSource(CreateSource {
                         source_id: source_b.clone(),
                         name: "B".to_string(),
                         location: weight_location(axis_id.clone(), 700.0),
-                    },
-                    FontIntent::CreateSource {
+                    }),
+                    FontIntent::CreateSource(CreateSource {
                         source_id: source_c.clone(),
                         name: "C".to_string(),
                         location: weight_location(axis_id.clone(), 800.0),
-                    },
-                    FontIntent::CreateSource {
+                    }),
+                    FontIntent::CreateSource(CreateSource {
                         source_id: source_d.clone(),
                         name: "D".to_string(),
                         location: weight_location(axis_id, 900.0),
-                    },
+                    }),
                 ],
             },
             None,
@@ -1424,12 +1431,12 @@ fn batched_source_deletes_restore_order_and_default_on_every_replay() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::DeleteSource {
+                    FontIntent::DeleteSource(DeleteSource {
                         source_id: source_b,
-                    },
-                    FontIntent::DeleteSource {
+                    }),
+                    FontIntent::DeleteSource(DeleteSource {
                         source_id: source_c,
-                    },
+                    }),
                 ],
             },
             Some("Delete Sources".to_string()),
@@ -1476,8 +1483,17 @@ fn batched_axis_deletes_restore_order_on_every_replay() {
                     (axis_c.clone(), "CCCC", "C"),
                 ]
                 .into_iter()
-                .map(|(axis_id, tag, name)| FontIntent::CreateAxis {
-                    axis: Axis::with_id(axis_id, tag.to_string(), name.to_string(), 0.0, 0.0, 1.0),
+                .map(|(axis_id, tag, name)| {
+                    FontIntent::CreateAxis(CreateAxis {
+                        axis: Axis::with_id(
+                            axis_id,
+                            tag.to_string(),
+                            name.to_string(),
+                            0.0,
+                            0.0,
+                            1.0,
+                        ),
+                    })
                 })
                 .collect(),
             },
@@ -1490,8 +1506,8 @@ fn batched_axis_deletes_restore_order_on_every_replay() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::DeleteAxis { axis_id: axis_a },
-                    FontIntent::DeleteAxis { axis_id: axis_b },
+                    FontIntent::DeleteAxis(DeleteAxis { axis_id: axis_a }),
+                    FontIntent::DeleteAxis(DeleteAxis { axis_id: axis_b }),
                 ],
             },
             Some("Delete Axes".to_string()),
@@ -1534,7 +1550,7 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::CreateAxis {
+                    FontIntent::CreateAxis(CreateAxis {
                         axis: Axis::with_id(
                             axis_id,
                             "wght".to_string(),
@@ -1543,12 +1559,12 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
                             400.0,
                             900.0,
                         ),
-                    },
-                    FontIntent::CreateSource {
+                    }),
+                    FontIntent::CreateSource(CreateSource {
                         source_id: SourceId::from_raw("bold"),
                         name: "Bold".to_string(),
                         location,
-                    },
+                    }),
                     create_glyph_intent("B", vec![66]),
                 ],
             },
@@ -1635,17 +1651,17 @@ fn add_square_contour(
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::AddContour {
+                    FontIntent::AddContour(AddContour {
                         layer_id: layer_id.clone(),
                         contour_id: contour_id.clone(),
                         closed: true,
-                    },
-                    FontIntent::AddPoints {
+                    }),
+                    FontIntent::AddPoints(AddPoints {
                         layer_id: layer_id.clone(),
                         contour_id: Some(contour_id.clone()),
                         before: None,
                         points,
-                    },
+                    }),
                 ],
             },
             None,
@@ -1660,7 +1676,7 @@ fn add_anchor(workspace: &mut FontWorkspace, layer_id: &LayerId) -> AnchorId {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::AddAnchors {
+                intents: vec![FontIntent::AddAnchors(AddAnchors {
                     layer_id: layer_id.clone(),
                     anchors: vec![AnchorSeed {
                         id: anchor_id.clone(),
@@ -1668,7 +1684,7 @@ fn add_anchor(workspace: &mut FontWorkspace, layer_id: &LayerId) -> AnchorId {
                         x: 100.0,
                         y: 700.0,
                     }],
-                }],
+                })],
             },
             None,
         )
@@ -1703,11 +1719,11 @@ fn add_contour_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::AddContour {
+        vec![FontIntent::AddContour(AddContour {
             layer_id: layer_id.clone(),
             contour_id: ContourId::new(),
             closed: true,
-        }],
+        })],
     );
 }
 
@@ -1718,11 +1734,11 @@ fn add_points_undo_redo_restores_layer() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::AddContour {
+                intents: vec![FontIntent::AddContour(AddContour {
                     layer_id: layer_id.clone(),
                     contour_id: contour_id.clone(),
                     closed: false,
-                }],
+                })],
             },
             None,
         )
@@ -1731,7 +1747,7 @@ fn add_points_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::AddPoints {
+        vec![FontIntent::AddPoints(AddPoints {
             layer_id: layer_id.clone(),
             contour_id: Some(contour_id),
             before: None,
@@ -1742,7 +1758,7 @@ fn add_points_undo_redo_restores_layer() {
                 point_type: PointType::OnCurve,
                 smooth: false,
             }],
-        }],
+        })],
     );
 }
 
@@ -1754,11 +1770,11 @@ fn set_contour_closed_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::SetContourClosed {
+        vec![FontIntent::SetContourClosed(SetContourClosed {
             layer_id: layer_id.clone(),
             contour_id,
             closed: false,
-        }],
+        })],
     );
 }
 
@@ -1771,11 +1787,11 @@ fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
     let applied = workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::MovePoints {
+                intents: vec![FontIntent::MovePoints(MovePoints {
                     layer_id: layer_id.clone(),
                     point_ids: vec![point_ids[0].clone(), point_ids[1].clone()],
                     coords: vec![5.0, 6.0, 105.0, 6.0],
-                }],
+                })],
             },
             None,
         )
@@ -1806,11 +1822,11 @@ fn set_point_smooth_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::SetPointSmooth {
+        vec![FontIntent::SetPointSmooth(SetPointSmooth {
             layer_id: layer_id.clone(),
             point_id: point_ids[0].clone(),
             smooth: true,
-        }],
+        })],
     );
 }
 
@@ -1822,10 +1838,10 @@ fn remove_points_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::RemovePoints {
+        vec![FontIntent::RemovePoints(RemovePoints {
             layer_id: layer_id.clone(),
             point_ids: vec![point_ids[0].clone()],
-        }],
+        })],
     );
 }
 
@@ -1836,7 +1852,7 @@ fn add_anchors_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::AddAnchors {
+        vec![FontIntent::AddAnchors(AddAnchors {
             layer_id: layer_id.clone(),
             anchors: vec![AnchorSeed {
                 id: AnchorId::new(),
@@ -1844,7 +1860,7 @@ fn add_anchors_undo_redo_restores_layer() {
                 x: 100.0,
                 y: 700.0,
             }],
-        }],
+        })],
     );
 }
 
@@ -1856,11 +1872,11 @@ fn move_anchors_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::MoveAnchors {
+        vec![FontIntent::MoveAnchors(MoveAnchors {
             layer_id: layer_id.clone(),
             anchor_ids: vec![anchor_id],
             coords: vec![150.0, 720.0],
-        }],
+        })],
     );
 }
 
@@ -1872,10 +1888,10 @@ fn remove_anchors_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::RemoveAnchors {
+        vec![FontIntent::RemoveAnchors(RemoveAnchors {
             layer_id: layer_id.clone(),
             anchor_ids: vec![anchor_id],
-        }],
+        })],
     );
 }
 
@@ -1887,11 +1903,11 @@ fn rename_anchors_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::RenameAnchors {
+        vec![FontIntent::RenameAnchors(RenameAnchors {
             layer_id: layer_id.clone(),
             anchor_ids: vec![anchor_id.clone()],
             names: vec!["bottom".to_string()],
-        }],
+        })],
     );
     assert_eq!(
         workspace
@@ -1913,10 +1929,10 @@ fn reverse_contour_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::ReverseContour {
+        vec![FontIntent::ReverseContour(ReverseContour {
             layer_id: layer_id.clone(),
             contour_id,
-        }],
+        })],
     );
 }
 
@@ -1928,11 +1944,11 @@ fn set_contour_start_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::SetContourStart {
+        vec![FontIntent::SetContourStart(SetContourStart {
             layer_id: layer_id.clone(),
             contour_id: contour_id.clone(),
             point_id: point_ids[2].clone(),
-        }],
+        })],
     );
     let contour = workspace
         .font()
@@ -1951,12 +1967,12 @@ fn translate_points_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::TranslatePoints {
+        vec![FontIntent::TranslatePoints(TranslatePoints {
             layer_id: layer_id.clone(),
             point_ids,
             dx: 10.0,
             dy: -5.0,
-        }],
+        })],
     );
 }
 
@@ -1967,10 +1983,10 @@ fn set_x_advance_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::SetXAdvance {
+        vec![FontIntent::SetXAdvance(SetXAdvance {
             layer_id: layer_id.clone(),
             width: 640.0,
-        }],
+        })],
     );
 }
 
@@ -1983,12 +1999,12 @@ fn apply_boolean_op_undo_redo_restores_layer() {
     assert_layer_undo_redo(
         &mut workspace,
         &layer_id,
-        vec![FontIntent::ApplyBooleanOp {
+        vec![FontIntent::ApplyBooleanOp(ApplyBooleanOp {
             layer_id: layer_id.clone(),
             contour_id_a: contour_a,
             contour_id_b: contour_b,
             operation: BooleanOp::Union,
-        }],
+        })],
     );
 }
 
@@ -2002,11 +2018,11 @@ fn update_glyph_undo_redo_restores_old_identity() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::UpdateGlyph {
+                intents: vec![FontIntent::UpdateGlyph(UpdateGlyph {
                     glyph_id: glyph_id.clone(),
                     new_name: GlyphName::new("A.alt").unwrap(),
                     new_unicodes: vec![97],
-                }],
+                })],
             },
             Some("Rename Glyph".to_string()),
         )
@@ -2056,9 +2072,9 @@ fn create_weight_axis(workspace: &mut FontWorkspace) -> AxisId {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateAxis {
+                intents: vec![FontIntent::CreateAxis(CreateAxis {
                     axis: weight_axis(axis_id.clone()),
-                }],
+                })],
             },
             Some("Create Axis".to_string()),
         )
@@ -2080,9 +2096,9 @@ fn create_axis_undo_redo_removes_and_restores_axis() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateAxis {
+                intents: vec![FontIntent::CreateAxis(CreateAxis {
                     axis: weight_axis(axis_id),
-                }],
+                })],
             },
             Some("Create Axis".to_string()),
         )
@@ -2114,9 +2130,9 @@ fn metadata_replacement_is_persisted_and_undoable_without_changing_metrics() {
     let applied = workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::UpdateFontMetadata {
+                intents: vec![FontIntent::UpdateFontMetadata(UpdateFontMetadata {
                     metadata: updated.clone(),
-                }],
+                })],
             },
             Some("Update Font Metadata".to_string()),
         )
@@ -2161,9 +2177,9 @@ fn set_languages(workspace: &mut FontWorkspace, language_ids: &[&str]) {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::SetLanguages {
+                intents: vec![FontIntent::SetLanguages(SetLanguages {
                     language_ids: language_ids.iter().map(ToString::to_string).collect(),
-                }],
+                })],
             },
             Some("Set Languages".to_string()),
         )
@@ -2302,12 +2318,12 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::CreateAxis {
+                    FontIntent::CreateAxis(CreateAxis {
                         axis: weight_axis(axis_id.clone()),
-                    },
-                    FontIntent::CreateNamedInstance {
+                    }),
+                    FontIntent::CreateNamedInstance(CreateNamedInstance {
                         instance: bold.clone(),
-                    },
+                    }),
                 ],
             },
             Some("Create Bold Instance".to_string()),
@@ -2328,9 +2344,9 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::UpdateNamedInstance {
+                intents: vec![FontIntent::UpdateNamedInstance(UpdateNamedInstance {
                     instance: updated.clone(),
-                }],
+                })],
             },
             Some("Update Bold Instance".to_string()),
         )
@@ -2360,7 +2376,9 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::DeleteNamedInstance { instance_id }],
+                intents: vec![FontIntent::DeleteNamedInstance(DeleteNamedInstance {
+                    instance_id,
+                })],
             },
             Some("Delete Bold Instance".to_string()),
         )
@@ -2383,9 +2401,9 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::DeleteAxis {
+                intents: vec![FontIntent::DeleteAxis(DeleteAxis {
                     axis_id: axis_id.clone(),
-                }],
+                })],
             },
             Some("Delete Weight Axis".to_string()),
         )
@@ -2420,14 +2438,14 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
         .apply(
             &FontIntentSet {
                 intents: vec![
-                    FontIntent::CreateAxis {
+                    FontIntent::CreateAxis(CreateAxis {
                         axis: weight_axis(axis_id.clone()),
-                    },
-                    FontIntent::CreateSource {
+                    }),
+                    FontIntent::CreateSource(CreateSource {
                         source_id: source_id.clone(),
                         name: "Bold".to_string(),
                         location,
-                    },
+                    }),
                 ],
             },
             None,
@@ -2438,9 +2456,9 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::DeleteAxis {
+                intents: vec![FontIntent::DeleteAxis(DeleteAxis {
                     axis_id: axis_id.clone(),
-                }],
+                })],
             },
             Some("Delete Axis".to_string()),
         )
@@ -2510,11 +2528,11 @@ fn create_source_undo_redo_removes_and_restores_source() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateSource {
+                intents: vec![FontIntent::CreateSource(CreateSource {
                     source_id: source_id.clone(),
                     name: "Bold".to_string(),
                     location: weight_location(axis_id, 700.0),
-                }],
+                })],
             },
             Some("Create Source".to_string()),
         )
@@ -2590,11 +2608,11 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::CreateSource {
+                intents: vec![FontIntent::CreateSource(CreateSource {
                     source_id: source_id.clone(),
                     name: "Bold".to_string(),
                     location: weight_location(axis_id, 700.0),
-                }],
+                })],
             },
             None,
         )
@@ -2602,9 +2620,9 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
     workspace
         .apply(
             &FontIntentSet {
-                intents: vec![FontIntent::DeleteSource {
+                intents: vec![FontIntent::DeleteSource(DeleteSource {
                     source_id: source_id.clone(),
-                }],
+                })],
             },
             None,
         )

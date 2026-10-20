@@ -1,6 +1,7 @@
 //! Kerning edits reach the compiled font: each master's value, a glyph
 //! exception at one master, and a renamed group, measured by shaping.
 
+use shift_font::{RenameKerningGroup, SetKerningGroupMember, SetKerningValues};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -112,22 +113,22 @@ fn an_exception_at_one_master_changes_only_that_pair_at_that_master() {
     // B joins A's group, so T kerns against both through it.
     edit(
         &mut font,
-        FontIntent::SetKerningGroupMember {
+        FontIntent::SetKerningGroupMember(SetKerningGroupMember {
             position: KerningPosition::Second,
             glyph_id: b,
             group_id: Some(a_group),
-        },
+        }),
     );
     // Then T against A alone becomes an exception at one master.
     edit(
         &mut font,
-        FontIntent::SetKerningValues {
+        FontIntent::SetKerningValues(SetKerningValues {
             edits: vec![KerningValueEdit {
                 source_id: bold_wide,
                 pair: KerningPair::new(KerningSide::Glyph(t), KerningSide::Glyph(a)),
                 value: Some(-300.0),
             }],
-        },
+        }),
     );
     let bytes = compile(&font);
 
@@ -149,10 +150,10 @@ fn renaming_a_group_keeps_every_masters_kern() {
 
     edit(
         &mut font,
-        FontIntent::RenameKerningGroup {
+        FontIntent::RenameKerningGroup(RenameKerningGroup {
             group_id: a_group,
             name: "Apex".to_string(),
-        },
+        }),
     );
     let bytes = compile(&font);
 
@@ -167,11 +168,11 @@ fn taking_a_glyph_out_of_its_group_stops_its_group_kerning() {
 
     edit(
         &mut font,
-        FontIntent::SetKerningGroupMember {
+        FontIntent::SetKerningGroupMember(SetKerningGroupMember {
             position: KerningPosition::Second,
             glyph_id: a,
             group_id: None,
-        },
+        }),
     );
     let bytes = compile(&font);
 
@@ -187,13 +188,13 @@ fn remove_t_a_at(font: &mut Font, filename: &str) {
     let pair = font.kerning().resolve(&source_id, &t, &a).unwrap().pair;
     edit(
         font,
-        FontIntent::SetKerningValues {
+        FontIntent::SetKerningValues(SetKerningValues {
             edits: vec![KerningValueEdit {
                 source_id,
                 pair,
                 value: None,
             }],
-        },
+        }),
     );
 }
 

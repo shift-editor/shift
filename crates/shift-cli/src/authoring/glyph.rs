@@ -5,6 +5,7 @@
 //! Every payload is lowered to a single [`FontIntentSet`], preserving the same
 //! validation and all-or-nothing behavior as interactive authoring.
 
+use shift_font::{CloneGlyphLayer, CreateGlyph, CreateGlyphLayer};
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -30,11 +31,11 @@ use super::{AuthoringReport, apply_mutation};
 pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
     let unicodes = parse_unicodes(&args.unicode)?;
     let set = FontIntentSet {
-        intents: vec![FontIntent::CreateGlyph {
+        intents: vec![FontIntent::CreateGlyph(CreateGlyph {
             glyph_id: None,
             name: args.name,
             unicodes,
-        }],
+        })],
     };
 
     apply_mutation(&args.path, &args.mutation, &set)
@@ -59,11 +60,11 @@ pub fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
     let set = FontIntentSet {
         intents: vec![
-            FontIntent::CreateGlyphLayer {
+            FontIntent::CreateGlyphLayer(CreateGlyphLayer {
                 layer_id: layer_id.clone(),
                 glyph_id,
                 source_id,
-            },
+            }),
             input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?,
         ],
     };
@@ -88,11 +89,11 @@ pub fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let layer_id = existing.clone().unwrap_or_default();
     let mut intents = Vec::new();
     if existing.is_none() {
-        intents.push(FontIntent::CreateGlyphLayer {
+        intents.push(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
             layer_id: layer_id.clone(),
             glyph_id,
             source_id,
-        });
+        }));
     }
     intents.push(input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?);
 
@@ -125,12 +126,12 @@ pub fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
         })?;
     let layer_id = LayerId::new();
     let set = FontIntentSet {
-        intents: vec![FontIntent::CloneGlyphLayer {
+        intents: vec![FontIntent::CloneGlyphLayer(CloneGlyphLayer {
             layer_id,
             glyph_id,
             source_id,
             from_layer_id,
-        }],
+        })],
     };
 
     apply_mutation(&args.path, &args.mutation, &set)
