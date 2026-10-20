@@ -3,7 +3,7 @@ use crate::{Bounds, Curve, Point, SlugError};
 
 use super::{
     COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
-    VariableAtlasBuilder, VariableGlyph, component_glyph_index,
+    VariableAtlasBuilder, VariableGlyph, weight_at,
 };
 
 pub(crate) const VARIABLE_COMPONENT_GLYPH_BYTES: usize = 24;
@@ -118,7 +118,7 @@ impl VariableAtlasBuilder {
         component_sources: Vec<VariableComponentSource>,
     ) -> Result<u32, SlugError> {
         let root_glyph = self.glyph(root_glyph_index)?;
-        if component_glyph_index(root_glyph).is_some() {
+        if root_glyph.component_index().is_some() {
             return Err(SlugError::LengthOverflow);
         }
 
@@ -134,7 +134,7 @@ impl VariableAtlasBuilder {
         let mut curve_count = 0_u32;
         for part in &parts {
             let direct_glyph = self.glyph(part.glyph_index)?;
-            if component_glyph_index(direct_glyph).is_some()
+            if direct_glyph.component_index().is_some()
                 || part.output_curve_start != curve_count
                 || (part.component_index != ROOT_COMPONENT
                     && part.component_index as usize >= components.len())
@@ -195,7 +195,7 @@ pub(super) fn resolve_component_glyph(
 ) -> Result<Vec<Curve>, SlugError> {
     let descriptor = atlas
         .component_glyphs
-        .get(component_glyph_index(glyph).or_overflow()?)
+        .get(glyph.component_index().or_overflow()?)
         .or_overflow()?;
     let component_start = descriptor.component_start as usize;
     let component_end = component_start
@@ -217,10 +217,7 @@ pub(super) fn resolve_component_glyph(
         .or_overflow()?;
     let mut output = vec![Curve::default(); glyph.curve_count as usize];
     for part in parts {
-        let direct_glyph = *atlas
-            .glyphs
-            .get(part.glyph_index as usize)
-            .ok_or(SlugError::GlyphIndexOutOfRange(part.glyph_index))?;
+        let direct_glyph = atlas.glyph(part.glyph_index)?;
         let transform = if part.component_index == ROOT_COMPONENT {
             Affine::identity()
         } else {
@@ -280,9 +277,7 @@ fn component_affine(
 
     let mut values = [0.0_f32; 9];
     for source in sources {
-        let weight = *weights.get(source.weight_index as usize).ok_or(
-            SlugError::VariableWeightIndexOutOfRange(source.weight_index),
-        )?;
+        let weight = weight_at(weights, source.weight_index)?;
         for (value, source_value) in values.iter_mut().zip([
             source.translate_x,
             source.translate_y,

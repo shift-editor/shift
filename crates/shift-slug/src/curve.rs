@@ -24,6 +24,30 @@ impl Point {
     }
 }
 
+impl std::ops::Add for Point {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self::new(self.x + other.x, self.y + other.y)
+    }
+}
+
+impl std::ops::Sub for Point {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self::new(self.x - other.x, self.y - other.y)
+    }
+}
+
+impl std::ops::Mul<f32> for Point {
+    type Output = Self;
+
+    fn mul(self, scale: f32) -> Self {
+        Self::new(self.x * scale, self.y * scale)
+    }
+}
+
 /// Conservative font-space bounds.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -52,6 +76,25 @@ impl Bounds {
         }
     }
 
+    /// Returns the bounds that enclose every curve, or empty bounds when
+    /// there are none.
+    pub(crate) fn of_curves<'a>(curves: impl IntoIterator<Item = &'a Curve>) -> Self {
+        curves
+            .into_iter()
+            .map(|curve| curve.bounds())
+            .reduce(Self::union)
+            .unwrap_or_default()
+    }
+
+    fn union(self, other: Self) -> Self {
+        Self {
+            min_x: self.min_x.min(other.min_x),
+            min_y: self.min_y.min(other.min_y),
+            max_x: self.max_x.max(other.max_x),
+            max_y: self.max_y.max(other.max_y),
+        }
+    }
+
     fn include(&mut self, point: Point) {
         self.min_x = self.min_x.min(point.x);
         self.min_y = self.min_y.min(point.y);
@@ -69,7 +112,50 @@ pub struct Curve {
     pub p2: Point,
 }
 
+/// Curves add, subtract and scale point by point, as the variable atlas
+/// blends source deltas.
+impl std::ops::Add for Curve {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            p0: self.p0 + other.p0,
+            p1: self.p1 + other.p1,
+            p2: self.p2 + other.p2,
+        }
+    }
+}
+
+impl std::ops::Sub for Curve {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self {
+            p0: self.p0 - other.p0,
+            p1: self.p1 - other.p1,
+            p2: self.p2 - other.p2,
+        }
+    }
+}
+
+impl std::ops::Mul<f32> for Curve {
+    type Output = Self;
+
+    fn mul(self, scale: f32) -> Self {
+        Self {
+            p0: self.p0 * scale,
+            p1: self.p1 * scale,
+            p2: self.p2 * scale,
+        }
+    }
+}
+
 impl Curve {
+    /// Returns whether every coordinate is zero, as in a delta that moves nothing.
+    pub(crate) fn is_zero(self) -> bool {
+        self == Self::default()
+    }
+
     pub fn from_line(p0: Point, p2: Point) -> Self {
         let delta_x = p2.x - p0.x;
         let delta_y = p2.y - p0.y;
@@ -399,5 +485,38 @@ fn ensure_finite(command: OutlineCommand<f32>, command_index: usize) -> Result<(
         Ok(())
     } else {
         Err(SlugError::NonFiniteCoordinate { command_index })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounds_of_curves_enclose_every_curve() {
+        let curves = [
+            Curve::from_line(Point::new(0.0, 0.0), Point::new(10.0, 5.0)),
+            Curve::from_line(Point::new(-4.0, 2.0), Point::new(3.0, 20.0)),
+        ];
+
+        let bounds = Bounds::of_curves(&curves);
+
+        assert_eq!((bounds.min_x, bounds.min_y), (-4.0, 0.0));
+        assert_eq!((bounds.max_x, bounds.max_y), (10.0, 20.0));
+        assert_eq!(Bounds::of_curves(&[]), Bounds::default());
+    }
+
+    #[test]
+    fn curves_blend_point_by_point() {
+        let base = Curve {
+            p0: Point::new(1.0, 2.0),
+            p1: Point::new(3.0, 4.0),
+            p2: Point::new(5.0, 6.0),
+        };
+        let delta = base - base * 0.5;
+
+        assert_eq!(base * 0.5 + delta, base);
+        assert!((base - base).is_zero());
+        assert!(!delta.is_zero());
     }
 }

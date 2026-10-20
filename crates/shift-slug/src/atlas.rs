@@ -150,7 +150,7 @@ impl AtlasBuilder {
         let curves = curves_from_commands(commands)?;
         let curve_start = to_u32(self.atlas.curves.len())?;
         let curve_count = to_u32(curves.len())?;
-        let bounds = glyph_bounds(&curves);
+        let bounds = Bounds::of_curves(&curves);
         let (local_bands, local_indices) = build_bands(&curves, bounds, self.atlas.band_count)?;
         let index_start = to_u32(self.atlas.curve_indices.len())?;
         let band_start = to_u32(self.atlas.bands.len())?;
@@ -198,23 +198,6 @@ impl Default for AtlasBuilder {
     fn default() -> Self {
         Self::new(DEFAULT_BAND_COUNT).expect("default Slug band count is valid")
     }
-}
-
-fn glyph_bounds(curves: &[Curve]) -> Bounds {
-    let Some(first) = curves.first() else {
-        return Bounds::default();
-    };
-    let mut bounds = first.bounds();
-
-    for curve in &curves[1..] {
-        let curve_bounds = curve.bounds();
-        bounds.min_x = bounds.min_x.min(curve_bounds.min_x);
-        bounds.min_y = bounds.min_y.min(curve_bounds.min_y);
-        bounds.max_x = bounds.max_x.max(curve_bounds.max_x);
-        bounds.max_y = bounds.max_y.max(curve_bounds.max_y);
-    }
-
-    bounds
 }
 
 fn build_bands(

@@ -555,19 +555,7 @@ fn fallback_bounds(
         &projection.fallback().source_id(),
     )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
-    let mut curves = curves.into_iter();
-    let Some(first) = curves.next() else {
-        return Ok(Bounds::default());
-    };
-    let mut bounds = first.bounds();
-    for curve in curves {
-        let curve_bounds = curve.bounds();
-        bounds.min_x = bounds.min_x.min(curve_bounds.min_x);
-        bounds.min_y = bounds.min_y.min(curve_bounds.min_y);
-        bounds.max_x = bounds.max_x.max(curve_bounds.max_x);
-        bounds.max_y = bounds.max_y.max(curve_bounds.max_y);
-    }
-    Ok(bounds)
+    Ok(Bounds::of_curves(&curves))
 }
 
 fn exact_source_ids(
