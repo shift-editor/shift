@@ -14,8 +14,8 @@ use crate::composite::{
     resolved_layer_geometry_from_layers,
 };
 use crate::{
-    Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId,
-    GlyphInterpolation, GlyphLayer, InterpolationBasis, LayerId, Source, SourceId,
+    Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphInterpolation,
+    GlyphLayer, InterpolationBasis, LayerId, Source, SourceId,
 };
 
 /// One exact-source shape that cannot be represented by compatible variation.
@@ -247,7 +247,7 @@ impl Font {
             .as_ref()
             .and_then(|interpolation| glyph.layers().get(&interpolation.reference_layer().id()))
             .cloned()
-            .or_else(|| fallback_layer(self, glyph));
+            .or_else(|| self.fallback_layer(glyph).cloned());
         let Some(fallback) = fallback else {
             return Ok(None);
         };
@@ -755,22 +755,6 @@ fn component_base_glyph_ids(
                 .map(|shape| &shape.layer),
         )
         .flat_map(|layer| layer.component_glyph_ids())
-}
-
-fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
-    if let Some(layer) = font.default_master_layer(glyph) {
-        return Some(Arc::clone(layer));
-    }
-
-    glyph
-        .layers()
-        .values()
-        .filter(|layer| {
-            font.source(&layer.source_id())
-                .is_some_and(Source::is_master)
-        })
-        .max_by_key(|layer| layer.contours().len() + layer.components().len())
-        .cloned()
 }
 
 fn exact_source_id(
