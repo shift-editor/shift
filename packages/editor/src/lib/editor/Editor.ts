@@ -129,6 +129,7 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { PositionTargets } from "../model/positions/PositionTargets";
 
 interface EditorOptions {
   font: Font;
@@ -1031,10 +1032,7 @@ export class Editor {
 
     return this.#multiSourceEditing.resolve({
       layer,
-      targets: {
-        points: [...points],
-        anchors: [...anchors],
-      },
+      targets: new PositionTargets([...points], [...anchors]),
     });
   }
 
@@ -2060,8 +2058,8 @@ export class Editor {
     await this.font.editCoordinator.settled();
 
     const selection = this.positionSelection(this.selection.ids);
-    const pointIds = selection?.targets.points ?? [];
-    if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {
+    const pointIds = (selection?.targets ?? PositionTargets.NONE).points;
+    if (!selection || pointIds.length === 0 || selection.targets.hasAnchors) {
       return false;
     }
 
@@ -2091,8 +2089,8 @@ export class Editor {
     const selection = this.positionSelection(this.selection.ids);
     if (!selection) return false;
 
-    const pointIds = selection.targets.points ?? [];
-    const anchorIds = selection.targets.anchors ?? [];
+    const pointIds = selection.targets.points;
+    const anchorIds = selection.targets.anchors;
     if (pointIds.length === 0 && anchorIds.length > 0) {
       this.transaction("Delete Anchors", () => AnchorEdits.fromSelection(selection).remove());
       await this.#clearSelectionAfterEdit();

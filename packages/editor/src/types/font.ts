@@ -59,6 +59,7 @@ export interface FontRecordIndex {
 
 export interface FontStoreOptions {
   readonly font?: FontSnapshot | null;
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent starts with no glyph records
   readonly records?: readonly GlyphRecord[];
   readonly workspace?: WorkspaceSnapshot | null;
 }

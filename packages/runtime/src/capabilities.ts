@@ -424,6 +424,7 @@ export interface KerningPairQuery {
 export interface KerningResolveInput extends ShiftTarget {
   pairs: KerningPairQuery[];
   sourceId?: SourceId;
+  // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use sourceId or the default location", not an empty location
   location?: AxisCoordinate[];
 }
 

@@ -16,13 +16,10 @@ import type {
   ComponentTransformSelectionLayer,
 } from "../../types/componentTransform";
 import type { ComponentLayerTargets, ComponentTargets } from "../../types/componentTargets";
-import type {
-  PositionSelection,
-  PositionSelectionLayer,
-  PositionTargets,
-} from "../../types/positionEdit";
+import type { PositionSelection, PositionSelectionLayer } from "../../types/positionEdit";
 import { LatestRequest } from "../utils/LatestRequest";
 import type { Scene } from "./Scene";
+import { PositionTargets } from "../model/positions/PositionTargets";
 
 /** Resolves and retains topology matches for the editor's selected source layers. */
 export class MultiSourceEditing {
@@ -329,17 +326,17 @@ function mapTargets(reference: PositionSelectionLayer, match: LayerMatch): Posit
     match.anchors.map((anchorMatch) => [anchorMatch.referenceId, anchorMatch.targetId]),
   );
   const points: PointId[] = [];
-  for (const pointId of reference.targets.points ?? []) {
+  for (const pointId of reference.targets.points) {
     const targetPointId = pointMatches.get(pointId);
     if (!targetPointId) return null;
     points.push(targetPointId);
   }
   const anchors: AnchorId[] = [];
-  for (const anchorId of reference.targets.anchors ?? []) {
+  for (const anchorId of reference.targets.anchors) {
     const targetAnchorId = anchorMatches.get(anchorId);
     if (!targetAnchorId) return null;
     anchors.push(targetAnchorId);
   }
 
-  return { points, anchors };
+  return new PositionTargets(points, anchors);
 }

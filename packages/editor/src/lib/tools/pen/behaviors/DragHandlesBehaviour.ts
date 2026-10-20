@@ -1,6 +1,11 @@
 import { Vec2 } from "@shift/geo";
 import type { PointId } from "@shift/types";
-import { DirectionSnap, PositionReference, type MoveEdit } from "../../../model/positions/index";
+import {
+  DirectionSnap,
+  PositionReference,
+  PositionTargets,
+  type MoveEdit,
+} from "../../../model/positions/index";
 import type { ToolContext } from "../../core/Behavior";
 import type { DragEvent, KeyDownEvent, ToolEvent } from "../../core/GestureDetector";
 import type { PenCurve, PenState, PenBehavior } from "../types";
@@ -110,7 +115,7 @@ export class HandleBehavior implements PenBehavior {
     try {
       this.#move = stroke.layer.positions
         .within(edit)
-        .move({ points: [controlEndId] })
+        .move(PositionTargets.points([controlEndId]))
         .from(PositionReference.point(controlEndId))
         .directionSnappedBy(
           DirectionSnap.everyDegrees(15, {

@@ -43,7 +43,7 @@ export class MoveEdit implements PositionEdit {
     additionalLayers: readonly PositionSelectionLayer[] = [],
   ) {
     this.#layers = new PositionEditGroup(layer, targets, edit, additionalLayers);
-    this.#anchorIds = [...(targets.anchors ?? [])];
+    this.#anchorIds = [...targets.anchors];
     this.#additionalPointRules = additionalLayers.map(() => null);
   }
 
@@ -126,7 +126,7 @@ export class MoveEdit implements PositionEdit {
     this.#assertConfiguring();
     this.#pointRules = constraint;
     this.#additionalPointRules = this.#layers.additional.map(({ layer, targets }) => {
-      const pointIds = targets.points ?? [];
+      const pointIds = targets.points;
       return pointIds.length > 0
         ? PointRuleConstraint.forSelection(layer.geometry, pointIds)
         : null;
@@ -190,7 +190,7 @@ export class MoveEdit implements PositionEdit {
     for (const [index, layer] of this.#layers.additional.entries()) {
       const pointRules = this.#additionalPointRules[index];
       const positions = pointRules
-        ? pointRules.positionsFor(layer.base.positions, layer.targets.anchors ?? [], delta)
+        ? pointRules.positionsFor(layer.base.positions, layer.targets.anchors, delta)
         : layer.base.translate(delta).positions;
       layer.include(positions);
       layer.setPositions(positions);

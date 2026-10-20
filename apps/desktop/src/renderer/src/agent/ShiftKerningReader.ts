@@ -96,6 +96,7 @@ export class ShiftKerningReader {
    */
   resolve(
     queries: KerningPairQuery[],
+    // oxlint-disable-next-line shift/no-optional-collection-field -- mirrors the agent protocol request
     target: { sourceId?: SourceId; location?: AxisCoordinate[] },
   ): ResolvedKerningPairs {
     const font = this.#font;

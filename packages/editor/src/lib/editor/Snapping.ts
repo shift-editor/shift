@@ -19,8 +19,10 @@ export interface SnappingContext {
 /** Options for one layer's snap set. */
 export interface LayerSnapOptions {
   /** Points that must not be alignment targets, such as the ones being moved. */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent excludes nothing
   readonly excluding?: ReadonlySet<PointId>;
   /** Excluded points still guided when they sit exactly on a line another target snapped to. */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent marks nothing
   readonly marking?: ReadonlySet<PointId>;
   /** Per-frame switch for every snap in the set, such as a held modifier suspending it. */
   readonly condition?: PositionCondition;
