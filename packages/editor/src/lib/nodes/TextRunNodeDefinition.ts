@@ -441,7 +441,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return nearEmptyOrigin ? 0 : null;
   }
 
-  draw(node: TextRunNode, ctx: RenderContext, pass: RenderPass): void {
+  override draw(node: TextRunNode, ctx: RenderContext, pass: RenderPass): void {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return;
 
