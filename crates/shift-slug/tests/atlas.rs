@@ -669,3 +669,31 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
         );
     }
 }
+
+#[test]
+fn line_bits_mark_only_curves_authored_as_lines() {
+    let commands = |shift: f32| {
+        [
+            OutlineCommand::Move { x: 0.0, y: 0.0 },
+            OutlineCommand::Line {
+                x: 10.0 + shift,
+                y: 0.0,
+            },
+            OutlineCommand::Quad {
+                cx: 15.0 + shift,
+                cy: 5.0,
+                x: 10.0 + shift,
+                y: 10.0,
+            },
+            OutlineCommand::Line { x: 0.0, y: 10.0 },
+            OutlineCommand::Close,
+        ]
+    };
+    let mut builder = VariableAtlasBuilder::default();
+
+    builder.add_glyph(commands(0.0), commands(4.0)).unwrap();
+    let atlas = builder.finish();
+
+    // Line, quadratic, line, and the closing line back to the start.
+    assert_eq!(atlas.line_bits(), &[0b1101]);
+}

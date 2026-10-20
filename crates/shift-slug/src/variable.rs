@@ -2,11 +2,8 @@ use std::ops::Range;
 
 use crate::length::{OrOverflow, ensure_total, to_u32, within};
 use crate::{
-    Bounds, Curve, LINE_EPSILON, OutlineCommand, Section, SlugError,
-    curve::{
-        cubic_subdivision_counts_from_commands,
-        curves_and_line_flags_from_commands_with_subdivisions,
-    },
+    Bounds, Curve, LINE_EPSILON, OutlineCommand, QuadraticOutline, Section, SlugError,
+    curve::{cubic_subdivision_counts_from_commands, outline_from_commands_with_subdivisions},
 };
 
 pub(crate) const CURVE_BYTES: usize = 24;
@@ -794,24 +791,14 @@ impl VariableAtlasBuilder {
             .zip(source_subdivision_counts)
             .map(|(base, source)| base.max(source))
             .collect::<Vec<_>>();
-        let (base_curves, line_flags) = curves_and_line_flags_from_commands_with_subdivisions(
-            base_commands,
-            &shared_subdivision_counts,
-        )?;
-        let (source_curves, source_line_flags) =
-            curves_and_line_flags_from_commands_with_subdivisions(
-                source_commands,
-                &shared_subdivision_counts,
-            )?;
-        if line_flags != source_line_flags {
+        let base =
+            outline_from_commands_with_subdivisions(base_commands, &shared_subdivision_counts)?;
+        let source =
+            outline_from_commands_with_subdivisions(source_commands, &shared_subdivision_counts)?;
+        if base.shapes() != source.shapes() {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
-        self.add_curve_glyph_with_sources_and_lines(
-            base_curves,
-            line_flags,
-            0,
-            [(1, source_curves)],
-        )
+        self.add_outline_glyph(base, 0, [(1, source.into_curves())])
     }
 
     /// Adds curves whose correspondence was established from stable source topology.
@@ -819,11 +806,11 @@ impl VariableAtlasBuilder {
     /// Comparing two location-resolved pen streams is only a fixture convenience
     /// because a binary outline drawer may change emitted command kinds at
     /// degeneracies. Production adapters must use the authored topology boundary,
-    /// including line flags for controls regenerated after interpolation.
+    /// including curve shapes for controls regenerated after interpolation.
     ///
     /// # Errors
     ///
-    /// Returns the errors of [`Self::add_curve_glyph_with_sources_and_lines`].
+    /// Returns the errors of [`Self::add_outline_glyph`].
     pub fn add_curve_glyph(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
@@ -840,50 +827,44 @@ impl VariableAtlasBuilder {
     ///
     /// # Errors
     ///
-    /// Returns the errors of [`Self::add_curve_glyph_with_sources_and_lines`].
+    /// Returns the errors of [`Self::add_outline_glyph`].
     pub fn add_curve_glyph_with_sources(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
         base_weight_index: u32,
         source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
     ) -> Result<u32, SlugError> {
-        let base_curves = base_curves.into_iter().collect::<Vec<_>>();
-        let line_flags = vec![false; base_curves.len()];
-        self.add_curve_glyph_with_sources_and_lines(
-            base_curves,
-            line_flags,
+        self.add_outline_glyph(
+            QuadraticOutline::from_quadratics(base_curves),
             base_weight_index,
             source_curves,
         )
     }
 
-    /// Adds stable source curves and marks controls regenerated from line endpoints.
+    /// Adds a base outline and its weighted source curves; returns the new glyph's index.
+    ///
+    /// Source curves correspond one to one with `base`'s and share its curve
+    /// shapes, so a line stays a line at every location.
     ///
     /// # Errors
     ///
     /// Returns [`SlugError::VariableTopologyMismatch`] when a source's curve count differs from the
-    /// base's, [`SlugError::VariableLineFlagMismatch`] when `line_flags` does not have one flag per
-    /// curve, and [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
-    pub fn add_curve_glyph_with_sources_and_lines(
+    /// base's, and [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
+    pub fn add_outline_glyph(
         &mut self,
-        base_curves: impl IntoIterator<Item = Curve>,
-        line_flags: impl IntoIterator<Item = bool>,
+        base: QuadraticOutline,
         base_weight_index: u32,
         source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
     ) -> Result<u32, SlugError> {
-        let base_curves: Vec<_> = base_curves.into_iter().collect();
-        let line_flags: Vec<_> = line_flags.into_iter().collect();
         let source_curves: Vec<_> = source_curves.into_iter().collect();
         let glyph_index = to_u32(self.atlas.glyphs.len())?;
         if source_curves
             .iter()
-            .any(|(_, curves)| curves.len() != base_curves.len())
+            .any(|(_, curves)| curves.len() != base.len())
         {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
-        if line_flags.len() != base_curves.len() {
-            return Err(SlugError::VariableLineFlagMismatch { glyph_index });
-        }
+        let base_curves = base.curves();
 
         let curve_start = to_u32(self.atlas.base_curves.len())?;
         let curve_count = to_u32(base_curves.len())?;
@@ -894,7 +875,7 @@ impl VariableAtlasBuilder {
                 .iter()
                 .chain(source_curves.iter().flat_map(|(_, curves)| curves)),
         );
-        if line_flags.iter().any(|is_line| *is_line) && !base_curves.is_empty() {
+        if base.has_lines() {
             bounds.min_x -= LINE_EPSILON;
             bounds.min_y -= LINE_EPSILON;
             bounds.max_x += LINE_EPSILON;
@@ -972,12 +953,8 @@ impl VariableAtlasBuilder {
         let required_line_words = total_curves.div_ceil(32);
         to_u32(required_line_words)?;
 
-        append_line_flags(
-            &mut self.atlas.line_bits,
-            self.atlas.base_curves.len(),
-            &line_flags,
-        );
-        self.atlas.base_curves.extend(base_curves);
+        base.write_line_bits(&mut self.atlas.line_bits, self.atlas.base_curves.len());
+        self.atlas.base_curves.extend(base.into_curves());
         self.atlas.curve_deltas.extend(curve_deltas);
         self.atlas.sparse_deltas.extend(sparse_deltas);
         self.atlas
@@ -1270,16 +1247,6 @@ fn command_topology(commands: &[OutlineCommand<f32>]) -> Vec<CommandKind> {
             OutlineCommand::Close => CommandKind::Close,
         })
         .collect()
-}
-
-fn append_line_flags(words: &mut Vec<u32>, curve_start: usize, line_flags: &[bool]) {
-    words.resize((curve_start + line_flags.len()).div_ceil(32), 0);
-    for (local_index, is_line) in line_flags.iter().enumerate() {
-        if *is_line {
-            let curve_index = curve_start + local_index;
-            words[curve_index / 32] |= 1 << (curve_index % 32);
-        }
-    }
 }
 
 fn next_section(

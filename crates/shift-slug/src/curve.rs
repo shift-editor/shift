@@ -1,4 +1,4 @@
-use crate::{OutlineCommand, SlugError};
+use crate::{CurveShape, OutlineCommand, QuadraticOutline, SlugError};
 
 /// Maximum font-space distance between a source cubic and its quadratic approximation.
 pub const CUBIC_APPROXIMATION_ACCURACY: f32 = 1.0;
@@ -292,8 +292,7 @@ impl Curve {
 }
 
 struct CurveConversion {
-    curves: Vec<Curve>,
-    line_flags: Vec<bool>,
+    outline: QuadraticOutline,
     cubic_subdivision_counts: Vec<usize>,
 }
 
@@ -307,37 +306,33 @@ struct Contour {
 pub(crate) fn curves_from_commands(
     commands: impl IntoIterator<Item = OutlineCommand<f32>>,
 ) -> Result<Vec<Curve>, SlugError> {
-    curves_and_line_flags_from_commands(commands).map(|(curves, _)| curves)
+    outline_from_commands(commands).map(QuadraticOutline::into_curves)
 }
 
-pub(crate) fn curves_and_line_flags_from_commands(
+pub(crate) fn outline_from_commands(
     commands: impl IntoIterator<Item = OutlineCommand<f32>>,
-) -> Result<(Vec<Curve>, Vec<bool>), SlugError> {
-    let conversion = curves_line_flags_and_subdivisions(commands, None)?;
-    Ok((conversion.curves, conversion.line_flags))
+) -> Result<QuadraticOutline, SlugError> {
+    Ok(convert_commands(commands, None)?.outline)
 }
 
-pub(crate) fn curves_and_line_flags_from_commands_with_subdivisions(
+pub(crate) fn outline_from_commands_with_subdivisions(
     commands: impl IntoIterator<Item = OutlineCommand<f32>>,
     cubic_subdivision_counts: &[usize],
-) -> Result<(Vec<Curve>, Vec<bool>), SlugError> {
-    let conversion = curves_line_flags_and_subdivisions(commands, Some(cubic_subdivision_counts))?;
-    Ok((conversion.curves, conversion.line_flags))
+) -> Result<QuadraticOutline, SlugError> {
+    Ok(convert_commands(commands, Some(cubic_subdivision_counts))?.outline)
 }
 
 pub(crate) fn cubic_subdivision_counts_from_commands(
     commands: impl IntoIterator<Item = OutlineCommand<f32>>,
 ) -> Result<Vec<usize>, SlugError> {
-    let conversion = curves_line_flags_and_subdivisions(commands, None)?;
-    Ok(conversion.cubic_subdivision_counts)
+    Ok(convert_commands(commands, None)?.cubic_subdivision_counts)
 }
 
-fn curves_line_flags_and_subdivisions(
+fn convert_commands(
     commands: impl IntoIterator<Item = OutlineCommand<f32>>,
     prescribed_subdivisions: Option<&[usize]>,
 ) -> Result<CurveConversion, SlugError> {
-    let mut curves = Vec::new();
-    let mut line_flags = Vec::new();
+    let mut outline = QuadraticOutline::default();
     let mut cubic_subdivisions = Vec::new();
     let mut contour = None;
 
@@ -346,7 +341,7 @@ fn curves_line_flags_and_subdivisions(
 
         match command {
             OutlineCommand::Move { x, y } => {
-                close_open_contour(&mut contour, &mut curves, &mut line_flags);
+                close_open_contour(&mut contour, &mut outline);
                 let point = Point::new(x, y);
                 contour = Some(Contour {
                     start: point,
@@ -359,7 +354,7 @@ fn curves_line_flags_and_subdivisions(
                     .as_mut()
                     .ok_or(SlugError::DrawingCommandWithoutContour { command_index })?;
                 let next = Point::new(x, y);
-                push_line(&mut curves, &mut line_flags, contour.current, next);
+                push_line(&mut outline, contour.current, next);
                 contour.current = next;
                 contour.has_segment = true;
             }
@@ -368,12 +363,14 @@ fn curves_line_flags_and_subdivisions(
                     .as_mut()
                     .ok_or(SlugError::DrawingCommandWithoutContour { command_index })?;
                 let next = Point::new(x, y);
-                curves.push(Curve {
-                    p0: contour.current,
-                    p1: Point::new(cx, cy),
-                    p2: next,
-                });
-                line_flags.push(false);
+                outline.push(
+                    Curve {
+                        p0: contour.current,
+                        p1: Point::new(cx, cy),
+                        p2: next,
+                    },
+                    CurveShape::Quadratic,
+                );
                 contour.current = next;
                 contour.has_segment = true;
             }
@@ -402,15 +399,13 @@ fn curves_line_flags_and_subdivisions(
                             next,
                         )
                     });
-                let cubic_curves = Curve::from_cubic_with_subdivisions(
+                outline.extend_quadratics(Curve::from_cubic_with_subdivisions(
                     contour.current,
                     first_control,
                     second_control,
                     next,
                     subdivision_count,
-                );
-                line_flags.extend(std::iter::repeat_n(false, cubic_curves.len()));
-                curves.extend(cubic_curves);
+                ));
                 cubic_subdivisions.push(subdivision_count);
                 contour.current = next;
                 contour.has_segment = true;
@@ -420,41 +415,34 @@ fn curves_line_flags_and_subdivisions(
                 if !active.has_segment {
                     return Err(SlugError::CloseWithoutDrawingSegment { command_index });
                 }
-                push_line(&mut curves, &mut line_flags, active.current, active.start);
+                push_line(&mut outline, active.current, active.start);
                 contour = None;
             }
         }
     }
 
-    close_open_contour(&mut contour, &mut curves, &mut line_flags);
-    debug_assert_eq!(curves.len(), line_flags.len());
+    close_open_contour(&mut contour, &mut outline);
     debug_assert!(
         prescribed_subdivisions.is_none_or(|counts| counts.len() == cubic_subdivisions.len())
     );
     Ok(CurveConversion {
-        curves,
-        line_flags,
+        outline,
         cubic_subdivision_counts: cubic_subdivisions,
     })
 }
 
-fn close_open_contour(
-    contour: &mut Option<Contour>,
-    curves: &mut Vec<Curve>,
-    line_flags: &mut Vec<bool>,
-) {
+fn close_open_contour(contour: &mut Option<Contour>, outline: &mut QuadraticOutline) {
     let Some(active) = contour.take() else {
         return;
     };
     if active.has_segment {
-        push_line(curves, line_flags, active.current, active.start);
+        push_line(outline, active.current, active.start);
     }
 }
 
-fn push_line(curves: &mut Vec<Curve>, line_flags: &mut Vec<bool>, start: Point, end: Point) {
+fn push_line(outline: &mut QuadraticOutline, start: Point, end: Point) {
     if start != end {
-        curves.push(Curve::from_line(start, end));
-        line_flags.push(true);
+        outline.push(Curve::from_line(start, end), CurveShape::Line);
     }
 }
 

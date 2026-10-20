@@ -149,9 +149,8 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
         )?;
         let topology = CurveTopology::from_contours(resolved.contours());
         let advance = authored_advance(resolved.x_advance(), 0)?;
-        let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
-            topology.curves_from_contours(resolved.contours())?,
-            topology.line_flags(),
+        let glyph_index = builder.add_outline_glyph(
+            topology.outline_from_contours(resolved.contours())?,
             compilation.constant_weight_index,
             [],
         )?;

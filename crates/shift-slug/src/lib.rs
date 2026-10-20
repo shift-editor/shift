@@ -21,6 +21,7 @@ pub mod length;
 mod numeric;
 mod outline;
 mod pack;
+mod quadratic_outline;
 mod render;
 mod resident;
 pub mod retained;
@@ -40,6 +41,7 @@ pub use curve::{Bounds, CUBIC_APPROXIMATION_ACCURACY, Curve, LINE_EPSILON, Point
 pub use error::SlugError;
 pub use outline::OutlineCommand;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
+pub use quadratic_outline::{CurveShape, QuadraticOutline};
 pub use render::{
     RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, RenderInstance, RenderParams,
     pack_render_instances, pack_render_params,
