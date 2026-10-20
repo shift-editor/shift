@@ -353,7 +353,7 @@ fn preserves_libs_binaries_layerinfo_and_fontinfo_through_round_trip() {
     }
     match original.fontinfo_remainder().get("woffMetadataUniqueID") {
         Some(LibValue::Dict(woff)) => {
-            assert_eq!(lib_string(woff.get("id")), "preservation-woff-id")
+            assert_eq!(lib_string(woff.get("id")), "preservation-woff-id");
         }
         other => panic!("expected WOFF metadata dict, got {other:?}"),
     }

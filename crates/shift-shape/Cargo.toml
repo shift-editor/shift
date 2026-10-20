@@ -10,3 +10,6 @@ harfrust = "0.13.3"
 thiserror = "2.0.18"
 unicode-linebreak = "0.1.5"
 unicode-script = "0.5"
+
+[lints]
+workspace = true

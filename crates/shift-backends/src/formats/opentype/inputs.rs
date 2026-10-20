@@ -875,16 +875,13 @@ mod tests {
 
     fn skrifa_curves(
         source: &OpenTypeFont,
-        glyph: crate::font_source::GlyphIndex,
+        glyph: GlyphIndex,
         location: &crate::font_source::VariationLocation,
     ) -> Vec<Curve> {
         let font = FontRef::new(source.bytes().as_ref()).unwrap();
         let location = skrifa_location(&font, source, location);
         let mut pen = CommandPen::default();
-        if let Some(outline) = font
-            .outline_glyphs()
-            .get(skrifa::GlyphId::new(glyph.to_u32()))
-        {
+        if let Some(outline) = font.outline_glyphs().get(GlyphId::new(glyph.to_u32())) {
             outline
                 .draw(
                     DrawSettings::unhinted(Size::unscaled(), LocationRef::from(&location))

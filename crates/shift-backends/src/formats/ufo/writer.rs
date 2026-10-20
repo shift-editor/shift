@@ -45,11 +45,17 @@ fn sync_tree(_root: &Path) -> std::io::Result<()> {
 /// Atomically exchanges `staged` and `target` in one filesystem operation,
 /// so there is never an instant without a UFO at `target`.
 #[cfg(target_os = "macos")]
+#[allow(
+    unsafe_code,
+    reason = "the atomic swap is only available as a libc call"
+)]
 fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    // SAFETY: both pointers come from `CString`s that live until the call
+    // returns and are NUL-terminated; `renamex_np` only reads them.
     let result = unsafe { libc::renamex_np(staged.as_ptr(), target.as_ptr(), libc::RENAME_SWAP) };
 
     if result == 0 {
@@ -60,6 +66,10 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    unsafe_code,
+    reason = "the atomic exchange is only available as a raw syscall"
+)]
 fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -67,6 +77,9 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
     // The raw syscall keeps the binary off glibc 2.28's `renameat2` wrapper, so
     // Linux builds linked against an older glibc still resolve every symbol.
+    // SAFETY: both pointers come from `CString`s that live until the syscall
+    // returns and are NUL-terminated; `renameat2` only reads them, and every
+    // other argument is a plain integer constant.
     let result = unsafe {
         libc::syscall(
             libc::SYS_renameat2,
@@ -94,7 +107,7 @@ fn exchange_unsupported(error: &std::io::Error) -> bool {
     #[cfg(unix)]
     if matches!(
         error.raw_os_error(),
-        Some(libc::ENOTSUP) | Some(libc::EINVAL) | Some(libc::ENOSYS)
+        Some(libc::ENOTSUP | libc::EINVAL | libc::ENOSYS)
     ) {
         return true;
     }

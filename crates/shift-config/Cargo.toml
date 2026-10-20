@@ -11,3 +11,6 @@ crate-type = ["rlib"]
 [dependencies]
 thiserror = "2.0.18"
 toml_edit = "0.25.17"
+
+[lints]
+workspace = true

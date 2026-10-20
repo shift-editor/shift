@@ -5,6 +5,10 @@
 //! blank line around it. The app and `shift-cli` share it, so both agree on
 //! what a valid file is.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 pub mod theme;
 
 use std::ops::Range;

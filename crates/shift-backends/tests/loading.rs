@@ -221,7 +221,7 @@ fn loads_binary_fonts_with_contours() {
 #[test]
 fn streams_binary_ufo_designspace_and_glyphs_without_eager_shift_geometry() {
     let binary_path = mutatorsans_ttf_path();
-    let binary_bytes = std::fs::read(&binary_path).unwrap();
+    let binary_bytes = fs::read(&binary_path).unwrap();
     let binary = skrifa::FontRef::new(&binary_bytes).unwrap();
     let expected_binary_glyphs = skrifa::raw::TableProvider::maxp(&binary)
         .unwrap()
@@ -464,7 +464,7 @@ fn binary_import_produces_valid_curve_point_runs() {
 
 #[test]
 fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
-    let mut bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();
+    let mut bytes = fs::read(mutatorsans_ttf_path()).unwrap();
 
     // Rename the hmtx tag in the table directory so the table lookup fails
     // while the rest of the font stays parseable.
@@ -477,7 +477,7 @@ fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
 
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("missing-hmtx.ttf");
-    std::fs::write(&path, bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
 
     let error = FontLoader::new()
         .read_font(path.to_str().unwrap())
@@ -490,11 +490,11 @@ fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
 
 #[test]
 fn truncated_binary_font_returns_error_instead_of_panicking() {
-    let bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();
+    let bytes = fs::read(mutatorsans_ttf_path()).unwrap();
 
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("truncated.ttf");
-    std::fs::write(&path, &bytes[..200]).unwrap();
+    fs::write(&path, &bytes[..200]).unwrap();
 
     FontLoader::new()
         .read_font(path.to_str().unwrap())

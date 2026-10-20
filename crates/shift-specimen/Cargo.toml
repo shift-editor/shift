@@ -12,3 +12,6 @@ crate-type = ["rlib"]
 harfrust = "0.13.3"
 skrifa = "0.32.0"
 unicode-script = "0.5"
+
+[lints]
+workspace = true

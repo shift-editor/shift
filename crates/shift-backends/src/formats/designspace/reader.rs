@@ -292,7 +292,7 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match event.name().as_ref() {
+            Ok(Event::Start(event) | Event::Empty(event)) => match event.name().as_ref() {
                 b"axis" => {
                     return Err(DesignspaceError::AxislessNotApplicable {
                         reason: "axes are present".to_string(),

@@ -265,7 +265,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
 fn load_source_metric_values(
     conn: &rusqlite::Connection,
     source_id: &font::SourceId,
-) -> rusqlite::Result<std::collections::BTreeMap<font::MetricId, font::MetricValue>> {
+) -> rusqlite::Result<BTreeMap<font::MetricId, font::MetricValue>> {
     let mut stmt = conn.prepare(
         "
         SELECT metric_id, position, overshoot

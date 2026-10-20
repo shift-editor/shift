@@ -13,3 +13,6 @@ norad = { git = "https://github.com/linebender/norad", rev = "c2034d9e4dbdb7bc93
 
 [dev-dependencies]
 tempfile = "3"
+
+[lints]
+workspace = true

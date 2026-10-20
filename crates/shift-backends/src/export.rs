@@ -463,7 +463,7 @@ mod tests {
 
     #[test]
     fn shift_font_propagation_matches_fontc_for_every_glyph_at_every_master() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../fixtures/fonts/AnchorPropagation.glyphs");
         let font = crate::font_loader::FontLoader::new()
             .read_font(path.to_str().unwrap())

@@ -443,7 +443,7 @@ fn variation_from_layers(
                 .filter_map(|(tag, support)| {
                     let axis = tags.iter().position(|candidate| candidate == tag)?;
                     Some(VariationSupport {
-                        axis: super::AxisIndex::new(axis as u32),
+                        axis: AxisIndex::new(axis as u32),
                         lower: support.min.into_inner().into_inner(),
                         peak: support.peak.into_inner().into_inner(),
                         upper: support.max.into_inner().into_inner(),

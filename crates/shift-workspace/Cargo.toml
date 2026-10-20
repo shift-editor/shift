@@ -17,3 +17,6 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
 rusqlite = "0.37.0"
+
+[lints]
+workspace = true

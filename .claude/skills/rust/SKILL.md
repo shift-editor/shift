@@ -62,6 +62,22 @@ A failure that callers may handle, test, or wrap is a type, not text.
 - Integer narrowing uses `try_from` with `.or_overflow()?` or `length::to_u32`. Never use `as` for a narrowing conversion that can lose data.
 - Bit-packed fields with a limit below their integer type go through `length::within(value, MASK)?`.
 
+## Use the language
+
+Let the type system state intent instead of comments, flags and tuples. Clippy enforces some of this (see `[workspace.lints.clippy]`); the rest is for review.
+
+- **An enum, not a `bool`, for any choice with consequences.** `persist(change_set, AfterPersist::KeepUnsaved)` says what happens; `persist(change_set, false)` doesn't, and a `!flag` deep inside can silently discard data. Keep `bool` for genuine yes/no facts (`is_closed`, `smooth`).
+- **Collect into domain types.** A collection type that callers build in loops implements `FromIterator` and `Extend`, so `let location: DesignLocation = axes.map(|a| (a.id(), a.default())).collect();` replaces `let mut location = DesignLocation::new(); for … { location.set(…) }`.
+- **Name a type instead of a tuple** once it has three fields, is returned from a function, is stored in a collection, or is destructured with `_` placeholders. Points are `kurbo::Point`, not `(f64, f64)`.
+- **A method, not a free function**, when the first argument is the owner: `font.master_layers(glyph)`, not `master_layers(font, glyph)`. Extension traits are fine across crates.
+- **Entity kinds are an enum.** `EntityKind::Glyph` with `Display`, never `kind: "glyph"` or a `kind: &str` parameter, so kinds can't drift and callers can match them.
+- **Repeated conversion shapes get one helper.** `.into_iter().map(Into::into).collect()` written ten times in a `From` impl becomes `convert_all(v)`; `changed.then(|| read()).transpose()?` becomes `if_changed(changed, read)?`.
+- **Let the type do the adapting.** When a call site needs `.to_string()`, `into_inner()`, `from_raw(…)` or a `.map(…)` to pass a value along, implement the trait instead: ids implement `ToSql`/`FromSql` (`params![glyph.id()]`, `row.get("glyph_id")?`), and conversions implement `From`/`Into`.
+- **Name the intent with a constructor.** `font.location_at(&coordinates)` and `font.default_location()` say what a value is; a `zip`/`map`/`collect` at the call site says how it's built.
+- **Method paths over closures** that only call a method: `.map(Axis::id)`, not `.map(|axis| axis.id())`.
+- **Points and vectors are `kurbo::Point`/`Vec2`**, and blending uses their operators (`point += weight * master_point`), not paired `x`/`y` arithmetic.
+- **Prefer `let … else`, `if let` chains (edition 2024) and early returns** over nested `match` or `if let`, and name non-trivial intermediate values.
+
 ## Rules the editor needs
 
 When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
@@ -74,4 +90,7 @@ When the editor needs a shift-font rule synchronously, write it as a plain-data 
 - [ ] No new `Result<_, String>`, `{ message: String }` error variant, or `.to_string()` of an error before a text boundary.
 - [ ] Code that calls a function with `String` errors types that error rather than wrapping the string.
 - [ ] Any error built at two or more sites for the same reason has one helper, with Rustdoc and a test.
+- [ ] No new `bool` parameter for a choice with consequences; no new `kind: "…"` string.
+- [ ] Collections built in loops implement `FromIterator`/`Extend` and are collected.
+- [ ] No tuple of three or more fields returned, stored or destructured with `_`; no free function whose first parameter is its owner.
 - [ ] `cargo fmt`, `cargo clippy` for the affected crates, and their tests pass.

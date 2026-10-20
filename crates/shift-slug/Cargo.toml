@@ -39,3 +39,6 @@ required-features = ["wgpu-benchmark"]
 [[example]]
 name = "benchmark_variable_wgpu"
 required-features = ["wgpu-benchmark"]
+
+[lints]
+workspace = true

@@ -13,6 +13,10 @@
 //! Shift glyph id, and shapes with zero advances, adding live ones itself; a
 //! compiled font ([`FontGlyphs`]) answers from its own tables.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 mod axis;
 mod breaks;
 mod itemize;

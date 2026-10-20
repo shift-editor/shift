@@ -189,9 +189,8 @@ fn canonical_document_rejects_an_invalid_saved_commit_id() {
     .expect("corrupt commit ID");
     drop(conn);
 
-    let error = match ShiftStore::open_document(&document_path) {
-        Ok(_) => panic!("invalid saved commit ID must be refused"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open_document(&document_path) else {
+        panic!("invalid saved commit ID must be refused");
     };
 
     assert!(matches!(error, StoreError::InvalidCommitId(_)));
@@ -210,9 +209,8 @@ fn recovery_overlay_refuses_a_different_document_identity() {
             .expect("bind first document"),
     );
 
-    let error = match ShiftStore::open_document_with_recovery(&second_path, &recovery_path) {
-        Ok(_) => panic!("recovery overlay must not bind to another document"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open_document_with_recovery(&second_path, &recovery_path) else {
+        panic!("recovery overlay must not bind to another document");
     };
 
     assert!(matches!(error, StoreError::RecoveryDocumentMismatch { .. }));
@@ -239,9 +237,9 @@ fn save_rechecks_the_canonical_commit_while_the_document_is_open() {
     second.replace_glyph_layer(&second_layer).unwrap();
     second.save_document().expect("save second editor");
 
-    let error = first
-        .save_document()
-        .expect_err("stale Save must be refused");
+    let Err(error) = first.save_document() else {
+        panic!("stale Save must be refused");
+    };
 
     assert!(matches!(
         error,

@@ -28,3 +28,6 @@ serde_json = "1.0"
 shift-font = { workspace = true, features = ["test-support"] }
 skrifa = "0.32.0"
 rusqlite = "0.37.0"
+
+[lints]
+workspace = true

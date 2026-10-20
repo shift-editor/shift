@@ -317,7 +317,7 @@ pub fn map_location_with_bases(
 }
 
 fn resolve_axes<'a>(
-    ids: &[crate::AxisId],
+    ids: &[AxisId],
     axes: &'a [Axis],
     mapping: &AxisMapping,
 ) -> CoreResult<Vec<&'a Axis>> {

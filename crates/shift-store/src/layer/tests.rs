@@ -136,12 +136,12 @@ fn native_component_closure_batches_root_queries() {
     let roots = (0..=MAX_LAYER_READ_BATCH_COUNT)
         .map(|index| font::GlyphId::from_raw(format!("root_{index:04}")))
         .collect::<Vec<_>>();
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
 
     let closure = store.referenced_glyph_closure(roots.clone()).unwrap();
 
     assert_eq!(closure, roots);
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 2));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 2));
 }
 
 #[test]
@@ -192,7 +192,7 @@ fn component_closure_is_cycle_safe_and_queries_each_frontier() {
             )
             .unwrap();
     }
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
 
     let closure = store
         .referenced_glyph_closure([font::GlyphId::from_raw("a")])
@@ -202,7 +202,7 @@ fn component_closure_is_cycle_safe_and_queries_each_frontier() {
         closure,
         ["a", "b", "c"].map(font::GlyphId::from_raw).to_vec()
     );
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 3));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 3));
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn dependent_lookup_preserves_results_across_component_query_batches() {
         .keys()
         .next()
         .unwrap();
-    let mut layer_ids = (0..super::references::MAX_COMPONENT_QUERY_BATCH_COUNT)
+    let mut layer_ids = (0..references::MAX_COMPONENT_QUERY_BATCH_COUNT)
         .map(|index| font::LayerId::from_raw(format!("missing_{index:04}")))
         .collect::<Vec<_>>();
     layer_ids.push(target.clone());

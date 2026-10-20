@@ -283,7 +283,7 @@ fn inspect_glyph(args: cli::InspectGlyphArgs) -> miette::Result<()> {
 }
 
 fn render_mode() -> RenderMode {
-    if std::io::stdout().is_terminal() {
+    if io::stdout().is_terminal() {
         RenderMode::Styled
     } else {
         RenderMode::Plain

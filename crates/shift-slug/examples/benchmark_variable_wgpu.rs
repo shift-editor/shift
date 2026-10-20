@@ -654,7 +654,7 @@ fn build_atlas(arguments: &Arguments) -> Result<(usize, usize, VariableAtlas)> {
             .ok_or("source glyph advance is unavailable")?;
         match builder.add_glyph(base.0.clone(), source.0.clone()) {
             Ok(glyph_index) => {
-                builder.set_glyph_source_advances(glyph_index, [base_advance, source_advance])?
+                builder.set_glyph_source_advances(glyph_index, [base_advance, source_advance])?;
             }
             Err(SlugError::VariableTopologyMismatch { .. }) => {
                 let glyph_index = builder.add_glyph(base.0.clone(), base.0)?;
@@ -1353,20 +1353,20 @@ fn arguments() -> Result<Arguments> {
     while let Some(option) = values.next() {
         match option.as_str() {
             "--weight" => {
-                arguments.weight = values.next().ok_or("--weight requires a value")?.parse()?
+                arguments.weight = values.next().ok_or("--weight requires a value")?.parse()?;
             }
             "--visible" => {
                 arguments.visible_glyphs =
-                    values.next().ok_or("--visible requires a count")?.parse()?
+                    values.next().ok_or("--visible requires a count")?.parse()?;
             }
             "--bands" => {
-                arguments.band_count = values.next().ok_or("--bands requires a count")?.parse()?
+                arguments.band_count = values.next().ok_or("--bands requires a count")?.parse()?;
             }
             "--iterations" => {
                 arguments.iterations = values
                     .next()
                     .ok_or("--iterations requires a count")?
-                    .parse()?
+                    .parse()?;
             }
             "--build-only" => arguments.build_only = true,
             _ => return Err(format!("unknown option {option}").into()),

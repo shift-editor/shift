@@ -1,5 +1,7 @@
 //! Shared test corpora for round-trip and persistence tests.
 
+#![allow(clippy::unwrap_used, reason = "test fixtures fail loudly on bad input")]
+
 pub mod generated;
 
 use crate::{

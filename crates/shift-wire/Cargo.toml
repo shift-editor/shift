@@ -23,3 +23,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true
