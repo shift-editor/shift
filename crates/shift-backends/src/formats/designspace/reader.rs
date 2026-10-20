@@ -70,11 +70,9 @@ pub(super) fn named_instances_from_designspace(
         });
         let candidate = NamedInstance::new(name, location, postscript_name);
 
-        if candidate.validate(axes).is_err()
-            || imported
-                .iter()
-                .any(|existing: &NamedInstance| existing.location() == candidate.location())
-        {
+        // Two instances at one location are kept here, so the import can
+        // report the later one when it leaves it out.
+        if candidate.validate(axes).is_err() {
             continue;
         }
         imported.push(candidate);
