@@ -473,8 +473,7 @@ impl<'a> StoreWriter<'a> {
                 let replaces_layers = value
                     .before
                     .as_ref()
-                    .map(|before| before.layers() != glyph.layers())
-                    .unwrap_or(true);
+                    .is_none_or(|before| before.layers() != glyph.layers());
                 if replaces_layers {
                     self.tx
                         .execute("DELETE FROM glyph_layers WHERE glyph_id = ?1", [&glyph_id])?;

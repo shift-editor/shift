@@ -31,7 +31,7 @@ impl Identified for Component {
     type Id = ComponentId;
 
     fn id(&self) -> Self::Id {
-        Component::id(self)
+        Self::id(self)
     }
 }
 

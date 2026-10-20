@@ -77,7 +77,7 @@ impl From<BridgeError> for Error {
 
 impl From<BridgeError> for JsError {
   fn from(error: BridgeError) -> Self {
-    JsError::from(to_napi_error(error))
+    Self::from(to_napi_error(error))
   }
 }
 

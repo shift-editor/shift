@@ -33,7 +33,7 @@ impl Identified for Glyph {
     type Id = GlyphId;
 
     fn id(&self) -> Self::Id {
-        Glyph::id(self)
+        Self::id(self)
     }
 }
 

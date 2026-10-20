@@ -204,11 +204,13 @@ impl Source for ShiftIrSource {
     }
 
     fn create_static_metadata_work(&self) -> Result<Box<IrWork>, Error> {
-        Ok(Box::new(StaticMetadataWork::new(self.snapshot.clone())))
+        Ok(Box::new(StaticMetadataWork::new(Arc::clone(
+            &self.snapshot,
+        ))))
     }
 
     fn create_global_metric_work(&self) -> Result<Box<IrWork>, Error> {
-        Ok(Box::new(GlobalMetricsWork::new(self.snapshot.clone())))
+        Ok(Box::new(GlobalMetricsWork::new(Arc::clone(&self.snapshot))))
     }
 
     fn create_glyph_ir_work(&self) -> Result<Vec<Box<IrWork>>, Error> {
@@ -217,16 +219,18 @@ impl Source for ShiftIrSource {
             .glyphs
             .iter()
             .cloned()
-            .map(|glyph| Box::new(GlyphWork::new(self.snapshot.clone(), glyph)) as Box<IrWork>)
+            .map(|glyph| Box::new(GlyphWork::new(Arc::clone(&self.snapshot), glyph)) as Box<IrWork>)
             .collect())
     }
 
     fn create_feature_ir_work(&self) -> Result<Box<IrWork>, Error> {
-        Ok(Box::new(FeatureWork::new(self.snapshot.clone())))
+        Ok(Box::new(FeatureWork::new(Arc::clone(&self.snapshot))))
     }
 
     fn create_kerning_locations_ir_work(&self) -> Result<Box<IrWork>, Error> {
-        Ok(Box::new(KerningLocationsWork::new(self.snapshot.clone())))
+        Ok(Box::new(KerningLocationsWork::new(Arc::clone(
+            &self.snapshot,
+        ))))
     }
 
     fn create_kerning_instance_ir_work(
@@ -234,7 +238,7 @@ impl Source for ShiftIrSource {
         at: NormalizedLocation,
     ) -> Result<Box<IrWork>, Error> {
         Ok(Box::new(KerningInstanceWork::new(
-            self.snapshot.clone(),
+            Arc::clone(&self.snapshot),
             at,
         )))
     }

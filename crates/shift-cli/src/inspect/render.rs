@@ -14,8 +14,8 @@ pub(crate) enum RenderMode {
 impl RenderMode {
     fn header(self, value: &str) -> Cell {
         match self {
-            RenderMode::Plain => Cell::new(value),
-            RenderMode::Styled => Cell::new(value)
+            Self::Plain => Cell::new(value),
+            Self::Styled => Cell::new(value)
                 .add_attribute(Attribute::Bold)
                 .fg(Color::DarkGrey),
         }
@@ -23,23 +23,23 @@ impl RenderMode {
 
     fn accent(self, value: &str) -> Cell {
         match self {
-            RenderMode::Plain => Cell::new(value),
-            RenderMode::Styled => Cell::new(value).fg(Color::Cyan),
+            Self::Plain => Cell::new(value),
+            Self::Styled => Cell::new(value).fg(Color::Cyan),
         }
     }
 
     fn muted(self, value: impl Into<String>) -> Cell {
         let value = value.into();
         match self {
-            RenderMode::Plain => Cell::new(value),
-            RenderMode::Styled => Cell::new(value).fg(Color::DarkGrey),
+            Self::Plain => Cell::new(value),
+            Self::Styled => Cell::new(value).fg(Color::DarkGrey),
         }
     }
 
     fn muted_text(self, value: &str) -> String {
         match self {
-            RenderMode::Plain => value.to_string(),
-            RenderMode::Styled => format!(
+            Self::Plain => value.to_string(),
+            Self::Styled => format!(
                 "{}{}{}",
                 anstyle::Style::new()
                     .fg_color(Some(AnsiColor::BrightBlack.into()))
@@ -52,8 +52,8 @@ impl RenderMode {
 
     fn styled_title(self, value: &str) -> String {
         match self {
-            RenderMode::Plain => value.to_string(),
-            RenderMode::Styled => format!(
+            Self::Plain => value.to_string(),
+            Self::Styled => format!(
                 "{}{}{}",
                 anstyle::Style::new().bold().render(),
                 value,
@@ -64,8 +64,8 @@ impl RenderMode {
 
     fn styled_section(self, value: &str) -> String {
         match self {
-            RenderMode::Plain => value.to_string(),
-            RenderMode::Styled => format!(
+            Self::Plain => value.to_string(),
+            Self::Styled => format!(
                 "{}{}{}",
                 anstyle::Style::new()
                     .bold()
@@ -86,8 +86,8 @@ impl RenderMode {
             .unwrap_or(0);
         rows.iter()
             .map(|(label, value)| match self {
-                RenderMode::Plain => format!("{label:<width$}{value}"),
-                RenderMode::Styled => format!(
+                Self::Plain => format!("{label:<width$}{value}"),
+                Self::Styled => format!(
                     "{}{label:<width$}{}{value}",
                     anstyle::Style::new()
                         .fg_color(Some(AnsiColor::BrightBlack.into()))

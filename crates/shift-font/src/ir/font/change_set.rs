@@ -200,7 +200,7 @@ impl Font {
                 continue;
             };
             let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
-            Arc::make_mut(glyph).set_layer(layer.clone());
+            Arc::make_mut(glyph).set_layer(Arc::clone(layer));
         }
 
         let state = self.state_mut();
@@ -312,7 +312,7 @@ mod tests {
         let mut renamed_second = second.clone();
         renamed_second.set_name(first.glyph_name().clone());
         renamed_second.set_unicodes(first.unicodes().to_vec());
-        let layer = first.layers().values().next().unwrap().clone();
+        let layer = Arc::clone(first.layers().values().next().unwrap());
         let mut moved_layer = (*layer).clone();
         moved_layer.set_width(moved_layer.width() + 10.0);
         renamed_first.set_layer(moved_layer.clone());

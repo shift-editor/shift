@@ -54,8 +54,8 @@ crate::sql_text::sql_text!(SourceKind);
 impl From<shift_font::SourceRole> for SourceKind {
     fn from(role: shift_font::SourceRole) -> Self {
         match role {
-            shift_font::SourceRole::Master => SourceKind::Master,
-            shift_font::SourceRole::Layer => SourceKind::Layer,
+            shift_font::SourceRole::Master => Self::Master,
+            shift_font::SourceRole::Layer => Self::Layer,
         }
     }
 }
@@ -63,8 +63,8 @@ impl From<shift_font::SourceRole> for SourceKind {
 impl From<SourceKind> for shift_font::SourceRole {
     fn from(kind: SourceKind) -> Self {
         match kind {
-            SourceKind::Master => shift_font::SourceRole::Master,
-            SourceKind::Layer => shift_font::SourceRole::Layer,
+            SourceKind::Master => Self::Master,
+            SourceKind::Layer => Self::Layer,
         }
     }
 }

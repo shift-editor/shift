@@ -26,7 +26,7 @@ impl ExportFormat {
     /// Returns the lowercase format token used by file extensions and commands.
     pub fn as_str(self) -> &'static str {
         match self {
-            ExportFormat::Ttf => "ttf",
+            Self::Ttf => "ttf",
         }
     }
 }

@@ -445,8 +445,7 @@ fn selected_shape<'a>(
         .exact_shapes
         .iter()
         .find(|shape| shape.source == source)
-        .map(|shape| &shape.shape)
-        .unwrap_or(&projection.fallback)
+        .map_or(&projection.fallback, |shape| &shape.shape)
 }
 
 fn projection_values(
@@ -761,8 +760,7 @@ unitsPerEm = 1000;
                     .find(|(root, exact_source, _)| {
                         root == glyph && *exact_source == source.index.to_u32()
                     })
-                    .map(|(_, _, glyph)| *glyph)
-                    .unwrap_or(*default_glyph);
+                    .map_or(*default_glyph, |(_, _, glyph)| *glyph);
                 let curves = page
                     .atlas()
                     .resolve_glyph_with_weights(atlas_glyph, &weights)
@@ -803,8 +801,7 @@ unitsPerEm = 1000;
                     .iter()
                     .find(|shape| shape.source == source)
             })
-            .map(|shape| &shape.shape)
-            .unwrap_or(&projection.fallback)
+            .map_or(&projection.fallback, |shape| &shape.shape)
     }
 
     fn shape_has_outline(

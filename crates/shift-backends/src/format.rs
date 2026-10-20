@@ -29,12 +29,12 @@ impl FontFormat {
 
     pub fn name(self) -> &'static str {
         match self {
-            FontFormat::Shift => "shift",
-            FontFormat::Ufo => "ufo",
-            FontFormat::Glyphs => "glyphs",
-            FontFormat::Designspace => "designspace",
-            FontFormat::Ttf => "ttf",
-            FontFormat::Otf => "otf",
+            Self::Shift => "shift",
+            Self::Ufo => "ufo",
+            Self::Glyphs => "glyphs",
+            Self::Designspace => "designspace",
+            Self::Ttf => "ttf",
+            Self::Otf => "otf",
         }
     }
 }

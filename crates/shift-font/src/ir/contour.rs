@@ -16,7 +16,7 @@ impl Identified for Contour {
     type Id = ContourId;
 
     fn id(&self) -> Self::Id {
-        Contour::id(self)
+        Self::id(self)
     }
 }
 
@@ -238,13 +238,13 @@ impl From<&BezPath> for Contours {
             contours.push(c);
         }
 
-        Contours(contours)
+        Self(contours)
     }
 }
 
 impl From<&Contour> for BezPath {
     fn from(contour: &Contour) -> Self {
-        let mut path = BezPath::new();
+        let mut path = Self::new();
 
         if let Some(first) = contour.points().first() {
             path.move_to((first.x(), first.y()));

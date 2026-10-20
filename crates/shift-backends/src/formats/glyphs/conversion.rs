@@ -124,22 +124,21 @@ impl GlyphsFontExt for GlyphsFont {
         design_default: f64,
     ) -> GlyphsAxisMapping {
         let axis = &self.axes[axis_index];
-        let mut mapping = self
-            .axis_mappings
-            .get(&axis.name)
-            .map(|mapping| {
-                mapping
-                    .iter()
-                    .map(|(user, design)| (user.into_inner(), design.into_inner()))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| {
+        let mut mapping = self.axis_mappings.get(&axis.name).map_or_else(
+            || {
                 design_values
                     .iter()
                     .copied()
                     .map(|value| (value, value))
                     .collect()
-            });
+            },
+            |mapping| {
+                mapping
+                    .iter()
+                    .map(|(user, design)| (user.into_inner(), design.into_inner()))
+                    .collect::<Vec<_>>()
+            },
+        );
         if mapping.is_empty() {
             mapping.push((design_default, design_default));
         }
@@ -332,11 +331,10 @@ pub(crate) fn font_header(
                             .zip(&axis_mappings)
                             .enumerate()
                             .map(|(index, (axis_id, mapping))| {
-                                let value = instance
-                                    .axes_values
-                                    .get(index)
-                                    .map(|value| mapping.unmap(value.into_inner()))
-                                    .unwrap_or_else(|| font.axes()[index].default());
+                                let value = instance.axes_values.get(index).map_or_else(
+                                    || font.axes()[index].default(),
+                                    |value| mapping.unmap(value.into_inner()),
+                                );
                                 (axis_id.clone(), value)
                             }),
                     ),

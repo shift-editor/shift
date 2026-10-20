@@ -657,7 +657,7 @@ impl Location {
         self.values.iter()
     }
 
-    pub fn normalize(&self, axes: &[Axis]) -> Location {
+    pub fn normalize(&self, axes: &[Axis]) -> Self {
         axes.iter()
             .filter_map(|axis| {
                 let value = self.values.get(&axis.id())?;
