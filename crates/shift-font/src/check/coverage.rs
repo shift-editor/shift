@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::{Font, Glyph, Source};
 
+use super::MonospaceCell;
 use super::health::extent;
 use super::roles::GlyphRole;
 use super::{Check, Finding};
@@ -153,7 +154,7 @@ pub(super) fn charset(font: &Font, charset: &Charset) -> Vec<Finding> {
 ///
 /// The cell width is `width` when given, otherwise the most common advance
 /// in that master. Marks and zero-width glyphs are skipped.
-pub(super) fn monospace(font: &Font, width: Option<f64>) -> Vec<Finding> {
+pub(super) fn monospace(font: &Font, cell: MonospaceCell) -> Vec<Finding> {
     let mut findings = Vec::new();
     for source in font.masters() {
         let samples = font
@@ -165,8 +166,9 @@ pub(super) fn monospace(font: &Font, width: Option<f64>) -> Vec<Finding> {
                 (advance.is_finite() && advance > 0.0).then_some((glyph, layer, advance))
             })
             .collect::<Vec<_>>();
-        let Some(cell) =
-            width.or_else(|| most_common(samples.iter().map(|(_, _, advance)| *advance)))
+        let Some(cell) = cell
+            .width()
+            .or_else(|| most_common(samples.iter().map(|(_, _, advance)| *advance)))
         else {
             continue;
         };

@@ -156,20 +156,17 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
     assert!(component_bases.contains(&"acute"));
 
     let e = font.glyph_by_name("E").expect("E glyph should exist");
-    let anchor_names: Vec<_> = e
-        .layers()
-        .values()
-        .flat_map(|layer| layer.anchors_iter())
-        .filter_map(|anchor| anchor.name())
-        .collect();
-    assert!(anchor_names.contains(&"top"));
-
-    let source_names: Vec<_> = font
-        .sources()
-        .iter()
-        .map(shift_font::Source::name)
-        .collect();
-    assert!(source_names.contains(&"Regular"));
+    assert!(
+        e.layers()
+            .values()
+            .flat_map(|layer| layer.anchors_iter())
+            .any(|anchor| anchor.name() == Some("top"))
+    );
+    assert!(
+        font.sources()
+            .iter()
+            .any(|source| source.name() == "Regular")
+    );
     assert!(font.sources().len() >= 2);
     assert!(
         font.glyphs()

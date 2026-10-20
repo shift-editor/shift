@@ -101,14 +101,12 @@ impl GlyphsFont {
     }
 
     fn parsed_glyph(&self, glyph: GlyphIndex) -> Result<&ParsedGlyph, FontReadError> {
-        let entry =
-            self.directory
-                .glyphs
-                .get(glyph.to_usize())
-                .ok_or(FontReadError::GlyphOutOfRange {
-                    glyph,
-                    glyph_count: self.directory.glyph_count(),
-                })?;
+        let entry = self.directory.glyphs.get(glyph.to_usize()).ok_or_else(|| {
+            FontReadError::GlyphOutOfRange {
+                glyph,
+                glyph_count: self.directory.glyph_count(),
+            }
+        })?;
         self.source.glyphs.get(entry.name.as_str()).ok_or_else(|| {
             FontReadError::InvalidProjection {
                 details: format!("Glyphs directory lost glyph {:?}", entry.name),

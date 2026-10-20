@@ -262,7 +262,7 @@ impl InspectReport {
                         source,
                         font.metric_definitions(),
                         &axes_by_id,
-                        &default_source_id,
+                        default_source_id.as_ref(),
                     )
                 })
                 .collect(),
@@ -362,16 +362,14 @@ impl SourceSummary {
         source: &Source,
         definitions: &[MetricDefinition],
         axes_by_id: &HashMap<AxisId, String>,
-        default_source_id: &Option<SourceId>,
+        default_source_id: Option<&SourceId>,
     ) -> Self {
         Self {
             id: source.id().to_string(),
             name: source.name().to_string(),
             location: location_values(source.location().as_untyped(), axes_by_id),
             filename: source.filename().map(ToOwned::to_owned),
-            is_default: default_source_id
-                .as_ref()
-                .is_some_and(|source_id| *source_id == source.id()),
+            is_default: default_source_id.is_some_and(|source_id| *source_id == source.id()),
             metric_values: definitions
                 .iter()
                 .filter_map(|definition| {

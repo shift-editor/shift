@@ -745,18 +745,17 @@ fn popping_glyph_cascades_layers() {
     let stored = store
         .get_glyph(&GlyphId::new(glyph_id.to_string()))
         .expect("glyph query should succeed");
-    let layers = store
+    let has_layers = store
         .list_glyph_layer_directory()
         .expect("layer query should succeed")
         .into_iter()
-        .filter(|entry| entry.glyph_id == glyph_id)
-        .collect::<Vec<_>>();
+        .any(|entry| entry.glyph_id == glyph_id);
     let unicodes = store
         .list_glyph_unicodes(&GlyphId::new(glyph_id.to_string()))
         .expect("unicode query should succeed");
 
     assert!(stored.is_none());
-    assert!(layers.is_empty());
+    assert!(!has_layers);
     assert!(unicodes.is_empty());
 }
 

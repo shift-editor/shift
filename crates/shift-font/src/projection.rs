@@ -341,7 +341,6 @@ impl Font {
     /// never a compatible authored layer, whose per-layer component identities
     /// interpolation does not carry. No geometry is evaluated.
     fn structural_components(
-        &self,
         root_glyph_id: &GlyphId,
         root_projection: &GlyphLayerProjection,
         projections: &HashMap<GlyphId, Option<Arc<GlyphLayerProjection>>>,
@@ -389,13 +388,13 @@ impl Font {
     ) -> CoreResult<GlyphProjection> {
         let fallback_source_id = layers.fallback.source_id();
         let components =
-            self.structural_components(glyph_id, &layers, projections, &fallback_source_id)?;
+            Self::structural_components(glyph_id, &layers, projections, &fallback_source_id)?;
 
         let mut exact_source_components = Vec::new();
         for source in self.masters() {
             let source_id = source.id();
             let source_components =
-                self.structural_components(glyph_id, &layers, projections, &source_id)?;
+                Self::structural_components(glyph_id, &layers, projections, &source_id)?;
             if source_components != components {
                 exact_source_components.push(GlyphSourceComponents {
                     source_id,

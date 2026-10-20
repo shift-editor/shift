@@ -10,7 +10,7 @@ use serde::Serialize;
 use shift_backends::font_loader::FontLoader;
 use shift_backends::{BackendError, ImportLoss, ImportLossKind};
 use shift_font::Font;
-use shift_font::check::{Charset, CheckOptions, Finding, Severity};
+use shift_font::check::{Charset, CheckOptions, Finding, MonospaceCell, Severity};
 
 use crate::cli::CheckArgs;
 
@@ -87,7 +87,10 @@ impl CheckReport {
 pub(crate) fn check(args: &CheckArgs) -> Result<CheckReport> {
     let options = CheckOptions {
         charset: args.charset.as_deref().map(read_charset).transpose()?,
-        monospace: args.mono.then_some(args.width),
+        monospace: args.mono.then(|| {
+            args.width
+                .map_or(MonospaceCell::MostCommonAdvance, MonospaceCell::Width)
+        }),
     };
     let (font, losses) = read_font(&args.path)?;
     let findings = font

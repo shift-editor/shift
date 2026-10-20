@@ -524,11 +524,9 @@ pub(super) fn convert_glyph(
 
 fn convert_node_type(node_type: NodeType) -> (shift_font::PointType, bool) {
     match node_type {
-        NodeType::Line => (shift_font::PointType::OnCurve, false),
-        NodeType::LineSmooth => (shift_font::PointType::OnCurve, true),
+        NodeType::Line | NodeType::Curve => (shift_font::PointType::OnCurve, false),
+        NodeType::LineSmooth | NodeType::CurveSmooth => (shift_font::PointType::OnCurve, true),
         NodeType::OffCurve => (shift_font::PointType::OffCurve, false),
-        NodeType::Curve => (shift_font::PointType::OnCurve, false),
-        NodeType::CurveSmooth => (shift_font::PointType::OnCurve, true),
         NodeType::QCurve => (shift_font::PointType::QCurve, false),
         NodeType::QCurveSmooth => (shift_font::PointType::QCurve, true),
     }

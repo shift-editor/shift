@@ -281,7 +281,7 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
                 &exact.shape,
                 &exact.values,
             )?;
-            let (curves, line_flags) = outline_curves(&outline)?;
+            let (curves, line_flags) = outline_curves(&outline);
             compiler.add_exact_variant(
                 *root,
                 exact.source_index,
@@ -419,13 +419,13 @@ fn compatible_curves(
     })
 }
 
-fn outline_curves(outline: &ProjectedOutline) -> Result<(Vec<Curve>, Vec<bool>), SlugError> {
+fn outline_curves(outline: &ProjectedOutline) -> (Vec<Curve>, Vec<bool>) {
     let subdivisions = outline
         .segments
         .iter()
         .map(cubic_subdivision_count)
         .collect::<Vec<_>>();
-    Ok(segments_to_curves(&outline.segments, &subdivisions))
+    segments_to_curves(&outline.segments, &subdivisions)
 }
 
 fn segments_to_curves(

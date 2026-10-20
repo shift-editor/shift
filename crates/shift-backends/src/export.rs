@@ -127,6 +127,10 @@ impl FontExporter {
     ///
     /// Returns [`ExportError`] when the source cannot be represented in the
     /// supported compiler model or compilation fails.
+    #[allow(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
         let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
         compile_ttf(source)
@@ -148,6 +152,10 @@ impl FontExporter {
     /// # Errors
     ///
     /// Returns [`ExportError`] when the font cannot be compiled.
+    #[allow(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
     pub fn propagated_anchors(
         &self,
         font: &impl FontView,

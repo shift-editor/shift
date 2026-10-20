@@ -168,7 +168,7 @@ pub fn propagate_anchors(glyph: &PropagationGlyph) -> PropagatedAnchors {
                 && !name.starts_with("exit")
         }) {
             // Carets count space between components, so the last caret is n_components - 1
-            let maybe_add_one = if name.starts_with("caret") { 1 } else { 0 };
+            let maybe_add_one = usize::from(name.starts_with("caret"));
             let anchor_index = suffix.parse::<usize>().unwrap_or(0) + maybe_add_one;
             component_count_from_anchors = component_count_from_anchors.max(anchor_index);
         }

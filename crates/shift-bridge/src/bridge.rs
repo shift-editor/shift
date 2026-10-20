@@ -1233,6 +1233,7 @@ impl Bridge {
   ///
   /// Resolves to `null` when the font draws nothing usable; rejects when the
   /// file cannot be read or compiled.
+  #[allow(clippy::unused_self, reason = "a JavaScript instance method")]
   #[napi(ts_return_type = "Promise<NapiSpecimen | null>")]
   pub fn font_file_specimen(&self, path: String) -> AsyncTask<crate::specimen::SpecimenTask> {
     AsyncTask::new(crate::specimen::SpecimenTask {
@@ -1260,6 +1261,7 @@ impl Bridge {
     self.document_state_snapshot()
   }
 
+  #[allow(clippy::unused_self, reason = "a JavaScript instance method")]
   #[napi]
   pub fn inspect_document(&self, path: String) -> errors::Result<NapiDocumentIdentity> {
     FontWorkspace::inspect_document(path)?.try_into()

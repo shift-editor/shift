@@ -29,12 +29,12 @@ impl Default for DesignspaceReader {
 
 impl FontReader for DesignspaceReader {
     fn load(&self, path: &str) -> FormatBackendResult<Font> {
-        self.load_designspace(path)
+        Self::load_designspace(path)
     }
 }
 
 impl DesignspaceReader {
-    fn load_designspace(&self, path: &str) -> FormatBackendResult<Font> {
+    fn load_designspace(path: &str) -> FormatBackendResult<Font> {
         let (header, mut stream, _report) = super::stream_font(path)?;
         collect_streamed_font(header, &mut stream)
     }
@@ -43,7 +43,7 @@ impl DesignspaceReader {
 pub(super) fn named_instances_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
-) -> DesignspaceResult<Vec<NamedInstance>> {
+) -> Vec<NamedInstance> {
     let mut imported = Vec::new();
     for (index, instance) in doc.instances.iter().enumerate() {
         // Legacy Designspace instances can also describe anisotropic or
@@ -62,7 +62,7 @@ pub(super) fn named_instances_from_designspace(
             .clone()
             .or_else(|| instance.name.clone())
             .unwrap_or_else(|| format!("Instance {}", index + 1));
-        let location = external_location_from_dimensions(&instance.location, doc, axes)?;
+        let location = external_location_from_dimensions(&instance.location, doc, axes);
         let postscript_name = instance.postscriptfontname.clone().filter(|name| {
             !imported
                 .iter()
@@ -80,14 +80,14 @@ pub(super) fn named_instances_from_designspace(
         imported.push(candidate);
     }
 
-    Ok(imported)
+    imported
 }
 
 fn external_location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
     axes: &[Axis],
-) -> DesignspaceResult<ExternalLocation> {
+) -> ExternalLocation {
     let mut location = ExternalLocation::new();
     for ds_axis in &doc.axes {
         let Some(axis) = axes.iter().find(|axis| axis.tag() == ds_axis.tag) else {
@@ -107,7 +107,7 @@ fn external_location_from_dimensions(
         location.set(axis.id(), value);
     }
 
-    Ok(location)
+    location
 }
 
 pub(crate) fn axis_mappings_from_designspace(

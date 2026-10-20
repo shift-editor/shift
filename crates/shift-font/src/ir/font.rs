@@ -627,7 +627,7 @@ impl Font {
                 let value = source
                     .location()
                     .get(&axis.id())
-                    .unwrap_or(previous.default());
+                    .unwrap_or_else(|| previous.default());
                 let is_default = self.default_source_id().as_ref() == Some(&source.id());
                 validate_source_axis(&axis, source, value, is_default)?;
                 if source.location().get(&axis.id()).is_none()
