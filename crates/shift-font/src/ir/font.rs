@@ -14,9 +14,11 @@ use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::Kerning;
 use crate::lib_data::{LibData, LibValue};
-use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue, StandardMetrics};
+use crate::metrics::{
+    FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
+};
 use crate::named_instance::{NamedInstance, validate_named_instances};
-use crate::source::Source;
+use crate::source::{Source, SourceList};
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -452,15 +454,11 @@ impl Font {
     }
 
     pub fn metric_definition(&self, metric_id: &MetricId) -> Option<&MetricDefinition> {
-        self.metric_definitions()
-            .iter()
-            .find(|definition| definition.id() == *metric_id)
+        self.metric_definitions().definition(metric_id)
     }
 
     pub fn metric_definition_for_kind(&self, kind: MetricKind) -> Option<&MetricDefinition> {
-        self.metric_definitions()
-            .iter()
-            .find(|definition| definition.kind() == kind)
+        self.metric_definitions().definition_for_kind(kind)
     }
 
     /// Returns one source's authored value for a standard metric role.
@@ -841,9 +839,7 @@ impl Font {
 
     /// Returns the source with `source_id`, whatever its role.
     pub fn source(&self, source_id: &SourceId) -> Option<&Source> {
-        self.sources()
-            .iter()
-            .find(|source| source.id() == *source_id)
+        self.sources().source(source_id)
     }
 
     /// Returns the master sources, in source order: the sources the editor shows, edits, and
@@ -946,20 +942,13 @@ impl Font {
         metrics: StandardMetrics,
     ) -> CoreResult<()> {
         let data = self.data_mut();
-        let source = data
-            .sources
-            .iter_mut()
-            .find(|source| source.id() == *source_id)
-            .require(source_id)?;
+        let source = data.sources.source_mut(source_id).require(source_id)?;
         metrics.apply_to(source, &data.metric_definitions);
         Ok(())
     }
 
     pub fn source_mut(&mut self, source_id: &SourceId) -> Option<&mut Source> {
-        self.data_mut()
-            .sources
-            .iter_mut()
-            .find(|source| source.id() == *source_id)
+        self.data_mut().sources.source_mut(source_id)
     }
 
     pub fn add_source(&mut self, mut source: Source) -> SourceId {

@@ -33,23 +33,6 @@ fn is_named_instance(active: bool, instance_type: &InstanceType) -> bool {
     active && *instance_type == InstanceType::Single
 }
 
-pub(crate) fn master_design_values(font: &GlyphsFont, axis_index: usize) -> Vec<f64> {
-    font.masters
-        .iter()
-        .filter_map(|master| master.axes_values.get(axis_index))
-        .map(|value| value.into_inner())
-        .collect()
-}
-
-pub(crate) fn default_design_value(font: &GlyphsFont, axis_index: usize, values: &[f64]) -> f64 {
-    font.masters
-        .get(font.default_master_idx)
-        .and_then(|master| master.axes_values.get(axis_index))
-        .map(|value| value.into_inner())
-        .or_else(|| values.first().copied())
-        .unwrap_or(0.0)
-}
-
 #[derive(Clone)]
 pub(crate) struct GlyphsAxisMapping {
     pub(crate) user_to_design: Box<[(f64, f64)]>,
@@ -97,60 +80,109 @@ impl GlyphsAxisMapping {
     }
 }
 
-pub(crate) fn glyphs_axis_mapping(
-    font: &GlyphsFont,
-    axis_index: usize,
-    design_values: &[f64],
-    design_default: f64,
-) -> GlyphsAxisMapping {
-    let axis = &font.axes[axis_index];
-    let mut mapping = font
-        .axis_mappings
-        .get(&axis.name)
-        .map(|mapping| {
-            mapping
-                .iter()
-                .map(|(user, design)| (user.into_inner(), design.into_inner()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| {
-            design_values
-                .iter()
-                .copied()
-                .map(|value| (value, value))
-                .collect()
-        });
-    if mapping.is_empty() {
-        mapping.push((design_default, design_default));
+/// Axis questions about a Glyphs source that glyphs-reader leaves to callers.
+pub(crate) trait GlyphsFontExt {
+    /// Returns each master's design value on the axis at `axis_index`.
+    fn master_design_values(&self, axis_index: usize) -> Vec<f64>;
+
+    /// Returns the default master's design value on the axis, falling back to
+    /// the first of `values`.
+    fn default_design_value(&self, axis_index: usize, values: &[f64]) -> f64;
+
+    /// Returns the axis's user-to-design mapping, or an identity mapping
+    /// through the masters' design values when the source authors none.
+    fn axis_mapping(
+        &self,
+        axis_index: usize,
+        design_values: &[f64],
+        design_default: f64,
+    ) -> GlyphsAxisMapping;
+}
+
+impl GlyphsFontExt for GlyphsFont {
+    fn master_design_values(&self, axis_index: usize) -> Vec<f64> {
+        self.masters
+            .iter()
+            .filter_map(|master| master.axes_values.get(axis_index))
+            .map(|value| value.into_inner())
+            .collect()
     }
-    mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
-    mapping.dedup_by(|left, right| left.0 == right.0);
-    GlyphsAxisMapping {
-        user_to_design: mapping.into_boxed_slice(),
+
+    fn default_design_value(&self, axis_index: usize, values: &[f64]) -> f64 {
+        self.masters
+            .get(self.default_master_idx)
+            .and_then(|master| master.axes_values.get(axis_index))
+            .map(|value| value.into_inner())
+            .or_else(|| values.first().copied())
+            .unwrap_or(0.0)
+    }
+
+    fn axis_mapping(
+        &self,
+        axis_index: usize,
+        design_values: &[f64],
+        design_default: f64,
+    ) -> GlyphsAxisMapping {
+        let axis = &self.axes[axis_index];
+        let mut mapping = self
+            .axis_mappings
+            .get(&axis.name)
+            .map(|mapping| {
+                mapping
+                    .iter()
+                    .map(|(user, design)| (user.into_inner(), design.into_inner()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| {
+                design_values
+                    .iter()
+                    .copied()
+                    .map(|value| (value, value))
+                    .collect()
+            });
+        if mapping.is_empty() {
+            mapping.push((design_default, design_default));
+        }
+        mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
+        mapping.dedup_by(|left, right| left.0 == right.0);
+        GlyphsAxisMapping {
+            user_to_design: mapping.into_boxed_slice(),
+        }
     }
 }
 
-pub(crate) fn master_location_values(master: &FontMaster, axis_count: usize) -> Vec<Option<f64>> {
-    (0..axis_count)
-        .map(|index| {
-            master
-                .axes_values
-                .get(index)
-                .map(|value| value.into_inner())
-        })
-        .collect()
+/// Reads a Glyphs master's location.
+pub(crate) trait GlyphsMasterExt {
+    /// Returns the master's value on each of the first `axis_count` axes.
+    fn location_values(&self, axis_count: usize) -> Vec<Option<f64>>;
+}
+
+impl GlyphsMasterExt for FontMaster {
+    fn location_values(&self, axis_count: usize) -> Vec<Option<f64>> {
+        (0..axis_count)
+            .map(|index| self.axes_values.get(index).map(|value| value.into_inner()))
+            .collect()
+    }
+}
+
+/// Reads a Glyphs anchor as Shift stores one.
+pub(crate) trait GlyphsAnchorExt {
+    /// Returns the anchor's name, `None` when it is blank, and its position.
+    fn name_and_position(&self) -> (Option<String>, f64, f64);
+}
+
+impl GlyphsAnchorExt for GlyphsAnchor {
+    fn name_and_position(&self) -> (Option<String>, f64, f64) {
+        (
+            (!self.name.is_empty()).then(|| self.name.to_string()),
+            self.pos.x,
+            self.pos.y,
+        )
+    }
 }
 
 pub(crate) fn missing_component_details(name: &str) -> String {
     format!("component base glyph {name:?} does not exist")
-}
-
-pub(crate) fn anchor_parts(anchor: &GlyphsAnchor) -> (Option<String>, f64, f64) {
-    (
-        (!anchor.name.is_empty()).then(|| anchor.name.to_string()),
-        anchor.pos.x,
-        anchor.pos.y,
-    )
 }
 
 pub(crate) fn font_header(
@@ -191,13 +223,13 @@ pub(crate) fn font_header(
     let mut axis_ids_by_index = Vec::new();
     let mut axis_mappings = Vec::new();
     for (index, glyphs_axis) in glyphs_font.axes.iter().enumerate() {
-        let design_values = master_design_values(glyphs_font, index);
+        let design_values = glyphs_font.master_design_values(index);
         if design_values.is_empty() {
             continue;
         }
 
-        let design_default = default_design_value(glyphs_font, index, &design_values);
-        let mapping = glyphs_axis_mapping(glyphs_font, index, &design_values, design_default);
+        let design_default = glyphs_font.default_design_value(index, &design_values);
+        let mapping = glyphs_font.axis_mapping(index, &design_values, design_default);
         let user_default = mapping.unmap(design_default);
         let instance_values = glyphs_font
             .instances
@@ -256,7 +288,7 @@ pub(crate) fn font_header(
         let mut location = DesignLocation::new();
         for (axis_id, value) in axis_ids_by_index
             .iter()
-            .zip(master_location_values(master, axis_ids_by_index.len()))
+            .zip(master.location_values(axis_ids_by_index.len()))
         {
             if let Some(value) = value {
                 location.set(axis_id.clone(), value);
@@ -480,7 +512,7 @@ pub(super) fn convert_glyph(
         }
 
         for anchor in &layer.anchors {
-            let (name, x, y) = anchor_parts(anchor);
+            let (name, x, y) = anchor.name_and_position();
             result_layer.add_anchor(Anchor::new(name, x, y));
         }
 

@@ -1,7 +1,7 @@
 use crate::errors::FormatBackendResult;
 use shift_font::{
     Axis, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName,
-    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
+    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId, SourceList,
 };
 
 pub trait FontView {
@@ -26,9 +26,7 @@ pub trait FontView {
     /// The default source, when the font names one it contains.
     fn default_source(&self) -> Option<&Source> {
         let default_source_id = self.default_source_id()?;
-        self.sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
+        self.sources().source(&default_source_id)
     }
 }
 

@@ -1,3 +1,4 @@
+mod axis_ext;
 mod axis_labels;
 mod error;
 mod import;
@@ -5,10 +6,10 @@ mod reader;
 mod source;
 mod writer;
 
+pub(crate) use axis_ext::{DesignspaceAxisExt, DesignspaceDocumentExt};
 pub use error::DesignspaceError;
 pub(crate) use import::{stream_font, stream_retained};
 pub use reader::DesignspaceReader;
-pub(crate) use reader::{derive_axis_range, find_default_source_index, map_axis_value};
 pub use source::DesignspaceFont;
 pub use writer::DesignspaceWriter;
 
