@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use indexmap::IndexSet;
 use std::sync::Arc;
 
 use bitflags::bitflags;
@@ -37,6 +37,18 @@ bitflags! {
 pub struct Replacement<T> {
     pub before: T,
     pub after: T,
+}
+
+impl<T> Replacement<Option<T>> {
+    /// The values this replacement holds, before then after.
+    pub fn sides(&self) -> impl Iterator<Item = &T> {
+        self.before.iter().chain(&self.after)
+    }
+
+    /// Whether this replacement creates its value.
+    pub fn creates(&self) -> bool {
+        self.before.is_none() && self.after.is_some()
+    }
 }
 
 impl<T> Replacement<T> {
@@ -198,6 +210,43 @@ pub enum FontChange {
 }
 
 impl FontChange {
+    /// The glyphs whose record or layer this change replaces.
+    pub fn glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        let replaced = match self {
+            Self::Glyph(value) => Some(value.sides().map(Glyph::id)),
+            _ => None,
+        };
+        let owner = match self {
+            Self::Layer { glyph_id, .. } => Some(glyph_id.clone()),
+            _ => None,
+        };
+        replaced.into_iter().flatten().chain(owner)
+    }
+
+    /// The layers this change leaves behind; a created glyph's layers are
+    /// structural.
+    pub fn touched_layers(&self) -> impl Iterator<Item = TouchedLayer> + '_ {
+        let replaced = match self {
+            Self::Layer {
+                layer, structural, ..
+            } => layer
+                .after
+                .as_ref()
+                .map(|layer| TouchedLayer::new(layer, *structural)),
+            _ => None,
+        };
+        let created = match self {
+            Self::Glyph(value) if value.creates() => value.after.as_ref(),
+            _ => None,
+        };
+        replaced.into_iter().chain(
+            created
+                .into_iter()
+                .flat_map(|glyph| glyph.layers().values())
+                .map(|layer| TouchedLayer::new(layer, true)),
+        )
+    }
+
     /// Returns every domain projection invalidated by this replacement.
     pub fn impact(&self) -> FontChangeImpact {
         match self {
@@ -338,20 +387,10 @@ impl FontChangeSet {
 
     /// Returns the glyphs whose own record or any layer this changeset
     /// replaces, in first-touched order.
-    pub fn touched_glyph_ids(&self) -> Vec<GlyphId> {
-        let mut seen = HashSet::new();
+    pub fn touched_glyph_ids(&self) -> IndexSet<GlyphId> {
         self.changes
             .iter()
-            .flat_map(|change| match change {
-                FontChange::Glyph(value) => [value.before.as_ref(), value.after.as_ref()]
-                    .into_iter()
-                    .flatten()
-                    .map(Glyph::id)
-                    .collect::<Vec<_>>(),
-                FontChange::Layer { glyph_id, .. } => vec![glyph_id.clone()],
-                _ => Vec::new(),
-            })
-            .filter(|glyph_id| seen.insert(glyph_id.clone()))
+            .flat_map(FontChange::glyph_ids)
             .collect()
     }
 
@@ -360,28 +399,7 @@ impl FontChangeSet {
     pub fn touched_layers(&self) -> Vec<TouchedLayer> {
         self.changes
             .iter()
-            .flat_map(|change| match change {
-                FontChange::Layer {
-                    layer, structural, ..
-                } => layer
-                    .after
-                    .iter()
-                    .map(|layer| TouchedLayer {
-                        layer: layer.clone(),
-                        structural: *structural,
-                    })
-                    .collect(),
-                FontChange::Glyph(value) if value.before.is_none() => value
-                    .after
-                    .iter()
-                    .flat_map(|glyph| glyph.layers().values())
-                    .map(|layer| TouchedLayer {
-                        layer: layer.clone(),
-                        structural: true,
-                    })
-                    .collect(),
-                _ => Vec::new(),
-            })
+            .flat_map(FontChange::touched_layers)
             .collect()
     }
 
@@ -583,6 +601,54 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn glyph_with_layer() -> (Glyph, Arc<GlyphLayer>) {
+        let layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+        let mut glyph = Glyph::with_id(GlyphId::new(), "a");
+        glyph.set_layer(layer);
+        let layer = Arc::clone(glyph.layers().values().next().expect("layer was set"));
+        (glyph, layer)
+    }
+
+    #[test]
+    fn touched_glyphs_come_once_in_first_touched_order_and_created_layers_are_structural() {
+        let (edited, edited_layer) = glyph_with_layer();
+        let (created, created_layer) = glyph_with_layer();
+        let layer_edit = FontChange::Layer {
+            glyph_id: edited.id(),
+            layer: Replacement::new(
+                Some(Arc::clone(&edited_layer)),
+                Some(Arc::clone(&edited_layer)),
+            ),
+            structural: false,
+        };
+        let change_set = FontChangeSet {
+            changes: vec![
+                layer_edit.clone(),
+                FontChange::Glyph(Box::new(Replacement::new(None, Some(created.clone())))),
+                layer_edit,
+            ],
+        };
+
+        let glyph_ids = change_set
+            .touched_glyph_ids()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let layers = change_set.touched_layers();
+
+        assert_eq!(glyph_ids, [edited.id(), created.id()]);
+        assert_eq!(
+            layers
+                .iter()
+                .map(|touched| (touched.layer.id(), touched.structural))
+                .collect::<Vec<_>>(),
+            [
+                (edited_layer.id(), false),
+                (created_layer.id(), true),
+                (edited_layer.id(), false),
+            ]
+        );
+    }
 
     #[test]
     fn collection_replacements_report_created_updated_and_deleted_entities() {

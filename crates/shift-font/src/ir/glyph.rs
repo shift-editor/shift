@@ -8,6 +8,7 @@ use crate::entity::{
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
+use crate::point::Point;
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
@@ -53,26 +54,22 @@ impl GlyphLayer {
     /// Returns the id of every contour, point, component, anchor, and guideline
     /// in the layer.
     pub(crate) fn entity_ids(&self) -> impl Iterator<Item = GlyphEntityId> + '_ {
+        let contours = self.contours_iter().map(GlyphEntityId::from);
+        let points = self.points().map(GlyphEntityId::from);
+        let components = self.components_iter().map(GlyphEntityId::from);
+        let anchors = self.anchors_iter().map(GlyphEntityId::from);
+        let guidelines = self.guidelines().iter().map(GlyphEntityId::from);
+        contours
+            .chain(points)
+            .chain(components)
+            .chain(anchors)
+            .chain(guidelines)
+    }
+
+    /// Returns every point of every contour, in contour order.
+    pub fn points(&self) -> impl Iterator<Item = &Point> {
         self.contours_iter()
-            .map(|contour| GlyphEntityId::from(contour.id()))
-            .chain(
-                self.contours_iter()
-                    .flat_map(|contour| contour.points().iter())
-                    .map(|point| GlyphEntityId::from(point.id())),
-            )
-            .chain(
-                self.components_iter()
-                    .map(|component| GlyphEntityId::from(component.id())),
-            )
-            .chain(
-                self.anchors_iter()
-                    .map(|anchor| GlyphEntityId::from(anchor.id())),
-            )
-            .chain(
-                self.guidelines()
-                    .iter()
-                    .map(|guideline| GlyphEntityId::from(guideline.id())),
-            )
+            .flat_map(|contour| contour.points().iter())
     }
 
     pub fn new(id: LayerId, source_id: SourceId) -> Self {
