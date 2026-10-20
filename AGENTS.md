@@ -93,6 +93,8 @@ This project uses **pnpm** (v11) as its package manager.
 - `pnpm typecheck` - Type check with tsgo
 - `cargo fmt` - Format Rust code (run after any Rust changes)
 - `cargo clippy` - Lint Rust code (run after any Rust changes)
+- `cargo deny check` - Check Rust dependency licenses, advisories and sources against `deny.toml` (run after changing dependencies)
+- `cargo machete` - Find Rust dependencies no code uses
 
 Use repository scripts when a matching command exists; they encode the intended tool, scope, and version. Run all TypeScript/JavaScript formatting through `pnpm format`, `pnpm format:check`, or `pnpm format:files`; never invoke Oxfmt directly and never use Prettier in this repository.
 
