@@ -29,7 +29,7 @@ import {
   type SelectableId,
   type ShiftId,
 } from "@shift/types";
-import { isSegmentId } from "@shift/glyph-state";
+import { isSegmentId, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type {
@@ -782,7 +782,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         if (!geometry?.point(id)) continue;
 
         const contourId = geometry.contourIdOfPoint(id);
@@ -801,7 +801,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         if (!geometry?.anchor(id)) continue;
 
         return new AnchorObject(id, geometry, node);
@@ -819,7 +819,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         const segment = geometry?.segment(id);
         if (!geometry || !segment) continue;
 
@@ -841,7 +841,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         if (!geometry?.contour(id)) continue;
 
         return new ContourObject(id, geometry, node);
@@ -1087,6 +1087,11 @@ export class Editor {
       if (node.kind === "glyph" && node.sourceId === layer.sourceId) return node;
     }
     return null;
+  }
+
+  /** The geometry a glyph node shows at the current location; null while its glyph is not loaded. */
+  #geometryShownBy(node: GlyphNode): GlyphGeometry | null {
+    return this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation) ?? null;
   }
 
   /** The active source's layer of the scene's one glyph node; null without exactly one. */

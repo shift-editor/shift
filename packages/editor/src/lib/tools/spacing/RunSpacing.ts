@@ -76,7 +76,7 @@ export class SpacingHalf {
     const glyphSide = this.glyphSide;
     const sourceId = editor.activeSourceId;
     if (!glyphSide || !sourceId || editor.sessionMode !== "workspace") return null;
-    return editor.glyphForId(glyphSide.glyphId)?.layerForSource(sourceId) ?? null;
+    return editor.layerForGlyph(glyphSide.glyphId, sourceId);
   }
 
   /** The glyph's other sidebearing at the active source, or null without an outline. */

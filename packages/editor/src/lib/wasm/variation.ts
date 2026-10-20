@@ -21,6 +21,7 @@ import {
   releaseVariationBasis,
 } from "@shift/wasm";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
+import { asDesignAxisLocation } from "../variation/location";
 
 /**
  * Registers Rust-compiled values with the module once per object, and frees
@@ -157,7 +158,7 @@ export function mapAxisMappings(
     axesHandles.of(axes),
     locationValues(axes, location),
   );
-  return locationFromValues(axes, design) as unknown as DesignAxisLocation;
+  return asDesignAxisLocation(locationFromValues(axes, design));
 }
 
 /** Maps a location through one of a font's compiled axis mappings; its output axes only. */
@@ -174,12 +175,14 @@ export function evaluateAxisMapping(
     locationValues(axes, location),
   );
   const outputIds = bases[index]?.outputAxisIds ?? [];
-  return new Map(
-    outputIds.flatMap((axisId, outputIndex) => {
-      const value = outputs[outputIndex];
-      return value === undefined || Number.isNaN(value) ? [] : [[axisId, value] as const];
-    }),
-  ) as unknown as DesignAxisLocation;
+  return asDesignAxisLocation(
+    new Map(
+      outputIds.flatMap((axisId, outputIndex) => {
+        const value = outputs[outputIndex];
+        return value === undefined || Number.isNaN(value) ? [] : [[axisId, value] as const];
+      }),
+    ),
+  );
 }
 
 /** Converts a normalized coordinate on an axis back to its design value. */

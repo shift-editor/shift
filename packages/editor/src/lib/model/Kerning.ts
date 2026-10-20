@@ -72,6 +72,7 @@ export class KerningGroups {
 
   readonly #byId: ReadonlyEntityMap<KerningGroupId, KerningGroup>;
   readonly #membership: MembershipByPosition;
+  readonly #byPosition: Readonly<Record<KerningPairPosition, readonly KerningGroup[]>>;
 
   private constructor(
     byId: ReadonlyMap<KerningGroupId, KerningGroup>,
@@ -79,6 +80,14 @@ export class KerningGroups {
   ) {
     this.#byId = new EntityMap("kerning group", byId);
     this.#membership = membership;
+    const sorted = byId
+      .values()
+      .toArray()
+      .sort((a, b) => a.name.localeCompare(b.name));
+    this.#byPosition = {
+      first: sorted.filter((group) => group.position === "first"),
+      second: sorted.filter((group) => group.position === "second"),
+    };
   }
 
   static from(groups: readonly KerningGroup[]): KerningGroups {
@@ -103,13 +112,9 @@ export class KerningGroups {
   groupOf(position: KerningPairPosition, glyphId: GlyphId): KerningGroupId | null {
     return this.#membership[position].get(glyphId) ?? null;
   }
-  /** The groups at a pair position, in name order. */
-  atPosition(position: KerningPairPosition): KerningGroup[] {
-    return this.#byId
-      .values()
-      .filter((group) => group.position === position)
-      .toArray()
-      .sort((a, b) => a.name.localeCompare(b.name));
+  /** The groups at a pair position, in name order; sorted once, when the groups change. */
+  atPosition(position: KerningPairPosition): readonly KerningGroup[] {
+    return this.#byPosition[position];
   }
 
   /** The group named `name` at a pair position; names are unique per position. */

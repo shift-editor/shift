@@ -1,6 +1,7 @@
 import type { Axis, AxisId, AxisMappingBasis } from "@shift/types";
 import { denormalizeAxis, evaluateAxisMapping } from "../wasm/variation";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
+import { asExternalAxisLocation } from "./location";
 
 export { mapAxisMappings } from "../wasm/variation";
 
@@ -37,7 +38,7 @@ export function unmapAxisMappings(
     external.set(axis.id, mapping ? unmapIndependentAxis(target, axis, mapping) : target);
   }
 
-  return external as unknown as ExternalAxisLocation;
+  return asExternalAxisLocation(external);
 }
 
 /** One independent mapping among a font's compiled mappings. */
