@@ -53,7 +53,7 @@ fn gpu_resolves_varying_component_transforms() {
     let expected_advance = atlas
         .resolve_advance_with_weights(authored.default_glyph, &weights)
         .unwrap();
-    let glyph = atlas.glyphs()[authored.default_glyph as usize];
+    let glyph = atlas.glyphs()[authored.default_glyph.get() as usize];
     let descriptor = atlas.component_glyphs()[(glyph.source_start & 0x7fff_ffff) as usize];
     let packed = atlas.pack(256).unwrap();
     let layout = packed.layout();
@@ -61,7 +61,7 @@ fn gpu_resolves_varying_component_transforms() {
     let instance = RenderInstance {
         pixel_rect: [0.0, 0.0, 64.0, 64.0],
         em_transform: [1.0, 1.0, 0.0, 0.0],
-        glyph_index: authored.default_glyph,
+        glyph_index: authored.default_glyph.get(),
         scratch_curve_start: 0,
         scratch_band_start: 0,
         scratch_index_start: 0,

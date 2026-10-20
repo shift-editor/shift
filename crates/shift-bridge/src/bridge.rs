@@ -756,7 +756,7 @@ fn napi_source_atlas_page(
       .map(|(glyph, default_glyph)| {
         Ok(NapiCatalogAtlasGlyph {
           glyph_id: identity.glyph_id(GlyphIndex::new(*glyph))?.to_string(),
-          default_glyph: *default_glyph,
+          default_glyph: default_glyph.get(),
           exact_sources: descriptor
             .exact_glyphs()
             .iter()
@@ -765,7 +765,7 @@ fn napi_source_atlas_page(
               let source_id = identity.source_id(shift_backends::SourceIndex::new(*source))?;
               Ok(NapiSlugExactSource {
                 source_id: source_id.to_string(),
-                glyph_index: *glyph_index,
+                glyph_index: glyph_index.get(),
               })
             })
             .collect::<BridgeResult<Vec<_>>>()?,
@@ -790,14 +790,14 @@ fn napi_slug_atlas(
     .iter()
     .map(|glyph| NapiSlugGlyph {
       glyph_id: glyph.glyph_id.to_string(),
-      default_glyph: glyph.authored.default_glyph,
+      default_glyph: glyph.authored.default_glyph.get(),
       exact_sources: glyph
         .authored
         .exact_sources
         .iter()
         .map(|source| NapiSlugExactSource {
           source_id: source.source_id.to_string(),
-          glyph_index: source.glyph_index,
+          glyph_index: source.glyph_index.get(),
         })
         .collect(),
     })

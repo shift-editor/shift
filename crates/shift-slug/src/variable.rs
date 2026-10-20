@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::length::{OrOverflow, ensure_total, to_u32, within};
 use crate::{
-    Bounds, Curve, LINE_EPSILON, OutlineCommand, QuadraticOutline, Section, SlugError,
+    Bounds, Curve, GlyphIndex, LINE_EPSILON, OutlineCommand, QuadraticOutline, Section, SlugError,
     curve::{cubic_subdivision_counts_from_commands, outline_from_commands_with_subdivisions},
 };
 
@@ -325,11 +325,11 @@ impl VariableAtlas {
     /// # Errors
     ///
     /// Returns [`SlugError::GlyphIndexOutOfRange`] when the atlas has no such glyph.
-    pub(crate) fn glyph(&self, glyph_index: u32) -> Result<VariableGlyph, SlugError> {
+    pub(crate) fn glyph(&self, glyph_index: GlyphIndex) -> Result<VariableGlyph, SlugError> {
         self.glyphs
-            .get(glyph_index as usize)
+            .get(glyph_index.as_usize())
             .copied()
-            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))
+            .ok_or_else(|| SlugError::GlyphIndexOutOfRange(glyph_index.get()))
     }
 
     /// Returns the glyph whose sources carry `glyph`'s advance: its root glyph
@@ -340,7 +340,7 @@ impl VariableAtlas {
         };
         let component = self.component_glyphs.get(component_index).or_overflow()?;
         self.glyphs
-            .get(component.root_glyph_index as usize)
+            .get(component.root_glyph_index.as_usize())
             .copied()
             .or_overflow()
     }
@@ -351,7 +351,10 @@ impl VariableAtlas {
     ///
     /// Returns [`SlugError::GlyphIndexOutOfRange`] when a glyph index is missing from the atlas,
     /// and [`SlugError::LengthOverflow`] when its source range is out of bounds.
-    pub fn preview_extents(&self, glyph_indices: &[u32]) -> Result<SlugPreviewExtents, SlugError> {
+    pub fn preview_extents(
+        &self,
+        glyph_indices: &[GlyphIndex],
+    ) -> Result<SlugPreviewExtents, SlugError> {
         let mut horizontal = 0.0_f32;
         let mut minimum_y = f32::INFINITY;
         let mut maximum_y = f32::NEG_INFINITY;
@@ -399,7 +402,7 @@ impl VariableAtlas {
     /// errors of [`Self::resolve_glyph_with_weights`].
     pub fn resolve_glyph(
         &self,
-        glyph_index: u32,
+        glyph_index: GlyphIndex,
         source_weight: f32,
     ) -> Result<Vec<Curve>, SlugError> {
         if !source_weight.is_finite() {
@@ -418,7 +421,7 @@ impl VariableAtlas {
     /// [`SlugError::LengthOverflow`] when a stored range is out of bounds.
     pub fn resolve_glyph_with_weights(
         &self,
-        glyph_index: u32,
+        glyph_index: GlyphIndex,
         weights: &[f32],
     ) -> Result<Vec<Curve>, SlugError> {
         if weights.iter().any(|weight| !weight.is_finite()) {
@@ -496,7 +499,7 @@ impl VariableAtlas {
     /// [`SlugError::LengthOverflow`] when a stored range is out of bounds.
     pub fn resolve_advance_with_weights(
         &self,
-        glyph_index: u32,
+        glyph_index: GlyphIndex,
         weights: &[f32],
     ) -> Result<f32, SlugError> {
         if weights.iter().any(|weight| !weight.is_finite()) {
@@ -770,13 +773,15 @@ impl VariableAtlasBuilder {
         &mut self,
         base_commands: impl IntoIterator<Item = OutlineCommand<f32>>,
         source_commands: impl IntoIterator<Item = OutlineCommand<f32>>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let base_commands: Vec<_> = base_commands.into_iter().collect();
         let source_commands: Vec<_> = source_commands.into_iter().collect();
-        let glyph_index = to_u32(self.atlas.glyphs.len())?;
+        let glyph_index = GlyphIndex::next_after(self.atlas.glyphs.len())?;
 
         if command_topology(&base_commands) != command_topology(&source_commands) {
-            return Err(SlugError::VariableTopologyMismatch { glyph_index });
+            return Err(SlugError::VariableTopologyMismatch {
+                glyph_index: glyph_index.get(),
+            });
         }
 
         let base_subdivision_counts =
@@ -784,7 +789,9 @@ impl VariableAtlasBuilder {
         let source_subdivision_counts =
             cubic_subdivision_counts_from_commands(source_commands.iter().copied())?;
         if base_subdivision_counts.len() != source_subdivision_counts.len() {
-            return Err(SlugError::VariableTopologyMismatch { glyph_index });
+            return Err(SlugError::VariableTopologyMismatch {
+                glyph_index: glyph_index.get(),
+            });
         }
         let shared_subdivision_counts = base_subdivision_counts
             .into_iter()
@@ -796,7 +803,9 @@ impl VariableAtlasBuilder {
         let source =
             outline_from_commands_with_subdivisions(source_commands, &shared_subdivision_counts)?;
         if base.shapes() != source.shapes() {
-            return Err(SlugError::VariableTopologyMismatch { glyph_index });
+            return Err(SlugError::VariableTopologyMismatch {
+                glyph_index: glyph_index.get(),
+            });
         }
         self.add_outline_glyph(base, 0, [(1, source.into_curves())])
     }
@@ -815,7 +824,7 @@ impl VariableAtlasBuilder {
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
         source_curves: impl IntoIterator<Item = Curve>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         self.add_curve_glyph_with_sources(
             base_curves,
             0,
@@ -833,7 +842,7 @@ impl VariableAtlasBuilder {
         base_curves: impl IntoIterator<Item = Curve>,
         base_weight_index: u32,
         source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         self.add_outline_glyph(
             QuadraticOutline::from_quadratics(base_curves),
             base_weight_index,
@@ -855,14 +864,16 @@ impl VariableAtlasBuilder {
         base: QuadraticOutline,
         base_weight_index: u32,
         source_curves: impl IntoIterator<Item = (u32, Vec<Curve>)>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let source_curves: Vec<_> = source_curves.into_iter().collect();
-        let glyph_index = to_u32(self.atlas.glyphs.len())?;
+        let glyph_index = GlyphIndex::next_after(self.atlas.glyphs.len())?;
         if source_curves
             .iter()
             .any(|(_, curves)| curves.len() != base.len())
         {
-            return Err(SlugError::VariableTopologyMismatch { glyph_index });
+            return Err(SlugError::VariableTopologyMismatch {
+                glyph_index: glyph_index.get(),
+            });
         }
         let base_curves = base.curves();
 
@@ -981,7 +992,7 @@ impl VariableAtlasBuilder {
     /// [`SlugError::NonFiniteVariableAdvance`] when an advance is not finite.
     pub fn set_glyph_source_advances(
         &mut self,
-        glyph_index: u32,
+        glyph_index: GlyphIndex,
         advances: impl IntoIterator<Item = f32>,
     ) -> Result<(), SlugError> {
         let advances = advances.into_iter().collect::<Vec<_>>();
@@ -989,14 +1000,14 @@ impl VariableAtlasBuilder {
         let expected = glyph.source_count as usize;
         if advances.len() != expected {
             return Err(SlugError::VariableAdvanceCountMismatch {
-                glyph_index,
+                glyph_index: glyph_index.get(),
                 expected,
                 actual: advances.len(),
             });
         }
         if let Some(source_index) = advances.iter().position(|advance| !advance.is_finite()) {
             return Err(SlugError::NonFiniteVariableAdvance {
-                glyph_index,
+                glyph_index: glyph_index.get(),
                 source_index,
             });
         }
@@ -1052,7 +1063,7 @@ impl VariableAtlasBuilder {
         }
     }
 
-    pub(crate) fn glyph(&self, glyph_index: u32) -> Result<VariableGlyph, SlugError> {
+    pub(crate) fn glyph(&self, glyph_index: GlyphIndex) -> Result<VariableGlyph, SlugError> {
         self.atlas.glyph(glyph_index)
     }
 

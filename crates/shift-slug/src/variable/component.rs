@@ -1,5 +1,5 @@
 use crate::length::{OrOverflow, ensure_total, to_u32};
-use crate::{Bounds, Curve, Point, SlugError};
+use crate::{Bounds, Curve, GlyphIndex, Point, SlugError};
 
 use super::{
     COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
@@ -21,7 +21,7 @@ pub struct VariableComponentGlyph {
     pub part_count: u32,
     pub component_start: u32,
     pub component_count: u32,
-    pub root_glyph_index: u32,
+    pub root_glyph_index: GlyphIndex,
     pub _padding: u32,
 }
 
@@ -29,7 +29,7 @@ pub struct VariableComponentGlyph {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VariableComponentPart {
-    pub glyph_index: u32,
+    pub glyph_index: GlyphIndex,
     /// Local component occurrence, or [`ROOT_COMPONENT`] for direct root contours.
     pub component_index: u32,
     pub output_curve_start: u32,
@@ -112,17 +112,17 @@ impl VariableAtlasBuilder {
     pub(crate) fn add_component_glyph(
         &mut self,
         bounds: Bounds,
-        root_glyph_index: u32,
+        root_glyph_index: GlyphIndex,
         parts: Vec<VariableComponentPart>,
         mut components: Vec<VariableComponent>,
         component_sources: Vec<VariableComponentSource>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let root_glyph = self.glyph(root_glyph_index)?;
         if root_glyph.component_index().is_some() {
             return Err(SlugError::LengthOverflow);
         }
 
-        let glyph_index = to_u32(self.atlas.glyphs.len())?;
+        let glyph_index = GlyphIndex::next_after(self.atlas.glyphs.len())?;
         let descriptor_index = to_u32(self.atlas.component_glyphs.len())?;
         if descriptor_index > GLYPH_OFFSET_MASK {
             return Err(SlugError::LengthOverflow);
@@ -327,7 +327,7 @@ pub(super) fn write_component_glyphs<F>(
                 value.part_count,
                 value.component_start,
                 value.component_count,
-                value.root_glyph_index,
+                value.root_glyph_index.get(),
                 value._padding,
             ],
         );
@@ -344,7 +344,7 @@ pub(super) fn write_component_parts<F>(
         write_words(
             writer,
             &[
-                value.glyph_index,
+                value.glyph_index.get(),
                 value.component_index,
                 value.output_curve_start,
                 value._padding,

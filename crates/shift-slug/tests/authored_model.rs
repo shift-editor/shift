@@ -8,6 +8,7 @@ use shift_font::{
     InterpolationBasis, LayerId, PointType, SourceId,
     test_support::{sample_font, sample_variable_font},
 };
+use shift_slug::GlyphIndex;
 use shift_slug::{
     AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
     VariableAtlasBuilder, add_authored_component_projection_glyph, add_authored_glyph,
@@ -73,7 +74,9 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     for (weight_index, source_weight) in weight_indices.iter().zip(source_weights) {
         weights[*weight_index as usize] = source_weight as f32;
     }
-    let actual = atlas.resolve_glyph_with_weights(0, &weights).unwrap();
+    let actual = atlas
+        .resolve_glyph_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
 
     let expected_layer = interpolation.resolve(&location, font.axes()).unwrap();
     let source_layers = interpolation
@@ -92,7 +95,9 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     .unwrap();
     let expected = topology.curves_from_layer(&expected_layer).unwrap();
     assert_curves_close(&actual, &expected, 0.001);
-    let actual_advance = atlas.resolve_advance_with_weights(0, &weights).unwrap();
+    let actual_advance = atlas
+        .resolve_advance_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
     assert!((actual_advance - expected_layer.width() as f32).abs() <= 0.001);
     assert_eq!(atlas.sources()[0].weight_index, 2);
     assert_eq!(atlas.sources()[1].weight_index, 5);
@@ -220,7 +225,12 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
             .add_glyph(&font, &projection, &[weight_set], 0)
             .unwrap()
             .default_glyph;
-        records.push((glyph.id(), atlas_index, weight_indices, component_glyph));
+        records.push((
+            glyph.id(),
+            atlas_index.get(),
+            weight_indices,
+            component_glyph,
+        ));
     }
     let atlas = builder.finish();
     let shared = build_authored_atlas(&font, 8).unwrap();
@@ -288,7 +298,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
                 weights[*weight_index as usize] = weight as f32;
             }
             let actual = atlas
-                .resolve_glyph_with_weights(atlas_index, &weights)
+                .resolve_glyph_with_weights(GlyphIndex::new(atlas_index), &weights)
                 .unwrap();
             let expected_advance = if component_glyph {
                 // Component curve order is validated by the dedicated component CPU/GPU tests.
@@ -303,7 +313,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
                 expected_layer.width() as f32
             };
             let actual_advance = atlas
-                .resolve_advance_with_weights(atlas_index, &weights)
+                .resolve_advance_with_weights(GlyphIndex::new(atlas_index), &weights)
                 .unwrap();
             maximum_advance_error =
                 maximum_advance_error.max((actual_advance - expected_advance).abs());

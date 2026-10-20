@@ -4,6 +4,7 @@
     clippy::too_many_lines,
     reason = "test and benchmark arithmetic on small known values; benchmarks and GPU tests run as one long scenario"
 )]
+use shift_slug::GlyphIndex;
 use std::{env, error::Error, fs, path::PathBuf, sync::mpsc, time::Instant};
 
 use shift_slug::{
@@ -1112,7 +1113,7 @@ fn validate_curves(
 ) -> Result<f32> {
     let mut maximum_error = 0.0_f32;
     for instance in instances {
-        let expected = atlas.resolve_glyph(instance.glyph_index, weight)?;
+        let expected = atlas.resolve_glyph(GlyphIndex::new(instance.glyph_index), weight)?;
         for (local_index, expected_curve) in expected.iter().enumerate() {
             let curve_index = instance.scratch_curve_start as usize + local_index;
             let actual = read_curve(bytes, curve_index)?;
@@ -1136,7 +1137,8 @@ fn validate_advances(
     let weights = [1.0 - weight, weight];
     let mut maximum_error = 0.0_f32;
     for (instance_index, instance) in instances.iter().enumerate() {
-        let expected = atlas.resolve_advance_with_weights(instance.glyph_index, &weights)?;
+        let expected =
+            atlas.resolve_advance_with_weights(GlyphIndex::new(instance.glyph_index), &weights)?;
         let actual = read_f32(bytes, instance_index)?;
         maximum_error = maximum_error.max((actual - expected).abs());
     }
@@ -1159,7 +1161,7 @@ fn validate_bands(
 ) -> Result<()> {
     for (instance_index, instance) in instances.iter().enumerate() {
         let glyph = atlas.glyphs()[instance.glyph_index as usize];
-        let expected_curves = atlas.resolve_glyph(instance.glyph_index, weight)?;
+        let expected_curves = atlas.resolve_glyph(GlyphIndex::new(instance.glyph_index), weight)?;
         let expected_bounds = curve_set_bounds(&expected_curves).unwrap_or(glyph.bounds);
         let bounds = read_bounds(bounds_bytes, instance_index)?;
         let bounds_error = [

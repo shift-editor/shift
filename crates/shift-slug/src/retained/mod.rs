@@ -1,8 +1,8 @@
 use crate::length::OrOverflow;
 use crate::numeric::lossy_f32;
 use crate::{
-    Curve, CurveShape, Point, QuadraticOutline, SlugError, SlugPreviewExtents, VariableAtlas,
-    VariableAtlasBuilder,
+    Curve, CurveShape, GlyphIndex, Point, QuadraticOutline, SlugError, SlugPreviewExtents,
+    VariableAtlas, VariableAtlasBuilder,
 };
 
 mod weights;
@@ -80,8 +80,8 @@ pub struct RetainedAtlasPage {
 impl RetainedAtlasPage {
     pub fn from_parts(
         atlas: VariableAtlas,
-        glyphs: Vec<(u32, u32)>,
-        exact_glyphs: Vec<(u32, u32, u32)>,
+        glyphs: Vec<(u32, GlyphIndex)>,
+        exact_glyphs: Vec<(u32, u32, GlyphIndex)>,
         axes: Vec<AtlasAxis>,
         regions: Vec<AtlasRegion>,
         complements: Vec<Box<[u32]>>,
@@ -102,11 +102,11 @@ impl RetainedAtlasPage {
         &self.atlas
     }
 
-    pub fn glyphs(&self) -> &[(u32, u32)] {
+    pub fn glyphs(&self) -> &[(u32, GlyphIndex)] {
         self.descriptor.glyphs()
     }
 
-    pub fn exact_glyphs(&self) -> &[(u32, u32, u32)] {
+    pub fn exact_glyphs(&self) -> &[(u32, u32, GlyphIndex)] {
         self.descriptor.exact_glyphs()
     }
 
@@ -137,19 +137,19 @@ impl RetainedAtlasPage {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RetainedAtlasDescriptor {
-    glyphs: Box<[(u32, u32)]>,
-    exact_glyphs: Box<[(u32, u32, u32)]>,
+    glyphs: Box<[(u32, GlyphIndex)]>,
+    exact_glyphs: Box<[(u32, u32, GlyphIndex)]>,
     axes: Box<[AtlasAxis]>,
     regions: Box<[AtlasRegion]>,
     complements: Box<[Box<[u32]>]>,
 }
 
 impl RetainedAtlasDescriptor {
-    pub fn glyphs(&self) -> &[(u32, u32)] {
+    pub fn glyphs(&self) -> &[(u32, GlyphIndex)] {
         &self.glyphs
     }
 
-    pub fn exact_glyphs(&self) -> &[(u32, u32, u32)] {
+    pub fn exact_glyphs(&self) -> &[(u32, u32, GlyphIndex)] {
         &self.exact_glyphs
     }
 
@@ -192,8 +192,8 @@ impl RetainedAtlasDescriptor {
 
 pub struct PageCompiler {
     builder: VariableAtlasBuilder,
-    glyphs: Vec<(u32, u32)>,
-    exact_glyphs: Vec<(u32, u32, u32)>,
+    glyphs: Vec<(u32, GlyphIndex)>,
+    exact_glyphs: Vec<(u32, u32, GlyphIndex)>,
     axes: Vec<AtlasAxis>,
     regions: Vec<AtlasRegion>,
     complements: ComplementRegistry,
@@ -234,7 +234,7 @@ impl PageCompiler {
         base: QuadraticOutline,
         base_advance: f32,
         sources: Vec<(u32, Vec<Curve>, f32)>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let source_weights = sources
             .iter()
             .map(|(weight, _, _)| *weight)
@@ -271,7 +271,7 @@ impl PageCompiler {
         source_index: u32,
         outline: QuadraticOutline,
         advance: f32,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let atlas_glyph = self
             .builder
             .add_outline_glyph(outline, 0, std::iter::empty())?;
