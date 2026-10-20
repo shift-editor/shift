@@ -5,6 +5,7 @@ import { TextBuffer } from "../text/TextBuffer";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
+import type { TextItem } from "../text/layout/types";
 import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
@@ -71,6 +72,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   /** A run node depends on its run record. */
   override references(node: TextRunNode): readonly NodeReference[] {
     return [node.runId];
+  }
+
+  /** A run node lays out its run record's items. */
+  override textItems(node: TextRunNode): readonly TextItem[] {
+    return this.editor.text.run(node.runId)?.items ?? [];
   }
 
   /**

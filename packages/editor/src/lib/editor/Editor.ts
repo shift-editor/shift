@@ -638,9 +638,8 @@ export class Editor {
     const activeSourceId = this.activeSourceId;
     if (this.sessionMode !== "workspace" || !activeSourceId) return null;
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    const [node] = glyphNodes;
-    if (!node || glyphNodes.length !== 1) return null;
+    const node = this.scene.only("glyph");
+    if (!node) return null;
 
     const layers = this.#multiSourceEditing.layersFor(node.glyphId);
     if (!layers) return null;
@@ -680,9 +679,8 @@ export class Editor {
     // Load the base first so the component draws its outline as soon as it is added.
     await this.font.loadGlyph(baseGlyphId);
 
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    const [node] = glyphNodes;
-    if (!node || glyphNodes.length !== 1 || node.glyphId === baseGlyphId) return null;
+    const node = this.scene.only("glyph");
+    if (!node || node.glyphId === baseGlyphId) return null;
 
     const layers = this.#multiSourceEditing.layersFor(node.glyphId);
     if (!layers) return null;
@@ -1093,6 +1091,15 @@ export class Editor {
     return null;
   }
 
+  /** The active source's layer of the scene's one glyph node; null without exactly one. */
+  #soleActiveLayer(): GlyphLayer | null {
+    const sourceId = this.activeSourceId;
+    const node = this.scene.only("glyph");
+    if (!sourceId || !node) return null;
+
+    return this.layerForGlyph(node.glyphId, sourceId);
+  }
+
   /**
    * Returns a loaded glyph's layer at a source.
    *
@@ -1289,8 +1296,8 @@ export class Editor {
   /** Selects every glyph item of every run; the run level's select-all. */
   #selectAllGlyphItems(): void {
     const ids = this.scene
-      .nodesOfKind("textRun")
-      .flatMap((node) => this.text.run(node.runId)?.items ?? [])
+      .nodes()
+      .flatMap((node) => this.nodeDefinition(node.kind).textItems?.(node) ?? [])
       .filter((item) => item.kind !== "linebreak")
       .map((item) => item.id);
     if (ids.length === 0) return;
@@ -1316,16 +1323,7 @@ export class Editor {
       return;
     }
 
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    const layer = this.layerForGlyph(node.glyphId, sourceId);
+    const layer = this.#soleActiveLayer();
     if (!layer) return;
 
     this.history.capture("Select all", () => {
@@ -1478,10 +1476,7 @@ export class Editor {
   }
 
   #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
+    const node = this.scene.only("glyph");
     if (!node) return;
 
     const glyph = this.#fontStore.glyphForId(node.glyphId);
@@ -1762,16 +1757,7 @@ export class Editor {
   }
 
   public get xAdvance(): number {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return 0;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return 0;
-
-    const [node] = glyphNodes;
-    if (!node) return 0;
-
-    return this.layerForGlyph(node.glyphId, sourceId)?.xAdvance ?? 0;
+    return this.#soleActiveLayer()?.xAdvance ?? 0;
   }
 
   /**
@@ -1780,16 +1766,7 @@ export class Editor {
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    this.layerForGlyph(node.glyphId, sourceId)?.setXAdvance(width);
+    this.#soleActiveLayer()?.setXAdvance(width);
   }
 
   /**
@@ -1798,16 +1775,7 @@ export class Editor {
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    this.layerForGlyph(node.glyphId, sourceId)?.setLeftSidebearing(value);
+    this.#soleActiveLayer()?.setLeftSidebearing(value);
   }
 
   /**
@@ -1816,16 +1784,7 @@ export class Editor {
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    this.layerForGlyph(node.glyphId, sourceId)?.setRightSidebearing(value);
+    this.#soleActiveLayer()?.setRightSidebearing(value);
   }
 
   public get screenMousePositionCell(): Signal<ScreenPoint> {
@@ -2052,16 +2011,7 @@ export class Editor {
     content: ShiftContent,
     options: PasteOptions = { offset: { x: 0, y: 0 } },
   ): readonly SelectableId[] | null {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return null;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return null;
-
-    const [node] = glyphNodes;
-    if (!node) return null;
-
-    const layer = this.layerForGlyph(node.glyphId, sourceId);
+    const layer = this.#soleActiveLayer();
     if (!layer) return null;
 
     const inserted: SelectableId[] = [];
@@ -2170,8 +2120,7 @@ export class Editor {
    * @returns `false` when there is no single edited glyph at an active source.
    */
   public addAnchorAtPointer(): boolean {
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
+    const node = this.scene.only("glyph");
     if (!node) return false;
     return this.addAnchorAt(this.toLocal(node, this.getMousePosition()));
   }
@@ -2190,8 +2139,7 @@ export class Editor {
    */
   public addAnchorAt(position: Point2D): boolean {
     const activeSourceId = this.activeSourceId;
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
+    const node = this.scene.only("glyph");
     const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
@@ -2366,16 +2314,7 @@ export class Editor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): Promise<void> {
-    const sourceId = this.activeSourceId;
-    if (!sourceId) return;
-
-    const glyphNodes = this.scene.nodesOfKind("glyph");
-    if (glyphNodes.length !== 1) return;
-
-    const [node] = glyphNodes;
-    if (!node) return;
-
-    const layer = this.layerForGlyph(node.glyphId, sourceId);
+    const layer = this.#soleActiveLayer();
     if (!layer || !layer.contour(contourIdA) || !layer.contour(contourIdB)) return;
 
     await this.history.captureAsync("Boolean operation", async () => {

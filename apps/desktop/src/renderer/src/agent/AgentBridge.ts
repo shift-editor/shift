@@ -126,7 +126,7 @@ export class AgentBridge {
 
   #inspectEditor(): EditorView {
     const editor = this.#session.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0] ?? null;
+    const node = editor.scene.first("glyph");
     const entry = node ? this.#session.font.entryForId(node.glyphId) : null;
     const glyph =
       node && entry

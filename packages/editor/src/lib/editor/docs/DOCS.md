@@ -83,7 +83,7 @@ editor/
 ## Key Types
 
 - **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
-- **`Scene`** -- Owns generic, serializable placed-node records and node-level queries. Glyph acquisition and retained object ownership remain outside Scene.
+- **`Scene`** -- Owns generic, serializable placed-node records and node-level queries (`nodesOfKind`, `only`, `first`). Node kinds come from the open `SceneNodeKinds` registry. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs. Reactive readers subscribe narrowly: `record(id)` to one record, `recordsOfType(type)` to one record type (the scene reads only node records), and `index(type, keys)` to one key of a reverse lookup that applies each change incrementally (`Scene.nodesReferencing`, `Text.runForItem`). Readers of `cell` rerun on every write.
 - **`EditorHistory`** -- TypeScript action timeline over whole editor records plus ordered workspace markers. Captures finish synchronously; undo and redo await the workspace queue.
 - **`HistoryCapture`** -- One explicit action boundary. `finish()` records its net effects; `cancel()` restores its starting records unless committed workspace effects must remain replayable.
@@ -205,6 +205,13 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 2. Add the identity to `ShiftId` and `SelectableId` in `@shift/types`.
 3. Resolve it in `Editor.object()` and provide live object bounds.
 4. Add editor tests for lookup, selection bounds, and invalidation after edits.
+
+### Add a scene node kind
+
+1. Declare the node type, extending `Node`, and register it on the open `SceneNodeKinds` interface. A package outside the editor augments `@shift/editor/types` with `declare module "@shift/editor/types" { interface SceneNodeKinds { "acme.guide": GuideNode } }`; `ShiftNode`, `NodeKind`, `NodeOfKind` and `scene.nodesOfKind`/`only`/`first` then type the new kind.
+2. Implement its `NodeDefinition` and register it on `NodeDefinitionByKind`.
+3. Offer capabilities through the definition (for example `textItems` for nodes that lay out text), so editor commands reach the new kind without switching on built-in kinds.
+4. Pick nodes by name: `scene.only(kind)` for the one node of a kind (null with none or several) and `scene.first(kind)` for the first in scene order. `shift/prefer-scene-only` rejects indexing `nodesOfKind(kind)` by hand.
 
 ## Gotchas
 

@@ -49,7 +49,7 @@ export const Editor = () => {
 
     const runs = editor.nodeDefinition("textRun");
     const run =
-      editor.scene.nodesOfKind("textRun")[0] ??
+      editor.scene.first("textRun") ??
       editor.scene.createNode<TextRunNode>({
         kind: "textRun",
         runId: editor.text.createRun([]).id,
@@ -86,7 +86,7 @@ export const Editor = () => {
   useEffect(() => {
     if (!glyph) return;
 
-    const run = editor.scene.nodesOfKind("textRun")[0];
+    const run = editor.scene.first("textRun");
     const node = run ? editor.nodeDefinition("textRun").childGlyph(run) : null;
     if (!node) return;
 
