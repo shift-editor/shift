@@ -55,6 +55,8 @@ function run(...characters: string[]): TextRunRecord {
     id: mintRunId(),
     type: "textrun",
     scope: "document",
+    shaping: true,
+    features: {},
     items: characters.map((char) => characterTextItem(char.codePointAt(0)!)),
   };
 }

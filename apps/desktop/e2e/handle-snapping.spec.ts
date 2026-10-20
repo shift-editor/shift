@@ -29,7 +29,7 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
   const drag = await page.evaluate(() => {
     const editor = window.shift!.editor;
     const node = editor.scene.nodesOfKind("glyph")[0]!;
-    const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+    const layer = editor.glyphOf(node)!.layerForSource(node.sourceId)!;
     const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
     const down = editor.sceneToScreen(
       editor.toScene(node, { x: cubic.controlStart.x, y: cubic.controlStart.y } as LocalPoint),

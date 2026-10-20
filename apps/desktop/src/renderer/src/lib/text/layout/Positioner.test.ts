@@ -125,7 +125,9 @@ describe("Positioner", () => {
     });
 
     it("lays out a character with no glyph as spacing, then as a mark once the glyph exists", async () => {
+      // Laid out as typed: shaped text gives a mark the font classes as one no advance.
       const run = editor.text.createRun([char(65), char(0x064e)]);
+      editor.history.capture("Shaping off", () => editor.text.setShaping(run.id, false));
       const layoutCell = editor.text.layoutCell(run.id);
       const advances: number[] = [];
       const subscription = effect(() => {
@@ -165,7 +167,12 @@ describe("Positioner mark attachment", () => {
 
   // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
   it("attaches a mark to an anchor a composite takes from its components", () => {
-    const run = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+    const literal = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+    // The shaper flags acutecomb as a mark from the compiled font's GDEF.
+    const run = {
+      ...literal,
+      shaped: literal.shaped.map((shaped, index) => ({ ...shaped, isMark: index === 1 })),
+    };
 
     const [base, mark] = new Positioner(editor, signal(editor.font.defaultLocation())).position(
       run,

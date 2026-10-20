@@ -30,9 +30,9 @@ async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
   await page.waitForFunction((expectedGlyphId) => {
     const editor = window.shift?.editor;
     const node = editor?.scene.nodesOfKind("glyph")[0];
-    if (!editor || !node || node.glyphId !== expectedGlyphId) return false;
+    if (!editor || !node || editor.glyphIdOf(node) !== expectedGlyphId) return false;
 
-    return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
+    return Boolean(editor.glyphOf(node)?.layerForSource(node.sourceId));
   }, glyphId);
 }
 
@@ -42,7 +42,7 @@ async function readLivePointPosition(page: Page, pointId: PointId): Promise<Poin
     const node = editor?.scene.nodesOfKind("glyph")[0];
     const point = node
       ? editor
-          ?.glyphForId(node.glyphId)
+          ?.glyphOf(node)
           ?.layerForSource(node.sourceId)
           ?.allPoints.find((candidate) => candidate.id === id)
       : null;
@@ -343,12 +343,12 @@ export class EditorDriver {
       const node = editor?.scene.nodeOfKind(editingId, "glyph");
       if (!editor || !node) return null;
 
-      const glyph = editor.glyphForId(node.glyphId);
-      const layer = glyph?.layerForSource(node.sourceId);
-      if (!layer) return null;
+      const glyphId = editor.glyphIdOf(node);
+      const layer = editor.glyphOf(node)?.layerForSource(node.sourceId);
+      if (!glyphId || !layer) return null;
 
       return {
-        glyphId: node.glyphId,
+        glyphId,
         nodeId: node.id,
         sourceId: node.sourceId,
         pointCount: layer.pointCount,
@@ -408,7 +408,7 @@ export class EditorDriver {
     return this.page.evaluate(() => {
       const editor = window.shift?.editor;
       const node = editor?.scene.nodesOfKind("glyph")[0];
-      const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
+      const layer = node ? editor?.glyphOf(node)?.layerForSource(node.sourceId) : null;
       if (!layer) throw new Error("Expected authored layer");
 
       const snapshotPoint = (point: Point) => ({
@@ -439,7 +439,7 @@ export class EditorDriver {
     return this.page.evaluate((ids) => {
       const editor = window.shift?.editor;
       const node = editor?.scene.nodesOfKind("glyph")[0];
-      const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
+      const layer = node ? editor?.glyphOf(node)?.layerForSource(node.sourceId) : null;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
       if (!editor || !node || !layer || !canvas) throw new Error("Expected editable glyph");
 
@@ -502,7 +502,7 @@ export class EditorDriver {
       const workspace = window.shift;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
       const node = workspace?.editor.scene.nodesOfKind("glyph")[0];
-      const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
+      const glyph = node ? workspace?.editor.glyphOf(node) : null;
       const layer = node ? glyph?.layerForSource(node.sourceId) : null;
       if (!workspace || !canvas || !node || !layer) throw new Error("Expected editable glyph");
 
@@ -570,7 +570,7 @@ export class EditorDriver {
       const workspace = window.shift;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
       const node = workspace?.editor.scene.nodesOfKind("glyph")[0];
-      const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
+      const glyph = node ? workspace?.editor.glyphOf(node) : null;
       const layer = node ? glyph?.layerForSource(node.sourceId) : null;
       if (!workspace || !canvas || !node || !layer) throw new Error("Expected editable glyph");
 

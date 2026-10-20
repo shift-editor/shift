@@ -7,7 +7,9 @@ license.workspace = true
 
 [dependencies]
 harfrust = "0.13.3"
+skrifa = "0.32.0"
 thiserror = "2.0.18"
+unicode-bidi = "0.3"
 unicode-linebreak = "0.1.5"
 unicode-script = "0.5"
 

@@ -420,7 +420,7 @@ test.describe("Toolbar tools", () => {
                 .run(run.runId)!
                 .items.map((item) => (item.kind === "character" ? item.codepoint : 10))
             : null,
-          edited: child ? editor.glyphForId(child.glyphId)?.name : null,
+          edited: child ? editor.glyphOf(child)?.name : null,
         };
       });
     await editor.selectTool("text");

@@ -40,6 +40,16 @@ export interface ShapedGlyphOutput {
   readonly yAdvance: number;
   readonly xOffset: number;
   readonly yOffset: number;
+  /** Whether `GDEF` classes the glyph as a mark. */
+  readonly isMark: boolean;
+}
+
+/** A shaped paragraph: its base direction and its runs. */
+export interface ShapedParagraphOutput {
+  /** The paragraph's base direction, from its first strong character. */
+  readonly rightToLeft: boolean;
+  /** Runs in logical order; a line lays them out by their levels. */
+  readonly runs: readonly ShapedRunOutput[];
 }
 
 /** One run of a shaped paragraph, in logical order. */
@@ -49,6 +59,8 @@ export interface ShapedRunOutput {
   readonly end: number;
   /** The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script. */
   readonly script: number;
+  /** The run's resolved bidi level; odd levels read right to left. */
+  readonly level: number;
   readonly rightToLeft: boolean;
   /** The run's glyphs in visual order. */
   readonly glyphs: readonly ShapedGlyphOutput[];
@@ -78,11 +90,11 @@ export function setShaperGlyphs(input: ShaperGlyphs): boolean {
 }
 
 /** Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null. */
-export function shapeParagraphs(input: ShapeParagraphs): (readonly ShapedRunOutput[] | null)[] {
+export function shapeParagraphs(input: ShapeParagraphs): (ShapedParagraphOutput | null)[] {
   const write = NumberWriter.shared();
   writeShapeParagraphs(write, input);
   const read = new NumberReader(shapeParagraphsCall(write.finish()));
-  return read.list(() => read.flag() ? read.list(() => readShapedRunOutput(read)) : null);
+  return read.list(() => read.flag() ? readShapedParagraphOutput(read) : null);
 }
 
 function writeFeatureInput(write: NumberWriter, value: FeatureInput): void {
@@ -152,6 +164,14 @@ function readShapedGlyphOutput(read: NumberReader): ShapedGlyphOutput {
     yAdvance: read.number(),
     xOffset: read.number(),
     yOffset: read.number(),
+    isMark: read.flag(),
+  };
+}
+
+function readShapedParagraphOutput(read: NumberReader): ShapedParagraphOutput {
+  return {
+    rightToLeft: read.flag(),
+    runs: read.list(() => readShapedRunOutput(read)),
   };
 }
 
@@ -160,6 +180,7 @@ function readShapedRunOutput(read: NumberReader): ShapedRunOutput {
     start: read.count(),
     end: read.count(),
     script: read.number(),
+    level: read.count(),
     rightToLeft: read.flag(),
     glyphs: read.list(() => readShapedGlyphOutput(read)),
   };

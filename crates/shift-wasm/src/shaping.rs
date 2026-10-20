@@ -73,6 +73,8 @@ layout! {
         pub y_advance: f64,
         pub x_offset: f64,
         pub y_offset: f64,
+        /// Whether `GDEF` classes the glyph as a mark.
+        pub is_mark: bool,
     }
 }
 
@@ -84,9 +86,21 @@ layout! {
         pub end: usize,
         /// The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script.
         pub script: f64,
+        /// The run's resolved bidi level; odd levels read right to left.
+        pub level: usize,
         pub right_to_left: bool,
         /// The run's glyphs in visual order.
         pub glyphs: Vec<ShapedGlyphOutput>,
+    }
+}
+
+layout! {
+    /// A shaped paragraph: its base direction and its runs.
+    pub struct ShapedParagraphOutput {
+        /// The paragraph's base direction, from its first strong character.
+        pub right_to_left: bool,
+        /// Runs in logical order; a line lays them out by their levels.
+        pub runs: Vec<ShapedRunOutput>,
     }
 }
 
@@ -102,7 +116,8 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        ParagraphInput, ShapeParagraphs, ShapedGlyphOutput, ShapedRunOutput, ShaperGlyphs,
+        ParagraphInput, ShapeParagraphs, ShapedGlyphOutput, ShapedParagraphOutput, ShapedRunOutput,
+        ShaperGlyphs,
     };
     use crate::layout::call;
 
@@ -202,8 +217,8 @@ mod exports {
         })
     }
 
-    /// Input: `ShapeParagraphs`. Output: each paragraph's runs, or null for
-    /// a paragraph that cannot be shaped or an unregistered shaper.
+    /// Input: `ShapeParagraphs`. Output: each paragraph, or null for a
+    /// paragraph that cannot be shaped or an unregistered shaper.
     #[wasm_bindgen(js_name = shapeParagraphs)]
     pub fn shape_paragraphs(input: &[f64]) -> Vec<f64> {
         call(input, |request: ShapeParagraphs| {
@@ -223,7 +238,7 @@ mod exports {
     fn shape(
         registered: &Registered,
         paragraph: &ParagraphInput,
-    ) -> Result<Vec<ShapedRunOutput>, ShapeError> {
+    ) -> Result<ShapedParagraphOutput, ShapeError> {
         let units: Vec<Unit<u32>> = paragraph
             .units
             .iter()
@@ -255,7 +270,7 @@ mod exports {
             })
             .collect::<Vec<_>>();
 
-        let runs = registered.shaper.shape_paragraph(
+        let paragraph = registered.shaper.shape_paragraph(
             &registered.glyphs,
             &ParagraphRequest {
                 units: &units,
@@ -264,12 +279,14 @@ mod exports {
                 features: &features,
             },
         )?;
-        Ok(runs
+        let runs = paragraph
+            .runs
             .into_iter()
             .map(|run| ShapedRunOutput {
                 start: index_of(run.units.start),
                 end: index_of(run.units.end),
                 script: run.script.as_deref().map_or(0.0, script_tag),
+                level: usize::from(run.level),
                 right_to_left: run.direction == TextDirection::RightToLeft,
                 glyphs: run
                     .glyphs
@@ -281,10 +298,15 @@ mod exports {
                         y_advance: f64::from(glyph.y_advance),
                         x_offset: f64::from(glyph.x_offset),
                         y_offset: f64::from(glyph.y_offset),
+                        is_mark: glyph.is_mark,
                     })
                     .collect(),
             })
-            .collect())
+            .collect();
+        Ok(ShapedParagraphOutput {
+            right_to_left: paragraph.direction == TextDirection::RightToLeft,
+            runs,
+        })
     }
 
     /// Reads a unit: a code point, or `-(glyph + 1)` for an inserted glyph.

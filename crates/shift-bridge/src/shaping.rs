@@ -1,6 +1,7 @@
 use napi_derive::napi;
 use shift_backends::shaper_font::{
-  FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, TextDirection,
+  FeatureSetting, FontFeature, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedParagraph,
+  ShapedRun, TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
@@ -53,6 +54,8 @@ pub struct NapiShapedGlyph {
   pub y_advance: i32,
   pub x_offset: i32,
   pub y_offset: i32,
+  /// Whether the font classes the glyph as a mark.
+  pub is_mark: bool,
 }
 
 impl From<ShapedGlyph> for NapiShapedGlyph {
@@ -64,11 +67,34 @@ impl From<ShapedGlyph> for NapiShapedGlyph {
       y_advance: glyph.y_advance,
       x_offset: glyph.x_offset,
       y_offset: glyph.y_offset,
+      is_mark: glyph.is_mark,
     }
   }
 }
 
-/// One run of a shaped paragraph, in one script and direction.
+/// A shaped paragraph: its base direction and its runs in logical order.
+#[napi(object)]
+pub struct NapiShapedParagraph {
+  /// The paragraph's base direction, from its first strong character.
+  #[napi(ts_type = "\"ltr\" | \"rtl\"")]
+  pub direction: String,
+  pub runs: Vec<NapiShapedRun>,
+}
+
+impl From<ShapedParagraph> for NapiShapedParagraph {
+  fn from(paragraph: ShapedParagraph) -> Self {
+    Self {
+      direction: direction_name(paragraph.direction).to_string(),
+      runs: paragraph
+        .runs
+        .into_iter()
+        .map(NapiShapedRun::from)
+        .collect(),
+    }
+  }
+}
+
+/// One run of a shaped paragraph, in one script and bidi level.
 #[napi(object)]
 pub struct NapiShapedRun {
   /// First paragraph unit in the run.
@@ -78,6 +104,9 @@ pub struct NapiShapedRun {
   /// ISO 15924 script tag such as `Arab`; absent when the run holds only
   /// characters common to all scripts.
   pub script: Option<String>,
+  /// Resolved bidi level; odd levels read right to left. A line lays its
+  /// runs out by level.
+  pub level: u32,
   #[napi(ts_type = "\"ltr\" | \"rtl\"")]
   pub direction: String,
   /// Glyphs in visual order; clusters index the paragraph's units.
@@ -86,16 +115,31 @@ pub struct NapiShapedRun {
 
 impl From<ShapedRun> for NapiShapedRun {
   fn from(run: ShapedRun) -> Self {
-    let direction = match run.direction {
-      TextDirection::LeftToRight => "ltr",
-      TextDirection::RightToLeft => "rtl",
-    };
     Self {
       start: run.units.start,
       end: run.units.end,
       script: run.script,
-      direction: direction.to_string(),
+      level: u32::from(run.level),
+      direction: direction_name(run.direction).to_string(),
       glyphs: run.glyphs.into_iter().map(NapiShapedGlyph::from).collect(),
+    }
+  }
+}
+
+/// A feature the font's feature code defines.
+#[napi(object)]
+pub struct NapiFontFeature {
+  /// The feature tag, such as `liga` or `ss01`.
+  pub tag: String,
+  /// The name a `featureNames` block gives a stylistic set or character variant.
+  pub name: Option<String>,
+}
+
+impl From<FontFeature> for NapiFontFeature {
+  fn from(feature: FontFeature) -> Self {
+    Self {
+      tag: feature.tag,
+      name: feature.name,
     }
   }
 }
@@ -161,6 +205,7 @@ fn shape_unit(unit: NapiShapeUnit) -> BridgeResult<ShapeUnit> {
     }),
   }
 }
+
 /// The compiled shaping tables and what the editor needs to shape with them
 /// itself: shaper glyph order and axis normalization.
 #[napi(object)]
@@ -219,5 +264,12 @@ impl NapiShaperFont {
         })
         .collect(),
     }
+  }
+}
+
+fn direction_name(direction: TextDirection) -> &'static str {
+  match direction {
+    TextDirection::LeftToRight => "ltr",
+    TextDirection::RightToLeft => "rtl",
   }
 }

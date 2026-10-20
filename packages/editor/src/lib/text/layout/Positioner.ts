@@ -41,11 +41,20 @@ const NOTDEF = ".notdef" as GlyphName;
  * The shaper substitutes glyphs and applies the feature code's own
  * positioning; this adds what export generates from structured data: each
  * glyph's current advance, pair kerning between neighbours in a left-to-right
- * run, and mark placement. A glyph's advance follows the category export
- * resolves: a nonspacing mark (`Font.isNonspacingMark`) at zero gets a
- * visible stand-in advance, and a character with no glyph counts as spacing.
- * Made for one layout, which tracks every glyph it reads; glyph lookups are
- * cached for that layout.
+ * run, cursive attachment from `entry` and `exit` anchors, and mark
+ * placement.
+ *
+ * Two facts make a glyph a mark, and they decide different things. The
+ * shaper's `isMark` (the compiled font's GDEF mark class, which export gives
+ * only category-Mark glyphs) decides that a glyph attaches by anchors and is
+ * passed over: it is not kerned, does not break a kerning pair or a cursive
+ * chain, and does not join one.
+ * The category export resolves (`Font.isNonspacingMark`) decides its advance:
+ * such a mark takes none in shaped text, as export compiles it, while a
+ * spacing mark keeps its width. Outside shaped text a nonspacing mark at zero
+ * gets a visible stand-in advance, and a character with no glyph counts as
+ * spacing. Made for one layout, which tracks every glyph it reads; glyph
+ * lookups are cached for that layout.
  */
 export class Positioner {
   readonly #editor: Editor;
@@ -68,9 +77,26 @@ export class Positioner {
     const positioned: PositionedGlyph[] = [];
     let pen = 0;
     let kernable: PositionedGlyph | null = null;
+    // The last glyph to the left that is not passed over, and how far cursive attachment raised it.
+    let left: {
+      readonly model: GlyphRenderModel | null;
+      readonly positioned: PositionedGlyph;
+    } | null = null;
+    let leftRise = 0;
     for (const [index, glyph] of glyphs.entries()) {
       const mark = markOffsets.get(index);
-      if (!mark && kernable?.glyphId && glyph.glyphId && run.direction === "ltr") {
+      const attached = mark !== undefined && mark.to !== null;
+      const passedOver = glyph.shaped.isMark;
+      const spacing = !mark && !passedOver;
+      const join =
+        marks === "anchors" && spacing && left
+          ? cursiveJoin(left.model, glyph.model, run.direction)
+          : null;
+      if (join && left) {
+        // Joined letters meet at their anchors: the left box ends where the right glyph starts.
+        left.positioned.xAdvance = join.x;
+        pen = left.positioned.origin.x + join.x;
+      } else if (spacing && kernable?.glyphId && glyph.glyphId && run.direction === "ltr") {
         kernable.xKern = this.#editor.font.kerningBetween(
           kernable.glyphId,
           glyph.glyphId,
@@ -80,14 +106,8 @@ export class Positioner {
         pen += kernable.xKern;
       }
 
-      const attached = mark !== undefined && mark.to !== null;
       const ownOffset = mark && !attached ? mark.offset : { x: 0, y: 0 };
-      const xAdvance = attached
-        ? 0
-        : displayAdvance(
-            glyph.model?.xAdvance ?? 0,
-            this.#editor.font.isNonspacingMark(glyph.name),
-          ) + glyph.shaped.xAdvance;
+      const xAdvance = this.#advance(glyph, passedOver);
       const current: PositionedGlyph = {
         glyphId: glyph.glyphId,
         glyphName: glyph.name,
@@ -102,10 +122,24 @@ export class Positioner {
         bounds: glyph.model?.bounds ?? null,
       };
       positioned.push(current);
-      if (attached) continue;
       pen += xAdvance;
-      // A literal mark breaks the kerning pair around it; an attached one is skipped over.
-      kernable = mark ? null : current;
+      if (passedOver) {
+        // An unattached mark sits at the height the cursive chain has reached.
+        if (!attached) current.yOffset += leftRise;
+        continue;
+      }
+      if (mark) {
+        // A literal mark breaks the kerning pair around it.
+        kernable = null;
+        left = null;
+        leftRise = 0;
+        continue;
+      }
+      const rise = join ? leftRise + join.y : 0;
+      current.yOffset += rise;
+      kernable = current;
+      left = { model: glyph.model, positioned: current };
+      leftRise = rise;
     }
 
     // In logical order, so a mark on a mark follows its target's final place.
@@ -124,7 +158,11 @@ export class Positioner {
 
   #runGlyph(run: SegmentedRun, shaped: ShapedGlyph): RunGlyph {
     const font = this.#editor.font;
-    const entry = shaped.glyphId ? font.entryForId(shaped.glyphId) : null;
+    const item = run.items[shaped.cluster];
+    // The shaper answers .notdef, and a pick its compiled font lacks, with no glyph; a pick
+    // the font has still shows itself.
+    const glyphId = shaped.glyphId ?? (item?.kind === "glyph" ? item.glyphId : null);
+    const entry = glyphId ? font.entryForId(glyphId) : null;
     if (entry) {
       return {
         shaped,
@@ -134,7 +172,6 @@ export class Positioner {
       };
     }
     // No glyph: a character the font lacks keeps the name it would take; a missing pick is .notdef.
-    const item = run.items[shaped.cluster];
     const codepoint = item?.kind === "character" ? item.codepoint : null;
     return {
       shaped,
@@ -142,6 +179,18 @@ export class Positioner {
       name: codepoint === null ? NOTDEF : font.nameForUnicode(codepoint as Unicode),
       model: null,
     };
+  }
+
+  /**
+   * A glyph's advance: none for a nonspacing mark that is passed over, as
+   * export compiles it; a passed-over spacing mark keeps its width; any
+   * other glyph takes its display advance.
+   */
+  #advance(glyph: RunGlyph, passedOver: boolean): number {
+    const nonspacing = this.#editor.font.isNonspacingMark(glyph.name);
+    const own = glyph.model?.xAdvance ?? 0;
+    if (passedOver) return nonspacing ? 0 : own + glyph.shaped.xAdvance;
+    return displayAdvance(own, nonspacing) + glyph.shaped.xAdvance;
   }
 
   /** The glyph's render model at the layout's location; null until the glyph loads. */
@@ -160,17 +209,20 @@ export class Positioner {
 
   /**
    * Attaches each mark to the glyph before it in logical order: to a preceding
-   * mark with the matching anchor (mark to mark), otherwise to the base. A
-   * glyph is a mark when it has an `_name` anchor its target has as `name`.
+   * mark with the matching anchor (mark to mark), otherwise to the base.
+   *
+   * @remarks
+   * Only a glyph the shaper flags as a mark attaches, as in the exported font.
+   * An `_name` anchor alone does not make one: a spacing dieresis inherits
+   * `_top` from its combining component but still sits beside the letter.
    */
   #anchorOffsets(run: SegmentedRun, glyphs: readonly RunGlyph[]): Map<number, MarkOffset> {
     const offsets = new Map<number, MarkOffset>();
     let base: number | null = null;
     let previousMark: number | null = null;
     for (const index of logicalIndexes(run)) {
-      const model = glyphs[index]?.model ?? null;
-      // Inside the run's layout computed: anchor edits, here or in a component, re-run the layout.
-      if (model) track(model.anchorsWithComponentsCell);
+      const glyph = glyphs[index];
+      const model = glyph?.shaped.isMark ? glyph.model : null;
       const offset = anchorOffset(model, previousMark, glyphs) ?? anchorOffset(model, base, glyphs);
       if (offset) {
         offsets.set(index, offset);
@@ -258,8 +310,10 @@ function anchorOffset(
 ): MarkOffset | null {
   const targetModel = target === null ? null : glyphs[target]?.model;
   if (!mark || target === null || !targetModel) return null;
-  for (const markAnchor of mark.anchorsWithComponents) {
-    if (!markAnchor.name.startsWith("_")) continue;
+  // Inside the run's layout computed: the layout reruns when an attaching
+  // anchor, or the target anchor it attaches to, changes, and not for others.
+  track(mark.attachingAnchorsCell);
+  for (const markAnchor of mark.attachingAnchorsCell.peek()) {
     const targetAnchor = targetModel.anchorNamed(markAnchor.name.slice(1));
     if (targetAnchor) {
       return {
@@ -272,6 +326,32 @@ function anchorOffset(
     }
   }
   return null;
+}
+
+/**
+ * Returns how two neighbouring glyphs join by cursive attachment, or null
+ * when they do not.
+ *
+ * @remarks
+ * The glyph earlier in reading order joins through its `exit` anchor to the
+ * next one's `entry` anchor, read with components' anchors copied in, as
+ * export compiles them. `x` is the left glyph's advance that puts the two
+ * anchors together; `y` is how far the right glyph sits above the left one.
+ * Chains rise from the left of the line: in right-to-left text that is the
+ * end of a word, which stays on the baseline, as Nastaliq expects.
+ */
+function cursiveJoin(
+  left: GlyphRenderModel | null,
+  right: GlyphRenderModel | null,
+  direction: SegmentedRun["direction"],
+): Point2D | null {
+  const [from, to] = direction === "rtl" ? [right, left] : [left, right];
+  const exit = from?.anchorNamed("exit");
+  const entry = to?.anchorNamed("entry");
+  if (!exit || !entry) return null;
+  return direction === "rtl"
+    ? { x: entry.x - exit.x, y: entry.y - exit.y }
+    : { x: exit.x - entry.x, y: exit.y - entry.y };
 }
 
 /** Indexes into the run's visual-order glyphs, in logical order. */

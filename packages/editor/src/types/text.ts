@@ -36,4 +36,14 @@ export interface TextRunRecord {
   readonly type: "textrun";
   readonly scope: "document";
   readonly items: readonly TextItem[];
+  /**
+   * Whether the font's feature code shapes the text; off lays out each item
+   * as typed, glyph by glyph.
+   */
+  readonly shaping: boolean;
+  /**
+   * Features turned on (`true`) or off (`false`) for this text by tag, such
+   * as `ss01`; a tag left out keeps the font's default.
+   */
+  readonly features: Readonly<Record<string, boolean>>;
 }
