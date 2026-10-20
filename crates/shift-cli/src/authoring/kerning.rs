@@ -23,9 +23,10 @@ use crate::cli::{
 use crate::kerning::selector::{GROUP_PREFIX, position_label, resolve_group_id, resolve_side};
 
 use super::font_info::target_source_id;
-use super::glyph::{load_font, resolve_glyph_id};
+use super::glyph::load_font;
 use super::layer_payload::read_json_input;
 use super::{AuthoringReport, apply_mutation, require_finite};
+use crate::selector::FontSelectors;
 
 /// Sets one pair's value at one master, or applies a JSON batch.
 ///
@@ -347,7 +348,7 @@ fn resolve_members(font: &Font, selectors: &[String]) -> Result<Vec<GlyphId>> {
     selectors
         .iter()
         .map(|selector| {
-            let glyph_id = resolve_glyph_id(font, selector)?;
+            let glyph_id = font.glyph_id_for(selector)?;
             if !seen.insert(glyph_id.clone()) {
                 return Err(miette!("glyph {selector:?} is repeated"));
             }

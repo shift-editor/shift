@@ -8,10 +8,11 @@ use shift_font::{FontIntent, FontIntentSet, GlyphId, GlyphName, LayerId};
 
 use crate::cli::SetGlyphsArgs;
 
-use super::glyph::{load_font, parse_unicodes, resolve_glyph_id, resolve_source_id};
+use super::glyph::{load_font, parse_unicodes};
 use super::input::{GlyphBatchInput, GlyphEntryInput};
 use super::layer_payload::read_json_input;
 use super::{AuthoringReport, apply_mutation};
+use crate::selector::FontSelectors;
 
 /// The glyph batch format `glyph export` writes and `glyph set` reads.
 pub(crate) const GLYPH_BATCH_FORMAT: u32 = 1;
@@ -59,7 +60,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
             .into_diagnostic()
             .wrap_err_with(context)?;
         let source_id = match entry.source.as_deref() {
-            Some(selector) => resolve_source_id(&font, selector).wrap_err_with(context)?,
+            Some(selector) => font.source_id_for(selector).wrap_err_with(context)?,
             None => font
                 .default_source_id()
                 .ok_or_else(|| miette!("{}: the font has no default source", context()))?,
@@ -123,7 +124,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     // that appears later in the batch.
     let base_glyph = |name: &str| match glyphs.get(name) {
         Some((glyph_id, _)) => Ok(glyph_id.clone()),
-        None => resolve_glyph_id(&font, name),
+        None => font.glyph_id_for(name),
     };
     for (glyph_id, source_id, input, context) in layers {
         let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());

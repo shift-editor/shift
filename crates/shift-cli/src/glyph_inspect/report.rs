@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use crate::selector::FontSelectors;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::composite::{GlyphComponents, ResolvedContour as FontResolvedContour};
 use shift_font::{
-    Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphId, GlyphLayer,
+    Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphLayer,
     LayerDifference, Point, Source,
 };
 
@@ -26,7 +27,7 @@ impl GlyphInspection {
             .read_font(path_text)
             .into_diagnostic()
             .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
-        let glyph_id = resolve_glyph_id(&font, selector)?;
+        let glyph_id = font.glyph_id_for(selector)?;
         let glyph = font
             .glyph(&glyph_id)
             .ok_or_else(|| miette!("glyph {selector:?} disappeared while inspecting the font"))?;
@@ -108,19 +109,6 @@ impl GlyphInspection {
             resolved,
         })
     }
-}
-
-fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
-    if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(&glyph_id).is_some()
-    {
-        return Ok(glyph_id);
-    }
-    if let Some(glyph_id) = font.glyph_id_by_name(selector) {
-        return Ok(glyph_id);
-    }
-
-    bail!("glyph {selector:?} does not exist; use its name or full glyph_ id")
 }
 
 pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<ExternalLocation> {

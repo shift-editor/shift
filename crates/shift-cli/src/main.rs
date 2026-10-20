@@ -4,6 +4,7 @@ mod cli;
 mod glyph_inspect;
 mod inspect;
 mod kerning;
+mod selector;
 mod skill;
 
 use std::io::{self, IsTerminal, Write};

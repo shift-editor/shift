@@ -11,6 +11,106 @@ pub(crate) enum RenderMode {
     Styled,
 }
 
+impl RenderMode {
+    fn header(self, value: &str) -> Cell {
+        match self {
+            RenderMode::Plain => Cell::new(value),
+            RenderMode::Styled => Cell::new(value)
+                .add_attribute(Attribute::Bold)
+                .fg(Color::DarkGrey),
+        }
+    }
+
+    fn accent(self, value: &str) -> Cell {
+        match self {
+            RenderMode::Plain => Cell::new(value),
+            RenderMode::Styled => Cell::new(value).fg(Color::Cyan),
+        }
+    }
+
+    fn muted(self, value: impl Into<String>) -> Cell {
+        let value = value.into();
+        match self {
+            RenderMode::Plain => Cell::new(value),
+            RenderMode::Styled => Cell::new(value).fg(Color::DarkGrey),
+        }
+    }
+
+    fn muted_text(self, value: &str) -> String {
+        match self {
+            RenderMode::Plain => value.to_string(),
+            RenderMode::Styled => format!(
+                "{}{}{}",
+                anstyle::Style::new()
+                    .fg_color(Some(AnsiColor::BrightBlack.into()))
+                    .render(),
+                value,
+                anstyle::Reset.render()
+            ),
+        }
+    }
+
+    fn styled_title(self, value: &str) -> String {
+        match self {
+            RenderMode::Plain => value.to_string(),
+            RenderMode::Styled => format!(
+                "{}{}{}",
+                anstyle::Style::new().bold().render(),
+                value,
+                anstyle::Reset.render()
+            ),
+        }
+    }
+
+    fn styled_section(self, value: &str) -> String {
+        match self {
+            RenderMode::Plain => value.to_string(),
+            RenderMode::Styled => format!(
+                "{}{}{}",
+                anstyle::Style::new()
+                    .bold()
+                    .fg_color(Some(AnsiColor::BrightCyan.into()))
+                    .render(),
+                value,
+                anstyle::Reset.render()
+            ),
+        }
+    }
+
+    /// Renders label/value rows with values aligned two spaces past the longest label.
+    fn key_values(self, rows: &[(&str, String)]) -> Vec<String> {
+        let width = rows
+            .iter()
+            .map(|(label, _)| label.chars().count() + 2)
+            .max()
+            .unwrap_or(0);
+        rows.iter()
+            .map(|(label, value)| match self {
+                RenderMode::Plain => format!("{label:<width$}{value}"),
+                RenderMode::Styled => format!(
+                    "{}{label:<width$}{}{value}",
+                    anstyle::Style::new()
+                        .fg_color(Some(AnsiColor::BrightBlack.into()))
+                        .render(),
+                    anstyle::Reset.render(),
+                ),
+            })
+            .collect()
+    }
+
+    fn empty_section(self, title: &str, message: &str) -> String {
+        format!(
+            "{}\n{}",
+            self.styled_section(title),
+            self.muted_text(message)
+        )
+    }
+
+    fn section_with_table(self, title: &str, table: &Table) -> String {
+        format!("{}\n{}", self.styled_section(title), table)
+    }
+}
+
 impl InspectReport {
     pub(crate) fn render(&self, view: InspectView, mode: RenderMode) -> String {
         match view {
@@ -26,35 +126,29 @@ impl InspectReport {
     }
 
     fn render_summary(&self, mode: RenderMode) -> String {
-        let mut lines = vec![styled_title(&self.file_name, mode)];
-        lines.extend(key_values(
-            &[
-                ("app id", self.document.application_id.clone()),
-                ("schema", self.document.schema_version.to_string()),
-                ("document", self.document.document_id.clone()),
-            ],
-            mode,
-        ));
+        let mut lines = vec![mode.styled_title(&self.file_name)];
+        lines.extend(mode.key_values(&[
+            ("app id", self.document.application_id.clone()),
+            ("schema", self.document.schema_version.to_string()),
+            ("document", self.document.document_id.clone()),
+        ]));
         lines.push(String::new());
-        lines.extend(key_values(
-            &[
-                ("axes", self.axes.len().to_string()),
-                ("mappings", self.axis_mappings.len().to_string()),
-                ("instances", self.named_instances.len().to_string()),
-                (
-                    "metric definitions",
-                    self.metric_definitions.len().to_string(),
-                ),
-                ("sources", self.sources.len().to_string()),
-                ("glyphs", self.glyph_count.to_string()),
-                ("kerning pairs", self.kerning.pair_count().to_string()),
-            ],
-            mode,
-        ));
+        lines.extend(mode.key_values(&[
+            ("axes", self.axes.len().to_string()),
+            ("mappings", self.axis_mappings.len().to_string()),
+            ("instances", self.named_instances.len().to_string()),
+            (
+                "metric definitions",
+                self.metric_definitions.len().to_string(),
+            ),
+            ("sources", self.sources.len().to_string()),
+            ("glyphs", self.glyph_count.to_string()),
+            ("kerning pairs", self.kerning.pair_count().to_string()),
+        ]));
 
         if !self.sources.is_empty() {
             lines.push(String::new());
-            lines.push(styled_section("Sources", mode));
+            lines.push(mode.styled_section("Sources"));
             lines.push(self.sources_table(mode));
         }
 
@@ -63,28 +157,28 @@ impl InspectReport {
 
     fn render_axes(&self, mode: RenderMode) -> String {
         if self.axes.is_empty() {
-            return empty_section("Axes", "No axes", mode);
+            return mode.empty_section("Axes", "No axes");
         }
 
         let mut table = base_table();
         table.set_header(vec![
-            header("tag", mode),
-            header("name", mode),
-            header("id", mode),
-            header("role", mode),
-            header("kind", mode),
-            header("min", mode),
-            header("default", mode),
-            header("max", mode),
-            header("values", mode),
-            header("labels", mode),
-            header("hidden", mode),
+            mode.header("tag"),
+            mode.header("name"),
+            mode.header("id"),
+            mode.header("role"),
+            mode.header("kind"),
+            mode.header("min"),
+            mode.header("default"),
+            mode.header("max"),
+            mode.header("values"),
+            mode.header("labels"),
+            mode.header("hidden"),
         ]);
         for axis in &self.axes {
             table.add_row(vec![
-                accent(&axis.tag, mode),
+                mode.accent(&axis.tag),
                 Cell::new(axis.name.clone()),
-                muted(compact_id(&axis.id), mode),
+                mode.muted(compact_id(&axis.id)),
                 Cell::new(axis.role.clone()),
                 Cell::new(axis.kind.clone()),
                 number(axis.minimum),
@@ -97,28 +191,28 @@ impl InspectReport {
         }
         align_right(&mut table, &[5, 6, 7, 8, 9, 10]);
 
-        let axes = section_with_table("Axes", &table, mode);
+        let axes = mode.section_with_table("Axes", &table);
         if self.axes.iter().all(|axis| axis.labels.is_empty()) {
             return axes;
         }
 
         let mut values = base_table();
         values.set_header(vec![
-            header("axis", mode),
-            header("name", mode),
-            header("id", mode),
-            header("value", mode),
-            header("min", mode),
-            header("max", mode),
-            header("linked", mode),
-            header("elidable", mode),
+            mode.header("axis"),
+            mode.header("name"),
+            mode.header("id"),
+            mode.header("value"),
+            mode.header("min"),
+            mode.header("max"),
+            mode.header("linked"),
+            mode.header("elidable"),
         ]);
         for axis in &self.axes {
             for label in &axis.labels {
                 values.add_row(vec![
-                    accent(&axis.tag, mode),
+                    mode.accent(&axis.tag),
                     Cell::new(label.name.clone()),
-                    muted(compact_id(&label.id), mode),
+                    mode.muted(compact_id(&label.id)),
                     number(label.value),
                     optional_number(label.minimum),
                     optional_number(label.maximum),
@@ -131,23 +225,23 @@ impl InspectReport {
 
         format!(
             "{axes}\n\n{}",
-            section_with_table("Axis Values", &values, mode)
+            mode.section_with_table("Axis Values", &values)
         )
     }
 
     fn render_mappings(&self, mode: RenderMode) -> String {
         if self.axis_mappings.is_empty() {
-            return empty_section("Mappings", "No axis mappings", mode);
+            return mode.empty_section("Mappings", "No axis mappings");
         }
 
         let mut table = base_table();
         table.set_header(vec![
-            header("name", mode),
-            header("kind", mode),
-            header("inputs", mode),
-            header("outputs", mode),
-            header("points", mode),
-            header("id", mode),
+            mode.header("name"),
+            mode.header("kind"),
+            mode.header("inputs"),
+            mode.header("outputs"),
+            mode.header("points"),
+            mode.header("id"),
         ]);
         for mapping in &self.axis_mappings {
             table.add_row(vec![
@@ -156,96 +250,96 @@ impl InspectReport {
                 Cell::new(format_axis_references(&mapping.inputs)),
                 Cell::new(format_axis_references(&mapping.outputs)),
                 right(mapping.points.len()),
-                muted(compact_id(&mapping.id), mode),
+                mode.muted(compact_id(&mapping.id)),
             ]);
         }
         align_right(&mut table, &[4]);
 
-        section_with_table("Mappings", &table, mode)
+        mode.section_with_table("Mappings", &table)
     }
 
     fn render_sources(&self, mode: RenderMode) -> String {
         if self.sources.is_empty() {
-            return empty_section("Sources", "No sources", mode);
+            return mode.empty_section("Sources", "No sources");
         }
 
         format!(
             "{}\n{}",
-            styled_section("Sources", mode),
+            mode.styled_section("Sources"),
             self.sources_table(mode)
         )
     }
 
     fn render_instances(&self, mode: RenderMode) -> String {
         if self.named_instances.is_empty() {
-            return empty_section("Instances", "No named instances", mode);
+            return mode.empty_section("Instances", "No named instances");
         }
 
         let mut table = base_table();
         table.set_header(vec![
-            header("name", mode),
-            header("id", mode),
-            header("external location", mode),
-            header("PostScript name", mode),
+            mode.header("name"),
+            mode.header("id"),
+            mode.header("external location"),
+            mode.header("PostScript name"),
         ]);
         for instance in &self.named_instances {
             table.add_row(vec![
                 Cell::new(instance.name.clone()),
-                muted(compact_id(&instance.id), mode),
+                mode.muted(compact_id(&instance.id)),
                 Cell::new(format_location(&instance.location)),
                 Cell::new(instance.postscript_name.as_deref().unwrap_or("-")),
             ]);
         }
 
-        section_with_table("Instances", &table, mode)
+        mode.section_with_table("Instances", &table)
     }
 
     fn render_glyphs(&self, mode: RenderMode) -> String {
         if self.glyphs.is_empty() {
-            return empty_section("Glyphs", "No glyphs", mode);
+            return mode.empty_section("Glyphs", "No glyphs");
         }
 
         let mut table = base_table();
         table.set_header(vec![
-            header("name", mode),
-            header("id", mode),
-            header("unicode", mode),
-            header("layers", mode),
+            mode.header("name"),
+            mode.header("id"),
+            mode.header("unicode"),
+            mode.header("layers"),
         ]);
         for glyph in &self.glyphs {
             table.add_row(vec![
                 Cell::new(glyph.name.clone()),
-                muted(compact_id(&glyph.id), mode),
+                mode.muted(compact_id(&glyph.id)),
                 Cell::new(display_list(&glyph.unicodes)),
                 right(glyph.layer_count),
             ]);
         }
         align_right(&mut table, &[3]);
 
-        section_with_table("Glyphs", &table, mode)
+        mode.section_with_table("Glyphs", &table)
     }
 
     fn render_layers(&self, mode: RenderMode) -> String {
         if self.glyphs.iter().all(|glyph| glyph.layers.is_empty()) {
-            return empty_section("Layers", "No layers", mode);
+            return mode.empty_section("Layers", "No layers");
         }
 
         let mut table = base_table();
         table.set_header(vec![
-            header("glyph", mode),
-            header("layer", mode),
-            header("source", mode),
-            header("advance", mode),
-            header("contours", mode),
-            header("points", mode),
-            header("anchors", mode),
-            header("components", mode),
+            mode.header("glyph"),
+            mode.header("layer"),
+            mode.header("source"),
+            mode.header("advance"),
+            mode.header("contours"),
+            mode.header("points"),
+            mode.header("anchors"),
+            mode.header("components"),
         ]);
         for glyph in &self.glyphs {
             for layer in &glyph.layers {
                 table.add_row(vec![
                     Cell::new(glyph.name.clone()),
-                    muted(compact_id(&layer.id), mode),
+                    mode.muted(compact_id(&layer.id)),
                     Cell::new(source_label(layer.source_name.as_deref(), &layer.source_id)),
                     right(format_number(layer.advance)),
                     right(layer.contour_count),
@@ -257,41 +351,35 @@ impl InspectReport {
         }
         align_right(&mut table, &[3, 4, 5, 6, 7]);
 
-        section_with_table("Layers", &table, mode)
+        mode.section_with_table("Layers", &table)
     }
 
     fn render_kerning(&self, mode: RenderMode) -> String {
         let kerning = &self.kerning;
         let group_count = kerning.first_group_count + kerning.second_group_count;
         if group_count == 0 && kerning.pair_count() == 0 {
-            return empty_section("Kerning", "No kerning", mode);
+            return mode.empty_section("Kerning", "No kerning");
         }
 
-        let mut lines = vec![styled_section("Kerning", mode)];
-        lines.extend(key_values(
-            &[
-                ("first groups", kerning.first_group_count.to_string()),
-                ("second groups", kerning.second_group_count.to_string()),
-                ("empty groups", kerning.empty_group_count.to_string()),
-            ],
-            mode,
-        ));
+        let mut lines = vec![mode.styled_section("Kerning")];
+        lines.extend(mode.key_values(&[
+            ("first groups", kerning.first_group_count.to_string()),
+            ("second groups", kerning.second_group_count.to_string()),
+            ("empty groups", kerning.empty_group_count.to_string()),
+        ]));
         lines.push(String::new());
         let mut table = base_table();
         table.set_header(vec![
-            header("master", mode),
-            header("pairs", mode),
-            header("glyph", mode),
-            header("exception", mode),
-            header("group", mode),
-            header("unresolved", mode),
+            mode.header("master"),
+            mode.header("pairs"),
+            mode.header("glyph"),
+            mode.header("exception"),
+            mode.header("group"),
+            mode.header("unresolved"),
         ]);
         for source in &kerning.sources {
             if source.pair_count == 0 {
-                table.add_row(vec![
-                    Cell::new(source.name.clone()),
-                    muted("no pairs", mode),
-                ]);
+                table.add_row(vec![Cell::new(source.name.clone()), mode.muted("no pairs")]);
                 continue;
             }
             table.add_row(vec![
@@ -311,16 +399,16 @@ impl InspectReport {
     fn sources_table(&self, mode: RenderMode) -> String {
         let mut table = base_table();
         table.set_header(vec![
-            header("name", mode),
-            header("id", mode),
-            header("location", mode),
-            header("metrics", mode),
-            header("file", mode),
+            mode.header("name"),
+            mode.header("id"),
+            mode.header("location"),
+            mode.header("metrics"),
+            mode.header("file"),
         ]);
         for source in &self.sources {
             table.add_row(vec![
                 Cell::new(source_name(source.name.as_str(), source.is_default)),
-                muted(compact_id(&source.id), mode),
+                mode.muted(compact_id(&source.id)),
                 Cell::new(format_location(&source.location)),
                 Cell::new(
                     source
@@ -360,44 +448,6 @@ fn align_right(table: &mut Table, columns: &[usize]) {
     }
 }
 
-fn header(value: &str, mode: RenderMode) -> Cell {
-    match mode {
-        RenderMode::Plain => Cell::new(value),
-        RenderMode::Styled => Cell::new(value)
-            .add_attribute(Attribute::Bold)
-            .fg(Color::DarkGrey),
-    }
-}
-
-fn accent(value: &str, mode: RenderMode) -> Cell {
-    match mode {
-        RenderMode::Plain => Cell::new(value),
-        RenderMode::Styled => Cell::new(value).fg(Color::Cyan),
-    }
-}
-
-fn muted(value: impl Into<String>, mode: RenderMode) -> Cell {
-    let value = value.into();
-    match mode {
-        RenderMode::Plain => Cell::new(value),
-        RenderMode::Styled => Cell::new(value).fg(Color::DarkGrey),
-    }
-}
-
-fn muted_text(value: &str, mode: RenderMode) -> String {
-    match mode {
-        RenderMode::Plain => value.to_string(),
-        RenderMode::Styled => format!(
-            "{}{}{}",
-            anstyle::Style::new()
-                .fg_color(Some(AnsiColor::BrightBlack.into()))
-                .render(),
-            value,
-            anstyle::Reset.render()
-        ),
-    }
-}
-
 fn number(value: f64) -> Cell {
     Cell::new(format_number(value)).set_alignment(CellAlignment::Right)
 }
@@ -415,66 +465,6 @@ fn optional_number(value: Option<f64>) -> Cell {
 )]
 fn right(value: impl ToString) -> Cell {
     Cell::new(value.to_string()).set_alignment(CellAlignment::Right)
-}
-
-fn styled_title(value: &str, mode: RenderMode) -> String {
-    match mode {
-        RenderMode::Plain => value.to_string(),
-        RenderMode::Styled => format!(
-            "{}{}{}",
-            anstyle::Style::new().bold().render(),
-            value,
-            anstyle::Reset.render()
-        ),
-    }
-}
-
-fn styled_section(value: &str, mode: RenderMode) -> String {
-    match mode {
-        RenderMode::Plain => value.to_string(),
-        RenderMode::Styled => format!(
-            "{}{}{}",
-            anstyle::Style::new()
-                .bold()
-                .fg_color(Some(AnsiColor::BrightCyan.into()))
-                .render(),
-            value,
-            anstyle::Reset.render()
-        ),
-    }
-}
-
-/// Renders label/value rows with values aligned two spaces past the longest label.
-fn key_values(rows: &[(&str, String)], mode: RenderMode) -> Vec<String> {
-    let width = rows
-        .iter()
-        .map(|(label, _)| label.chars().count() + 2)
-        .max()
-        .unwrap_or(0);
-    rows.iter()
-        .map(|(label, value)| match mode {
-            RenderMode::Plain => format!("{label:<width$}{value}"),
-            RenderMode::Styled => format!(
-                "{}{label:<width$}{}{value}",
-                anstyle::Style::new()
-                    .fg_color(Some(AnsiColor::BrightBlack.into()))
-                    .render(),
-                anstyle::Reset.render(),
-            ),
-        })
-        .collect()
-}
-
-fn empty_section(title: &str, message: &str, mode: RenderMode) -> String {
-    format!(
-        "{}\n{}",
-        styled_section(title, mode),
-        muted_text(message, mode)
-    )
-}
-
-fn section_with_table(title: &str, table: &Table, mode: RenderMode) -> String {
-    format!("{}\n{}", styled_section(title, mode), table)
 }
 
 fn source_name(name: &str, is_default: bool) -> String {
