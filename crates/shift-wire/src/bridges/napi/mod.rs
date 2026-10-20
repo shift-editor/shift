@@ -141,6 +141,10 @@ pub struct NapiCatalogAtlasWeights {
 
 #[napi(string_enum = "camelCase")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the font-format names for point types"
+)]
 pub enum NapiPointType {
     OnCurve,
     OffCurve,

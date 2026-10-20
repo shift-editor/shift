@@ -65,7 +65,7 @@ impl DesignspaceFont {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let import_paths: Arc<[BTreeMap<String, PathBuf>]> = Arc::from(source_paths.clone());
-        let (header, _, _) = stream_retained(path, import_paths.clone())
+        let (header, _, _) = stream_retained(path, &import_paths)
             .map_err(|error| malformed(path, error.to_string()))?;
         let source_order = std::iter::once(default_source)
             .chain((0..document.sources.len()).filter(|index| *index != default_source))
@@ -105,7 +105,7 @@ impl DesignspaceFont {
             .into_iter()
             .zip(&directory.sources)
             .map(|(paths, source)| {
-                retained_layer(&directory, paths)
+                retained_layer(&directory, &paths)
                     .map(|layer| (source.location.to_vec(), vec![layer].into_boxed_slice()))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -149,8 +149,8 @@ impl FontSource for DesignspaceFont {
 
 impl FontImporter for DesignspaceFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream, report) = stream_retained(&self.path, self.import_paths.clone())
-            .map_err(|source| {
+        let (header, stream, report) =
+            stream_retained(&self.path, &self.import_paths).map_err(|source| {
                 BackendError::load(FontFormat::Designspace, self.path.clone(), source)
             })?;
         Ok(FontImport::new(

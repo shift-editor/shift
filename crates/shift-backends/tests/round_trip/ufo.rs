@@ -427,10 +427,10 @@ fn preserves_metadata_metrics_and_glyph_count() {
     ] {
         assert_eq!(
             reloaded
-                .metric_value(reloaded.default_source_id().unwrap(), kind)
+                .metric_value(&reloaded.default_source_id().unwrap(), kind)
                 .map(|value| value.position),
             original
-                .metric_value(original.default_source_id().unwrap(), kind)
+                .metric_value(&original.default_source_id().unwrap(), kind)
                 .map(|value| value.position)
         );
     }

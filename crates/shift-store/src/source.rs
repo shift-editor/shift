@@ -89,7 +89,7 @@ pub struct SourceAxisLocation {
 }
 
 impl ShiftStore {
-    pub fn create_axis(&mut self, axis: NewAxis) -> Result<(), StoreError> {
+    pub fn create_axis(&mut self, axis: &NewAxis) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO axes (
@@ -142,7 +142,7 @@ impl ShiftStore {
         }
     }
 
-    pub fn create_source(&mut self, source: NewSource) -> Result<(), StoreError> {
+    pub fn create_source(&mut self, source: &NewSource) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO sources (

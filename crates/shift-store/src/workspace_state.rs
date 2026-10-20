@@ -74,7 +74,7 @@ impl WorkspaceState {
 }
 
 impl ShiftStore {
-    pub fn set_workspace_state(&mut self, state: WorkspaceState) -> Result<(), StoreError> {
+    pub fn set_workspace_state(&mut self, state: &WorkspaceState) -> Result<(), StoreError> {
         let original_import_path = state.original_import_path.as_deref().map(path_to_db);
 
         self.conn.execute(
@@ -135,7 +135,7 @@ impl ShiftStore {
         }
     }
 
-    pub fn set_workspace_document_id(&mut self, document_id: String) -> Result<(), StoreError> {
+    pub fn set_workspace_document_id(&mut self, document_id: &str) -> Result<(), StoreError> {
         self.conn.execute(
             "
             UPDATE workspace_state

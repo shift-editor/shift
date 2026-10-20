@@ -25,7 +25,7 @@ pub(crate) const GLYPH_BATCH_FORMAT: u32 = 1;
 ///
 /// Rejects invalid payloads, selectors, repeated glyph/source pairs, and conflicting
 /// Unicode assignments without writing. Also reports document and persistence failures.
-pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
+pub fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let batch = read_json_input::<GlyphBatchInput>(&args.input, "glyph batch")?;
     if batch.glyphs.is_empty() {
@@ -141,5 +141,5 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
         );
     }
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }

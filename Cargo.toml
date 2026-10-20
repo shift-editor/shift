@@ -26,6 +26,9 @@ implicit_clone = "warn"
 unnested_or_patterns = "warn"
 semicolon_if_nothing_returned = "warn"
 trivially_copy_pass_by_ref = "warn"
+# Borrow what isn't consumed: ids and collections by reference.
+needless_pass_by_value = "warn"
+redundant_clone = "warn"
 large_types_passed_by_value = "warn"
 
 [workspace.package]

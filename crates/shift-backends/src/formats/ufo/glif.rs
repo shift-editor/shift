@@ -69,7 +69,7 @@ pub(crate) fn project_glif_glyph(
 
 pub(crate) fn retained_layer(
     directory: &FontDirectory,
-    paths: BTreeMap<String, PathBuf>,
+    paths: &BTreeMap<String, PathBuf>,
 ) -> Result<RetainedUfoLayer, FontReadError> {
     let glyphs = directory
         .glyphs

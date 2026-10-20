@@ -295,7 +295,7 @@ impl UfoReader {
             .unwrap_or(1000.0);
         let metric_definitions = font.metric_definitions().to_vec();
         let default_source = font
-            .source_mut(default_source_id)
+            .source_mut(&default_source_id)
             .expect("new font should contain its default source");
         set_metric_position(
             &metric_definitions,

@@ -27,7 +27,7 @@ pub(super) fn check(font: &Font, glyph: &Glyph, out: &mut Vec<Finding>) {
 
     if let Some(default) = default
         && encoded
-        && glyph.layer_for_source(default.id()).is_none()
+        && glyph.layer_for_source(&default.id()).is_none()
     {
         out.push(
             Finding::glyph(
@@ -44,7 +44,7 @@ pub(super) fn check(font: &Font, glyph: &Glyph, out: &mut Vec<Finding>) {
     }
 
     for source in font.masters() {
-        let Some(layer) = glyph.layer_for_source(source.id()) else {
+        let Some(layer) = glyph.layer_for_source(&source.id()) else {
             continue;
         };
         let at = |check, message: String| {

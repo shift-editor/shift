@@ -450,7 +450,7 @@ mod tests {
             KerningSide::Group(group_id("A")),
             KerningSide::Glyph(glyph("V")),
         );
-        kerning.set_value(source_id.clone(), second_exception.clone(), -30.0);
+        kerning.set_value(source_id.clone(), second_exception, -30.0);
         kerning.set_value(source_id.clone(), first_exception, -20.0);
         kerning.set_value(
             source_id.clone(),

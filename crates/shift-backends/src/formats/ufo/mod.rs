@@ -105,10 +105,10 @@ mod tests {
         );
 
         let original_layer = original_glyph
-            .layer_for_source(original.default_source_id().unwrap())
+            .layer_for_source(&original.default_source_id().unwrap())
             .unwrap();
         let loaded_layer = loaded_glyph
-            .layer_for_source(loaded.default_source_id().unwrap())
+            .layer_for_source(&loaded.default_source_id().unwrap())
             .unwrap();
 
         assert_eq!(original_layer.width(), loaded_layer.width());
@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn tracked_languages_round_trip_through_font_lib_plist() {
         let mut font = create_test_font();
-        font.apply_intents(shift_font::FontIntentSet {
+        font.apply_intents(&shift_font::FontIntentSet {
             intents: vec![shift_font::FontIntent::SetLanguages {
                 language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
             }],
@@ -322,7 +322,7 @@ mod tests {
         let default_source_id = font.default_source_id().unwrap();
 
         let bad_name = "A\u{0001}B".to_string();
-        let mut glyph = Glyph::with_unicode(bad_name.clone(), 0x0041);
+        let mut glyph = Glyph::with_unicode(bad_name, 0x0041);
         glyph.set_layer(GlyphLayer::with_width(
             LayerId::new(),
             default_source_id,
@@ -402,7 +402,7 @@ mod tests {
 
         let loaded_glyph = loaded.glyph_by_name("A").unwrap();
         let loaded_layer = loaded_glyph
-            .layer_for_source(loaded.default_source_id().unwrap())
+            .layer_for_source(&loaded.default_source_id().unwrap())
             .unwrap();
 
         assert_eq!(loaded_layer.width(), 512.5);

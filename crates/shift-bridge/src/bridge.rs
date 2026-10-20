@@ -1268,7 +1268,7 @@ impl Bridge {
 
   #[napi]
   pub fn set_workspace_id(&mut self, workspace_id: String) -> errors::Result<NapiDocumentState> {
-    self.workspace_mut()?.set_workspace_id(workspace_id)?;
+    self.workspace_mut()?.set_workspace_id(&workspace_id)?;
     self.document_state_snapshot()
   }
 
@@ -1368,7 +1368,7 @@ impl Bridge {
       set.intents.push(map_intent(intent)?);
     }
 
-    let outcome = self.workspace_mut()?.apply(set, label)?;
+    let outcome = self.workspace_mut()?.apply(&set, label)?;
     self.mark_font_changed();
 
     self.applied_echo(outcome)
@@ -3368,15 +3368,15 @@ mod tests {
           NapiFontIntent {
             set_point_smooth: Some(NapiSetPointSmoothIntent {
               layer_id: layer_id.clone(),
-              point_id: p1.clone(),
+              point_id: p1,
               smooth: true,
             }),
             ..skeleton_intent("setPointSmooth")
           },
           NapiFontIntent {
             set_contour_closed: Some(NapiSetContourClosedIntent {
-              layer_id: layer_id.clone(),
-              contour_id: contour_id.clone(),
+              layer_id,
+              contour_id,
               closed: true,
             }),
             ..skeleton_intent("setContourClosed")
@@ -3504,8 +3504,8 @@ mod tests {
       .apply(
         vec![NapiFontIntent {
           move_anchors: Some(NapiMoveAnchorsIntent {
-            layer_id: layer_id.clone(),
-            anchor_ids: vec![a1.clone()],
+            layer_id,
+            anchor_ids: vec![a1],
             coords: vec![300.0, 650.0],
           }),
           ..skeleton_intent("moveAnchors")
@@ -3572,14 +3572,14 @@ mod tests {
           NapiFontIntent {
             remove_points: Some(NapiRemovePointsIntent {
               layer_id: layer_id.clone(),
-              point_ids: vec![p1.clone()],
+              point_ids: vec![p1],
             }),
             ..skeleton_intent("removePoints")
           },
           NapiFontIntent {
             remove_anchors: Some(NapiRemoveAnchorsIntent {
-              layer_id: layer_id.clone(),
-              anchor_ids: vec![a1.clone()],
+              layer_id,
+              anchor_ids: vec![a1],
             }),
             ..skeleton_intent("removeAnchors")
           },
@@ -3881,7 +3881,7 @@ mod tests {
         vec![NapiFontIntent {
           reverse_contour: Some(NapiReverseContourIntent {
             layer_id: layer_id.clone(),
-            contour_id: contour_id.clone(),
+            contour_id,
           }),
           ..skeleton_intent("reverseContour")
         }],
@@ -3900,8 +3900,8 @@ mod tests {
       .apply(
         vec![NapiFontIntent {
           remove_points: Some(NapiRemovePointsIntent {
-            layer_id: layer_id.clone(),
-            point_ids: vec![p2.clone()],
+            layer_id,
+            point_ids: vec![p2],
           }),
           ..skeleton_intent("removePoints")
         }],
@@ -4753,7 +4753,7 @@ mod tests {
       .glyph("A")
       .expect("snapshot should include edited A");
     let layer = glyph
-      .layer_for_source(snapshot.default_source_id().unwrap())
+      .layer_for_source(&snapshot.default_source_id().unwrap())
       .expect("edited glyph should include default layer");
 
     assert_eq!(bridge.get_glyphs().unwrap().len(), 1);
@@ -4973,7 +4973,7 @@ mod tests {
       .unwrap();
 
     assert_eq!(projections.len(), 1);
-    assert_eq!(projections[0].glyph_id, glyph.id.clone());
+    assert_eq!(projections[0].glyph_id, glyph.id);
     assert_eq!(
       projections[0].fallback.values.as_ref(),
       &[500.0, 10.0, 20.0]
@@ -5011,7 +5011,7 @@ mod tests {
       .unwrap();
 
     assert_eq!(previews.len(), 1);
-    assert_eq!(previews[0].glyph_id, glyph.id.clone());
+    assert_eq!(previews[0].glyph_id, glyph.id);
     assert_eq!(previews[0].x_advance, 500.0);
     assert!(previews[0].svg_path.starts_with('M'));
   }

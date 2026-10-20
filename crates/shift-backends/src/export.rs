@@ -417,7 +417,7 @@ mod tests {
             PropagationAnchor, PropagationComponent, PropagationGlyph, compiled_anchors,
         };
         let glyph = font.glyph(glyph_id).unwrap();
-        let layer = glyph.layer_for_source(source_id.clone()).unwrap();
+        let layer = glyph.layer_for_source(source_id).unwrap();
         let own: Vec<_> = layer
             .anchors_iter()
             .filter_map(|anchor| {

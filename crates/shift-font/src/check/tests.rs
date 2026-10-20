@@ -27,7 +27,7 @@ fn edit_layer(font: &mut Font, source: &str, edit: impl FnOnce(&mut GlyphLayer))
     let source_id = source_named(font, source);
     let glyph_id = font.glyph_id_by_name("A").unwrap();
     let mut glyph = font.pop_glyph(glyph_id).unwrap();
-    edit(glyph.layer_for_source_mut(source_id).unwrap());
+    edit(glyph.layer_for_source_mut(&source_id).unwrap());
     font.insert_glyph(glyph).unwrap();
 }
 
@@ -118,7 +118,7 @@ fn reports_masters_at_the_same_location() {
         .location()
         .clone();
     let medium = source_named(&font, "Medium");
-    font.source_mut(medium).unwrap().set_location(bold);
+    font.source_mut(&medium).unwrap().set_location(bold);
 
     assert!(checks(&font).contains(&Check::DuplicateMasterLocation));
 }
@@ -130,7 +130,7 @@ fn reports_a_master_outside_its_axis() {
     let mut location = DesignLocation::new();
     location.set(axis, 2000.0);
     let bold = source_named(&font, "Bold");
-    font.source_mut(bold).unwrap().set_location(location);
+    font.source_mut(&bold).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::MasterOutsideAxis));
 }
@@ -142,7 +142,7 @@ fn reports_a_font_without_a_master_at_the_default() {
     let mut location = DesignLocation::new();
     location.set(axis, 500.0);
     let regular = font.default_source_id().unwrap();
-    font.source_mut(regular).unwrap().set_location(location);
+    font.source_mut(&regular).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::NoDefaultMaster));
 }
@@ -272,7 +272,7 @@ fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     let mut b = crate::Glyph::new("B");
     for source in ["Regular", "Bold"] {
         let source_id = source_named(&font, source);
-        let a_layer = a_glyph.layer_for_source(source_id.clone()).unwrap();
+        let a_layer = a_glyph.layer_for_source(&source_id).unwrap();
         let mut layer = GlyphLayer::with_width(crate::LayerId::new(), source_id, a_layer.width());
         if source == "Regular" {
             layer.add_component(crate::Component::new(a.clone(), "A"));

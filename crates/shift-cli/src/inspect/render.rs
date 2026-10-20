@@ -97,7 +97,7 @@ impl InspectReport {
         }
         align_right(&mut table, &[5, 6, 7, 8, 9, 10]);
 
-        let axes = section_with_table("Axes", table, mode);
+        let axes = section_with_table("Axes", &table, mode);
         if self.axes.iter().all(|axis| axis.labels.is_empty()) {
             return axes;
         }
@@ -131,7 +131,7 @@ impl InspectReport {
 
         format!(
             "{axes}\n\n{}",
-            section_with_table("Axis Values", values, mode)
+            section_with_table("Axis Values", &values, mode)
         )
     }
 
@@ -161,7 +161,7 @@ impl InspectReport {
         }
         align_right(&mut table, &[4]);
 
-        section_with_table("Mappings", table, mode)
+        section_with_table("Mappings", &table, mode)
     }
 
     fn render_sources(&self, mode: RenderMode) -> String {
@@ -197,7 +197,7 @@ impl InspectReport {
             ]);
         }
 
-        section_with_table("Instances", table, mode)
+        section_with_table("Instances", &table, mode)
     }
 
     fn render_glyphs(&self, mode: RenderMode) -> String {
@@ -222,7 +222,7 @@ impl InspectReport {
         }
         align_right(&mut table, &[3]);
 
-        section_with_table("Glyphs", table, mode)
+        section_with_table("Glyphs", &table, mode)
     }
 
     fn render_layers(&self, mode: RenderMode) -> String {
@@ -257,7 +257,7 @@ impl InspectReport {
         }
         align_right(&mut table, &[3, 4, 5, 6, 7]);
 
-        section_with_table("Layers", table, mode)
+        section_with_table("Layers", &table, mode)
     }
 
     fn render_kerning(&self, mode: RenderMode) -> String {
@@ -409,6 +409,10 @@ fn optional_number(value: Option<f64>) -> Cell {
     }
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "a display helper called with values and temporaries"
+)]
 fn right(value: impl ToString) -> Cell {
     Cell::new(value.to_string()).set_alignment(CellAlignment::Right)
 }
@@ -469,7 +473,7 @@ fn empty_section(title: &str, message: &str, mode: RenderMode) -> String {
     )
 }
 
-fn section_with_table(title: &str, table: Table, mode: RenderMode) -> String {
+fn section_with_table(title: &str, table: &Table, mode: RenderMode) -> String {
     format!("{}\n{}", styled_section(title, mode), table)
 }
 

@@ -1103,6 +1103,10 @@ impl From<&IrPoint> for PointData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the font-format names for point types"
+)]
 pub enum PointType {
     OnCurve,
     OffCurve,

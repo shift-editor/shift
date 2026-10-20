@@ -132,10 +132,7 @@ mod tests {
         font.set_axis_mappings(vec![independent, cross]).unwrap();
         font.set_named_instances(vec![NamedInstance::new(
             "Black Italic".to_string(),
-            ExternalLocation::from_untyped(location(&[
-                (weight_id.clone(), 900.0),
-                (italic_id.clone(), 1.0),
-            ])),
+            ExternalLocation::from_untyped(location(&[(weight_id, 900.0), (italic_id, 1.0)])),
             Some("PlaceholderSans-BlackItalic".to_string()),
         )])
         .unwrap();

@@ -48,7 +48,7 @@ pub fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
 ///
 /// Rejects empty requests, blank metadata, ambiguous versions, non-finite metrics,
 /// unresolved selectors, or metric edits on layer-only sources. Reports persistence failures.
-pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
+pub fn set_font(args: &SetFontArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let mut metadata = font.metadata().clone();
     let mut intents = Vec::new();
@@ -100,7 +100,7 @@ pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
         || args.italic_angle.is_some();
     if has_metrics {
         let source_id = target_source_id(&font, args.source.as_deref())?;
-        intents.extend(source_metric_intents(&font, source_id, &args)?);
+        intents.extend(source_metric_intents(&font, source_id, args)?);
     } else if args.source.is_some() {
         bail!("--source selects where metric flags apply; pass a metric flag");
     }
@@ -108,7 +108,7 @@ pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
         bail!("font set needs at least one metadata or metric flag");
     }
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 fn source_metric_intents(

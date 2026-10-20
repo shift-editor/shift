@@ -1305,7 +1305,7 @@ mod tests {
         font.insert_glyph(child).unwrap();
 
         let root_id = GlyphId::from_raw("Adieresis");
-        let mut root = Glyph::with_id(root_id.clone(), "Adieresis");
+        let mut root = Glyph::with_id(root_id, "Adieresis");
         let mut light_layer = line_layer(light_id, 300.0);
         light_layer.add_component(Component::new(child_id.clone(), "diaeresis"));
         root.set_layer(light_layer);
@@ -1358,7 +1358,7 @@ mod tests {
         font.insert_glyph(middle).unwrap();
 
         let root_id = GlyphId::from_raw("root");
-        let mut root = Glyph::with_id(root_id.clone(), "root");
+        let mut root = Glyph::with_id(root_id, "root");
         let mut root_layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
         root_layer.add_component(Component::with_matrix(
             middle_id.clone(),
@@ -1395,7 +1395,7 @@ mod tests {
         let root_id = GlyphId::from_raw("root");
         let mut root = Glyph::with_id(root_id.clone(), "root");
         let mut root_layer = line_layer(source_id, 0.0);
-        root_layer.add_component(Component::new(root_id.clone(), "root"));
+        root_layer.add_component(Component::new(root_id, "root"));
         let root_layer_id = root_layer.id();
         root.set_layer(root_layer);
         font.insert_glyph(root).unwrap();

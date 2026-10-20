@@ -30,7 +30,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
 
     workspace
         .apply(
-            FontIntentSet {
+            &FontIntentSet {
                 intents: vec![
                     FontIntent::ReplaceGlyphLayerContent {
                         layer_id: layer_id.clone(),
@@ -134,11 +134,11 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
     let layer_id = before
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(before.default_source_id().unwrap())
+        .layer_for_source(&before.default_source_id().unwrap())
         .unwrap()
         .id();
     let result = workspace.apply(
-        FontIntentSet {
+        &FontIntentSet {
             intents: vec![
                 FontIntent::ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
@@ -178,13 +178,13 @@ fn component_replacement_acquires_the_dependency_closure_before_cycle_validation
     let layer_id = before
         .glyph_by_name("acute")
         .unwrap()
-        .layer_for_source(before.default_source_id().unwrap())
+        .layer_for_source(&before.default_source_id().unwrap())
         .unwrap()
         .id();
     assert!(
         workspace
             .apply(
-                FontIntentSet {
+                &FontIntentSet {
                     intents: vec![FontIntent::ReplaceGlyphLayerContent {
                         layer_id,
                         width: 200.0,

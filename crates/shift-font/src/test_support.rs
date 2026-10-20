@@ -211,15 +211,8 @@ pub fn sample_font() -> Font {
         ),
         -100.0,
     );
-    set_source_metrics(
-        &mut font,
-        regular_id.clone(),
-        1500.0,
-        -500.0,
-        1456.0,
-        1012.0,
-    );
-    let regular = font.source_mut(regular_id.clone()).unwrap();
+    set_source_metrics(&mut font, &regular_id, 1500.0, -500.0, 1456.0, 1012.0);
+    let regular = font.source_mut(&regular_id).unwrap();
     regular.set_line_gap(Some(42.0));
     regular.set_italic_angle(Some(-9.5));
     regular.set_underline_position(Some(-175.0));
@@ -388,21 +381,14 @@ pub fn sample_variable_font() -> Font {
     .expect("sample named instance should be valid");
 
     let default_source_id = font.default_source_id().unwrap();
-    set_source_metrics(
-        &mut font,
-        default_source_id.clone(),
-        800.0,
-        -200.0,
-        700.0,
-        500.0,
-    );
-    let default_source = font.source_mut(default_source_id.clone()).unwrap();
+    set_source_metrics(&mut font, &default_source_id, 800.0, -200.0, 700.0, 500.0);
+    let default_source = font.source_mut(&default_source_id).unwrap();
     default_source.set_line_gap(Some(20.0));
     default_source.set_underline_position(Some(-100.0));
     default_source.set_underline_thickness(Some(50.0));
     let mut default_location = DesignLocation::new();
     default_location.set(weight_id.clone(), 400.0);
-    font.source_mut(default_source_id.clone())
+    font.source_mut(&default_source_id)
         .unwrap()
         .set_location(default_location);
 
@@ -412,14 +398,7 @@ pub fn sample_variable_font() -> Font {
     let mut bold_location = DesignLocation::new();
     bold_location.set(weight_id, 800.0);
     let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
-    set_source_metrics(
-        &mut font,
-        bold_source_id.clone(),
-        820.0,
-        -220.0,
-        720.0,
-        510.0,
-    );
+    set_source_metrics(&mut font, &bold_source_id, 820.0, -220.0, 720.0, 510.0);
 
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
     glyph.set_layer(triangle_layer(default_source_id.clone(), 600.0, 300.0));
@@ -458,7 +437,7 @@ fn add_a_groups(
 
 fn set_source_metrics(
     font: &mut Font,
-    source_id: SourceId,
+    source_id: &SourceId,
     ascender: f64,
     descender: f64,
     cap_height: f64,
@@ -476,7 +455,7 @@ fn set_source_metrics(
         let overshoot = font
             .sources()
             .iter()
-            .find(|source| source.id() == source_id)
+            .find(|source| source.id() == *source_id)
             .and_then(|source| source.metric_value(&definition.id()))
             .map(|value| value.overshoot)
             .unwrap_or_default();

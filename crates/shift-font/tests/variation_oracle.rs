@@ -211,9 +211,7 @@ fn build(cases: &[AxisCase]) -> Option<Built> {
             location.set(id.clone(), case.to_design(*value));
         }
         let source_id = if index == 0 {
-            font.source_mut(default_id.clone())
-                .unwrap()
-                .set_location(location);
+            font.source_mut(&default_id).unwrap().set_location(location);
             default_id.clone()
         } else {
             font.add_source(Source::new(format!("Master {index}"), location))

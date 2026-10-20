@@ -99,7 +99,7 @@ pub fn stream_into(
             let batch = result?;
             let pack_elapsed = batch.glyphs.pack_elapsed();
             let compression_elapsed = batch.glyphs.compression_elapsed();
-            let sqlite_elapsed = writer.write_packed_glyph_batch(batch.glyphs)?;
+            let sqlite_elapsed = writer.write_packed_glyph_batch(&batch.glyphs)?;
             observe(ImportBatchProgress {
                 glyph_count: batch.glyph_count,
                 layer_count: batch.layer_count,

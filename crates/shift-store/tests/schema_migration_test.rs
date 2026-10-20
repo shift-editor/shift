@@ -75,7 +75,7 @@ fn rewriting_a_glyph_clears_a_removed_category() {
     let (mut font, id) = font_with_mark();
     store.replace_font_state(&font).unwrap();
 
-    font.set_glyph_category(id.clone(), None, None).unwrap();
+    font.set_glyph_category(&id, None, None).unwrap();
     store.replace_font_state(&font).unwrap();
 
     let loaded = store.load_font_state().unwrap();

@@ -124,25 +124,25 @@ fn loads_ufo_metadata_metrics_and_geometry() {
     assert_eq!(metrics.units_per_em, 1000.0);
     let source_id = font.default_source_id().unwrap();
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::Ascender)
+        font.metric_value(&source_id, MetricKind::Ascender)
             .unwrap()
             .position,
         700.0
     );
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::Descender)
+        font.metric_value(&source_id, MetricKind::Descender)
             .unwrap()
             .position,
         -200.0
     );
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::CapHeight)
+        font.metric_value(&source_id, MetricKind::CapHeight)
             .unwrap()
             .position,
         700.0
     );
     assert_eq!(
-        font.metric_value(source_id, MetricKind::XHeight)
+        font.metric_value(&source_id, MetricKind::XHeight)
             .unwrap()
             .position,
         500.0
@@ -510,13 +510,13 @@ fn streams_glyphs_file_features_kerning_components_and_anchors() {
     assert_eq!(font.metrics().units_per_em, 1000.0);
     let source_id = font.default_source_id().unwrap();
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::Ascender)
+        font.metric_value(&source_id, MetricKind::Ascender)
             .unwrap()
             .position,
         700.0
     );
     assert_eq!(
-        font.metric_value(source_id, MetricKind::Descender)
+        font.metric_value(&source_id, MetricKind::Descender)
             .unwrap()
             .position,
         -160.0
@@ -627,7 +627,7 @@ fn loads_designspace_sources_axes_and_default_metadata() {
         })
         .expect("non-default Bold Condensed master should be imported");
     assert_eq!(
-        font.metric_value(bold_condensed.id(), MetricKind::Ascender)
+        font.metric_value(&bold_condensed.id(), MetricKind::Ascender)
             .expect("non-default master ascender should survive import")
             .position,
         800.0

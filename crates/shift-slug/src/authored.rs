@@ -380,7 +380,7 @@ impl AuthoredCurveTopology {
             .map(|contour| {
                 let points = contour.points();
                 let mut segments = CurveSegmentIter::new(points, contour.is_closed())
-                    .map(|segment| segment_topology(points, segment))
+                    .map(|segment| segment_topology(points, &segment))
                     .collect::<Vec<_>>();
 
                 if let (Some(first), Some(last)) =
@@ -604,7 +604,7 @@ impl ResolvedCurveTopology {
             .map(|contour| {
                 let points = &contour.points;
                 let mut segments = CurveSegmentIter::new(points, contour.closed)
-                    .map(|segment| segment_topology(points, segment))
+                    .map(|segment| segment_topology(points, &segment))
                     .collect::<Vec<_>>();
                 if let (Some(first), Some(last)) =
                     (segments.first().copied(), segments.last().copied())
@@ -962,7 +962,7 @@ fn line_flags<'a>(segments: impl IntoIterator<Item = &'a SegmentTopology>) -> Ve
         .collect()
 }
 
-fn segment_topology(points: &[FontPoint], segment: CurveSegment<'_>) -> SegmentTopology {
+fn segment_topology(points: &[FontPoint], segment: &CurveSegment<'_>) -> SegmentTopology {
     match segment {
         CurveSegment::Line(p0, p1) => {
             SegmentTopology::Line([point_index(points, p0), point_index(points, p1)])

@@ -40,7 +40,7 @@ fn setting_a_value_records_one_reversible_change() {
     let original = font.clone();
 
     let outcome = font
-        .apply_intents(set(vec![KerningValueEdit {
+        .apply_intents(&set(vec![KerningValueEdit {
             source_id: regular(),
             pair: a_groups(),
             value: Some(-60.0),
@@ -67,7 +67,7 @@ fn an_exception_is_added_and_removed_without_touching_its_group_pair() {
     let mut font = sample_font();
     let a = GlyphId::from_raw("A");
 
-    font.apply_intents(set(vec![KerningValueEdit {
+    font.apply_intents(&set(vec![KerningValueEdit {
         source_id: regular(),
         pair: exception(),
         value: Some(-20.0),
@@ -79,7 +79,7 @@ fn an_exception_is_added_and_removed_without_touching_its_group_pair() {
     );
 
     let outcome = font
-        .apply_intents(set(vec![KerningValueEdit {
+        .apply_intents(&set(vec![KerningValueEdit {
             source_id: regular(),
             pair: exception(),
             value: None,
@@ -99,7 +99,7 @@ fn an_unchanged_value_records_nothing() {
     let mut font = sample_font();
 
     let outcome = font
-        .apply_intents(set(vec![KerningValueEdit {
+        .apply_intents(&set(vec![KerningValueEdit {
             source_id: regular(),
             pair: a_groups(),
             value: Some(-80.0),
@@ -132,7 +132,7 @@ fn edits_naming_a_missing_group_source_or_a_non_finite_value_are_rejected_atomic
 
     for edit in rejected {
         let mut font = original.clone();
-        let result = font.apply_intents(set(vec![
+        let result = font.apply_intents(&set(vec![
             KerningValueEdit {
                 source_id: regular(),
                 pair: a_groups(),
@@ -144,9 +144,9 @@ fn edits_naming_a_missing_group_source_or_a_non_finite_value_are_rejected_atomic
         assert_eq!(font, original);
     }
 
-    let mut font = original.clone();
+    let mut font = original;
     assert!(matches!(
-        font.apply_intents(set(vec![KerningValueEdit {
+        font.apply_intents(&set(vec![KerningValueEdit {
             source_id: regular(),
             pair: KerningPair::groups(first_a(), KerningGroupId::from_raw("Missing")),
             value: Some(-10.0),
@@ -160,7 +160,7 @@ fn a_group_on_the_wrong_side_of_a_pair_is_rejected() {
     let mut font = sample_font();
     let original = font.clone();
 
-    let result = font.apply_intents(set(vec![KerningValueEdit {
+    let result = font.apply_intents(&set(vec![KerningValueEdit {
         source_id: regular(),
         pair: KerningPair::groups(second_a(), second_a()),
         value: Some(-10.0),
@@ -198,7 +198,7 @@ fn moving_a_glyph_into_a_new_group_is_one_reversible_step() {
     let round = KerningGroupId::from_raw("round");
 
     let outcome = font
-        .apply_intents(FontIntentSet {
+        .apply_intents(&FontIntentSet {
             intents: vec![
                 create(&round, KerningPosition::First, " Round "),
                 FontIntent::SetKerningGroupMember {
@@ -227,7 +227,7 @@ fn taking_a_glyph_out_of_its_group_keeps_the_group() {
     let mut font = sample_font();
     let a = GlyphId::from_raw("A");
 
-    font.apply_intents(one(FontIntent::SetKerningGroupMember {
+    font.apply_intents(&one(FontIntent::SetKerningGroupMember {
         position: KerningPosition::Second,
         glyph_id: a.clone(),
         group_id: None,
@@ -244,7 +244,7 @@ fn renaming_a_group_keeps_its_pairs() {
     let original = font.clone();
 
     let outcome = font
-        .apply_intents(one(FontIntent::RenameKerningGroup {
+        .apply_intents(&one(FontIntent::RenameKerningGroup {
             group_id: first_a(),
             name: "Round".to_string(),
         }))
@@ -264,7 +264,7 @@ fn deleting_a_group_keeps_its_pairs_for_undo() {
     let a = GlyphId::from_raw("A");
 
     let outcome = font
-        .apply_intents(one(FontIntent::DeleteKerningGroup {
+        .apply_intents(&one(FontIntent::DeleteKerningGroup {
             group_id: second_a(),
         }))
         .unwrap();
@@ -307,7 +307,7 @@ fn group_edits_reject_bad_names_ids_and_positions_without_changing_anything() {
     ];
 
     for intent in rejected {
-        assert!(font.apply_intents(one(intent)).is_err());
+        assert!(font.apply_intents(&one(intent)).is_err());
         assert_eq!(font, original);
     }
 }

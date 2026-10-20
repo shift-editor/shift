@@ -5,3 +5,6 @@ allow-panic-in-tests = true
 allow-print-in-tests = true
 allow-dbg-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+# Shift's crates are not a published API, so lints also check public functions.
+avoid-breaking-exported-api = false
