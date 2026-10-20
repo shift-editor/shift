@@ -1,6 +1,6 @@
 import type { MessagePortMain, UtilityProcess } from "electron";
 import type { MessagePort as NodeMessagePort } from "node:worker_threads";
-import { errorToMessage } from "../errors";
+import { fromTransportError, toTransportError, type TransportError } from "../errors";
 
 /** One delivered transport message: structured-clone payload plus transferred ports. */
 export type TransportMessage = { data: unknown; ports: readonly unknown[] };
@@ -51,7 +51,7 @@ type RequestEnvelope = {
 
 type ResponseEnvelope =
   | { kind: "response"; id: string; ok: true; result: unknown }
-  | { kind: "response"; id: string; ok: false; error: { message: string } };
+  | { kind: "response"; id: string; ok: false; error: TransportError };
 
 type EventEnvelope = { kind: "event"; type: string; payload: unknown };
 
@@ -180,7 +180,7 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
     this.#pending.delete(response.id);
 
     if (!response.ok) {
-      pending.reject(new Error(response.error.message));
+      pending.reject(fromTransportError(response.error));
       return;
     }
 
@@ -223,7 +223,7 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
         kind: "response",
         id: request.id,
         ok: false,
-        error: { message: `unknown request type "${request.type}"` },
+        error: toTransportError(new Error(`unknown request type "${request.type}"`)),
       });
       return;
     }
@@ -236,7 +236,7 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
         kind: "response",
         id: request.id,
         ok: false,
-        error: { message: errorToMessage(error) },
+        error: toTransportError(error),
       });
     }
   };
