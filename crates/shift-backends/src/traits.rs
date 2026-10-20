@@ -101,6 +101,12 @@ impl FontView for Font {
 }
 
 pub trait FontReader: Send + Sync {
+    /// Reads the whole font at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`](crate::FormatBackendError) when the file
+    /// cannot be read or parsed.
     fn load(&self, path: &str) -> FormatBackendResult<Font>;
 
     fn get_glyph(&self, font: &Font, name: &GlyphName) -> Option<Glyph> {
@@ -117,6 +123,12 @@ pub trait FontReader: Send + Sync {
 }
 
 pub trait FontWriter: Send + Sync {
+    /// Writes `font` to `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`](crate::FormatBackendError) when the font
+    /// cannot be represented in the format or the files cannot be written.
     fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()>;
 }
 

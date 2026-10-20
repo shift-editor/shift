@@ -27,6 +27,12 @@ pub struct OpenTypeFont {
 }
 
 impl OpenTypeFont {
+    /// Opens a TrueType or OpenType file for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::Io`] when the file cannot be read, and
+    /// [`FontReadError::MalformedSource`] when it is not a valid font.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
         let bytes: Arc<[u8]> = std::fs::read(path)
             .map_err(|source| FontReadError::Io {

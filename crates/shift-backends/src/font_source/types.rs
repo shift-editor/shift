@@ -395,6 +395,14 @@ impl FontDirectory {
         &self.default_location
     }
 
+    /// Returns the default location with `coordinates` applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnknownAxis`] or [`FontReadError::DuplicateAxis`] when a coordinate
+    /// names a missing or repeated axis, and [`FontReadError::NonFiniteCoordinate`],
+    /// [`FontReadError::CoordinateOutOfRange`] or [`FontReadError::CoordinateNotAllowed`] when its
+    /// value does not fit the axis.
     pub fn location(
         &self,
         coordinates: &[VariationCoordinate],
@@ -591,6 +599,12 @@ impl GlyphShape {
             + self.components.len() * shift_font::Transform::VALUE_COUNT
     }
 
+    /// Checks that the shape's values match its structure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::InvalidProjection`] when the value count does not match the
+    /// structure, a value is not finite, or a contour is empty or malformed.
     pub fn validate(&self) -> Result<(), FontReadError> {
         let expected = self.expected_value_count();
         if self.values.len() != expected {
@@ -662,6 +676,13 @@ pub struct GlyphProjection {
 }
 
 impl GlyphProjection {
+    /// Checks the fallback shape, variation deltas and exact-source shapes against the font's axis
+    /// and source counts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::InvalidProjection`] when a shape is invalid, a delta does not match
+    /// the fallback or has an invalid region, or an exact source is out of range.
     pub fn validate(&self, axis_count: usize, source_count: usize) -> Result<(), FontReadError> {
         self.fallback.validate()?;
         let value_count = self.fallback.values.len();

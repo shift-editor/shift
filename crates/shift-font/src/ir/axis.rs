@@ -312,6 +312,14 @@ impl Axis {
         self.hidden = hidden;
     }
 
+    /// Checks the axis's name, tag, range or values, role, and labels.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxis`] when the name is blank, the tag is not four ASCII
+    /// characters, the range or values are not finite and ordered around the default, or an
+    /// internal axis owns labels; [`CoreError::DuplicateAxisLabelId`] or
+    /// [`CoreError::InvalidAxisLabel`] when a label repeats an id or is itself invalid.
     pub fn validate(&self) -> CoreResult<()> {
         if self.name.trim().is_empty() {
             return Err(self.invalid("name must not be blank"));
@@ -527,6 +535,13 @@ impl AxisMapping {
         self.description = description;
     }
 
+    /// Checks the mapping against `axes`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxisMapping`] when the name is blank, an input, output or point
+    /// list is empty or repeats an axis, it references an unknown axis or an input of the wrong
+    /// role, or its points do not fit its axes.
     pub fn validate(&self, axes: &[Axis]) -> CoreResult<()> {
         if self.name.trim().is_empty() {
             return Err(self.invalid("name must not be blank"));

@@ -29,6 +29,12 @@ pub struct AuthoredWeightSet {
 }
 
 impl AuthoredWeightSet {
+    /// Pairs an interpolation basis with the atlas weight slot of each of its sources.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthoredSlugError::WeightCountMismatch`] when `source_weight_indices` does not
+    /// have one entry per basis source.
     pub fn new(
         basis: InterpolationBasis,
         source_weight_indices: Vec<u32>,
@@ -57,6 +63,13 @@ impl AuthoredWeightSet {
 ///
 /// Rust owns topology, occurrence order, cycle pruning, and anchor matching. This adapter only
 /// turns those relationships and their canonical source samples into the resident GPU program.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::Core`] when the glyph or a component cannot be projected,
+/// [`AuthoredSlugError::MissingWeightBasis`] when no weight set matches a glyph's basis, a topology
+/// or finiteness error when a source does not match its default, and [`AuthoredSlugError::Slug`]
+/// when the atlas outgrows its limits. The builder is rolled back on failure.
 pub fn add_authored_glyph_with_weight_sets(
     builder: &mut VariableAtlasBuilder,
     font: &Font,

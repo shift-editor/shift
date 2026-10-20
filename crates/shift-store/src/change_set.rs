@@ -15,6 +15,14 @@ use crate::{
 };
 
 impl ShiftStore {
+    /// Persists a change set whose layer changes carry their payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::RecoveryRequiresPostFont`] in a recovered document, which needs
+    /// [`Self::apply_change_set_with_font`]; [`StoreError::DocumentRequiresRecoveryOverlay`] in a
+    /// document opened without one; and [`StoreError::Sqlite`] or a layer-encoding error when the
+    /// write fails. Nothing is written on failure.
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
         self.apply_change_set_inner(change_set, None, SaveState::Unsaved)
     }
@@ -26,6 +34,12 @@ impl ShiftStore {
     /// In a document, [`SaveState::MatchesSaved`] discards the recovery
     /// overlay instead of writing the change: the document is back to what is
     /// saved, so there is no unsaved work left to keep.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::DocumentRequiresRecoveryOverlay`] in a document opened without a
+    /// recovery overlay, and [`StoreError::Sqlite`] or a layer-encoding error when the write fails.
+    /// Nothing is written on failure.
     pub fn apply_change_set_with_font(
         &mut self,
         change_set: &font::FontChangeSet,
@@ -95,6 +109,12 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Replaces every stored record with `font`'s in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] or a layer-encoding error when the write fails; nothing is
+    /// written on failure.
     pub fn replace_font_state(&mut self, font: &font::Font) -> Result<(), StoreError> {
         let tx = self.conn.transaction()?;
         let writer = StoreWriter::new(&tx);

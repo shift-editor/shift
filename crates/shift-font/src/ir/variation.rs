@@ -252,6 +252,12 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
     }
 }
 
+/// Maps `external` through `mappings` into a design-space location.
+///
+/// # Errors
+///
+/// Returns [`CoreError::InvalidAxisMapping`] when a mapping does not fit `axes`, and
+/// [`CoreError::AxisNotFound`] when a mapping's output axis is missing.
 pub fn map_location(
     external: &ExternalLocation,
     axes: &[Axis],
@@ -265,6 +271,10 @@ pub fn map_location(
 }
 
 /// Evaluates precompiled mapping bases without reconstructing their variation models.
+///
+/// # Errors
+///
+/// Returns [`CoreError::AxisNotFound`] when a basis's output or region axis is missing from `axes`.
 pub fn map_location_with_bases(
     external: &ExternalLocation,
     axes: &[Axis],

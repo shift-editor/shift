@@ -58,6 +58,11 @@ impl WorkspaceState {
 }
 
 impl ShiftStore {
+    /// Writes the workspace state, replacing any stored before.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the write fails.
     pub fn set_workspace_state(&mut self, state: &WorkspaceState) -> Result<(), StoreError> {
         let original_import_path = state.original_import_path.as_deref().map(path_to_db);
 
@@ -96,6 +101,12 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the workspace state, or `None` when none was written.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails, including when the stored source kind is
+    /// unknown.
     pub fn workspace_state(&self) -> Result<Option<WorkspaceState>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -119,6 +130,11 @@ impl ShiftStore {
         }
     }
 
+    /// Records the workspace's document id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the write fails.
     pub fn set_workspace_document_id(&mut self, document_id: &str) -> Result<(), StoreError> {
         self.conn.execute(
             "

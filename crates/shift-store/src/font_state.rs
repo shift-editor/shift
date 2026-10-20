@@ -13,12 +13,23 @@ use crate::{
 impl ShiftStore {
     /// Materializes the complete font. Use only for export/save boundaries;
     /// interactive open should use [`Self::load_font_directory`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a record cannot be read, a decoding error such as
+    /// [`StoreError::LayerDecoding`] when a layer payload is invalid, and [`StoreError::Font`] when
+    /// the records do not form a valid font.
     pub fn load_font_state(&self) -> Result<font::Font, StoreError> {
         self.load_font(true)
     }
 
     /// Loads eager font metadata and the glyph/layer directory without
     /// reading any layer payload BLOB.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a record cannot be read, and [`StoreError::Font`] when
+    /// the records do not form a valid font.
     pub fn load_font_directory(&self) -> Result<font::Font, StoreError> {
         self.load_font(false)
     }

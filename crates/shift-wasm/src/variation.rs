@@ -161,6 +161,10 @@ thread_local! {
 }
 
 /// Registers axes in order, for locations passed as numbers in that order.
+///
+/// # Errors
+///
+/// Returns a [`JsError`] when `axes` does not match the expected shape.
 #[wasm_bindgen(js_name = registerAxes)]
 pub fn register_axes(axes: Ts<VariationAxes>) -> Result<u32, JsError> {
     let axes = axes.to_rust()?.0.into_iter().map(axis).collect();
@@ -168,6 +172,10 @@ pub fn register_axes(axes: Ts<VariationAxes>) -> Result<u32, JsError> {
 }
 
 /// Registers a variation basis evaluated with each axis's own range.
+///
+/// # Errors
+///
+/// Returns a [`JsError`] when `basis` does not match the expected shape.
 #[wasm_bindgen(js_name = registerVariationBasis)]
 pub fn register_variation_basis(basis: Ts<VariationBasisData>) -> Result<u32, JsError> {
     let basis = variation_basis(basis.to_rust()?);
@@ -175,6 +183,10 @@ pub fn register_variation_basis(basis: Ts<VariationBasisData>) -> Result<u32, Js
 }
 
 /// Registers an interpolation basis.
+///
+/// # Errors
+///
+/// Returns a [`JsError`] when `basis` does not match the expected shape.
 #[wasm_bindgen(js_name = registerInterpolationBasis)]
 pub fn register_interpolation_basis(basis: Ts<InterpolationBasisData>) -> Result<u32, JsError> {
     let data = basis.to_rust()?;
@@ -198,6 +210,10 @@ pub fn register_interpolation_basis(basis: Ts<InterpolationBasisData>) -> Result
 }
 
 /// Registers a font's axis mappings, in order.
+///
+/// # Errors
+///
+/// Returns a [`JsError`] when `bases` does not match the expected shape.
 #[wasm_bindgen(js_name = registerAxisMappings)]
 pub fn register_axis_mappings(bases: Ts<AxisMappingBases>) -> Result<u32, JsError> {
     let bases = bases

@@ -47,6 +47,11 @@ enum ProjectionEvaluation<'a> {
 /// A root the source cannot project (for example a Glyphs smart-component
 /// glyph) compiles as an empty outline so it cannot fail the rest of the page;
 /// reading that glyph directly still reports the projection error.
+///
+/// # Errors
+///
+/// Returns [`SourceAtlasError::Read`] when a root is out of range or the font's axes cannot be
+/// read, and [`SourceAtlasError::Slug`] when the inputs outgrow the atlas limits.
 pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
     source: &S,
     roots: &[GlyphIndex],

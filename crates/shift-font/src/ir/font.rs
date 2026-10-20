@@ -686,12 +686,24 @@ impl Font {
         &self.data().axis_mappings
     }
 
+    /// Replaces the font's axis mappings after validating them against its axes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxisMapping`] when a mapping is invalid, and
+    /// [`CoreError::DuplicateAxisMappingId`] or [`CoreError::DuplicateAxisMappingName`] when two
+    /// mappings share an id or name. The font is unchanged on failure.
     pub fn set_axis_mappings(&mut self, mappings: Vec<AxisMapping>) -> CoreResult<()> {
         validate_axis_mappings(self.axes(), &mappings)?;
         self.data_mut().axis_mappings = mappings;
         Ok(())
     }
 
+    /// Compiles each axis mapping into the basis that evaluates it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxisMapping`] when a mapping does not fit the font's axes.
     pub fn axis_mapping_bases(&self) -> CoreResult<Vec<crate::AxisMappingBasis>> {
         self.axis_mappings()
             .iter()
@@ -699,6 +711,12 @@ impl Font {
             .collect()
     }
 
+    /// Maps a user-facing location through the font's axis mappings into design space.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxisMapping`] when a mapping does not fit the font's axes, and
+    /// [`CoreError::AxisNotFound`] when a mapping's output axis is missing.
     pub fn mapped_location(
         &self,
         external: &crate::ExternalLocation,
@@ -925,6 +943,10 @@ impl Font {
     }
 
     /// Returns `source_id`'s standard metric positions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::SourceNotFound`] when the font has no such source.
     pub fn standard_metrics(&self, source_id: &SourceId) -> CoreResult<StandardMetrics> {
         let source = self.require_source(source_id)?;
         Ok(StandardMetrics::of(source, self.metric_definitions()))
@@ -1152,6 +1174,13 @@ impl Font {
         self.axis(axis_id).require(axis_id)
     }
 
+    /// Adds `glyph` to the font and returns its id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::DuplicateGlyphId`] when the id is taken,
+    /// [`CoreError::DuplicateGlyphName`] when the name is, and [`CoreError::DuplicateLayerId`] or
+    /// [`CoreError::DuplicateGlyphLayer`] when one of its layers clashes with the font's.
     pub fn insert_glyph(&mut self, glyph: Glyph) -> CoreResult<GlyphId> {
         let glyph_id = glyph.id();
         if self.data().glyphs.contains(&glyph_id) {
@@ -1290,6 +1319,13 @@ impl Font {
         self.data().glyphs.len()
     }
 
+    /// Renames a glyph.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing, and
+    /// [`CoreError::DuplicateGlyphName`] when another glyph has the name. The font is unchanged on
+    /// failure.
     pub fn rename_glyph(&mut self, glyph_id: &GlyphId, name: GlyphName) -> CoreResult<()> {
         let mut state = (*self.state).clone();
         let glyph = state.data.glyphs.get_mut(glyph_id).require(&glyph_id)?;
@@ -1299,6 +1335,11 @@ impl Font {
         Ok(())
     }
 
+    /// Replaces a glyph's Unicode code points.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing.
     pub fn set_glyph_unicodes(&mut self, glyph_id: &GlyphId, unicodes: Vec<u32>) -> CoreResult<()> {
         let mut state = (*self.state).clone();
         let glyph = state.data.glyphs.get_mut(glyph_id).require(&glyph_id)?;
@@ -1310,6 +1351,10 @@ impl Font {
 
     /// Sets or clears the glyph's category overrides; `None` falls back to
     /// glyph data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing.
     pub fn set_glyph_category(
         &mut self,
         glyph_id: &GlyphId,
@@ -1324,6 +1369,13 @@ impl Font {
         Ok(())
     }
 
+    /// Adds an empty layer for `glyph_id` at `source_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::SourceNotFound`] or [`CoreError::GlyphNotFound`] when the source or
+    /// glyph is missing, [`CoreError::DuplicateLayerId`] when `layer_id` is taken, and
+    /// [`CoreError::DuplicateGlyphLayer`] when the glyph already has a layer at that source.
     pub fn create_glyph_layer(
         &mut self,
         layer_id: LayerId,
@@ -1351,6 +1403,13 @@ impl Font {
         Ok(())
     }
 
+    /// Adds `layer` to the glyph `glyph_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::SourceNotFound`] or [`CoreError::GlyphNotFound`] when the layer's
+    /// source or the glyph is missing, and [`CoreError::DuplicateLayerId`] or
+    /// [`CoreError::DuplicateGlyphLayer`] when the layer's id or source is already used.
     pub fn insert_glyph_layer(&mut self, glyph_id: GlyphId, layer: GlyphLayer) -> CoreResult<()> {
         if self.source(&layer.source_id()).is_none() {
             return Err(CoreError::SourceNotFound(layer.source_id()));
@@ -1375,6 +1434,13 @@ impl Font {
     /// Replaces one layer's canonical numeric values without changing its structure or indexes.
     ///
     /// Value count and finiteness are validated before the layer changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when no glyph owns the layer,
+    /// [`CoreError::MissingGlyphValue`] or [`CoreError::TrailingGlyphValues`] when the value count
+    /// does not match the layer's structure, and [`CoreError::InvalidPositionUpdateInput`] when a
+    /// value is not finite.
     pub fn replace_glyph_layer_values(
         &mut self,
         layer_id: &LayerId,
@@ -1397,6 +1463,13 @@ impl Font {
     /// Atomically replaces existing layers after validating the complete batch.
     /// Uniquely owned fonts mutate in place; shared snapshots retain copy-on-write semantics.
     /// Already shared layer snapshots transfer without cloning their geometry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::DuplicateLayerId`] when the batch names a layer twice,
+    /// [`CoreError::LayerNotFound`] when a layer does not exist, and
+    /// [`CoreError::LayerSourceMismatch`] when a replacement changes its layer's source. No layer
+    /// changes on failure.
     pub fn replace_glyph_layers<L>(&mut self, layers: Vec<L>) -> CoreResult<()>
     where
         L: Into<Arc<GlyphLayer>>,
@@ -1456,6 +1529,11 @@ impl Font {
         Ok(())
     }
 
+    /// Removes a layer from its glyph and returns it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when no glyph owns the layer.
     pub fn remove_glyph_layer(&mut self, layer_id: &LayerId) -> CoreResult<GlyphLayer> {
         let glyph_id = self.require_layer_owner(layer_id)?;
         let state = self.state_mut();

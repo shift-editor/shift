@@ -26,6 +26,11 @@ pub struct FontImportWriter<'store> {
 
 impl ShiftStore {
     /// Starts an atomic replacement using a glyph-free font header.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the transaction cannot start or the header cannot be
+    /// written.
     pub fn begin_import(
         &mut self,
         font_header: &font::Font,
@@ -42,6 +47,12 @@ impl ShiftStore {
 
 /// Encodes and compresses an owned bounded glyph batch without touching SQLite.
 /// The returned batch retains glyph directory facts for the single writer.
+///
+/// # Errors
+///
+/// Returns [`StoreError::LayerEncoding`] when a layer cannot be encoded, and
+/// [`StoreError::LayerCompression`] or [`StoreError::LayerPayloadTooLarge`] when its payload cannot
+/// be compressed or is too large.
 pub fn encode_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<GlyphWriteBatch, StoreError> {
     let started = Instant::now();
     let encoded_layers = encode_glyph_layers(&glyphs)?;
@@ -64,12 +75,23 @@ pub fn encode_glyph_batch(glyphs: Vec<font::Glyph>) -> Result<GlyphWriteBatch, S
 
 impl FontImportWriter<'_> {
     /// Writes one complete glyph and all of its currently authored layers.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::write_glyph_batch`].
     pub fn write_glyph(&mut self, glyph: &font::Glyph) -> Result<(), StoreError> {
         self.write_glyph_batch(std::slice::from_ref(glyph))?;
         Ok(())
     }
 
     /// Encodes a bounded glyph batch in parallel, then writes it in stable order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::LayerEncoding`] when a layer cannot be encoded,
+    /// [`StoreError::LayerCompression`] or [`StoreError::LayerPayloadTooLarge`] when its payload
+    /// cannot be compressed or is too large, and [`StoreError::Sqlite`] when a row cannot be
+    /// written.
     pub fn write_glyph_batch(
         &mut self,
         glyphs: &[font::Glyph],
@@ -94,6 +116,10 @@ impl FontImportWriter<'_> {
     }
 
     /// Writes a prepared batch in stable order through the owned transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a row cannot be written.
     pub fn write_packed_glyph_batch(
         &mut self,
         batch: &GlyphWriteBatch,
@@ -127,6 +153,11 @@ impl FontImportWriter<'_> {
     }
 
     /// Atomically publishes every glyph and layer written by this stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the indexes cannot be rebuilt or the transaction cannot
+    /// commit; nothing is published on failure.
     pub fn finish(self) -> Result<(), StoreError> {
         restore_import_indexes(&self.tx)?;
         self.tx.commit()?;

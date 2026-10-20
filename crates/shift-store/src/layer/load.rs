@@ -25,6 +25,13 @@ struct LayerDirectoryRead {
 
 impl ShiftStore {
     /// Fetches, bounds-checks, decodes, and cross-checks one canonical layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the payload cannot be read, a size or decompression
+    /// error such as [`StoreError::LayerPayloadTooLarge`] when it is out of bounds or corrupt, and
+    /// [`StoreError::LayerDecoding`] or [`StoreError::LayerDirectoryMismatch`] when it does not
+    /// decode to the layer its directory row describes.
     pub fn load_glyph_layer(
         &self,
         layer_id: &font::LayerId,
@@ -34,6 +41,11 @@ impl ShiftStore {
 
     /// Fetches and cross-validates requested layers through count- and
     /// decoded-byte-bounded batches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::MissingEntity`] when a requested layer is not stored, and the errors
+    /// of [`Self::load_glyph_layer`] for each payload.
     pub fn load_glyph_layers(
         &self,
         layer_ids: &[font::LayerId],

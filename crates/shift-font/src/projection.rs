@@ -430,6 +430,11 @@ impl Font {
     /// Interpolation bases are shared when the ordered compatible source identities match.
     /// The result owns no mutable font state and must be discarded after the current read or
     /// compilation so projections cannot outlive authored edits.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when a requested glyph is missing, and
+    /// [`CoreError::UnresolvableComponentGlyph`] when a component's glyph cannot be projected.
     pub fn glyph_projection_set(&self, glyph_ids: &[GlyphId]) -> CoreResult<GlyphProjectionSet> {
         for glyph_id in glyph_ids {
             if self.glyph(glyph_id).is_none() {
@@ -517,6 +522,11 @@ impl GlyphProjectionSet {
     }
 
     /// Resolves one prepared glyph without rebuilding its projection or component closure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] or [`CoreError::UnresolvableComponentGlyph`] when the
+    /// glyph or a component cannot be resolved at `location`.
     pub fn resolve_glyph(
         &self,
         glyph_id: &GlyphId,

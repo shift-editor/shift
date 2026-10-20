@@ -148,6 +148,12 @@ impl FontLoader {
     }
 
     /// Opens a retained random-access source without constructing an authored Font.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnsupportedFormat`] for a `.shift` path or one without a font
+    /// extension, [`FontReadError::Io`] when the file cannot be read, and
+    /// [`FontReadError::MalformedSource`] when it cannot be parsed.
     #[allow(
         clippy::unused_self,
         reason = "a loader method beside load; retained sources need no adaptor yet"
@@ -168,6 +174,13 @@ impl FontLoader {
         }
     }
 
+    /// Opens `path` as a bounded glyph stream for import.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::MissingExtension`] or [`BackendError::UnsupportedFormat`] when the
+    /// path does not name a supported format, [`BackendError::StreamingUnsupported`] when the
+    /// format cannot stream, and [`BackendError::Load`] when the source cannot be read.
     pub fn stream_font(&self, path: &str) -> BackendResult<FontImport> {
         let resolved = resolve(path)?;
         let adaptor = self
@@ -194,6 +207,13 @@ impl FontLoader {
         ))
     }
 
+    /// Reads the whole font at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::MissingExtension`] or [`BackendError::UnsupportedFormat`] when the
+    /// path does not name a supported format, and [`BackendError::Load`] when the source cannot be
+    /// read.
     pub fn read_font(&self, path: &str) -> BackendResult<Font> {
         let resolved = resolve(path)?;
         let adaptor = self
@@ -215,6 +235,12 @@ impl FontLoader {
             .map_err(|source| BackendError::load(resolved.format, resolved.path_buf, source))
     }
 
+    /// Writes `font` to `path` as a UFO or Designspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::UnsupportedWriteFormat`] for any other extension, and
+    /// [`BackendError::Save`] when the font cannot be written.
     pub fn write_font(&self, font: &Font, path: &str) -> BackendResult<()> {
         let resolved = resolve(path)?;
 

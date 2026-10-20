@@ -88,6 +88,12 @@ pub struct AuthoredAtlasBuilder {
 }
 
 impl AuthoredAtlasBuilder {
+    /// Starts an authored atlas whose glyphs each split into `band_count` bands.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidBandCount`] when `band_count` is zero or above
+    /// [`crate::MAX_BAND_COUNT`].
     pub fn new(band_count: u32) -> Result<Self, SlugError> {
         Ok(Self {
             builder: VariableAtlasBuilder::new(band_count)?,
@@ -96,6 +102,10 @@ impl AuthoredAtlasBuilder {
     }
 
     /// Adds an identity-preserving blank for an authored glyph without layers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthoredSlugError::Slug`] when the atlas outgrows `u32` indices.
     pub fn add_empty_glyph(
         &mut self,
         constant_weight_index: u32,
@@ -112,6 +122,14 @@ impl AuthoredAtlasBuilder {
         })
     }
 
+    /// Adds `projection`'s glyph, its components and its exact-source variants.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthoredSlugError::Core`] when the glyph or a component cannot be projected,
+    /// [`AuthoredSlugError::MissingWeightBasis`] when no weight set matches a glyph's basis, a
+    /// topology or finiteness error when a source does not match its default, and
+    /// [`AuthoredSlugError::Slug`] when the atlas outgrows its limits.
     pub fn add_glyph(
         &mut self,
         font: &Font,
@@ -648,6 +666,12 @@ impl AuthoredCurveTopology {
     }
 
     /// Freezes one cubic subdivision count large enough for every compatible layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthoredSlugError::ContourCountMismatch`] or
+    /// [`AuthoredSlugError::ContourTopologyMismatch`] when a layer's contours do not match the
+    /// reference's, and [`AuthoredSlugError::Slug`] when a subdivision count overflows.
     pub fn from_compatible_layers<'a>(
         reference_layer: &GlyphLayer,
         compatible_layers: impl IntoIterator<Item = &'a GlyphLayer>,
@@ -670,6 +694,12 @@ impl AuthoredCurveTopology {
     }
 
     /// Evaluates this exact topology against a topology-compatible layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthoredSlugError::ContourCountMismatch`] or
+    /// [`AuthoredSlugError::ContourTopologyMismatch`] when the layer does not match this topology,
+    /// and [`AuthoredSlugError::NonFiniteCoordinate`] when a point is not finite.
     pub fn curves_from_layer(&self, layer: &GlyphLayer) -> Result<Vec<Curve>, AuthoredSlugError> {
         let contours = self.matching_contours(layer)?;
         self.curves.curves_from_contours(&contours)
@@ -732,6 +762,10 @@ pub(crate) fn add_resolved_sources_glyph(
 }
 
 /// Converts one already-resolved contour set for CPU-oracle comparison.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::NonFiniteCoordinate`] when a point is not finite.
 pub fn curves_from_resolved_contours(
     contours: &[ResolvedContour],
 ) -> Result<Vec<Curve>, AuthoredSlugError> {
@@ -763,6 +797,12 @@ pub fn authored_glyph_requirements(projection: &GlyphProjection) -> AuthoredGlyp
 ///
 /// `source_weight_indices` must follow `interpolation.basis().source_ids()`.
 /// Static glyphs use `constant_weight_index`, whose uploaded value must be one.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::UnsupportedGlyph`] when the projection has components or
+/// exact-source shapes, a topology or finiteness error when a source does not match the default,
+/// and [`AuthoredSlugError::Slug`] when the atlas outgrows its limits.
 pub fn add_authored_projection_glyph(
     builder: &mut VariableAtlasBuilder,
     projection: &GlyphProjection,
@@ -875,6 +915,13 @@ fn add_default_projection_glyph(
 /// This compatibility API supplies the root basis for every component glyph.
 /// Use [`add_authored_glyph_with_weight_sets`] when component glyphs have
 /// independently deduplicated interpolation bases or exact-source variants.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::UnsupportedGlyph`] when the projection has exact-source shapes or
+/// component variants, [`AuthoredSlugError::MissingInterpolationSources`] when a component glyph
+/// has no interpolation, [`AuthoredSlugError::WeightCountMismatch`] when `source_weight_indices`
+/// does not match the basis, and the errors of [`add_authored_glyph_with_weight_sets`].
 pub fn add_authored_component_projection_glyph(
     builder: &mut VariableAtlasBuilder,
     font: &Font,
@@ -928,6 +975,11 @@ pub fn add_authored_component_projection_glyph(
 ///
 /// This compatibility API uses the root basis for the complete component
 /// closure. Use [`add_authored_glyph_with_weight_sets`] for differing bases.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::WeightCountMismatch`] when `source_weight_indices` does not match
+/// the projection's basis, and the errors of [`add_authored_glyph_with_weight_sets`].
 pub fn add_authored_glyph(
     builder: &mut VariableAtlasBuilder,
     font: &Font,
