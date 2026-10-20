@@ -75,6 +75,12 @@ macro_rules! typed_id {
             }
         }
 
+        impl From<$name> for String {
+            fn from(id: $name) -> Self {
+                id.0
+            }
+        }
+
         impl std::str::FromStr for $name {
             type Err = InvalidEntityId;
 

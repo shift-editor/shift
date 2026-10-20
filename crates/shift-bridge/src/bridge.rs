@@ -9,8 +9,8 @@ use shift_backends::{
   AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
   FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
-  ProjectedGlyph as SourceProjectedGlyph, SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind,
-  build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
+  SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind, build_binary_atlas_page,
+  font_loader::FontLoader, variable_glyph_inputs,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -85,6 +85,7 @@ use shift_workspace::{
 };
 use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
+  iter,
   path::Path,
   sync::Arc,
   time::{Duration, Instant},
@@ -238,539 +239,487 @@ fn log_slug_atlas_profile(
   );
 }
 
-fn wire_font_snapshot(
-  source: &dyn FontSource,
-  identity: &SourceIdentity,
-) -> BridgeResult<FontSnapshot> {
-  let directory = source.directory();
-  let metadata = FontMetadata {
-    family_name: directory.family_name().map(str::to_string),
-    style_name: directory.style_name().map(str::to_string),
-    version_major: None,
-    version_minor: None,
-    copyright: None,
-    trademark: None,
-    designer: None,
-    designer_url: None,
-    manufacturer: None,
-    manufacturer_url: None,
-    license: None,
-    license_url: None,
-    description: None,
-    note: None,
-  };
-  let metric_rows = |metrics: &shift_backends::FontMetrics| {
-    [
-      (WireMetricKind::Ascender, "Ascender", metrics.ascender),
-      (
-        WireMetricKind::CapHeight,
-        "Cap Height",
-        metrics.cap_height.unwrap_or(metrics.units_per_em * 0.7),
-      ),
-      (
-        WireMetricKind::XHeight,
-        "x-Height",
-        metrics.x_height.unwrap_or(metrics.units_per_em * 0.5),
-      ),
-      (WireMetricKind::Baseline, "Baseline", 0.0),
-      (WireMetricKind::Descender, "Descender", metrics.descender),
-    ]
-  };
-  let default_metric_rows = metric_rows(&directory.metrics());
-  let metric_definitions = default_metric_rows
-    .iter()
-    .zip(identity.metric_ids.iter())
-    .map(|((kind, name, _), id)| MetricDefinition {
-      id: id.clone(),
-      kind: *kind,
-      name: (*name).into(),
-    })
-    .collect::<Vec<_>>();
-  let font_axes = identity.font_axes.to_vec();
-  let axes = font_axes.iter().map(Axis::from).collect::<Vec<_>>();
-  let sources = directory
-    .sources()
-    .iter()
-    .zip(identity.source_ids.iter())
-    .map(|(source, id)| {
-      let values = identity
-        .axis_ids
-        .iter()
-        .cloned()
-        .zip(source.location.iter().copied())
-        .collect::<HashMap<_, _>>();
-      Source {
-        id: id.clone(),
-        name: source.name.clone(),
-        location: WireLocation { values },
-        filename: source.filename.clone(),
-        metric_values: metric_rows(&source.metrics)
-          .iter()
-          .zip(identity.metric_ids.iter())
-          .map(|((_, _, position), metric_id)| SourceMetricValue {
-            metric_id: metric_id.clone(),
-            position: *position,
-            overshoot: 0.0,
-          })
-          .collect(),
-        italic_angle: source.metrics.italic_angle,
-        line_gap: Some(source.metrics.line_gap),
-        underline_position: source.metrics.underline_position,
-        underline_thickness: source.metrics.underline_thickness,
-      }
-    })
-    .collect::<Vec<_>>();
-  let font_axis_mappings = source_axis_mappings(directory, identity)?;
-  let axis_mappings = font_axis_mappings
-    .iter()
-    .map(AxisMapping::from)
-    .collect::<Vec<_>>();
-  let axis_mapping_bases = identity
-    .mapping_bases
-    .iter()
-    .map(AxisMappingBasis::from)
-    .collect();
-  let named_instances = directory
-    .instances()
-    .iter()
-    .zip(identity.instance_ids.iter())
-    .map(|(instance, id)| NamedInstance {
-      id: id.clone(),
-      name: instance.name.clone(),
-      location: WireLocation {
-        values: identity
-          .axis_ids
-          .iter()
-          .cloned()
-          .zip(instance.location.iter().copied())
-          .collect(),
-      },
-      postscript_name: instance.postscript_name.clone(),
-    })
-    .collect();
-  Ok(FontSnapshot {
-    metadata,
-    metrics: FontMetrics {
-      units_per_em: directory.metrics().units_per_em,
-    },
-    metric_definitions,
-    source_metrics_interpolation: None,
-    glyphs: directory
-      .glyphs()
-      .iter()
-      .zip(identity.glyph_ids.iter())
-      .map(|(glyph, id)| GlyphEntry {
-        id: id.clone(),
-        name: glyph.name.clone().into(),
-        unicodes: glyph.unicodes.to_vec(),
-      })
-      .collect(),
-    sources,
-    axes,
-    axis_mappings,
-    axis_mapping_bases,
-    named_instances,
-    // Preview sources expose only the directory, which carries no font lib
-    // or kerning.
-    language_ids: None,
-    kerning: KerningSnapshot::default(),
-  })
+/// A font source opened for browsing, with the ids the bridge gave its entries.
+struct RetainedSource {
+  font: OpenedFont,
+  identity: SourceIdentity,
 }
 
-fn source_font_axes(directory: &FontDirectory, identity: &SourceIdentity) -> Vec<FontAxis> {
-  directory
-    .axes()
-    .iter()
-    .zip(identity.axis_ids.iter())
-    .map(|(axis, id)| {
-      let mut mapped = match &axis.kind {
-        VariationAxisKind::Continuous {
-          minimum,
-          default,
-          maximum,
-        } => FontAxis::continuous_with_id(
-          id.clone(),
-          axis.tag.clone(),
-          axis.name.clone(),
-          *minimum,
-          *default,
-          *maximum,
-        ),
-        VariationAxisKind::Discrete { values, default } => FontAxis::discrete_with_id(
-          id.clone(),
-          axis.tag.clone(),
-          axis.name.clone(),
-          values.to_vec(),
-          *default,
-        ),
-      };
-      mapped.set_hidden(axis.hidden);
-      mapped
-    })
-    .collect()
-}
-
-fn source_axis_mappings(
-  directory: &FontDirectory,
-  identity: &SourceIdentity,
-) -> BridgeResult<Vec<FontAxisMapping>> {
-  directory
-    .mappings()
-    .iter()
-    .zip(identity.mapping_ids.iter())
-    .map(|(mapping, mapping_id)| {
-      let input_axis_ids = mapping
-        .input_axes
-        .iter()
-        .map(|axis| identity.axis_id(*axis))
-        .collect::<BridgeResult<Vec<_>>>()?;
-      let output_axis_ids = mapping
-        .output_axes
-        .iter()
-        .map(|axis| identity.axis_id(*axis))
-        .collect::<BridgeResult<Vec<_>>>()?;
-      let points = mapping
-        .points
-        .iter()
-        .map(|point| FontAxisMappingPoint {
-          description: point.description.clone(),
-          input: FontLocation::from_map(
-            input_axis_ids
-              .iter()
-              .cloned()
-              .zip(point.input.iter().copied()),
-          ),
-          output: FontLocation::from_map(
-            output_axis_ids
-              .iter()
-              .cloned()
-              .zip(point.output.iter().copied()),
-          ),
-        })
-        .collect();
-      let mut mapped = FontAxisMapping::with_id(
-        mapping_id.clone(),
-        mapping.name.clone(),
-        input_axis_ids,
-        output_axis_ids,
-        points,
-      );
-      mapped.set_description(mapping.description.clone());
-      Ok(mapped)
-    })
-    .collect()
-}
-
-fn source_location(
-  directory: &FontDirectory,
-  identity: &SourceIdentity,
-  coordinates: Vec<f64>,
-) -> BridgeResult<Vec<f64>> {
-  if coordinates.len() != directory.axes().len() {
-    return Err(BridgeError::InvalidInput {
-      kind: "catalog location coordinate count",
-      value: coordinates.len().to_string(),
-    });
+impl RetainedSource {
+  fn open(path: &Path) -> BridgeResult<Self> {
+    let font = FontLoader::new().open_source(path)?;
+    let identity = SourceIdentity::new(font.directory(), &SourceGlyphIds::for_path(path))?;
+    Ok(Self { font, identity })
   }
 
-  let external =
-    shift_font::ExternalLocation::from_map(identity.axis_ids.iter().cloned().zip(coordinates));
-  let design = shift_font::ir::variation::map_location_with_bases(
-    &external,
-    &identity.font_axes,
-    &identity.mapping_bases,
-  )?;
-  Ok(
-    identity
-      .font_axes
+  /// The font snapshot the editor shows for the retained source.
+  fn snapshot(&self) -> BridgeResult<FontSnapshot> {
+    let directory = self.font.directory();
+    let identity = &self.identity;
+    let metadata = FontMetadata {
+      family_name: directory.family_name().map(str::to_string),
+      style_name: directory.style_name().map(str::to_string),
+      version_major: None,
+      version_minor: None,
+      copyright: None,
+      trademark: None,
+      designer: None,
+      designer_url: None,
+      manufacturer: None,
+      manufacturer_url: None,
+      license: None,
+      license_url: None,
+      description: None,
+      note: None,
+    };
+    let metric_rows = |metrics: &shift_backends::FontMetrics| {
+      [
+        (WireMetricKind::Ascender, "Ascender", metrics.ascender),
+        (
+          WireMetricKind::CapHeight,
+          "Cap Height",
+          metrics.cap_height.unwrap_or(metrics.units_per_em * 0.7),
+        ),
+        (
+          WireMetricKind::XHeight,
+          "x-Height",
+          metrics.x_height.unwrap_or(metrics.units_per_em * 0.5),
+        ),
+        (WireMetricKind::Baseline, "Baseline", 0.0),
+        (WireMetricKind::Descender, "Descender", metrics.descender),
+      ]
+    };
+    let default_metric_rows = metric_rows(&directory.metrics());
+    let metric_definitions = default_metric_rows
       .iter()
-      .map(|axis| design.value_on(axis))
-      .collect(),
-  )
-}
-
-fn wire_source_glyph(
-  projected: SourceProjectedGlyph,
-  directory: &FontDirectory,
-  identity: &SourceIdentity,
-) -> BridgeResult<Vec<GlyphSnapshot>> {
-  let mut projections = Vec::with_capacity(projected.components.len() + 1);
-  projections.push(projected.root);
-  projections.extend(projected.components);
-  let by_index = projections
-    .iter()
-    .map(|projection| (projection.glyph, projection))
-    .collect::<HashMap<_, _>>();
-  let component_glyph_ids = projections
-    .iter()
-    .skip(1)
-    .map(|projection| identity.glyph_id(projection.glyph))
-    .collect::<BridgeResult<Vec<_>>>()?;
-  let exact_sources = projections
-    .iter()
-    .flat_map(|projection| projection.exact_shapes.iter().map(|shape| shape.source))
-    .collect::<HashSet<_>>();
-
-  projections
-    .iter()
-    .map(|projection| {
-      let glyph_id = identity.glyph_id(projection.glyph)?;
-      let fallback = wire_source_shape(
-        &projection.fallback,
-        projection.glyph,
-        "fallback",
-        directory,
-        identity,
-      )?;
-      let variation = projection
-        .variation
-        .as_ref()
-        .map(|variation| {
-          let deltas = variation
-            .deltas
+      .zip(identity.metric_ids.iter())
+      .map(|((kind, name, _), id)| MetricDefinition {
+        id: id.clone(),
+        kind: *kind,
+        name: (*name).into(),
+      })
+      .collect::<Vec<_>>();
+    let font_axes = identity.font_axes.to_vec();
+    let axes = font_axes.iter().map(Axis::from).collect::<Vec<_>>();
+    let sources = directory
+      .sources()
+      .iter()
+      .zip(identity.source_ids.iter())
+      .map(|(source, id)| {
+        let values = identity
+          .axis_values(source.location.iter().copied())
+          .collect::<HashMap<_, _>>();
+        Source {
+          id: id.clone(),
+          name: source.name.clone(),
+          location: WireLocation { values },
+          filename: source.filename.clone(),
+          metric_values: metric_rows(&source.metrics)
             .iter()
-            .map(|delta| {
-              let region = delta
-                .region
-                .supports
-                .iter()
-                .map(|support| {
-                  let axis_id = identity.axis_id(support.axis)?;
-                  Ok(InterpolationSupport {
-                    axis_id,
-                    lower: support.lower,
-                    peak: support.peak,
-                    upper: support.upper,
-                  })
-                })
-                .collect::<BridgeResult<Vec<_>>>()?;
-              Ok(VariationDelta {
-                region,
-                values: delta.values.to_vec(),
-              })
+            .zip(identity.metric_ids.iter())
+            .map(|((_, _, position), metric_id)| SourceMetricValue {
+              metric_id: metric_id.clone(),
+              position: *position,
+              overshoot: 0.0,
             })
-            .collect::<BridgeResult<Vec<_>>>()?;
-          Ok::<_, BridgeError>(GlyphVariation {
-            basis: VariationBasis { deltas },
-          })
-        })
-        .transpose()?;
-      let exact_source_shapes = projection
-        .exact_shapes
-        .iter()
-        .map(|exact| {
-          let source_id = identity.source_id(exact.source)?;
-          Ok(GlyphSourceShape {
-            source_id,
-            shape: wire_source_shape(
-              &exact.shape,
-              projection.glyph,
-              &format!("source{}", exact.source.to_u32()),
-              directory,
-              identity,
-            )?,
-          })
-        })
-        .collect::<BridgeResult<Vec<_>>>()?;
-      let components = wire_source_components(projection.glyph, None, &by_index, identity)?;
-      let exact_source_components = exact_sources
-        .iter()
-        .map(|source| {
-          let source_id = identity.source_id(*source)?;
-          Ok(GlyphSourceComponents {
-            source_id,
-            components: wire_source_components(
-              projection.glyph,
-              Some(*source),
-              &by_index,
-              identity,
-            )?,
-          })
-        })
-        .collect::<BridgeResult<Vec<_>>>()?;
-      Ok(GlyphSnapshot {
-        glyph_id: glyph_id.clone(),
-        projection: Some(GlyphProjection {
-          glyph_id,
-          fallback,
-          interpolation: None,
-          decomposition: None,
-          variation,
-          exact_source_shapes,
-          components,
-          exact_source_components,
-          component_glyph_ids: component_glyph_ids.clone(),
-        }),
-        layers: Vec::new(),
+            .collect(),
+          italic_angle: source.metrics.italic_angle,
+          line_gap: Some(source.metrics.line_gap),
+          underline_position: source.metrics.underline_position,
+          underline_thickness: source.metrics.underline_thickness,
+        }
       })
-    })
-    .collect()
-}
-
-fn wire_source_shape(
-  shape: &SourceGlyphShape,
-  glyph: GlyphIndex,
-  selector: &str,
-  directory: &FontDirectory,
-  identity: &SourceIdentity,
-) -> BridgeResult<GlyphLayerShape> {
-  let glyph_id = identity.glyph_id(glyph)?;
-  let mut point_index = 0_usize;
-  let contours = shape
-    .contours
-    .iter()
-    .enumerate()
-    .map(|(contour_index, contour)| {
-      let contour_id = ContourId::from_raw(format!("{glyph_id}-{selector}-c{contour_index}"));
-      let points = contour
-        .points
-        .iter()
-        .map(|point| {
-          let id = PointId::from_raw(format!("{glyph_id}-{selector}-p{point_index}"));
-          point_index += 1;
-          PointData {
-            id: id.to_string(),
-            point_type: match point.kind {
-              SourceGlyphPointKind::OnCurve => PointType::OnCurve,
-              SourceGlyphPointKind::QuadraticControl | SourceGlyphPointKind::CubicControl => {
-                PointType::OffCurve
-              }
-            },
-            smooth: point.smooth,
-          }
-        })
-        .collect();
-      ContourData {
-        id: contour_id.to_string(),
-        closed: contour.closed,
-        points,
-      }
-    })
-    .collect();
-  let anchors = shape
-    .anchors
-    .iter()
-    .enumerate()
-    .map(|(index, name)| AnchorData {
-      id: AnchorId::from_raw(format!("{glyph_id}-{selector}-a{index}")).to_string(),
-      name: name.clone(),
-    })
-    .collect();
-  let components = shape
-    .components
-    .iter()
-    .enumerate()
-    .map(|(index, component)| {
-      let base_glyph_id = identity.glyph_id(component.glyph)?;
-      let base_glyph_name = directory
+      .collect::<Vec<_>>();
+    let font_axis_mappings = identity.axis_mappings_of(directory)?;
+    let axis_mappings = font_axis_mappings
+      .iter()
+      .map(AxisMapping::from)
+      .collect::<Vec<_>>();
+    let axis_mapping_bases = identity
+      .mapping_bases
+      .iter()
+      .map(AxisMappingBasis::from)
+      .collect();
+    let named_instances = directory
+      .instances()
+      .iter()
+      .zip(identity.instance_ids.iter())
+      .map(|(instance, id)| NamedInstance {
+        id: id.clone(),
+        name: instance.name.clone(),
+        location: WireLocation {
+          values: identity
+            .axis_values(instance.location.iter().copied())
+            .collect(),
+        },
+        postscript_name: instance.postscript_name.clone(),
+      })
+      .collect();
+    Ok(FontSnapshot {
+      metadata,
+      metrics: FontMetrics {
+        units_per_em: directory.metrics().units_per_em,
+      },
+      metric_definitions,
+      source_metrics_interpolation: None,
+      glyphs: directory
         .glyphs()
-        .get(component.glyph.to_usize())
-        .ok_or_else(|| BridgeError::InvalidInput {
-          kind: "source component glyph",
-          value: component.glyph.to_u32().to_string(),
-        })?
-        .name
-        .clone()
-        .into();
-      Ok(ComponentData {
-        id: ComponentId::from_raw(format!("{glyph_id}-{selector}-m{index}")).to_string(),
-        base_glyph_id,
-        base_glyph_name,
-        alignment: Default::default(),
-      })
+        .iter()
+        .zip(identity.glyph_ids.iter())
+        .map(|(glyph, id)| GlyphEntry {
+          id: id.clone(),
+          name: glyph.name.clone().into(),
+          unicodes: glyph.unicodes.to_vec(),
+        })
+        .collect(),
+      sources,
+      axes,
+      axis_mappings,
+      axis_mapping_bases,
+      named_instances,
+      // Preview sources expose only the directory, which carries no font lib
+      // or kerning.
+      language_ids: None,
+      kerning: KerningSnapshot::default(),
     })
-    .collect::<BridgeResult<Vec<_>>>()?;
-  Ok(GlyphLayerShape {
-    structure: GlyphStructure {
-      contours,
-      anchors,
-      components,
-    },
-    values: shape.values.to_vec(),
-    component_transform_kind: ComponentTransformKind::Affine,
-  })
+  }
+
+  /// Maps external axis coordinates, in source axis order, to design values.
+  fn location(&self, coordinates: Vec<f64>) -> BridgeResult<Vec<f64>> {
+    let identity = &self.identity;
+    if coordinates.len() != self.font.directory().axes().len() {
+      return Err(BridgeError::InvalidInput {
+        kind: "catalog location coordinate count",
+        value: coordinates.len().to_string(),
+      });
+    }
+
+    let external = shift_font::ExternalLocation::from_map(identity.axis_values(coordinates));
+    let design = shift_font::ir::variation::map_location_with_bases(
+      &external,
+      &identity.font_axes,
+      &identity.mapping_bases,
+    )?;
+    Ok(
+      identity
+        .font_axes
+        .iter()
+        .map(|axis| design.value_on(axis))
+        .collect(),
+    )
+  }
+
+  /// Projects one source glyph and its complete component closure.
+  fn glyph(&self, glyph_id: &GlyphId) -> BridgeResult<Vec<GlyphSnapshot>> {
+    let identity = &self.identity;
+    let projected = self.font.glyph(identity.glyph_index(glyph_id)?)?;
+    let mut projections = Vec::with_capacity(projected.components.len() + 1);
+    projections.push(projected.root);
+    projections.extend(projected.components);
+    let by_index = projections
+      .iter()
+      .map(|projection| (projection.glyph, projection))
+      .collect::<HashMap<_, _>>();
+    let component_glyph_ids = projections
+      .iter()
+      .skip(1)
+      .map(|projection| identity.glyph_id(projection.glyph))
+      .collect::<BridgeResult<Vec<_>>>()?;
+    let exact_sources = projections
+      .iter()
+      .flat_map(|projection| projection.exact_shapes.iter().map(|shape| shape.source))
+      .collect::<HashSet<_>>();
+
+    projections
+      .iter()
+      .map(|projection| {
+        let glyph_id = identity.glyph_id(projection.glyph)?;
+        let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id.clone()))?;
+        let variation = projection
+          .variation
+          .as_ref()
+          .map(|variation| {
+            let deltas = variation
+              .deltas
+              .iter()
+              .map(|delta| {
+                let region = delta
+                  .region
+                  .supports
+                  .iter()
+                  .map(|support| {
+                    let axis_id = identity.axis_id(support.axis)?;
+                    Ok(InterpolationSupport {
+                      axis_id,
+                      lower: support.lower,
+                      peak: support.peak,
+                      upper: support.upper,
+                    })
+                  })
+                  .collect::<BridgeResult<Vec<_>>>()?;
+                Ok(VariationDelta {
+                  region,
+                  values: delta.values.to_vec(),
+                })
+              })
+              .collect::<BridgeResult<Vec<_>>>()?;
+            Ok::<_, BridgeError>(GlyphVariation {
+              basis: VariationBasis { deltas },
+            })
+          })
+          .transpose()?;
+        let exact_source_shapes = projection
+          .exact_shapes
+          .iter()
+          .map(|exact| {
+            let source_id = identity.source_id(exact.source)?;
+            Ok(GlyphSourceShape {
+              source_id,
+              shape: self.shape(
+                &exact.shape,
+                &ShapeIds::exact(glyph_id.clone(), exact.source),
+              )?,
+            })
+          })
+          .collect::<BridgeResult<Vec<_>>>()?;
+        let components = self.components(projection.glyph, None, &by_index)?;
+        let exact_source_components = exact_sources
+          .iter()
+          .map(|source| {
+            let source_id = identity.source_id(*source)?;
+            Ok(GlyphSourceComponents {
+              source_id,
+              components: self.components(projection.glyph, Some(*source), &by_index)?,
+            })
+          })
+          .collect::<BridgeResult<Vec<_>>>()?;
+        Ok(GlyphSnapshot {
+          glyph_id: glyph_id.clone(),
+          projection: Some(GlyphProjection {
+            glyph_id,
+            fallback,
+            interpolation: None,
+            decomposition: None,
+            variation,
+            exact_source_shapes,
+            components,
+            exact_source_components,
+            component_glyph_ids: component_glyph_ids.clone(),
+          }),
+          layers: Vec::new(),
+        })
+      })
+      .collect()
+  }
+
+  /// Converts one projected shape, naming its entities with `ids`.
+  fn shape(&self, shape: &SourceGlyphShape, ids: &ShapeIds) -> BridgeResult<GlyphLayerShape> {
+    let mut point_index = 0_usize;
+    let contours = shape
+      .contours
+      .iter()
+      .enumerate()
+      .map(|(contour_index, contour)| {
+        let contour_id = ids.contour(contour_index);
+        let points = contour
+          .points
+          .iter()
+          .map(|point| {
+            let id = ids.point(point_index);
+            point_index += 1;
+            PointData {
+              id: id.to_string(),
+              point_type: match point.kind {
+                SourceGlyphPointKind::OnCurve => PointType::OnCurve,
+                SourceGlyphPointKind::QuadraticControl | SourceGlyphPointKind::CubicControl => {
+                  PointType::OffCurve
+                }
+              },
+              smooth: point.smooth,
+            }
+          })
+          .collect();
+        ContourData {
+          id: contour_id.to_string(),
+          closed: contour.closed,
+          points,
+        }
+      })
+      .collect();
+    let anchors = shape
+      .anchors
+      .iter()
+      .enumerate()
+      .map(|(index, name)| AnchorData {
+        id: ids.anchor(index).to_string(),
+        name: name.clone(),
+      })
+      .collect();
+    let components = shape
+      .components
+      .iter()
+      .enumerate()
+      .map(|(index, component)| {
+        let base_glyph_id = self.identity.glyph_id(component.glyph)?;
+        let base_glyph_name = self
+          .font
+          .directory()
+          .glyphs()
+          .get(component.glyph.to_usize())
+          .ok_or_else(|| BridgeError::InvalidInput {
+            kind: "source component glyph",
+            value: component.glyph.to_u32().to_string(),
+          })?
+          .name
+          .clone()
+          .into();
+        Ok(ComponentData {
+          id: ids.component(index).to_string(),
+          base_glyph_id,
+          base_glyph_name,
+          alignment: Default::default(),
+        })
+      })
+      .collect::<BridgeResult<Vec<_>>>()?;
+    Ok(GlyphLayerShape {
+      structure: GlyphStructure {
+        contours,
+        anchors,
+        components,
+      },
+      values: shape.values.to_vec(),
+      component_transform_kind: ComponentTransformKind::Affine,
+    })
+  }
+
+  /// Lists the component occurrences under `root`, depth first, on the exact
+  /// source's shapes when there is one and the fallback shapes otherwise.
+  fn components(
+    &self,
+    root: GlyphIndex,
+    exact_source: Option<shift_backends::SourceIndex>,
+    projections: &HashMap<GlyphIndex, &SourceGlyphProjection>,
+  ) -> BridgeResult<GlyphComponents> {
+    let mut walker = ComponentWalker {
+      identity: &self.identity,
+      projections,
+      exact_source,
+      output: Vec::new(),
+      visiting: HashSet::new(),
+    };
+    walker.visit(root, Vec::new())?;
+    Ok(GlyphComponents {
+      root_glyph_id: self.identity.glyph_id(root)?,
+      components: walker.output,
+    })
+  }
 }
 
-fn wire_source_components(
-  root: GlyphIndex,
+/// Walks a source glyph's component graph, rejecting cycles.
+struct ComponentWalker<'a> {
+  identity: &'a SourceIdentity,
+  projections: &'a HashMap<GlyphIndex, &'a SourceGlyphProjection>,
   exact_source: Option<shift_backends::SourceIndex>,
-  projections: &HashMap<GlyphIndex, &SourceGlyphProjection>,
-  identity: &SourceIdentity,
-) -> BridgeResult<GlyphComponents> {
-  fn visit(
-    glyph: GlyphIndex,
-    exact_source: Option<shift_backends::SourceIndex>,
-    parent_path: Vec<ComponentId>,
-    output: &mut Vec<ComponentGlyph>,
-    visiting: &mut HashSet<GlyphIndex>,
-    projections: &HashMap<GlyphIndex, &SourceGlyphProjection>,
-    identity: &SourceIdentity,
-  ) -> BridgeResult<()> {
-    if !visiting.insert(glyph) {
+  output: Vec<ComponentGlyph>,
+  visiting: HashSet<GlyphIndex>,
+}
+
+impl ComponentWalker<'_> {
+  fn visit(&mut self, glyph: GlyphIndex, parent_path: Vec<ComponentId>) -> BridgeResult<()> {
+    if !self.visiting.insert(glyph) {
       return Err(BridgeError::InvalidInput {
         kind: "source component graph",
         value: format!("cycle at glyph {}", glyph.to_u32()),
       });
     }
-    let projection = projections
+    let projection = self
+      .projections
       .get(&glyph)
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source component closure",
         value: glyph.to_u32().to_string(),
       })?;
-    let selector = exact_source.and_then(|source| {
+    let parent_glyph_id = self.identity.glyph_id(glyph)?;
+    let exact = self.exact_source.and_then(|source| {
       projection
         .exact_shapes
         .iter()
         .find(|shape| shape.source == source)
         .map(|shape| (source, &shape.shape))
     });
-    let (selector_name, shape) = match selector {
-      Some((source, shape)) => (format!("source{}", source.to_u32()), shape),
-      None => ("fallback".into(), &projection.fallback),
+    let (ids, shape) = match exact {
+      Some((source, shape)) => (ShapeIds::exact(parent_glyph_id.clone(), source), shape),
+      None => (
+        ShapeIds::fallback(parent_glyph_id.clone()),
+        &projection.fallback,
+      ),
     };
-    let parent_glyph_id = identity.glyph_id(glyph)?;
     for (index, component) in shape.components.iter().enumerate() {
-      let component_id =
-        ComponentId::from_raw(format!("{parent_glyph_id}-{selector_name}-m{index}"));
+      let component_id = ids.component(index);
       let mut component_path = parent_path.clone();
       component_path.push(component_id.clone());
-      output.push(ComponentGlyph {
+      self.output.push(ComponentGlyph {
         parent_glyph_id: parent_glyph_id.clone(),
         component_id,
         component_index: index,
-        base_glyph_id: identity.glyph_id(component.glyph)?,
+        base_glyph_id: self.identity.glyph_id(component.glyph)?,
         parent_path: parent_path.clone(),
         component_path: component_path.clone(),
       });
-      visit(
-        component.glyph,
-        exact_source,
-        component_path,
-        output,
-        visiting,
-        projections,
-        identity,
-      )?;
+      self.visit(component.glyph, component_path)?;
     }
-    visiting.remove(&glyph);
+    self.visiting.remove(&glyph);
     Ok(())
   }
+}
 
-  let mut components = Vec::new();
-  visit(
-    root,
-    exact_source,
-    Vec::new(),
-    &mut components,
-    &mut HashSet::new(),
-    projections,
-    identity,
-  )?;
-  Ok(GlyphComponents {
-    root_glyph_id: identity.glyph_id(root)?,
-    components,
-  })
+/// Names the entities of one projected source shape.
+///
+/// Retained sources have no stored entity ids, so each id is derived from
+/// the glyph, the shape it belongs to, and the entity's position: the same
+/// entity gets the same id every time the glyph is read.
+struct ShapeIds {
+  glyph_id: GlyphId,
+  selector: String,
+}
+
+impl ShapeIds {
+  /// Ids for the glyph's fallback shape.
+  fn fallback(glyph_id: GlyphId) -> Self {
+    Self {
+      glyph_id,
+      selector: "fallback".to_string(),
+    }
+  }
+
+  /// Ids for the glyph's shape on one exact source.
+  fn exact(glyph_id: GlyphId, source: shift_backends::SourceIndex) -> Self {
+    Self {
+      glyph_id,
+      selector: format!("source{}", source.to_u32()),
+    }
+  }
+
+  fn contour(&self, index: usize) -> ContourId {
+    ContourId::from_raw(self.entity('c', index))
+  }
+
+  /// Points are numbered across the whole shape, not per contour.
+  fn point(&self, index: usize) -> PointId {
+    PointId::from_raw(self.entity('p', index))
+  }
+
+  fn anchor(&self, index: usize) -> AnchorId {
+    AnchorId::from_raw(self.entity('a', index))
+  }
+
+  fn component(&self, index: usize) -> ComponentId {
+    ComponentId::from_raw(self.entity('m', index))
+  }
+
+  fn entity(&self, kind: char, index: usize) -> String {
+    format!("{}-{}-{kind}{index}", self.glyph_id, self.selector)
+  }
 }
 
 fn napi_source_atlas_page(
@@ -1048,36 +997,121 @@ impl SourceIdentity {
     let mut identity = Self {
       glyph_ids,
       glyph_indices,
-      axis_ids: (0..directory.axes().len())
-        .map(|_| AxisId::new())
-        .collect::<Vec<_>>()
-        .into_boxed_slice(),
-      source_ids: (0..directory.sources().len())
-        .map(|_| SourceId::new())
-        .collect::<Vec<_>>()
-        .into_boxed_slice(),
-      mapping_ids: (0..directory.mappings().len())
-        .map(|_| AxisMappingId::new())
-        .collect::<Vec<_>>()
-        .into_boxed_slice(),
-      instance_ids: (0..directory.instances().len())
-        .map(|_| NamedInstanceId::new())
-        .collect::<Vec<_>>()
-        .into_boxed_slice(),
-      metric_ids: (0..5)
-        .map(|_| MetricId::new())
-        .collect::<Vec<_>>()
-        .into_boxed_slice(),
+      axis_ids: iter::repeat_with(AxisId::new)
+        .take(directory.axes().len())
+        .collect(),
+      source_ids: iter::repeat_with(SourceId::new)
+        .take(directory.sources().len())
+        .collect(),
+      mapping_ids: iter::repeat_with(AxisMappingId::new)
+        .take(directory.mappings().len())
+        .collect(),
+      instance_ids: iter::repeat_with(NamedInstanceId::new)
+        .take(directory.instances().len())
+        .collect(),
+      metric_ids: iter::repeat_with(MetricId::new).take(5).collect(),
       font_axes: Box::new([]),
       mapping_bases: Box::new([]),
     };
-    identity.font_axes = source_font_axes(directory, &identity).into_boxed_slice();
-    identity.mapping_bases = source_axis_mappings(directory, &identity)?
+    identity.font_axes = identity.axes_of(directory).into_boxed_slice();
+    identity.mapping_bases = identity
+      .axis_mappings_of(directory)?
       .iter()
       .map(|mapping| shift_font::AxisMappingBasis::try_from((mapping, identity.font_axes.as_ref())))
       .collect::<std::result::Result<Vec<_>, _>>()?
       .into_boxed_slice();
     Ok(identity)
+  }
+
+  /// Builds the font axes of `directory` under this identity's axis ids.
+  fn axes_of(&self, directory: &FontDirectory) -> Vec<FontAxis> {
+    directory
+      .axes()
+      .iter()
+      .zip(self.axis_ids.iter())
+      .map(|(axis, id)| {
+        let mut mapped = match &axis.kind {
+          VariationAxisKind::Continuous {
+            minimum,
+            default,
+            maximum,
+          } => FontAxis::continuous_with_id(
+            id.clone(),
+            axis.tag.clone(),
+            axis.name.clone(),
+            *minimum,
+            *default,
+            *maximum,
+          ),
+          VariationAxisKind::Discrete { values, default } => FontAxis::discrete_with_id(
+            id.clone(),
+            axis.tag.clone(),
+            axis.name.clone(),
+            values.to_vec(),
+            *default,
+          ),
+        };
+        mapped.set_hidden(axis.hidden);
+        mapped
+      })
+      .collect()
+  }
+
+  /// Builds the axis mappings of `directory` under this identity's ids.
+  fn axis_mappings_of(&self, directory: &FontDirectory) -> BridgeResult<Vec<FontAxisMapping>> {
+    directory
+      .mappings()
+      .iter()
+      .zip(self.mapping_ids.iter())
+      .map(|(mapping, mapping_id)| {
+        let input_axis_ids = mapping
+          .input_axes
+          .iter()
+          .map(|axis| self.axis_id(*axis))
+          .collect::<BridgeResult<Vec<_>>>()?;
+        let output_axis_ids = mapping
+          .output_axes
+          .iter()
+          .map(|axis| self.axis_id(*axis))
+          .collect::<BridgeResult<Vec<_>>>()?;
+        let points = mapping
+          .points
+          .iter()
+          .map(|point| FontAxisMappingPoint {
+            description: point.description.clone(),
+            input: FontLocation::from_map(
+              input_axis_ids
+                .iter()
+                .cloned()
+                .zip(point.input.iter().copied()),
+            ),
+            output: FontLocation::from_map(
+              output_axis_ids
+                .iter()
+                .cloned()
+                .zip(point.output.iter().copied()),
+            ),
+          })
+          .collect();
+        let mut mapped = FontAxisMapping::with_id(
+          mapping_id.clone(),
+          mapping.name.clone(),
+          input_axis_ids,
+          output_axis_ids,
+          points,
+        );
+        mapped.set_description(mapping.description.clone());
+        Ok(mapped)
+      })
+      .collect()
+  }
+
+  /// Pairs positional values, in source axis order, with this identity's axis ids.
+  fn axis_values(
+    &self,
+    values: impl IntoIterator<Item = f64>,
+  ) -> impl Iterator<Item = (AxisId, f64)> {
+    self.axis_ids.iter().cloned().zip(values)
   }
 
   fn glyph_id(&self, index: GlyphIndex) -> BridgeResult<GlyphId> {
@@ -1138,8 +1172,7 @@ impl SourceIdentity {
 #[napi]
 pub struct Bridge {
   workspace: Option<FontWorkspace>,
-  font_source: Option<OpenedFont>,
-  source_identity: Option<SourceIdentity>,
+  retained_source: Option<RetainedSource>,
   live_version: DocumentVersion,
   saved_version: DocumentVersion,
   slug_generation: u32,
@@ -1156,8 +1189,7 @@ impl Bridge {
   pub fn new() -> Self {
     Self {
       workspace: None,
-      font_source: None,
-      source_identity: None,
+      retained_source: None,
       live_version: DocumentVersion::default(),
       saved_version: DocumentVersion::default(),
       slug_generation: 0,
@@ -1178,8 +1210,7 @@ impl Bridge {
       store_path,
       new_workspace_from_options(options),
     )?);
-    self.font_source = None;
-    self.source_identity = None;
+    self.retained_source = None;
     self.reset_versions();
     Ok(())
   }
@@ -1243,8 +1274,7 @@ impl Bridge {
   #[napi]
   pub fn open_document(&mut self, path: String, recovery_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::open_document(path, recovery_path)?);
-    self.font_source = None;
-    self.source_identity = None;
+    self.retained_source = None;
     self.reset_versions();
     Ok(())
   }
@@ -1252,8 +1282,7 @@ impl Bridge {
   #[napi]
   pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::open(path, store_path)?);
-    self.font_source = None;
-    self.source_identity = None;
+    self.retained_source = None;
     self.reset_versions();
     Ok(())
   }
@@ -1261,23 +1290,17 @@ impl Bridge {
   #[napi]
   pub fn resume_workspace(&mut self, store_path: String) -> errors::Result<()> {
     self.workspace = Some(FontWorkspace::resume(store_path)?);
-    self.font_source = None;
-    self.source_identity = None;
+    self.retained_source = None;
     self.reset_versions();
     Ok(())
   }
 
   #[napi]
   pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
-    let source = FontLoader::new().open_source(Path::new(&path))?;
-    let identity = SourceIdentity::new(
-      source.directory(),
-      &SourceGlyphIds::for_path(Path::new(&path)),
-    )?;
-    let snapshot = wire_font_snapshot(&source, &identity)?;
+    let source = RetainedSource::open(Path::new(&path))?;
+    let snapshot = source.snapshot()?;
     self.workspace = None;
-    self.font_source = Some(source);
-    self.source_identity = Some(identity);
+    self.retained_source = Some(source);
     self.slug_atlas = None;
     self.source_atlas_descriptors.clear();
     Ok(snapshot.into())
@@ -1285,8 +1308,7 @@ impl Bridge {
 
   #[napi]
   pub fn close_font_source(&mut self) {
-    self.font_source = None;
-    self.source_identity = None;
+    self.retained_source = None;
     self.slug_atlas = None;
     self.source_atlas_descriptors.clear();
   }
@@ -1903,15 +1925,7 @@ impl Bridge {
   #[napi(ts_args_type = "glyphId: GlyphId")]
   pub fn read_font_source_glyph(&self, glyph_id: String) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let glyph_id = parse::<GlyphId>(&glyph_id)?;
-    let source = self.font_source()?;
-    let identity = self.source_identity()?;
-    let glyph_index = identity.glyph_index(&glyph_id)?;
-    let projected = source.glyph(glyph_index)?;
-    Ok(convert_all(wire_source_glyph(
-      projected,
-      source.directory(),
-      identity,
-    )?))
+    Ok(convert_all(self.retained_source()?.glyph(&glyph_id)?))
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
@@ -1928,14 +1942,13 @@ impl Bridge {
     self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
     let generation = self.slug_generation;
     let (atlas, descriptor, location, layout) = {
-      let source = self.font_source()?;
-      let identity = self.source_identity()?;
-      let location = source_location(source.directory(), identity, coordinates)?;
+      let source = self.retained_source()?;
+      let location = source.location(coordinates)?;
       let roots = parse_id_list::<GlyphId>(&glyph_ids)?
         .iter()
-        .map(|glyph_id| identity.glyph_index(glyph_id))
+        .map(|glyph_id| source.identity.glyph_index(glyph_id))
         .collect::<BridgeResult<Vec<_>>>()?;
-      let page = match source {
+      let page = match &source.font {
         OpenedFont::OpenType(font) => {
           build_binary_atlas_page(font, &roots, shift_slug::DEFAULT_BAND_COUNT)?
         }
@@ -1955,7 +1968,7 @@ impl Bridge {
       &descriptor,
       &location,
       layout,
-      self.source_identity()?,
+      &self.retained_source()?.identity,
     )?;
     self.source_atlas_descriptors.insert(page_index, descriptor);
     self.slug_atlas = Some(SlugAtlasGeneration {
@@ -1994,9 +2007,7 @@ impl Bridge {
     &self,
     coordinates: Vec<f64>,
   ) -> errors::Result<Vec<NapiCatalogAtlasWeights>> {
-    let source = self.font_source()?;
-    let identity = self.source_identity()?;
-    let location = source_location(source.directory(), identity, coordinates)?;
+    let location = self.retained_source()?.location(coordinates)?;
 
     self
       .source_atlas_descriptors
@@ -2222,22 +2233,12 @@ impl Bridge {
       })
   }
 
-  fn font_source(&self) -> BridgeResult<&OpenedFont> {
+  fn retained_source(&self) -> BridgeResult<&RetainedSource> {
     self
-      .font_source
+      .retained_source
       .as_ref()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "font source",
-        value: "no retained font source is open".to_string(),
-      })
-  }
-
-  fn source_identity(&self) -> BridgeResult<&SourceIdentity> {
-    self
-      .source_identity
-      .as_ref()
-      .ok_or_else(|| BridgeError::InvalidInput {
-        kind: "font source identity",
         value: "no retained font source is open".to_string(),
       })
   }
