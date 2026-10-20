@@ -71,9 +71,7 @@ export const Bounds = {
     return { min: { x, y }, max: { x: x + w, y: y + h } };
   },
 
-  // ============================================
   // Composition
-  // ============================================
 
   /** Return the smallest bounds that contains both `a` and `b`. */
   union(a: Bounds, b: Bounds): Bounds {

@@ -3,8 +3,7 @@ import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { Editor } from "@shift/editor";
-import { Font } from "@shift/editor/model";
-import { FontStore } from "@shift/editor/model";
+import { Font, FontStore } from "@shift/editor/model";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import {

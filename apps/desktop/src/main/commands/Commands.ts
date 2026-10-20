@@ -1,7 +1,6 @@
 import { shell } from "electron";
 import log from "electron-log/main";
-import type { Command } from "./Command";
-import type { CommandRegistry } from "./Command";
+import type { Command, CommandRegistry } from "./Command";
 import {
   SHIFT_DISCORD_URL,
   SHIFT_NEW_ISSUE_URL,

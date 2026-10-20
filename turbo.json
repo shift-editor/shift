@@ -222,10 +222,12 @@
       "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
     },
     "lint": {
-      "outputs": []
+      "outputs": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.oxlintrc.json", "$TURBO_ROOT$/scripts/oxlint/**"]
     },
     "lint:check": {
-      "outputs": []
+      "outputs": [],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.oxlintrc.json", "$TURBO_ROOT$/scripts/oxlint/**"]
     },
     "test": {
       "outputs": [],

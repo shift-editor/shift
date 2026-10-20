@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { bench, describe } from "vitest";
-import type { AnchorId, GlyphName, TextItemId } from "@shift/types";
+import { asAnchorId, type GlyphName, type TextItemId } from "@shift/types";
 import { PositionEdits } from "@shift/editor/model";
 import type { LocalPoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing/TestEditor";
@@ -176,7 +176,7 @@ for (const scale of SCALES) {
         ...OPTIONS,
         setup: async () => {
           const { editor } = await open();
-          const selection = editor.positionSelection([uTop(editor).id as AnchorId])!;
+          const selection = editor.positionSelection([asAnchorId(uTop(editor).id)])!;
           move = PositionEdits.fromSelection(selection).move(selection.targets);
         },
         teardown: async (_task, mode) => {

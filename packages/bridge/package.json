@@ -14,7 +14,9 @@
     }
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "lint": "oxlint --fix src/",
+    "lint:check": "oxlint --deny-warnings src/"
   },
   "dependencies": {
     "@shift/types": "workspace:*",

@@ -6,7 +6,7 @@ import {
   type GlyphStructure,
   type PointId,
 } from "@shift/types";
-import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
+import { Bounds, wrapIndex, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import { Segment } from "./Segment";
 import { Point, type PointWithNeighbors } from "./Point";
 import { CONTOURS_VALUE_OFFSET } from "./valueLayout";
@@ -80,7 +80,7 @@ export class Contour {
   get bounds(): BoundsType | null {
     if (this.#bounds === undefined) {
       const segments = this.segments();
-      if (segments.length == 0) return null;
+      if (segments.length === 0) return null;
 
       this.#bounds = Bounds.unionAll(segments.map((segment) => segment.bounds));
     }
@@ -123,7 +123,7 @@ export class Contour {
     if (index < 0 || index >= count) {
       if (!wrap || count === 0) return null;
 
-      index = ((index % count) + count) % count;
+      index = wrapIndex(index, count);
     }
 
     return this.#points?.[index] ?? this.#pointAt(index);

@@ -1,6 +1,6 @@
 import { Curve, Vec2, type Bounds, type CurveType, type Point2D } from "@shift/geo";
-import { asSegmentId, type PointId, type SegmentId } from "@shift/types";
-import { Point } from "./Point";
+import { asPointId, asSegmentId, type PointId, type SegmentId } from "@shift/types";
+import type { Point } from "./Point";
 import type {
   ContourGeometry,
   SegmentPoints,
@@ -39,8 +39,8 @@ export function parseSegmentId(
   const separatorIndex = body.indexOf(":");
   if (separatorIndex <= 0 || separatorIndex === body.length - 1) return null;
 
-  const startPointId = body.slice(0, separatorIndex) as PointId;
-  const endPointId = body.slice(separatorIndex + 1) as PointId;
+  const startPointId = asPointId(body.slice(0, separatorIndex));
+  const endPointId = asPointId(body.slice(separatorIndex + 1));
   return { startPointId, endPointId };
 }
 

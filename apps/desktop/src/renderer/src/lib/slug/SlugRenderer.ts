@@ -1,7 +1,7 @@
 import type { GlyphId, SourceId } from "@shift/types";
 import type { GlyphAtlasPageWeights } from "@/types/glyphAtlas";
 import type { GlyphPreviewFrame, GlyphPreviewInstance } from "@/types/glyphPreview";
-import { SlugAtlas } from "./SlugAtlas";
+import type { SlugAtlas } from "./SlugAtlas";
 import { SlugAtlasPage } from "./SlugAtlasPage";
 import { SlugRendererPipelines } from "./SlugRendererResources";
 

@@ -2,7 +2,7 @@ import { Vec2, type Point2D } from "@shift/geo";
 import type { PositionCondition } from "../../../types/positionEdit";
 import type { GlyphLayer } from "../Glyph";
 import { AngleSnap } from "./AngleSnap";
-import { PositionReference } from "./PositionReference";
+import type { PositionReference } from "./PositionReference";
 
 /** Quantizes a vector's direction while preserving its length. */
 export class DirectionSnap {
