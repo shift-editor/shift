@@ -2,7 +2,7 @@
 
 use miette::{Result, bail, miette};
 use shift_font::UpdateAxis;
-use shift_font::{AxisKind, FontIntent, FontIntentSet};
+use shift_font::{AxisKind, FontIntentSet};
 
 use crate::cli::SetAxisArgs;
 
@@ -55,8 +55,6 @@ pub(crate) fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        &FontIntentSet {
-            intents: vec![FontIntent::UpdateAxis(UpdateAxis { axis })],
-        },
+        &FontIntentSet::from(UpdateAxis { axis }),
     )
 }

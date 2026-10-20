@@ -1,6 +1,6 @@
 use crate::ReplaceGlyphLayerContent;
 use crate::test_support::sample_font;
-use crate::{Anchor, Component, Contour, CoreError, FontIntent, FontIntentSet, GlyphId, PointType};
+use crate::{Anchor, Component, Contour, CoreError, FontIntentSet, GlyphId, PointType};
 
 #[test]
 fn replacement_preserves_auxiliary_data_and_refreshes_structure_identity() {
@@ -16,17 +16,13 @@ fn replacement_preserves_auxiliary_data_and_refreshes_structure_identity() {
     let contour_id = contour.id();
     let anchor = Anchor::new(Some("top".to_string()), 25.0, 40.0);
     let anchor_id = anchor.id();
-    font.apply_intents(&FontIntentSet {
-        intents: vec![FontIntent::ReplaceGlyphLayerContent(
-            ReplaceGlyphLayerContent {
-                layer_id: layer.id(),
-                width: 720.0,
-                contours: vec![contour],
-                anchors: vec![anchor],
-                components: Vec::new(),
-            },
-        )],
-    })
+    font.apply_intents(&FontIntentSet::from(ReplaceGlyphLayerContent {
+        layer_id: layer.id(),
+        width: 720.0,
+        contours: vec![contour],
+        anchors: vec![anchor],
+        components: Vec::new(),
+    }))
     .unwrap();
     let replacement = font.layer(&layer.id()).unwrap();
     assert_eq!(replacement.source_id(), layer.source_id());
@@ -69,17 +65,13 @@ fn replacement_rejects_cross_layer_identity_collisions_without_mutation() {
         .unwrap()
         .clone();
     let before = font.clone();
-    let result = font.apply_intents(&FontIntentSet {
-        intents: vec![FontIntent::ReplaceGlyphLayerContent(
-            ReplaceGlyphLayerContent {
-                layer_id,
-                width: 500.0,
-                contours: vec![contour],
-                anchors: Vec::new(),
-                components: Vec::new(),
-            },
-        )],
-    });
+    let result = font.apply_intents(&FontIntentSet::from(ReplaceGlyphLayerContent {
+        layer_id,
+        width: 500.0,
+        contours: vec![contour],
+        anchors: Vec::new(),
+        components: Vec::new(),
+    }));
     assert!(matches!(result, Err(CoreError::DuplicateContourId(_))));
     assert_eq!(font, before);
 }
@@ -101,17 +93,13 @@ fn replacement_rejects_duplicate_and_nonfinite_payloads_before_mutation() {
         (f64::NAN, Vec::new()),
     ] {
         assert!(
-            font.apply_intents(&FontIntentSet {
-                intents: vec![FontIntent::ReplaceGlyphLayerContent(
-                    ReplaceGlyphLayerContent {
-                        layer_id: layer_id.clone(),
-                        width,
-                        contours,
-                        anchors: Vec::new(),
-                        components: Vec::new(),
-                    }
-                )],
-            })
+            font.apply_intents(&FontIntentSet::from(ReplaceGlyphLayerContent {
+                layer_id: layer_id.clone(),
+                width,
+                contours,
+                anchors: Vec::new(),
+                components: Vec::new(),
+            }))
             .is_err()
         );
         assert_eq!(font, before);
@@ -131,17 +119,13 @@ fn replacement_rejects_missing_and_cyclic_component_bases() {
     let before = font.clone();
     for base_glyph_id in [GlyphId::new(), glyph_id] {
         assert!(
-            font.apply_intents(&FontIntentSet {
-                intents: vec![FontIntent::ReplaceGlyphLayerContent(
-                    ReplaceGlyphLayerContent {
-                        layer_id: layer_id.clone(),
-                        width: 500.0,
-                        contours: Vec::new(),
-                        anchors: Vec::new(),
-                        components: vec![Component::new(base_glyph_id, "A")],
-                    }
-                )],
-            })
+            font.apply_intents(&FontIntentSet::from(ReplaceGlyphLayerContent {
+                layer_id: layer_id.clone(),
+                width: 500.0,
+                contours: Vec::new(),
+                anchors: Vec::new(),
+                components: vec![Component::new(base_glyph_id, "A")],
+            }))
             .is_err()
         );
         assert_eq!(font, before);

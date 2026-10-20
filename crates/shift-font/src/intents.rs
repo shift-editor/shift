@@ -80,10 +80,22 @@ macro_rules! font_intents {
             fn from(intent: $layer) -> Self {
                 Self::$layer(intent)
             }
+        }
+
+        impl From<$layer> for FontIntentSet {
+            fn from(intent: $layer) -> Self {
+                FontIntent::from(intent).into()
+            }
         })*
         $(impl From<$font> for FontIntent {
             fn from(intent: $font) -> Self {
                 Self::$font(intent)
+            }
+        }
+
+        impl From<$font> for FontIntentSet {
+            fn from(intent: $font) -> Self {
+                FontIntent::from(intent).into()
             }
         })*
     };
@@ -225,6 +237,23 @@ impl FontIntent {
 #[derive(Clone, Debug, Default)]
 pub struct FontIntentSet {
     pub intents: Vec<FontIntent>,
+}
+
+/// A set of one intent, applied as one edit.
+impl From<FontIntent> for FontIntentSet {
+    fn from(intent: FontIntent) -> Self {
+        Self {
+            intents: vec![intent],
+        }
+    }
+}
+
+impl FromIterator<FontIntent> for FontIntentSet {
+    fn from_iter<I: IntoIterator<Item = FontIntent>>(intents: I) -> Self {
+        Self {
+            intents: intents.into_iter().collect(),
+        }
+    }
 }
 
 impl FontIntentSet {
@@ -954,11 +983,9 @@ mod tests {
         font.add_source(Source::new("Bold".to_string(), location));
         let original = font.clone();
 
-        let Err(error) = font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::DeleteSource(DeleteSource {
-                source_id: default_source_id.clone(),
-            })],
-        }) else {
+        let Err(error) = font.apply_intents(&FontIntentSet::from(DeleteSource {
+            source_id: default_source_id.clone(),
+        })) else {
             panic!("default source deletion should be rejected");
         };
 
@@ -979,13 +1006,11 @@ mod tests {
         let source_id = SourceId::new();
         let location = DesignLocation::from([(axis_id, 400.0)]);
 
-        let result = font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::CreateSource(CreateSource {
-                source_id,
-                name: "Book".to_string(),
-                location,
-            })],
-        });
+        let result = font.apply_intents(&FontIntentSet::from(CreateSource {
+            source_id,
+            name: "Book".to_string(),
+            location,
+        }));
 
         assert!(matches!(
             result,
@@ -1048,13 +1073,11 @@ mod tests {
         font.insert_glyph(root).unwrap();
         let component_id = ComponentId::new();
 
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::AddComponent(AddComponent {
-                layer_id: root_layer_id.clone(),
-                component_id: component_id.clone(),
-                base_glyph_id: base_id.clone(),
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(AddComponent {
+            layer_id: root_layer_id.clone(),
+            component_id: component_id.clone(),
+            base_glyph_id: base_id.clone(),
+        }))
         .unwrap();
 
         let component = font
@@ -1065,12 +1088,10 @@ mod tests {
         assert_eq!(component.base_glyph_id(), base_id);
         assert_eq!(component.base_glyph_name().as_str(), "base");
 
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::RemoveComponents(RemoveComponents {
-                layer_id: root_layer_id.clone(),
-                component_ids: vec![component_id],
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(RemoveComponents {
+            layer_id: root_layer_id.clone(),
+            component_ids: vec![component_id],
+        }))
         .unwrap();
 
         assert!(font.layer(&root_layer_id).unwrap().components().is_empty());
@@ -1131,13 +1152,11 @@ mod tests {
         glyph.set_layer(GlyphLayer::new(layer_id.clone(), source_id));
         font.insert_glyph(glyph).unwrap();
 
-        let result = font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::AddComponent(AddComponent {
-                layer_id,
-                component_id: ComponentId::new(),
-                base_glyph_id: glyph_id.clone(),
-            })],
-        });
+        let result = font.apply_intents(&FontIntentSet::from(AddComponent {
+            layer_id,
+            component_id: ComponentId::new(),
+            base_glyph_id: glyph_id.clone(),
+        }));
 
         assert!(matches!(
             result,
@@ -1166,13 +1185,11 @@ mod tests {
         child.set_layer(GlyphLayer::new(child_layer_id.clone(), source_id));
         font.insert_glyph(child).unwrap();
 
-        let result = font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::AddComponent(AddComponent {
-                layer_id: child_layer_id,
-                component_id: ComponentId::new(),
-                base_glyph_id: parent_id.clone(),
-            })],
-        });
+        let result = font.apply_intents(&FontIntentSet::from(AddComponent {
+            layer_id: child_layer_id,
+            component_id: ComponentId::new(),
+            base_glyph_id: parent_id.clone(),
+        }));
 
         assert!(matches!(
             result,
@@ -1194,12 +1211,10 @@ mod tests {
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::TransformLayer(TransformLayer {
-                layer_id: layer_id.clone(),
-                transform: Transform::translate(25.0, 0.0),
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(TransformLayer {
+            layer_id: layer_id.clone(),
+            transform: Transform::translate(25.0, 0.0),
+        }))
         .unwrap();
         let anchor = font
             .require_layer(&layer_id)
@@ -1208,12 +1223,10 @@ mod tests {
             .unwrap();
         assert_eq!(anchor.x(), 35.0);
 
-        let rejected = font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::TransformLayer(TransformLayer {
-                layer_id,
-                transform: Transform::translate(f64::NAN, 0.0),
-            })],
-        });
+        let rejected = font.apply_intents(&FontIntentSet::from(TransformLayer {
+            layer_id,
+            transform: Transform::translate(f64::NAN, 0.0),
+        }));
         assert!(matches!(
             rejected,
             Err(CoreError::InvalidPositionUpdateInput {
@@ -1240,13 +1253,11 @@ mod tests {
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::SetComponentTransforms(SetComponentTransforms {
-                layer_id: layer_id.clone(),
-                component_ids: vec![component_id.clone()],
-                transforms: vec![12.0, -7.0, 30.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(SetComponentTransforms {
+            layer_id: layer_id.clone(),
+            component_ids: vec![component_id.clone()],
+            transforms: vec![12.0, -7.0, 30.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        }))
         .unwrap();
 
         let transform = font
@@ -1310,12 +1321,10 @@ mod tests {
         root.set_layer(root_layer);
         font.insert_glyph(root).unwrap();
 
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::DecomposeComponents(DecomposeComponents {
-                layer_id: root_layer_id.clone(),
-                component_ids: vec![root_component_id],
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(DecomposeComponents {
+            layer_id: root_layer_id.clone(),
+            component_ids: vec![root_component_id],
+        }))
         .unwrap();
 
         let layer = font.layer(&root_layer_id).unwrap();
@@ -1348,26 +1357,22 @@ mod tests {
 
         let source_id = SourceId::new();
         let location = DesignLocation::from([(axis_id, 700.0)]);
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::CreateSource(CreateSource {
-                source_id: source_id.clone(),
-                name: "Bold".to_string(),
-                location,
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(CreateSource {
+            source_id: source_id.clone(),
+            name: "Bold".to_string(),
+            location,
+        }))
         .expect("new source should apply");
 
         let layer_id = LayerId::new();
         let values = GlyphInterpolationValues::new(vec![600.0, 30.0, 40.0]);
-        font.apply_intents(&FontIntentSet {
-            intents: vec![FontIntent::MaterializeGlyphLayer(MaterializeGlyphLayer {
-                layer_id: layer_id.clone(),
-                glyph_id,
-                source_id,
-                from_layer_id,
-                values: values.clone(),
-            })],
-        })
+        font.apply_intents(&FontIntentSet::from(MaterializeGlyphLayer {
+            layer_id: layer_id.clone(),
+            glyph_id,
+            source_id,
+            from_layer_id,
+            values: values.clone(),
+        }))
         .expect("materialized layer should apply");
 
         let layer = font

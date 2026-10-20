@@ -536,18 +536,16 @@ fn kerning_edit(
     source_id: &str,
     value: Option<f64>,
 ) -> shift_font::FontChangeSet {
-    font.apply_intents(&shift_font::FontIntentSet {
-        intents: vec![shift_font::FontIntent::SetKerningValues(SetKerningValues {
-            edits: vec![shift_font::KerningValueEdit {
-                source_id: shift_font::SourceId::from_raw(source_id),
-                pair: shift_font::KerningPair::groups(
-                    shift_font::KerningGroupId::from_raw("first_A"),
-                    shift_font::KerningGroupId::from_raw("second_A"),
-                ),
-                value,
-            }],
-        })],
-    })
+    font.apply_intents(&shift_font::FontIntentSet::from(SetKerningValues {
+        edits: vec![shift_font::KerningValueEdit {
+            source_id: shift_font::SourceId::from_raw(source_id),
+            pair: shift_font::KerningPair::groups(
+                shift_font::KerningGroupId::from_raw("first_A"),
+                shift_font::KerningGroupId::from_raw("second_A"),
+            ),
+            value,
+        }],
+    }))
     .expect("kerning edit applies")
     .changes
 }

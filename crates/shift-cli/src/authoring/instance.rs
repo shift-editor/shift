@@ -84,11 +84,7 @@ pub(crate) fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        &FontIntentSet {
-            intents: vec![FontIntent::UpdateNamedInstance(UpdateNamedInstance {
-                instance,
-            })],
-        },
+        &FontIntentSet::from(UpdateNamedInstance { instance }),
     )
 }
 
@@ -103,11 +99,9 @@ pub(crate) fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringRepo
     apply_mutation(
         &args.path,
         &args.mutation,
-        &FontIntentSet {
-            intents: vec![FontIntent::DeleteNamedInstance(DeleteNamedInstance {
-                instance_id: instance.id(),
-            })],
-        },
+        &FontIntentSet::from(DeleteNamedInstance {
+            instance_id: instance.id(),
+        }),
     )
 }
 

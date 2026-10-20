@@ -90,9 +90,7 @@ pub(crate) fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport
     apply_mutation(
         &args.path,
         &args.mutation,
-        &FontIntentSet {
-            intents: vec![FontIntent::SetKerningValues(SetKerningValues { edits })],
-        },
+        &FontIntentSet::from(SetKerningValues { edits }),
     )
 }
 
@@ -130,12 +128,10 @@ pub(crate) fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<Autho
 pub(crate) fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
-    let set = FontIntentSet {
-        intents: vec![FontIntent::RenameKerningGroup(RenameKerningGroup {
-            group_id,
-            name: args.name,
-        })],
-    };
+    let set = FontIntentSet::from(RenameKerningGroup {
+        group_id,
+        name: args.name,
+    });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }
@@ -148,11 +144,7 @@ pub(crate) fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<Autho
 pub(crate) fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
-    let set = FontIntentSet {
-        intents: vec![FontIntent::DeleteKerningGroup(DeleteKerningGroup {
-            group_id,
-        })],
-    };
+    let set = FontIntentSet::from(DeleteKerningGroup { group_id });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }

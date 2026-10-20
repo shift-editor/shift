@@ -80,10 +80,8 @@ fn kern_at(bytes: &[u8], text: &str, (width, weight): (f32, f32)) -> i32 {
 }
 
 fn edit(font: &mut Font, intent: FontIntent) {
-    font.apply_intents(&FontIntentSet {
-        intents: vec![intent],
-    })
-    .expect("kerning edit should apply");
+    font.apply_intents(&FontIntentSet::from(intent))
+        .expect("kerning edit should apply");
 }
 
 #[test]

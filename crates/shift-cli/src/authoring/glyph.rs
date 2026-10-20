@@ -30,13 +30,11 @@ use super::{AuthoringReport, apply_mutation};
 /// with existing identity, the package cannot be loaded, or saving fails.
 pub(crate) fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
     let unicodes = parse_unicodes(&args.unicode)?;
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CreateGlyph(CreateGlyph {
-            glyph_id: None,
-            name: args.name,
-            unicodes,
-        })],
-    };
+    let set = FontIntentSet::from(CreateGlyph {
+        glyph_id: None,
+        name: args.name,
+        unicodes,
+    });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }
@@ -125,14 +123,12 @@ pub(crate) fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
             )
         })?;
     let layer_id = LayerId::new();
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CloneGlyphLayer(CloneGlyphLayer {
-            layer_id,
-            glyph_id,
-            source_id,
-            from_layer_id,
-        })],
-    };
+    let set = FontIntentSet::from(CloneGlyphLayer {
+        layer_id,
+        glyph_id,
+        source_id,
+        from_layer_id,
+    });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }

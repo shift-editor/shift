@@ -10,14 +10,7 @@ use shift_workspace::{AcquireScope, FontWorkspace};
 use tempfile::TempDir;
 
 fn apply(workspace: &mut FontWorkspace, intent: FontIntent) {
-    workspace
-        .apply(
-            &FontIntentSet {
-                intents: vec![intent],
-            },
-            None,
-        )
-        .unwrap();
+    workspace.apply(&FontIntentSet::from(intent), None).unwrap();
 }
 
 /// A saved document opened with a recovery overlay.

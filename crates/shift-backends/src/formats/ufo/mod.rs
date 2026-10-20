@@ -170,11 +170,9 @@ mod tests {
     #[test]
     fn tracked_languages_round_trip_through_font_lib_plist() {
         let mut font = create_test_font();
-        font.apply_intents(&shift_font::FontIntentSet {
-            intents: vec![shift_font::FontIntent::SetLanguages(SetLanguages {
-                language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
-            })],
-        })
+        font.apply_intents(&shift_font::FontIntentSet::from(SetLanguages {
+            language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
+        }))
         .unwrap();
 
         let temp_dir = tempfile::tempdir().unwrap();
