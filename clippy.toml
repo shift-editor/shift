@@ -8,3 +8,7 @@ allow-indexing-slicing-in-tests = true
 
 # Shift's crates are not a published API, so lints also check public functions.
 avoid-breaking-exported-api = false
+
+# A ratchet: today's longest function. Lower it as long functions are split
+# into named steps; never raise it.
+too-many-lines-threshold = 192

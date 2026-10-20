@@ -1,7 +1,8 @@
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "test and benchmark arithmetic on small known values"
+    clippy::too_many_lines,
+    reason = "test and benchmark arithmetic on small known values; benchmarks and GPU tests run as one long scenario"
 )]
 use std::{env, error::Error, fs, path::PathBuf, sync::mpsc, time::Instant};
 
