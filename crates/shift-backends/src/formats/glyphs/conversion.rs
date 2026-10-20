@@ -14,13 +14,12 @@ use shift_font::{
 
 use super::families::InstanceFamilies;
 use crate::{
-    distinct_named_instances,
+    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport, distinct_named_instances,
     feature_includes::inline_feature_includes,
     font_source::piecewise_map,
     glyph_category::{GlyphCategories, ResolvedCategory},
     kerning_import::{KerningImport, NamedKerningSide},
     metrics::set_metric_position,
-    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -248,8 +247,8 @@ pub(crate) fn font_header(
                         .iter()
                         .map(|(user, design)| AxisMappingPoint {
                             description: None,
-                            input: Location::from_map(HashMap::from([(axis_id.clone(), *user)])),
-                            output: Location::from_map(HashMap::from([(axis_id.clone(), *design)])),
+                            input: Location::from([(axis_id.clone(), *user)]),
+                            output: Location::from([(axis_id.clone(), *design)]),
                         })
                         .collect(),
                 )
@@ -271,7 +270,7 @@ pub(crate) fn font_header(
         let source_id = font.add_source(Source::new(master.name.clone(), location));
         let metric_definitions = font.metric_definitions().to_vec();
         let source = font
-            .source_mut(source_id.clone())
+            .source_mut(&source_id)
             .expect("a newly added source should exist");
         set_metric_position(
             &metric_definitions,
@@ -397,10 +396,12 @@ pub(super) fn add_intermediate_sources(
     let metrics = font.source_metric_interpolation();
     let mut intermediates = HashMap::new();
     for coordinates in locations {
-        let mut location = DesignLocation::new();
-        for (axis, value) in font.axes().iter().zip(&coordinates) {
-            location.set(axis.id(), value.into_inner());
-        }
+        let location: DesignLocation = font
+            .axes()
+            .iter()
+            .zip(&coordinates)
+            .map(|(axis, value)| (axis.id(), value.into_inner()))
+            .collect();
         let name = coordinates
             .iter()
             .map(ToString::to_string)
@@ -665,8 +666,8 @@ mod tests {
         assert_eq!(imported_layer_count(&glyphs_font.glyphs["a"], &sources), 2);
         for glyph in [&a, &b] {
             assert_eq!(glyph.layers().len(), 2);
-            assert!(glyph.layer_for_source(master_source_id.clone()).is_some());
-            assert!(glyph.layer_for_source(brace.id()).is_some());
+            assert!(glyph.layer_for_source(&master_source_id).is_some());
+            assert!(glyph.layer_for_source(&brace.id()).is_some());
         }
     }
 

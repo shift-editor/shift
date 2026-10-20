@@ -17,7 +17,7 @@ pub(super) fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Na
     })
 }
 
-fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendError {
+fn io_error(action: &str, path: &Path, error: &std::io::Error) -> FormatBackendError {
     FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
 }
 
@@ -45,11 +45,17 @@ fn sync_tree(_root: &Path) -> std::io::Result<()> {
 /// Atomically exchanges `staged` and `target` in one filesystem operation,
 /// so there is never an instant without a UFO at `target`.
 #[cfg(target_os = "macos")]
+#[allow(
+    unsafe_code,
+    reason = "the atomic swap is only available as a libc call"
+)]
 fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    // SAFETY: both pointers come from `CString`s that live until the call
+    // returns and are NUL-terminated; `renamex_np` only reads them.
     let result = unsafe { libc::renamex_np(staged.as_ptr(), target.as_ptr(), libc::RENAME_SWAP) };
 
     if result == 0 {
@@ -60,6 +66,10 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    unsafe_code,
+    reason = "the atomic exchange is only available as a raw syscall"
+)]
 fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -67,6 +77,9 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
     // The raw syscall keeps the binary off glibc 2.28's `renameat2` wrapper, so
     // Linux builds linked against an older glibc still resolve every symbol.
+    // SAFETY: both pointers come from `CString`s that live until the syscall
+    // returns and are NUL-terminated; `renameat2` only reads them, and every
+    // other argument is a plain integer constant.
     let result = unsafe {
         libc::syscall(
             libc::SYS_renameat2,
@@ -94,7 +107,7 @@ fn exchange_unsupported(error: &std::io::Error) -> bool {
     #[cfg(unix)]
     if matches!(
         error.raw_os_error(),
-        Some(libc::ENOTSUP) | Some(libc::EINVAL) | Some(libc::ENOSYS)
+        Some(libc::ENOTSUP | libc::EINVAL | libc::ENOSYS)
     ) {
         return true;
     }
@@ -223,7 +236,7 @@ impl UfoWriter {
             }
             LibValue::Dict(dict) => {
                 let mut plist_dict = plist::Dictionary::new();
-                for (k, v) in dict.iter() {
+                for (k, v) in dict {
                     plist_dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));
                 }
                 plist::Value::Dictionary(plist_dict)
@@ -238,7 +251,7 @@ impl UfoWriter {
 
     fn convert_lib(lib: &LibData) -> plist::Dictionary {
         let mut dict = plist::Dictionary::new();
-        for (k, v) in lib.iter() {
+        for (k, v) in lib {
             dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));
         }
         dict
@@ -424,7 +437,7 @@ impl UfoWriter {
             let Some(ref source_id) = default_source_id else {
                 continue;
             };
-            if let Some(layer_data) = glyph.layer_for_source(source_id.clone()) {
+            if let Some(layer_data) = glyph.layer_for_source(source_id) {
                 let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                 default_layer.insert_glyph(norad_glyph);
             }
@@ -453,7 +466,7 @@ impl UfoWriter {
             Self::apply_layer_metadata(source, norad_layer)?;
 
             for glyph in font.glyphs() {
-                if let Some(layer_data) = glyph.layer_for_source(source.id()) {
+                if let Some(layer_data) = glyph.layer_for_source(&source.id()) {
                     let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }
@@ -464,7 +477,7 @@ impl UfoWriter {
             norad_font.features = fea_source.to_string();
         }
 
-        for (data_path, bytes) in font.data_files().iter() {
+        for (data_path, bytes) in font.data_files() {
             norad_font
                 .data
                 .insert(PathBuf::from(data_path), bytes.clone())
@@ -498,27 +511,27 @@ impl UfoWriter {
             _ => Path::new("."),
         };
         std::fs::create_dir_all(parent)
-            .map_err(|e| io_error("create parent directory for", target, e))?;
+            .map_err(|e| io_error("create parent directory for", target, &e))?;
 
         // Staged in the target's parent so the swap is a same-filesystem rename.
         let staging = tempfile::Builder::new()
             .prefix(".shift-ufo-staging-")
             .tempdir_in(parent)
-            .map_err(|e| io_error("create staging directory for", target, e))?;
+            .map_err(|e| io_error("create staging directory for", target, &e))?;
         let staged_ufo = staging.path().join(file_name);
         norad_font
             .save(&staged_ufo)
             .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
-        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
+        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, &e))?;
 
         if target.exists() {
             Self::exchange_or_swap(target, &staged_ufo, staging)?;
         } else {
             std::fs::rename(&staged_ufo, target)
-                .map_err(|e| io_error("move new UFO into place at", target, e))?;
+                .map_err(|e| io_error("move new UFO into place at", target, &e))?;
         }
 
-        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, e))?;
+        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, &e))?;
         Ok(())
     }
 
@@ -534,7 +547,7 @@ impl UfoWriter {
             Err(error) if exchange_unsupported(&error) => {
                 Self::swap_with_backup(target, staged, staging)
             }
-            Err(error) => Err(io_error("swap new UFO into place at", target, error)),
+            Err(error) => Err(io_error("swap new UFO into place at", target, &error)),
         }
     }
 
@@ -545,7 +558,7 @@ impl UfoWriter {
     ) -> FormatBackendResult<()> {
         let backup = staging.path().join("previous");
         std::fs::rename(target, &backup)
-            .map_err(|e| io_error("move aside existing UFO at", target, e))?;
+            .map_err(|e| io_error("move aside existing UFO at", target, &e))?;
 
         if let Err(error) = std::fs::rename(staged, target) {
             if std::fs::rename(&backup, target).is_err() {
@@ -557,7 +570,7 @@ impl UfoWriter {
                     staging_path.join("previous").display(),
                 )));
             }
-            return Err(io_error("move new UFO into place at", target, error));
+            return Err(io_error("move new UFO into place at", target, &error));
         }
 
         Ok(())

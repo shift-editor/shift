@@ -100,7 +100,7 @@ pub fn build_authored_atlas_profiled(
     font: &Font,
     band_count: u32,
 ) -> Result<(AuthoredAtlas, AuthoredAtlasProfile), AuthoredSlugError> {
-    let glyph_ids = font.glyphs().map(|glyph| glyph.id()).collect::<Vec<_>>();
+    let glyph_ids = font.glyphs().map(shift_font::Glyph::id).collect::<Vec<_>>();
     build_authored_atlas_page_profiled(font, &glyph_ids, band_count)
 }
 
@@ -199,7 +199,7 @@ fn collect_weight_sets(
     let bases = projections.into_iter().flat_map(|projection| {
         projection
             .interpolation()
-            .map(|interpolation| interpolation.basis())
+            .map(shift_font::GlyphInterpolation::basis)
             .into_iter()
             .chain(projection.decomposition())
     });

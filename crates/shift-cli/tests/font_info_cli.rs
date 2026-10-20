@@ -129,7 +129,7 @@ fn metric_edits_target_only_the_selected_master_and_preserve_overshoots() {
         .find(|source| source.name() == "Bold")
         .unwrap();
     let original = before
-        .metric_value(bold.id(), MetricKind::Ascender)
+        .metric_value(&bold.id(), MetricKind::Ascender)
         .unwrap();
     let output = shift(&[
         "font",
@@ -146,7 +146,7 @@ fn metric_edits_target_only_the_selected_master_and_preserve_overshoots() {
     assert!(output.status.success(), "{:?}", output.stderr);
     let after = load_font(path.to_str().unwrap());
     assert_eq!(
-        after.metric_value(bold.id(), MetricKind::Ascender),
+        after.metric_value(&bold.id(), MetricKind::Ascender),
         Some(MetricValue::new(1700.25, original.overshoot))
     );
     assert_eq!(after.default_source(), before.default_source());
@@ -159,8 +159,8 @@ fn metric_edits_target_only_the_selected_master_and_preserve_overshoots() {
     assert_eq!(after.source(&bold.id()).unwrap().color(), bold.color());
     assert_eq!(after.source(&bold.id()).unwrap().line_gap(), Some(36.5));
     assert_eq!(
-        after.metric_value(bold.id(), MetricKind::CapHeight),
-        before.metric_value(bold.id(), MetricKind::CapHeight)
+        after.metric_value(&bold.id(), MetricKind::CapHeight),
+        before.metric_value(&bold.id(), MetricKind::CapHeight)
     );
     let selector = bold.id().to_string();
     let info = font_info(path.to_str().unwrap(), &["--source", &selector]);
@@ -240,7 +240,7 @@ fn missing_standard_metric_is_introduced_without_overwriting_other_authored_role
     let after = load_font(path.to_str().unwrap());
     assert_eq!(
         after
-            .metric_value(after.default_source_id().unwrap(), MetricKind::Ascender)
+            .metric_value(&after.default_source_id().unwrap(), MetricKind::Ascender)
             .unwrap()
             .position,
         1650.0
@@ -251,15 +251,15 @@ fn missing_standard_metric_is_introduced_without_overwriting_other_authored_role
         .find(|source| source.name() == "Bold")
         .unwrap();
     assert_eq!(
-        after.metric_value(bold.id(), MetricKind::Ascender),
+        after.metric_value(&bold.id(), MetricKind::Ascender),
         Some(MetricValue::for_kind(
             MetricKind::Ascender,
             after.metrics().units_per_em
         ))
     );
     assert_eq!(
-        after.metric_value(after.default_source_id().unwrap(), MetricKind::CapHeight),
-        before.metric_value(before.default_source_id().unwrap(), MetricKind::CapHeight)
+        after.metric_value(&after.default_source_id().unwrap(), MetricKind::CapHeight),
+        before.metric_value(&before.default_source_id().unwrap(), MetricKind::CapHeight)
     );
     let report: Value = serde_json::from_slice(&output.stdout).unwrap();
     let sources = report["changes"].as_array().unwrap();

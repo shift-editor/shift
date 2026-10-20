@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
@@ -443,7 +443,7 @@ fn variation_from_layers(
                 .filter_map(|(tag, support)| {
                     let axis = tags.iter().position(|candidate| candidate == tag)?;
                     Some(VariationSupport {
-                        axis: super::AxisIndex::new(axis as u32),
+                        axis: AxisIndex::new(axis as u32),
                         lower: support.min.into_inner().into_inner(),
                         peak: support.peak.into_inner().into_inner(),
                         upper: support.max.into_inner().into_inner(),
@@ -652,8 +652,8 @@ mod tests {
         GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance, SourceIndex, VariationLocation,
     };
     use shift_font::{
-        Axis, AxisId, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Location,
-        MetricKind, MetricValue, NamedInstance, Source,
+        Axis, AxisId, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, MetricKind,
+        MetricValue, NamedInstance, Source,
     };
 
     #[test]
@@ -677,9 +677,8 @@ mod tests {
         let italic_id = italic.id();
         font.add_axis(italic).unwrap();
 
-        let mut regular_location = DesignLocation::new();
-        regular_location.set(weight_id.clone(), 400.0);
-        regular_location.set(italic_id.clone(), 0.0);
+        let regular_location =
+            DesignLocation::from([(weight_id.clone(), 400.0), (italic_id.clone(), 0.0)]);
         let mut regular = Source::with_filename(
             "Regular".to_string(),
             regular_location,
@@ -692,9 +691,8 @@ mod tests {
         regular.set_underline_thickness(Some(60.0));
         let regular_id = font.add_source(regular);
 
-        let mut bold_location = DesignLocation::new();
-        bold_location.set(weight_id.clone(), 800.0);
-        bold_location.set(italic_id.clone(), 1.0);
+        let bold_location =
+            DesignLocation::from([(weight_id.clone(), 800.0), (italic_id.clone(), 1.0)]);
         let mut bold =
             Source::with_filename("Bold".to_string(), bold_location, "Bold.ufo".to_string());
         set_metrics(&font, &mut bold, [1600.0, -550.0, 1450.0, 1050.0]);
@@ -727,9 +725,7 @@ mod tests {
         cross.set_description(Some("Reduce italic weight".to_string()));
         font.set_axis_mappings(vec![independent, cross]).unwrap();
 
-        let mut instance_location = ExternalLocation::new();
-        instance_location.set(weight_id, 900.0);
-        instance_location.set(italic_id, 1.0);
+        let instance_location = ExternalLocation::from([(weight_id, 900.0), (italic_id, 1.0)]);
         font.set_named_instances(vec![NamedInstance::new(
             "Black Italic".to_string(),
             instance_location,
@@ -975,8 +971,8 @@ mod tests {
     fn mapping_point(input: &[(AxisId, f64)], output: &[(AxisId, f64)]) -> AxisMappingPoint {
         AxisMappingPoint {
             description: None,
-            input: Location::from_map(input.iter().cloned().collect()),
-            output: Location::from_map(output.iter().cloned().collect()),
+            input: input.iter().cloned().collect(),
+            output: output.iter().cloned().collect(),
         }
     }
 

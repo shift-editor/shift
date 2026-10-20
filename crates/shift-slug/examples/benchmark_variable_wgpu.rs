@@ -1,17 +1,16 @@
 use std::{env, error::Error, fs, path::PathBuf, sync::mpsc, time::Instant};
 
 use shift_slug::{
-    pack_render_instances, pack_render_params, pack_variable_params, Bounds, Curve, OutlineCommand,
-    RenderInstance, RenderParams, SlugError, VariableAtlas, VariableAtlasBuilder, VariableParams,
-    DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
+    Bounds, Curve, DEFAULT_BAND_COUNT, OutlineCommand, RenderInstance, RenderParams, SlugError,
+    VARIABLE_SLUG_WGSL, VariableAtlas, VariableAtlasBuilder, VariableParams, pack_render_instances,
+    pack_render_params, pack_variable_params,
 };
 use skrifa::{
+    FontRef, GlyphId, MetadataProvider, Tag,
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    FontRef, GlyphId, MetadataProvider, Tag,
 };
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     BindGroupEntry, BufferDescriptor, BufferUsages, Color, ColorTargetState, ColorWrites,
     CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
     DeviceDescriptor, Extent3d, FragmentState, LoadOp, MemoryHints, Operations, Origin3d,
@@ -20,6 +19,7 @@ use wgpu::{
     RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, StoreOp, TexelCopyBufferInfo,
     TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect, TextureDescriptor,
     TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, VertexState,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -654,7 +654,7 @@ fn build_atlas(arguments: &Arguments) -> Result<(usize, usize, VariableAtlas)> {
             .ok_or("source glyph advance is unavailable")?;
         match builder.add_glyph(base.0.clone(), source.0.clone()) {
             Ok(glyph_index) => {
-                builder.set_glyph_source_advances(glyph_index, [base_advance, source_advance])?
+                builder.set_glyph_source_advances(glyph_index, [base_advance, source_advance])?;
             }
             Err(SlugError::VariableTopologyMismatch { .. }) => {
                 let glyph_index = builder.add_glyph(base.0.clone(), base.0)?;
@@ -1353,20 +1353,20 @@ fn arguments() -> Result<Arguments> {
     while let Some(option) = values.next() {
         match option.as_str() {
             "--weight" => {
-                arguments.weight = values.next().ok_or("--weight requires a value")?.parse()?
+                arguments.weight = values.next().ok_or("--weight requires a value")?.parse()?;
             }
             "--visible" => {
                 arguments.visible_glyphs =
-                    values.next().ok_or("--visible requires a count")?.parse()?
+                    values.next().ok_or("--visible requires a count")?.parse()?;
             }
             "--bands" => {
-                arguments.band_count = values.next().ok_or("--bands requires a count")?.parse()?
+                arguments.band_count = values.next().ok_or("--bands requires a count")?.parse()?;
             }
             "--iterations" => {
                 arguments.iterations = values
                     .next()
                     .ok_or("--iterations requires a count")?
-                    .parse()?
+                    .parse()?;
             }
             "--build-only" => arguments.build_only = true,
             _ => return Err(format!("unknown option {option}").into()),

@@ -1,7 +1,7 @@
 //! Component matrices, contour segments and bounds, and whole-layer transforms.
 
-use serde::{de::IgnoredAny, Deserialize, Serialize};
-use shift_font::composite::{layer_bbox, resolved_contours_bbox, ResolvedContour};
+use serde::{Deserialize, Serialize, de::IgnoredAny};
+use shift_font::composite::{ResolvedContour, layer_bbox, resolved_contours_bbox};
 use shift_font::curve::segment_bounds;
 use shift_font::{
     Anchor, AnchorId, Component, ComponentId, Contour, ContourId, CurveSegment, CurveSegmentIter,
@@ -153,8 +153,12 @@ pub fn transform_point(
 ) -> Result<Ts<ReferencePoint>, JsError> {
     let transform = DecomposedTransform::from(transform.to_rust()?);
     let point = point.to_rust()?;
-    let (x, y) = transform.transform_point(point.x, point.y);
-    Ok(ReferencePoint { x, y }.into_ts()?)
+    let moved = transform.transform_point(shift_font::kurbo::Point::new(point.x, point.y));
+    Ok(ReferencePoint {
+        x: moved.x,
+        y: moved.y,
+    }
+    .into_ts()?)
 }
 
 /// `DecomposedTransform::from_matrix`.

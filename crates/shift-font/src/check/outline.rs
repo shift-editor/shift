@@ -5,13 +5,14 @@
 //! badly, because a contour starts at a different point, runs the other way,
 //! or sits in a different position in the list.
 
-use kurbo::{BezPath, PathEl, Shape};
+use kurbo::{BezPath, Shape};
 
 use crate::{
     Contour, CoreResult, Font, Glyph, GlyphId, GlyphLayer, LayerDifference, PointType, Source,
 };
 
-use super::{designspace::number, Check, Finding};
+use super::polygon::Polygon;
+use super::{Check, Finding, designspace::number};
 
 /// Tolerances for the geometric checks.
 #[derive(Clone, Debug, PartialEq)]
@@ -154,7 +155,7 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
                         let kinds = contour
                             .points
                             .iter()
-                            .map(|p| p.point_type())
+                            .map(crate::Point::point_type)
                             .collect::<Vec<_>>();
                         (contour.closed, kinds)
                     })
@@ -167,7 +168,7 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
 /// Returns one layer per master that draws `glyph`, in source order.
 fn master_layers<'a>(font: &'a Font, glyph: &'a Glyph) -> Vec<(&'a Source, &'a GlyphLayer)> {
     font.masters()
-        .filter_map(|source| Some((source, glyph.layer_for_source(source.id())?)))
+        .filter_map(|source| Some((source, glyph.layer_for_source(&source.id())?)))
         .collect()
 }
 
@@ -238,7 +239,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::WrongContourDirection,
                     index,
-                    format!("runs the other way in '{}'", self.source.name()),
+                    &format!("runs the other way in '{}'", self.source.name()),
                 ));
                 continue;
             }
@@ -246,7 +247,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::WrongStartPoint,
                     index,
-                    format!(
+                    &format!(
                         "starts {shift} point{} later in '{}' than in '{}'",
                         if shift == 1 { "" } else { "s" },
                         self.source.name(),
@@ -259,7 +260,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::ContourInsideOut,
                     index,
-                    format!(
+                    &format!(
                         "turns inside out {}% of the way to '{}'",
                         number(t * 100.0),
                         self.source.name()
@@ -269,7 +270,7 @@ impl Pair<'_> {
         }
     }
 
-    fn finding(&self, check: Check, contour: usize, what: String) -> Finding {
+    fn finding(&self, check: Check, contour: usize, what: &str) -> Finding {
         Finding::glyph(
             check,
             self.glyph.id(),
@@ -314,7 +315,7 @@ impl Pair<'_> {
                 out.push(self.finding(
                     Check::WrongContourOrder,
                     i,
-                    format!(
+                    &format!(
                         "and contour {} are in each other's place in '{}'",
                         j + 1,
                         self.source.name()
@@ -339,7 +340,7 @@ impl Pair<'_> {
         let types = b
             .points()
             .iter()
-            .map(|p| p.point_type())
+            .map(crate::Point::point_type)
             .collect::<Vec<_>>();
         let a_types = a.iter().map(|p| p.2).collect::<Vec<_>>();
         let cost = |shift: usize| {
@@ -382,30 +383,8 @@ fn broken_between(a: &Contour, b: &Contour) -> bool {
 
 /// Whether a closed path's flattened outline crosses itself.
 fn crosses_itself(path: &BezPath) -> bool {
-    let mut polygon = Vec::new();
-    kurbo::flatten(path, 1.0, |element| match element {
-        PathEl::MoveTo(point) | PathEl::LineTo(point) => polygon.push((point.x, point.y)),
-        _ => {}
-    });
-    let count = polygon.len();
-    if !(4..=4000).contains(&count) {
-        return false;
-    }
-    let edge = |i: usize| (polygon[i], polygon[(i + 1) % count]);
-    (0..count).any(|i| {
-        ((i + 2)..count).filter(|j| (j + 1) % count != i).any(|j| {
-            let ((p, q), (r, t)) = (edge(i), edge(j));
-            segments_cross(p, q, r, t)
-        })
-    })
-}
-
-/// Whether two segments properly cross; touching at an end doesn't count.
-fn segments_cross(p: (f64, f64), q: (f64, f64), r: (f64, f64), s: (f64, f64)) -> bool {
-    let side = |a: (f64, f64), b: (f64, f64), c: (f64, f64)| {
-        (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
-    };
-    side(r, s, p) * side(r, s, q) < 0.0 && side(p, q, r) * side(p, q, s) < 0.0
+    let polygon = Polygon::flatten(path, 1.0);
+    (4..=4000).contains(&polygon.len()) && polygon.crosses_itself()
 }
 
 /// Returns the first sample position at which the contour's area has the

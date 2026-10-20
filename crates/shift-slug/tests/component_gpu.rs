@@ -3,20 +3,20 @@
 use std::sync::mpsc;
 
 use shift_font::{
-    test_support::sample_variable_font, Anchor, Component, Contour, DecomposedTransform,
-    DesignLocation, Glyph, GlyphId, GlyphLayer, LayerId, PointType,
+    Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
+    LayerId, PointType, test_support::sample_variable_font,
 };
 use shift_slug::{
-    add_authored_glyph_with_weight_sets, pack_render_instances, pack_variable_params,
-    AuthoredWeightSet, Curve, RenderInstance, VariableAtlasBuilder, VariableParams,
-    VARIABLE_SLUG_WGSL,
+    AuthoredWeightSet, Curve, RenderInstance, VARIABLE_SLUG_WGSL, VariableAtlasBuilder,
+    VariableParams, add_authored_glyph_with_weight_sets, pack_render_instances,
+    pack_variable_params,
 };
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     BindGroupEntry, BufferDescriptor, BufferUsages, CommandEncoderDescriptor,
     ComputePassDescriptor, ComputePipelineDescriptor, DeviceDescriptor, MapMode, MemoryHints,
     PipelineCompilationOptions, PollType, PowerPreference, RequestAdapterOptions,
     ShaderModuleDescriptor, ShaderSource,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
 #[test]
@@ -33,8 +33,7 @@ fn gpu_resolves_varying_component_transforms() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 600.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -276,7 +275,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     let mut font = sample_variable_font();
     let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let layers = font
-        .glyph(&root_id.clone())
+        .glyph(&root_id)
         .unwrap()
         .layers()
         .values()

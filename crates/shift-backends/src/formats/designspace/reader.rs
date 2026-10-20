@@ -1,11 +1,11 @@
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::errors::FormatBackendResult;
-use crate::font_source::{piecewise_map, VariationAxisKind};
+use crate::font_source::{VariationAxisKind, piecewise_map};
 use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::designspace::DesignSpaceDocument;
-use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
+use quick_xml::events::{BytesStart, Event};
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, DesignLocation, ExternalLocation,
     Font, Location, NamedInstance,
@@ -245,9 +245,7 @@ fn mapping_location_from_dimensions(
 }
 
 fn singleton_location(axis_id: AxisId, value: f64) -> Location {
-    let mut location = Location::new();
-    location.set(axis_id, value);
-    location
+    Location::from([(axis_id, value)])
 }
 
 fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {
@@ -292,11 +290,11 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match event.name().as_ref() {
+            Ok(Event::Start(event) | Event::Empty(event)) => match event.name().as_ref() {
                 b"axis" => {
                     return Err(DesignspaceError::AxislessNotApplicable {
                         reason: "axes are present".to_string(),
-                    })
+                    });
                 }
                 b"source" => {
                     if let Some(filename) = xml_attr(&reader, &event, b"filename")? {
@@ -315,7 +313,7 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
             Err(error) => {
                 return Err(DesignspaceError::ParseAxislessXml {
                     details: error.to_string(),
-                })
+                });
             }
             _ => {}
         }

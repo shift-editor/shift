@@ -5,7 +5,7 @@ use std::{
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    test_support::sample_font, DesignLocation, ExternalLocation, Font, LibValue, MetricKind,
+    DesignLocation, ExternalLocation, Font, LibValue, MetricKind, test_support::sample_font,
 };
 use shift_store::ShiftStore;
 
@@ -85,8 +85,7 @@ fn mapped_weight_interpolation_survives_native_round_trip() {
             (681.25, 123.0, 750.0, 850.0),
             (800.0, 160.0, 900.0, 900.0),
         ] {
-            let mut external_location = ExternalLocation::new();
-            external_location.set(axis_id.clone(), external);
+            let external_location = ExternalLocation::from([(axis_id.clone(), external)]);
             let design_location = font.mapped_location(&external_location).unwrap();
             let layer = interpolation
                 .resolve(&design_location, font.axes())

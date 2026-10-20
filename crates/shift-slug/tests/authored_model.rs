@@ -1,15 +1,15 @@
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    test_support::{sample_font, sample_variable_font},
     Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
     InterpolationBasis, LayerId, PointType, SourceId,
+    test_support::{sample_font, sample_variable_font},
 };
 use shift_slug::{
-    add_authored_component_projection_glyph, add_authored_glyph,
+    AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
+    VariableAtlasBuilder, add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
     authored_glyph_requirements, build_authored_atlas, build_authored_atlas_page,
-    curves_from_resolved_contours, AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError,
-    AuthoredWeightSet, Curve, VariableAtlasBuilder,
+    curves_from_resolved_contours,
 };
 
 #[test]
@@ -60,8 +60,7 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     let atlas = builder.finish();
 
     let axis_id = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis_id, 600.0);
+    let location = DesignLocation::from([(axis_id, 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -101,10 +100,12 @@ fn authored_atlas_keeps_layerless_glyphs_as_resident_blanks() {
     let glyph = builder.add_empty_glyph(0).unwrap();
     let atlas = builder.finish();
 
-    assert!(atlas
-        .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
-        .unwrap()
-        .is_empty());
+    assert!(
+        atlas
+            .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         atlas.resolve_advance_with_weights(glyph.default_glyph, &[1.0]),
         Ok(0.0)
@@ -162,7 +163,7 @@ fn authored_atlas_page_compiles_only_ordered_unique_roots_and_component_closures
 
     let component_root = font
         .glyphs()
-        .map(|glyph| glyph.id())
+        .map(Glyph::id)
         .find(|glyph_id| {
             font.glyph_projection(glyph_id)
                 .unwrap()
@@ -334,8 +335,7 @@ fn components_scaled_per_master_resolve_like_the_compiled_font() {
             .authored
             .default_glyph;
         for weight in [100.0, 200.0, 250.0, 400.0, 700.0] {
-            let mut location = DesignLocation::new();
-            location.set(axis.clone(), weight);
+            let location = DesignLocation::from([(axis.clone(), weight)]);
             let mut weights = vec![0.0_f32; page.weight_count() as usize];
             weights[0] = 1.0;
             for set in page.weight_sets() {
@@ -453,8 +453,7 @@ fn component_model_resolves_varying_decomposed_transform() {
             .unwrap();
     let atlas = builder.finish();
     let axis_id = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis_id, 600.0);
+    let location = DesignLocation::from([(axis_id, 600.0)]);
     let source_weights = projection
         .interpolation()
         .unwrap()
@@ -541,8 +540,7 @@ fn component_model_ignores_mark_anchors_when_placing_components() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 600.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -612,8 +610,7 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 650.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 650.0)]);
     let mut weights = vec![0.0_f32; next_weight_index as usize];
     weights[0] = 1.0;
     for set in &weight_sets {
@@ -724,8 +721,7 @@ fn decomposed_root_keeps_its_components_extra_master() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 650.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 650.0)]);
     let mut weights = vec![0.0_f32; weight_indices.len() + 1];
     weights[0] = 1.0;
     for (weight_index, weight) in weight_indices

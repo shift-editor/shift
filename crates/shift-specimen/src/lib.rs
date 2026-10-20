@@ -15,14 +15,18 @@
 //! Outlines are returned in font units with the y axis pointing down, ready to
 //! use as SVG path data.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use harfrust::{ShapeOptions, ShaperData, UnicodeBuffer};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
-use skrifa::raw::types::Tag;
 use skrifa::raw::TableProvider;
+use skrifa::raw::types::Tag;
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use unicode_script::{Script, UnicodeScript};
 
@@ -132,18 +136,18 @@ fn specimen_from(font: &SpecimenFont, coverage: &Coverage) -> Option<Specimen> {
     if coverage.is_symbol_font() {
         return font.glyph_order_specimen();
     }
-    if let Some(script) = font.declared_script() {
-        if let Some(specimen) = font.script_specimen(script, coverage) {
-            return Some(specimen);
-        }
+    if let Some(script) = font.declared_script()
+        && let Some(specimen) = font.script_specimen(script, coverage)
+    {
+        return Some(specimen);
     }
     if let Some(specimen) = font.shaped_specimen("Ag") {
         return Some(specimen);
     }
-    if let Some(script) = coverage.main_script() {
-        if let Some(specimen) = font.script_specimen(script, coverage) {
-            return Some(specimen);
-        }
+    if let Some(script) = coverage.main_script()
+        && let Some(specimen) = font.script_specimen(script, coverage)
+    {
+        return Some(specimen);
     }
 
     ["AG", "ag"]

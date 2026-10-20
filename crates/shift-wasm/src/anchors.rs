@@ -5,9 +5,9 @@
 
 use fontir::ir::AnchorKind as IrAnchorKind;
 use serde::Serialize;
-use shift_font::anchor_attachment::{self, follow_anchors, AnchorLike, Following};
+use shift_font::anchor_attachment::{self, AnchorLike, Following, follow_anchors};
 use shift_font::anchor_propagation::{
-    self, compiled_anchors, PropagatedAnchors, PropagationAnchor,
+    self, PropagatedAnchors, PropagationAnchor, compiled_anchors,
 };
 use shift_font::{ComponentAlignment, DecomposedTransform, Transform};
 use tsify::{Ts, Tsify};
@@ -233,7 +233,7 @@ impl AnchorLike for AlignmentAnchor {
         self.name.as_deref()
     }
 
-    fn position(&self) -> (f64, f64) {
-        (self.x, self.y)
+    fn position(&self) -> shift_font::kurbo::Point {
+        shift_font::kurbo::Point::new(self.x, self.y)
     }
 }

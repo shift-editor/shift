@@ -110,10 +110,8 @@ mod tests {
     fn mappings_view_reports_mapping_axes_and_points() {
         let mut font = sample_font();
         let axis_id = font.axes()[0].id();
-        let mut input = Location::new();
-        input.set(axis_id.clone(), 900.0);
-        let mut output = Location::new();
-        output.set(axis_id.clone(), 800.0);
+        let input = Location::from([(axis_id.clone(), 900.0)]);
+        let output = Location::from([(axis_id.clone(), 800.0)]);
         font.set_axis_mappings(vec![AxisMapping::new(
             "Weight curve".to_string(),
             vec![axis_id.clone()],
@@ -248,8 +246,7 @@ mod tests {
         )]);
         font.add_axis(axis).expect("test axis should be valid");
 
-        let mut instance_location = ExternalLocation::new();
-        instance_location.set(axis_id.clone(), 700.0);
+        let instance_location = ExternalLocation::from([(axis_id.clone(), 700.0)]);
         font.add_named_instance(NamedInstance::with_id(
             NamedInstanceId::from_raw("bold"),
             "Bold".to_string(),
@@ -267,8 +264,7 @@ mod tests {
         ));
 
         let bold_id = SourceId::from_raw("bold");
-        let mut bold_location = DesignLocation::new();
-        bold_location.set(axis_id, 700.0);
+        let bold_location = DesignLocation::from([(axis_id, 700.0)]);
         font.add_source(Source::with_id(
             bold_id.clone(),
             "Bold".to_string(),

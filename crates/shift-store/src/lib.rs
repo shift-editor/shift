@@ -1,3 +1,7 @@
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 mod change_set;
 mod connection;
 mod document;
@@ -31,4 +35,4 @@ pub use store::ShiftStore;
 pub use types::{
     AxisId, CommitId, DocumentId, GlyphId, GlyphWriteBatch, LayerBatchTiming, RevisionId, SourceId,
 };
-pub use workspace_state::{WorkspaceSourceKind, WorkspaceState};
+pub use workspace_state::{SaveState, WorkspaceSourceKind, WorkspaceState};

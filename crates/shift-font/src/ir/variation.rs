@@ -81,7 +81,7 @@ impl Font {
                     .iter()
                     .find(|basis| basis.is_independent() && basis.output_axis_ids[0] == axis.id())
                 {
-                    let location = Location::from_map(HashMap::from([(axis.id(), default)]));
+                    let location = Location::from([(axis.id(), default)]);
                     default = basis
                         .evaluate(&location, self.axes())?
                         .get(&axis.id())
@@ -101,7 +101,7 @@ impl Font {
                     values.sort_by(f64::total_cmp);
                     values.dedup();
                     for value in &mut values {
-                        let location = Location::from_map(HashMap::from([(axis.id(), *value)]));
+                        let location = Location::from([(axis.id(), *value)]);
                         *value = basis
                             .evaluate(&location, self.axes())?
                             .get(&axis.id())
@@ -317,7 +317,7 @@ pub fn map_location_with_bases(
 }
 
 fn resolve_axes<'a>(
-    ids: &[crate::AxisId],
+    ids: &[AxisId],
     axes: &'a [Axis],
     mapping: &AxisMapping,
 ) -> CoreResult<Vec<&'a Axis>> {
@@ -521,10 +521,10 @@ mod tests {
     }
 
     fn location(values: &[(AxisId, f64)]) -> Location {
-        let mut location = Location::new();
-        for (axis_id, value) in values {
-            location.set(axis_id.clone(), *value);
-        }
+        let location: Location = values
+            .iter()
+            .map(|(axis_id, value)| (axis_id.clone(), *value))
+            .collect();
         location
     }
 }

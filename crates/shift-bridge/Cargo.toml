@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "shift-bridge"
 version = "0.0.1"
 authors = ["Kostya Farber <kostya.farber@gmail.com>"]
@@ -27,3 +27,6 @@ tokio-stream = "0.1"
 
 [build-dependencies]
 napi-build = "2.1"
+
+[lints]
+workspace = true

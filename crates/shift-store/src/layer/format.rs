@@ -99,7 +99,8 @@ fn record_entity(
     entity_ids: &mut HashSet<GlyphEntityId>,
     entity_id: GlyphEntityId,
 ) -> Result<(), String> {
-    if entity_ids.insert(entity_id.clone()) {
+    if !entity_ids.contains(&entity_id) {
+        entity_ids.insert(entity_id);
         return Ok(());
     }
 

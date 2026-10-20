@@ -13,7 +13,7 @@ use shift_font::{
     LayerId, TouchedLayer, error::CoreError,
 };
 use shift_store::{
-    DocumentMetadata, RecoveryState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
+    DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
 };
 
 use crate::document_identity::{DocumentIdentity, document_identity};
@@ -82,13 +82,13 @@ impl FontWorkspace {
         source: WorkspaceSource,
         store: ShiftStore,
         residency: LayerResidency,
-        dirty: bool,
+        save_state: SaveState,
     ) -> Self {
         Self {
             font,
             source,
             store,
-            ledger: Ledger::new(dirty),
+            ledger: Ledger::new(save_state),
             residency,
         }
     }
@@ -98,18 +98,18 @@ impl FontWorkspace {
         new_workspace: NewWorkspace,
     ) -> Result<Self, WorkspaceError> {
         let mut store = ShiftStore::open(store_path)?;
-        store.set_font_info(new_workspace.font_info())?;
+        store.set_font_info(&new_workspace.font_info())?;
 
         let font = new_font(new_workspace);
         store.replace_font_state(&font)?;
-        store.set_workspace_state(WorkspaceState::untitled(None))?;
+        store.set_workspace_state(&WorkspaceState::untitled(None))?;
 
         Ok(Self::from_store(
             font,
             WorkspaceSource::Untitled,
             store,
             LayerResidency::default(),
-            false,
+            SaveState::MatchesSaved,
         ))
     }
 
@@ -137,7 +137,10 @@ impl FontWorkspace {
     ) -> Result<Self, WorkspaceError> {
         let document_path = document_path.as_ref();
         let store = ShiftStore::open_document_with_recovery(document_path, recovery_path)?;
-        let dirty = !matches!(store.recovery_state()?, Some(RecoveryState::Clean));
+        let save_state = match store.recovery_state()? {
+            Some(RecoveryState::Clean) => SaveState::MatchesSaved,
+            _ => SaveState::Unsaved,
+        };
         let font = store.load_font_directory()?;
         let residency = LayerResidency::with_unloaded(
             font.glyphs()
@@ -151,7 +154,7 @@ impl FontWorkspace {
             },
             store,
             residency,
-            dirty,
+            save_state,
         ))
     }
 
@@ -227,7 +230,11 @@ impl FontWorkspace {
             source,
             store,
             residency,
-            state.dirty,
+            if state.dirty {
+                SaveState::Unsaved
+            } else {
+                SaveState::MatchesSaved
+            },
         ))
     }
 
@@ -247,7 +254,7 @@ impl FontWorkspace {
     /// sets that batch several create intents.
     pub fn apply(
         &mut self,
-        set: FontIntentSet,
+        set: &FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
         let required_layers = set
@@ -265,7 +272,7 @@ impl FontWorkspace {
                 }
                 FontIntent::ReplaceGlyphLayerContent { components, .. } => {
                     component_roots
-                        .extend(components.iter().map(|component| component.base_glyph_id()));
+                        .extend(components.iter().map(shift_font::Component::base_glyph_id));
                 }
                 FontIntent::DecomposeComponents {
                     layer_id,
@@ -277,7 +284,7 @@ impl FontWorkspace {
                     component_roots.extend(component_ids.iter().filter_map(|component_id| {
                         layer
                             .component(component_id)
-                            .map(|component| component.base_glyph_id())
+                            .map(shift_font::Component::base_glyph_id)
                     }));
                 }
                 _ => {}
@@ -293,7 +300,7 @@ impl FontWorkspace {
             self.acquire_glyphs(&dependents, AcquireScope::ComponentClosure)?;
         }
 
-        let outcome = self.commit_edit(true, |font| {
+        let outcome = self.commit_edit(SaveState::Unsaved, |font| {
             let outcome = font.apply_intents(set)?;
             let changes = outcome.changes.clone();
             Ok((outcome, changes))
@@ -312,8 +319,8 @@ impl FontWorkspace {
             return Ok(None);
         };
 
-        let dirty = self.ledger.is_dirty();
-        match self.replay(&entry, ReplaySide::Pre, dirty) {
+        let save_state = self.ledger.save_state();
+        match self.replay(&entry, ReplaySide::Pre, save_state) {
             Ok(outcome) => {
                 self.ledger.record_undone(entry);
                 Ok(Some(outcome))
@@ -333,8 +340,8 @@ impl FontWorkspace {
             return Ok(None);
         };
 
-        let dirty = self.ledger.is_entry_dirty(&entry);
-        match self.replay(&entry, ReplaySide::Post, dirty) {
+        let save_state = self.ledger.save_state_after(&entry);
+        match self.replay(&entry, ReplaySide::Post, save_state) {
             Ok(outcome) => {
                 self.ledger.record_redone(entry);
                 Ok(Some(outcome))
@@ -355,7 +362,7 @@ impl FontWorkspace {
         &mut self,
         entry: &LedgerEntry,
         side: ReplaySide,
-        dirty: bool,
+        save_state: SaveState,
     ) -> Result<AppliedIntents, WorkspaceError> {
         self.acquire_layers(entry.layer_ids())?;
 
@@ -363,7 +370,7 @@ impl FontWorkspace {
             ReplaySide::Pre => entry.change_set.inverted(),
             ReplaySide::Post => entry.change_set.clone(),
         };
-        self.commit_edit(dirty, move |font| {
+        self.commit_edit(save_state, move |font| {
             font.apply_change_set(&change_set)?;
             let layers = touched_layers(&change_set);
             let outcome = AppliedIntents {
@@ -377,8 +384,8 @@ impl FontWorkspace {
     fn commit_font(
         &mut self,
         next_font: shift_font::Font,
-        change_set: FontChangeSet,
-        dirty: bool,
+        change_set: &FontChangeSet,
+        save_state: SaveState,
     ) -> Result<(), WorkspaceError> {
         if let Some(layer_id) = change_set
             .changes
@@ -386,23 +393,23 @@ impl FontWorkspace {
             .filter_map(FontChange::layer_id)
             .find(|layer_id| self.residency.is_unloaded(layer_id))
         {
-            return Err(WorkspaceError::UnloadedLayerMutation(layer_id.clone()));
+            return Err(WorkspaceError::UnloadedLayerMutation(layer_id));
         }
 
         self.store
-            .apply_change_set_with_font(&change_set, &next_font, dirty)?;
+            .apply_change_set_with_font(change_set, &next_font, save_state)?;
         self.font = next_font;
         self.residency.retain_directory_layers(&self.font);
         Ok(())
     }
 
-    fn commit_edit<R, F>(&mut self, dirty: bool, edit: F) -> Result<R, WorkspaceError>
+    fn commit_edit<R, F>(&mut self, save_state: SaveState, edit: F) -> Result<R, WorkspaceError>
     where
         F: FnOnce(&mut shift_font::Font) -> Result<(R, FontChangeSet), WorkspaceError>,
     {
         let mut next_font = self.font.clone();
         let (result, change_set) = edit(&mut next_font)?;
-        self.commit_font(next_font, change_set, dirty)?;
+        self.commit_font(next_font, &change_set, save_state)?;
 
         Ok(result)
     }
@@ -434,7 +441,7 @@ impl FontWorkspace {
                 let mut writer = store.begin_import(import.header())?;
                 stream_into(import, &mut writer, ImportBatchLimit::default(), |_| {})?;
                 writer.finish()?;
-                store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+                store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
                 store.finish_import()?;
                 let font = store.load_font_directory()?;
                 let residency = LayerResidency::with_unloaded(
@@ -452,7 +459,7 @@ impl FontWorkspace {
                     },
                     store,
                     residency,
-                    false,
+                    SaveState::MatchesSaved,
                 ));
             }
             Err(shift_backends::BackendError::StreamingUnsupported { .. }) => {}
@@ -461,9 +468,9 @@ impl FontWorkspace {
 
         let font = loader.read_font(import_path_str)?;
         let mut store = ShiftStore::open(store_path)?;
-        store.set_font_info(font_info_from_font(&font))?;
+        store.set_font_info(&font_info_from_font(&font))?;
         store.replace_font_state(&font)?;
-        store.set_workspace_state(WorkspaceState::imported(import_path, None))?;
+        store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
 
         Ok(Self::from_store(
             font,
@@ -472,7 +479,7 @@ impl FontWorkspace {
             },
             store,
             LayerResidency::default(),
-            false,
+            SaveState::MatchesSaved,
         ))
     }
 
@@ -568,7 +575,7 @@ impl FontWorkspace {
             let Some(glyph) = self.font.glyph(glyph_id) else {
                 continue;
             };
-            for layer in glyph.layers().values().map(|layer| layer.as_ref()) {
+            for layer in glyph.layers().values().map(AsRef::as_ref) {
                 if self.residency.is_unloaded(&layer.id()) || !seen_layer_ids.insert(layer.id()) {
                     continue;
                 }
@@ -679,7 +686,7 @@ impl FontWorkspace {
         Ok(state.revision.to_string())
     }
 
-    pub fn set_workspace_id(&mut self, workspace_id: String) -> Result<(), WorkspaceError> {
+    pub fn set_workspace_id(&mut self, workspace_id: &str) -> Result<(), WorkspaceError> {
         if matches!(&self.source, WorkspaceSource::Document { .. }) {
             return Ok(());
         }

@@ -96,7 +96,7 @@ impl FontImportWriter<'_> {
     /// Writes a prepared batch in stable order through the owned transaction.
     pub fn write_packed_glyph_batch(
         &mut self,
-        batch: GlyphWriteBatch,
+        batch: &GlyphWriteBatch,
     ) -> Result<std::time::Duration, StoreError> {
         let started = Instant::now();
         for glyph in &batch.glyphs {

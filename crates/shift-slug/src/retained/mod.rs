@@ -577,12 +577,9 @@ mod tests {
         };
 
         let page = compile_page(&input, crate::DEFAULT_BAND_COUNT).unwrap();
-        let mut compiler = PageCompiler::new(
-            crate::DEFAULT_BAND_COUNT,
-            input.axes.clone(),
-            input.regions.clone(),
-        )
-        .unwrap();
+        let mut compiler =
+            PageCompiler::new(crate::DEFAULT_BAND_COUNT, input.axes.clone(), input.regions)
+                .unwrap();
         compiler
             .add_glyph(
                 7,

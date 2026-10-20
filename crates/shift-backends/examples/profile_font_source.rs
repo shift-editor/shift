@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sequential_started = Instant::now();
     let sequential = glyphs
         .iter()
-        .map(|glyph| font.glyph(*glyph).map(summarize))
+        .map(|glyph| font.glyph(*glyph).map(|glyph| summarize(&glyph)))
         .collect::<Result<Vec<_>, _>>()?;
     let sequential_elapsed = sequential_started.elapsed();
     let sequential_checksum = checksum(&sequential);
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let parallel_started = Instant::now();
     let parallel = glyphs
         .par_iter()
-        .map(|glyph| font.glyph(*glyph).map(summarize))
+        .map(|glyph| font.glyph(*glyph).map(|glyph| summarize(&glyph)))
         .collect::<Result<Vec<_>, _>>()?;
     let parallel_elapsed = parallel_started.elapsed();
     let parallel_checksum = checksum(&parallel);
@@ -115,7 +115,7 @@ fn print_samples(label: &str, samples: &[Duration]) {
     );
 }
 
-fn summarize(glyph: ProjectedGlyph) -> (usize, usize, usize, i64) {
+fn summarize(glyph: &ProjectedGlyph) -> (usize, usize, usize, i64) {
     let projections = std::iter::once(&glyph.root).chain(glyph.components.iter());
     let mut contour_count = 0;
     let mut component_count = 0;
@@ -153,11 +153,17 @@ fn millis(duration: Duration) -> f64 {
 }
 
 #[cfg(unix)]
+#[allow(
+    unsafe_code,
+    reason = "peak memory is only available through getrusage"
+)]
 fn peak_rss_mebibytes() -> Option<f64> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
+    // SAFETY: `usage` is a valid, writable `rusage` for the call to fill.
     if unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) } != 0 {
         return None;
     }
+    // SAFETY: `getrusage` returned 0, so it initialized `usage`.
     let rss = unsafe { usage.assume_init() }.ru_maxrss as f64;
     #[cfg(target_os = "macos")]
     return Some(rss / 1_048_576.0);

@@ -58,7 +58,7 @@ pub(crate) fn load_glyph_layer_from_conn(
         ",
     )?;
     let facts = directory_stmt
-        .query_row([layer_id.to_string()], map_directory_facts_row)
+        .query_row([&layer_id], map_directory_facts_row)
         .optional()?;
     drop(directory_stmt);
     let Some(facts) = facts else {
@@ -80,7 +80,7 @@ pub(crate) fn load_glyph_layer_from_conn(
     let payload: Vec<u8> = payload_stmt
         .query_row(
             params![
-                layer_id.to_string(),
+                layer_id,
                 facts.actual_stored_byte_length,
                 MAX_LAYER_PAYLOAD_BYTES_SQL
             ],
@@ -223,11 +223,10 @@ fn read_layer_directory(
     }
     drop(directory_stmt);
 
-    let mut decoded_byte_lengths = Vec::with_capacity(keys.len());
-    for key in keys {
-        let facts = facts.get(key).or_missing("glyph layer", key)?;
-        decoded_byte_lengths.push(facts.validate()?);
-    }
+    let decoded_byte_lengths = keys
+        .iter()
+        .map(|key| facts.get(key).or_missing("glyph layer", key)?.validate())
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(LayerDirectoryRead {
         facts,

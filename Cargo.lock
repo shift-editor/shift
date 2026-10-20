@@ -2296,12 +2296,12 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
+ "shift-shape",
  "shift-slug",
  "shift-store",
  "skrifa",
  "tempfile",
  "thiserror",
- "unicode-script",
  "write-fonts",
 ]
 
@@ -2366,9 +2366,20 @@ dependencies = [
  "indexmap",
  "kurbo",
  "linesweeper",
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "shift-shape"
+version = "0.1.0"
+dependencies = [
+ "harfrust",
+ "thiserror",
+ "unicode-linebreak",
+ "unicode-script",
 ]
 
 [[package]]
@@ -2418,6 +2429,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "shift-font",
+ "shift-shape",
  "tsify",
  "wasm-bindgen",
 ]

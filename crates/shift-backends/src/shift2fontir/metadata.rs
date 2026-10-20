@@ -6,8 +6,8 @@ use fontdrasil::orchestration::{Access, Work};
 use fontdrasil::types::Axes;
 use fontir::error::Error;
 use fontir::ir::{
-    FeaturesSource, GlobalMetric, GlobalMetricsBuilder, GlyphOrder, NameBuilder,
-    PreliminaryGdefCategories, StaticMetadata, DEFAULT_VENDOR_ID,
+    DEFAULT_VENDOR_ID, FeaturesSource, GlobalMetric, GlobalMetricsBuilder, GlyphOrder, NameBuilder,
+    PreliminaryGdefCategories, StaticMetadata,
 };
 use fontir::orchestration::{Context, WorkId};
 use shift_font::{MetricKind, Source};

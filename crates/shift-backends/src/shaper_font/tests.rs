@@ -83,7 +83,7 @@ impl FontFuncs for LiveFuncs {
 fn request(glyph_names: &[&str], feature_source: &str) -> ShaperFontRequest {
     ShaperFontRequest {
         units_per_em: 1000,
-        glyph_names: glyph_names.iter().map(|name| name.to_string()).collect(),
+        glyph_names: glyph_names.iter().map(ToString::to_string).collect(),
         glyph_ids: vec![None; glyph_names.len()],
         feature_source: feature_source.to_string(),
         axes: Vec::new(),
@@ -149,10 +149,12 @@ fn include_statements_are_reported_as_errors() {
     let compilation = ShaperFont::compile(&request(&[".notdef"], "include(other.fea);")).unwrap();
 
     assert!(compilation.font.is_none());
-    assert!(compilation
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error));
+    assert!(
+        compilation
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+    );
 }
 
 #[test]
@@ -279,7 +281,7 @@ fn request_classifies_glyphs_by_category() {
     let mut font = sample_variable_font();
     let glyph_id = font.glyph_by_name("A").unwrap().id();
     font.set_glyph_category(
-        glyph_id,
+        &glyph_id,
         Some(GlyphCategory::Mark),
         Some(GlyphSubcategory::Nonspacing),
     )

@@ -32,7 +32,7 @@ fn merged_view_sql(table: &RecoveryTableShape) -> String {
     let select = match table.table.mode() {
         RecoveryMode::CanonicalOnly => format!(
             "SELECT {main_projection} FROM main.{name} AS m{}",
-            where_clause(main_parent_visibility)
+            where_clause(&main_parent_visibility)
         ),
         RecoveryMode::OverlayRows {
             tombstone_kind,
@@ -61,8 +61,8 @@ fn merged_view_sql(table: &RecoveryTableShape) -> String {
             format!(
                 "SELECT {recovery_projection} FROM recovery.{name} AS r{}{}\nUNION ALL\nSELECT {main_projection} FROM main.{name} AS m{}",
                 base_join.unwrap_or_default(),
-                where_clause(recovery_predicates),
-                where_clause(main_predicates)
+                where_clause(&recovery_predicates),
+                where_clause(&main_predicates)
             )
         }
         RecoveryMode::ReplaceCollection { owner_column, .. } => {
@@ -82,8 +82,8 @@ fn merged_view_sql(table: &RecoveryTableShape) -> String {
 
             format!(
                 "SELECT {recovery_projection} FROM recovery.{name} AS r{}\nUNION ALL\nSELECT {main_projection} FROM main.{name} AS m{}",
-                where_clause(recovery_predicates),
-                where_clause(main_predicates)
+                where_clause(&recovery_predicates),
+                where_clause(&main_predicates)
             )
         }
     };
@@ -174,7 +174,7 @@ fn replacement_marker(table: &str, owner: Option<(&str, &str)>, negated: bool) -
     )
 }
 
-fn where_clause(predicates: Vec<String>) -> String {
+fn where_clause(predicates: &[String]) -> String {
     if predicates.is_empty() {
         String::new()
     } else {

@@ -1,9 +1,8 @@
 use crate::Require;
 use crate::{
-    boolean,
-    error::{CoreError, CoreResult},
     Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
-    Point, PointId, PointType, Transform,
+    Point, PointId, PointType, Transform, boolean,
+    error::{CoreError, CoreResult},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -163,19 +162,19 @@ fn invalid_position_update_input(kind: &'static str, message: impl Into<String>)
 }
 
 impl GlyphLayer {
-    fn require_contour_mut(&mut self, id: ContourId) -> CoreResult<&mut Contour> {
-        let contour = self.contour_mut(&id).require(&id)?;
+    fn require_contour_mut(&mut self, id: &ContourId) -> CoreResult<&mut Contour> {
+        let contour = self.contour_mut(id).require(&id)?;
 
         Ok(contour)
     }
 
     fn require_point_mut(
         &mut self,
-        contour_id: ContourId,
-        point_id: PointId,
+        contour_id: &ContourId,
+        point_id: &PointId,
     ) -> CoreResult<&mut Point> {
         let contour = self.require_contour_mut(contour_id)?;
-        contour.get_point_mut(&point_id).require(&point_id)
+        contour.get_point_mut(point_id).require(&point_id)
     }
 
     fn require_point_contour(&self, point_id: PointId) -> CoreResult<ContourId> {
@@ -183,8 +182,8 @@ impl GlyphLayer {
             .ok_or(CoreError::PointInContourNotFound(point_id))
     }
 
-    fn require_anchor_mut(&mut self, anchor_id: AnchorId) -> CoreResult<&mut Anchor> {
-        self.anchor_mut(&anchor_id).require(&anchor_id)
+    fn require_anchor_mut(&mut self, anchor_id: &AnchorId) -> CoreResult<&mut Anchor> {
+        self.anchor_mut(anchor_id).require(&anchor_id)
     }
 
     fn require_point_contours(
@@ -302,7 +301,7 @@ impl GlyphLayer {
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
         for (anchor_id, position) in updates {
-            self.require_anchor_mut(anchor_id.clone())?
+            self.require_anchor_mut(anchor_id)?
                 .set_position(position.x, position.y);
         }
         Ok(())
@@ -360,14 +359,14 @@ impl GlyphLayer {
     pub fn transform_layer(&mut self, transform: &Transform) {
         for contour in self.contours_iter_mut() {
             for point in contour.points_mut() {
-                let (x, y) = transform.transform_point(point.x(), point.y());
-                point.set_position(x, y);
+                let moved = transform.transform_point(point.position());
+                point.set_position(moved.x, moved.y);
             }
         }
 
         for anchor in self.anchors_iter_mut() {
-            let (x, y) = transform.transform_point(anchor.x(), anchor.y());
-            anchor.set_position(x, y);
+            let moved = transform.transform_point(anchor.position());
+            anchor.set_position(moved.x, moved.y);
         }
 
         let translation_only = *transform == Transform::translate(transform.dx, transform.dy);
@@ -399,23 +398,23 @@ impl GlyphLayer {
         created_contour
     }
 
-    pub fn remove_contour_checked(&mut self, contour_id: ContourId) -> CoreResult<Contour> {
-        self.remove_contour(contour_id.clone()).require(&contour_id)
+    pub fn remove_contour_checked(&mut self, contour_id: &ContourId) -> CoreResult<Contour> {
+        self.remove_contour(contour_id).require(&contour_id)
     }
 
-    pub fn close_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
+    pub fn close_contour(&mut self, contour_id: &ContourId) -> CoreResult<()> {
         let contour = self.require_contour_mut(contour_id)?;
         contour.close();
         Ok(())
     }
 
-    pub fn open_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
+    pub fn open_contour(&mut self, contour_id: &ContourId) -> CoreResult<()> {
         let contour = self.require_contour_mut(contour_id)?;
         contour.open();
         Ok(())
     }
 
-    pub fn reverse_contour(&mut self, contour_id: ContourId) -> CoreResult<()> {
+    pub fn reverse_contour(&mut self, contour_id: &ContourId) -> CoreResult<()> {
         let contour = self.require_contour_mut(contour_id)?;
         contour.reverse();
         Ok(())
@@ -430,14 +429,14 @@ impl GlyphLayer {
     /// Returns an error when the contour or its requested point does not exist.
     pub fn set_contour_start(
         &mut self,
-        contour_id: ContourId,
-        point_id: PointId,
+        contour_id: &ContourId,
+        point_id: &PointId,
     ) -> CoreResult<bool> {
         let contour = self.require_contour_mut(contour_id)?;
         let index = contour
             .points()
             .iter()
-            .position(|point| point.id() == point_id)
+            .position(|point| point.id() == *point_id)
             .require(&point_id)?;
         if !contour.is_closed() || index == 0 || !contour.points()[index].is_on_curve() {
             return Ok(false);
@@ -449,24 +448,24 @@ impl GlyphLayer {
 
     pub fn apply_boolean_op(
         &mut self,
-        contour_id_a: ContourId,
-        contour_id_b: ContourId,
+        contour_id_a: &ContourId,
+        contour_id_b: &ContourId,
         op: BooleanOp,
     ) -> CoreResult<Vec<ContourId>> {
-        let a = self.contour(&contour_id_a).require(&contour_id_a)?.clone();
-        let b = self.contour(&contour_id_b).require(&contour_id_b)?.clone();
+        let a = self.contour(contour_id_a).require(&contour_id_a)?.clone();
+        let b = self.contour(contour_id_b).require(&contour_id_b)?.clone();
 
         let result =
             boolean(op, &a, &b).map_err(|e| CoreError::BooleanOperationFailed(e.to_string()))?;
 
-        self.remove_contour_checked(contour_id_a.clone())?;
-        self.remove_contour_checked(contour_id_b.clone())?;
+        self.remove_contour_checked(contour_id_a)?;
+        self.remove_contour_checked(contour_id_b)?;
 
-        let mut created_ids = Vec::new();
-        for contour in result.0 {
-            let contour_id = self.add_contour(contour);
-            created_ids.push(contour_id);
-        }
+        let created_ids = result
+            .0
+            .into_iter()
+            .map(|contour| self.add_contour(contour))
+            .collect();
 
         Ok(created_ids)
     }
@@ -484,13 +483,13 @@ impl GlyphLayer {
 impl GlyphLayer {
     pub fn add_point_to_contour(
         &mut self,
-        contour_id: ContourId,
+        contour_id: &ContourId,
         x: f64,
         y: f64,
         point_type: PointType,
         is_smooth: bool,
     ) -> CoreResult<AddedPoint> {
-        let contour = self.require_contour_mut(contour_id.clone())?;
+        let contour = self.require_contour_mut(contour_id)?;
         let point_id = contour.add_point(x, y, point_type, is_smooth);
 
         Ok(AddedPoint {
@@ -501,17 +500,17 @@ impl GlyphLayer {
 
     pub fn insert_point_before(
         &mut self,
-        before_id: PointId,
+        before_id: &PointId,
         x: f64,
         y: f64,
         point_type: PointType,
         is_smooth: bool,
     ) -> CoreResult<AddedPoint> {
         let contour_id = self.require_point_contour(before_id.clone())?;
-        let contour = self.require_contour_mut(contour_id)?;
+        let contour = self.require_contour_mut(&contour_id)?;
 
         let point_id = contour
-            .insert_point_before(before_id.clone(), x, y, point_type, is_smooth)
+            .insert_point_before(before_id, x, y, point_type, is_smooth)
             .require(&before_id)?;
 
         Ok(AddedPoint {
@@ -520,10 +519,10 @@ impl GlyphLayer {
         })
     }
 
-    pub fn remove_point(&mut self, point_id: PointId) -> CoreResult<()> {
+    pub fn remove_point(&mut self, point_id: &PointId) -> CoreResult<()> {
         let contour_id = self.require_point_contour(point_id.clone())?;
-        let contour = self.require_contour_mut(contour_id)?;
-        contour.remove_point(point_id.clone()).require(&point_id)?;
+        let contour = self.require_contour_mut(&contour_id)?;
+        contour.remove_point(point_id).require(&point_id)?;
         Ok(())
     }
 
@@ -531,9 +530,9 @@ impl GlyphLayer {
         self.update_points(point_ids, |point| point.translate(dx, dy))
     }
 
-    pub fn set_point_smooth(&mut self, point_id: PointId, smooth: bool) -> CoreResult<()> {
+    pub fn set_point_smooth(&mut self, point_id: &PointId, smooth: bool) -> CoreResult<()> {
         let contour_id = self.require_point_contour(point_id.clone())?;
-        self.require_point_mut(contour_id, point_id)?
+        self.require_point_mut(&contour_id, point_id)?
             .set_smooth(smooth);
         Ok(())
     }
@@ -546,9 +545,9 @@ impl GlyphLayer {
         self.require_point_contour(point_id.clone()).is_ok()
     }
 
-    pub fn toggle_smooth(&mut self, point_id: PointId) -> CoreResult<bool> {
+    pub fn toggle_smooth(&mut self, point_id: &PointId) -> CoreResult<bool> {
         let contour_id = self.require_point_contour(point_id.clone())?;
-        let point = self.require_point_mut(contour_id, point_id)?;
+        let point = self.require_point_mut(&contour_id, point_id)?;
 
         point.toggle_smooth();
 
@@ -560,8 +559,8 @@ impl GlyphLayer {
         let mut empty_contours = Vec::new();
 
         for (point_id, contour_id) in point_contours {
-            let contour = self.require_contour_mut(contour_id.clone())?;
-            contour.remove_point(point_id.clone()).require(&point_id)?;
+            let contour = self.require_contour_mut(&contour_id)?;
+            contour.remove_point(&point_id).require(&point_id)?;
 
             if contour.is_empty() && !empty_contours.contains(&contour_id) {
                 empty_contours.push(contour_id);
@@ -569,7 +568,7 @@ impl GlyphLayer {
         }
 
         for contour_id in &empty_contours {
-            self.remove_contour_checked(contour_id.clone())?;
+            self.remove_contour_checked(contour_id)?;
         }
 
         Ok(empty_contours)
@@ -587,7 +586,7 @@ impl GlyphLayer {
         }
 
         for anchor_id in anchor_ids {
-            self.remove_anchor(anchor_id.clone()).require(&anchor_id)?;
+            self.remove_anchor(anchor_id).require(&anchor_id)?;
         }
 
         Ok(())
@@ -625,7 +624,7 @@ mod tests {
         (session, contour_id)
     }
 
-    fn add_point(session: &mut GlyphLayer, contour_id: ContourId, x: f64, y: f64) -> PointId {
+    fn add_point(session: &mut GlyphLayer, contour_id: &ContourId, x: f64, y: f64) -> PointId {
         session
             .add_point_to_contour(contour_id, x, y, PointType::OnCurve, false)
             .unwrap()
@@ -638,71 +637,67 @@ mod tests {
 
     fn point_position(
         session: &GlyphLayer,
-        contour_id: ContourId,
-        point_id: PointId,
+        contour_id: &ContourId,
+        point_id: &PointId,
     ) -> (f64, f64) {
         let point = session
-            .contour(&contour_id)
+            .contour(contour_id)
             .unwrap()
-            .get_point(&point_id)
+            .get_point(point_id)
             .unwrap();
         (point.x(), point.y())
     }
 
-    fn anchor_position(session: &GlyphLayer, anchor_id: AnchorId) -> (f64, f64) {
-        let anchor = session.anchor(&anchor_id).unwrap();
+    fn anchor_position(session: &GlyphLayer, anchor_id: &AnchorId) -> (f64, f64) {
+        let anchor = session.anchor(anchor_id).unwrap();
         (anchor.x(), anchor.y())
     }
 
     #[test]
     fn set_contour_start_rotates_without_changing_points() {
         let (mut session, contour_id) = session_with_contour();
-        add_point(&mut session, contour_id.clone(), 10.0, 20.0);
+        add_point(&mut session, &contour_id, 10.0, 20.0);
         session
-            .add_point_to_contour(contour_id.clone(), 40.0, 80.0, PointType::OffCurve, false)
+            .add_point_to_contour(&contour_id, 40.0, 80.0, PointType::OffCurve, false)
             .unwrap();
         let point_id = session
-            .add_point_to_contour(contour_id.clone(), 70.0, 20.0, PointType::QCurve, true)
+            .add_point_to_contour(&contour_id, 70.0, 20.0, PointType::QCurve, true)
             .unwrap()
             .point_id;
-        session.close_contour(contour_id.clone()).unwrap();
+        session.close_contour(&contour_id).unwrap();
         let before = session.contour(&contour_id).unwrap().points().to_vec();
 
-        assert!(session
-            .set_contour_start(contour_id.clone(), point_id.clone())
-            .unwrap());
+        assert!(session.set_contour_start(&contour_id, &point_id).unwrap());
         let after = session.contour(&contour_id).unwrap();
         assert!(after.is_closed());
         assert_eq!(
             after.points(),
             &[before[2].clone(), before[0].clone(), before[1].clone()]
         );
-        assert!(!session.set_contour_start(contour_id, point_id).unwrap());
+        assert!(!session.set_contour_start(&contour_id, &point_id).unwrap());
     }
 
     #[test]
     fn set_contour_start_rejects_ineligible_targets_without_mutating() {
         let (mut session, contour_id) = session_with_contour();
-        add_point(&mut session, contour_id.clone(), 10.0, 20.0);
-        let point_id = add_point(&mut session, contour_id.clone(), 70.0, 20.0);
+        add_point(&mut session, &contour_id, 10.0, 20.0);
+        let point_id = add_point(&mut session, &contour_id, 70.0, 20.0);
         let handle_id = session
-            .add_point_to_contour(contour_id.clone(), 40.0, 80.0, PointType::OffCurve, false)
+            .add_point_to_contour(&contour_id, 40.0, 80.0, PointType::OffCurve, false)
             .unwrap()
             .point_id;
         let before = session.clone();
-        assert!(!session
-            .set_contour_start(contour_id.clone(), point_id)
-            .unwrap());
+        assert!(!session.set_contour_start(&contour_id, &point_id).unwrap());
         assert_eq!(session, before);
 
-        session.close_contour(contour_id.clone()).unwrap();
+        session.close_contour(&contour_id).unwrap();
         let before = session.clone();
-        assert!(!session
-            .set_contour_start(contour_id.clone(), handle_id)
-            .unwrap());
-        assert!(session
-            .set_contour_start(contour_id, PointId::new())
-            .is_err());
+        assert!(!session.set_contour_start(&contour_id, &handle_id).unwrap());
+        assert!(
+            session
+                .set_contour_start(&contour_id, &PointId::new())
+                .is_err()
+        );
         assert_eq!(session, before);
     }
 
@@ -710,7 +705,7 @@ mod tests {
     fn remove_contour_removes_contour() {
         let (mut session, contour_id) = session_with_contour();
 
-        session.remove_contour_checked(contour_id).unwrap();
+        session.remove_contour_checked(&contour_id).unwrap();
 
         assert_eq!(session.contours_count(), 0);
     }
@@ -721,7 +716,7 @@ mod tests {
         let contour_id = ContourId::new();
 
         assert!(matches!(
-            session.remove_contour_checked(contour_id.clone()),
+            session.remove_contour_checked(&contour_id),
             Err(CoreError::ContourNotFound(id)) if id == contour_id
         ));
     }
@@ -729,7 +724,7 @@ mod tests {
     #[test]
     fn apply_bulk_node_positions_sets_points_and_anchors() {
         let (mut session, contour_id) = session_with_contour();
-        let point_id = add_point(&mut session, contour_id.clone(), 10.0, 20.0);
+        let point_id = add_point(&mut session, &contour_id, 10.0, 20.0);
         let anchor_id = add_anchor(&mut session, 100.0, 200.0);
         let point_ids = [point_id.clone()];
         let point_coords = [300.0, 400.0];
@@ -746,10 +741,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            point_position(&session, contour_id.clone(), point_id.clone()),
+            point_position(&session, &contour_id, &point_id),
             (300.0, 400.0)
         );
-        assert_eq!(anchor_position(&session, anchor_id.clone()), (500.0, 600.0));
+        assert_eq!(anchor_position(&session, &anchor_id), (500.0, 600.0));
     }
 
     #[test]
@@ -758,7 +753,7 @@ mod tests {
         let contour_id = ContourId::new();
 
         assert!(matches!(
-            session.add_point_to_contour(contour_id.clone(), 1.0, 2.0, PointType::OnCurve, false),
+            session.add_point_to_contour(&contour_id, 1.0, 2.0, PointType::OnCurve, false),
             Err(CoreError::ContourNotFound(id)) if id == contour_id
         ));
     }
@@ -766,21 +761,15 @@ mod tests {
     #[test]
     fn move_points_multiple() {
         let (mut session, contour_id) = session_with_contour();
-        let p1 = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
-        let p2 = add_point(&mut session, contour_id.clone(), 100.0, 100.0);
+        let p1 = add_point(&mut session, &contour_id, 0.0, 0.0);
+        let p2 = add_point(&mut session, &contour_id, 100.0, 100.0);
 
         session
             .move_points(&[p1.clone(), p2.clone()], 10.0, 20.0)
             .unwrap();
 
-        assert_eq!(
-            point_position(&session, contour_id.clone(), p1.clone()),
-            (10.0, 20.0)
-        );
-        assert_eq!(
-            point_position(&session, contour_id.clone(), p2.clone()),
-            (110.0, 120.0)
-        );
+        assert_eq!(point_position(&session, &contour_id, &p1), (10.0, 20.0));
+        assert_eq!(point_position(&session, &contour_id, &p2), (110.0, 120.0));
     }
 
     #[test]
@@ -788,13 +777,13 @@ mod tests {
         let mut session = create_session();
         let c1_id = session.add_empty_contour().id();
         let p1 = session
-            .add_point_to_contour(c1_id.clone(), 0.0, 0.0, PointType::OnCurve, false)
+            .add_point_to_contour(&c1_id, 0.0, 0.0, PointType::OnCurve, false)
             .unwrap();
         let p1 = p1.point_id;
 
         let c2_id = session.add_empty_contour().id();
         let p2 = session
-            .add_point_to_contour(c2_id.clone(), 50.0, 50.0, PointType::OnCurve, false)
+            .add_point_to_contour(&c2_id, 50.0, 50.0, PointType::OnCurve, false)
             .unwrap();
         let p2 = p2.point_id;
 
@@ -812,7 +801,7 @@ mod tests {
     #[test]
     fn move_points_missing_point_does_not_partially_move_existing_points() {
         let (mut session, contour_id) = session_with_contour();
-        let point_id = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
+        let point_id = add_point(&mut session, &contour_id, 0.0, 0.0);
         let missing_id = PointId::new();
 
         let result = session.move_points(&[point_id.clone(), missing_id.clone()], 10.0, 20.0);
@@ -821,19 +810,16 @@ mod tests {
             result,
             Err(CoreError::PointInContourNotFound(id)) if id == missing_id
         ));
-        assert_eq!(
-            point_position(&session, contour_id.clone(), point_id.clone()),
-            (0.0, 0.0)
-        );
+        assert_eq!(point_position(&session, &contour_id, &point_id), (0.0, 0.0));
     }
 
     #[test]
     fn apply_bulk_node_positions_validates_all_contours_before_moving() {
         let mut session = create_session();
         let first_contour = session.add_empty_contour().id();
-        let first_point = add_point(&mut session, first_contour.clone(), 10.0, 20.0);
+        let first_point = add_point(&mut session, &first_contour, 10.0, 20.0);
         let second_contour = session.add_empty_contour().id();
-        let second_point = add_point(&mut session, second_contour.clone(), 30.0, 40.0);
+        let second_point = add_point(&mut session, &second_contour, 30.0, 40.0);
         let missing_point = PointId::new();
         let invalid_ids = [
             first_point.clone(),
@@ -853,11 +839,11 @@ mod tests {
             Err(CoreError::PointInContourNotFound(id)) if id == missing_point
         ));
         assert_eq!(
-            point_position(&session, first_contour.clone(), first_point.clone()),
+            point_position(&session, &first_contour, &first_point),
             (10.0, 20.0)
         );
         assert_eq!(
-            point_position(&session, second_contour.clone(), second_point.clone()),
+            point_position(&session, &second_contour, &second_point),
             (30.0, 40.0)
         );
 
@@ -872,11 +858,11 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            point_position(&session, first_contour, first_point),
+            point_position(&session, &first_contour, &first_point),
             (100.0, 200.0)
         );
         assert_eq!(
-            point_position(&session, second_contour, second_point),
+            point_position(&session, &second_contour, &second_point),
             (300.0, 400.0)
         );
     }
@@ -884,7 +870,7 @@ mod tests {
     #[test]
     fn apply_bulk_node_positions_missing_anchor_does_not_move_points() {
         let (mut session, contour_id) = session_with_contour();
-        let point_id = add_point(&mut session, contour_id.clone(), 10.0, 20.0);
+        let point_id = add_point(&mut session, &contour_id, 10.0, 20.0);
         let missing_id = AnchorId::new();
         let point_ids = [point_id.clone()];
         let point_coords = [300.0, 400.0];
@@ -903,7 +889,7 @@ mod tests {
             Err(CoreError::AnchorNotFound(id)) if id == missing_id
         ));
         assert_eq!(
-            point_position(&session, contour_id.clone(), point_id.clone()),
+            point_position(&session, &contour_id, &point_id),
             (10.0, 20.0)
         );
     }
@@ -914,7 +900,7 @@ mod tests {
         let original_width = session.width();
         let contour_id = session.add_empty_contour().id();
         let point_id = session
-            .add_point_to_contour(contour_id.clone(), 10.0, 20.0, PointType::OnCurve, false)
+            .add_point_to_contour(&contour_id, 10.0, 20.0, PointType::OnCurve, false)
             .unwrap();
         let point_id = point_id.point_id;
         let anchor_id = session.add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
@@ -952,7 +938,7 @@ mod tests {
         let mut session = create_session();
         let contour_id = session.add_empty_contour().id();
         let point_id = session
-            .add_point_to_contour(contour_id.clone(), 10.0, 20.0, PointType::OnCurve, false)
+            .add_point_to_contour(&contour_id, 10.0, 20.0, PointType::OnCurve, false)
             .unwrap()
             .point_id;
         let anchor_id = session.add_anchor(Anchor::new(Some("top".to_string()), 30.0, 40.0));
@@ -997,10 +983,7 @@ mod tests {
 
         session.translate_layer(4.0, 0.0);
 
-        let order: Vec<_> = session
-            .components_iter()
-            .map(|component| component.id())
-            .collect();
+        let order: Vec<_> = session.components_iter().map(Component::id).collect();
         assert_eq!(order, vec![first.clone(), second]);
         let transform = session.component(&first).unwrap().transform();
         assert_eq!(transform.rotation, 33.0);
@@ -1010,9 +993,9 @@ mod tests {
     #[test]
     fn remove_points_removes_all_requested_points() {
         let (mut session, contour_id) = session_with_contour();
-        let p1 = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
-        let p2 = add_point(&mut session, contour_id.clone(), 100.0, 100.0);
-        let p3 = add_point(&mut session, contour_id.clone(), 200.0, 200.0);
+        let p1 = add_point(&mut session, &contour_id, 0.0, 0.0);
+        let p2 = add_point(&mut session, &contour_id, 100.0, 100.0);
+        let p3 = add_point(&mut session, &contour_id, 200.0, 200.0);
 
         let empty_contours = session.remove_points(&[p1.clone(), p3.clone()]).unwrap();
 
@@ -1026,8 +1009,8 @@ mod tests {
     #[test]
     fn remove_points_prunes_an_emptied_contour() {
         let (mut session, contour_id) = session_with_contour();
-        let p1 = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
-        let p2 = add_point(&mut session, contour_id.clone(), 100.0, 100.0);
+        let p1 = add_point(&mut session, &contour_id, 0.0, 0.0);
+        let p2 = add_point(&mut session, &contour_id, 100.0, 100.0);
 
         let empty_contours = session.remove_points(&[p1, p2]).unwrap();
 
@@ -1038,7 +1021,7 @@ mod tests {
     #[test]
     fn remove_points_missing_point_does_not_partially_remove_existing_points() {
         let (mut session, contour_id) = session_with_contour();
-        let point_id = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
+        let point_id = add_point(&mut session, &contour_id, 0.0, 0.0);
         let missing_id = PointId::new();
 
         let result = session.remove_points(&[point_id.clone(), missing_id.clone()]);
@@ -1053,11 +1036,11 @@ mod tests {
     #[test]
     fn insert_point_before_creates_bezier_pattern() {
         let (mut session, contour_id) = session_with_contour();
-        let anchor1 = add_point(&mut session, contour_id.clone(), 0.0, 0.0);
-        let anchor2 = add_point(&mut session, contour_id.clone(), 100.0, 100.0);
+        let anchor1 = add_point(&mut session, &contour_id, 0.0, 0.0);
+        let anchor2 = add_point(&mut session, &contour_id, 100.0, 100.0);
 
         let control = session
-            .insert_point_before(anchor2.clone(), 50.0, 75.0, PointType::OffCurve, false)
+            .insert_point_before(&anchor2, 50.0, 75.0, PointType::OffCurve, false)
             .unwrap();
         let control = control.point_id;
 
@@ -1077,11 +1060,11 @@ mod tests {
     #[test]
     fn insert_point_before_nonexistent_fails() {
         let (mut session, contour_id) = session_with_contour();
-        add_point(&mut session, contour_id.clone(), 0.0, 0.0);
+        add_point(&mut session, &contour_id, 0.0, 0.0);
         let fake_id = PointId::new();
 
         assert!(matches!(
-            session.insert_point_before(fake_id.clone(), 50.0, 50.0, PointType::OffCurve, false),
+            session.insert_point_before(&fake_id, 50.0, 50.0, PointType::OffCurve, false),
             Err(CoreError::PointInContourNotFound(id)) if id == fake_id
         ));
     }

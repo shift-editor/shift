@@ -124,25 +124,25 @@ fn loads_ufo_metadata_metrics_and_geometry() {
     assert_eq!(metrics.units_per_em, 1000.0);
     let source_id = font.default_source_id().unwrap();
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::Ascender)
+        font.metric_value(&source_id, MetricKind::Ascender)
             .unwrap()
             .position,
         700.0
     );
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::Descender)
+        font.metric_value(&source_id, MetricKind::Descender)
             .unwrap()
             .position,
         -200.0
     );
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::CapHeight)
+        font.metric_value(&source_id, MetricKind::CapHeight)
             .unwrap()
             .position,
         700.0
     );
     assert_eq!(
-        font.metric_value(source_id, MetricKind::XHeight)
+        font.metric_value(&source_id, MetricKind::XHeight)
             .unwrap()
             .position,
         500.0
@@ -154,7 +154,7 @@ fn loads_ufo_metadata_metrics_and_geometry() {
     let glyph_o = font.glyph_by_name("O").expect("O glyph should exist");
     let has_off_curve = main_layer(glyph_o)
         .contours_iter()
-        .flat_map(|contour| contour.points())
+        .flat_map(Contour::points)
         .any(|point| point.point_type() == PointType::OffCurve);
     assert!(has_off_curve, "O should contain curve control points");
 }
@@ -183,16 +183,21 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
         .collect();
     assert!(anchor_names.contains(&"top"));
 
-    let source_names: Vec<_> = font.sources().iter().map(|source| source.name()).collect();
+    let source_names: Vec<_> = font
+        .sources()
+        .iter()
+        .map(shift_font::Source::name)
+        .collect();
     assert!(source_names.contains(&"Regular"));
     assert!(font.sources().len() >= 2);
-    assert!(font
-        .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
-        .all(|layer| font
-            .sources()
-            .iter()
-            .any(|source| source.id() == layer.source_id())));
+    assert!(
+        font.glyphs()
+            .flat_map(|glyph| glyph.layers().values())
+            .all(|layer| font
+                .sources()
+                .iter()
+                .any(|source| source.id() == layer.source_id()))
+    );
 
     assert_eq!(
         shift_font::test_support::default_kerning_between(&font, "T", "A"),
@@ -221,7 +226,7 @@ fn loads_binary_fonts_with_contours() {
 #[test]
 fn streams_binary_ufo_designspace_and_glyphs_without_eager_shift_geometry() {
     let binary_path = mutatorsans_ttf_path();
-    let binary_bytes = std::fs::read(&binary_path).unwrap();
+    let binary_bytes = fs::read(&binary_path).unwrap();
     let binary = skrifa::FontRef::new(&binary_bytes).unwrap();
     let expected_binary_glyphs = skrifa::raw::TableProvider::maxp(&binary)
         .unwrap()
@@ -464,7 +469,7 @@ fn binary_import_produces_valid_curve_point_runs() {
 
 #[test]
 fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
-    let mut bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();
+    let mut bytes = fs::read(mutatorsans_ttf_path()).unwrap();
 
     // Rename the hmtx tag in the table directory so the table lookup fails
     // while the rest of the font stays parseable.
@@ -477,7 +482,7 @@ fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
 
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("missing-hmtx.ttf");
-    std::fs::write(&path, bytes).unwrap();
+    fs::write(&path, bytes).unwrap();
 
     let error = FontLoader::new()
         .read_font(path.to_str().unwrap())
@@ -490,11 +495,11 @@ fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
 
 #[test]
 fn truncated_binary_font_returns_error_instead_of_panicking() {
-    let bytes = std::fs::read(mutatorsans_ttf_path()).unwrap();
+    let bytes = fs::read(mutatorsans_ttf_path()).unwrap();
 
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("truncated.ttf");
-    std::fs::write(&path, &bytes[..200]).unwrap();
+    fs::write(&path, &bytes[..200]).unwrap();
 
     FontLoader::new()
         .read_font(path.to_str().unwrap())
@@ -509,13 +514,13 @@ fn streams_glyphs_file_features_kerning_components_and_anchors() {
     assert_eq!(font.metrics().units_per_em, 1000.0);
     let source_id = font.default_source_id().unwrap();
     assert_eq!(
-        font.metric_value(source_id.clone(), MetricKind::Ascender)
+        font.metric_value(&source_id, MetricKind::Ascender)
             .unwrap()
             .position,
         700.0
     );
     assert_eq!(
-        font.metric_value(source_id, MetricKind::Descender)
+        font.metric_value(&source_id, MetricKind::Descender)
             .unwrap()
             .position,
         -160.0
@@ -626,7 +631,7 @@ fn loads_designspace_sources_axes_and_default_metadata() {
         })
         .expect("non-default Bold Condensed master should be imported");
     assert_eq!(
-        font.metric_value(bold_condensed.id(), MetricKind::Ascender)
+        font.metric_value(&bold_condensed.id(), MetricKind::Ascender)
             .expect("non-default master ascender should survive import")
             .position,
         800.0
@@ -638,10 +643,11 @@ fn loads_designspace_sources_axes_and_default_metadata() {
         .find(|instance| instance.name() == "Medium_Wide_I")
         .expect("valid instance with a conflicting PostScript name should remain available");
     assert_eq!(medium_wide.postscript_name(), None);
-    assert!(font
-        .named_instances()
-        .iter()
-        .all(|instance| !matches!(instance.name(), "Extrapolate" | "Anisotropic_Extrapolate")));
+    assert!(
+        font.named_instances()
+            .iter()
+            .all(|instance| !matches!(instance.name(), "Extrapolate" | "Anisotropic_Extrapolate"))
+    );
 
     let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     assert!(glyph_a.layers().len() >= 4);

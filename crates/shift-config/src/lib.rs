@@ -5,6 +5,10 @@
 //! blank line around it. The app and `shift-cli` share it, so both agree on
 //! what a valid file is.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 pub mod theme;
 
 use std::ops::Range;
@@ -265,11 +269,11 @@ pub fn set_theme(source: Option<&str>, theme: &ThemeSetting) -> Result<String, C
     }
     let mut document: DocumentMut = source.parse().map_err(|_| ConfigEditError::InvalidFile)?;
 
-    if let (ThemeSetting::Slots(slots), Some(item)) = (theme, document.get_mut("theme")) {
-        if item.is_table_like() {
-            set_slots(item, slots);
-            return Ok(document.to_string());
-        }
+    if let (ThemeSetting::Slots(slots), Some(item)) = (theme, document.get_mut("theme"))
+        && item.is_table_like()
+    {
+        set_slots(item, slots);
+        return Ok(document.to_string());
     }
 
     if document.get("theme").is_some_and(Item::is_table) {

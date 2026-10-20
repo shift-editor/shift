@@ -55,7 +55,7 @@ impl UfoReader {
         Self
     }
 
-    fn convert_point_type(typ: &norad::PointType) -> PointType {
+    fn convert_point_type(typ: norad::PointType) -> PointType {
         match typ {
             norad::PointType::Move => PointType::OnCurve,
             norad::PointType::Line => PointType::OnCurve,
@@ -70,7 +70,7 @@ impl UfoReader {
         let is_closed = contour.is_closed();
 
         for point in &contour.points {
-            let point_type = Self::convert_point_type(&point.typ);
+            let point_type = Self::convert_point_type(point.typ);
             shift_contour.add_point(point.x, point.y, point_type, point.smooth);
         }
 
@@ -98,7 +98,7 @@ impl UfoReader {
 
     pub(crate) fn convert_anchor(anchor: &norad::Anchor) -> Anchor {
         Anchor::new(
-            anchor.name.as_ref().map(|name| name.to_string()),
+            anchor.name.as_ref().map(ToString::to_string),
             anchor.x,
             anchor.y,
         )
@@ -110,8 +110,8 @@ impl UfoReader {
             Line::Vertical(x) => Guideline::vertical(x),
             Line::Angle { x, y, degrees } => Guideline::angled(x, y, degrees),
         };
-        converted.set_name(guideline.name.as_ref().map(|name| name.to_string()));
-        converted.set_color(guideline.color.as_ref().map(|color| color.to_rgba_string()));
+        converted.set_name(guideline.name.as_ref().map(ToString::to_string));
+        converted.set_color(guideline.color.as_ref().map(norad::Color::to_rgba_string));
         converted
     }
 
@@ -132,7 +132,7 @@ impl UfoReader {
             }
             plist::Value::Dictionary(dict) => {
                 let mut map = BTreeMap::new();
-                for (k, v) in dict.iter() {
+                for (k, v) in dict {
                     map.insert(k.clone(), Self::convert_plist_to_lib_value(v));
                 }
                 LibValue::Dict(map)
@@ -179,7 +179,7 @@ impl UfoReader {
 
     pub(crate) fn convert_lib(lib: &plist::Dictionary) -> LibData {
         let mut data = BTreeMap::new();
-        for (k, v) in lib.iter() {
+        for (k, v) in lib {
             data.insert(k.clone(), Self::convert_plist_to_lib_value(v));
         }
         LibData::from_map(data)
@@ -295,7 +295,7 @@ impl UfoReader {
             .unwrap_or(1000.0);
         let metric_definitions = font.metric_definitions().to_vec();
         let default_source = font
-            .source_mut(default_source_id)
+            .source_mut(&default_source_id)
             .expect("new font should contain its default source");
         set_metric_position(
             &metric_definitions,

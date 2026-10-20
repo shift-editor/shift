@@ -41,11 +41,13 @@ pub enum BridgeError {
 pub fn to_napi_error(error: BridgeError) -> Error {
   let status = match &error {
     BridgeError::InvalidInput { .. }
-    | BridgeError::Backend(BackendError::MissingExtension { .. })
-    | BridgeError::Backend(BackendError::InvalidPathUtf8 { .. })
-    | BridgeError::Backend(BackendError::InvalidExtensionUtf8 { .. })
-    | BridgeError::Backend(BackendError::UnsupportedFormat { .. })
-    | BridgeError::Backend(BackendError::UnsupportedWriteFormat { .. })
+    | BridgeError::Backend(
+      BackendError::MissingExtension { .. }
+      | BackendError::InvalidPathUtf8 { .. }
+      | BackendError::InvalidExtensionUtf8 { .. }
+      | BackendError::UnsupportedFormat { .. }
+      | BackendError::UnsupportedWriteFormat { .. },
+    )
     | BridgeError::Shape(
       ShapeError::TooManyUnits
       | ShapeError::TooManyInsertedGlyphs

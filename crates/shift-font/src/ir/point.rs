@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the font-format names for point types"
+)]
 pub enum PointType {
     #[default]
     OnCurve,
@@ -53,6 +57,10 @@ impl Point {
 
     pub fn id(&self) -> PointId {
         self.id.clone()
+    }
+
+    pub fn position(&self) -> kurbo::Point {
+        kurbo::Point::new(self.x, self.y)
     }
 
     pub fn x(&self) -> f64 {

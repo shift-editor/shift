@@ -1,5 +1,5 @@
-use crate::distinct_named_instances;
 use crate::SourceGlyphIds;
+use crate::distinct_named_instances;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
@@ -14,13 +14,13 @@ use shift_font::{
 };
 
 use crate::{
+    ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
     font_source::VariationAxisKind,
-    formats::ufo::{load_header, read_glyph_paths, UfoKerning},
+    formats::ufo::{UfoKerning, load_header, read_glyph_paths},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     kerning_import::KerningImport,
     metrics::copy_source_metrics,
-    ImportReport,
 };
 
 use super::{
@@ -56,9 +56,9 @@ pub(crate) fn stream_font(path: &str) -> FormatBackendResult<DesignspaceStream> 
 
 pub(crate) fn stream_retained(
     path: &Path,
-    glyph_paths: Arc<[BTreeMap<String, PathBuf>]>,
+    glyph_paths: &Arc<[BTreeMap<String, PathBuf>]>,
 ) -> FormatBackendResult<DesignspaceStream> {
-    stream_designspace(path, Some(&glyph_paths)).map_err(FormatBackendError::from)
+    stream_designspace(path, Some(glyph_paths)).map_err(FormatBackendError::from)
 }
 
 fn stream_designspace(

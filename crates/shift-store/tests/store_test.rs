@@ -3,7 +3,7 @@ use std::sync::Arc;
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
     AxisId, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, SHIFT_APPLICATION_ID,
-    SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore, SourceId, SourceKind, WorkspaceState,
+    SHIFT_DOCUMENT_SCHEMA_VERSION, SaveState, ShiftStore, SourceId, SourceKind, WorkspaceState,
 };
 
 fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
@@ -65,7 +65,7 @@ fn writes_and_reads_font_info() {
     let font_info = open_sans_font_info();
 
     store
-        .set_font_info(font_info.clone())
+        .set_font_info(&font_info)
         .expect("font info should be written");
 
     let loaded = store
@@ -83,7 +83,7 @@ fn metadata_change_set_preserves_metrics_and_store_only_font_info() {
     original.sample_text = Some("Hamburgefontsiv".to_string());
     original.vendor_id = Some("SHFT".to_string());
     store
-        .set_font_info(original.clone())
+        .set_font_info(&original)
         .expect("font info should be written");
     let metadata = FontMetadata {
         family_name: Some("Shift Sans".to_string()),
@@ -199,7 +199,7 @@ fn change_sets_preserve_dense_entity_order_indices() {
     let before_mappings = after.axis_mappings().to_vec();
     let before_instances = after.named_instances().to_vec();
     let before_sources = source_collection(&after);
-    after.remove_axis(font.axes()[0].id()).unwrap();
+    after.remove_axis(&font.axes()[0].id()).unwrap();
     after.remove_source(font.sources()[1].id()).unwrap();
     after.pop_glyph(glyph.id()).unwrap();
 
@@ -283,13 +283,21 @@ fn glyph_edit_is_sparse() {
     let mut with_append = font.clone();
     with_append.insert_glyph(appended.clone()).unwrap();
     store
-        .apply_change_set_with_font(&glyph_created(&appended).into(), &with_append, true)
+        .apply_change_set_with_font(
+            &glyph_created(&appended).into(),
+            &with_append,
+            SaveState::Unsaved,
+        )
         .unwrap();
 
     let mut after_pop = with_append;
     after_pop.pop_glyph(appended.id()).unwrap();
     store
-        .apply_change_set_with_font(&glyph_deleted(&appended).into(), &after_pop, true)
+        .apply_change_set_with_font(
+            &glyph_deleted(&appended).into(),
+            &after_pop,
+            SaveState::Unsaved,
+        )
         .unwrap();
 
     let first = font.glyphs().next().unwrap();
@@ -364,7 +372,7 @@ fn writes_and_reads_workspace_state() {
     let state = WorkspaceState::untitled(Some("doc-1".to_string()));
 
     store
-        .set_workspace_state(state.clone())
+        .set_workspace_state(&state)
         .expect("workspace state should be written");
 
     let loaded = store
@@ -380,7 +388,7 @@ fn applying_change_set_marks_workspace_state_dirty() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     store
-        .set_workspace_state(WorkspaceState::untitled(Some("doc-1".to_string())))
+        .set_workspace_state(&WorkspaceState::untitled(Some("doc-1".to_string())))
         .expect("workspace state should be written");
 
     store
@@ -402,11 +410,11 @@ fn overwrites_font_info() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
     store
-        .set_font_info(open_sans_font_info())
+        .set_font_info(&open_sans_font_info())
         .expect("font info should be written");
 
     store
-        .set_font_info(FontInfo {
+        .set_font_info(&FontInfo {
             family_name: Some("Shift Sans".to_string()),
             units_per_em: 1000.0,
             ..empty_font_info()
@@ -427,7 +435,7 @@ fn overwrites_font_info() {
 fn font_info_requires_positive_units_per_em() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
 
-    let result = store.set_font_info(FontInfo {
+    let result = store.set_font_info(&FontInfo {
         units_per_em: 0.0,
         ..empty_font_info()
     });
@@ -441,7 +449,7 @@ fn creates_and_reads_glyph() {
     let glyph_id = GlyphId::new("glyph-A");
 
     store
-        .create_glyph(NewGlyph {
+        .create_glyph(&NewGlyph {
             id: glyph_id.clone(),
             name: Some("A".to_string()),
         })
@@ -543,7 +551,10 @@ fn creates_and_reads_glyph_layer() {
 
     assert_eq!(layer.glyph_id.as_str(), glyph_id.as_str());
     assert_eq!(layer.source_id.as_str(), source_id.as_str());
-    assert_eq!(layer.name.as_ref().map(|name| name.as_str()), Some("A"));
+    assert_eq!(
+        layer.name.as_ref().map(shift_font::GlyphName::as_str),
+        Some("A")
+    );
 }
 
 #[test]
@@ -653,7 +664,7 @@ fn applies_glyph_identity_change_set() {
     let source_id = shift_font::SourceId::new();
     let layer =
         shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
-    create_regular_source_with_id(&mut store, source_id);
+    create_regular_source_with_id(&mut store, &source_id);
 
     let mut replacement = shift_font::Glyph::with_id(glyph_id.clone(), "A.alt");
     replacement.set_unicodes(vec![0x00c1]);
@@ -722,7 +733,7 @@ fn popping_glyph_cascades_layers() {
     let source_id = shift_font::SourceId::new();
     let layer =
         shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
-    create_regular_source_with_id(&mut store, source_id);
+    create_regular_source_with_id(&mut store, &source_id);
 
     let mut glyph = glyph;
     glyph.set_layer(layer);
@@ -755,7 +766,7 @@ fn popping_glyph_cascades_layers() {
 fn applies_layer_metrics_and_contour_point_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, contour, point_id) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, &layer.source_id());
 
     let mut glyph = glyph;
     glyph.set_layer(layer.clone());
@@ -802,7 +813,7 @@ fn applies_layer_metrics_and_contour_point_changes() {
 fn applies_layer_geometry_replacement() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, first_contour, _) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, &layer.source_id());
     let mut replacement = shift_font::GlyphLayer::with_width(layer.id(), layer.source_id(), 500.0);
     replacement.add_contour(contour_with_point(10.0, 20.0));
 
@@ -839,7 +850,7 @@ fn applies_layer_geometry_replacement() {
 fn layer_geometry_replacement_round_trips_anchors() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, &layer.source_id());
 
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
@@ -861,13 +872,13 @@ fn layer_geometry_replacement_round_trips_anchors() {
 fn applies_anchor_position_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, &layer.source_id());
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
 
     let mut replacement = layer.clone();
-    assert!(replacement.set_anchor_position(anchor_id.clone(), 300.0, 650.0));
+    assert!(replacement.set_anchor_position(&anchor_id, 300.0, 650.0));
     store
         .apply_change_set(&shift_font::FontChangeSet::from(layer_replaced(
             glyph.id(),
@@ -892,7 +903,7 @@ fn reopen_preserves_layer_anchors() {
 
     {
         let mut store = ShiftStore::open(&path).expect("open");
-        create_regular_source_with_id(&mut store, layer.source_id());
+        create_regular_source_with_id(&mut store, &layer.source_id());
         store
             .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
             .expect("change set should apply");
@@ -917,7 +928,7 @@ fn create_glyph_a(store: &mut ShiftStore) -> GlyphId {
     let glyph_id = GlyphId::new(shift_font::GlyphId::from_raw("A").to_string());
 
     store
-        .create_glyph(NewGlyph {
+        .create_glyph(&NewGlyph {
             id: glyph_id.clone(),
             name: Some("A".to_string()),
         })
@@ -986,7 +997,7 @@ fn create_glyph_b(store: &mut ShiftStore) -> GlyphId {
     let glyph_id = GlyphId::new(shift_font::GlyphId::from_raw("B").to_string());
 
     store
-        .create_glyph(NewGlyph {
+        .create_glyph(&NewGlyph {
             id: glyph_id.clone(),
             name: Some("B".to_string()),
         })
@@ -1044,7 +1055,7 @@ fn create_weight_axis(store: &mut ShiftStore) -> AxisId {
     let axis_id = AxisId::new("axis-wght");
 
     store
-        .create_axis(NewAxis {
+        .create_axis(&NewAxis {
             id: axis_id.clone(),
             tag: "wght".to_string(),
             name: "Weight".to_string(),
@@ -1062,7 +1073,7 @@ fn create_regular_source(store: &mut ShiftStore) -> SourceId {
     let source_id = SourceId::new(shift_font::SourceId::from_raw("regular").to_string());
 
     store
-        .create_source(NewSource {
+        .create_source(&NewSource {
             id: source_id.clone(),
             name: Some("Regular".to_string()),
             family_name: Some("Shift Sans".to_string()),
@@ -1075,9 +1086,9 @@ fn create_regular_source(store: &mut ShiftStore) -> SourceId {
     source_id
 }
 
-fn create_regular_source_with_id(store: &mut ShiftStore, source_id: shift_font::SourceId) {
+fn create_regular_source_with_id(store: &mut ShiftStore, source_id: &shift_font::SourceId) {
     store
-        .create_source(NewSource {
+        .create_source(&NewSource {
             id: SourceId::new(source_id.to_string()),
             name: Some("Regular".to_string()),
             family_name: Some("Shift Sans".to_string()),
@@ -1252,7 +1263,7 @@ fn save_as_document_snapshots_working_store_without_workspace_state() {
     state.dirty = true;
     state.revision = 7;
     working
-        .set_workspace_state(state.clone())
+        .set_workspace_state(&state)
         .expect("write workspace state");
 
     let metadata = working
@@ -1336,9 +1347,8 @@ fn create_document_never_clobbers_an_existing_destination() {
     let path = temp.path().join("Existing.shift");
     std::fs::write(&path, b"retain me").expect("write destination");
 
-    let error = match ShiftStore::create_document(&path, &sample_font()) {
-        Ok(_) => panic!("existing destination must not be replaced"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::create_document(&path, &sample_font()) else {
+        panic!("existing destination must not be replaced");
     };
 
     assert!(matches!(
@@ -1359,9 +1369,8 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
     let future_path = temp.path().join("Future.shift");
 
     rusqlite::Connection::open(&plain_path).expect("create plain sqlite");
-    let plain_error = match ShiftStore::open_document(&plain_path) {
-        Ok(_) => panic!("plain SQLite must not open as Shift"),
-        Err(error) => error,
+    let Err(plain_error) = ShiftStore::open_document(&plain_path) else {
+        panic!("plain SQLite must not open as Shift");
     };
     assert!(matches!(
         plain_error,
@@ -1377,9 +1386,8 @@ fn document_open_rejects_plain_corrupt_and_future_sqlite_files() {
     conn.pragma_update(None, "user_version", 999)
         .expect("stamp future schema");
     drop(conn);
-    let future_error = match ShiftStore::open_document(&future_path) {
-        Ok(_) => panic!("future document must be refused"),
-        Err(error) => error,
+    let Err(future_error) = ShiftStore::open_document(&future_path) else {
+        panic!("future document must be refused");
     };
     assert!(matches!(
         future_error,
@@ -1407,9 +1415,8 @@ fn document_open_rejects_foreign_key_corruption_before_write_access() {
     .expect("break a glyph foreign key");
     drop(conn);
 
-    let error = match ShiftStore::open_document(&path) {
-        Ok(_) => panic!("foreign-key corruption must be refused"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open_document(&path) else {
+        panic!("foreign-key corruption must be refused");
     };
     assert!(matches!(
         error,
@@ -1424,9 +1431,8 @@ fn canonical_document_requires_document_open_posture() {
     let path = temp.path().join("Canonical.shift");
     drop(ShiftStore::create_document(&path, &sample_font()).expect("create document"));
 
-    let error = match ShiftStore::open(&path) {
-        Ok(_) => panic!("canonical document must not use working-store WAL posture"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open(&path) else {
+        panic!("canonical document must not use working-store WAL posture");
     };
     assert!(matches!(
         error,
@@ -1446,7 +1452,7 @@ fn canonical_document_requires_document_open_posture() {
 #[test]
 fn completed_import_store_restores_durable_wal_mode() {
     let path = temp_store_path("import-pragmas");
-    let font = shift_font::test_support::sample_font();
+    let font = sample_font();
     let mut store = ShiftStore::open_for_import(&path).expect("open import store");
     let mut writer = store.begin_import(&font).expect("begin import");
     for glyph in font.glyphs() {
@@ -1474,13 +1480,12 @@ fn import_mode_refuses_a_published_workspace_destination() {
     let path = temp_store_path("occupied-import");
     let mut store = ShiftStore::open(&path).expect("open");
     store
-        .set_workspace_state(WorkspaceState::untitled(None))
+        .set_workspace_state(&WorkspaceState::untitled(None))
         .expect("publish workspace");
     drop(store);
 
-    let error = match ShiftStore::open_for_import(&path) {
-        Ok(_) => panic!("published store must be retained"),
-        Err(error) => error,
+    let Err(error) = ShiftStore::open_for_import(&path) else {
+        panic!("published store must be retained");
     };
     assert!(matches!(
         error,
@@ -1497,7 +1502,7 @@ fn reopen_preserves_written_contents_and_integrity() {
     {
         let mut store = ShiftStore::open(&path).expect("open");
         store
-            .set_font_info(open_sans_font_info())
+            .set_font_info(&open_sans_font_info())
             .expect("write font info");
     }
 
@@ -1538,7 +1543,7 @@ fn applies_axis_and_source_created_change_set_and_survives_reopen() {
             900.0,
         );
         store
-            .set_font_info(empty_font_info())
+            .set_font_info(&empty_font_info())
             .expect("initialize font info");
         let change_set = shift_font::FontChangeSet::new(vec![
             shift_font::FontChange::Axes(shift_font::Replacement::new(Vec::new(), vec![axis])),

@@ -1,10 +1,10 @@
-use crate::length::{ensure_total, to_u32, within, OrOverflow};
+use crate::length::{OrOverflow, ensure_total, to_u32, within};
 use crate::{
+    Bounds, Curve, LINE_EPSILON, OutlineCommand, Point, Section, SlugError,
     curve::{
         cubic_subdivision_counts_from_commands,
         curves_and_line_flags_from_commands_with_subdivisions,
     },
-    Bounds, Curve, OutlineCommand, Point, Section, SlugError, LINE_EPSILON,
 };
 
 pub(crate) const CURVE_BYTES: usize = 24;
@@ -42,7 +42,6 @@ pub(crate) mod params_word {
 
 mod component;
 pub(crate) use component::ROOT_COMPONENT;
-#[cfg(test)]
 pub(crate) use component::VARIABLE_COMPONENT_GLYPH_BYTES;
 pub use component::{
     VariableComponent, VariableComponentGlyph, VariableComponentPart, VariableComponentSource,
@@ -112,7 +111,7 @@ pub fn pack_variable_params(
     params: VariableParams,
 ) -> Result<[u8; VARIABLE_PARAMS_BYTES], SlugError> {
     let layout = params.layout;
-    let mut words = [0; VARIABLE_PARAMS_BYTES / std::mem::size_of::<u32>()];
+    let mut words = [0; VARIABLE_PARAMS_BYTES / size_of::<u32>()];
     words[params_word::INSTANCE_COUNT] = params.instance_count;
     words[params_word::BAND_COUNT] = params.band_count;
     words[params_word::ATLAS_SPLIT_OFFSET] = params.atlas_split_offset;
@@ -129,8 +128,8 @@ pub fn pack_variable_params(
     words[params_word::LINE_BITS] = to_u32(layout.line_bits.offset)?;
     let mut bytes = [0; VARIABLE_PARAMS_BYTES];
     for (index, word) in words.into_iter().enumerate() {
-        let start = index * std::mem::size_of::<u32>();
-        bytes[start..start + std::mem::size_of::<u32>()].copy_from_slice(&word.to_le_bytes());
+        let start = index * size_of::<u32>();
+        bytes[start..start + size_of::<u32>()].copy_from_slice(&word.to_le_bytes());
     }
     Ok(bytes)
 }
@@ -463,7 +462,7 @@ impl VariableAtlas {
         let sparse_deltas = next_section(
             curve_deltas,
             self.sparse_deltas.len(),
-            std::mem::size_of::<u32>(),
+            size_of::<u32>(),
             alignment,
         )?;
         let glyphs = next_section(
@@ -476,13 +475,13 @@ impl VariableAtlas {
         let source_advances = next_section(
             sources,
             self.source_advances.len(),
-            std::mem::size_of::<f32>(),
+            size_of::<f32>(),
             alignment,
         )?;
         let component_glyphs = next_section(
             source_advances,
             self.component_glyphs.len(),
-            component::VARIABLE_COMPONENT_GLYPH_BYTES,
+            VARIABLE_COMPONENT_GLYPH_BYTES,
             alignment,
         )?;
         let component_parts = next_section(
@@ -506,7 +505,7 @@ impl VariableAtlas {
         let line_bits = next_section(
             component_sources,
             self.line_bits.len(),
-            std::mem::size_of::<u32>(),
+            size_of::<u32>(),
             alignment,
         )?;
         let total_length = line_bits
@@ -805,10 +804,9 @@ impl VariableAtlasBuilder {
                 .filter(|(_, delta)| !curve_is_zero(*delta))
                 .collect::<Vec<_>>();
             let dense_bytes = byte_length(deltas.len(), CURVE_BYTES)?;
-            let sparse_values_bytes =
-                byte_length(changed.len(), CURVE_BYTES + std::mem::size_of::<u32>())?;
+            let sparse_values_bytes = byte_length(changed.len(), CURVE_BYTES + size_of::<u32>())?;
             let sparse_bytes = sparse_values_bytes
-                .checked_add(2 * std::mem::size_of::<u32>())
+                .checked_add(2 * size_of::<u32>())
                 .or_overflow()?;
             let delta_start = to_u32(
                 self.atlas

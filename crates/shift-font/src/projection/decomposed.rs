@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::FontProjection;
-use crate::placed_blend::{mirrors, placed_point_index, shapes_match, ContourShape};
+use crate::placed_blend::{ContourShape, mirrors, placed_point_index, shapes_match};
 
 /// A glyph's flattened outline split by where each contour comes from: the
 /// glyph's own contours first, then one part per component occurrence in
@@ -247,7 +247,7 @@ impl Font {
         }
         let mut layers = Vec::with_capacity(source_ids.len());
         for source_id in source_ids {
-            let Some(layer) = glyph.layer_for_source(source_id.clone()) else {
+            let Some(layer) = glyph.layer_for_source(source_id) else {
                 return Ok(None);
             };
             layers.push(layer);
@@ -304,11 +304,7 @@ fn component_glyphs(glyph: &Glyph) -> Vec<GlyphId> {
     glyph
         .layers()
         .values()
-        .flat_map(|layer| {
-            layer
-                .components_iter()
-                .map(|component| component.base_glyph_id())
-        })
+        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
         .collect()
 }
 
@@ -368,14 +364,21 @@ fn blend(outlines: &[OutlineParts], weights: &[f64]) -> Option<OutlineParts> {
     }
 
     let blended_point = |part: usize, contour: usize, index: usize, point: &Point| {
-        let (x, y) = outlines
-            .iter()
-            .zip(weights)
-            .fold((0.0, 0.0), |(x, y), (outline, weight)| {
-                let source = &outline[part][contour].points[index];
-                (x + weight * source.x(), y + weight * source.y())
-            });
-        Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
+        let blended =
+            outlines
+                .iter()
+                .zip(weights)
+                .fold(kurbo::Vec2::ZERO, |sum, (outline, weight)| {
+                    let source = &outline[part][contour].points[index];
+                    sum + *weight * source.position().to_vec2()
+                });
+        Point::new(
+            PointId::new(),
+            blended.x,
+            blended.y,
+            point.point_type(),
+            point.is_smooth(),
+        )
     };
     let blended_contour = |part: usize, contour: usize, first: &ResolvedContour| ResolvedContour {
         points: first
@@ -440,7 +443,7 @@ fn placed(
                 .get(placed_point_index(index, shape, reversing))
         })
         .map(|point| {
-            let (x, y) = transform.transform_point(point.x(), point.y());
+            let kurbo::Point { x, y } = transform.transform_point(point.position());
             Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
         })
         .collect();

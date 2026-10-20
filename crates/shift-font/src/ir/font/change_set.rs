@@ -109,7 +109,7 @@ impl Font {
         let state = self.state_mut();
         for glyph_id in &touched_glyph_ids {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
-                state.index.remove_glyph(glyph_id.clone(), glyph);
+                state.index.remove_glyph(glyph_id, glyph);
             }
         }
 
@@ -169,7 +169,7 @@ impl Font {
             if layer.before.is_some() && layer.after.is_none() {
                 let layer_id = replacement_layer_id(layer)?;
                 let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
-                Arc::make_mut(glyph).remove_layer(layer_id);
+                Arc::make_mut(glyph).remove_layer(&layer_id);
             }
         }
 
@@ -225,7 +225,7 @@ impl Font {
                 continue;
             };
             state.index.validate_glyph_insert(glyph_id.clone(), glyph)?;
-            state.index.insert_glyph(glyph_id.clone(), glyph);
+            state.index.insert_glyph(glyph_id, glyph);
             touched_unicodes.extend(glyph.unicodes().iter().copied());
         }
         // A full rebuild lists glyphs sharing a code point in glyph order; keep that.
@@ -434,7 +434,7 @@ mod tests {
         let axis_id = original.axes()[0].id();
         let mut font = original.clone();
         let outcome = font
-            .apply_intents(FontIntentSet {
+            .apply_intents(&FontIntentSet {
                 intents: vec![FontIntent::DeleteAxis { axis_id }],
             })
             .unwrap();
@@ -454,7 +454,7 @@ mod tests {
         let mut metadata = edited.metadata().clone();
         metadata.family_name = Some("Edited".to_string());
         let changes = edited
-            .apply_intents(FontIntentSet {
+            .apply_intents(&FontIntentSet {
                 intents: vec![FontIntent::UpdateFontMetadata { metadata }],
             })
             .unwrap()
@@ -489,7 +489,7 @@ mod tests {
         let layer_id = LayerId::from_raw("created_regular");
         let original = font.clone();
         let outcome = font
-            .apply_intents(FontIntentSet {
+            .apply_intents(&FontIntentSet {
                 intents: vec![
                     FontIntent::CreateGlyph {
                         glyph_id: Some(glyph_id.clone()),
@@ -498,7 +498,7 @@ mod tests {
                     },
                     FontIntent::CreateGlyphLayer {
                         layer_id: layer_id.clone(),
-                        glyph_id: glyph_id.clone(),
+                        glyph_id,
                         source_id,
                     },
                 ],
@@ -513,17 +513,19 @@ mod tests {
                 .count(),
             0
         );
-        assert!(outcome
-            .changes
-            .entity_changes()
-            .iter()
-            .any(|change| matches!(
-                change,
-                FontEntityChange::Layer {
-                    change: EntityChange::Created(layer),
-                    ..
-                } if layer.id() == layer_id
-            )));
+        assert!(
+            outcome
+                .changes
+                .entity_changes()
+                .iter()
+                .any(|change| matches!(
+                    change,
+                    FontEntityChange::Layer {
+                        change: EntityChange::Created(layer),
+                        ..
+                    } if layer.id() == layer_id
+                ))
+        );
         let edited = font.clone();
 
         font.apply_change_set(&outcome.changes.inverted()).unwrap();

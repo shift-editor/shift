@@ -15,6 +15,10 @@
     "./reference": {
       "types": "./src/reference.ts",
       "import": "./src/reference.ts"
+    },
+    "./shaping": {
+      "types": "./src/shaping.ts",
+      "import": "./src/shaping.ts"
     }
   },
   "scripts": {

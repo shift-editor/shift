@@ -115,7 +115,7 @@ pub fn propagate_anchors(glyph: &PropagationGlyph) -> PropagatedAnchors {
             all_anchors.retain(|name, _| !name.starts_with("exit"));
         }
 
-        let transform = to_affine(component.transform);
+        let transform = Affine::from(component.transform);
         let scale = get_xy_rotation(transform);
         for anchor in anchors {
             let new_has_underscore = anchor.name.starts_with('_');
@@ -194,17 +194,6 @@ pub fn propagate_anchors(glyph: &PropagationGlyph) -> PropagatedAnchors {
         anchors: all_anchors.into_values().collect(),
         base_glyph_count: number_of_base_glyphs,
     }
-}
-
-fn to_affine(transform: Transform) -> Affine {
-    Affine::new([
-        transform.xx,
-        transform.xy,
-        transform.yx,
-        transform.yy,
-        transform.dx,
-        transform.dy,
-    ])
 }
 
 /// Returns an iterator over anchors, accounting for a possible "*origin" anchor

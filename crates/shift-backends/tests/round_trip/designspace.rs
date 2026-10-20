@@ -228,7 +228,7 @@ fn layer_width(font: &Font, source_name: &str, glyph_name: &str) -> f64 {
         .unwrap_or_else(|| panic!("source {source_name} should exist"));
     font.glyph_by_name(glyph_name)
         .unwrap_or_else(|| panic!("glyph {glyph_name} should exist"))
-        .layer_for_source(source.id())
+        .layer_for_source(&source.id())
         .unwrap_or_else(|| panic!("{glyph_name} should have a layer for {source_name}"))
         .width()
 }
@@ -295,7 +295,7 @@ fn imports_missing_source_names_from_ufo_metadata_and_filenames() {
     let source_names = font
         .sources()
         .iter()
-        .map(|source| source.name())
+        .map(shift_font::Source::name)
         .collect::<Vec<_>>();
 
     assert_eq!(source_names, ["Text", "Grouped-Text-Alt", "Editorial"]);

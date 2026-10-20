@@ -5,6 +5,10 @@
 //! arrays suitable for native `wgpu` and browser WebGPU consumers. It owns no
 //! GPU device and contains no canonical authored font state.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 mod atlas;
 mod authored;
 mod curve;
@@ -19,32 +23,32 @@ pub mod retained;
 mod typescript_layout;
 mod variable;
 
-pub use atlas::{Atlas, AtlasBuilder, Band, Glyph, Statistics, DEFAULT_BAND_COUNT, MAX_BAND_COUNT};
+pub use atlas::{Atlas, AtlasBuilder, Band, DEFAULT_BAND_COUNT, Glyph, MAX_BAND_COUNT, Statistics};
 pub use authored::{
+    AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredGlyph, AuthoredGlyphRequirements,
+    AuthoredSlugError, AuthoredSourceGlyph, AuthoredWeightSet,
     add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
-    authored_glyph_requirements, curves_from_resolved_contours, AuthoredAtlasBuilder,
-    AuthoredCurveTopology, AuthoredGlyph, AuthoredGlyphRequirements, AuthoredSlugError,
-    AuthoredSourceGlyph, AuthoredWeightSet,
+    authored_glyph_requirements, curves_from_resolved_contours,
 };
-pub use curve::{Bounds, Curve, Point, CUBIC_APPROXIMATION_ACCURACY, LINE_EPSILON};
+pub use curve::{Bounds, CUBIC_APPROXIMATION_ACCURACY, Curve, LINE_EPSILON, Point};
 pub use error::SlugError;
 pub use outline::OutlineCommand;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
 pub use render::{
-    pack_render_instances, pack_render_params, RenderInstance, RenderParams, RENDER_INSTANCE_BYTES,
-    RENDER_PARAMS_BYTES,
+    RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, RenderInstance, RenderParams,
+    pack_render_instances, pack_render_params,
 };
 pub use resident::{
+    AuthoredAtlas, AuthoredAtlasGlyph, AuthoredAtlasPage, AuthoredAtlasProfile,
     build_authored_atlas, build_authored_atlas_page, build_authored_atlas_page_profiled,
-    build_authored_atlas_profiled, AuthoredAtlas, AuthoredAtlasGlyph, AuthoredAtlasPage,
-    AuthoredAtlasProfile,
+    build_authored_atlas_profiled,
 };
 pub use variable::{
-    pack_variable_params, PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks,
-    SlugPreviewExtents, VariableAtlas, VariableAtlasBuilder, VariableComponent,
+    PackedVariableAtlas, PackedVariableChunk, PackedVariableChunks, SlugPreviewExtents,
+    VARIABLE_PARAMS_BYTES, VariableAtlas, VariableAtlasBuilder, VariableComponent,
     VariableComponentGlyph, VariableComponentPart, VariableComponentSource, VariableGlyph,
-    VariableLayout, VariableParams, VariableSource, VariableStatistics, VARIABLE_PARAMS_BYTES,
+    VariableLayout, VariableParams, VariableSource, VariableStatistics, pack_variable_params,
 };
 
 /// Shader source shared by native `wgpu` and Electron WebGPU consumers.

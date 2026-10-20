@@ -2,11 +2,12 @@
 //! coordinates and advances that can't compile, and outlines that won't
 //! render where the glyph is used.
 
-use kurbo::{BezPath, PathEl};
+use kurbo::BezPath;
 
 use crate::curve::segment_bounds;
 use crate::{CurveSegmentIter, DesignLocation, Font, Glyph, GlyphLayer, Point, Source};
 
+use super::polygon::Polygon;
 use super::roles::GlyphRole;
 use super::{Check, Finding};
 
@@ -25,25 +26,26 @@ pub(super) fn check(font: &Font, glyph: &Glyph, out: &mut Vec<Finding>) {
     let default = font.default_source().filter(|source| source.is_master());
     let encoded = !glyph.unicodes().is_empty() && !role.space_like;
 
-    if let Some(default) = default {
-        if encoded && glyph.layer_for_source(default.id()).is_none() {
-            out.push(
-                Finding::glyph(
-                    Check::EmptyOutline,
-                    glyph.id(),
-                    format!(
-                        "'{}' is encoded but has no layer in the default master '{}'",
-                        glyph.name(),
-                        default.name()
-                    ),
-                )
-                .in_source(default.id()),
-            );
-        }
+    if let Some(default) = default
+        && encoded
+        && glyph.layer_for_source(&default.id()).is_none()
+    {
+        out.push(
+            Finding::glyph(
+                Check::EmptyOutline,
+                glyph.id(),
+                format!(
+                    "'{}' is encoded but has no layer in the default master '{}'",
+                    glyph.name(),
+                    default.name()
+                ),
+            )
+            .in_source(default.id()),
+        );
     }
 
     for source in font.masters() {
-        let Some(layer) = glyph.layer_for_source(source.id()) else {
+        let Some(layer) = glyph.layer_for_source(&source.id()) else {
             continue;
         };
         let at = |check, message: String| {
@@ -160,7 +162,8 @@ fn direction(layer: &GlyphLayer, at: &impl Fn(Check, String) -> Finding, out: &m
         .collect::<Vec<_>>();
     let outlines = closed
         .iter()
-        .map(|(_, contour)| flatten(&BezPath::from(*contour)))
+        // Within a quarter of a font unit.
+        .map(|(_, contour)| Polygon::flatten(&BezPath::from(*contour), 0.25))
         .collect::<Vec<_>>();
     for (position, container) in filled_counters(&outlines) {
         let (index, outer) = (closed[position].0, closed[container].0);
@@ -176,16 +179,6 @@ fn direction(layer: &GlyphLayer, at: &impl Fn(Check, String) -> Finding, out: &m
             .in_contour(index),
         );
     }
-}
-
-/// Flattens a closed contour to a polygon within a quarter of a font unit.
-fn flatten(path: &BezPath) -> Vec<(f64, f64)> {
-    let mut polygon = Vec::new();
-    kurbo::flatten(path, 0.25, |element| match element {
-        PathEl::MoveTo(point) | PathEl::LineTo(point) => polygon.push((point.x, point.y)),
-        _ => {}
-    });
-    polygon
 }
 
 fn resolved(
@@ -287,90 +280,42 @@ pub(super) fn extent<'a>(
 /// A contour that crosses any other contour is an overlapping stroke, like an
 /// A's crossbar laid over its legs or bars drawn across a frame's counter,
 /// and is never reported.
-fn filled_counters(outlines: &[Vec<(f64, f64)>]) -> Vec<(usize, usize)> {
-    let areas = outlines
-        .iter()
-        .map(|outline| polygon_area(outline))
-        .collect::<Vec<_>>();
+fn filled_counters(outlines: &[Polygon]) -> Vec<(usize, usize)> {
+    let areas = outlines.iter().map(Polygon::area).collect::<Vec<_>>();
     let usable = |index: usize| outlines[index].len() >= 3 && areas[index].abs() > f64::EPSILON;
     let crosses_another = |index: usize| {
-        (0..outlines.len())
-            .any(|other| other != index && edges_cross(&outlines[index], &outlines[other]))
+        (0..outlines.len()).any(|other| other != index && outlines[index].crosses(&outlines[other]))
     };
 
     let mut filled = Vec::new();
     for index in (0..outlines.len()).filter(|index| usable(*index) && !crosses_another(*index)) {
         let innermost = (0..outlines.len())
             .filter(|other| *other != index && usable(*other))
-            .filter(|other| inside(&outlines[index], &outlines[*other]))
+            .filter(|other| outlines[index].is_inside(&outlines[*other]))
             .min_by(|left, right| areas[*left].abs().total_cmp(&areas[*right].abs()));
-        if let Some(container) = innermost {
-            if (areas[index] > 0.0) == (areas[container] > 0.0) {
-                filled.push((index, container));
-            }
+        if let Some(container) = innermost
+            && (areas[index] > 0.0) == (areas[container] > 0.0)
+        {
+            filled.push((index, container));
         }
     }
     filled
-}
-
-/// Whether every vertex of `inner` lies inside `outer`; callers have ruled
-/// out crossing edges.
-fn inside(inner: &[(f64, f64)], outer: &[(f64, f64)]) -> bool {
-    inner.iter().all(|point| contains_point(outer, *point))
-}
-
-fn edges(polygon: &[(f64, f64)]) -> impl Iterator<Item = ((f64, f64), (f64, f64))> + '_ {
-    polygon
-        .iter()
-        .copied()
-        .zip(polygon.iter().copied().cycle().skip(1))
-}
-
-fn edges_cross(a: &[(f64, f64)], b: &[(f64, f64)]) -> bool {
-    edges(a).any(|(p, q)| edges(b).any(|(r, s)| segments_cross(p, q, r, s)))
-}
-
-/// Whether two segments properly cross; touching at an end doesn't count.
-fn segments_cross(p: (f64, f64), q: (f64, f64), r: (f64, f64), s: (f64, f64)) -> bool {
-    let side = |a: (f64, f64), b: (f64, f64), c: (f64, f64)| {
-        (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
-    };
-    let (d1, d2) = (side(r, s, p), side(r, s, q));
-    let (d3, d4) = (side(p, q, r), side(p, q, s));
-    d1 * d2 < 0.0 && d3 * d4 < 0.0
-}
-
-fn polygon_area(points: &[(f64, f64)]) -> f64 {
-    edges(points)
-        .map(|(a, b)| a.0 * b.1 - b.0 * a.1)
-        .sum::<f64>()
-        / 2.0
-}
-
-fn contains_point(polygon: &[(f64, f64)], (x, y): (f64, f64)) -> bool {
-    let mut inside = false;
-    for (previous, current) in edges(polygon) {
-        if (current.1 > y) != (previous.1 > y) {
-            let crossing =
-                (previous.0 - current.0) * (y - current.1) / (previous.1 - current.1) + current.0;
-            if x < crossing {
-                inside = !inside;
-            }
-        }
-    }
-    inside
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn rectangle(min: f64, max: f64, counter_clockwise: bool) -> Vec<(f64, f64)> {
+    fn rectangle(min: f64, max: f64, counter_clockwise: bool) -> Polygon {
         let mut points = vec![(min, min), (max, min), (max, max), (min, max)];
         if !counter_clockwise {
             points.reverse();
         }
-        points
+        polygon(points)
+    }
+
+    fn polygon(points: Vec<(f64, f64)>) -> Polygon {
+        points.into_iter().map(kurbo::Point::from).collect()
     }
 
     #[test]
@@ -421,7 +366,7 @@ mod tests {
         ];
         let bar = vec![(10.0, 40.0), (90.0, 40.0), (90.0, 50.0), (10.0, 50.0)];
 
-        assert!(filled_counters(&[legs, bar]).is_empty());
+        assert!(filled_counters(&[polygon(legs), polygon(bar)]).is_empty());
     }
 
     #[test]

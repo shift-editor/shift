@@ -1,7 +1,7 @@
 [package]
 name = "fontsrc"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 description = "Read and write authored font sources in Rust and TypeScript"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -13,3 +13,6 @@ norad = { git = "https://github.com/linebender/norad", rev = "c2034d9e4dbdb7bc93
 
 [dev-dependencies]
 tempfile = "3"
+
+[lints]
+workspace = true

@@ -9,8 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use kurbo::{BezPath, Shape};
-use shift_backends::font_loader::FontLoader;
 use shift_backends::FontExporter;
+use shift_backends::font_loader::FontLoader;
 use shift_font::{Contour, ExternalLocation, Font};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -98,10 +98,10 @@ fn disagreements(source: &str) -> Vec<String> {
         let location = compiled
             .axes()
             .location(user.iter().map(|(t, v)| (t.as_str(), *v)));
-        let mut external = ExternalLocation::new();
-        for (tag, value) in &user {
-            external.set(font.axis_id_by_tag(tag).unwrap(), *value as f64);
-        }
+        let external: ExternalLocation = user
+            .iter()
+            .map(|(tag, value)| (font.axis_id_by_tag(tag).unwrap(), *value as f64))
+            .collect();
         let design = font.mapped_location(&external).unwrap();
         let mut projection = font.projection(&design);
         let metrics = compiled.glyph_metrics(Size::unscaled(), &location);

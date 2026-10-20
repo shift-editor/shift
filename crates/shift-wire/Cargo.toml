@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "shift-wire"
 version = "0.0.0"
 authors = ["Kostya Farber <kostya.farber@gmail.com>"]
@@ -23,3 +23,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

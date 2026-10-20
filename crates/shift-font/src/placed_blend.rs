@@ -106,19 +106,16 @@ pub fn blend_placed_contours(
     let mut contour_start = 0;
     for &shape in first.shapes {
         for index in 0..shape.point_count {
-            let (mut x, mut y) = (0.0, 0.0);
+            let mut blended = kurbo::Vec2::ZERO;
             for ((master, weight), &mirrored) in masters.iter().zip(weights).zip(&mirrored) {
                 let at = (contour_start + placed_point_index(index, shape, mirrored)) * 2;
-                let (px, py) = master
-                    .transform
-                    .transform_point(master.coordinates[at], master.coordinates[at + 1]);
-                x += weight * px;
-                y += weight * py;
+                let point = kurbo::Point::new(master.coordinates[at], master.coordinates[at + 1]);
+                blended += *weight * master.transform.transform_point(point).to_vec2();
             }
             out.push(BlendedPoint {
                 source_index: placed_point_index(index, shape, mirrored[0]),
-                x,
-                y,
+                x: blended.x,
+                y: blended.y,
             });
         }
         contour_start += shape.point_count;

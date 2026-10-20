@@ -9,15 +9,15 @@ use shift_font::Require;
 use std::{collections::HashMap, error::Error, fmt};
 
 use shift_font::{
-    composite::ResolvedContour, ContourId, CoreError, CurveSegment, CurveSegmentIter, Font,
-    GlyphLayer, GlyphProjection, GlyphProjectionSet, Point as FontPoint, PointId, PointType,
-    SourceId,
+    ContourId, CoreError, CurveSegment, CurveSegmentIter, Font, GlyphLayer, GlyphProjection,
+    GlyphProjectionSet, Point as FontPoint, PointId, PointType, SourceId,
+    composite::ResolvedContour,
 };
 
 use crate::{AuthoredAtlasProfile, Curve, Point, SlugError, VariableAtlasBuilder};
 
 mod component;
-pub use component::{add_authored_glyph_with_weight_sets, AuthoredWeightSet};
+pub use component::{AuthoredWeightSet, add_authored_glyph_with_weight_sets};
 
 pub(crate) type AuthoredDefaultKey = (shift_font::GlyphId, Vec<u32>, u32);
 pub(crate) type AuthoredDefaultGlyphs = HashMap<AuthoredDefaultKey, u32>;
@@ -244,11 +244,13 @@ impl fmt::Display for AuthoredSlugError {
                 formatter.write_str("authored glyph interpolation has no compatible sources")
             }
             Self::MissingSourceLocation(source_id) => {
-                write!(formatter, "authored source {source_id} has no font location")
+                write!(
+                    formatter,
+                    "authored source {source_id} has no font location"
+                )
             }
-            Self::ComponentBasisMismatch => formatter.write_str(
-                "component interpolation basis differs from the root glyph basis",
-            ),
+            Self::ComponentBasisMismatch => formatter
+                .write_str("component interpolation basis differs from the root glyph basis"),
             Self::MissingWeightBasis(glyph_id) => write!(
                 formatter,
                 "component glyph {glyph_id} uses an interpolation basis without GPU weight indexes"
@@ -378,7 +380,7 @@ impl AuthoredCurveTopology {
             .map(|contour| {
                 let points = contour.points();
                 let mut segments = CurveSegmentIter::new(points, contour.is_closed())
-                    .map(|segment| segment_topology(points, segment))
+                    .map(|segment| segment_topology(points, &segment))
                     .collect::<Vec<_>>();
 
                 if let (Some(first), Some(last)) =
@@ -602,7 +604,7 @@ impl ResolvedCurveTopology {
             .map(|contour| {
                 let points = &contour.points;
                 let mut segments = CurveSegmentIter::new(points, contour.closed)
-                    .map(|segment| segment_topology(points, segment))
+                    .map(|segment| segment_topology(points, &segment))
                     .collect::<Vec<_>>();
                 if let (Some(first), Some(last)) =
                     (segments.first().copied(), segments.last().copied())
@@ -960,7 +962,7 @@ fn line_flags<'a>(segments: impl IntoIterator<Item = &'a SegmentTopology>) -> Ve
         .collect()
 }
 
-fn segment_topology(points: &[FontPoint], segment: CurveSegment<'_>) -> SegmentTopology {
+fn segment_topology(points: &[FontPoint], segment: &CurveSegment<'_>) -> SegmentTopology {
     match segment {
         CurveSegment::Line(p0, p1) => {
             SegmentTopology::Line([point_index(points, p0), point_index(points, p1)])

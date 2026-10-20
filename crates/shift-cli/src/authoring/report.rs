@@ -214,7 +214,7 @@ impl AuthoringReport {
                     lines.push(format!("+ source  {name}  {source_id}  {location}"));
                 }
                 AuthoringChange::SourceUpdated { metrics } => {
-                    lines.push(format!("~ {}", metrics.render()))
+                    lines.push(format!("~ {}", metrics.render()));
                 }
                 AuthoringChange::GlyphCreated {
                     glyph_id,

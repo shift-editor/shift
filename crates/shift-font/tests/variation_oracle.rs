@@ -8,8 +8,6 @@
 //! interpolates to itself. A failure prints the case so it can become a
 //! focused test.
 
-use std::collections::HashMap;
-
 use fontdrasil::coords::{CoordConverter, DesignCoord, UserCoord};
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingPoint, Contour, DesignLocation, ExternalLocation, Font,
@@ -182,8 +180,8 @@ fn build(cases: &[AxisCase]) -> Option<Built> {
                     .iter()
                     .map(|(user, design)| AxisMappingPoint {
                         description: None,
-                        input: Location::from_map(HashMap::from([(id.clone(), *user)])),
-                        output: Location::from_map(HashMap::from([(id.clone(), *design)])),
+                        input: Location::from([(id.clone(), *user)]),
+                        output: Location::from([(id.clone(), *design)]),
                     })
                     .collect(),
             )
@@ -206,14 +204,14 @@ fn build(cases: &[AxisCase]) -> Option<Built> {
     let mut glyph = Glyph::new("square");
     let mut masters = Vec::new();
     for (index, user) in placements.iter().enumerate() {
-        let mut location = DesignLocation::new();
-        for ((case, id), value) in cases.iter().zip(&ids).zip(user) {
-            location.set(id.clone(), case.to_design(*value));
-        }
+        let location: DesignLocation = cases
+            .iter()
+            .zip(&ids)
+            .zip(user)
+            .map(|((case, id), value)| (id.clone(), case.to_design(*value)))
+            .collect();
         let source_id = if index == 0 {
-            font.source_mut(default_id.clone())
-                .unwrap()
-                .set_location(location);
+            font.source_mut(&default_id).unwrap().set_location(location);
             default_id.clone()
         } else {
             font.add_source(Source::new(format!("Master {index}"), location))
@@ -245,8 +243,7 @@ fn failures(cases: &[AxisCase]) -> Vec<String> {
     for (index, case) in cases.iter().enumerate() {
         for step in 0..=8 {
             let user = case.min + (case.max - case.min) * step as f64 / 8.0;
-            let mut external = ExternalLocation::new();
-            external.set(ids[index].clone(), user);
+            let external = ExternalLocation::from([(ids[index].clone(), user)]);
             let ours = font
                 .mapped_location(&external)
                 .unwrap()

@@ -10,9 +10,9 @@ use std::cell::RefCell;
 
 use serde::Deserialize;
 use shift_font::{
-    ir::variation::map_location_with_bases, Axis, AxisId, AxisMappingBasis, AxisMappingId,
-    AxisRole, AxisSupport, DesignNormalization, ExternalLocation, InterpolationBasis,
-    InterpolationRegion, Location, SourceId, VariationBasis, VariationDelta,
+    Axis, AxisId, AxisMappingBasis, AxisMappingId, AxisRole, AxisSupport, DesignNormalization,
+    ExternalLocation, InterpolationBasis, InterpolationRegion, Location, SourceId, VariationBasis,
+    VariationDelta, ir::variation::map_location_with_bases,
 };
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -140,10 +140,10 @@ impl<T> Registry<T> {
     }
 
     fn remove(&mut self, handle: u32) {
-        if let Some(entry) = self.entries.get_mut(handle as usize) {
-            if entry.take().is_some() {
-                self.free.push(handle);
-            }
+        if let Some(entry) = self.entries.get_mut(handle as usize)
+            && entry.take().is_some()
+        {
+            self.free.push(handle);
         }
     }
 }

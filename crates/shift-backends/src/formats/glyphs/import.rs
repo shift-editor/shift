@@ -7,15 +7,15 @@ use shift_font::{Font, Glyph, GlyphId};
 
 use super::{
     conversion::{
-        add_intermediate_sources, convert_glyph, convert_kerning, font_header,
-        imported_layer_count, GlyphsLayerSources,
+        GlyphsLayerSources, add_intermediate_sources, convert_glyph, convert_kerning, font_header,
+        imported_layer_count,
     },
     families::InstanceFamilies,
     report::import_report,
 };
 use crate::{
-    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
     FormatBackendError, FormatBackendResult, ImportReport,
+    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
 };
 
 /// Bounded Shift conversion over one parsed Glyphs source.

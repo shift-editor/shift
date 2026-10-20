@@ -1,7 +1,7 @@
 [package]
 name = "shift-slug"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "GPU-independent Slug curve and band preprocessing for Shift glyph grids"
 license.workspace = true
 
@@ -39,3 +39,6 @@ required-features = ["wgpu-benchmark"]
 [[example]]
 name = "benchmark_variable_wgpu"
 required-features = ["wgpu-benchmark"]
+
+[lints]
+workspace = true

@@ -1,5 +1,5 @@
 use shift_font::{
-    test_support::sample_variable_font, CurveSegment, CurveSegmentIter, DesignLocation, GlyphId,
+    CurveSegment, CurveSegmentIter, DesignLocation, GlyphId, test_support::sample_variable_font,
 };
 use shift_slug::{AtlasBuilder, OutlineCommand, VariableAtlasBuilder};
 
@@ -98,7 +98,5 @@ fn commands_at(
 }
 
 fn location(axis_id: &shift_font::AxisId, value: f64) -> DesignLocation {
-    let mut location = DesignLocation::new();
-    location.set(axis_id.clone(), value);
-    location
+    DesignLocation::from([(axis_id.clone(), value)])
 }

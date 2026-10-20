@@ -2,16 +2,16 @@
 
 use std::mem::{offset_of, size_of};
 
-use shift_font::test_support::generated::{assert_generated_file, TypeScriptModule};
+use shift_font::test_support::generated::{TypeScriptModule, assert_generated_file};
 
 use crate::variable::{
-    pack_component_glyphs, params_word, COMPONENT_GLYPH_FLAG, CURVE_BYTES, GLYPH_OFFSET_MASK,
-    VARIABLE_COMPONENT_GLYPH_BYTES, VARIABLE_GLYPH_BYTES,
+    COMPONENT_GLYPH_FLAG, CURVE_BYTES, GLYPH_OFFSET_MASK, VARIABLE_COMPONENT_GLYPH_BYTES,
+    VARIABLE_GLYPH_BYTES, pack_component_glyphs, params_word,
 };
 use crate::{
-    pack_render_instances, Bounds, Curve, OutlineCommand, RenderInstance, VariableAtlasBuilder,
-    VariableComponentGlyph, VariableGlyph, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES,
-    VARIABLE_PARAMS_BYTES,
+    Bounds, Curve, OutlineCommand, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, RenderInstance,
+    VARIABLE_PARAMS_BYTES, VariableAtlasBuilder, VariableComponentGlyph, VariableGlyph,
+    pack_render_instances,
 };
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {

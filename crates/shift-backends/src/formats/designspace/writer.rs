@@ -9,8 +9,8 @@ use norad::designspace::{
     AxisMappings as DsAxisMappings, DesignSpaceDocument, Dimension, Instance as DsInstance,
     Source as DsSource,
 };
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use serde::Serialize;
 use shift_font::{
     Axis, AxisKind, AxisMapping, BinaryData, DesignLocation, ExternalLocation, FeatureData, Font,
@@ -46,14 +46,13 @@ impl<'a> UfoFileView<'a> {
         let mut metadata = font.metadata().clone();
 
         // Companion UFOs conventionally carry their own master's style name.
-        if group.file_default != font.default_source_id() {
-            if let Some(source) = group
+        if group.file_default != font.default_source_id()
+            && let Some(source) = group
                 .sources
                 .iter()
                 .find(|source| Some(source.id()) == group.file_default)
-            {
-                metadata.style_name = Some(source.name().to_string());
-            }
+        {
+            metadata.style_name = Some(source.name().to_string());
         }
 
         Self {
@@ -229,10 +228,10 @@ impl DesignspaceWriter {
     /// binding. `None` means the file has only named layers and its default
     /// layer is written empty.
     fn file_default(sources: &[Source], font_default: &Option<SourceId>) -> Option<SourceId> {
-        if let Some(id) = font_default {
-            if sources.iter().any(|source| source.id() == *id) {
-                return Some(id.clone());
-            }
+        if let Some(id) = font_default
+            && sources.iter().any(|source| source.id() == *id)
+        {
+            return Some(id.clone());
         }
 
         sources

@@ -2,8 +2,8 @@ use std::{path::Path, sync::Arc};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
-    font_source::{inferred_smooth_point_indices, FontSource, OpenTypeFont},
-    import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
+    font_source::{FontSource, OpenTypeFont, inferred_smooth_point_indices},
+    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit, collect_streamed_font},
 };
 use rayon::prelude::*;
 use shift_font::{
@@ -11,10 +11,10 @@ use shift_font::{
     PointId, PointType, SourceId,
 };
 use skrifa::{
+    FontRef, MetadataProvider,
     outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::{tables::hmtx::Hmtx, types::GlyphId, TableProvider},
-    FontRef, MetadataProvider,
+    raw::{TableProvider, tables::hmtx::Hmtx, types::GlyphId},
 };
 
 pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
@@ -156,7 +156,7 @@ fn detect_smooth_points(contours: &mut [Contour]) {
             contour.points(),
             contour.is_closed(),
             |point| (point.x(), point.y()),
-            |point| point.is_on_curve(),
+            shift_font::Point::is_on_curve,
         );
         for index in smooth {
             contour
@@ -348,7 +348,11 @@ mod tests {
     }
 
     fn point_types(contour: &Contour) -> Vec<PointType> {
-        contour.points().iter().map(|p| p.point_type()).collect()
+        contour
+            .points()
+            .iter()
+            .map(shift_font::Point::point_type)
+            .collect()
     }
 
     fn deterministic_pen_contours() -> Vec<Contour> {

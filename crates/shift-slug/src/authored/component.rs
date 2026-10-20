@@ -1,6 +1,6 @@
 use crate::length::OrOverflow;
 use shift_font::Require;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::time::Instant;
 
 use shift_font::{
@@ -15,10 +15,9 @@ use crate::{
 };
 
 use super::{
-    add_default_projection_glyph, add_resolved_sources_glyph, authored_advance,
-    curves_from_resolved_contours, source_location, AuthoredDefaultGlyphs, AuthoredDefaultKey,
-    AuthoredGlyph, AuthoredGlyphCompilation, AuthoredSlugError, AuthoredSourceGlyph,
-    ResolvedCurveTopology,
+    AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredGlyphCompilation,
+    AuthoredSlugError, AuthoredSourceGlyph, ResolvedCurveTopology, add_default_projection_glyph,
+    add_resolved_sources_glyph, authored_advance, curves_from_resolved_contours, source_location,
 };
 
 /// One deduplicated interpolation basis and its per-frame weight-buffer indexes.
@@ -177,7 +176,7 @@ pub(super) fn add_default_component_projection_glyph(
             .components()
             .components()
             .iter()
-            .map(|component| component.base_glyph_id()),
+            .map(shift_font::composite::ComponentGlyph::base_glyph_id),
     ) {
         if direct_glyphs.contains_key(&glyph_id) {
             continue;
@@ -217,8 +216,8 @@ pub(super) fn add_default_component_projection_glyph(
         append_component_sources(
             &mut component_sources,
             parent_projection,
-            occurrence.component_id(),
-            occurrence.base_glyph_id(),
+            &occurrence.component_id(),
+            &occurrence.base_glyph_id(),
             &source_context,
         )?;
         let source_count = u32::try_from(component_sources.len())
@@ -444,21 +443,24 @@ impl AuthoredComponentSourceContext<'_> {
             )]);
         };
         let weight_indices = projection_weight_indices(projection, self.weight_sets)?;
-        let mut layers = Vec::with_capacity(interpolation.sources().len());
-        for (source, weight_index) in interpolation.sources().iter().zip(weight_indices) {
-            let mut layer = interpolation.reference_layer().clone();
-            layer.apply_interpolation_values(source.values())?;
-            layers.push((*weight_index, layer));
-        }
-        Ok(layers)
+        interpolation
+            .sources()
+            .iter()
+            .zip(weight_indices)
+            .map(|(source, weight_index)| {
+                let mut layer = interpolation.reference_layer().clone();
+                layer.apply_interpolation_values(source.values())?;
+                Ok((*weight_index, layer))
+            })
+            .collect()
     }
 }
 
 fn append_component_sources(
     output: &mut Vec<VariableComponentSource>,
     parent_projection: &GlyphProjection,
-    component_id: ComponentId,
-    base_glyph_id: GlyphId,
+    component_id: &ComponentId,
+    base_glyph_id: &GlyphId,
     context: &AuthoredComponentSourceContext<'_>,
 ) -> Result<(), AuthoredSlugError> {
     for (source_index, (weight_index, layer)) in context
@@ -468,8 +470,8 @@ fn append_component_sources(
     {
         let component = layer
             .components_iter()
-            .find(|component| component.id() == component_id)
-            .filter(|component| component.base_glyph_id() == base_glyph_id)
+            .find(|component| component.id() == *component_id)
+            .filter(|component| component.base_glyph_id() == *base_glyph_id)
             .ok_or_else(|| shift_font::CoreError::InvalidComponentId(component_id.to_string()))?;
         let transform = component.transform();
         let values = [

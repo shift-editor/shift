@@ -5,14 +5,14 @@ use std::sync::Arc;
 use norad::PointType;
 
 use crate::font_source::geometry::{
-    control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
-    SourceGeometry,
+    ContourPoint, SourceComponent, SourceContour, SourceGeometry, control_point_kind,
+    normalize_contour,
 };
 use crate::font_source::interpolation::InterpolationAxis;
-use crate::font_source::projection::{empty_projection_layer, project_layers, ProjectionLayer};
+use crate::font_source::projection::{ProjectionLayer, empty_projection_layer, project_layers};
 use crate::font_source::{
-    malformed, AffineTransform, DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor,
-    GlyphIndex, GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex,
+    AffineTransform, DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor, GlyphIndex,
+    GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex, malformed,
 };
 
 pub(crate) struct RetainedGlif {
@@ -69,7 +69,7 @@ pub(crate) fn project_glif_glyph(
 
 pub(crate) fn retained_layer(
     directory: &FontDirectory,
-    paths: BTreeMap<String, PathBuf>,
+    paths: &BTreeMap<String, PathBuf>,
 ) -> Result<RetainedUfoLayer, FontReadError> {
     let glyphs = directory
         .glyphs

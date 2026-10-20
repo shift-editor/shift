@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -10,10 +9,10 @@ use skrifa::{FontRef, MetadataProvider};
 
 use super::localized_string;
 use crate::font_source::{
-    malformed, FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
+    FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
 use crate::metrics::set_metric_position;
-use crate::{distinct_named_instances, FontFormat};
+use crate::{FontFormat, distinct_named_instances};
 use shift_font::{
     Axis, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Font as ShiftFont,
     Location, MetricKind, NamedInstance,
@@ -108,7 +107,7 @@ fn binary_directory(
         .expect("new font should have a default source");
     let metric_definitions = header.metric_definitions().to_vec();
     let default_source = header
-        .source_mut(default_source_id.clone())
+        .source_mut(&default_source_id)
         .expect("new font should contain its default source");
     default_source.set_name(style_name.unwrap_or_else(|| "Default".to_string()));
     for (kind, value) in [
@@ -147,7 +146,7 @@ fn binary_directory(
         axis_ids.push(axis_id);
     }
     header
-        .source_mut(default_source_id)
+        .source_mut(&default_source_id)
         .expect("new font should contain its default source")
         .set_location(default_location);
 
@@ -193,8 +192,7 @@ fn binary_directory(
                     // is also the minimum or maximum, two of them name the
                     // same user value, which a mapping cannot repeat.
                     values.dedup_by(|(input, _), (previous, _)| input == previous);
-                    let user_location =
-                        |value| Location::from_map(HashMap::from([(axis_id.clone(), value)]));
+                    let user_location = |value| Location::from([(axis_id.clone(), value)]);
                     Ok(AxisMapping::new(
                         format!("{} mapping", axis.name()),
                         vec![axis_id.clone()],
@@ -221,7 +219,7 @@ fn binary_directory(
             return Err(malformed(
                 path,
                 format!("failed to read avar table: {error}"),
-            ))
+            ));
         }
     };
 
@@ -321,12 +319,14 @@ mod tests {
             .expect("fixture should contain S");
         let projected = font.glyph(glyph.index).unwrap();
 
-        assert!(projected
-            .root
-            .fallback
-            .contours
-            .iter()
-            .flat_map(|contour| contour.points.iter())
-            .any(|point| point.kind == GlyphPointKind::OnCurve && point.smooth));
+        assert!(
+            projected
+                .root
+                .fallback
+                .contours
+                .iter()
+                .flat_map(|contour| contour.points.iter())
+                .any(|point| point.kind == GlyphPointKind::OnCurve && point.smooth)
+        );
     }
 }

@@ -1,11 +1,11 @@
+use skrifa::FontRef;
 use skrifa::raw::tables::glyf::Glyf;
 use skrifa::raw::tables::gvar::Gvar;
 use skrifa::raw::tables::loca::Loca;
 use skrifa::raw::types::MajorMinor;
 use skrifa::raw::{ReadError, TableProvider};
-use skrifa::FontRef;
 
-use crate::font_source::{malformed, FontReadError};
+use crate::font_source::{FontReadError, malformed};
 
 use super::OpenTypeFont;
 
@@ -28,7 +28,7 @@ pub(super) fn variable_tables(
             return Err(malformed(
                 &source.path,
                 format!("failed to read loca table: {error}"),
-            ))
+            ));
         }
     };
     let glyf = font.glyf().map_err(|error| match error {
@@ -44,7 +44,7 @@ pub(super) fn variable_tables(
             return Err(malformed(
                 &source.path,
                 format!("failed to read gvar table: {error}"),
-            ))
+            ));
         }
     };
 
@@ -59,28 +59,28 @@ fn reject_unsupported_tables(
         Ok(_) => {
             return Err(FontReadError::UnsupportedProjection {
                 details: "CFF2 projection is not supported",
-            })
+            });
         }
         Err(ReadError::TableIsMissing(_)) => {}
         Err(error) => {
             return Err(malformed(
                 &source.path,
                 format!("failed to read CFF2 table: {error}"),
-            ))
+            ));
         }
     }
     match font.varc() {
         Ok(_) => {
             return Err(FontReadError::UnsupportedProjection {
                 details: "VARC projection is not supported",
-            })
+            });
         }
         Err(ReadError::TableIsMissing(_)) => {}
         Err(error) => {
             return Err(malformed(
                 &source.path,
                 format!("failed to read VARC table: {error}"),
-            ))
+            ));
         }
     }
     if source

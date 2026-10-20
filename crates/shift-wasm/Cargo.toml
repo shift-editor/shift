@@ -1,7 +1,7 @@
 [package]
 name = "shift-wasm"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 description = "Shift's shared Rust rules for the editor, compiled to WebAssembly"
 license.workspace = true
 publish = false
@@ -13,12 +13,17 @@ crate-type = ["cdylib", "rlib"]
 # Test-only exports of shift-font rules the editor keeps in TypeScript, built
 # into @shift/wasm/reference so tests compare the two. Never shipped.
 reference = []
+# Text shaping (shift-shape and HarfRust, about 0.6 MB), built into
+# @shift/wasm/shaping, a separate module the editor loads when text first
+# needs shaping.
+shaping = ["dep:shift-shape"]
 
 [dependencies]
 fontir = "1.0.0"
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
 shift-font = { workspace = true }
+shift-shape = { workspace = true, optional = true }
 # Generates the TypeScript types of exported values and converts them.
 tsify = { version = "0.5", default-features = false, features = ["js"] }
 # Must match the wasm-bindgen CLI in the Nix dev shell exactly; scripts check it.
@@ -26,3 +31,6 @@ wasm-bindgen = "=0.2.121"
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

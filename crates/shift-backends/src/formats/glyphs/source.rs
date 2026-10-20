@@ -5,21 +5,21 @@ use std::sync::Arc;
 use glyphs_reader::{Font as ParsedGlyphsFont, Glyph as ParsedGlyph, Layer, Node, NodeType, Shape};
 
 use super::{
-    anchor_parts, component_transform, default_design_value, font_header, master_design_values,
-    master_location_values, missing_component_details, InstanceFamilies,
+    InstanceFamilies, anchor_parts, component_transform, default_design_value, font_header,
+    master_design_values, master_location_values, missing_component_details,
 };
 use crate::font_source::geometry::{
-    control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
-    SourceGeometry,
+    ContourPoint, SourceComponent, SourceContour, SourceGeometry, control_point_kind,
+    normalize_contour,
 };
 use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::{
-    empty_projection_layer, project_layers, resolve_projection_closure, ProjectionLayer,
+    ProjectionLayer, empty_projection_layer, project_layers, resolve_projection_closure,
 };
 use crate::font_source::{
-    malformed, AffineTransform, FontDirectory, FontImporter, FontReadError, FontSource,
-    GlyphAnchor, GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph,
-    SourceIndex,
+    AffineTransform, FontDirectory, FontImporter, FontReadError, FontSource, GlyphAnchor,
+    GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex,
+    malformed,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
@@ -257,7 +257,9 @@ fn convert_glyphs_layer(
         },
         metrics: GlyphMetrics {
             x_advance: layer.width.into_inner(),
-            y_advance: layer.vert_width.map(|value| value.into_inner()),
+            y_advance: layer
+                .vert_width
+                .map(ordered_float::OrderedFloat::into_inner),
         },
     })
 }
@@ -491,10 +493,12 @@ unitsPerEm = 1000;
             .variation
             .expect("variable Glyphs source should retain deltas");
 
-        assert!(variation
-            .deltas
-            .iter()
-            .flat_map(|delta| delta.values.iter())
-            .any(|value| *value != 0.0));
+        assert!(
+            variation
+                .deltas
+                .iter()
+                .flat_map(|delta| delta.values.iter())
+                .any(|value| *value != 0.0)
+        );
     }
 }

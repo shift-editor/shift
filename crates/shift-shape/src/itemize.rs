@@ -4,11 +4,11 @@ use std::ops::Range;
 
 use unicode_script::{Script, UnicodeScript};
 
-use super::ShapeUnit;
+use crate::Unit;
 
 /// A stretch of a paragraph's units in one script.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct ScriptRun {
+pub(crate) struct ScriptRun {
     pub units: Range<usize>,
     /// `None` when every unit in the run is common to all scripts, such as
     /// digits, spaces, and punctuation on their own.
@@ -20,7 +20,7 @@ pub(super) struct ScriptRun {
 /// Units common to all scripts (spaces, digits, punctuation), combining marks,
 /// and glyphs inserted by name join the run around them: the preceding run,
 /// or the following one at the start of the paragraph.
-pub(super) fn script_runs(units: &[ShapeUnit]) -> Vec<ScriptRun> {
+pub(crate) fn script_runs<G>(units: &[Unit<G>]) -> Vec<ScriptRun> {
     let mut runs = Vec::new();
     let mut start = 0;
     let mut current: Option<Script> = None;
@@ -54,13 +54,13 @@ pub(super) fn script_runs(units: &[ShapeUnit]) -> Vec<ScriptRun> {
 
 /// Returns the script a unit belongs to, or `None` when it takes the script
 /// of its neighbours.
-fn specific_script(unit: &ShapeUnit) -> Option<Script> {
+fn specific_script<G>(unit: &Unit<G>) -> Option<Script> {
     match unit {
-        ShapeUnit::Character(character) => match character.script() {
+        Unit::Character(character) => match character.script() {
             Script::Common | Script::Inherited | Script::Unknown => None,
             script => Some(script),
         },
-        ShapeUnit::Glyph(_) => None,
+        Unit::Glyph(_) => None,
     }
 }
 
@@ -69,7 +69,7 @@ mod tests {
     use super::*;
 
     fn runs(text: &str) -> Vec<(Range<usize>, Option<Script>)> {
-        let units: Vec<ShapeUnit> = text.chars().map(ShapeUnit::Character).collect();
+        let units: Vec<Unit<u32>> = text.chars().map(Unit::Character).collect();
         script_runs(&units)
             .into_iter()
             .map(|run| (run.units, run.script))

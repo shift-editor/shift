@@ -11,8 +11,8 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    inferred_smooth_point_indices, AffineTransform, FontReadError, GlyphIndex, GlyphPointKind,
-    PointProvenance, TrueTypePointIndex,
+    AffineTransform, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
+    TrueTypePointIndex, inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
@@ -249,7 +249,7 @@ fn push_cubic(
     }
 }
 
-fn normalize_contour(points: Vec<VariablePoint>) -> Result<VariableContour, SourceAtlasError> {
+fn normalize_contour(points: &[VariablePoint]) -> Result<VariableContour, SourceAtlasError> {
     if points.is_empty() {
         return Err(invalid_geometry("binary atlas contour has no points"));
     }
@@ -549,8 +549,8 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                                         malformed(
                                             self.path,
                                             format!(
-                                            "invalid base anchor point {base} in glyph {raw_id}"
-                                        ),
+                                                "invalid base anchor point {base} in glyph {raw_id}"
+                                            ),
                                         )
                                     })?;
                             let component = child
@@ -638,7 +638,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
         let contour_ends = simple
             .end_pts_of_contours()
             .iter()
-            .map(|end| end.get())
+            .map(skrifa::raw::types::BigEndian::get)
             .collect::<Vec<_>>();
         let mut points = raw_points
             .iter()
@@ -704,7 +704,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                 )
                 .into());
             }
-            contours.push(normalize_contour(points[start..=end].to_vec())?);
+            contours.push(normalize_contour(&points[start..=end])?);
             start = end + 1;
         }
 

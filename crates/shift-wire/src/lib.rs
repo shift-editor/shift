@@ -3,6 +3,10 @@
 //! These types split stable glyph structure from mutable numeric values. The
 //! values layout is canonical and must stay in lockstep with every consumer.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -358,7 +362,7 @@ impl From<&IrGlyph> for GlyphRecord {
             .layers()
             .values()
             .flat_map(|layer| layer.components_iter())
-            .map(|component| component.base_glyph_id())
+            .map(shift_font::Component::base_glyph_id)
             .collect();
         component_base_glyph_ids.sort();
         component_base_glyph_ids.dedup();
@@ -581,7 +585,7 @@ impl LayerMatch {
             .collect();
         let points = reference
             .contours_iter()
-            .flat_map(|contour| contour.points())
+            .flat_map(shift_font::Contour::points)
             .filter_map(|point| {
                 layer_match
                     .point_for(&point.id())
@@ -1099,6 +1103,10 @@ impl From<&IrPoint> for PointData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the font-format names for point types"
+)]
 pub enum PointType {
     OnCurve,
     OffCurve,

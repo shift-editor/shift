@@ -353,7 +353,7 @@ fn preserves_libs_binaries_layerinfo_and_fontinfo_through_round_trip() {
     }
     match original.fontinfo_remainder().get("woffMetadataUniqueID") {
         Some(LibValue::Dict(woff)) => {
-            assert_eq!(lib_string(woff.get("id")), "preservation-woff-id")
+            assert_eq!(lib_string(woff.get("id")), "preservation-woff-id");
         }
         other => panic!("expected WOFF metadata dict, got {other:?}"),
     }
@@ -427,10 +427,10 @@ fn preserves_metadata_metrics_and_glyph_count() {
     ] {
         assert_eq!(
             reloaded
-                .metric_value(reloaded.default_source_id().unwrap(), kind)
+                .metric_value(&reloaded.default_source_id().unwrap(), kind)
                 .map(|value| value.position),
             original
-                .metric_value(original.default_source_id().unwrap(), kind)
+                .metric_value(&original.default_source_id().unwrap(), kind)
                 .map(|value| value.position)
         );
     }
@@ -503,12 +503,12 @@ fn preserves_components_anchors_layers_and_kerning() {
     let original_source_names: Vec<_> = original
         .sources()
         .iter()
-        .map(|source| source.name())
+        .map(shift_font::Source::name)
         .collect();
     let reloaded_source_names: Vec<_> = reloaded
         .sources()
         .iter()
-        .map(|source| source.name())
+        .map(shift_font::Source::name)
         .collect();
     assert_eq!(reloaded_source_names.len(), original_source_names.len());
     for name in original_source_names {

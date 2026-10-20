@@ -68,11 +68,7 @@ fn find_quad_extremum_1d(p0: f64, c: f64, p1: f64) -> Option<f64> {
         return None;
     }
     let t = (p0 - c) / denom;
-    if t > 0.0 && t < 1.0 {
-        Some(t)
-    } else {
-        None
-    }
+    if t > 0.0 && t < 1.0 { Some(t) } else { None }
 }
 
 /// Solve derivative of cubic Bézier for one axis.

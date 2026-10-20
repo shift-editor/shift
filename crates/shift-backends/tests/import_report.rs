@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use shift_backends::{font_loader::FontLoader, ImportLossKind};
+use shift_backends::{ImportLossKind, font_loader::FontLoader};
 use shift_font::test_support::kerning_between;
 
 fn fixture(name: &str) -> PathBuf {

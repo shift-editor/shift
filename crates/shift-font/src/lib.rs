@@ -29,6 +29,10 @@
 //! orchestration belongs to `shift-workspace`. Transport belongs to `shift-bridge`
 //! and `shift-wire`. UI interaction belongs to the TypeScript editor.
 //!
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 pub mod anchor_attachment;
 pub mod anchor_propagation;
 pub mod changes;
@@ -55,4 +59,6 @@ pub use ir::{
     glyph_name, guideline, kerning, lib_data, metrics, named_instance, point, segment, source,
     variation,
 };
+/// Points, vectors, and affine maps in the font model's signatures.
+pub use kurbo;
 pub use projection::*;

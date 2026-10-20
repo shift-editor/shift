@@ -100,7 +100,7 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{values_from_layer, PointType};
+    use crate::{PointType, values_from_layer};
     use shift_font::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {
@@ -183,7 +183,7 @@ mod tests {
 
         let anchor = restored.anchor(&AnchorId::from_raw(30)).unwrap();
         assert_eq!(anchor.name(), Some("top"));
-        assert_eq!(anchor.position(), (5.0, 6.0));
+        assert_eq!(anchor.position(), shift_font::kurbo::Point::new(5.0, 6.0));
 
         let component = restored.component(&ComponentId::from_raw(40)).unwrap();
         assert_eq!(component.base_glyph_id(), GlyphId::from_raw("base"));
@@ -232,7 +232,7 @@ mod tests {
                 .unwrap()
                 .points()
                 .iter()
-                .map(|point| point.point_type())
+                .map(shift_font::Point::point_type)
                 .collect::<Vec<_>>(),
             vec![
                 IrPointType::OnCurve,

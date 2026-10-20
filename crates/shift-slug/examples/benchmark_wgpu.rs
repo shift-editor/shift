@@ -9,17 +9,16 @@ use std::{
 };
 
 use shift_slug::{
-    pack_render_instances, pack_render_params, Atlas, AtlasBuilder, Bounds, CurveIndexEncoding,
-    Layout, OutlineCommand, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, SLUG_WGSL,
+    Atlas, AtlasBuilder, Bounds, CurveIndexEncoding, DEFAULT_BAND_COUNT, Layout, OutlineCommand,
+    RenderInstance, RenderParams, SLUG_WGSL, Section, pack_render_instances, pack_render_params,
 };
 use skrifa::{
+    FontRef, GlyphId, MetadataProvider, Tag,
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    FontRef, GlyphId, MetadataProvider, Tag,
 };
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages,
     ColorTargetState, ColorWrites, CommandEncoderDescriptor, Device, DeviceDescriptor, Extent3d,
     Features, FragmentState, LoadOp, MemoryHints, Operations, Origin3d, PipelineCompilationOptions,
@@ -29,6 +28,7 @@ use wgpu::{
     TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect,
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
     VertexState,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -1143,21 +1143,21 @@ fn arguments() -> Result<Arguments> {
             "--width" => arguments.width = required_value(&mut values, "--width")?.parse()?,
             "--height" => arguments.height = required_value(&mut values, "--height")?.parse()?,
             "--cell-size" => {
-                arguments.cell_size = required_value(&mut values, "--cell-size")?.parse()?
+                arguments.cell_size = required_value(&mut values, "--cell-size")?.parse()?;
             }
             "--iterations" => {
-                arguments.iterations = required_value(&mut values, "--iterations")?.parse()?
+                arguments.iterations = required_value(&mut values, "--iterations")?.parse()?;
             }
             "--full-cell-quads" => arguments.full_cell_quads = true,
             "--compact-indices" => arguments.compact_indices = true,
             "--output" => {
-                arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?))
+                arguments.output = Some(PathBuf::from(required_value(&mut values, "--output")?));
             }
             "--comparison-output" => {
                 arguments.comparison_output = Some(PathBuf::from(required_value(
                     &mut values,
                     "--comparison-output",
-                )?))
+                )?));
             }
             _ => arguments.settings.push(parse_setting(&value)?),
         }

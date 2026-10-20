@@ -199,7 +199,7 @@ impl Font {
         let metric_ids = self
             .metric_definitions()
             .iter()
-            .map(|definition| definition.id())
+            .map(crate::MetricDefinition::id)
             .collect::<Vec<_>>();
         let technical_fields = [
             SourceMetricField::ItalicAngle,
@@ -264,12 +264,12 @@ fn technical_metric(source: &Source, field: SourceMetricField) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_support::generated::{assert_generated_file, TypeScriptModule};
+    use crate::test_support::generated::{TypeScriptModule, assert_generated_file};
     use crate::{DesignLocation, Font, MetricKind, MetricValue, Source};
 
     use super::{
-        SourceMetricField, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,
-        SOURCE_METRIC_VALUE_COUNT, SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+        SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
+        SOURCE_TECHNICAL_FIELD_VALUE_COUNT, SourceMetricField,
     };
 
     #[test]
@@ -312,32 +312,31 @@ mod tests {
             .unwrap()
             .id();
         let default_id = font.default_source_id().unwrap();
-        let mut default_location = DesignLocation::new();
-        default_location.set(axis_id.clone(), 400.0);
-        let default_source = font.source_mut(default_id).unwrap();
+        let default_location = DesignLocation::from([(axis_id.clone(), 400.0)]);
+        let default_source = font.source_mut(&default_id).unwrap();
         default_source.set_location(default_location);
         default_source.set_metric_value(ascender_id.clone(), MetricValue::new(800.0, 16.0));
         default_source.set_line_gap(Some(20.0));
 
-        let mut bold_location = DesignLocation::new();
-        bold_location.set(axis_id.clone(), 700.0);
+        let bold_location = DesignLocation::from([(axis_id.clone(), 700.0)]);
         let bold_id = font.add_source(Source::new("Bold".to_string(), bold_location));
-        font.source_mut(bold_id)
+        font.source_mut(&bold_id)
             .unwrap()
             .set_metric_value(ascender_id.clone(), MetricValue::new(900.0, 20.0));
 
         let interpolation = font.source_metric_interpolation().unwrap();
-        let mut middle = DesignLocation::new();
-        middle.set(axis_id, 550.0);
+        let middle = DesignLocation::from([(axis_id, 550.0)]);
         let resolved = interpolation.resolve(&middle, font.axes()).unwrap();
 
         assert_eq!(
             resolved.metric_values().get(&ascender_id),
             Some(&MetricValue::new(850.0, 18.0))
         );
-        assert!(!interpolation
-            .technical_fields()
-            .contains(&SourceMetricField::LineGap));
+        assert!(
+            !interpolation
+                .technical_fields()
+                .contains(&SourceMetricField::LineGap)
+        );
         assert_eq!(resolved.line_gap(), None);
     }
 }

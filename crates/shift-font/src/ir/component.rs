@@ -1,6 +1,6 @@
+use crate::GlyphName;
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
-use crate::GlyphName;
 use serde::{Deserialize, Serialize};
 
 /// Whether a component is placed by its anchors or by hand.
@@ -107,7 +107,7 @@ impl DecomposedTransform {
     ];
 
     /// Encodes the transform in [`Self::VALUE_FIELDS`] order.
-    pub fn to_values(&self) -> [f64; Self::VALUE_COUNT] {
+    pub fn to_values(self) -> [f64; Self::VALUE_COUNT] {
         [
             self.translate_x,
             self.translate_y,
@@ -123,8 +123,17 @@ impl DecomposedTransform {
 
     /// Decodes values produced by [`Self::to_values`].
     pub fn from_values(values: [f64; Self::VALUE_COUNT]) -> Self {
-        let [translate_x, translate_y, rotation, scale_x, scale_y, skew_x, skew_y, t_center_x, t_center_y] =
-            values;
+        let [
+            translate_x,
+            translate_y,
+            rotation,
+            scale_x,
+            scale_y,
+            skew_x,
+            skew_y,
+            t_center_x,
+            t_center_y,
+        ] = values;
         Self {
             translate_x,
             translate_y,
@@ -155,7 +164,7 @@ impl DecomposedTransform {
     /// Compose the decomposed transform into a raw affine matrix.
     ///
     /// Order: translate to center → scale → skew → rotate → translate back → translate
-    pub fn to_matrix(&self) -> Transform {
+    pub fn to_matrix(self) -> Transform {
         let cos_r = self.rotation.to_radians().cos();
         let sin_r = self.rotation.to_radians().sin();
         let tan_sx = self.skew_x.to_radians().tan();
@@ -216,8 +225,27 @@ impl DecomposedTransform {
         }
     }
 
-    pub fn transform_point(&self, x: f64, y: f64) -> (f64, f64) {
-        self.to_matrix().transform_point(x, y)
+    pub fn transform_point(self, point: kurbo::Point) -> kurbo::Point {
+        self.to_matrix().transform_point(point)
+    }
+
+    /// A placement that only moves by `offset`.
+    pub fn translation(offset: kurbo::Vec2) -> Self {
+        Self {
+            translate_x: offset.x,
+            translate_y: offset.y,
+            ..Default::default()
+        }
+    }
+
+    /// The translation part of the placement.
+    pub fn offset(&self) -> kurbo::Vec2 {
+        kurbo::Vec2::new(self.translate_x, self.translate_y)
+    }
+
+    pub fn set_offset(&mut self, offset: kurbo::Vec2) {
+        self.translate_x = offset.x;
+        self.translate_y = offset.y;
     }
 }
 
@@ -234,7 +262,7 @@ impl Transform {
         ["xx", "xy", "yx", "yy", "dx", "dy"];
 
     /// Encodes the matrix in [`Self::VALUE_FIELDS`] order.
-    pub fn to_values(&self) -> [f64; Self::VALUE_COUNT] {
+    pub fn to_values(self) -> [f64; Self::VALUE_COUNT] {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
     }
 
@@ -286,11 +314,14 @@ impl Transform {
             && self.dy.abs() < f64::EPSILON
     }
 
-    pub fn transform_point(&self, x: f64, y: f64) -> (f64, f64) {
-        (
-            self.xx * x + self.yx * y + self.dx,
-            self.xy * x + self.yy * y + self.dy,
-        )
+    pub fn transform_point(self, point: kurbo::Point) -> kurbo::Point {
+        kurbo::Affine::from(self) * point
+    }
+}
+
+impl From<Transform> for kurbo::Affine {
+    fn from(transform: Transform) -> Self {
+        Self::new(transform.to_values())
     }
 }
 
@@ -449,7 +480,7 @@ mod tests {
     #[test]
     fn transform_point() {
         let t = Transform::translate(100.0, 50.0);
-        let (x, y) = t.transform_point(10.0, 20.0);
+        let kurbo::Point { x, y } = t.transform_point(kurbo::Point::new(10.0, 20.0));
         assert_eq!(x, 110.0);
         assert_eq!(y, 70.0);
     }
@@ -457,7 +488,7 @@ mod tests {
     #[test]
     fn transform_scale() {
         let t = Transform::scale(2.0, 3.0);
-        let (x, y) = t.transform_point(10.0, 20.0);
+        let kurbo::Point { x, y } = t.transform_point(kurbo::Point::new(10.0, 20.0));
         assert_eq!(x, 20.0);
         assert_eq!(y, 60.0);
     }
@@ -467,7 +498,7 @@ mod tests {
         let translate = Transform::translate(10.0, 20.0);
         let scale = Transform::scale(2.0, 3.0);
         let composed = translate.compose(scale);
-        let (x, y) = composed.transform_point(4.0, 5.0);
+        let kurbo::Point { x, y } = composed.transform_point(kurbo::Point::new(4.0, 5.0));
 
         assert_eq!(x, 18.0);
         assert_eq!(y, 35.0);
@@ -488,7 +519,7 @@ mod tests {
             translate_y: 50.0,
             ..Default::default()
         };
-        let (x, y) = d.transform_point(10.0, 20.0);
+        let kurbo::Point { x, y } = d.transform_point(kurbo::Point::new(10.0, 20.0));
         assert!((x - 110.0).abs() < 1e-10);
         assert!((y - 70.0).abs() < 1e-10);
     }
@@ -500,7 +531,7 @@ mod tests {
             scale_y: 3.0,
             ..Default::default()
         };
-        let (x, y) = d.transform_point(10.0, 20.0);
+        let kurbo::Point { x, y } = d.transform_point(kurbo::Point::new(10.0, 20.0));
         assert!((x - 20.0).abs() < 1e-10);
         assert!((y - 60.0).abs() < 1e-10);
     }

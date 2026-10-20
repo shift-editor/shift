@@ -248,6 +248,10 @@ fn table(headers: &[&str]) -> Table {
     table
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "a display helper called with values and temporaries"
+)]
 fn right(value: impl ToString) -> Cell {
     Cell::new(value.to_string()).set_alignment(CellAlignment::Right)
 }

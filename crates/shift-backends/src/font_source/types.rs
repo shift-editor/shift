@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use crate::font_source::FontReadError;
 use crate::FontFormat;
+use crate::font_source::FontReadError;
 
 macro_rules! index_type {
     ($name:ident) => {
@@ -424,7 +424,7 @@ pub struct AffineTransform {
 
 impl AffineTransform {
     /// Encodes the transform in [`shift_font::Transform::VALUE_FIELDS`] order.
-    pub fn to_values(&self) -> [f64; shift_font::Transform::VALUE_COUNT] {
+    pub fn to_values(self) -> [f64; shift_font::Transform::VALUE_COUNT] {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
     }
 

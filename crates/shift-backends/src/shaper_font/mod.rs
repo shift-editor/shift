@@ -18,7 +18,6 @@
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
 mod diagnostics;
-mod itemize;
 mod shape;
 mod state;
 mod tables;
@@ -29,7 +28,7 @@ use std::sync::Arc;
 
 use fea_rs::compile::error::GlyphOrderError;
 use fea_rs::compile::{self, NopFeatureProvider, Opts};
-use fea_rs::parse::{parse_root, ParseTree, SourceLoadError};
+use fea_rs::parse::{ParseTree, SourceLoadError, parse_root};
 use fea_rs::{DiagnosticSet, GlyphMap};
 use fontbe::features::FeaVariationInfo;
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
@@ -37,9 +36,10 @@ use fontdrasil::types::Axis as IrAxis;
 use fontdrasil::variations::VariationModelError;
 use fontir::ir::StaticMetadata;
 use shift_font::{AxisId, GlyphId};
+use shift_shape::AxisNormalization;
+use write_fonts::BuilderError;
 use write_fonts::tables::gdef::GlyphClassDef;
 use write_fonts::types::Tag;
-use write_fonts::BuilderError;
 
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use shape::{
@@ -49,7 +49,7 @@ pub use shape::{
 pub use state::ShaperFontState;
 
 use crate::glyph_category::gdef_classes;
-use crate::shift2fontir::{to_ir_axes, units_per_em, AxisConversionError};
+use crate::shift2fontir::{AxisConversionError, to_ir_axes, units_per_em};
 use crate::traits::FontView;
 use diagnostics::feature_diagnostics;
 
@@ -96,7 +96,7 @@ impl ShaperFontRequest {
         let axes = to_ir_axes(font.axes(), font.axis_mappings())?;
         let (glyph_names, glyph_ids) = std::iter::once((
             NOTDEF.to_string(),
-            font.glyph(NOTDEF).map(|glyph| glyph.id()),
+            font.glyph(NOTDEF).map(shift_font::Glyph::id),
         ))
         .chain(
             font.glyphs()
@@ -112,7 +112,7 @@ impl ShaperFontRequest {
             glyph_ids,
             feature_source: font.features().fea_source().unwrap_or_default().to_string(),
             axes,
-            axis_ids: font.axes().iter().map(|axis| axis.id()).collect(),
+            axis_ids: font.axes().iter().map(shift_font::Axis::id).collect(),
             gdef_classes: gdef_classes(font.glyphs(), font.lib()),
         })
     }
@@ -212,6 +212,29 @@ impl ShaperFont {
     /// Returns the glyph name for each glyph id, with `.notdef` at id 0.
     pub fn glyph_names(&self) -> &[String] {
         &self.glyph_names
+    }
+
+    /// Returns the Shift glyph at each shaper glyph id, in glyph order;
+    /// `None` for a `.notdef` the font does not have.
+    pub fn glyph_ids(&self) -> &[Option<GlyphId>] {
+        &self.glyph_ids
+    }
+
+    /// Returns how each axis's user coordinates normalize, in `fvar` order,
+    /// from the axis's mapping points.
+    pub fn axis_normalizations(&self) -> Vec<(AxisId, AxisNormalization)> {
+        self.axes
+            .iter()
+            .zip(&self.axis_ids)
+            .map(|(axis, axis_id)| {
+                let points = axis
+                    .converter
+                    .iter()
+                    .map(|(user, _, normalized)| (user.to_f64(), normalized.to_f64()))
+                    .collect();
+                (axis_id.clone(), AxisNormalization::new(points))
+            })
+            .collect()
     }
 
     /// Returns where each generated feature belongs among the authored

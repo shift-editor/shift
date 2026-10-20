@@ -80,9 +80,7 @@ mod tests {
     use crate::{DesignLocation, Source};
 
     fn weight_location(font: &crate::Font, value: f64) -> DesignLocation {
-        let mut location = DesignLocation::new();
-        location.set(font.axes()[0].id(), value);
-        location
+        DesignLocation::from([(font.axes()[0].id(), value)])
     }
 
     #[test]
@@ -127,8 +125,7 @@ mod tests {
     fn the_basis_skips_masters_without_kerning() {
         let mut font = sample_variable_font();
         let weight_id = font.axes()[0].id();
-        let mut location = DesignLocation::new();
-        location.set(weight_id, 600.0);
+        let location = DesignLocation::from([(weight_id, 600.0)]);
         let medium_id = font
             .sources()
             .iter()
@@ -148,10 +145,11 @@ mod tests {
                 crate::KerningGroupId::from_raw("second_A"),
             ),
         );
-        assert!(font
-            .kerning_interpolation_basis()
-            .unwrap()
-            .source_ids()
-            .contains(&default_source_id));
+        assert!(
+            font.kerning_interpolation_basis()
+                .unwrap()
+                .source_ids()
+                .contains(&default_source_id)
+        );
     }
 }

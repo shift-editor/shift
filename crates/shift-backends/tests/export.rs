@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
-use shift_font::test_support::sample_variable_font;
 use shift_font::Font;
+use shift_font::test_support::sample_variable_font;
 use shift_store::ShiftStore;
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, MetadataProvider};
@@ -49,7 +49,7 @@ impl From<&Font> for StaticCompilation {
             .expect("compiled fixture should have a default source");
         for glyph in font.glyphs() {
             let layer = glyph
-                .layer_for_source(default_source_id.clone())
+                .layer_for_source(&default_source_id)
                 .expect("encoded glyph should have a default layer");
             for unicode in glyph.unicodes() {
                 glyphs.insert(

@@ -1,7 +1,7 @@
 //! Native glyph interpolation over Shift sources and internal locations.
 
 use crate::Require;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -23,13 +23,13 @@ mod values;
 
 pub use layer_match::{LayerDifference, LayerMatch};
 pub use metrics::{
-    ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
-    SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
-    SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+    ResolvedSourceMetrics, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,
+    SOURCE_METRIC_VALUE_COUNT, SOURCE_TECHNICAL_FIELD_VALUE_COUNT, SourceMetricField,
+    SourceMetricInterpolation, SourceMetricValues,
 };
 pub use values::{
-    GlyphInterpolationValues, GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET,
-    GLYPH_ANCHOR_VALUE_COUNT, GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
+    GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET, GLYPH_ANCHOR_VALUE_COUNT,
+    GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS, GlyphInterpolationValues,
 };
 
 /// Normalized support for one authoring axis within an interpolation region.
@@ -406,7 +406,7 @@ impl Font {
         let mut compatible_sources = Vec::new();
 
         for source in self.masters() {
-            let Some(layer) = glyph.layer_for_source(source.id()) else {
+            let Some(layer) = glyph.layer_for_source(&source.id()) else {
                 continue;
             };
             if !reference_layer.match_with(layer).is_complete() {
@@ -460,14 +460,13 @@ fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Ar
         let default_is_master = font
             .source(&default_source_id)
             .is_some_and(crate::Source::is_master);
-        if default_is_master {
-            if let Some(layer) = glyph
+        if default_is_master
+            && let Some(layer) = glyph
                 .layers()
                 .values()
                 .find(|layer| layer.source_id() == default_source_id)
-            {
-                return Some(layer.clone());
-            }
+        {
+            return Some(layer.clone());
         }
     }
 
@@ -668,7 +667,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let layer = glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -685,7 +684,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -703,7 +702,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
         let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
@@ -725,7 +724,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let reference_layer = glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut candidate = reference_layer.clone();
         let point = candidate
@@ -745,8 +744,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let axis_id = font.axes()[0].id();
-        let mut location = DesignLocation::new();
-        location.set(axis_id, 600.0);
+        let location = DesignLocation::from([(axis_id, 600.0)]);
 
         let layer = font
             .glyph_interpolation(&glyph.id())

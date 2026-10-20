@@ -30,7 +30,7 @@ use skill::{SkillReport, install_skill, show_skill, skill_status};
 
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
-        Command::Inspect(args) => inspect(args),
+        Command::Inspect(args) => inspect(&args),
         Command::Check(args) => {
             let report = check::check(&args)?;
             write_report(&report, args.json, check::CheckReport::render)?;
@@ -60,7 +60,7 @@ fn main() -> miette::Result<()> {
             }
             FontCommand::Set(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(set_font(*args), json)
+                write_authoring_result(set_font(&args), json)
             }
         },
         Command::Axis { command } => match command {
@@ -84,7 +84,7 @@ fn main() -> miette::Result<()> {
             }
             InstanceCommand::Remove(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(remove_instance(args), json)
+                write_authoring_result(remove_instance(&args), json)
             }
         },
         Command::Source { command } => match command {
@@ -100,23 +100,23 @@ fn main() -> miette::Result<()> {
             }
             GlyphCommand::Set(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(set_glyphs(args), json)
+                write_authoring_result(set_glyphs(&args), json)
             }
-            GlyphCommand::Inspect(args) => inspect_glyph(args),
+            GlyphCommand::Inspect(args) => inspect_glyph(&args),
             GlyphCommand::Export(args) => export_glyph_batch(args),
         },
         Command::Layer { command } => match command {
             LayerCommand::Add(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(add_layer(args), json)
+                write_authoring_result(add_layer(&args), json)
             }
             LayerCommand::Set(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(set_layer(args), json)
+                write_authoring_result(set_layer(&args), json)
             }
             LayerCommand::Copy(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(copy_layer(args), json)
+                write_authoring_result(copy_layer(&args), json)
             }
         },
         Command::Kerning { command } => kerning_command(command),
@@ -128,6 +128,10 @@ fn main() -> miette::Result<()> {
     }
 }
 
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "each report type is private to its module"
+)]
 fn kerning_command(command: KerningCommand) -> miette::Result<()> {
     match command {
         KerningCommand::List(args) => {
@@ -144,11 +148,11 @@ fn kerning_command(command: KerningCommand) -> miette::Result<()> {
         }
         KerningCommand::Set(args) => {
             let json = args.mutation.json;
-            write_authoring_result(set_kerning(*args), json)
+            write_authoring_result(set_kerning(&args), json)
         }
         KerningCommand::Remove(args) => {
             let json = args.mutation.json;
-            write_authoring_result(remove_kerning(args), json)
+            write_authoring_result(remove_kerning(&args), json)
         }
         KerningCommand::Group { command } => match command {
             KerningGroupCommand::Create(args) => {
@@ -161,15 +165,15 @@ fn kerning_command(command: KerningCommand) -> miette::Result<()> {
             }
             KerningGroupCommand::Delete(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(delete_kerning_group(args), json)
+                write_authoring_result(delete_kerning_group(&args), json)
             }
             KerningGroupCommand::Assign(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(assign_kerning_group(args), json)
+                write_authoring_result(assign_kerning_group(&args), json)
             }
             KerningGroupCommand::Unassign(args) => {
                 let json = args.mutation.json;
-                write_authoring_result(unassign_kerning_group(args), json)
+                write_authoring_result(unassign_kerning_group(&args), json)
             }
         },
     }
@@ -193,7 +197,7 @@ fn write_authoring_result(
     json: bool,
 ) -> miette::Result<()> {
     match result {
-        Ok(report) => write_authoring_report(report, json),
+        Ok(report) => write_authoring_report(&report, json),
         Err(error) if json => {
             let mut messages = vec![error.to_string()];
             let error_ref: &(dyn std::error::Error + Send + Sync + 'static) = error.as_ref();
@@ -217,7 +221,7 @@ fn write_authoring_result(
     }
 }
 
-fn write_authoring_report(report: AuthoringReport, json: bool) -> miette::Result<()> {
+fn write_authoring_report(report: &AuthoringReport, json: bool) -> miette::Result<()> {
     let output = if json {
         serde_json::to_string_pretty(&report).into_diagnostic()?
     } else {
@@ -241,7 +245,7 @@ fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
         .into_diagnostic()
 }
 
-fn inspect(args: cli::InspectArgs) -> miette::Result<()> {
+fn inspect(args: &cli::InspectArgs) -> miette::Result<()> {
     let report = InspectReport::load(&args.path)?;
     let output = if args.json {
         serde_json::to_string_pretty(&report).into_diagnostic()?
@@ -271,7 +275,7 @@ fn export_glyph_batch(args: cli::ExportGlyphsArgs) -> miette::Result<()> {
     }
 }
 
-fn inspect_glyph(args: cli::InspectGlyphArgs) -> miette::Result<()> {
+fn inspect_glyph(args: &cli::InspectGlyphArgs) -> miette::Result<()> {
     let report = GlyphInspection::load(&args.path, &args.glyph, &args.location)?;
     let output = if args.json {
         serde_json::to_string_pretty(&report).into_diagnostic()?
@@ -283,7 +287,7 @@ fn inspect_glyph(args: cli::InspectGlyphArgs) -> miette::Result<()> {
 }
 
 fn render_mode() -> RenderMode {
-    if std::io::stdout().is_terminal() {
+    if io::stdout().is_terminal() {
         RenderMode::Styled
     } else {
         RenderMode::Plain

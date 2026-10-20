@@ -12,11 +12,11 @@ use shift_font::{
     Source as ShiftSource, SourceId,
 };
 
-use crate::glyph_category::{gdef_classes, GlyphCategories};
+use crate::glyph_category::{GlyphCategories, gdef_classes};
 use crate::traits::FontView;
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use super::axes::{normalized_source_location, to_ir_axes, AxisConversionError};
+use super::axes::{AxisConversionError, normalized_source_location, to_ir_axes};
 use super::glyph::GlyphWork;
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{

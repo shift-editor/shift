@@ -48,7 +48,7 @@ pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
             instance: NamedInstance::new(name, location, args.postscript_name),
         }]
     };
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Edits supplied product fields while preserving identity, order, and omissions.
@@ -85,7 +85,7 @@ pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
+        &FontIntentSet {
             intents: vec![FontIntent::UpdateNamedInstance { instance }],
         },
     )
@@ -96,13 +96,13 @@ pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
 /// # Errors
 ///
 /// Returns an error for an unknown/ambiguous selector or document/persistence failure.
-pub fn remove_instance(args: RemoveInstanceArgs) -> Result<AuthoringReport> {
+pub fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let instance = resolve_instance(&font, &args.instance)?;
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
+        &FontIntentSet {
             intents: vec![FontIntent::DeleteNamedInstance {
                 instance_id: instance.id(),
             }],
@@ -111,15 +111,11 @@ pub fn remove_instance(args: RemoveInstanceArgs) -> Result<AuthoringReport> {
 }
 
 fn default_location(font: &Font) -> ExternalLocation {
-    let mut location = ExternalLocation::new();
-    for axis in font
+    let external = font
         .axes()
         .iter()
-        .filter(|axis| axis.role() == AxisRole::External)
-    {
-        location.set(axis.id(), axis.default());
-    }
-    location
+        .filter(|axis| axis.role() == AxisRole::External);
+    ExternalLocation::at_defaults(external)
 }
 
 fn resolve_instance<'a>(font: &'a Font, selector: &str) -> Result<&'a NamedInstance> {

@@ -237,7 +237,7 @@ impl FontLoader {
             _ => {
                 return Err(BackendError::UnsupportedWriteFormat {
                     extension: resolved.extension.to_string(),
-                })
+                });
             }
         }
 
@@ -257,10 +257,10 @@ impl FontLoader {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{format_from_extension, FontLoader};
+    use super::{FontLoader, format_from_extension};
+    use crate::ImportBatchLimit;
     use crate::font_source::OpenedFont;
     use crate::format::FontFormat;
-    use crate::ImportBatchLimit;
 
     fn fixture(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -99,7 +99,7 @@ fn load_metric_definitions(
             value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
         };
         Ok(font::MetricDefinition::with_id(
-            font::MetricId::from_raw(row.get::<_, String>(0)?),
+            row.get::<_, font::MetricId>(0)?,
             kind,
             row.get(2)?,
         ))
@@ -159,7 +159,7 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
     )?;
 
     let rows = stmt.query_map([], |row| {
-        let axis_id = font::AxisId::from_raw(row.get::<_, String>(0)?);
+        let axis_id = row.get::<_, font::AxisId>(0)?;
         let tag = row.get(1)?;
         let name = row.get(2)?;
         let default = row.get(4)?;
@@ -224,7 +224,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
     )?;
 
     let rows = stmt.query_map([], |row| {
-        let source_id = font::SourceId::from_raw(row.get::<_, String>(0)?);
+        let source_id = row.get::<_, font::SourceId>(0)?;
         let location = load_source_location(conn, &source_id)?;
         let mut source = font::Source::with_id(
             source_id,
@@ -255,7 +255,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
         *source.lib_mut() = load_lib_data(
             conn,
             "source_lib",
-            Some(("source_id", &source.id().to_string())),
+            Some(("source_id", source.id().as_str())),
         )?;
     }
 
@@ -265,7 +265,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
 fn load_source_metric_values(
     conn: &rusqlite::Connection,
     source_id: &font::SourceId,
-) -> rusqlite::Result<std::collections::BTreeMap<font::MetricId, font::MetricValue>> {
+) -> rusqlite::Result<BTreeMap<font::MetricId, font::MetricValue>> {
     let mut stmt = conn.prepare(
         "
         SELECT metric_id, position, overshoot
@@ -274,9 +274,9 @@ fn load_source_metric_values(
         ORDER BY metric_id
         ",
     )?;
-    let rows = stmt.query_map([source_id.to_string()], |row| {
+    let rows = stmt.query_map([&source_id], |row| {
         Ok((
-            font::MetricId::from_raw(row.get::<_, String>(0)?),
+            row.get::<_, font::MetricId>(0)?,
             font::MetricValue::new(row.get(1)?, row.get(2)?),
         ))
     })?;
@@ -298,7 +298,7 @@ fn load_source_location(
     )?;
 
     let mut location = font::DesignLocation::new();
-    let rows = stmt.query_map([source_id.to_string()], |row| {
+    let rows = stmt.query_map([&source_id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
     })?;
     for row in rows {
@@ -318,7 +318,7 @@ fn load_glyphs(
         )?;
         stmt.query_map([], |row| {
             Ok((
-                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                row.get::<_, font::GlyphId>(0)?,
                 row.get::<_, Option<String>>(1)?.unwrap_or_default(),
                 row.get::<_, Option<String>>(2)?,
                 row.get::<_, Option<String>>(3)?,
@@ -334,7 +334,7 @@ fn load_glyphs(
         )?;
         let rows = stmt.query_map([], |row| {
             Ok((
-                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                row.get::<_, font::GlyphId>(0)?,
                 row.get::<_, i64>(1)? as u32,
                 row.get::<_, i64>(2)?,
             ))
@@ -353,7 +353,7 @@ fn load_glyphs(
         let mut stmt = conn.prepare("SELECT glyph_id, key, value_json FROM glyph_lib")?;
         let rows = stmt.query_map([], |row| {
             Ok((
-                font::GlyphId::from_raw(row.get::<_, String>(0)?),
+                row.get::<_, font::GlyphId>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
             ))
@@ -376,9 +376,9 @@ fn load_glyphs(
         )?;
         stmt.query_map([], |row| {
             Ok((
-                font::LayerId::from_raw(row.get::<_, String>(0)?),
-                font::GlyphId::from_raw(row.get::<_, String>(1)?),
-                font::SourceId::from_raw(row.get::<_, String>(2)?),
+                row.get::<_, font::LayerId>(0)?,
+                row.get::<_, font::GlyphId>(1)?,
+                row.get::<_, font::SourceId>(2)?,
                 row.get::<_, f64>(3)?,
                 row.get::<_, Option<f64>>(4)?,
             ))
@@ -449,7 +449,7 @@ fn load_font_guidelines(conn: &rusqlite::Connection) -> Result<Vec<font::Guideli
 
 fn map_guideline_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<font::Guideline> {
     Ok(font::Guideline::with_id(
-        font::GuidelineId::from_raw(row.get::<_, String>(0)?),
+        row.get::<_, font::GuidelineId>(0)?,
         row.get(1)?,
         row.get(2)?,
         row.get(3)?,
@@ -520,19 +520,18 @@ fn load_kerning_groups(
         ORDER BY order_index
         ",
     )?;
-    let mut groups = Vec::with_capacity(group_rows.len());
-    for (group_id, position, name) in group_rows {
-        let members = member_stmt
-            .query_map([&group_id], |row| {
-                Ok(font::GlyphId::from_raw(row.get::<_, String>(0)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        groups.push((
-            font::KerningGroupId::from_raw(group_id),
-            font::KerningGroup::new(kerning_position(position)?, name, members),
-        ));
-    }
-    Ok(groups)
+    group_rows
+        .into_iter()
+        .map(|(group_id, position, name)| {
+            let members = member_stmt
+                .query_map([&group_id], |row| row.get::<_, font::GlyphId>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((
+                font::KerningGroupId::from_raw(group_id),
+                font::KerningGroup::new(kerning_position(position)?, name, members),
+            ))
+        })
+        .collect()
 }
 
 fn kerning_position(column: i64) -> Result<font::KerningPosition, StoreError> {

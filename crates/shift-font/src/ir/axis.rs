@@ -358,12 +358,12 @@ impl Axis {
                 if value < self.minimum() || value > self.maximum() {
                     return Err(label.invalid("values must be inside the axis range"));
                 }
-                if let AxisKind::Discrete { values, .. } = &self.kind {
-                    if !values.contains(&value) {
-                        return Err(
-                            label.invalid("discrete-axis values must be authored discrete values")
-                        );
-                    }
+                if let AxisKind::Discrete { values, .. } = &self.kind
+                    && !values.contains(&value)
+                {
+                    return Err(
+                        label.invalid("discrete-axis values must be authored discrete values")
+                    );
                 }
             }
             if self.labels[..index]
@@ -596,6 +596,13 @@ impl Location {
         Self { values }
     }
 
+    /// Places every axis in `axes` at its default value.
+    pub fn at_defaults<'a>(axes: impl IntoIterator<Item = &'a Axis>) -> Self {
+        axes.into_iter()
+            .map(|axis| (axis.id(), axis.default()))
+            .collect()
+    }
+
     pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
         self.values.get(axis_id).copied()
     }
@@ -647,6 +654,35 @@ impl Location {
     }
 }
 
+impl FromIterator<(AxisId, f64)> for Location {
+    fn from_iter<I: IntoIterator<Item = (AxisId, f64)>>(values: I) -> Self {
+        Self {
+            values: values.into_iter().collect(),
+        }
+    }
+}
+
+impl Extend<(AxisId, f64)> for Location {
+    fn extend<I: IntoIterator<Item = (AxisId, f64)>>(&mut self, values: I) {
+        self.values.extend(values);
+    }
+}
+
+impl<const N: usize> From<[(AxisId, f64); N]> for Location {
+    fn from(values: [(AxisId, f64); N]) -> Self {
+        values.into_iter().collect()
+    }
+}
+
+impl<'a> IntoIterator for &'a Location {
+    type Item = (&'a AxisId, &'a f64);
+    type IntoIter = std::collections::hash_map::Iter<'a, AxisId, f64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.values.iter()
+    }
+}
+
 macro_rules! typed_location {
     ($name:ident) => {
         #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -660,6 +696,11 @@ macro_rules! typed_location {
 
             pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
                 Self(Location::from_map(values))
+            }
+
+            /// Places every axis in `axes` at its default value.
+            pub fn at_defaults<'a>(axes: impl IntoIterator<Item = &'a Axis>) -> Self {
+                Self(Location::at_defaults(axes))
             }
 
             pub fn from_untyped(location: Location) -> Self {
@@ -694,6 +735,33 @@ macro_rules! typed_location {
                 self.0.iter()
             }
         }
+
+        impl FromIterator<(AxisId, f64)> for $name {
+            fn from_iter<I: IntoIterator<Item = (AxisId, f64)>>(values: I) -> Self {
+                Self(values.into_iter().collect())
+            }
+        }
+
+        impl Extend<(AxisId, f64)> for $name {
+            fn extend<I: IntoIterator<Item = (AxisId, f64)>>(&mut self, values: I) {
+                self.0.extend(values);
+            }
+        }
+
+        impl<const N: usize> From<[(AxisId, f64); N]> for $name {
+            fn from(values: [(AxisId, f64); N]) -> Self {
+                values.into_iter().collect()
+            }
+        }
+
+        impl<'a> IntoIterator for &'a $name {
+            type Item = (&'a AxisId, &'a f64);
+            type IntoIter = std::collections::hash_map::Iter<'a, AxisId, f64>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.0.values.iter()
+            }
+        }
     };
 }
 
@@ -710,6 +778,31 @@ impl DesignLocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn locations_build_from_pairs_and_axis_defaults() {
+        let weight = Axis::weight();
+        let width = Axis::width();
+
+        let defaults = DesignLocation::at_defaults([&weight, &width]);
+        let bold = DesignLocation::from([(weight.id(), 700.0)]);
+
+        assert_eq!(defaults.get(&weight.id()), Some(weight.default()));
+        assert_eq!(defaults.get(&width.id()), Some(width.default()));
+        assert_eq!(bold.get(&weight.id()), Some(700.0));
+        assert_eq!(bold.get(&width.id()), None);
+    }
+
+    #[test]
+    fn extending_a_location_replaces_an_axis_value() {
+        let weight = Axis::weight();
+        let mut location = Location::at_defaults([&weight]);
+
+        location.extend([(weight.id(), 300.0)]);
+
+        let entries: Vec<_> = (&location).into_iter().collect();
+        assert_eq!(entries, vec![(&weight.id(), &300.0)]);
+    }
 
     #[test]
     fn axis_normalize() {
@@ -860,9 +953,7 @@ mod tests {
         let weight = AxisId::from_raw("wght");
         let width = AxisId::from_raw("wdth");
         let slant = AxisId::from_raw("slnt");
-        let mut loc = Location::new();
-        loc.set(weight.clone(), 700.0);
-        loc.set(width.clone(), 100.0);
+        let loc = Location::from([(weight.clone(), 700.0), (width.clone(), 100.0)]);
 
         assert_eq!(loc.get(&weight), Some(700.0));
         assert_eq!(loc.get(&width), Some(100.0));
@@ -873,12 +964,9 @@ mod tests {
     fn location_equivalence_uses_axis_defaults_and_tolerance() {
         let axis = Axis::weight();
         let implicit_default = Location::new();
-        let mut explicit_default = Location::new();
-        explicit_default.set(axis.id(), axis.default());
-        let mut near_default = Location::new();
-        near_default.set(axis.id(), axis.default() + 0.0000005);
-        let mut distinct = Location::new();
-        distinct.set(axis.id(), axis.default() + 0.001);
+        let explicit_default = Location::from([(axis.id(), axis.default())]);
+        let near_default = Location::from([(axis.id(), axis.default() + 0.0000005)]);
+        let distinct = Location::from([(axis.id(), axis.default() + 0.001)]);
 
         assert_ne!(implicit_default, explicit_default);
         assert!(implicit_default.is_equivalent_to(&explicit_default, std::slice::from_ref(&axis)));

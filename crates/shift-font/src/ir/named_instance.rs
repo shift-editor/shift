@@ -71,19 +71,19 @@ impl NamedInstance {
             return Err(self.invalid("name must not be blank"));
         }
 
-        if let Some(name) = &self.postscript_name {
-            if !valid_postscript_name(name) {
-                return Err(self.invalid(
+        if let Some(name) = &self.postscript_name
+            && !valid_postscript_name(name)
+        {
+            return Err(self.invalid(
                     "PostScript name must be 1..=63 printable ASCII characters without whitespace or [](){}<>/%",
                 ));
-            }
         }
 
         let axes_by_id = axes
             .iter()
             .map(|axis| (axis.id(), axis))
             .collect::<HashMap<_, _>>();
-        for (axis_id, value) in self.location.iter() {
+        for (axis_id, value) in &self.location {
             let Some(axis) = axes_by_id.get(axis_id) else {
                 return Err(self.invalid(format!("location references unknown axis {axis_id}")));
             };
@@ -126,12 +126,12 @@ pub(crate) fn validate_named_instances(
         if !ids.insert(instance.id()) {
             return Err(CoreError::DuplicateNamedInstanceId(instance.id()));
         }
-        if let Some(name) = instance.postscript_name() {
-            if !postscript_names.insert(name) {
-                return Err(CoreError::DuplicateNamedInstancePostscriptName(
-                    name.to_string(),
-                ));
-            }
+        if let Some(name) = instance.postscript_name()
+            && !postscript_names.insert(name)
+        {
+            return Err(CoreError::DuplicateNamedInstancePostscriptName(
+                name.to_string(),
+            ));
         }
         if let Some(existing) = instances[..index]
             .iter()
@@ -186,8 +186,7 @@ mod tests {
     #[test]
     fn complete_external_location_is_valid() {
         let axis = Axis::weight();
-        let mut location = ExternalLocation::new();
-        location.set(axis.id(), 700.0);
+        let location = ExternalLocation::from([(axis.id(), 700.0)]);
         let instance = NamedInstance::new("Bold".to_string(), location, None);
 
         assert!(instance.validate(&[axis]).is_ok());
@@ -209,8 +208,7 @@ mod tests {
     fn internal_axis_coordinate_is_invalid() {
         let mut axis = Axis::weight();
         axis.set_role(AxisRole::Internal);
-        let mut location = ExternalLocation::new();
-        location.set(axis.id(), 400.0);
+        let location = ExternalLocation::from([(axis.id(), 400.0)]);
         let instance = NamedInstance::new("Regular".to_string(), location, None);
 
         assert!(matches!(
@@ -223,8 +221,7 @@ mod tests {
     #[test]
     fn postscript_name_uses_font_naming_constraints() {
         let axis = Axis::weight();
-        let mut location = ExternalLocation::new();
-        location.set(axis.id(), 700.0);
+        let location = ExternalLocation::from([(axis.id(), 700.0)]);
         let instance = NamedInstance::new(
             "Bold".to_string(),
             location,
@@ -241,10 +238,8 @@ mod tests {
     #[test]
     fn collection_allows_repeated_display_names_at_distinct_locations() {
         let axis = Axis::weight();
-        let mut regular_location = ExternalLocation::new();
-        regular_location.set(axis.id(), 400.0);
-        let mut display_location = ExternalLocation::new();
-        display_location.set(axis.id(), 700.0);
+        let regular_location = ExternalLocation::from([(axis.id(), 400.0)]);
+        let display_location = ExternalLocation::from([(axis.id(), 700.0)]);
         let regular = NamedInstance::new("Text".to_string(), regular_location, None);
         let display = NamedInstance::new("Text".to_string(), display_location, None);
 
@@ -254,8 +249,7 @@ mod tests {
     #[test]
     fn collection_rejects_two_products_at_the_same_location() {
         let axis = Axis::weight();
-        let mut location = ExternalLocation::new();
-        location.set(axis.id(), 700.0);
+        let location = ExternalLocation::from([(axis.id(), 700.0)]);
         let first = NamedInstance::new("Bold".to_string(), location.clone(), None);
         let second = NamedInstance::new("Display".to_string(), location, None);
 

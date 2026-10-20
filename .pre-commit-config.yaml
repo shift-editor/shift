@@ -74,7 +74,7 @@ repos:
     hooks:
       - id: oxfmt
         name: oxfmt
-        entry: pnpm format:files
+        entry: pnpm format:files --no-error-on-unmatched-pattern
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json, markdown]
         exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'

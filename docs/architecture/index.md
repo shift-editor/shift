@@ -21,6 +21,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
 | `crates/shift-config/**`    | [`crates/shift-config/docs/DOCS.md`](../../crates/shift-config/docs/DOCS.md)       | Reading, validating, and comment-preserving edits of `config.toml` and theme files          |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
+| `crates/shift-shape/**`     | [`crates/shift-shape/docs/DOCS.md`](../../crates/shift-shape/docs/DOCS.md)         | Text shaping for every host: script itemization, HarfRust, line-break opportunities         |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
 | `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
 | `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font                                    |

@@ -256,8 +256,8 @@ impl GlyphLayer {
         id
     }
 
-    pub fn remove_contour(&mut self, id: ContourId) -> Option<Contour> {
-        self.contours.shift_remove(&id)
+    pub fn remove_contour(&mut self, id: &ContourId) -> Option<Contour> {
+        self.contours.shift_remove(id)
     }
 
     pub fn clear_contours(&mut self) {
@@ -286,8 +286,8 @@ impl GlyphLayer {
         id
     }
 
-    pub fn remove_component(&mut self, id: ComponentId) -> Option<Component> {
-        self.components.shift_remove(&id)
+    pub fn remove_component(&mut self, id: &ComponentId) -> Option<Component> {
+        self.components.shift_remove(id)
     }
 
     pub fn clear_components(&mut self) {
@@ -314,8 +314,8 @@ impl GlyphLayer {
         self.anchors.iter_mut().find(|anchor| anchor.id() == *id)
     }
 
-    pub fn anchor_index(&self, id: AnchorId) -> Option<usize> {
-        self.anchors.iter().position(|anchor| anchor.id() == id)
+    pub fn anchor_index(&self, id: &AnchorId) -> Option<usize> {
+        self.anchors.iter().position(|anchor| anchor.id() == *id)
     }
 
     pub fn add_anchor(&mut self, anchor: Anchor) -> AnchorId {
@@ -324,7 +324,7 @@ impl GlyphLayer {
         id
     }
 
-    pub fn remove_anchor(&mut self, id: AnchorId) -> Option<Anchor> {
+    pub fn remove_anchor(&mut self, id: &AnchorId) -> Option<Anchor> {
         self.anchor_index(id)
             .map(|index| self.anchors.remove(index))
     }
@@ -333,8 +333,8 @@ impl GlyphLayer {
         self.anchors.clear();
     }
 
-    pub fn set_anchor_position(&mut self, id: AnchorId, x: f64, y: f64) -> bool {
-        let Some(anchor) = self.anchor_mut(&id) else {
+    pub fn set_anchor_position(&mut self, id: &AnchorId, x: f64, y: f64) -> bool {
+        let Some(anchor) = self.anchor_mut(id) else {
             return false;
         };
         anchor.set_position(x, y);
@@ -498,22 +498,22 @@ impl Glyph {
         self.layers.insert(layer.id(), layer);
     }
 
-    pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {
+    pub fn layer_for_source(&self, source_id: &SourceId) -> Option<&GlyphLayer> {
         self.layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.source_id() == *source_id)
             .map(Arc::as_ref)
     }
 
-    pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
+    pub fn layer_for_source_mut(&mut self, source_id: &SourceId) -> Option<&mut GlyphLayer> {
         self.layers
             .values_mut()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.source_id() == *source_id)
             .map(Arc::make_mut)
     }
 
-    pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
-        self.layers.remove(&id).map(Arc::unwrap_or_clone)
+    pub fn remove_layer(&mut self, id: &LayerId) -> Option<GlyphLayer> {
+        self.layers.remove(id).map(Arc::unwrap_or_clone)
     }
 
     pub fn lib(&self) -> &LibData {
@@ -548,10 +548,7 @@ mod tests {
         layer.set_width(600.0);
 
         assert_eq!(g.layer(&layer_id).unwrap().width(), 600.0);
-        assert_eq!(
-            g.layer_for_source(source_id.clone()).unwrap().id(),
-            layer_id.clone()
-        );
+        assert_eq!(g.layer_for_source(&source_id).unwrap().id(), layer_id);
     }
 
     #[test]
@@ -563,12 +560,12 @@ mod tests {
         let second_layer_id = LayerId::new();
         glyph.set_layer(GlyphLayer::with_width(
             first_layer_id.clone(),
-            first_source_id.clone(),
+            first_source_id,
             500.0,
         ));
         glyph.set_layer(GlyphLayer::with_width(
             second_layer_id.clone(),
-            second_source_id.clone(),
+            second_source_id,
             600.0,
         ));
         let snapshot = glyph.clone();
@@ -608,7 +605,7 @@ mod tests {
         let a1 = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 20.0));
         let a2 = layer.add_anchor(Anchor::new(Some("bottom".to_string()), 30.0, 40.0));
 
-        let ids: Vec<_> = layer.anchors_iter().map(|a| a.id()).collect();
+        let ids: Vec<_> = layer.anchors_iter().map(crate::Anchor::id).collect();
         assert_eq!(ids, vec![a1, a2]);
     }
 }

@@ -1,8 +1,6 @@
 //! Axis mappings and interpolation agree with fontdrasil, which fontc uses
 //! to compile the exported font, so the editor previews what ships.
 
-use std::collections::HashMap;
-
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingPoint, Contour, DesignLocation, ExternalLocation, Font,
     Glyph, GlyphLayer, LayerId, Location, PointType, Source, SourceId,
@@ -17,8 +15,8 @@ fn mapping(axis: &AxisId, points: &[(f64, f64)]) -> AxisMapping {
             .iter()
             .map(|(user, design)| AxisMappingPoint {
                 description: None,
-                input: Location::from_map(HashMap::from([(axis.clone(), *user)])),
-                output: Location::from_map(HashMap::from([(axis.clone(), *design)])),
+                input: Location::from([(axis.clone(), *user)]),
+                output: Location::from([(axis.clone(), *design)]),
             })
             .collect(),
     )
@@ -36,8 +34,7 @@ fn weight_font(minimum: f64, default: f64, maximum: f64, points: &[(f64, f64)]) 
 }
 
 fn design_at(font: &Font, axis: &AxisId, user: f64) -> f64 {
-    let mut external = ExternalLocation::new();
-    external.set(axis.clone(), user);
+    let external = ExternalLocation::from([(axis.clone(), user)]);
     font.mapped_location(&external).unwrap().get(axis).unwrap()
 }
 
@@ -96,12 +93,9 @@ fn a_default_master_reached_through_a_fractional_mapping_interpolates_to_itself(
     let mut placed = Vec::new();
     // Masters sit at the authored design values, as a designspace places them.
     for (index, design) in [points[2].1, points[0].1].into_iter().enumerate() {
-        let mut location = DesignLocation::new();
-        location.set(axis.clone(), design);
+        let location = DesignLocation::from([(axis.clone(), design)]);
         let source_id = if index == 0 {
-            font.source_mut(default_id.clone())
-                .unwrap()
-                .set_location(location);
+            font.source_mut(&default_id).unwrap().set_location(location);
             default_id.clone()
         } else {
             font.add_source(Source::new(format!("Master {index}"), location))

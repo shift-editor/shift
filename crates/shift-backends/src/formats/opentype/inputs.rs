@@ -10,17 +10,17 @@ use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider};
 
 use crate::font_source::atlas::{
-    validate_roots, AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError,
-    SourceAtlasPage,
+    AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError, SourceAtlasPage,
+    validate_roots,
 };
 use crate::font_source::{
-    inferred_smooth_point_indices, malformed, FontReadError, FontSource, GlyphComponent,
-    GlyphDelta as ProjectedDelta, GlyphIndex, GlyphPointKind, GlyphProjection, GlyphShape,
-    GlyphShapeContour, GlyphShapePoint, GlyphVariation, PointProvenance, ProjectedGlyph,
-    VariationAxisKind, VariationRegion, VariationSupport,
+    FontReadError, FontSource, GlyphComponent, GlyphDelta as ProjectedDelta, GlyphIndex,
+    GlyphPointKind, GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint,
+    GlyphVariation, PointProvenance, ProjectedGlyph, VariationAxisKind, VariationRegion,
+    VariationSupport, inferred_smooth_point_indices, malformed,
 };
 
-use super::{geometry, metrics, tables, OpenTypeFont};
+use super::{OpenTypeFont, geometry, metrics, tables};
 
 /// Compiles one selected glyph and its component closure directly from glyf/gvar semantics.
 pub(super) fn project_binary_glyph(
@@ -48,9 +48,9 @@ pub(super) fn project_binary_glyph(
     let advances = metrics::advance_contributions(
         &source.path,
         &font,
-        loca.clone(),
-        glyf.clone(),
-        gvar.clone(),
+        &loca,
+        &glyf,
+        gvar.as_ref(),
         &mut registry,
         &glyph_indices,
     )
@@ -429,9 +429,9 @@ pub fn build_binary_atlas_page(
     let advances = metrics::advance_contributions(
         &source.path,
         &font,
-        loca,
-        glyf,
-        gvar,
+        &loca,
+        &glyf,
+        gvar.as_ref(),
         &mut registry,
         roots,
     )?;
@@ -597,13 +597,13 @@ pub(super) fn tuple_region(tuple: &TupleVariation<'_, GlyphDelta>) -> AtlasRegio
 mod tests {
     use std::path::PathBuf;
 
-    use shift_slug::{AtlasBuilder, Curve, OutlineCommand, DEFAULT_BAND_COUNT};
+    use shift_slug::{AtlasBuilder, Curve, DEFAULT_BAND_COUNT, OutlineCommand};
     use skrifa::outline::pen::PathStyle;
     use skrifa::outline::{DrawSettings, OutlinePen};
     use skrifa::prelude::{LocationRef, Size};
     use skrifa::{FontRef, GlyphId, MetadataProvider};
 
-    use super::{build_binary_atlas_page, OpenTypeFont};
+    use super::{OpenTypeFont, build_binary_atlas_page};
     use crate::font_source::{FontSource, GlyphIndex, VariationAxisKind, VariationCoordinate};
 
     #[derive(Default)]
@@ -674,15 +674,12 @@ mod tests {
         });
         let composite = source.glyph(roots[1]).unwrap();
         assert!(!composite.root.fallback.components.is_empty());
-        assert!(composite
-            .root
-            .fallback
-            .components
-            .iter()
-            .all(|component| composite
+        assert!(composite.root.fallback.components.iter().all(|component| {
+            composite
                 .components
                 .iter()
-                .any(|projection| projection.glyph == component.glyph)));
+                .any(|projection| projection.glyph == component.glyph)
+        }));
         let page = build_binary_atlas_page(&source, &roots, DEFAULT_BAND_COUNT).unwrap();
         let axis = &source.directory().axes[0];
         let (default, maximum) = match axis.kind {
@@ -765,11 +762,13 @@ mod tests {
             source.directory().mappings.len(),
             source.directory().axes.len()
         );
-        assert!(source
-            .directory()
-            .mappings
-            .iter()
-            .all(|mapping| !mapping.points.is_empty()));
+        assert!(
+            source
+                .directory()
+                .mappings
+                .iter()
+                .all(|mapping| !mapping.points.is_empty())
+        );
 
         let space = source
             .directory()
@@ -875,16 +874,13 @@ mod tests {
 
     fn skrifa_curves(
         source: &OpenTypeFont,
-        glyph: crate::font_source::GlyphIndex,
+        glyph: GlyphIndex,
         location: &crate::font_source::VariationLocation,
     ) -> Vec<Curve> {
         let font = FontRef::new(source.bytes().as_ref()).unwrap();
         let location = skrifa_location(&font, source, location);
         let mut pen = CommandPen::default();
-        if let Some(outline) = font
-            .outline_glyphs()
-            .get(skrifa::GlyphId::new(glyph.to_u32()))
-        {
+        if let Some(outline) = font.outline_glyphs().get(GlyphId::new(glyph.to_u32())) {
             outline
                 .draw(
                     DrawSettings::unhinted(Size::unscaled(), LocationRef::from(&location))

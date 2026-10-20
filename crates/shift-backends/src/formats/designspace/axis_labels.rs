@@ -113,7 +113,7 @@ fn push_label(
                 details: format!(
                     "axis label {name:?} must provide both userminimum and usermaximum"
                 ),
-            })
+            });
         }
     };
     let linked_value = number_attribute(reader, event, b"linkeduservalue")?;
@@ -212,6 +212,10 @@ fn write_event(writer: &mut Writer<Vec<u8>>, event: Event) -> DesignspaceResult<
     writer.write_event(event).map_err(parse_error)
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "passed as `map_err(parse_error)`"
+)]
 fn parse_error(error: impl ToString) -> DesignspaceError {
     DesignspaceError::ParseDesignspaceXml {
         details: error.to_string(),

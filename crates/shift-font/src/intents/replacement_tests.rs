@@ -7,7 +7,7 @@ fn replacement_preserves_auxiliary_data_and_refreshes_structure_identity() {
     let layer = font
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(font.default_source_id().unwrap())
+        .layer_for_source(&font.default_source_id().unwrap())
         .unwrap()
         .clone();
     let mut contour = Contour::new();
@@ -15,7 +15,7 @@ fn replacement_preserves_auxiliary_data_and_refreshes_structure_identity() {
     let contour_id = contour.id();
     let anchor = Anchor::new(Some("top".to_string()), 25.0, 40.0);
     let anchor_id = anchor.id();
-    font.apply_intents(FontIntentSet {
+    font.apply_intents(&FontIntentSet {
         intents: vec![FontIntent::ReplaceGlyphLayerContent {
             layer_id: layer.id(),
             width: 720.0,
@@ -53,20 +53,20 @@ fn replacement_rejects_cross_layer_identity_collisions_without_mutation() {
     let layer_id = font
         .glyph_by_name("acute")
         .unwrap()
-        .layer_for_source(source_id.clone())
+        .layer_for_source(&source_id)
         .unwrap()
         .id();
     let contour = font
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(source_id)
+        .layer_for_source(&source_id)
         .unwrap()
         .contours_iter()
         .next()
         .unwrap()
         .clone();
     let before = font.clone();
-    let result = font.apply_intents(FontIntentSet {
+    let result = font.apply_intents(&FontIntentSet {
         intents: vec![FontIntent::ReplaceGlyphLayerContent {
             layer_id,
             width: 500.0,
@@ -85,7 +85,7 @@ fn replacement_rejects_duplicate_and_nonfinite_payloads_before_mutation() {
     let layer_id = font
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(font.default_source_id().unwrap())
+        .layer_for_source(&font.default_source_id().unwrap())
         .unwrap()
         .id();
     let mut contour = Contour::new();
@@ -95,8 +95,8 @@ fn replacement_rejects_duplicate_and_nonfinite_payloads_before_mutation() {
         (500.0, vec![contour.clone(), contour]),
         (f64::NAN, Vec::new()),
     ] {
-        assert!(font
-            .apply_intents(FontIntentSet {
+        assert!(
+            font.apply_intents(&FontIntentSet {
                 intents: vec![FontIntent::ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width,
@@ -105,7 +105,8 @@ fn replacement_rejects_duplicate_and_nonfinite_payloads_before_mutation() {
                     components: Vec::new(),
                 }],
             })
-            .is_err());
+            .is_err()
+        );
         assert_eq!(font, before);
     }
 }
@@ -117,13 +118,13 @@ fn replacement_rejects_missing_and_cyclic_component_bases() {
     let layer_id = font
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(font.default_source_id().unwrap())
+        .layer_for_source(&font.default_source_id().unwrap())
         .unwrap()
         .id();
     let before = font.clone();
     for base_glyph_id in [GlyphId::new(), glyph_id] {
-        assert!(font
-            .apply_intents(FontIntentSet {
+        assert!(
+            font.apply_intents(&FontIntentSet {
                 intents: vec![FontIntent::ReplaceGlyphLayerContent {
                     layer_id: layer_id.clone(),
                     width: 500.0,
@@ -132,7 +133,8 @@ fn replacement_rejects_missing_and_cyclic_component_bases() {
                     components: vec![Component::new(base_glyph_id, "A")],
                 }],
             })
-            .is_err());
+            .is_err()
+        );
         assert_eq!(font, before);
     }
 }

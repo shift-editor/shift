@@ -106,9 +106,5 @@ fn label(font: &Font, pair: &KerningPair) -> String {
 }
 
 fn plural(count: usize) -> &'static str {
-    if count == 1 {
-        ""
-    } else {
-        "s"
-    }
+    if count == 1 { "" } else { "s" }
 }
