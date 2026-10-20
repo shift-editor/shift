@@ -3,7 +3,7 @@ use std::sync::Arc;
 use shift_font::{FontMetadata, test_support::sample_font};
 use shift_store::{
     AxisId, FontInfo, GlyphId, NewAxis, NewGlyph, NewSource, SHIFT_APPLICATION_ID,
-    SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore, SourceId, SourceKind, WorkspaceState,
+    SHIFT_DOCUMENT_SCHEMA_VERSION, SaveState, ShiftStore, SourceId, SourceKind, WorkspaceState,
 };
 
 fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
@@ -283,13 +283,21 @@ fn glyph_edit_is_sparse() {
     let mut with_append = font.clone();
     with_append.insert_glyph(appended.clone()).unwrap();
     store
-        .apply_change_set_with_font(&glyph_created(&appended).into(), &with_append, true)
+        .apply_change_set_with_font(
+            &glyph_created(&appended).into(),
+            &with_append,
+            SaveState::Unsaved,
+        )
         .unwrap();
 
     let mut after_pop = with_append;
     after_pop.pop_glyph(appended.id()).unwrap();
     store
-        .apply_change_set_with_font(&glyph_deleted(&appended).into(), &after_pop, true)
+        .apply_change_set_with_font(
+            &glyph_deleted(&appended).into(),
+            &after_pop,
+            SaveState::Unsaved,
+        )
         .unwrap();
 
     let first = font.glyphs().next().unwrap();

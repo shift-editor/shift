@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use shift_font::test_support::sample_font;
-use shift_store::ShiftStore;
+use shift_store::{SaveState, ShiftStore};
 
 fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
     shift_font::SourceCollection {
@@ -85,7 +85,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&change, &post, true)
+        .apply_change_set_with_font(&change, &post, SaveState::Unsaved)
         .unwrap();
     let merged_source = document
         .get_source(&shift_store::SourceId::new("source_regular"))
@@ -170,7 +170,7 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("write semantic recovery changes");
     drop(document);
 
@@ -208,7 +208,7 @@ fn metric_definition_replacement_preserves_untouched_source_values() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("write metric recovery change");
     document.save_document().expect("save recovered document");
     drop(document);
@@ -256,7 +256,7 @@ fn recovery_persists_collection_reordering_without_entity_updates() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("persist reordered collections");
     drop(document);
 
@@ -368,7 +368,11 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     let mut invalid_post = original.clone();
     invalid_post.pop_glyph(tail_id).expect("pop tail glyph");
     let error = document
-        .apply_change_set_with_font(&glyph_deleted(non_tail).into(), &invalid_post, true)
+        .apply_change_set_with_font(
+            &glyph_deleted(non_tail).into(),
+            &invalid_post,
+            SaveState::Unsaved,
+        )
         .unwrap_err();
     assert!(matches!(
         error,
@@ -379,7 +383,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     ));
 
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
     let directory = document.load_font_directory().unwrap();
     assert_eq!(directory.glyph_count(), post.glyph_count());
@@ -424,7 +428,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     let mut reverted = post.clone();
     reverted.pop_glyph(glyph_id.clone()).expect("pop glyph");
     document
-        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, true)
+        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, SaveState::Unsaved)
         .unwrap();
     assert_eq!(
         document.load_font_directory().unwrap().glyph_count(),
@@ -451,12 +455,12 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     drop(recovery);
 
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
     document.save_document().expect("save additions");
 
     document
-        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, true)
+        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, SaveState::Unsaved)
         .expect("pop the saved tail glyph");
     assert_eq!(document.load_font_state().unwrap(), reverted);
     let recovery = rusqlite::Connection::open(&recovery_path).expect("inspect saved pop");
@@ -480,7 +484,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     drop(recovery);
 
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("redo the saved append");
     document.save_document().expect("save redone addition");
     drop(document);
@@ -519,7 +523,7 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
         )),
     ]);
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
     assert!(document.load_glyph_layer(&layer_id).unwrap().is_none());
 
@@ -570,10 +574,12 @@ fn kerning_edits_persist_in_a_working_store() {
     store.replace_font_state(&font).expect("write font");
 
     let set = kerning_edit(&mut font, "regular", Some(-40.0));
-    store.apply_change_set_with_font(&set, &font, true).unwrap();
+    store
+        .apply_change_set_with_font(&set, &font, SaveState::Unsaved)
+        .unwrap();
     let removed = kerning_edit(&mut font, "bold", None);
     store
-        .apply_change_set_with_font(&removed, &font, true)
+        .apply_change_set_with_font(&removed, &font, SaveState::Unsaved)
         .unwrap();
     drop(store);
 
@@ -595,7 +601,7 @@ fn recovery_overlay_keeps_unsaved_kerning_until_saved() {
         .expect("open with recovery");
     let changes = kerning_edit(&mut font, "regular", Some(-40.0));
     document
-        .apply_change_set_with_font(&changes, &font, true)
+        .apply_change_set_with_font(&changes, &font, SaveState::Unsaved)
         .unwrap();
     drop(document);
 
@@ -653,7 +659,7 @@ fn kerning_group_edits_persist_in_a_working_store_and_a_recovery_overlay() {
     let mut renamed = font.clone();
     let changes = edit_groups(&mut renamed);
     working
-        .apply_change_set_with_font(&changes, &renamed, true)
+        .apply_change_set_with_font(&changes, &renamed, SaveState::Unsaved)
         .unwrap();
     drop(working);
     assert_eq!(
@@ -671,7 +677,7 @@ fn kerning_group_edits_persist_in_a_working_store_and_a_recovery_overlay() {
         .expect("open with recovery");
     let changes = edit_groups(&mut font);
     document
-        .apply_change_set_with_font(&changes, &font, true)
+        .apply_change_set_with_font(&changes, &font, SaveState::Unsaved)
         .unwrap();
     drop(document);
 
