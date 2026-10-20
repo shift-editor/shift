@@ -171,7 +171,7 @@ mod tests {
         GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET, GLYPH_ANCHOR_VALUE_COUNT,
         GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
     };
-    use crate::test_support::generated::{assert_generated_file, TypeScriptModule};
+    use crate::test_support::generated::{TypeScriptModule, assert_generated_file};
     use crate::{
         Anchor, Contour, DecomposedTransform, GlyphLayer, LayerId, PointType, SourceId, Transform,
     };

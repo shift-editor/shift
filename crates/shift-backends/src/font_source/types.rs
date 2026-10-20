@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use crate::font_source::FontReadError;
 use crate::FontFormat;
+use crate::font_source::FontReadError;
 
 macro_rules! index_type {
     ($name:ident) => {

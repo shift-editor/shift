@@ -1,9 +1,8 @@
 use crate::Require;
 use crate::{
-    boolean,
-    error::{CoreError, CoreResult},
     Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
-    Point, PointId, PointType, Transform,
+    Point, PointId, PointType, Transform, boolean,
+    error::{CoreError, CoreResult},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -668,9 +667,11 @@ mod tests {
         session.close_contour(contour_id.clone()).unwrap();
         let before = session.contour(&contour_id).unwrap().points().to_vec();
 
-        assert!(session
-            .set_contour_start(contour_id.clone(), point_id.clone())
-            .unwrap());
+        assert!(
+            session
+                .set_contour_start(contour_id.clone(), point_id.clone())
+                .unwrap()
+        );
         let after = session.contour(&contour_id).unwrap();
         assert!(after.is_closed());
         assert_eq!(
@@ -690,19 +691,25 @@ mod tests {
             .unwrap()
             .point_id;
         let before = session.clone();
-        assert!(!session
-            .set_contour_start(contour_id.clone(), point_id)
-            .unwrap());
+        assert!(
+            !session
+                .set_contour_start(contour_id.clone(), point_id)
+                .unwrap()
+        );
         assert_eq!(session, before);
 
         session.close_contour(contour_id.clone()).unwrap();
         let before = session.clone();
-        assert!(!session
-            .set_contour_start(contour_id.clone(), handle_id)
-            .unwrap());
-        assert!(session
-            .set_contour_start(contour_id, PointId::new())
-            .is_err());
+        assert!(
+            !session
+                .set_contour_start(contour_id.clone(), handle_id)
+                .unwrap()
+        );
+        assert!(
+            session
+                .set_contour_start(contour_id, PointId::new())
+                .is_err()
+        );
         assert_eq!(session, before);
     }
 

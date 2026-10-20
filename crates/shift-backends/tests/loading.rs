@@ -186,13 +186,14 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
     let source_names: Vec<_> = font.sources().iter().map(|source| source.name()).collect();
     assert!(source_names.contains(&"Regular"));
     assert!(font.sources().len() >= 2);
-    assert!(font
-        .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
-        .all(|layer| font
-            .sources()
-            .iter()
-            .any(|source| source.id() == layer.source_id())));
+    assert!(
+        font.glyphs()
+            .flat_map(|glyph| glyph.layers().values())
+            .all(|layer| font
+                .sources()
+                .iter()
+                .any(|source| source.id() == layer.source_id()))
+    );
 
     assert_eq!(
         shift_font::test_support::default_kerning_between(&font, "T", "A"),
@@ -638,10 +639,11 @@ fn loads_designspace_sources_axes_and_default_metadata() {
         .find(|instance| instance.name() == "Medium_Wide_I")
         .expect("valid instance with a conflicting PostScript name should remain available");
     assert_eq!(medium_wide.postscript_name(), None);
-    assert!(font
-        .named_instances()
-        .iter()
-        .all(|instance| !matches!(instance.name(), "Extrapolate" | "Anisotropic_Extrapolate")));
+    assert!(
+        font.named_instances()
+            .iter()
+            .all(|instance| !matches!(instance.name(), "Extrapolate" | "Anisotropic_Extrapolate"))
+    );
 
     let glyph_a = font.glyph_by_name("A").expect("A glyph should exist");
     assert!(glyph_a.layers().len() >= 4);

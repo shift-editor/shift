@@ -1,7 +1,7 @@
 [package]
 name = "shift-backends"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Font format backends for reading and writing various font formats"
 license.workspace = true
 

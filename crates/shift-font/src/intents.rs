@@ -5,6 +5,7 @@
 //! carry caller-minted ids and insertion anchors, while changesets retain
 //! expected originals and replacements for atomic persistence and inversion.
 
+use crate::Require;
 use crate::anchor_attachment::realign_attached_components;
 use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
 use crate::composite::anchor_aligned_offset;
@@ -13,13 +14,12 @@ use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentAlignment,
     ComponentId, Contour, ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata,
-    Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, LibValue, MetricDefinition, MetricId,
-    MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId, Transform,
-    LANGUAGES_LIB_KEY,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
+    MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
+    Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::source::source_locations_equal;
-use crate::Require;
 use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -573,10 +573,10 @@ impl Font {
                 for layer_id in layer_ids {
                     touched.touch(layer_id, true);
                 }
-                if let Some(glyph_id) = glyph_id {
-                    if !glyph_ids.contains(&glyph_id) {
-                        glyph_ids.push(glyph_id);
-                    }
+                if let Some(glyph_id) = glyph_id
+                    && !glyph_ids.contains(&glyph_id)
+                {
+                    glyph_ids.push(glyph_id);
                 }
                 continue;
             };

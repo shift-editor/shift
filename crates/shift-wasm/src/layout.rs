@@ -14,7 +14,7 @@
 //! followed by its items; an optional value is a flag followed by the value
 //! when present.
 
-use crate::names::{with_names, NameTable};
+use crate::names::{NameTable, with_names};
 
 /// Reads numbers in order from a call's input.
 ///

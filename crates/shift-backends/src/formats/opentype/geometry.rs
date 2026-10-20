@@ -11,8 +11,8 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    inferred_smooth_point_indices, AffineTransform, FontReadError, GlyphIndex, GlyphPointKind,
-    PointProvenance, TrueTypePointIndex,
+    AffineTransform, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
+    TrueTypePointIndex, inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
@@ -549,8 +549,8 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                                         malformed(
                                             self.path,
                                             format!(
-                                            "invalid base anchor point {base} in glyph {raw_id}"
-                                        ),
+                                                "invalid base anchor point {base} in glyph {raw_id}"
+                                            ),
                                         )
                                     })?;
                             let component = child

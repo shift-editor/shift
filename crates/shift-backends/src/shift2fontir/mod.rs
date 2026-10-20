@@ -24,4 +24,4 @@ mod tests;
 pub(crate) use axes::to_ir_axes;
 pub use axes::{AxisConversionError, MappingSide};
 pub use propagation::{PropagatedAnchor, PropagatedGlyphAnchors, PropagatedSourceAnchors};
-pub(crate) use source::{units_per_em, ShiftIrSource, ShiftIrSourceError};
+pub(crate) use source::{ShiftIrSource, ShiftIrSourceError, units_per_em};

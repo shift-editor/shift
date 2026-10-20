@@ -1,10 +1,10 @@
 use std::{env, error::Error, fs, path::PathBuf, time::Instant};
 
-use shift_slug::{AtlasBuilder, CurveIndexEncoding, OutlineCommand, DEFAULT_BAND_COUNT};
+use shift_slug::{AtlasBuilder, CurveIndexEncoding, DEFAULT_BAND_COUNT, OutlineCommand};
 use skrifa::{
+    FontRef, GlyphId, MetadataProvider, Tag,
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    FontRef, GlyphId, MetadataProvider, Tag,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;

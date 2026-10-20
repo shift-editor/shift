@@ -1,3 +1,4 @@
+use crate::Require;
 use crate::axis::{Axis, AxisKind, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
@@ -14,10 +15,9 @@ use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::Kerning;
 use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
-use crate::named_instance::{validate_named_instances, NamedInstance};
-use crate::source::source_locations_equal;
+use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::Source;
-use crate::Require;
+use crate::source::source_locations_equal;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -1763,9 +1763,9 @@ mod axis_authoring_tests;
 mod tests {
     use super::*;
     use crate::{
-        test_support::sample_font, Anchor, AxisMappingPoint, AxisRole, Component, ComponentId,
-        Contour, ContourId, ExternalLocation, GlyphLayer, GuidelineId, LayerId, Location, PointId,
-        PointType,
+        Anchor, AxisMappingPoint, AxisRole, Component, ComponentId, Contour, ContourId,
+        ExternalLocation, GlyphLayer, GuidelineId, LayerId, Location, PointId, PointType,
+        test_support::sample_font,
     };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -2170,10 +2170,11 @@ mod tests {
         assert!(font.has_contour_id(&contour_id));
         assert!(font.has_point_id(&point_id));
         assert!(font.has_anchor_id(&anchor_id));
-        assert!(font
-            .index()
-            .entity_ids
-            .contains(&GlyphEntityId::from(component_id)));
+        assert!(
+            font.index()
+                .entity_ids
+                .contains(&GlyphEntityId::from(component_id))
+        );
 
         let committed = font.layer(&layer_id).unwrap().clone();
         let mut invalid = values.into_vec();

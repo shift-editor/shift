@@ -1,17 +1,16 @@
 use std::{env, error::Error, fs, path::PathBuf, sync::mpsc, time::Instant};
 
 use shift_slug::{
-    pack_render_instances, pack_render_params, pack_variable_params, Bounds, Curve, OutlineCommand,
-    RenderInstance, RenderParams, SlugError, VariableAtlas, VariableAtlasBuilder, VariableParams,
-    DEFAULT_BAND_COUNT, VARIABLE_SLUG_WGSL,
+    Bounds, Curve, DEFAULT_BAND_COUNT, OutlineCommand, RenderInstance, RenderParams, SlugError,
+    VARIABLE_SLUG_WGSL, VariableAtlas, VariableAtlasBuilder, VariableParams, pack_render_instances,
+    pack_render_params, pack_variable_params,
 };
 use skrifa::{
+    FontRef, GlyphId, MetadataProvider, Tag,
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    FontRef, GlyphId, MetadataProvider, Tag,
 };
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     BindGroupEntry, BufferDescriptor, BufferUsages, Color, ColorTargetState, ColorWrites,
     CommandEncoderDescriptor, ComputePassDescriptor, ComputePipelineDescriptor, Device,
     DeviceDescriptor, Extent3d, FragmentState, LoadOp, MemoryHints, Operations, Origin3d,
@@ -20,6 +19,7 @@ use wgpu::{
     RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, StoreOp, TexelCopyBufferInfo,
     TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect, TextureDescriptor,
     TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor, VertexState,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;

@@ -9,17 +9,16 @@ use std::{
 };
 
 use shift_slug::{
-    pack_render_instances, pack_render_params, Atlas, AtlasBuilder, Bounds, CurveIndexEncoding,
-    Layout, OutlineCommand, RenderInstance, RenderParams, Section, DEFAULT_BAND_COUNT, SLUG_WGSL,
+    Atlas, AtlasBuilder, Bounds, CurveIndexEncoding, DEFAULT_BAND_COUNT, Layout, OutlineCommand,
+    RenderInstance, RenderParams, SLUG_WGSL, Section, pack_render_instances, pack_render_params,
 };
 use skrifa::{
+    FontRef, GlyphId, MetadataProvider, Tag,
     outline::{DrawSettings, OutlinePen},
     prelude::{LocationRef, Size},
-    FontRef, GlyphId, MetadataProvider, Tag,
 };
 use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Transform};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
     BindGroupEntry, BindingResource, BufferBinding, BufferDescriptor, BufferUsages,
     ColorTargetState, ColorWrites, CommandEncoderDescriptor, Device, DeviceDescriptor, Extent3d,
     Features, FragmentState, LoadOp, MemoryHints, Operations, Origin3d, PipelineCompilationOptions,
@@ -29,6 +28,7 @@ use wgpu::{
     TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect,
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
     VertexState,
+    util::{BufferInitDescriptor, DeviceExt},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;

@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 
 use toml_edit::{Document, Item, TableLike};
 
-use crate::{location, ConfigProblem, Location, Severity};
+use crate::{ConfigProblem, Location, Severity, location};
 
 /// The sixteen base16 palette keys, in order.
 pub const PALETTE_KEYS: [&str; 16] = [

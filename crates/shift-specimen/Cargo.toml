@@ -1,7 +1,7 @@
 [package]
 name = "shift-specimen"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Chooses, shapes, and outlines the specimen text shown on Shift's recent-file thumbnails"
 license.workspace = true
 

@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
 use shift_font::{
-    composite::{
-        resolved_contours_bbox, resolved_contours_to_svg_path, ResolvedComponentGeometry,
-        ResolvedContour, ResolvedLayerGeometry,
-    },
     ComponentAlignment, GlyphId, PointType as IrPointType, Transform,
+    composite::{
+        ResolvedComponentGeometry, ResolvedContour, ResolvedLayerGeometry, resolved_contours_bbox,
+        resolved_contours_to_svg_path,
+    },
 };
 
 use crate::{

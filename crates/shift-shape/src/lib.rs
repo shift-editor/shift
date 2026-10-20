@@ -24,13 +24,13 @@ mod shape;
 mod source;
 
 pub use axis::AxisNormalization;
-pub use breaks::{line_breaks, LineBreak};
+pub use breaks::{LineBreak, line_breaks};
 pub use harfrust::{NormalizedCoord, Tag};
 pub use shape::{
     FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedRun, Shaper,
     TextDirection,
 };
-pub use source::{character_glyphs, FontGlyphs, GlyphSource, NOTDEF};
+pub use source::{FontGlyphs, GlyphSource, NOTDEF, character_glyphs};
 
 /// One unit of text to shape, naming inserted glyphs by `G`, the host's
 /// glyph identity.

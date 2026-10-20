@@ -1,5 +1,5 @@
-use crate::distinct_named_instances;
 use crate::SourceGlyphIds;
+use crate::distinct_named_instances;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
@@ -14,13 +14,13 @@ use shift_font::{
 };
 
 use crate::{
+    ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
     font_source::VariationAxisKind,
-    formats::ufo::{load_header, read_glyph_paths, UfoKerning},
+    formats::ufo::{UfoKerning, load_header, read_glyph_paths},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     kerning_import::KerningImport,
     metrics::copy_source_metrics,
-    ImportReport,
 };
 
 use super::{

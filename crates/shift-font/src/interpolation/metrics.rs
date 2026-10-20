@@ -264,12 +264,12 @@ fn technical_metric(source: &Source, field: SourceMetricField) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_support::generated::{assert_generated_file, TypeScriptModule};
+    use crate::test_support::generated::{TypeScriptModule, assert_generated_file};
     use crate::{DesignLocation, Font, MetricKind, MetricValue, Source};
 
     use super::{
-        SourceMetricField, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,
-        SOURCE_METRIC_VALUE_COUNT, SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+        SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
+        SOURCE_TECHNICAL_FIELD_VALUE_COUNT, SourceMetricField,
     };
 
     #[test]
@@ -335,9 +335,11 @@ mod tests {
             resolved.metric_values().get(&ascender_id),
             Some(&MetricValue::new(850.0, 18.0))
         );
-        assert!(!interpolation
-            .technical_fields()
-            .contains(&SourceMetricField::LineGap));
+        assert!(
+            !interpolation
+                .technical_fields()
+                .contains(&SourceMetricField::LineGap)
+        );
         assert_eq!(resolved.line_gap(), None);
     }
 }

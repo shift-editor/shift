@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use shift_backends::{
-    build_binary_atlas_page, FontSource, GlyphIndex, OpenTypeFont, SourceAtlasDescriptor,
+    FontSource, GlyphIndex, OpenTypeFont, SourceAtlasDescriptor, build_binary_atlas_page,
 };
-use shift_slug::{PackedVariableAtlas, DEFAULT_BAND_COUNT};
+use shift_slug::{DEFAULT_BAND_COUNT, PackedVariableAtlas};
 
 const ROOTS_PER_PAGE: usize = 256;
 const ALIGNMENT: usize = 256;

@@ -513,17 +513,19 @@ mod tests {
                 .count(),
             0
         );
-        assert!(outcome
-            .changes
-            .entity_changes()
-            .iter()
-            .any(|change| matches!(
-                change,
-                FontEntityChange::Layer {
-                    change: EntityChange::Created(layer),
-                    ..
-                } if layer.id() == layer_id
-            )));
+        assert!(
+            outcome
+                .changes
+                .entity_changes()
+                .iter()
+                .any(|change| matches!(
+                    change,
+                    FontEntityChange::Layer {
+                        change: EntityChange::Created(layer),
+                        ..
+                    } if layer.id() == layer_id
+                ))
+        );
         let edited = font.clone();
 
         font.apply_change_set(&outcome.changes.inverted()).unwrap();

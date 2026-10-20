@@ -2,10 +2,10 @@ use shift_slug::OutlineCommand;
 #[cfg(feature = "wgpu-benchmark")]
 use shift_slug::SLUG_WGSL;
 use shift_slug::{
-    pack_render_instances, pack_render_params, pack_variable_params, AtlasBuilder, Curve,
-    CurveIndexEncoding, Point, RenderInstance, RenderParams, Section, SlugError,
-    VariableAtlasBuilder, VariableLayout, VariableParams, CUBIC_APPROXIMATION_ACCURACY,
-    LINE_EPSILON, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, VARIABLE_PARAMS_BYTES,
+    AtlasBuilder, CUBIC_APPROXIMATION_ACCURACY, Curve, CurveIndexEncoding, LINE_EPSILON, Point,
+    RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, RenderInstance, RenderParams, Section, SlugError,
+    VARIABLE_PARAMS_BYTES, VariableAtlasBuilder, VariableLayout, VariableParams,
+    pack_render_instances, pack_render_params, pack_variable_params,
 };
 
 #[test]
@@ -223,9 +223,11 @@ fn compact_indexes_are_glyph_local_and_pair_packed() {
         ..compact_layout.curve_indices.offset + compact_layout.curve_indices.length]
         .chunks_exact(4)
         .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
-    assert!(compact_words
-        .flat_map(|word| [word & 0xffff, word >> 16])
-        .all(|index| index < 2));
+    assert!(
+        compact_words
+            .flat_map(|word| [word & 0xffff, word >> 16])
+            .all(|index| index < 2)
+    );
 }
 
 #[test]

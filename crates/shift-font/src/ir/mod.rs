@@ -27,7 +27,7 @@ pub use axis::{
     DesignLocation, ExternalLocation, Location,
 };
 pub use binary_data::BinaryData;
-pub use boolean::{boolean, BooleanOp};
+pub use boolean::{BooleanOp, boolean};
 pub use component::{Component, ComponentAlignment, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{

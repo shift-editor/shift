@@ -96,8 +96,8 @@ mod exports {
     use std::collections::HashMap;
 
     use shift_shape::{
-        character_glyphs, AxisNormalization, FeatureSetting, GlyphSource, ParagraphRequest,
-        ShapeError, Shaper, Tag, TextDirection, Unit, NOTDEF,
+        AxisNormalization, FeatureSetting, GlyphSource, NOTDEF, ParagraphRequest, ShapeError,
+        Shaper, Tag, TextDirection, Unit, character_glyphs,
     };
     use wasm_bindgen::prelude::*;
 

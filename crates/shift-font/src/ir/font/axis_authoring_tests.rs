@@ -1,5 +1,5 @@
 use crate::{
-    test_support::sample_variable_font, Axis, AxisKind, CoreError, DesignLocation, Font, Source,
+    Axis, AxisKind, CoreError, DesignLocation, Font, Source, test_support::sample_variable_font,
 };
 
 #[test]

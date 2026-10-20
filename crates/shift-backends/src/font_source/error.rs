@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::font_source::{AxisIndex, GlyphIndex};
 use crate::FontFormat;
+use crate::font_source::{AxisIndex, GlyphIndex};
 
 pub(crate) fn malformed(path: &Path, details: String) -> FontReadError {
     let format = match path

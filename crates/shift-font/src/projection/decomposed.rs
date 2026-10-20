@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::FontProjection;
-use crate::placed_blend::{mirrors, placed_point_index, shapes_match, ContourShape};
+use crate::placed_blend::{ContourShape, mirrors, placed_point_index, shapes_match};
 
 /// A glyph's flattened outline split by where each contour comes from: the
 /// glyph's own contours first, then one part per component occurrence in

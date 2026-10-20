@@ -149,10 +149,12 @@ fn include_statements_are_reported_as_errors() {
     let compilation = ShaperFont::compile(&request(&[".notdef"], "include(other.fea);")).unwrap();
 
     assert!(compilation.font.is_none());
-    assert!(compilation
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error));
+    assert!(
+        compilation
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+    );
 }
 
 #[test]

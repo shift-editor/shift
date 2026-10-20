@@ -11,7 +11,7 @@ use shift_font::{
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
-use crate::variation::{axis, VariationAxes};
+use crate::variation::{VariationAxes, axis};
 
 /// Authored axis mappings; the editor's `AxisMapping[]` satisfies this.
 #[derive(Deserialize, Tsify)]

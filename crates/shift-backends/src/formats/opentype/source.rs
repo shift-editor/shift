@@ -10,10 +10,10 @@ use skrifa::{FontRef, MetadataProvider};
 
 use super::localized_string;
 use crate::font_source::{
-    malformed, FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
+    FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
 use crate::metrics::set_metric_position;
-use crate::{distinct_named_instances, FontFormat};
+use crate::{FontFormat, distinct_named_instances};
 use shift_font::{
     Axis, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Font as ShiftFont,
     Location, MetricKind, NamedInstance,
@@ -221,7 +221,7 @@ fn binary_directory(
             return Err(malformed(
                 path,
                 format!("failed to read avar table: {error}"),
-            ))
+            ));
         }
     };
 
@@ -321,12 +321,14 @@ mod tests {
             .expect("fixture should contain S");
         let projected = font.glyph(glyph.index).unwrap();
 
-        assert!(projected
-            .root
-            .fallback
-            .contours
-            .iter()
-            .flat_map(|contour| contour.points.iter())
-            .any(|point| point.kind == GlyphPointKind::OnCurve && point.smooth));
+        assert!(
+            projected
+                .root
+                .fallback
+                .contours
+                .iter()
+                .flat_map(|contour| contour.points.iter())
+                .any(|point| point.kind == GlyphPointKind::OnCurve && point.smooth)
+        );
     }
 }

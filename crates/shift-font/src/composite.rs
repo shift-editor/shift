@@ -13,8 +13,8 @@
 //! - Cycles are handled branch-locally: cyclic branches are skipped so
 //!   non-cyclic branches still contribute geometry.
 
-use crate::curve::segment_bounds;
 use crate::Require;
+use crate::curve::segment_bounds;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
     GlyphLayer, Point, PointId, Transform,

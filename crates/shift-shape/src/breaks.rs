@@ -1,6 +1,6 @@
 //! Where a line may break, by the Unicode line breaking algorithm.
 
-use unicode_linebreak::{linebreaks, BreakOpportunity};
+use unicode_linebreak::{BreakOpportunity, linebreaks};
 
 use crate::Unit;
 
