@@ -2,14 +2,14 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 use glyphs_reader::{
-    Anchor as GlyphsAnchor, Component as GlyphsComponent, FeatureSnippet, Font as GlyphsFont,
-    FontMaster, Glyph as GlyphsGlyph, InstanceType, Layer as GlyphsLayer, NodeType, Shape,
+    Anchor as GlyphsAnchor, FeatureSnippet, Font as GlyphsFont, FontMaster, Glyph as GlyphsGlyph,
+    InstanceType, Layer as GlyphsLayer, NodeType, Shape,
 };
 use ordered_float::OrderedFloat;
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
     ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Kerning, KerningPosition,
-    LayerId, LibValue, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
+    LayerId, LibValue, Location, NamedInstance, Source, SourceId, StandardMetrics, Transform,
 };
 
 use super::families::InstanceFamilies;
@@ -19,7 +19,6 @@ use crate::{
     font_source::piecewise_map,
     glyph_category::{GlyphCategories, ResolvedCategory},
     kerning_import::{KerningImport, NamedKerningSide},
-    metrics::set_metric_position,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -140,10 +139,6 @@ pub(crate) fn master_location_values(master: &FontMaster, axis_count: usize) -> 
                 .map(|value| value.into_inner())
         })
         .collect()
-}
-
-pub(crate) fn component_transform(component: &GlyphsComponent) -> [f64; 6] {
-    component.transform.as_coeffs()
 }
 
 pub(crate) fn missing_component_details(name: &str) -> String {
@@ -268,34 +263,19 @@ pub(crate) fn font_header(
             }
         }
         let source_id = font.add_source(Source::new(master.name.clone(), location));
-        let metric_definitions = font.metric_definitions().to_vec();
+        font.set_standard_metrics(
+            &source_id,
+            StandardMetrics {
+                ascender: master.ascender(),
+                descender: master.descender(),
+                cap_height: master.cap_height(),
+                x_height: master.x_height(),
+                baseline: None,
+            },
+        )?;
         let source = font
             .source_mut(&source_id)
             .expect("a newly added source should exist");
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::Ascender,
-            master.ascender(),
-        );
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::Descender,
-            master.descender(),
-        );
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::CapHeight,
-            master.cap_height(),
-        );
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::XHeight,
-            master.x_height(),
-        );
         source.set_italic_angle(master.italic_angle());
         source_ids_by_master_id.insert(master.id.clone(), source_id.clone());
         if master_index == glyphs_font.default_master_idx {
@@ -490,18 +470,10 @@ pub(super) fn convert_glyph(
                                 component.name.as_str(),
                             ))
                         })?;
-                    let coeffs = component_transform(component);
                     result_layer.add_component(Component::with_matrix(
                         base_glyph_id.clone(),
                         component.name.to_string(),
-                        &Transform {
-                            xx: coeffs[0],
-                            xy: coeffs[1],
-                            yx: coeffs[2],
-                            yy: coeffs[3],
-                            dx: coeffs[4],
-                            dy: coeffs[5],
-                        },
+                        &Transform::from_values(component.transform.as_coeffs()),
                     ));
                 }
             }

@@ -19,7 +19,6 @@ mod glyph_subset;
 pub mod import;
 mod import_report;
 mod kerning_import;
-mod metrics;
 mod numeric;
 pub mod shaper_font;
 mod shift2fontir;

@@ -436,10 +436,37 @@ pub struct AffineTransform {
     pub dy: f64,
 }
 
+impl From<&norad::AffineTransform> for AffineTransform {
+    fn from(transform: &norad::AffineTransform) -> Self {
+        Self {
+            xx: transform.x_scale,
+            xy: transform.xy_scale,
+            yx: transform.yx_scale,
+            yy: transform.y_scale,
+            dx: transform.x_offset,
+            dy: transform.y_offset,
+        }
+    }
+}
+
 impl AffineTransform {
     /// Encodes the transform in [`shift_font::Transform::VALUE_FIELDS`] order.
     pub fn to_values(self) -> [f64; shift_font::Transform::VALUE_COUNT] {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
+    }
+
+    /// Decodes a transform from [`shift_font::Transform::VALUE_FIELDS`] order.
+    pub fn from_values(
+        [xx, xy, yx, yy, dx, dy]: [f64; shift_font::Transform::VALUE_COUNT],
+    ) -> Self {
+        Self {
+            xx,
+            xy,
+            yx,
+            yy,
+            dx,
+            dy,
+        }
     }
 
     pub const fn identity() -> Self {

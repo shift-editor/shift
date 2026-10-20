@@ -1,3 +1,4 @@
+use crate::Source;
 use crate::entity::MetricId;
 use serde::{Deserialize, Serialize};
 
@@ -149,5 +150,103 @@ mod tests {
             MetricValue::for_kind(MetricKind::XHeight, 2000.0),
             MetricValue::new(1000.0, 32.0)
         );
+    }
+
+    #[test]
+    fn standard_metrics_write_present_roles_and_keep_overshoot() {
+        let mut font = crate::Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let before = font.standard_metrics(&source_id).unwrap();
+        let x_height_id = font
+            .metric_definition_for_kind(MetricKind::XHeight)
+            .unwrap()
+            .id();
+        font.source_mut(&source_id)
+            .unwrap()
+            .set_metric_value(x_height_id.clone(), MetricValue::new(500.0, 12.0));
+
+        font.set_standard_metrics(
+            &source_id,
+            StandardMetrics {
+                ascender: Some(780.0),
+                x_height: Some(520.0),
+                ..StandardMetrics::default()
+            },
+        )
+        .unwrap();
+
+        let after = font.standard_metrics(&source_id).unwrap();
+        assert_eq!(after.ascender, Some(780.0));
+        assert_eq!(after.x_height, Some(520.0));
+        assert_eq!(after.descender, before.descender);
+        let x_height = font
+            .source(&source_id)
+            .unwrap()
+            .metric_value(&x_height_id)
+            .unwrap();
+        assert_eq!(x_height.overshoot, 12.0);
+    }
+}
+
+/// The positions of a source's standard metrics, each `None` when the source
+/// has no value for that role.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StandardMetrics {
+    pub ascender: Option<f64>,
+    pub cap_height: Option<f64>,
+    pub x_height: Option<f64>,
+    pub baseline: Option<f64>,
+    pub descender: Option<f64>,
+}
+
+impl StandardMetrics {
+    /// Reads `source`'s positions for the roles `definitions` define.
+    pub fn of(source: &Source, definitions: &[MetricDefinition]) -> Self {
+        let position = |kind| {
+            let definition = definitions
+                .iter()
+                .find(|definition| definition.kind() == kind)?;
+            source
+                .metric_value(&definition.id())
+                .map(|value| value.position)
+        };
+        Self {
+            ascender: position(MetricKind::Ascender),
+            cap_height: position(MetricKind::CapHeight),
+            x_height: position(MetricKind::XHeight),
+            baseline: position(MetricKind::Baseline),
+            descender: position(MetricKind::Descender),
+        }
+    }
+
+    /// Writes each present position into `source`, keeping the overshoot it
+    /// already has. Roles that `definitions` does not define are skipped.
+    pub fn apply_to(self, source: &mut Source, definitions: &[MetricDefinition]) {
+        for (kind, position) in self.by_kind() {
+            let Some(position) = position else {
+                continue;
+            };
+            let Some(definition) = definitions
+                .iter()
+                .find(|definition| definition.kind() == kind)
+            else {
+                continue;
+            };
+            let overshoot = source
+                .metric_value(&definition.id())
+                .map(|value| value.overshoot)
+                .unwrap_or_default();
+            source.set_metric_value(definition.id(), MetricValue::new(position, overshoot));
+        }
+    }
+
+    fn by_kind(self) -> [(MetricKind, Option<f64>); 5] {
+        [
+            (MetricKind::Ascender, self.ascender),
+            (MetricKind::CapHeight, self.cap_height),
+            (MetricKind::XHeight, self.x_height),
+            (MetricKind::Baseline, self.baseline),
+            (MetricKind::Descender, self.descender),
+        ]
     }
 }

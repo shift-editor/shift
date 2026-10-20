@@ -1,11 +1,11 @@
 use crate::atomic::sync_parent;
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use crate::metrics::metric_position;
 use crate::numeric::{rounded_i32, saturating_u32};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
-    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, MetricKind, Point, PointType,
+    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, Point, PointType,
+    StandardMetrics,
 };
 use std::path::{Path, PathBuf};
 
@@ -372,26 +372,11 @@ impl UfoWriter {
         let default_source = font
             .default_source()
             .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
-        font_info.ascender = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::Ascender,
-        );
-        font_info.descender = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::Descender,
-        );
-        font_info.cap_height = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::CapHeight,
-        );
-        font_info.x_height = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::XHeight,
-        );
+        let metrics = StandardMetrics::of(default_source, font.metric_definitions());
+        font_info.ascender = metrics.ascender;
+        font_info.descender = metrics.descender;
+        font_info.cap_height = metrics.cap_height;
+        font_info.x_height = metrics.x_height;
         font_info.italic_angle = default_source.italic_angle();
         font_info.open_type_hhea_line_gap = default_source.line_gap().map(rounded_i32);
         font_info.open_type_os2_typo_line_gap = default_source.line_gap().map(rounded_i32);
