@@ -24,7 +24,7 @@ use report::{
     MasterKerning, PairRow, SourceReference,
 };
 pub(crate) use report::{GroupReport, PairReport, SideReport};
-pub use report::{KerningGroupsReport, KerningListReport, KerningResolutionReport};
+pub(crate) use report::{KerningGroupsReport, KerningListReport, KerningResolutionReport};
 
 /// Lists authored pairs with one value per master.
 ///
@@ -35,7 +35,7 @@ pub use report::{KerningGroupsReport, KerningListReport, KerningResolutionReport
 /// # Errors
 ///
 /// Reports unreadable fonts and unresolved source or glyph selectors.
-pub fn list_kerning(args: ListKerningArgs) -> Result<KerningListReport> {
+pub(crate) fn list_kerning(args: ListKerningArgs) -> Result<KerningListReport> {
     let font = read_font(&args.path)?;
     let kerning = font.kerning();
     let sources = match args.source.as_deref() {
@@ -100,7 +100,7 @@ pub fn list_kerning(args: ListKerningArgs) -> Result<KerningListReport> {
 /// # Errors
 ///
 /// Reports unreadable fonts.
-pub fn kerning_groups(args: KerningGroupsArgs) -> Result<KerningGroupsReport> {
+pub(crate) fn kerning_groups(args: KerningGroupsArgs) -> Result<KerningGroupsReport> {
     let font = read_font(&args.path)?;
     let position = args.position.map(KerningPosition::from);
     let mut groups = font
@@ -128,7 +128,7 @@ pub fn kerning_groups(args: KerningGroupsArgs) -> Result<KerningGroupsReport> {
 /// # Errors
 ///
 /// Reports unreadable fonts, unresolved glyphs, and invalid locations.
-pub fn get_kerning(args: GetKerningArgs) -> Result<KerningResolutionReport> {
+pub(crate) fn get_kerning(args: GetKerningArgs) -> Result<KerningResolutionReport> {
     let font = read_font(&args.path)?;
     let first = resolve_glyph_id(&font, &args.first)?;
     let second = resolve_glyph_id(&font, &args.second)?;

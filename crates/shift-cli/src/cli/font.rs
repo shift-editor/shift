@@ -5,7 +5,7 @@ use clap::{Args, ValueHint};
 use super::MutationArgs;
 
 #[derive(Debug, Args)]
-pub struct FontInfoArgs {
+pub(crate) struct FontInfoArgs {
     /// Canonical SQLite .shift document to inspect.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -20,7 +20,7 @@ pub struct FontInfoArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct SetFontArgs {
+pub(crate) struct SetFontArgs {
     /// Canonical SQLite .shift document to edit.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,

@@ -4,23 +4,23 @@ use std::path::{Path, PathBuf};
 
 use fontsrc::ufo::{DirEntry, FontSource};
 
-pub struct MemorySource {
+pub(crate) struct MemorySource {
     files: HashMap<PathBuf, Vec<u8>>,
     directories: HashMap<PathBuf, Vec<DirEntry>>,
 }
 
 impl MemorySource {
-    pub fn read(root: &Path) -> io::Result<Self> {
+    pub(crate) fn read(root: &Path) -> io::Result<Self> {
         Ok(Self::from_files(Self::read_files(root)?))
     }
 
-    pub fn read_files(root: &Path) -> io::Result<HashMap<PathBuf, Vec<u8>>> {
+    pub(crate) fn read_files(root: &Path) -> io::Result<HashMap<PathBuf, Vec<u8>>> {
         let mut files = HashMap::new();
         Self::read_directory(root, Path::new(""), &mut files)?;
         Ok(files)
     }
 
-    pub fn from_files(files: HashMap<PathBuf, Vec<u8>>) -> Self {
+    pub(crate) fn from_files(files: HashMap<PathBuf, Vec<u8>>) -> Self {
         let mut directories = HashMap::<PathBuf, BTreeSet<DirEntry>>::new();
         for path in files.keys() {
             let parent = path.parent().unwrap_or_else(|| Path::new(""));

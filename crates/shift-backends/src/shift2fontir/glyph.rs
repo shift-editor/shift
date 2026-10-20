@@ -24,7 +24,7 @@ pub(super) struct GlyphWork {
 }
 
 impl GlyphWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>, glyph: Glyph) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>, glyph: Glyph) -> Self {
         let glyph_name = glyph.name().into();
         Self {
             snapshot,

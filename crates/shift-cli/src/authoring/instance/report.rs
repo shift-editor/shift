@@ -7,7 +7,7 @@ use shift_font::{Font, NamedInstance};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InstanceReport {
+pub(crate) struct InstanceReport {
     pub instance_id: String,
     pub name: String,
     pub location: BTreeMap<String, f64>,

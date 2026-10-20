@@ -1,7 +1,7 @@
 use clap::{Args, Subcommand, ValueEnum};
 
 #[derive(Debug, Subcommand)]
-pub enum SkillCommand {
+pub(crate) enum SkillCommand {
     /// Print the skill, or one of its reference topics.
     Show(ShowSkillArgs),
 
@@ -13,7 +13,7 @@ pub enum SkillCommand {
 }
 
 #[derive(Debug, Args)]
-pub struct SkillIdentityArgs {
+pub(crate) struct SkillIdentityArgs {
     /// The command the skill names, such as shift-cli-nightly. Defaults to the
     /// name this program was run as, so each Shift build installs its own skill.
     #[arg(long, value_name = "NAME")]
@@ -21,7 +21,7 @@ pub struct SkillIdentityArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct ShowSkillArgs {
+pub(crate) struct ShowSkillArgs {
     /// Section to print; the overview lists the others.
     #[arg(value_enum, default_value_t = SkillTopic::Overview)]
     pub topic: SkillTopic,
@@ -31,7 +31,7 @@ pub struct ShowSkillArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct InstallSkillArgs {
+pub(crate) struct InstallSkillArgs {
     /// Install into your home directory for every project, instead of the current directory.
     #[arg(short, long)]
     pub global: bool,
@@ -57,7 +57,7 @@ pub struct InstallSkillArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct SkillStatusArgs {
+pub(crate) struct SkillStatusArgs {
     /// Check your home directory instead of the current directory.
     #[arg(short, long)]
     pub global: bool,
@@ -75,7 +75,7 @@ pub struct SkillStatusArgs {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum SkillTopic {
+pub(crate) enum SkillTopic {
     Overview,
     Mcp,
     Cli,
@@ -86,7 +86,7 @@ pub enum SkillTopic {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum SkillAgent {
+pub(crate) enum SkillAgent {
     /// `.agents/skills` (Codex, OpenCode, VS Code, Cursor) and `.claude/skills` (Claude Code).
     All,
     /// `.agents/skills`, read by Codex, OpenCode, VS Code, and Cursor.
