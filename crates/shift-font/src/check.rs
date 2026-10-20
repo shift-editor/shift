@@ -17,6 +17,7 @@ mod designspace;
 mod health;
 mod kerning;
 mod outline;
+mod polygon;
 mod roles;
 
 pub use coverage::Charset;

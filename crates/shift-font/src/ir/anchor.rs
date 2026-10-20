@@ -44,8 +44,8 @@ impl Anchor {
         self.y
     }
 
-    pub fn position(&self) -> (f64, f64) {
-        (self.x, self.y)
+    pub fn position(&self) -> kurbo::Point {
+        kurbo::Point::new(self.x, self.y)
     }
 
     pub fn set_position(&mut self, x: f64, y: f64) {
@@ -79,10 +79,10 @@ mod tests {
     fn anchor_mutation() {
         let mut a = Anchor::new("top".to_string(), 250.0, 700.0);
         a.set_position(300.0, 750.0);
-        assert_eq!(a.position(), (300.0, 750.0));
+        assert_eq!(a.position(), kurbo::Point::new(300.0, 750.0));
 
         a.translate(-50.0, 50.0);
-        assert_eq!(a.position(), (250.0, 800.0));
+        assert_eq!(a.position(), kurbo::Point::new(250.0, 800.0));
 
         a.set_name(None::<String>);
         assert_eq!(a.name(), None);

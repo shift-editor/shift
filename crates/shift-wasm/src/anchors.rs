@@ -233,7 +233,7 @@ impl AnchorLike for AlignmentAnchor {
         self.name.as_deref()
     }
 
-    fn position(&self) -> (f64, f64) {
-        (self.x, self.y)
+    fn position(&self) -> shift_font::kurbo::Point {
+        shift_font::kurbo::Point::new(self.x, self.y)
     }
 }
