@@ -3,7 +3,11 @@ use std::collections::{BTreeMap, HashMap};
 
 use shift_font as font;
 
-use crate::{FontInfo, ShiftStore, StoreError, source::SourceKind};
+use crate::{
+    FontInfo, ShiftStore, StoreError,
+    columns::{AxisRoleColumn, KerningPositionColumn, KerningSideColumns, MetricKindColumn},
+    source::SourceKind,
+};
 
 impl ShiftStore {
     /// Materializes the complete font. Use only for export/save boundaries;
@@ -90,15 +94,7 @@ fn load_metric_definitions(
     let mut stmt =
         conn.prepare("SELECT id, kind, name FROM metric_definitions ORDER BY order_index, id")?;
     let rows = stmt.query_map([], |row| {
-        let kind = match row.get::<_, String>(1)?.as_str() {
-            "ascender" => font::MetricKind::Ascender,
-            "cap_height" => font::MetricKind::CapHeight,
-            "x_height" => font::MetricKind::XHeight,
-            "baseline" => font::MetricKind::Baseline,
-            "descender" => font::MetricKind::Descender,
-            "custom" => font::MetricKind::Custom,
-            value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
-        };
+        let MetricKindColumn(kind) = row.get(1)?;
         Ok(font::MetricDefinition::with_id(
             row.get::<_, font::MetricId>(0)?,
             kind,
@@ -171,11 +167,7 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
         } else {
             font::Axis::continuous_with_id(axis_id, tag, name, row.get(3)?, default, row.get(5)?)
         };
-        axis.set_role(match row.get::<_, String>(6)?.as_str() {
-            "external" => font::AxisRole::External,
-            "internal" => font::AxisRole::Internal,
-            value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
-        });
+        axis.set_role(row.get::<_, AxisRoleColumn>(6)?.0);
         let labels_json = row.get::<_, String>(8)?;
         axis.set_labels(serde_json::from_str(&labels_json).map_err(json_column_error)?);
         axis.set_hidden(row.get(9)?);
@@ -470,8 +462,8 @@ fn load_kerning(conn: &rusqlite::Connection) -> Result<font::Kerning, StoreError
     for row in stmt.query_map([], KerningPairRow::read)? {
         let row = row?;
         let pair = font::KerningPair::new(
-            kerning_side(&row.first_kind, row.first_value)?,
-            kerning_side(&row.second_kind, row.second_value)?,
+            KerningSideColumns::read(&row.first_kind, row.first_value)?,
+            KerningSideColumns::read(&row.second_kind, row.second_value)?,
         );
         kerning.set_value(row.source_id, pair, row.value);
     }
@@ -516,7 +508,7 @@ fn load_kerning_groups(
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
+                row.get::<_, KerningPositionColumn>(1)?.0,
                 row.get::<_, String>(2)?,
             ))
         })?
@@ -538,32 +530,10 @@ fn load_kerning_groups(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok((
                 font::KerningGroupId::from_raw(group_id),
-                font::KerningGroup::new(kerning_position(position)?, name, members),
+                font::KerningGroup::new(position, name, members),
             ))
         })
         .collect()
-}
-
-fn kerning_position(column: i64) -> Result<font::KerningPosition, StoreError> {
-    match column {
-        1 => Ok(font::KerningPosition::First),
-        2 => Ok(font::KerningPosition::Second),
-        _ => Err(StoreError::InvalidDocument(format!(
-            "unknown kerning group position {column}"
-        ))),
-    }
-}
-
-fn kerning_side(kind: &str, value: String) -> Result<font::KerningSide, StoreError> {
-    match kind {
-        "glyph" => Ok(font::KerningSide::Glyph(font::GlyphId::from_raw(value))),
-        "group" => Ok(font::KerningSide::Group(font::KerningGroupId::from_raw(
-            value,
-        ))),
-        _ => Err(StoreError::InvalidDocument(format!(
-            "unknown kerning side kind {kind:?}"
-        ))),
-    }
 }
 
 fn load_lib_data(

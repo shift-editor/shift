@@ -7,6 +7,7 @@ use shift_font as font;
 
 use crate::{
     ShiftStore, StoreError,
+    columns::{AxisRoleColumn, KerningPositionColumn, KerningSideColumns, MetricKindColumn},
     layer::write_layer_in_tx,
     source::SourceKind,
     workspace_state::{SaveState, mark_workspace_changed_in_tx},
@@ -346,8 +347,14 @@ impl<'a> StoreWriter<'a> {
         pair: &font::KerningPair,
         value: Option<f64>,
     ) -> Result<(), StoreError> {
-        let (first_kind, first_value) = kerning_side_parts(&pair.first);
-        let (second_kind, second_value) = kerning_side_parts(&pair.second);
+        let KerningSideColumns {
+            kind: first_kind,
+            value: first_value,
+        } = KerningSideColumns::of(&pair.first);
+        let KerningSideColumns {
+            kind: second_kind,
+            value: second_value,
+        } = KerningSideColumns::of(&pair.second);
         match value {
             Some(value) => {
                 self.tx.execute(
@@ -537,10 +544,7 @@ impl<'a> StoreWriter<'a> {
         order_index: i64,
         upsert: bool,
     ) -> Result<(), StoreError> {
-        let role = match axis.role() {
-            font::AxisRole::External => "external",
-            font::AxisRole::Internal => "internal",
-        };
+        let role = AxisRoleColumn(axis.role());
         let discrete_values_json = axis
             .discrete_values()
             .map(serde_json::to_string)
@@ -615,14 +619,7 @@ impl<'a> StoreWriter<'a> {
     ) -> Result<(), StoreError> {
         self.tx.execute("DELETE FROM metric_definitions", [])?;
         for (order_index, definition) in definitions.iter().enumerate() {
-            let kind = match definition.kind() {
-                font::MetricKind::Ascender => "ascender",
-                font::MetricKind::CapHeight => "cap_height",
-                font::MetricKind::XHeight => "x_height",
-                font::MetricKind::Baseline => "baseline",
-                font::MetricKind::Descender => "descender",
-                font::MetricKind::Custom => "custom",
-            };
+            let kind = MetricKindColumn(definition.kind());
             self.tx.execute(
                 "INSERT INTO metric_definitions (id, kind, name, order_index) VALUES (?1, ?2, ?3, ?4)",
                 params![
@@ -971,8 +968,14 @@ impl<'a> StoreWriter<'a> {
         )?;
         for (source_id, source) in kerning.sources() {
             for (pair, value) in source.pairs() {
-                let (first_kind, first_value) = kerning_side_parts(&pair.first);
-                let (second_kind, second_value) = kerning_side_parts(&pair.second);
+                let KerningSideColumns {
+                    kind: first_kind,
+                    value: first_value,
+                } = KerningSideColumns::of(&pair.first);
+                let KerningSideColumns {
+                    kind: second_kind,
+                    value: second_value,
+                } = KerningSideColumns::of(&pair.second);
                 insert_pair.execute(params![
                     source_id.as_str(),
                     first_kind,
@@ -991,7 +994,7 @@ impl<'a> StoreWriter<'a> {
         group_id: &font::KerningGroupId,
         group: &font::KerningGroup,
     ) -> Result<(), StoreError> {
-        let position = kerning_position_column(group.position);
+        let position = KerningPositionColumn(group.position);
         self.tx.execute(
             "
             INSERT INTO kerning_groups (id, position, name)
@@ -1144,21 +1147,6 @@ impl<'a> SourceRow<'a> {
             underline_thickness: source.underline_thickness(),
             order_index,
         }
-    }
-}
-
-/// Returns the `position` column value stored for a kerning pair position.
-pub(crate) fn kerning_position_column(position: font::KerningPosition) -> i64 {
-    match position {
-        font::KerningPosition::First => 1,
-        font::KerningPosition::Second => 2,
-    }
-}
-
-fn kerning_side_parts(side: &font::KerningSide) -> (&'static str, &str) {
-    match side {
-        font::KerningSide::Glyph(glyph_id) => ("glyph", glyph_id.as_str()),
-        font::KerningSide::Group(group_id) => ("group", group_id.as_str()),
     }
 }
 
