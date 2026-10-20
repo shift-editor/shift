@@ -162,14 +162,13 @@ impl ShiftIrSource {
                 named_instances: font.named_instances().to_vec(),
                 sources: font.sources().to_vec(),
                 default_source_id,
-                glyphs: font.glyphs().into_iter().cloned().collect(),
+                glyphs: font.glyphs().cloned().collect(),
                 kerning: font.kerning().clone(),
                 features: font.features().clone(),
                 gdef_classes: gdef_classes(font.glyphs(), font.lib()),
                 nonspacing_marks: {
                     let categories = GlyphCategories::new();
                     font.glyphs()
-                        .into_iter()
                         .filter(|glyph| categories.resolve(glyph).is_nonspacing_mark())
                         .map(|glyph| glyph.name().to_string())
                         .collect()
@@ -177,7 +176,6 @@ impl ShiftIrSource {
                 mark_category_glyphs: {
                     let categories = GlyphCategories::new();
                     font.glyphs()
-                        .into_iter()
                         .filter(|glyph| categories.resolve(glyph).is_mark())
                         .map(|glyph| glyph.name().to_string())
                         .collect()

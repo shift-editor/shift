@@ -13,7 +13,7 @@ pub trait FontView {
     fn named_instances(&self) -> &[NamedInstance];
     fn sources(&self) -> &[Source];
     fn default_source_id(&self) -> Option<SourceId>;
-    fn glyphs(&self) -> Vec<&Glyph>;
+    fn glyphs(&self) -> impl Iterator<Item = &Glyph>;
     fn glyph(&self, name: &str) -> Option<&Glyph>;
     fn kerning(&self) -> &Kerning;
     fn features(&self) -> &FeatureData;
@@ -63,8 +63,8 @@ impl FontView for Font {
         self.default_source_id()
     }
 
-    fn glyphs(&self) -> Vec<&Glyph> {
-        self.glyphs().collect()
+    fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
+        self.glyphs()
     }
 
     fn glyph(&self, name: &str) -> Option<&Glyph> {

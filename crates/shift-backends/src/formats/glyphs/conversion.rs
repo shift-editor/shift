@@ -153,14 +153,12 @@ impl GlyphsFontExt for GlyphsFont {
 /// Reads a Glyphs master's location.
 pub(crate) trait GlyphsMasterExt {
     /// Returns the master's value on each of the first `axis_count` axes.
-    fn location_values(&self, axis_count: usize) -> Vec<Option<f64>>;
+    fn location_values(&self, axis_count: usize) -> impl Iterator<Item = Option<f64>>;
 }
 
 impl GlyphsMasterExt for FontMaster {
-    fn location_values(&self, axis_count: usize) -> Vec<Option<f64>> {
-        (0..axis_count)
-            .map(|index| self.axes_values.get(index).map(|value| value.into_inner()))
-            .collect()
+    fn location_values(&self, axis_count: usize) -> impl Iterator<Item = Option<f64>> {
+        (0..axis_count).map(|index| self.axes_values.get(index).map(|value| value.into_inner()))
     }
 }
 
