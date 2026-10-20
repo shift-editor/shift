@@ -232,7 +232,7 @@ mod tests {
                 .unwrap()
                 .points()
                 .iter()
-                .map(|point| point.point_type())
+                .map(shift_font::Point::point_type)
                 .collect::<Vec<_>>(),
             vec![
                 IrPointType::OnCurve,

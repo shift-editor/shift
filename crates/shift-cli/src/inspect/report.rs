@@ -467,7 +467,7 @@ impl GlyphSummary {
 impl GlyphLayerSummary {
     fn from_layer(layer: &GlyphLayer, source_names_by_id: &HashMap<SourceId, String>) -> Self {
         let source_id = layer.source_id();
-        let point_count = layer.contours_iter().map(|contour| contour.len()).sum();
+        let point_count = layer.contours_iter().map(shift_font::Contour::len).sum();
 
         Self {
             id: layer.id().to_string(),

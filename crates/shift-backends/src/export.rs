@@ -558,10 +558,8 @@ mod tests {
             72.0,
         );
         optical.set_role(AxisRole::Internal);
-        let mut input = Location::new();
-        input.set(weight.id(), 400.0);
-        let mut output = Location::new();
-        output.set(optical.id(), 12.0);
+        let input = Location::from([(weight.id(), 400.0)]);
+        let output = Location::from([(optical.id(), 12.0)]);
         let mapping = AxisMapping::new(
             "Optical compensation".to_string(),
             vec![weight.id()],

@@ -1610,7 +1610,7 @@ fn validate_source_values(
     axes: &[Axis],
     definitions: &[MetricDefinition],
 ) -> CoreResult<()> {
-    for (axis_id, value) in source.location().iter() {
+    for (axis_id, value) in source.location() {
         if !axes.iter().any(|axis| axis.id() == *axis_id) {
             return Err(CoreError::AxisNotFound(axis_id.clone()));
         }
@@ -1870,8 +1870,7 @@ mod tests {
     }
 
     fn independent_axis_mapping(name: &str, axis: &Axis) -> AxisMapping {
-        let mut input = Location::new();
-        input.set(axis.id(), axis.default());
+        let input = Location::from([(axis.id(), axis.default())]);
         let output = input.clone();
 
         AxisMapping::new(
@@ -1887,10 +1886,7 @@ mod tests {
     }
 
     fn cross_axis_mapping(name: &str, axes: &[Axis]) -> AxisMapping {
-        let mut input = Location::new();
-        for axis in axes {
-            input.set(axis.id(), axis.default());
-        }
+        let input = Location::at_defaults(axes);
         let output = input.clone();
         let axis_ids = axes.iter().map(Axis::id).collect::<Vec<_>>();
 
@@ -1993,10 +1989,8 @@ mod tests {
         let axis_id = axis.id();
         font.add_axis(axis.clone())
             .expect("test axis should be valid");
-        let mut input = Location::new();
-        input.set(axis_id.clone(), 900.0);
-        let mut output = Location::new();
-        output.set(axis_id.clone(), 800.0);
+        let input = Location::from([(axis_id.clone(), 900.0)]);
+        let output = Location::from([(axis_id.clone(), 800.0)]);
         font.set_axis_mappings(vec![AxisMapping::new(
             "Weight curve".to_string(),
             vec![axis_id.clone()],
@@ -2027,12 +2021,8 @@ mod tests {
         font.add_axis(weight).expect("weight axis should be valid");
         font.add_axis(width).expect("width axis should be valid");
 
-        let mut narrow = ExternalLocation::new();
-        narrow.set(weight_id.clone(), 400.0);
-        narrow.set(width_id.clone(), 75.0);
-        let mut wide = ExternalLocation::new();
-        wide.set(weight_id, 400.0);
-        wide.set(width_id.clone(), 125.0);
+        let narrow = ExternalLocation::from([(weight_id.clone(), 400.0), (width_id.clone(), 75.0)]);
+        let wide = ExternalLocation::from([(weight_id, 400.0), (width_id.clone(), 125.0)]);
         font.set_named_instances(vec![
             NamedInstance::new("Narrow".to_string(), narrow, None),
             NamedInstance::new("Wide".to_string(), wide, None),

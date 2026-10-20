@@ -91,7 +91,7 @@ fn selected_sources(font: &Font, sources: &ExportSources) -> Result<Vec<SourceId
             .find(|source| source.name() == name)
             .map(|source| vec![source.id()])
             .ok_or_else(|| miette!("source {name:?} does not exist")),
-        ExportSources::All => Ok(font.sources().iter().map(|source| source.id()).collect()),
+        ExportSources::All => Ok(font.sources().iter().map(shift_font::Source::id).collect()),
     }
 }
 

@@ -98,6 +98,21 @@ impl From<BTreeMap<String, LibValue>> for LibData {
     }
 }
 
+impl FromIterator<(String, LibValue)> for LibData {
+    fn from_iter<I: IntoIterator<Item = (String, LibValue)>>(data: I) -> Self {
+        Self::from_map(data)
+    }
+}
+
+impl<'a> IntoIterator for &'a LibData {
+    type Item = (&'a String, &'a LibValue);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, LibValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

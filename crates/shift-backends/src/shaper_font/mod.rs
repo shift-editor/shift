@@ -96,7 +96,7 @@ impl ShaperFontRequest {
         let axes = to_ir_axes(font.axes(), font.axis_mappings())?;
         let (glyph_names, glyph_ids) = std::iter::once((
             NOTDEF.to_string(),
-            font.glyph(NOTDEF).map(|glyph| glyph.id()),
+            font.glyph(NOTDEF).map(shift_font::Glyph::id),
         ))
         .chain(
             font.glyphs()
@@ -112,7 +112,7 @@ impl ShaperFontRequest {
             glyph_ids,
             feature_source: font.features().fea_source().unwrap_or_default().to_string(),
             axes,
-            axis_ids: font.axes().iter().map(|axis| axis.id()).collect(),
+            axis_ids: font.axes().iter().map(shift_font::Axis::id).collect(),
             gdef_classes: gdef_classes(font.glyphs(), font.lib()),
         })
     }

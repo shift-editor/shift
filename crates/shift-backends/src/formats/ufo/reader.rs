@@ -98,7 +98,7 @@ impl UfoReader {
 
     pub(crate) fn convert_anchor(anchor: &norad::Anchor) -> Anchor {
         Anchor::new(
-            anchor.name.as_ref().map(|name| name.to_string()),
+            anchor.name.as_ref().map(ToString::to_string),
             anchor.x,
             anchor.y,
         )
@@ -110,8 +110,8 @@ impl UfoReader {
             Line::Vertical(x) => Guideline::vertical(x),
             Line::Angle { x, y, degrees } => Guideline::angled(x, y, degrees),
         };
-        converted.set_name(guideline.name.as_ref().map(|name| name.to_string()));
-        converted.set_color(guideline.color.as_ref().map(|color| color.to_rgba_string()));
+        converted.set_name(guideline.name.as_ref().map(ToString::to_string));
+        converted.set_color(guideline.color.as_ref().map(norad::Color::to_rgba_string));
         converted
     }
 
@@ -132,7 +132,7 @@ impl UfoReader {
             }
             plist::Value::Dictionary(dict) => {
                 let mut map = BTreeMap::new();
-                for (k, v) in dict.iter() {
+                for (k, v) in dict {
                     map.insert(k.clone(), Self::convert_plist_to_lib_value(v));
                 }
                 LibValue::Dict(map)
@@ -179,7 +179,7 @@ impl UfoReader {
 
     pub(crate) fn convert_lib(lib: &plist::Dictionary) -> LibData {
         let mut data = BTreeMap::new();
-        for (k, v) in lib.iter() {
+        for (k, v) in lib {
             data.insert(k.clone(), Self::convert_plist_to_lib_value(v));
         }
         LibData::from_map(data)

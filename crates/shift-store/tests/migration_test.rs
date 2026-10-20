@@ -97,7 +97,10 @@ fn assert_migrated_kerning(font: &shift_font::Font) {
         kerning.value(&regular, &KerningPair::glyphs(a, acute)),
         Some(-15.0)
     );
-    assert_eq!(kerning.source(&regular).map(|pairs| pairs.len()), Some(2));
+    assert_eq!(
+        kerning.source(&regular).map(shift_font::SourceKerning::len),
+        Some(2)
+    );
     assert_eq!(kerning.sources().count(), 1);
 }
 

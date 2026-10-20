@@ -257,7 +257,9 @@ fn convert_glyphs_layer(
         },
         metrics: GlyphMetrics {
             x_advance: layer.width.into_inner(),
-            y_advance: layer.vert_width.map(|value| value.into_inner()),
+            y_advance: layer
+                .vert_width
+                .map(ordered_float::OrderedFloat::into_inner),
         },
     })
 }

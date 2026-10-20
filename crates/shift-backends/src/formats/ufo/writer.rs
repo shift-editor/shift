@@ -236,7 +236,7 @@ impl UfoWriter {
             }
             LibValue::Dict(dict) => {
                 let mut plist_dict = plist::Dictionary::new();
-                for (k, v) in dict.iter() {
+                for (k, v) in dict {
                     plist_dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));
                 }
                 plist::Value::Dictionary(plist_dict)
@@ -251,7 +251,7 @@ impl UfoWriter {
 
     fn convert_lib(lib: &LibData) -> plist::Dictionary {
         let mut dict = plist::Dictionary::new();
-        for (k, v) in lib.iter() {
+        for (k, v) in lib {
             dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));
         }
         dict
@@ -477,7 +477,7 @@ impl UfoWriter {
             norad_font.features = fea_source.to_string();
         }
 
-        for (data_path, bytes) in font.data_files().iter() {
+        for (data_path, bytes) in font.data_files() {
             norad_font
                 .data
                 .insert(PathBuf::from(data_path), bytes.clone())

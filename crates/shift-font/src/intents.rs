@@ -1100,7 +1100,7 @@ impl Font {
             });
         }
 
-        for (axis_id, _) in location.iter() {
+        for (axis_id, _) in location {
             if self.axis(axis_id).is_none() {
                 return Err(CoreError::AxisNotFound(axis_id.clone()));
             }
@@ -1841,8 +1841,7 @@ mod tests {
         let axis = Axis::weight();
         let axis_id = axis.id();
         font.add_axis(axis).unwrap();
-        let mut location = DesignLocation::new();
-        location.set(axis_id, 700.0);
+        let location = DesignLocation::from([(axis_id, 700.0)]);
         font.add_source(Source::new("Bold".to_string(), location));
         let original = font.clone();
 
@@ -1869,8 +1868,7 @@ mod tests {
         let axis_id = axis.id();
         font.add_axis(axis).expect("weight axis should be valid");
         let source_id = SourceId::new();
-        let mut location = DesignLocation::new();
-        location.set(axis_id, 400.0);
+        let location = DesignLocation::from([(axis_id, 400.0)]);
 
         let result = font.apply_intents(&FontIntentSet {
             intents: vec![FontIntent::CreateSource {
@@ -2240,8 +2238,7 @@ mod tests {
             .expect("test glyph should be valid");
 
         let source_id = SourceId::new();
-        let mut location = DesignLocation::new();
-        location.set(axis_id, 700.0);
+        let location = DesignLocation::from([(axis_id, 700.0)]);
         font.apply_intents(&FontIntentSet {
             intents: vec![FontIntent::CreateSource {
                 source_id: source_id.clone(),
@@ -2273,7 +2270,7 @@ mod tests {
                 .contours_iter()
                 .next()
                 .and_then(|contour| contour.points().first())
-                .map(|point| point.id()),
+                .map(crate::Point::id),
             Some(source_point_id)
         );
     }

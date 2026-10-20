@@ -216,8 +216,7 @@ fn range_edits_cannot_strand_labels_or_named_instances() {
         }
         font.add_axis(axis.clone()).unwrap();
         if !labels {
-            let mut location = ExternalLocation::new();
-            location.set(axis.id(), 100.0);
+            let location = ExternalLocation::from([(axis.id(), 100.0)]);
             font.add_named_instance(NamedInstance::new("Thin".to_string(), location, None))
                 .unwrap();
         }

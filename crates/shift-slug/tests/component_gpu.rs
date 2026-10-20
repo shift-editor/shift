@@ -33,8 +33,7 @@ fn gpu_resolves_varying_component_transforms() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 600.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())

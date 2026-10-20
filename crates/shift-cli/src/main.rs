@@ -128,6 +128,10 @@ fn main() -> miette::Result<()> {
     }
 }
 
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "each report type is private to its module"
+)]
 fn kerning_command(command: KerningCommand) -> miette::Result<()> {
     match command {
         KerningCommand::List(args) => {

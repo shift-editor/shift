@@ -461,11 +461,11 @@ impl GlyphLayer {
         self.remove_contour_checked(contour_id_a)?;
         self.remove_contour_checked(contour_id_b)?;
 
-        let mut created_ids = Vec::new();
-        for contour in result.0 {
-            let contour_id = self.add_contour(contour);
-            created_ids.push(contour_id);
-        }
+        let created_ids = result
+            .0
+            .into_iter()
+            .map(|contour| self.add_contour(contour))
+            .collect();
 
         Ok(created_ids)
     }
@@ -983,10 +983,7 @@ mod tests {
 
         session.translate_layer(4.0, 0.0);
 
-        let order: Vec<_> = session
-            .components_iter()
-            .map(|component| component.id())
-            .collect();
+        let order: Vec<_> = session.components_iter().map(Component::id).collect();
         assert_eq!(order, vec![first.clone(), second]);
         let transform = session.component(&first).unwrap().transform();
         assert_eq!(transform.rotation, 33.0);

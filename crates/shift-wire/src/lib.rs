@@ -362,7 +362,7 @@ impl From<&IrGlyph> for GlyphRecord {
             .layers()
             .values()
             .flat_map(|layer| layer.components_iter())
-            .map(|component| component.base_glyph_id())
+            .map(shift_font::Component::base_glyph_id)
             .collect();
         component_base_glyph_ids.sort();
         component_base_glyph_ids.dedup();
@@ -585,7 +585,7 @@ impl LayerMatch {
             .collect();
         let points = reference
             .contours_iter()
-            .flat_map(|contour| contour.points())
+            .flat_map(shift_font::Contour::points)
             .filter_map(|point| {
                 layer_match
                     .point_for(&point.id())

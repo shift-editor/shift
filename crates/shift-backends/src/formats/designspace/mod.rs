@@ -249,10 +249,10 @@ mod tests {
     }
 
     fn location(values: &[(shift_font::AxisId, f64)]) -> Location {
-        let mut location = Location::new();
-        for (axis_id, value) in values {
-            location.set(axis_id.clone(), *value);
-        }
+        let location: Location = values
+            .iter()
+            .map(|(axis_id, value)| (axis_id.clone(), *value))
+            .collect();
         location
     }
 }

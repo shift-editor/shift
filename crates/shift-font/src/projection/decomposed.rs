@@ -304,11 +304,7 @@ fn component_glyphs(glyph: &Glyph) -> Vec<GlyphId> {
     glyph
         .layers()
         .values()
-        .flat_map(|layer| {
-            layer
-                .components_iter()
-                .map(|component| component.base_glyph_id())
-        })
+        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
         .collect()
 }
 

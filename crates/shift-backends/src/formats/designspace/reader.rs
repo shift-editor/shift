@@ -245,9 +245,7 @@ fn mapping_location_from_dimensions(
 }
 
 fn singleton_location(axis_id: AxisId, value: f64) -> Location {
-    let mut location = Location::new();
-    location.set(axis_id, value);
-    location
+    Location::from([(axis_id, value)])
 }
 
 fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {

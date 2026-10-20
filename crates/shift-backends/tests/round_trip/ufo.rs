@@ -503,12 +503,12 @@ fn preserves_components_anchors_layers_and_kerning() {
     let original_source_names: Vec<_> = original
         .sources()
         .iter()
-        .map(|source| source.name())
+        .map(shift_font::Source::name)
         .collect();
     let reloaded_source_names: Vec<_> = reloaded
         .sources()
         .iter()
-        .map(|source| source.name())
+        .map(shift_font::Source::name)
         .collect();
     assert_eq!(reloaded_source_names.len(), original_source_names.len());
     for name in original_source_names {

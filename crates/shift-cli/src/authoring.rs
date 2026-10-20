@@ -94,7 +94,7 @@ fn font_structure(path: &Path) -> Result<Font> {
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
     // Removing from the end keeps each removal an incremental index update.
-    let glyph_ids: Vec<_> = font.glyphs().map(|glyph| glyph.id()).collect();
+    let glyph_ids: Vec<_> = font.glyphs().map(shift_font::Glyph::id).collect();
     for glyph_id in glyph_ids.into_iter().rev() {
         font.pop_glyph(glyph_id).into_diagnostic()?;
     }
@@ -138,10 +138,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
 /// non-finite values, invalid source authoring, or persistence failures.
 pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
     let font = glyph::load_font(&args.path)?;
-    let mut location = DesignLocation::new();
-    for axis in font.axes() {
-        location.set(axis.id(), axis.default());
-    }
+    let mut location = DesignLocation::at_defaults(font.axes());
     for (axis_id, value) in parse_location(&font, &args.location)? {
         location.set(axis_id, value);
     }

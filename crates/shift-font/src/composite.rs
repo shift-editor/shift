@@ -512,19 +512,13 @@ pub fn resolved_contours_from_layers(
 /// Builds a single SVG path string from root contours and resolved component
 /// contours.
 pub fn layer_to_svg_path(layer: &GlyphLayer, component_contours: &[ResolvedContour]) -> String {
-    let mut parts = Vec::new();
-    for contour in layer.contours_iter() {
-        let d = contour_to_svg_d(contour.points(), contour.is_closed());
-        if !d.is_empty() {
-            parts.push(d);
-        }
-    }
-    for contour in component_contours {
-        let d = contour_to_svg_d(&contour.points, contour.closed);
-        if !d.is_empty() {
-            parts.push(d);
-        }
-    }
+    let own = layer
+        .contours_iter()
+        .map(|contour| contour_to_svg_d(contour.points(), contour.is_closed()));
+    let components = component_contours
+        .iter()
+        .map(|contour| contour_to_svg_d(&contour.points, contour.closed));
+    let parts: Vec<_> = own.chain(components).filter(|d| !d.is_empty()).collect();
     parts.join(" ")
 }
 

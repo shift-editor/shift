@@ -111,15 +111,11 @@ pub fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringReport> {
 }
 
 fn default_location(font: &Font) -> ExternalLocation {
-    let mut location = ExternalLocation::new();
-    for axis in font
+    let external = font
         .axes()
         .iter()
-        .filter(|axis| axis.role() == AxisRole::External)
-    {
-        location.set(axis.id(), axis.default());
-    }
-    location
+        .filter(|axis| axis.role() == AxisRole::External);
+    ExternalLocation::at_defaults(external)
 }
 
 fn resolve_instance<'a>(font: &'a Font, selector: &str) -> Result<&'a NamedInstance> {

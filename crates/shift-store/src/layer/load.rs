@@ -223,11 +223,10 @@ fn read_layer_directory(
     }
     drop(directory_stmt);
 
-    let mut decoded_byte_lengths = Vec::with_capacity(keys.len());
-    for key in keys {
-        let facts = facts.get(key).or_missing("glyph layer", key)?;
-        decoded_byte_lengths.push(facts.validate()?);
-    }
+    let decoded_byte_lengths = keys
+        .iter()
+        .map(|key| facts.get(key).or_missing("glyph layer", key)?.validate())
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(LayerDirectoryRead {
         facts,

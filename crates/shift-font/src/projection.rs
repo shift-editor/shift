@@ -416,7 +416,7 @@ impl Font {
                     .iter()
                     .flat_map(|source| source.components.components()),
             )
-            .map(|component| component.base_glyph_id())
+            .map(crate::composite::ComponentGlyph::base_glyph_id)
             .collect::<Vec<_>>();
         component_glyph_ids.sort();
         component_glyph_ids.dedup();
@@ -654,13 +654,10 @@ impl FontProjection<'_> {
     /// Returns the first interpolation error encountered while resolving a
     /// requested glyph or one of its component branches.
     pub fn glyphs(&mut self, glyph_ids: &[GlyphId]) -> CoreResult<Vec<ResolvedGlyph>> {
-        let mut glyphs = Vec::new();
-        for glyph_id in glyph_ids {
-            if let Some(glyph) = self.glyph(glyph_id)? {
-                glyphs.push(glyph);
-            }
-        }
-        Ok(glyphs)
+        glyph_ids
+            .iter()
+            .filter_map(|glyph_id| self.glyph(glyph_id).transpose())
+            .collect()
     }
 
     fn prepare_layer_tree(&mut self, glyph_id: &GlyphId) -> CoreResult<bool> {
@@ -753,11 +750,7 @@ fn component_base_glyph_ids(
                 .iter()
                 .map(|shape| &shape.layer),
         )
-        .flat_map(|layer| {
-            layer
-                .components_iter()
-                .map(|component| component.base_glyph_id())
-        })
+        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
 }
 
 fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
@@ -796,7 +789,7 @@ fn exact_source_id(
         .iter()
         .filter(|source| source.is_master())
         .find(|source| source.location().is_equivalent_to(location, axes))
-        .map(|source| source.id())
+        .map(Source::id)
 }
 
 #[cfg(test)]
@@ -832,9 +825,7 @@ mod tests {
     }
 
     fn location(axis_id: &AxisId, value: f64) -> DesignLocation {
-        let mut location = DesignLocation::new();
-        location.set(axis_id.clone(), value);
-        location
+        DesignLocation::from([(axis_id.clone(), value)])
     }
 
     fn line_layer(source_id: SourceId, x: f64) -> GlyphLayer {
@@ -893,8 +884,7 @@ mod tests {
                 .basis(),
         ));
 
-        let mut location = DesignLocation::new();
-        location.set(font.axes()[0].id(), 600.0);
+        let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
         let expected = font
             .projection(&location)
             .glyph(&root_ids[0])
@@ -917,8 +907,7 @@ mod tests {
     fn projection_interpolates_when_an_exact_source_has_no_glyph_layer() {
         let font = sample_variable_font();
         let glyph_id = font.glyph_by_name("A").unwrap().id();
-        let mut location = DesignLocation::new();
-        location.set(font.axes()[0].id(), 600.0);
+        let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
 
         let glyph = font
             .projection(&location)
@@ -1078,8 +1067,7 @@ mod tests {
         let bold = projection
             .resolve(bold_source.location(), font.axes(), font.sources())
             .unwrap();
-        let mut midpoint = DesignLocation::new();
-        midpoint.set(font.axes()[0].id(), 600.0);
+        let midpoint = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
         let interpolated = projection
             .resolve(&midpoint, font.axes(), font.sources())
             .unwrap();
@@ -1088,14 +1076,14 @@ mod tests {
         assert_eq!(projection.exact_source_components().len(), 1);
         assert_eq!(
             bold.components_iter()
-                .map(|component| component.base_glyph_id())
+                .map(Component::base_glyph_id)
                 .collect::<Vec<_>>(),
             vec![caron_id.clone(), c_id.clone()]
         );
         assert_eq!(
             interpolated
                 .components_iter()
-                .map(|component| component.base_glyph_id())
+                .map(Component::base_glyph_id)
                 .collect::<Vec<_>>(),
             vec![c_id, caron_id]
         );
@@ -1132,7 +1120,7 @@ mod tests {
                 .components()
                 .components()
                 .iter()
-                .map(|component| component.base_glyph_id())
+                .map(crate::composite::ComponentGlyph::base_glyph_id)
                 .collect::<Vec<_>>(),
             vec![base_id.clone()]
         );
@@ -1163,7 +1151,7 @@ mod tests {
                 .components()
                 .components()
                 .iter()
-                .map(|component| component.base_glyph_id())
+                .map(crate::composite::ComponentGlyph::base_glyph_id)
                 .collect::<Vec<_>>(),
             vec![base_id]
         );
@@ -1224,7 +1212,7 @@ mod tests {
                 .components()
                 .components()
                 .iter()
-                .map(|component| component.base_glyph_id())
+                .map(crate::composite::ComponentGlyph::base_glyph_id)
                 .collect::<Vec<_>>(),
             vec![acutecomb_id.clone(), acute_id.clone()]
         );

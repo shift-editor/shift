@@ -144,8 +144,7 @@ pub fn sample_font() -> Font {
     font.add_axis(width)
         .expect("sample width axis should be valid");
 
-    let mut regular_location = ExternalLocation::new();
-    regular_location.set(weight_id.clone(), 400.0);
+    let regular_location = ExternalLocation::from([(weight_id.clone(), 400.0)]);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("regular"),
         "Regular".to_string(),
@@ -172,12 +171,9 @@ pub fn sample_font() -> Font {
 
     let regular_id = SourceId::from_raw("regular");
     let bold_id = SourceId::from_raw("bold");
-    let mut regular_location = DesignLocation::new();
-    regular_location.set(weight_id.clone(), 400.0);
-    regular_location.set(width_id.clone(), 100.0);
-    let mut bold_location = DesignLocation::new();
-    bold_location.set(weight_id, 800.0);
-    bold_location.set(width_id, 112.5);
+    let regular_location =
+        DesignLocation::from([(weight_id.clone(), 400.0), (width_id.clone(), 100.0)]);
+    let bold_location = DesignLocation::from([(weight_id, 800.0), (width_id, 112.5)]);
     font.add_source(Source::with_id(
         regular_id.clone(),
         "Regular".to_string(),
@@ -370,8 +366,7 @@ pub fn sample_variable_font() -> Font {
     )])
     .expect("sample axis mapping should be valid");
 
-    let mut bold_instance_location = ExternalLocation::new();
-    bold_instance_location.set(weight_id.clone(), 900.0);
+    let bold_instance_location = ExternalLocation::from([(weight_id.clone(), 900.0)]);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("bold"),
         "Bold".to_string(),
@@ -386,17 +381,14 @@ pub fn sample_variable_font() -> Font {
     default_source.set_line_gap(Some(20.0));
     default_source.set_underline_position(Some(-100.0));
     default_source.set_underline_thickness(Some(50.0));
-    let mut default_location = DesignLocation::new();
-    default_location.set(weight_id.clone(), 400.0);
+    let default_location = DesignLocation::from([(weight_id.clone(), 400.0)]);
     font.source_mut(&default_source_id)
         .unwrap()
         .set_location(default_location);
 
-    let mut medium_location = DesignLocation::new();
-    medium_location.set(weight_id.clone(), 600.0);
+    let medium_location = DesignLocation::from([(weight_id.clone(), 600.0)]);
     font.add_source(Source::new("Medium".to_string(), medium_location));
-    let mut bold_location = DesignLocation::new();
-    bold_location.set(weight_id, 800.0);
+    let bold_location = DesignLocation::from([(weight_id, 800.0)]);
     let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
     set_source_metrics(&mut font, &bold_source_id, 820.0, -220.0, 720.0, 510.0);
 
@@ -469,10 +461,8 @@ fn set_source_metrics(
 }
 
 fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {
-    let mut input = Location::new();
-    input.set(axis.id(), user);
-    let mut output = Location::new();
-    output.set(axis.id(), design);
+    let input = Location::from([(axis.id(), user)]);
+    let output = Location::from([(axis.id(), design)]);
     AxisMappingPoint {
         description: None,
         input,

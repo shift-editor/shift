@@ -23,8 +23,7 @@ fn axis_and_product_batch_has_one_exact_undo_step_without_loading_geometry() {
         original.maximum(),
     );
     axis.set_labels(original.labels().to_vec());
-    let mut location = ExternalLocation::new();
-    location.set(original.id(), 700.0);
+    let location = ExternalLocation::from([(original.id(), 700.0)]);
     let book = NamedInstance::new("Book".to_string(), location, None);
     workspace
         .apply(
