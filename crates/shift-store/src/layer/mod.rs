@@ -11,7 +11,7 @@ mod tests;
 #[cfg(test)]
 use load::load_glyph_layer_batch_from_conn;
 #[cfg(test)]
-use payload::{LayerPayloadCompression, decompress_layer};
+use payload::LayerPayloadCompression;
 
 pub use directory::GlyphLayerDirectoryEntry;
 pub use format::GLYPH_LAYER_FORMAT;
@@ -19,7 +19,7 @@ pub use load::{MAX_LAYER_READ_BATCH_COUNT, MAX_LAYER_READ_BATCH_DECODED_BYTES};
 
 pub(crate) use format::encode_layer;
 pub(crate) use load::load_glyph_layers_from_conn;
-pub(crate) use payload::{StoredLayerPayload, compress_layer};
+pub(crate) use payload::StoredLayerPayload;
 #[cfg(test)]
 pub(crate) use write::rewrite_layer_in_tx;
 pub(crate) use write::{store_stored_layer_in_tx, write_layer_in_tx};
