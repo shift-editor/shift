@@ -484,7 +484,7 @@ fn source_location(
     identity
       .font_axes
       .iter()
-      .map(|axis| design.get(&axis.id()).unwrap_or(axis.default()))
+      .map(|axis| design.value_on(axis))
       .collect(),
   )
 }

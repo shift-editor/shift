@@ -1,5 +1,5 @@
 use crate::Require;
-use crate::axis::{Axis, AxisKind, AxisMapping, DesignLocation};
+use crate::axis::{Axis, AxisKind, AxisList, AxisMapping, DesignLocation};
 use crate::binary_data::BinaryData;
 use crate::collection::EntityList;
 use crate::entity::{
@@ -852,7 +852,7 @@ impl Font {
     }
 
     pub fn axis(&self, axis_id: &AxisId) -> Option<&Axis> {
-        self.data().axes.iter().find(|axis| axis.id() == *axis_id)
+        self.data().axes.axis(axis_id)
     }
 
     pub fn axis_id_by_tag(&self, tag: &str) -> Option<AxisId> {
@@ -881,6 +881,26 @@ impl Font {
     /// the font and round-trip through export, but the editor never addresses them.
     pub fn masters(&self) -> impl Iterator<Item = &Source> {
         self.sources().iter().filter(|source| source.is_master())
+    }
+
+    /// Returns the default source when it is a master.
+    pub fn default_master(&self) -> Option<&Source> {
+        self.default_source().filter(|source| source.is_master())
+    }
+
+    /// Returns `glyph`'s layer on the [default master](Self::default_master).
+    pub fn default_master_layer<'a>(&self, glyph: &'a Glyph) -> Option<&'a Arc<GlyphLayer>> {
+        glyph.shared_layer_for_source(&self.default_master()?.id())
+    }
+
+    /// Returns each master that `glyph` draws, paired with the glyph's layer on it, in source
+    /// order.
+    pub fn masters_with_layers<'a>(
+        &'a self,
+        glyph: &'a Glyph,
+    ) -> impl Iterator<Item = (&'a Source, &'a GlyphLayer)> {
+        self.masters()
+            .filter_map(|source| Some((source, glyph.layer_for_source(&source.id())?)))
     }
 
     /// Returns `glyph`'s layers on [master sources](Self::masters), in source order, and by
@@ -1024,6 +1044,16 @@ impl Font {
 
     pub fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
         self.data().glyphs.values().map(Arc::as_ref)
+    }
+
+    /// Returns the id of every layer of every glyph.
+    pub fn layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {
+        self.glyphs().flat_map(Glyph::layer_ids)
+    }
+
+    /// Returns how many layers the font's glyphs have in total.
+    pub fn layer_count(&self) -> usize {
+        self.glyphs().map(|glyph| glyph.layers().len()).sum()
     }
 
     pub fn glyph(&self, glyph_id: &GlyphId) -> Option<&Glyph> {
@@ -1603,7 +1633,7 @@ fn validate_source_values(
     definitions: &[MetricDefinition],
 ) -> CoreResult<()> {
     for (axis_id, value) in source.location() {
-        if !axes.iter().any(|axis| axis.id() == *axis_id) {
+        if !axes.contains_axis(axis_id) {
             return Err(CoreError::AxisNotFound(axis_id.clone()));
         }
         if !value.is_finite() {
@@ -2841,5 +2871,35 @@ mod tests {
             elapsed,
             "glyph layer membership index rebuild should stay comfortably sub-second",
         );
+    }
+
+    #[test]
+    fn master_questions_skip_masters_a_glyph_does_not_draw() {
+        let font = crate::test_support::sample_variable_font();
+        let glyph = font.glyphs().find(|glyph| glyph.name() == "A").unwrap();
+        let default_id = font.default_source_id().unwrap();
+
+        let drawn = font
+            .masters_with_layers(glyph)
+            .map(|(source, layer)| (source.name(), layer.source_id()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            font.default_master().map(Source::id),
+            Some(default_id.clone())
+        );
+        assert_eq!(
+            font.default_master_layer(glyph)
+                .map(|layer| layer.source_id()),
+            Some(default_id)
+        );
+        assert_eq!(
+            drawn.len(),
+            2,
+            "the Medium master has no layer for A: {drawn:?}"
+        );
+        assert!(drawn.iter().all(|(name, _)| *name != "Medium"));
+        assert_eq!(font.layer_ids().count(), font.layer_count());
+        assert_eq!(font.layer_count(), 2);
     }
 }

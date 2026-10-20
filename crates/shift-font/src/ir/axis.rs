@@ -143,6 +143,23 @@ pub struct Axis {
     hidden: bool,
 }
 
+/// Looks up axes by id in a list of axes.
+pub trait AxisList {
+    /// Returns the axis with `axis_id`.
+    fn axis(&self, axis_id: &AxisId) -> Option<&Axis>;
+
+    /// Returns whether the list has an axis with `axis_id`.
+    fn contains_axis(&self, axis_id: &AxisId) -> bool {
+        self.axis(axis_id).is_some()
+    }
+}
+
+impl AxisList for [Axis] {
+    fn axis(&self, axis_id: &AxisId) -> Option<&Axis> {
+        self.iter().find(|axis| axis.id() == *axis_id)
+    }
+}
+
 impl Axis {
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
         Self::with_id(AxisId::new(), tag, name, minimum, default, maximum)
@@ -517,14 +534,13 @@ impl AxisMapping {
         }
 
         for axis_id in self.inputs.iter().chain(&self.outputs) {
-            if !axes.iter().any(|axis| axis.id() == *axis_id) {
+            if !axes.contains_axis(axis_id) {
                 return Err(self.invalid(format!("references unknown axis {axis_id}")));
             }
         }
         for input_id in &self.inputs {
             let axis = axes
-                .iter()
-                .find(|axis| axis.id() == *input_id)
+                .axis(input_id)
                 .expect("mapping axes were checked above");
             if self.is_independent() && axis.role() != AxisRole::External {
                 return Err(self.invalid(format!("input axis {input_id} is not external")));
@@ -608,6 +624,12 @@ impl Location {
         self.values.get(axis_id).copied()
     }
 
+    /// Returns this location's value on `axis`, or the axis default when the
+    /// location has none.
+    pub fn value_on(&self, axis: &Axis) -> f64 {
+        self.get(&axis.id()).unwrap_or(axis.default())
+    }
+
     pub fn set(&mut self, axis_id: AxisId, value: f64) {
         self.values.insert(axis_id, value);
     }
@@ -640,8 +662,8 @@ impl Location {
     /// [`PartialEq`] when exact stored-coordinate equality is required.
     pub fn is_equivalent_to(&self, other: &Self, axes: &[Axis]) -> bool {
         axes.iter().all(|axis| {
-            let left = self.get(&axis.id()).unwrap_or(axis.default());
-            let right = other.get(&axis.id()).unwrap_or(axis.default());
+            let left = self.value_on(axis);
+            let right = other.value_on(axis);
             (left - right).abs() <= 1e-6
         })
     }
@@ -710,6 +732,12 @@ macro_rules! typed_location {
 
             pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
                 self.0.get(axis_id)
+            }
+
+            /// Returns this location's value on `axis`, or the axis default
+            /// when the location has none.
+            pub fn value_on(&self, axis: &Axis) -> f64 {
+                self.0.value_on(axis)
             }
 
             pub fn set(&mut self, axis_id: AxisId, value: f64) {
@@ -965,5 +993,25 @@ mod tests {
         assert!(implicit_default.is_equivalent_to(&explicit_default, std::slice::from_ref(&axis)));
         assert!(implicit_default.is_equivalent_to(&near_default, std::slice::from_ref(&axis)));
         assert!(!implicit_default.is_equivalent_to(&distinct, std::slice::from_ref(&axis)));
+    }
+
+    #[test]
+    fn value_on_falls_back_to_the_axis_default() {
+        let weight = Axis::weight();
+        let width = Axis::width();
+        let location = Location::from([(weight.id(), 700.0)]);
+
+        assert_eq!(location.value_on(&weight), 700.0);
+        assert_eq!(location.value_on(&width), width.default());
+    }
+
+    #[test]
+    fn axis_list_finds_axes_by_id() {
+        let weight = Axis::weight();
+        let axes = [weight.clone()];
+
+        assert_eq!(axes.axis(&weight.id()), Some(&weight));
+        assert!(axes.contains_axis(&weight.id()));
+        assert!(!axes.contains_axis(&Axis::width().id()));
     }
 }

@@ -254,11 +254,7 @@ impl Font {
         let exact_source_shapes = self
             .masters()
             .filter_map(|source| {
-                let layer = glyph
-                    .layers()
-                    .values()
-                    .find(|layer| layer.source_id() == source.id())?
-                    .clone();
+                let layer = glyph.shared_layer_for_source(&source.id())?.clone();
                 if layer.id() == fallback.id() {
                     return None;
                 }
@@ -750,22 +746,12 @@ fn component_base_glyph_ids(
                 .iter()
                 .map(|shape| &shape.layer),
         )
-        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
+        .flat_map(|layer| layer.component_glyph_ids())
 }
 
 fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
-    if let Some(default_source_id) = font.default_source_id() {
-        let is_master = font
-            .source(&default_source_id)
-            .is_some_and(Source::is_master);
-        if is_master
-            && let Some(layer) = glyph
-                .layers()
-                .values()
-                .find(|layer| layer.source_id() == default_source_id)
-        {
-            return Some(layer.clone());
-        }
+    if let Some(layer) = font.default_master_layer(glyph) {
+        return Some(layer.clone());
     }
 
     glyph

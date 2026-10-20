@@ -293,13 +293,7 @@ impl Font {
             let Some(candidate) = self.glyph(&candidate_id) else {
                 continue;
             };
-            pending.extend(
-                candidate
-                    .layers()
-                    .values()
-                    .flat_map(|layer| layer.components_iter())
-                    .map(Component::base_glyph_id),
-            );
+            pending.extend(candidate.component_glyph_ids());
         }
 
         false

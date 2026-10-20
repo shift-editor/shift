@@ -2,13 +2,10 @@ use crate::anchor::Anchor;
 use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
-use crate::entity::{
-    AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
-};
+use crate::entity::{AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, SourceId};
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
-use crate::point::Point;
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
@@ -99,13 +96,7 @@ impl GlyphLayer {
             }
 
             for point in contour.points() {
-                cloned_contour.push_point(Point::new(
-                    PointId::new(),
-                    point.x(),
-                    point.y(),
-                    point.point_type(),
-                    point.is_smooth(),
-                ));
+                cloned_contour.push_point(point.with_fresh_id());
             }
 
             layer.add_contour(cloned_contour);
@@ -271,6 +262,11 @@ impl GlyphLayer {
 
     pub fn components_iter(&self) -> impl Iterator<Item = &Component> {
         self.components.values()
+    }
+
+    /// Returns the glyph each component draws, in component order.
+    pub fn component_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.components_iter().map(Component::base_glyph_id)
     }
 
     pub fn components_iter_mut(&mut self) -> impl Iterator<Item = &mut Component> {
@@ -467,6 +463,18 @@ impl Glyph {
         &self.layers
     }
 
+    /// Returns the ids of the glyph's layers.
+    pub fn layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {
+        self.layers.keys().cloned()
+    }
+
+    /// Returns the glyph each component draws, across all of the glyph's layers.
+    pub fn component_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.layers
+            .values()
+            .flat_map(|layer| layer.component_glyph_ids())
+    }
+
     pub fn layer(&self, id: &LayerId) -> Option<&GlyphLayer> {
         self.layers.get(id).map(Arc::as_ref)
     }
@@ -500,10 +508,14 @@ impl Glyph {
     }
 
     pub fn layer_for_source(&self, source_id: &SourceId) -> Option<&GlyphLayer> {
+        self.shared_layer_for_source(source_id).map(Arc::as_ref)
+    }
+
+    /// Returns the glyph's layer on `source_id` as the shared handle the glyph holds.
+    pub fn shared_layer_for_source(&self, source_id: &SourceId) -> Option<&Arc<GlyphLayer>> {
         self.layers
             .values()
             .find(|layer| layer.source_id() == *source_id)
-            .map(Arc::as_ref)
     }
 
     pub fn layer_for_source_mut(&mut self, source_id: &SourceId) -> Option<&mut GlyphLayer> {

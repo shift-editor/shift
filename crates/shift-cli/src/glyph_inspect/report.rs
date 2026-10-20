@@ -170,8 +170,8 @@ fn exact_source<'a>(font: &'a Font, location: &DesignLocation) -> Option<&'a Sou
     font.sources().iter().find(|source| {
         source.is_master()
             && font.axes().iter().all(|axis| {
-                let expected = source.location().get(&axis.id()).unwrap_or(axis.default());
-                let actual = location.get(&axis.id()).unwrap_or(axis.default());
+                let expected = source.location().value_on(axis);
+                let actual = location.value_on(axis);
                 (expected - actual).abs() <= 1e-6
             })
     })
@@ -530,7 +530,7 @@ fn location_values(location: &shift_font::Location, axes: &[Axis]) -> Vec<Locati
     axes.iter()
         .map(|axis| LocationValue {
             axis_tag: axis.tag().to_string(),
-            value: location.get(&axis.id()).unwrap_or(axis.default()),
+            value: location.value_on(axis),
         })
         .collect()
 }
