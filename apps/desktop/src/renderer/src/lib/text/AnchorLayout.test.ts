@@ -8,7 +8,7 @@ import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
 
-describe("a run's layout follows the anchors its marks use, while one is dragged", () => {
+describe("a run's layout follows the anchors its marks and joins use, while one is dragged", () => {
   let editor: TestEditor;
 
   beforeEach(async () => {
@@ -50,7 +50,7 @@ describe("a run's layout follows the anchors its marks use, while one is dragged
     return { layoutCell, seen, subscription };
   }
 
-  it("keeps the layout when an anchor no mark uses moves", async () => {
+  it("keeps the layout when an anchor no mark or join uses moves", async () => {
     const runId = await shapedRun("ببب", ["beh-ar.fina", "beh-ar.medi", "beh-ar.init"]);
     const { layoutCell, seen, subscription } = watchLayout(runId);
 
@@ -79,6 +79,23 @@ describe("a run's layout follows the anchors its marks use, while one is dragged
 
     expect(markX()).toBe(before + 30);
     expect(seen.length).toBeGreaterThan(1);
+    move.discard();
+  });
+
+  it("re-steps a cursive join when the exit anchor moves", async () => {
+    const runId = await shapedRun("\u0628\u0628\u0628", [
+      "beh-ar.fina",
+      "beh-ar.medi",
+      "beh-ar.init",
+    ]);
+    const initHeight = () => editor.text.layoutCell(runId).peek()!.placedGlyphs.at(-1)!.origin.y;
+    const { subscription } = watchLayout(runId);
+    expect(initHeight()).toBe(400);
+
+    const move = dragAnchor("exit", { x: 0, y: 10 });
+    subscription.dispose();
+
+    expect(initHeight()).toBe(390);
     move.discard();
   });
 });

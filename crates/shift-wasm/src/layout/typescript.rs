@@ -13,6 +13,7 @@ use shift_font::test_support::generated::assert_generated_file;
 
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
+use crate::cursive::CursiveRun;
 use crate::decomposition::DecomposedGlyph;
 use crate::shaping::{
     FontFeatureOutput, ShapeParagraphs, ShapedParagraphOutput, ShaperFeatures, ShaperGlyphs,
@@ -71,6 +72,12 @@ fn calls() -> Vec<Call> {
             doc: "Blends every component occurrence of a decomposed glyph as each master places it, or null when any occurrence's masters don't line up point for point.",
             input: DecomposedGlyph::kind(),
             output: Option::<Vec<Vec<shift_font::placed_blend::BlendedPoint>>>::kind(),
+        },
+        Call {
+            name: "attachCursive",
+            doc: "Joins a run's glyphs at their exit and entry anchors, as the curs lookups export generates join them.",
+            input: CursiveRun::kind(),
+            output: Vec::<shift_font::cursive::CursivePosition>::kind(),
         },
     ]
 }

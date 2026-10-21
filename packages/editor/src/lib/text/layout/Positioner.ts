@@ -7,6 +7,11 @@ import type { Editor } from "../../editor/Editor";
 import type { GlyphRenderModel } from "../../model/Glyph";
 import type { Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
+import {
+  attachCursive,
+  type CursiveAnchor,
+  type CursivePosition,
+} from "../../wasm/generated/layouts";
 
 /**
  * How marks are placed: `"anchors"` attaches each mark to the glyph before it
@@ -41,7 +46,8 @@ const NOTDEF = ".notdef" as GlyphName;
  * The shaper substitutes glyphs and applies the feature code's own
  * positioning; this adds what export generates from structured data: each
  * glyph's current advance, pair kerning between neighbours in a left-to-right
- * run, and mark placement.
+ * run, cursive attachment at `entry` and `exit` anchors (shift-font's rule,
+ * through `@shift/wasm`), and mark placement.
  *
  * Two facts make a glyph a mark, and they decide different things. The
  * shaper's `isMark` (the compiled font's `GDEF` mark class, which export
@@ -72,10 +78,18 @@ export class Positioner {
     const markOffsets =
       marks === "anchors" ? this.#anchorOffsets(run, glyphs) : this.#literalOffsets(glyphs);
 
+    const unjoined = glyphs.map((glyph) => ({
+      xAdvance: this.#advance(glyph, glyph.shaped.isMark),
+      xOffset: glyph.shaped.xOffset,
+      yOffset: glyph.shaped.yOffset,
+    }));
+    const places = marks === "anchors" ? joinCursive(run, glyphs, unjoined) : unjoined;
+
     const positioned: PositionedGlyph[] = [];
     let pen = 0;
     let kernable: PositionedGlyph | null = null;
     for (const [index, glyph] of glyphs.entries()) {
+      const place = places[index]!;
       const mark = markOffsets.get(index);
       const attached = mark !== undefined && mark.to !== null;
       // A mark the font classes as one is passed over: never kerned, and it keeps the pair around it.
@@ -92,7 +106,7 @@ export class Positioner {
       }
 
       const ownOffset = mark && !attached ? mark.offset : { x: 0, y: 0 };
-      const xAdvance = this.#advance(glyph, passedOver);
+      const xAdvance = place.xAdvance;
       const current: PositionedGlyph = {
         glyphId: glyph.glyphId,
         glyphName: glyph.name,
@@ -101,8 +115,8 @@ export class Positioner {
         xAdvance,
         xKern: 0,
         yAdvance: glyph.shaped.yAdvance,
-        xOffset: glyph.shaped.xOffset + ownOffset.x,
-        yOffset: glyph.shaped.yOffset + ownOffset.y,
+        xOffset: place.xOffset + ownOffset.x,
+        yOffset: place.yOffset + ownOffset.y,
         cluster: run.clusterStart + glyph.shaped.cluster,
         bounds: glyph.model?.bounds ?? null,
       };
@@ -298,6 +312,46 @@ function anchorOffset(
     }
   }
   return null;
+}
+
+/**
+ * Joins a run's glyphs at their `exit` and `entry` anchors, as the `curs`
+ * lookups export generates join them, through shift-font's rule.
+ *
+ * @remarks
+ * Reads only each glyph's `entry` and `exit` anchors, the names fontc reads
+ * as cursive, so the layout reruns when one of those moves and not when
+ * another anchor does. A run with neither keeps its places, uncalled.
+ */
+function joinCursive(
+  run: SegmentedRun,
+  glyphs: readonly RunGlyph[],
+  places: readonly CursivePosition[],
+): readonly CursivePosition[] {
+  const anchors = glyphs.map((glyph) => ({
+    entry: anchorPoint(glyph.model, "entry"),
+    exit: anchorPoint(glyph.model, "exit"),
+  }));
+  if (!anchors.some(({ entry, exit }) => entry || exit)) return places;
+
+  const order = logicalIndexes(run);
+  const joined = attachCursive({
+    direction: run.direction,
+    glyphs: order.map((index) => ({
+      ...anchors[index]!,
+      isMark: glyphs[index]!.shaped.isMark,
+      position: places[index]!,
+    })),
+  });
+  const visual = [...places];
+  for (const [position, index] of order.entries()) visual[index] = joined[position]!;
+  return visual;
+}
+
+/** An anchor's position, read from the glyph's per-name anchor cell; null without one. */
+function anchorPoint(model: GlyphRenderModel | null, name: string): CursiveAnchor | null {
+  const anchor = model?.anchorNamed(name) ?? null;
+  return anchor ? { x: anchor.x, y: anchor.y } : null;
 }
 
 /** Indexes into the run's visual-order glyphs, in logical order. */
