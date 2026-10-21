@@ -1,5 +1,6 @@
-//! Documents, working stores, and recovery overlays at schema version 2
-//! open in this version and gain glyph categories.
+//! Documents, working stores, and recovery overlays at older schema
+//! versions open in this version and gain glyph categories and the scene
+//! state.
 
 use std::path::Path;
 
@@ -8,12 +9,13 @@ use shift_font::{GlyphCategory, GlyphSubcategory};
 use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 
 /// Rewrites a current database into the version 2 shape, before glyph
-/// categories.
+/// categories and the scene state.
 fn downgrade_to_version_2(path: &Path) {
     let conn = rusqlite::Connection::open(path).unwrap();
     conn.execute_batch(
         "ALTER TABLE glyphs DROP COLUMN category;
          ALTER TABLE glyphs DROP COLUMN sub_category;
+         DROP TABLE scene_state;
          PRAGMA user_version = 2;",
     )
     .unwrap();

@@ -24,6 +24,8 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** Undo and redo retain at most 100 entries per stack. Extending either stack drops that stack's oldest entry; a fresh apply or explicit `discard_redo` clears redo. Discarding redo changes neither live font state nor the current/saved history positions.
 - **Architecture Invariant:** Document `dirty` compares the ledger's current history position with its saved position; the durable authored revision remains monotonic and is not an undo cursor. Undo/redo persist their resulting dirty value atomically with replay. A resumed dirty workspace has no reachable saved position because its in-memory ledger does not survive process restart.
 
+- **Architecture Invariant:** The editor's scene state (`set_scene_state`/`scene_state`) is document content without font history: a changed scene marks the document unsaved but adds no ledger entry, does not advance the authored revision, and is never exported. Until the next save, an undo or redo back to the saved font position stays unsaved while the scene differs from what was saved.
+
 ## Codemap
 
 ```

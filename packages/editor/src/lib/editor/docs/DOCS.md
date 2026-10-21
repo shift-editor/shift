@@ -1,6 +1,6 @@
 # Editor
 
-<!-- reviewed: 2026-09-28 -->
+<!-- reviewed: 2026-10-21 -->
 
 Central orchestrator for the canvas-based glyph editing surface, wiring viewport transforms, selection, rendering, hit testing, and tool management into a single facade.
 
@@ -65,6 +65,9 @@ editor/
   Editor.ts              -- Facade, wires all subsystems
   MultiSourceEditing.ts  -- Reactive cross-layer matching and target resolution
   lifecycle.ts           -- EventEmitter for destruction and preview mutation notices
+  persistence/
+    ScenePersistence.ts  -- Debounced canvas writes, flush, and restore through a SceneStateStore
+    scenePayload.ts      -- Versioned canvas payload: encode, validated decode, stale-reference drops
   managers/
     Camera.ts             -- UPM<->screen affine matrices, zoom, pan
   rendering/
@@ -168,6 +171,10 @@ A plain source-row click activates that source and collapses the editing set. Sh
 `WorkspaceEditCoordinator.onEdit()` publishes renderer-local `accepted`, `committed`, and `failed` events keyed by `PendingEditId`. Accepted edits attach to the open capture or create a workspace-only entry. Undo and redo wait for every pending operation. A failed apply is removed after workspace resynchronization; later changes to the same editor record have their first `before` value rebased, so failure rollback cannot overwrite a newer user action or shift the Rust undo stack.
 
 A new editor-only entry clears editor redo immediately. If the abandoned redo branch contains workspace effects, history serializes `discardRedo()` behind pending applies. Entries may contain multiple accepted workspace operations, but ordinary transaction boundaries should group related intents into one document operation.
+
+### Canvas persistence
+
+`Editor.scenePersistence` (present when the session passes `sceneState`) keeps the canvas with the document. It follows `ShiftStore.onChange()`: any change to a `textrun` record or a `textRun`/`glyph` node schedules one write of every such record after a quiet period (500 ms by default), encoded as `{ records }` under `SCENE_PAYLOAD_VERSION`. Scope decides what is persisted: a record is document content unless it declares `scope: "session"` (`isSessionRecord` in `lib/store/recordScope.ts`, shared with history replay), so selection, editing, and the text caret are never written; hover, camera, and tool state are not store records at all. `flush()` issues a pending write synchronously, so a save queued after it on the same ordered store includes it; failures are logged and retried on the next flush. `restore()` reads the store once the font is loaded, drops malformed records and records whose run, run item, glyph, or source is gone (logged), puts the rest back without history, and selects the child glyph's source. The desktop app stores the payload in the `.shift` document through `workspace.setSceneState`; another document format implements `SceneStateStore`.
 
 ### Editing result selection
 

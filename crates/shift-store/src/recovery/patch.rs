@@ -15,7 +15,8 @@ use super::{
     },
 };
 use crate::{
-    FontInfo, StoreError, change_set::StoreWriter, layer::write_layer_in_tx, write_mode::WriteMode,
+    FontInfo, SceneState, StoreError, change_set::StoreWriter, layer::write_layer_in_tx,
+    scene_state::write_scene_state_in_tx, write_mode::WriteMode,
 };
 
 const GLOBAL_OWNER: &str = "";
@@ -31,13 +32,7 @@ impl RecoveryOverlay {
             return Ok(());
         }
 
-        let state = self.state()?;
-        if !matches!(state, RecoveryState::Clean | RecoveryState::Dirty) {
-            return Err(StoreError::InvalidRecoveryTransition {
-                expected: "clean or dirty",
-                found: state.as_str(),
-            });
-        }
+        self.require_editable()?;
 
         let impact = change_set.impact();
         let metadata_changed = impact.contains(font::FontChangeImpact::METADATA);
@@ -219,13 +214,7 @@ impl RecoveryOverlay {
         glyph_id: &font::GlyphId,
         layer: &font::GlyphLayer,
     ) -> Result<(), StoreError> {
-        let state = self.state()?;
-        if !matches!(state, RecoveryState::Clean | RecoveryState::Dirty) {
-            return Err(StoreError::InvalidRecoveryTransition {
-                expected: "clean or dirty",
-                found: state.as_str(),
-            });
-        }
+        self.require_editable()?;
 
         let tx = self.conn.transaction()?;
         clear_tombstone(&tx, GLYPH_LAYERS, layer.id().as_str())?;
@@ -234,6 +223,38 @@ impl RecoveryOverlay {
         mark_dirty(&tx)?;
         tx.commit()?;
         Ok(())
+    }
+}
+
+impl RecoveryOverlay {
+    /// Writes the scene state as an unsaved change without advancing the
+    /// overlay revision, which addresses font-derived caches.
+    pub(crate) fn replace_scene_state(&mut self, state: &SceneState) -> Result<(), StoreError> {
+        self.require_editable()?;
+
+        let tx = self.conn.transaction()?;
+        write_scene_state_in_tx(&tx, state)?;
+        tx.execute(
+            "UPDATE recovery_metadata
+             SET state = 'dirty', pending_commit_id = NULL
+             WHERE id = 1",
+            [],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Fails unless the overlay accepts unsaved changes: it is clean or dirty,
+    /// not mid-save or in conflict.
+    fn require_editable(&self) -> Result<(), StoreError> {
+        let state = self.state()?;
+        if matches!(state, RecoveryState::Clean | RecoveryState::Dirty) {
+            return Ok(());
+        }
+        Err(StoreError::InvalidRecoveryTransition {
+            expected: "clean or dirty",
+            found: state.as_str(),
+        })
     }
 }
 

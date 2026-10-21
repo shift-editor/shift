@@ -70,19 +70,44 @@ test("recovers edits made after a previous recovery", async ({ recoveryApp }) =>
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(secondGlyph);
 });
 
-test("reopens a saved document on the glyph it was editing after forced termination", async ({
+test("reopens a saved document on the glyph and canvas it was editing after forced termination", async ({
   recoveryApp,
 }) => {
   const editor = new EditorDriver(recoveryApp.page);
   await editor.openGlyphByUnicode("41");
   const glyph = await editor.activeGlyph();
   if (!glyph) throw new Error("Expected glyph A to be open before the crash");
+  // Placing the glyph on the canvas is document content: wait until it is recovered.
+  await waitForDirty(recoveryApp.page, true);
+  const before = await canvasRun(recoveryApp.page);
 
   const reopened = await recoveryApp.crashAndRecoverWindow(glyph.glyphId);
 
   await waitForEditorReady(reopened, glyph.glyphId);
-  expect(await reopened.evaluate(() => window.shift?.documentStateCell.peek()?.dirty)).toBe(false);
+  expect(await canvasRun(reopened)).toEqual(before);
+  expect(before.childGlyphId).toBe(glyph.glyphId);
+  expect(await reopened.evaluate(() => window.shift?.documentStateCell.peek()?.dirty)).toBe(true);
 });
+
+/** Identifies the canvas run node and the glyph its child edits. */
+async function canvasRun(
+  page: Page,
+): Promise<{ runNodeId: string | null; childGlyphId: string | null }> {
+  return page.evaluate(() => {
+    const editor = window.shift?.editor;
+    const run = editor?.scene.first("textRun") ?? null;
+    const child = run ? (editor?.nodeDefinition("textRun").childGlyph(run) ?? null) : null;
+    return { runNodeId: run?.id ?? null, childGlyphId: child?.glyphId ?? null };
+  });
+}
+
+async function waitForDirty(page: Page, dirty: boolean): Promise<void> {
+  await page.waitForFunction(
+    (expected) => window.shift?.documentStateCell.peek()?.dirty === expected,
+    dirty,
+    { timeout: 20_000 },
+  );
+}
 
 /** Creates a glyph in one transaction so a single undo removes it. */
 async function createGlyph(page: Page, name: GlyphName): Promise<void> {

@@ -182,6 +182,16 @@ pub(crate) fn mark_workspace_changed_in_tx(
     Ok(())
 }
 
+/// Marks the workspace unsaved without advancing its revision, for changes
+/// such as the scene state that no font-derived cache depends on.
+pub(crate) fn mark_workspace_unsaved_in_tx(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    tx.execute(
+        "UPDATE workspace_state SET dirty = 1, updated_at_ms = ?1 WHERE id = 1",
+        params![now_ms()],
+    )?;
+    Ok(())
+}
+
 fn map_workspace_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceState> {
     let source_kind: WorkspaceSourceKind = row.get(1)?;
 

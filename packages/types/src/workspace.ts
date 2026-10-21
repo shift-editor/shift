@@ -9,6 +9,7 @@ import type {
   GlyphState,
   MetricDefinition,
   NamedInstance,
+  SceneState,
   Source,
   SourceMetricsInterpolationSnapshot,
 } from "./bridge";
@@ -30,6 +31,8 @@ export interface WorkspaceSnapshot {
   /** Tracked Hyperglot language ids; `null` when the font stores no list. */
   languageIds: string[] | null;
   kerning: KerningSnapshot;
+  /** The editor's canvas stored with the document; `null` when none was ever written. */
+  sceneState: SceneState | null;
 }
 
 export interface WorkspaceGlyphLayerSnapshot {

@@ -26,13 +26,21 @@ import {
   type AnchorId,
   type GlyphRecord,
   type PointId,
+  type SceneState,
   type Unicode,
 } from "@shift/types";
 import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
+import { openGlyph } from "@/lib/editor/openGlyph";
+import { workspaceSceneStateStore } from "@/lib/workspace/workspaceSceneStateStore";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
+
+interface TestEditorOptions {
+  /** Quiet time before a canvas change is written; the app default when omitted. */
+  readonly sceneDelayMs?: number;
+}
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -73,11 +81,20 @@ export class TestEditor extends Editor {
    * Creates a real editor stack with the requested immutable session capability.
    *
    * @param sessionMode - Presentation and interaction capability under test.
+   * @param options - `sceneDelayMs` sets the canvas write delay; a workspace
+   *   session keeps its canvas in the document as the app does.
    */
-  constructor(sessionMode: FontSessionMode = "workspace") {
+  constructor(sessionMode: FontSessionMode = "workspace", options: TestEditorOptions = {}) {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
+    const sceneState =
+      sessionMode === "workspace"
+        ? {
+            store: workspaceSceneStateStore(stack.client, stack.editCoordinator),
+            ...(options.sceneDelayMs === undefined ? {} : { delayMs: options.sceneDelayMs }),
+          }
+        : undefined;
+    super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode, sceneState });
     this.#stack = stack;
     this.#clipboard = clipboard;
     registerBuiltInTools(this);
@@ -99,10 +116,14 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  /** Opens a saved package through a fresh workspace stack and places one glyph. */
+  /**
+   * Opens a saved package through a fresh workspace stack, restores its
+   * canvas, and opens one glyph as the editor route does.
+   */
   async openSession(sourcePath: string, glyphName: string): Promise<this> {
     await this.#stack.openWorkspace(sourcePath);
     this.selectSource(this.font.defaultSource.id);
+    await this.scenePersistence?.restore();
 
     const record = this.font.recordForName(glyphName as GlyphName);
     if (!record) throw new Error(`Opened package has no ${glyphName} glyph`);
@@ -116,14 +137,22 @@ export class TestEditor extends Editor {
     return this.#stack.editCoordinator;
   }
 
-  /** Flushes pending edits, saves to a new target, and adopts it. */
-  saveAs(sourcePath: string): Promise<WorkspaceDocumentState> {
+  /** Flushes pending edits and the canvas, saves to a new target, and adopts it. */
+  async saveAs(sourcePath: string): Promise<WorkspaceDocumentState> {
+    await this.scenePersistence?.flush();
     return this.#stack.editCoordinator.save(sourcePath);
   }
 
-  /** Flushes pending edits and saves to the current target. */
-  save(): Promise<WorkspaceDocumentState> {
+  /** Flushes pending edits and the canvas, and saves to the current target. */
+  async save(): Promise<WorkspaceDocumentState> {
+    await this.scenePersistence?.flush();
     return this.#stack.editCoordinator.save(null);
+  }
+
+  /** The canvas stored in the workspace now, as a fresh snapshot reads it. */
+  async storedSceneState(): Promise<SceneState | null> {
+    const snapshot = await this.#stack.client.snapshot();
+    return snapshot?.sceneState ?? null;
   }
 
   /** Closes the clean workspace and permanently disposes this test stack. */
@@ -182,18 +211,9 @@ export class TestEditor extends Editor {
 
   /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
   #placeGlyph(glyphId: GlyphId): void {
-    const item = this.text.glyphItem(glyphId);
-    if (!item || !this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
-    const record = this.text.createRun([item]);
-    const run = this.scene.createNode<TextRunNode>({
-      kind: "textRun",
-      runId: record.id,
-      size: this.font.metricsCell.peek().unitsPerEm,
-      position: { x: 0, y: 0 },
-    });
-    const child = this.nodeDefinition("textRun").editItem(run, item.id);
+    if (!this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
+    const child = this.history.withoutRecording(() => openGlyph(this, glyphId));
     if (!child) throw new Error("placed glyph is not loaded");
-    this.enterNode(child.id);
   }
 
   /**

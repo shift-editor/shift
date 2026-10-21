@@ -14,6 +14,7 @@ import type {
   LayerRead,
   Location,
   ParagraphRequest,
+  SceneState,
   ShapedRun,
   ShaperFont,
   SlugAtlas,
@@ -233,6 +234,12 @@ export type SyncCallMap = {
   };
   /** Permanently removes the current redo branch without changing document state. */
   "workspace.discardRedo": { request: void; response: null };
+  /**
+   * Replaces the editor's canvas stored with the document. Rides the edit lane
+   * so a save issued after it includes it. Marks the document dirty when the
+   * canvas changed, but adds no undo entry and does not change exports.
+   */
+  "workspace.setSceneState": { request: SceneState; response: WorkspaceDocumentState };
   /**
    * Saves to the current canonical document, or rejects when the workspace still
    * needs a path. Rides the edit lane so the utility serializes it behind every

@@ -181,6 +181,12 @@ export class WorkspaceHost {
           this.#bridge.discardRedo();
           return null;
         }),
+      // Same queue as edits and save, so a save sent after it writes this canvas.
+      "workspace.setSceneState": ({ version, payload }) =>
+        this.#serialize(() => {
+          this.#bridge.setSceneState(version, payload);
+          return this.#emitDocumentChanged();
+        }),
       // Save rides the edit lane: the same #serialize queue orders it behind
       // every committed apply/undo/redo, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),
@@ -669,6 +675,7 @@ export class WorkspaceHost {
       namedInstances: this.#bridge.getNamedInstances(),
       languageIds: this.#bridge.getLanguageIds(),
       kerning: this.#bridge.getKerning(),
+      sceneState: this.#bridge.getSceneState(),
     };
   }
 

@@ -81,7 +81,8 @@ use shift_wire::{
   },
 };
 use shift_workspace::{
-  AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
+  AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, SceneState, WorkspaceError,
+  WorkspaceSource,
 };
 use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -118,6 +119,15 @@ pub struct NapiDocumentState {
   pub save_target: Option<String>,
   pub dirty: bool,
   pub needs_save_as: bool,
+}
+
+/// The editor's canvas as stored with the document: an opaque payload in
+/// the format `version` names. The bridge never reads the payload.
+#[napi(object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NapiSceneState {
+  pub version: u32,
+  pub payload: String,
 }
 
 #[napi(object)]
@@ -1528,6 +1538,39 @@ impl Bridge {
   pub fn discard_redo(&mut self) -> errors::Result<()> {
     self.workspace_mut()?.discard_redo();
     Ok(())
+  }
+
+  /// Returns the editor's stored canvas, or `null` when none was written.
+  #[napi]
+  pub fn get_scene_state(&self) -> errors::Result<Option<NapiSceneState>> {
+    let Some(state) = self.workspace()?.scene_state()? else {
+      return Ok(None);
+    };
+    let version = u32::try_from(state.version).map_err(|_| BridgeError::InvalidInput {
+      kind: "scene state version",
+      value: state.version.to_string(),
+    })?;
+    Ok(Some(NapiSceneState {
+      version,
+      payload: state.payload,
+    }))
+  }
+
+  /// Replaces the editor's stored canvas and returns the document state.
+  ///
+  /// A changed canvas marks the document unsaved but is not a font edit: no
+  /// undo entry, no font revision, nothing exported.
+  #[napi]
+  pub fn set_scene_state(
+    &mut self,
+    version: u32,
+    payload: String,
+  ) -> errors::Result<NapiDocumentState> {
+    self.workspace_mut()?.set_scene_state(&SceneState {
+      version: i64::from(version),
+      payload,
+    })?;
+    self.document_state_snapshot()
   }
 
   /// Glyph-addressed snapshots for renderer-local synchronous font state.

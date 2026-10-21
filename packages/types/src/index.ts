@@ -223,6 +223,7 @@ export type {
   SetMetricDefinitionsIntent,
   Source,
   SourceMetricValue,
+  SceneState,
   Specimen,
   Unicode,
   UpdateAxisIntent,
