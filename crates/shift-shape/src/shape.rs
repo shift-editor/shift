@@ -110,6 +110,9 @@ impl<G, L: ?Sized> Copy for ShapeRequest<'_, G, L> {}
 pub struct ParagraphRequest<'a, G, L: ?Sized = [NormalizedCoord]> {
     pub units: &'a [Unit<G>],
     pub location: &'a L,
+    /// An ISO 15924 script tag, such as `Arab`, that every run is shaped in;
+    /// `None` shapes each run in the script of its own characters.
+    pub script: Option<&'a str>,
     /// A BCP 47 language tag; `None` uses the default language system.
     pub language: Option<&'a str>,
     /// Settings over the features the shaper applies by default, for every run.
@@ -125,6 +128,7 @@ impl<'a, G, L: ?Sized> ParagraphRequest<'a, G, L> {
         ParagraphRequest {
             units: self.units,
             location,
+            script: self.script,
             language: self.language,
             features: self.features,
         }
@@ -320,7 +324,10 @@ impl Shaper {
             .map(|run| {
                 let start = unit_index(run.units.start)?;
                 let end = unit_index(run.units.end)?;
-                let script = run.script.map(|script| script.short_name().to_string());
+                let script = request.script.map_or_else(
+                    || run.script.map(|script| script.short_name().to_string()),
+                    |script| Some(script.to_string()),
+                );
                 let direction = TextDirection::of_level(run.level);
                 let units = &request.units[run.units];
                 let mut glyphs =

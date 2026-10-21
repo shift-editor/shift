@@ -35,6 +35,9 @@ pub struct NapiParagraphRequest {
   pub units: Vec<NapiShapeUnit>,
   /// User-space location to shape at; omitted axes are at their default.
   pub location: NapiLocation,
+  /// ISO 15924 script tag, such as `Arab`, to shape every run in; each
+  /// run's own script when omitted.
+  pub script: Option<String>,
   /// BCP 47 language tag; the default language system when omitted.
   pub language: Option<String>,
   /// Settings over the features applied by default.
@@ -125,6 +128,7 @@ impl From<ShapedRun> for NapiShapedRun {
 pub(crate) struct ParsedParagraphRequest {
   units: Vec<ShapeUnit>,
   location: ExternalLocation,
+  script: Option<String>,
   language: Option<String>,
   features: Vec<FeatureSetting>,
 }
@@ -134,6 +138,7 @@ impl ParsedParagraphRequest {
     ParagraphRequest {
       units: &self.units,
       location: &self.location,
+      script: self.script.as_deref(),
       language: self.language.as_deref(),
       features: &self.features,
     }
@@ -160,6 +165,7 @@ impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
     Ok(Self {
       units,
       location,
+      script: request.script,
       language: request.language,
       features,
     })

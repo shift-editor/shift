@@ -308,6 +308,11 @@ export interface NapiParagraphRequest {
   units: Array<NapiShapeUnit>
   /** User-space location to shape at; omitted axes are at their default. */
   location: NapiLocation
+  /**
+   * ISO 15924 script tag, such as `Arab`, to shape every run in; each
+   * run's own script when omitted.
+   */
+  script?: string
   /** BCP 47 language tag; the default language system when omitted. */
   language?: string
   /** Settings over the features applied by default. */

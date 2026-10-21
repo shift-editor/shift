@@ -257,6 +257,7 @@ fn paragraph<'a>(units: &'a [ShapeUnit], location: &'a ExternalLocation) -> Para
     ParagraphRequest {
         units,
         location,
+        script: None,
         language: None,
         features: &[],
     }
@@ -335,4 +336,83 @@ fn digits_inside_an_arabic_paragraph_shape_left_to_right_left_of_it() {
         .collect();
     // Screen order: the digits read left to right, left of the Arabic they follow.
     assert_eq!(runs, vec![(2, vec![2, 3]), (1, vec![1, 0])]);
+}
+
+#[test]
+fn a_paragraph_shapes_in_the_script_it_is_given() {
+    let font = font_with(
+        &[("a", Some('a')), ("a.arab", None)],
+        "languagesystem DFLT dflt; languagesystem latn dflt; languagesystem arab dflt;\n\
+         feature ccmp { script arab; sub a by a.arab; } ccmp;",
+    );
+    let location = ExternalLocation::new();
+    let units = characters("a");
+    let shaper = shaper(&font);
+
+    let own = shaper
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+    let arabic = shaper
+        .shape_paragraph(&ParagraphRequest {
+            script: Some("Arab"),
+            ..paragraph(&units, &location)
+        })
+        .unwrap();
+
+    assert_eq!(own.runs[0].script.as_deref(), Some("Latn"));
+    assert_eq!(
+        names_and_clusters(&font, &own.runs[0].glyphs),
+        vec![named("a", 0)]
+    );
+    assert_eq!(arabic.runs[0].script.as_deref(), Some("Arab"));
+    assert_eq!(
+        names_and_clusters(&font, &arabic.runs[0].glyphs),
+        vec![named("a.arab", 0)]
+    );
+}
+
+#[test]
+fn features_list_each_tag_once_with_names_and_defaults() {
+    let font = font_with(
+        &[
+            ("a", Some('a')),
+            ("a.ss01", None),
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+        ],
+        "languagesystem DFLT dflt;
+         languagesystem latn dflt;
+         feature ccmp { sub a by a; } ccmp;
+         feature liga { sub f i by f_i; } liga;
+         feature ss01 {
+             featureNames { name \"Single-storey a\"; };
+             sub a by a.ss01;
+         } ss01;",
+    );
+    let shaper = shift_shape::Shaper::new(shaper(&font).font().bytes().to_vec()).unwrap();
+
+    let features: Vec<_> = shaper
+        .features()
+        .unwrap()
+        .into_iter()
+        .map(|feature| (feature.tag.to_string(), feature.name, feature.default))
+        .collect();
+
+    assert_eq!(
+        features,
+        vec![
+            (
+                "ccmp".to_string(),
+                None,
+                shift_shape::FeatureDefault::Required
+            ),
+            ("liga".to_string(), None, shift_shape::FeatureDefault::On),
+            (
+                "ss01".to_string(),
+                Some("Single-storey a".to_string()),
+                shift_shape::FeatureDefault::Off
+            ),
+        ]
+    );
 }

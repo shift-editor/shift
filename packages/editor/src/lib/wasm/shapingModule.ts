@@ -9,9 +9,11 @@ import type {
   ShapeUnit,
 } from "@shift/types";
 import { registerShaper, releaseShaper } from "@shift/wasm/shaping";
+import type { FontFeature } from "../../types/text";
 import {
   setShaperGlyphs,
   shapeParagraphs,
+  shaperFeatures,
   type ParagraphInput,
   type ShapedParagraphOutput,
   type ShapedRunOutput,
@@ -83,6 +85,21 @@ export class RegisteredShaper {
     return shaped.map((paragraph) => (paragraph ? this.#paragraph(paragraph) : null));
   }
 
+  /**
+   * Lists the features the shaper font defines, in tag order, each with how
+   * the shaper treats it by default, as shift-shape reports it.
+   *
+   * @returns An empty list once the shaper is released.
+   */
+  features(): FontFeature[] {
+    const features = shaperFeatures({ shaper: this.#handle }) ?? [];
+    return features.map((feature) => ({
+      tag: tagString(feature.tag),
+      name: feature.name ?? null,
+      default: feature.default,
+    }));
+  }
+
   #paragraph(paragraph: ShapedParagraphOutput): ShapedParagraph {
     return {
       direction: paragraph.direction,
@@ -98,7 +115,8 @@ export class RegisteredShaper {
       tag: tagNumber(tag),
       setting,
     }));
-    return { units, location, language, features };
+    const script = paragraph.script ? tagNumber(paragraph.script) : 0;
+    return { units, location, script, language, features };
   }
 
   /** A code point, or `-(glyph + 1)` for a glyph inserted by name. */
