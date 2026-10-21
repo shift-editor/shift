@@ -1,7 +1,7 @@
 import { getShiftHost } from "@/host/shiftHost";
 import { useState } from "react";
 import { Button, Tooltip, X } from "@shift/ui";
-import { useWindowButtonLayout } from "./WindowControls";
+import { runWindowCommand, useWindowButtonLayout } from "./WindowControls";
 import { useTitleBarColors } from "./useTitleBarColors";
 
 interface TrafficLightButtonProps {
@@ -101,13 +101,13 @@ export const Titlebar = ({ closeOnly = false, onClose, edited = false }: Titleba
   const [isHovered, setIsHovered] = useState(false);
   const host = getShiftHost();
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (onClose) {
       onClose();
       return;
     }
 
-    host.commands.run("window.close");
+    await runWindowCommand("window.close");
   };
 
   if (host.platform !== "darwin") {
@@ -115,13 +115,8 @@ export const Titlebar = ({ closeOnly = false, onClose, edited = false }: Titleba
     return closeOnly ? <DialogTitlebar onClose={handleClose} /> : null;
   }
 
-  const handleMinimize = () => {
-    host.commands.run("window.minimise");
-  };
-
-  const handleMaximize = () => {
-    host.commands.run("window.maximise");
-  };
+  const handleMinimize = () => runWindowCommand("window.minimise");
+  const handleMaximize = () => runWindowCommand("window.maximise");
 
   return (
     <div

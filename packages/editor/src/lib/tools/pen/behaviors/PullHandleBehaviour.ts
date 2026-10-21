@@ -7,8 +7,6 @@ import { PenTargets, type PenTarget } from "../PenTargets";
 import type { PenBehavior, PenState } from "../types";
 import type { Pen } from "../Pen";
 
-const DRAG_THRESHOLD = 3;
-
 /**
  * Pulls the next segment's first handle out of an open end: the active endpoint, or
  * another contour's end when no stroke is active, which then continues from it.
@@ -53,7 +51,8 @@ export class PullHandleBehavior implements PenBehavior {
 
     const pointer = ctx.editor.toLocal(stroke.node, event.coords.scene);
     const { pull } = state;
-    const withinThreshold = Vec2.dist(pull.position, pointer) <= DRAG_THRESHOLD;
+    const withinThreshold =
+      Vec2.dist(pull.position, pointer) <= ctx.editor.camera.handleDragThreshold;
     if (!pull.handlePosition && withinThreshold) return true;
 
     const guides = this.#pull.preview(pointer, event.shiftKey, event.altKey);

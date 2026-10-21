@@ -87,6 +87,19 @@ export function externalAxisLocationForDesignLocation(
   return unmapAxisMappings(location, axes, bases);
 }
 
+/** Whether two user-space locations name the same value on exactly the same axes. */
+export function externalAxisLocationsEqual(
+  left: ExternalAxisLocation,
+  right: ExternalAxisLocation,
+): boolean {
+  if (left.size !== right.size) return false;
+
+  for (const [axisId, value] of left) {
+    if (right.get(axisId) !== value) return false;
+  }
+  return true;
+}
+
 export function designAxisLocationsEqual(
   left: DesignAxisLocation,
   right: DesignAxisLocation,
