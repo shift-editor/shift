@@ -129,7 +129,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * A run child gives up its points only while edited, as with clicks.
    */
   override selectableInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
-    if (node.parentId !== null && !this.#isEditing(node)) return [];
+    if (node.itemId !== undefined && !this.#isEditing(node)) return [];
     const glyph = this.editor.glyphForId(node.glyphId);
     if (!glyph) return [];
 
@@ -151,7 +151,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   hit(node: GlyphNode, point: LocalPoint): PointerTarget | null {
     // A run child you are not editing is plain text; its parent run answers the hit.
-    if (node.parentId !== null && !this.#isEditing(node)) return null;
+    if (node.itemId !== undefined && !this.#isEditing(node)) return null;
 
     const geometry = this.#view(node);
     if (!geometry) return null;
@@ -335,7 +335,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     if (editing) {
       this.#drawEditableContent(node, ctx, view);
-    } else if (node.parentId === null) {
+    } else if (node.itemId === undefined) {
       // A run child you are not editing is plain text; its parent run draws it.
       this.#drawDisplayContent(ctx, view);
     }

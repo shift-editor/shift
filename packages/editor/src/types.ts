@@ -29,6 +29,7 @@ export type {
   GlyphNode,
   NodeKind,
   NodeOfKind,
+  PageNode,
   SceneNodeKinds,
   ShiftNode,
   TextRunNode,

@@ -31,6 +31,7 @@ import {
 import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
+import { openGlyphInRun } from "@/lib/editor/openGlyph";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
@@ -169,7 +170,7 @@ export class TestEditor extends Editor {
     return this.font.loadGlyph(record.id);
   }
 
-  /** The canvas's text run; the editor route creates it on the first open. */
+  /** The active page's text run; the editor route creates it on the first open. */
   get textRun(): TextRunNode | null {
     return this.scene.first("textRun");
   }
@@ -180,20 +181,19 @@ export class TestEditor extends Editor {
     return run ? this.nodeDefinition("textRun").childGlyph(run) : null;
   }
 
-  /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
+  /**
+   * Opens a loaded glyph as the editor route does: the active page's run becomes
+   * that glyph, edited in place.
+   */
+  openGlyph(glyphId: GlyphId): GlyphNode {
+    const node = this.history.withoutRecording(() => openGlyphInRun(this, glyphId));
+    if (!node) throw new Error("opened glyph is not loaded");
+    return node;
+  }
+
   #placeGlyph(glyphId: GlyphId): void {
-    const item = this.text.glyphItem(glyphId);
-    if (!item || !this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
-    const record = this.text.createRun([item]);
-    const run = this.scene.createNode<TextRunNode>({
-      kind: "textRun",
-      runId: record.id,
-      size: this.font.metricsCell.peek().unitsPerEm,
-      position: { x: 0, y: 0 },
-    });
-    const child = this.nodeDefinition("textRun").editItem(run, item.id);
-    if (!child) throw new Error("placed glyph is not loaded");
-    this.enterNode(child.id);
+    if (!this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
+    this.openGlyph(glyphId);
   }
 
   /**
