@@ -15,7 +15,10 @@ use shift_font::{
     composite::ResolvedContour,
 };
 
-use crate::{AuthoredAtlasProfile, Curve, Point, SlugError, VariableAtlasBuilder};
+use crate::{
+    AuthoredAtlasProfile, Curve, CurveShape, Point, QuadraticOutline, SlugError,
+    VariableAtlasBuilder,
+};
 
 mod component;
 pub use component::{AuthoredWeightSet, add_authored_glyph_with_weight_sets};
@@ -110,9 +113,8 @@ impl AuthoredAtlasBuilder {
         &mut self,
         constant_weight_index: u32,
     ) -> Result<AuthoredGlyph, AuthoredSlugError> {
-        let default_glyph = self.builder.add_curve_glyph_with_sources_and_lines(
-            std::iter::empty(),
-            std::iter::empty(),
+        let default_glyph = self.builder.add_outline_glyph(
+            QuadraticOutline::default(),
             constant_weight_index,
             std::iter::empty(),
         )?;
@@ -484,9 +486,13 @@ impl SegmentTopology {
         }
     }
 
-    /// Returns one flag per output quadratic, set when it comes from a line.
-    fn line_flags(self) -> impl Iterator<Item = bool> {
-        std::iter::repeat_n(matches!(self, Self::Line(_)), self.curve_count())
+    /// Returns the shape of each output quadratic.
+    fn curve_shapes(self) -> impl Iterator<Item = CurveShape> {
+        let shape = match self {
+            Self::Line(_) => CurveShape::Line,
+            Self::Quad(_) | Self::Cubic { .. } => CurveShape::Quadratic,
+        };
+        std::iter::repeat_n(shape, self.curve_count())
     }
 
     /// Raises a cubic's subdivision count to what `points` need.
@@ -588,13 +594,34 @@ impl CurveTopology {
         Ok(topology)
     }
 
-    /// Returns one flag per output quadratic whose control is derived from a line.
-    pub(crate) fn line_flags(&self) -> Vec<bool> {
+    /// Returns the shape of each output quadratic, in curve order.
+    pub(crate) fn curve_shapes(&self) -> impl Iterator<Item = CurveShape> + '_ {
         self.contours
             .iter()
             .flat_map(|contour| &contour.segments)
-            .flat_map(|segment| segment.line_flags())
-            .collect()
+            .flat_map(|segment| segment.curve_shapes())
+    }
+
+    /// Pairs curves evaluated from this topology with its curve shapes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::CurveShapeCountMismatch`] when `curves` was not
+    /// evaluated from this topology.
+    pub(crate) fn outline_of(&self, curves: Vec<Curve>) -> Result<QuadraticOutline, SlugError> {
+        QuadraticOutline::new(curves, self.curve_shapes().collect())
+    }
+
+    /// Evaluates this topology against topology-compatible contours, with curve shapes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::curves_from_contours`].
+    pub(crate) fn outline_from_contours<C: ContourPoints>(
+        &self,
+        contours: &[C],
+    ) -> Result<QuadraticOutline, AuthoredSlugError> {
+        Ok(self.outline_of(self.curves_from_contours(contours)?)?)
     }
 
     /// Evaluates this topology against topology-compatible contours.
@@ -688,9 +715,19 @@ impl AuthoredCurveTopology {
         self.curves.curve_count
     }
 
-    /// Returns one flag per output quadratic whose control is derived from a line.
-    pub fn line_flags(&self) -> Vec<bool> {
-        self.curves.line_flags()
+    /// Returns the shape of each output quadratic, in curve order.
+    pub fn curve_shapes(&self) -> impl Iterator<Item = CurveShape> + '_ {
+        self.curves.curve_shapes()
+    }
+
+    /// Pairs curves evaluated from this topology with its curve shapes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::CurveShapeCountMismatch`] when `curves` was not
+    /// evaluated from this topology.
+    pub fn outline_of(&self, curves: Vec<Curve>) -> Result<QuadraticOutline, SlugError> {
+        self.curves.outline_of(curves)
     }
 
     /// Evaluates this exact topology against a topology-compatible layer.
@@ -744,7 +781,7 @@ pub(crate) fn add_resolved_sources_glyph(
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
     let topology =
         CurveTopology::from_compatible_contours(base, rest.iter().map(|(_, contours)| *contours))?;
-    let base_curves = topology.curves_from_contours(base)?;
+    let base_outline = topology.outline_from_contours(base)?;
     let source_curves = rest
         .iter()
         .map(|(weight_index, contours)| {
@@ -752,12 +789,7 @@ pub(crate) fn add_resolved_sources_glyph(
         })
         .collect::<Result<Vec<_>, AuthoredSlugError>>()?;
     builder
-        .add_curve_glyph_with_sources_and_lines(
-            base_curves,
-            topology.line_flags(),
-            *base_weight_index,
-            source_curves,
-        )
+        .add_outline_glyph(base_outline, *base_weight_index, source_curves)
         .map_err(Into::into)
 }
 
@@ -849,14 +881,9 @@ fn add_default_projection_glyph(
             });
         }
         let topology = AuthoredCurveTopology::from_layer(projection.fallback());
-        let curves = topology.curves_from_layer(projection.fallback())?;
+        let outline = topology.outline_of(topology.curves_from_layer(projection.fallback())?)?;
         let advance = authored_advance(projection.fallback().width(), 0)?;
-        let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
-            curves,
-            topology.line_flags(),
-            constant_weight_index,
-            [],
-        )?;
+        let glyph_index = builder.add_outline_glyph(outline, constant_weight_index, [])?;
         builder.set_glyph_source_advances(glyph_index, [advance])?;
         defaults.insert(key.clone(), glyph_index);
         inserted_defaults.push(key);
@@ -898,9 +925,8 @@ fn add_default_projection_glyph(
         .first()
         .cloned()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
-    let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
-        base_curves,
-        topology.line_flags(),
+    let glyph_index = builder.add_outline_glyph(
+        topology.outline_of(base_curves)?,
         base_weight_index,
         source_curves.into_iter().skip(1),
     )?;
