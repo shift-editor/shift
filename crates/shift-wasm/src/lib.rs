@@ -22,6 +22,7 @@
 )]
 
 pub mod anchors;
+pub mod cursive;
 pub mod decomposition;
 mod layout;
 pub mod names;

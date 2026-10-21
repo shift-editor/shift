@@ -38,6 +38,7 @@ pub mod anchor_propagation;
 pub mod changes;
 pub mod check;
 pub mod composite;
+pub mod cursive;
 pub mod curve;
 pub mod error;
 pub mod intents;

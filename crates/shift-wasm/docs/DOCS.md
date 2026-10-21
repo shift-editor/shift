@@ -21,6 +21,7 @@ Runs shift-font's rules in the editor through WebAssembly, so the editor calls t
 crates/shift-wasm/src/
   lib.rs         module list
   anchors.rs     anchorKind, propagateAnchors, followAnchors
+  cursive.rs     attachCursive: joins a run's glyphs at their exit and entry anchors, as export's curs lookups do
   decomposition.rs   blendDecomposedGlyph: component outlines between masters of a decomposed glyph
   shaping.rs     registerShaper, setShaperGlyphs, shapeParagraphs (the `shaping` feature)
   variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
