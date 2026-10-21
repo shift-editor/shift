@@ -12,8 +12,8 @@ use fontdrasil::variations::{
 };
 
 use crate::{
-    Axis, AxisId, CoreResult, DesignLocation, DesignNormalization, Font, GlyphId, GlyphLayer,
-    Location, SourceId,
+    Axis, AxisId, AxisList, CoreResult, DesignLocation, DesignNormalization, Font, GlyphId,
+    GlyphLayer, Location, SourceId,
 };
 
 mod kerning;
@@ -405,10 +405,7 @@ impl Font {
 
         let mut compatible_sources = Vec::new();
 
-        for source in self.masters() {
-            let Some(layer) = glyph.layer_for_source(&source.id()) else {
-                continue;
-            };
+        for (source, layer) in self.masters_with_layers(glyph) {
             if !reference_layer.match_with(layer).is_complete() {
                 continue;
             }
@@ -456,18 +453,8 @@ impl Font {
 }
 
 fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
-    if let Some(default_source_id) = font.default_source_id() {
-        let default_is_master = font
-            .source(&default_source_id)
-            .is_some_and(crate::Source::is_master);
-        if default_is_master
-            && let Some(layer) = glyph
-                .layers()
-                .values()
-                .find(|layer| layer.source_id() == default_source_id)
-        {
-            return Some(layer.clone());
-        }
+    if let Some(layer) = font.default_master_layer(glyph) {
+        return Some(layer.clone());
     }
 
     font.master_layers(glyph)
@@ -621,10 +608,7 @@ fn region_scalar(
             continue;
         }
 
-        let axis = axes
-            .iter()
-            .find(|axis| axis.id() == support.axis_id)
-            .require(&support.axis_id)?;
+        let axis = axes.axis(&support.axis_id).require(&support.axis_id)?;
         let normalized = if let Some(design_normalization) = design_normalization {
             let normalization = design_normalization
                 .iter()
@@ -632,7 +616,7 @@ fn region_scalar(
                 .require(&support.axis_id)?;
             normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
         } else {
-            axis.normalize(location.get(&axis.id()).unwrap_or(axis.default()))
+            axis.normalize(location.value_on(axis))
         }
         .clamp(-1.0, 1.0);
 

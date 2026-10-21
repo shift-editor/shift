@@ -293,7 +293,7 @@ pub fn map_axis_location(mappings: u32, axes: u32, external: &[f64]) -> Vec<f64>
                 Err(_) => axes
                     .iter()
                     .map(|axis| match axis.role() {
-                        AxisRole::External => external.get(&axis.id()).unwrap_or(axis.default()),
+                        AxisRole::External => external.value_on(axis),
                         AxisRole::Internal => axis.default(),
                     })
                     .collect(),

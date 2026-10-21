@@ -103,7 +103,7 @@ impl FontDirectory {
                     location: font
                         .axes()
                         .iter()
-                        .map(|axis| source.location().get(&axis.id()).unwrap_or(axis.default()))
+                        .map(|axis| source.location().value_on(axis))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                     filename: source.filename().map(str::to_string),
@@ -121,12 +121,7 @@ impl FontDirectory {
                     location: font
                         .axes()
                         .iter()
-                        .map(|axis| {
-                            instance
-                                .location()
-                                .get(&axis.id())
-                                .unwrap_or(axis.default())
-                        })
+                        .map(|axis| instance.location().value_on(axis))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                     postscript_name: instance.postscript_name().map(str::to_string),
@@ -157,7 +152,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
     };
     let coordinate = |location: &Location, axis_id: &AxisId| {
         font.axis(axis_id)
-            .map(|axis| location.get(axis_id).unwrap_or(axis.default()))
+            .map(|axis| location.value_on(axis))
             .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
     };
 

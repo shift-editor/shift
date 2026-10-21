@@ -191,8 +191,7 @@ impl Font {
         }
 
         let sources = self.masters().collect::<Vec<_>>();
-        let default_source = self.default_source()?;
-        if !default_source.is_master() || sources.is_empty() {
+        if self.default_master().is_none() || sources.is_empty() {
             return None;
         }
 

@@ -276,17 +276,10 @@ fn compare_components(
             .any(|(reference, source)| reference.base_glyph_id() != source.base_glyph_id());
     if sequence_differs {
         differences.push(LayerDifference::ComponentSequence {
-            reference: component_sequence(reference),
-            source: component_sequence(source),
+            reference: reference.component_glyph_ids().collect(),
+            source: source.component_glyph_ids().collect(),
         });
     }
-}
-
-fn component_sequence(layer: &GlyphLayer) -> Vec<GlyphId> {
-    layer
-        .components_iter()
-        .map(crate::Component::base_glyph_id)
-        .collect()
 }
 
 #[cfg(test)]

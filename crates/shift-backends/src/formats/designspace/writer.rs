@@ -14,9 +14,9 @@ use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use serde::Serialize;
 use shift_font::{
-    Axis, AxisKind, AxisMapping, BinaryData, DesignLocation, ExternalLocation, FeatureData, Font,
-    FontMetadata, FontMetrics, Glyph, Guideline, Kerning, LibData, Location, MetricDefinition,
-    NamedInstance, Source, SourceId,
+    Axis, AxisKind, AxisList, AxisMapping, BinaryData, DesignLocation, ExternalLocation,
+    FeatureData, Font, FontMetadata, FontMetrics, Glyph, Guideline, Kerning, LibData, Location,
+    MetricDefinition, NamedInstance, Source, SourceId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -298,7 +298,7 @@ impl DesignspaceWriter {
         location
             .iter()
             .filter_map(|(axis_id, value)| {
-                let axis = axes.iter().find(|axis| axis.id() == *axis_id)?;
+                let axis = axes.axis(axis_id)?;
                 Some(Dimension {
                     name: axis.name().to_string(),
                     xvalue: Some(lossy_f32(*value)),
@@ -335,9 +335,7 @@ impl DesignspaceWriter {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
-                xvalue: Some(lossy_f32(
-                    location.get(&axis.id()).unwrap_or(axis.default()),
-                )),
+                xvalue: Some(lossy_f32(location.value_on(axis))),
                 ..Default::default()
             })
             .collect()
@@ -347,9 +345,7 @@ impl DesignspaceWriter {
         axes.iter()
             .map(|axis| Dimension {
                 name: axis.name().to_string(),
-                uservalue: Some(lossy_f32(
-                    location.get(&axis.id()).unwrap_or(axis.default()),
-                )),
+                uservalue: Some(lossy_f32(location.value_on(axis))),
                 ..Default::default()
             })
             .collect()
