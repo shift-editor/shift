@@ -125,7 +125,7 @@ describe("component references become removable or editable local contours", () 
     expect(componentId).not.toBeNull();
     expect(editor.selection.ids).toEqual([componentId]);
 
-    const root = editor.glyphForId(editor.glyphNode!.glyphId)!;
+    const root = editor.glyphOf(editor.glyphNode!)!;
     const referenceLayer = root.layerForSource(referenceSourceId)!;
     const targetLayer = root.layerForSource(targetSourceId)!;
     expect(referenceLayer.components).toHaveLength(1);

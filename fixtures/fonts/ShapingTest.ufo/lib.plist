@@ -4,6 +4,7 @@
 <dict>
 	<key>public.glyphOrder</key>
 	<array>
+		<string>.notdef</string>
 		<string>space</string>
 		<string>f</string>
 		<string>i</string>

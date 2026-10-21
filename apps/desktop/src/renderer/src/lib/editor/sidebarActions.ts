@@ -52,7 +52,7 @@ export function selectedBooleanContourIds(editor: Editor): readonly ContourId[] 
   const glyphNode = editor.scene.only("glyph");
   if (!glyphNode) return null;
 
-  const layer = editor.layerForGlyph(glyphNode.glyphId, glyphNode.sourceId);
+  const layer = editor.layerOf(glyphNode, glyphNode.sourceId);
   if (!layer) return null;
 
   const selectedIds = new Set(editor.selection.ids);

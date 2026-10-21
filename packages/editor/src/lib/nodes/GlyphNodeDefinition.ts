@@ -1,4 +1,3 @@
-import type { NodeReference } from "../../types/records";
 import { Bounds, Curve, Mat, Rect } from "@shift/geo";
 import type {
   ComponentId,
@@ -49,16 +48,24 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   readonly #outline = new OutlineRenderer();
 
-  /** A glyph node depends on the glyph it shows. */
-  override references(node: GlyphNode): readonly NodeReference[] {
-    return [node.glyphId];
-  }
   readonly #debugOverlays = new DebugOverlays();
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
   readonly #segments = new Segments();
   readonly #handles = new Handles();
   readonly #guides = new Guides();
+  /** The edited glyph nodes that draw a full metric box, or null when every node does; see {@link showsMetrics}. */
+  readonly #metricNodeIds = computed(
+    (): ReadonlySet<NodeId> | null => {
+      const edited = this.editor.editing.stateCell.value.nodeIds;
+      if (edited.length <= 1) return null;
+      if (this.editor.selection.stateCell.value.ids.length > 0) {
+        return new Set(this.editor.subjectGlyphNodesCell.value.map((subject) => subject.id));
+      }
+      return new Set(edited.slice(-1));
+    },
+    { name: "glyphNode.metricNodeIds" },
+  );
   readonly #outlineViews = keyedCache({
     name: "glyphNode.outlineViews",
     key: (target: GlyphOutlineTarget) => {
@@ -130,7 +137,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    */
   override selectableInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
     if (node.parentId !== null && !this.#isEditing(node)) return [];
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.editor.glyphOf(node);
     if (!glyph) return [];
 
     const geometry = glyph.geometryAt(this.editor.externalLocation);
@@ -154,7 +161,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (node.parentId !== null && !this.#isEditing(node)) return null;
 
     const geometry = this.#view(node);
-    if (!geometry) return null;
+    const glyphId = this.editor.glyphIdOf(node);
+    if (!geometry || !glyphId) return null;
 
     const hit = geometry.hitAt(point, this.editor.hitRadius);
     if (hit) {
@@ -166,7 +174,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId,
             point,
             segmentId: hit.id,
             pointIds: segment.pointIds,
@@ -177,7 +185,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId,
             point,
             pointId: hit.id,
           };
@@ -186,7 +194,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId,
             point,
             anchorId: hit.id,
           };
@@ -210,7 +218,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         componentId,
         componentPath: component.componentPath,
         nodeId: node.id,
-        glyphId: node.glyphId,
+        glyphId,
         point,
       };
     }
@@ -232,7 +240,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           componentId,
           componentPath: fillHit.componentPath,
           nodeId: node.id,
-          glyphId: node.glyphId,
+          glyphId,
           point,
         };
       }
@@ -281,7 +289,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #view(node: GlyphNode): GlyphRenderModel | null {
     return (
       this.editor
-        .glyphForId(node.glyphId)
+        .glyphOf(node)
         ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
     );
   }
@@ -297,13 +305,31 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const advance = this.#displayAdvance(node, view);
     if (advance === null) return;
 
+    if (!this.showsMetrics(node)) {
+      this.#guides.drawBaseline(ctx.canvas, advance);
+      return;
+    }
     const metrics = this.#trackedMetrics();
     this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
   }
 
+  /**
+   * Whether an edited glyph draws its full metric box.
+   *
+   * @remarks
+   * With several glyphs edited, only those the selection is in do, or with
+   * nothing selected the one edited last; the others draw just their
+   * baseline. Reactive: a render pass reading it redraws when the
+   * selection or the edited glyphs change.
+   */
+  showsMetrics(node: GlyphNode): boolean {
+    track(this.#metricNodeIds);
+    return this.#metricNodeIds.peek()?.has(node.id) ?? true;
+  }
+
   /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */
   #displayAdvance(node: GlyphNode, view: GlyphRenderModel): number | null {
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.editor.glyphOf(node);
     if (!glyph) return null;
 
     track(view.xAdvanceCell);
@@ -368,7 +394,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const targets = this.visibleOutlines(node.id);
     if (targets.length === 0) return;
 
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.editor.glyphOf(node);
     if (!glyph) return;
 
     for (const target of targets) {
@@ -462,7 +488,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const sourceId = this.editor.activeSourceIdCell.peek();
     if (!sourceId) return;
 
-    const layer = this.editor.layerForGlyph(node.glyphId, sourceId);
+    const layer = this.editor.glyphOf(node)?.layerForSource(sourceId) ?? null;
     if (!layer) return;
 
     track(layer.editBaseOutlineCell);

@@ -11,8 +11,8 @@ import { SidebarSection, SidebarSubsection } from "./SidebarSection";
  * to browse every group.
  *
  * @remarks
- * Renders nothing unless the scene holds exactly one glyph, as the Glyph
- * section above it does.
+ * Renders nothing unless the sidebar describes exactly one glyph; kerning
+ * groups belong to a single glyph.
  */
 interface GlyphKerningSectionProps {
   /** The sidebar block the section sits in, which the groups panel opens beside. */
@@ -21,12 +21,11 @@ interface GlyphKerningSectionProps {
 
 export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => {
   const editor = useEditor();
-  const scene = useSignalState(editor.scene.cell);
-  const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-  const node = glyphNodes.length === 1 ? glyphNodes[0] : undefined;
-  if (node?.kind !== "glyph") return null;
+  const subject = useSignalState(editor.subjectGlyphIdsCell);
+  // Kerning groups belong to one glyph; with several, the section waits for one.
+  const glyphId = subject.length === 1 ? subject[0]! : null;
+  if (!glyphId) return null;
 
-  const glyphId = node.glyphId;
   const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
   const disabled = editor.sessionMode !== "workspace";
 

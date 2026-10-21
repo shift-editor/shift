@@ -3,8 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { mintNodeId } from "@shift/types";
-import type { GlyphNode } from "@shift/editor/types";
+import type { TextRunNode } from "@shift/editor/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { effect } from "@shift/editor/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
@@ -21,7 +20,8 @@ describe("Editor scene bootstrap", () => {
   it("places the opened glyph as the page run's child at the origin", () => {
     const record = editor.font.recordForName("A")!;
     const [run, child] = editor.scene.nodes();
-    if (run?.kind !== "textRun") throw new Error("Expected the page run first");
+    if (run?.kind !== "textRun" || child?.kind !== "glyph")
+      throw new Error("Expected run and child");
     const item = editor.text.run(run.runId)?.items[0];
 
     expect(editor.scene.nodes()).toHaveLength(2);
@@ -30,26 +30,25 @@ describe("Editor scene bootstrap", () => {
       kind: "glyph",
       parentId: run.id,
       itemId: item?.id,
-      glyphId: record.id,
+      part: 0,
       sourceId: editor.font.defaultSource.id,
     });
+    expect(editor.glyphIdOf(child)).toBe(record.id);
     expect(editor.toScene(child!, localPoint(0, 0))).toEqual({ x: 0, y: 0 });
     expect(editor.editing.nodeIds).toEqual([child!.id]);
   });
 
-  it("finds the nodes that depend on a run or a glyph, and follows their removal", () => {
-    const [run, child] = editor.scene.nodes();
-    if (run?.kind !== "textRun" || child?.kind !== "glyph")
-      throw new Error("Expected run and glyph");
+  it("finds the nodes that depend on a run, and follows their removal", () => {
+    const [run] = editor.scene.nodes();
+    if (run?.kind !== "textRun") throw new Error("Expected run");
     const dependents: number[] = [];
     const reader = effect(() => {
-      dependents.push(editor.scene.nodesReferencing(child.glyphId).length);
+      dependents.push(editor.scene.nodesReferencing(run.runId).length);
     });
 
     expect(editor.scene.nodesReferencing(run.runId)).toEqual([run]);
-    expect(editor.scene.nodesReferencing(child.glyphId)).toEqual([child]);
 
-    editor.scene.deleteNode(child.id);
+    editor.scene.deleteNode(run.id);
     reader.dispose();
 
     expect(dependents).toEqual([1, 0]);
@@ -93,72 +92,46 @@ describe("Editor scene bootstrap", () => {
     expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
   });
 
+  /** Places a run of one `A` at `x` and edits its glyph; setup, not the behavior under test. */
+  const placeA = (x: number) => {
+    const record = editor.font.recordForName("A")!;
+    const item = editor.text.glyphItem(record.id)!;
+    const run = editor.scene.createNode<TextRunNode>({
+      kind: "textRun",
+      runId: editor.text.createRun([item]).id,
+      size: editor.font.metricsCell.peek().unitsPerEm,
+      position: { x, y: 0 },
+    });
+    return { run, child: editor.nodeDefinition("textRun").editItem(run, item.id)! };
+  };
+
   it("names the one glyph node only while the scene shows exactly one", () => {
     const [firstRun, firstChild] = editor.scene.nodes();
 
     expect(editor.scene.only("glyph")).toBe(firstChild);
     expect(editor.scene.first("textRun")).toBe(firstRun);
 
-    const record = editor.font.recordForName("A")!;
-    editor.scene.createNode<GlyphNode>({
-      kind: "glyph",
-      glyphId: record.id,
-      sourceId: editor.font.defaultSource.id,
-      position: { x: 700, y: 0 },
-    });
+    placeA(700);
 
     expect(editor.scene.nodesOfKind("glyph")).toHaveLength(2);
     expect(editor.scene.only("glyph")).toBeNull();
     expect(editor.scene.first("glyph")).toBe(firstChild);
   });
 
-  it("can place the same glyph id twice with distinct node ids", () => {
+  it("can place the same glyph twice with distinct node ids", () => {
     const record = editor.font.recordForName("A")!;
-    const left = mintNodeId();
-    const right = mintNodeId();
+    const left = placeA(0);
+    const right = placeA(700);
 
-    editor.scene.setNodes([
-      {
-        id: left,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId: record.id,
-        sourceId: editor.font.defaultSource.id,
-        position: { x: 0, y: 0 },
-      },
-      {
-        id: right,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a1",
-        glyphId: record.id,
-        sourceId: editor.font.defaultSource.id,
-        position: { x: 700, y: 0 },
-      },
-    ]);
+    expect(left.child.id).not.toBe(right.child.id);
+    expect(editor.glyphIdOf(left.child)).toBe(record.id);
+    expect(editor.glyphIdOf(right.child)).toBe(record.id);
+    expect(editor.toLocal(right.child, scenePoint(710, -20))).toEqual({ x: 10, y: 20 });
 
-    const leftNode = editor.scene.node(left);
-    const rightNode = editor.scene.node(right);
-    if (leftNode?.kind !== "glyph" || rightNode?.kind !== "glyph") {
-      throw new Error("Expected two glyph nodes");
-    }
+    editor.scene.updateNode({ id: right.run.id, position: { x: 730, y: 5 } });
 
-    expect(leftNode.glyphId).toBe(record.id);
-    expect(rightNode.glyphId).toBe(record.id);
-    expect(editor.toLocal(rightNode, scenePoint(710, -20))).toEqual({
-      x: 10,
-      y: 20,
-    });
-
-    editor.scene.updateNode({
-      id: rightNode.id,
-      position: { x: rightNode.position.x + 30, y: rightNode.position.y + 5 },
-    });
-
-    expect(editor.scene.node(right)?.position).toEqual({ x: 730, y: 5 });
+    expect(editor.scene.node(right.run.id)?.position).toEqual({ x: 730, y: 5 });
+    expect(editor.scene.node(left.run.id)?.position).toEqual({ x: 0, y: 0 });
   });
 
   it("resolves authored points through the ownership index and keeps their bounds live", async () => {
@@ -197,9 +170,7 @@ describe("Editor scene bootstrap", () => {
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
 
-    const defaultLayer = editor
-      .glyphForId(node.glyphId)
-      ?.layerForSource(editor.font.defaultSource.id);
+    const defaultLayer = editor.glyphOf(node)?.layerForSource(editor.font.defaultSource.id);
     if (!defaultLayer) throw new Error("Expected default glyph layer");
 
     const defaultContour = defaultLayer.contours[0];
@@ -217,7 +188,7 @@ describe("Editor scene bootstrap", () => {
     expect(editor.activeSourceId).toBe(sourceId);
     expect(editor.glyphNode?.sourceId).toBe(sourceId);
 
-    const createdLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const createdLayer = editor.glyphOf(node)?.layerForSource(sourceId);
     if (!createdLayer) throw new Error("Expected seeded glyph layer");
 
     const createdContour = createdLayer.contours[0];
@@ -316,9 +287,7 @@ describe("Editor scene bootstrap", () => {
     const node = editor.glyphNode;
     if (!node) throw new Error("Expected opened glyph node");
 
-    const defaultLayer = editor
-      .glyphForId(node.glyphId)
-      ?.layerForSource(editor.font.defaultSource.id);
+    const defaultLayer = editor.glyphOf(node)?.layerForSource(editor.font.defaultSource.id);
     if (!defaultLayer) throw new Error("Expected default glyph layer");
 
     const axisId = editor.font.createAxis(weightAxis());
@@ -329,12 +298,12 @@ describe("Editor scene bootstrap", () => {
     );
     await editor.settle();
 
-    expect(editor.glyphForId(node.glyphId)?.layerForSource(sourceId)).toBeNull();
+    expect(editor.glyphOf(node)?.layerForSource(sourceId)).toBeNull();
 
     editor.selectSourceForEditing(sourceId);
     await editor.settle();
 
-    const materializedLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
+    const materializedLayer = editor.glyphOf(node)?.layerForSource(sourceId);
     if (!materializedLayer) throw new Error("Expected materialized glyph layer");
 
     expect(editor.activeSourceId).toBe(sourceId);
