@@ -33,7 +33,6 @@ mod report;
 pub(crate) use axis::set_axis;
 pub(crate) use font_info::{font_info, set_font};
 pub(crate) use glyph::{add_glyph, add_layer, copy_layer, set_layer};
-pub(crate) use glyph::{resolve_glyph_id, resolve_source_id};
 pub(crate) use glyph_batch::set_glyphs;
 pub(crate) use glyph_export::{ExportSources, export_glyphs};
 pub(crate) use instance::{add_instance, remove_instance, set_instance};

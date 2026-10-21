@@ -11,9 +11,9 @@ use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::{Font, GlyphId, KerningPair, KerningPosition, KerningSide, Location, Source};
 
-use crate::authoring::{resolve_glyph_id, resolve_source_id};
 use crate::cli::{GetKerningArgs, KerningGroupsArgs, ListKerningArgs};
 use crate::glyph_inspect::parse_location;
+use crate::selector::FontSelectors;
 
 mod report;
 pub(crate) mod selector;
@@ -39,7 +39,7 @@ pub(crate) fn list_kerning(args: ListKerningArgs) -> Result<KerningListReport> {
     let kerning = font.kerning();
     let sources = match args.source.as_deref() {
         Some(selector) => {
-            let source_id = resolve_source_id(&font, selector)?;
+            let source_id = font.source_id_for(selector)?;
             vec![
                 font.source(&source_id)
                     .ok_or_else(|| miette!("source does not exist"))?,
@@ -129,8 +129,8 @@ pub(crate) fn kerning_groups(args: KerningGroupsArgs) -> Result<KerningGroupsRep
 /// Reports unreadable fonts, unresolved glyphs, and invalid locations.
 pub(crate) fn get_kerning(args: GetKerningArgs) -> Result<KerningResolutionReport> {
     let font = read_font(&args.path)?;
-    let first = resolve_glyph_id(&font, &args.first)?;
-    let second = resolve_glyph_id(&font, &args.second)?;
+    let first = font.glyph_id_for(&args.first)?;
+    let second = font.glyph_id_for(&args.second)?;
 
     let masters = font
         .masters()
@@ -263,7 +263,7 @@ struct GlyphFilter {
 
 impl GlyphFilter {
     fn new(font: &Font, selector: &str) -> Result<Self> {
-        let glyph = resolve_glyph_id(font, selector)?;
+        let glyph = font.glyph_id_for(selector)?;
         let group = |position| {
             font.kerning()
                 .group_of(position, &glyph)

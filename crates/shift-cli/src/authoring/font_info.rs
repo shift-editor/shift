@@ -8,8 +8,9 @@ use shift_font::{SetMetricDefinitions, UpdateFontMetadata, UpdateSource};
 
 use crate::cli::{FontInfoArgs, SetFontArgs};
 
-use super::glyph::{load_font, resolve_source_id};
+use super::glyph::load_font;
 use super::{AuthoringReport, apply_mutation, require_finite};
+use crate::selector::FontSelectors;
 use report::{FontInfoReport, SourceMetrics, format_version};
 
 pub(super) mod report;
@@ -201,7 +202,7 @@ fn source_metric_intents(
 
 pub(super) fn target_source_id(font: &Font, selector: Option<&str>) -> Result<SourceId> {
     match selector {
-        Some(selector) => resolve_source_id(font, selector),
+        Some(selector) => font.source_id_for(selector),
         None => font
             .default_source_id()
             .ok_or_else(|| miette!("the font has no default source")),
