@@ -4,7 +4,7 @@ use shift_font::{CreateGlyph, CreateGlyphLayer, UpdateGlyph};
 use std::collections::{HashMap, HashSet};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use shift_font::{FontIntent, FontIntentSet, GlyphId, GlyphName, LayerId};
+use shift_font::{FontIntentSet, GlyphId, GlyphName, LayerId};
 
 use crate::cli::SetGlyphsArgs;
 
@@ -93,11 +93,14 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
                 None => {
                     let glyph_id = GlyphId::new();
                     let values = requested_unicodes.clone().unwrap_or_default();
-                    intents.push(FontIntent::CreateGlyph(CreateGlyph {
-                        glyph_id: Some(glyph_id.clone()),
-                        name: name.clone(),
-                        unicodes: values.clone(),
-                    }));
+                    intents.push(
+                        CreateGlyph {
+                            glyph_id: Some(glyph_id.clone()),
+                            name: name.clone(),
+                            unicodes: values.clone(),
+                        }
+                        .into(),
+                    );
                     (glyph_id, values)
                 }
             };
@@ -107,11 +110,14 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         if let Some(values) = requested_unicodes
             && *current_unicodes != values
         {
-            intents.push(FontIntent::UpdateGlyph(UpdateGlyph {
-                glyph_id: glyph_id.clone(),
-                new_name: glyph_name,
-                new_unicodes: values.clone(),
-            }));
+            intents.push(
+                UpdateGlyph {
+                    glyph_id: glyph_id.clone(),
+                    new_name: glyph_name,
+                    new_unicodes: values.clone(),
+                }
+                .into(),
+            );
             *current_unicodes = values;
         }
 
@@ -130,11 +136,14 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
         let layer_id = existing.clone().unwrap_or_else(LayerId::new);
         if existing.is_none() {
-            intents.push(FontIntent::CreateGlyphLayer(CreateGlyphLayer {
-                layer_id: layer_id.clone(),
-                glyph_id,
-                source_id,
-            }));
+            intents.push(
+                CreateGlyphLayer {
+                    layer_id: layer_id.clone(),
+                    glyph_id,
+                    source_id,
+                }
+                .into(),
+            );
         }
         intents.push(
             input

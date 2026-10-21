@@ -624,20 +624,23 @@ fn edit_groups(font: &mut shift_font::Font) -> shift_font::FontChangeSet {
     let round = shift_font::KerningGroupId::from_raw("a_round");
     font.apply_intents(&shift_font::FontIntentSet {
         intents: vec![
-            shift_font::FontIntent::CreateKerningGroup(CreateKerningGroup {
+            CreateKerningGroup {
                 group_id: round.clone(),
                 position: shift_font::KerningPosition::First,
                 name: "Round".to_string(),
-            }),
-            shift_font::FontIntent::SetKerningGroupMember(SetKerningGroupMember {
+            }
+            .into(),
+            SetKerningGroupMember {
                 position: shift_font::KerningPosition::First,
                 glyph_id: shift_font::GlyphId::from_raw("A"),
                 group_id: Some(round),
-            }),
-            shift_font::FontIntent::RenameKerningGroup(RenameKerningGroup {
+            }
+            .into(),
+            RenameKerningGroup {
                 group_id: shift_font::KerningGroupId::from_raw("second_A"),
                 name: "Apex".to_string(),
-            }),
+            }
+            .into(),
         ],
     })
     .expect("group edits apply")
