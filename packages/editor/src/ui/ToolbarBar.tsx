@@ -5,7 +5,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { Point2D } from "@shift/geo";
+import { Vec2 } from "@shift/geo";
 import { cn } from "@shift/ui";
 import type { Editor } from "../lib/editor/Editor";
 import type {
@@ -18,6 +18,7 @@ import type {
 import { ShiftIcon } from "./ShiftIcon";
 import { springEasing, type Spring, type SpringEasing } from "./springEasing";
 import { ToolsPane, type ToolsPaneSide } from "./ToolsPane";
+import { centreOf } from "./toolbarGeometry";
 import { poseAngle } from "./toolbarPose";
 import { TOOL_FADE_MS, toolDipKeyframes } from "./toolbarPresence";
 
@@ -73,12 +74,6 @@ function readRunningMotion(bar: HTMLElement, animations: readonly Animation[]): 
   const rotateDeg = style.rotate === "none" ? 0 : Number.parseFloat(style.rotate);
 
   return { translate: { x: Number.parseFloat(x), y: Number.parseFloat(y) }, rotateDeg };
-}
-
-function centreOf(element: HTMLElement): Point2D {
-  const rect = element.getBoundingClientRect();
-
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
 export interface ToolbarBarProps {
@@ -171,17 +166,12 @@ export function ToolbarBar({
 
     // Rotation is about the handle, so only a slide moves it.
     const gripCentre = centreOf(grip);
-    const handle = moved
-      ? gripCentre
-      : { x: gripCentre.x - running.translate.x, y: gripCentre.y - running.translate.y };
+    const handle = moved ? gripCentre : Vec2.sub(gripCentre, running.translate);
     placeRef.current = { key: placeKey, pose, handle };
     if (!moved) return;
 
-    const drawnAt = {
-      x: last.handle.x + running.translate.x,
-      y: last.handle.y + running.translate.y,
-    };
-    const slide = { x: drawnAt.x - handle.x, y: drawnAt.y - handle.y };
+    const drawnAt = Vec2.add(last.handle, running.translate);
+    const slide = Vec2.sub(drawnAt, handle);
     const drawnAngle = poseAngle(last.pose) + running.rotateDeg;
     const turn = drawnAngle - poseAngle(pose);
     const still = Math.abs(slide.x) < 0.5 && Math.abs(slide.y) < 0.5 && Math.abs(turn) < 0.5;

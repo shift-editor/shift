@@ -12,7 +12,8 @@ import type {
   UseToolbarDragOptions,
 } from "../types/toolbar";
 import { nextToolbarDrag, startToolbarDrag } from "./toolbarDrag";
-import { frameOf } from "./toolbarGeometry";
+import { CanvasSurface } from "../lib/editor/rendering/CanvasSurface";
+import { centreOf, frameOf } from "./toolbarGeometry";
 
 /**
  * Where the handle sits inside the bar, from layout offsets.
@@ -66,12 +67,12 @@ export function useToolbarDrag({
         return;
       }
 
-      const layer = layerRef.current?.getBoundingClientRect();
+      const layer = layerRef.current;
       const previous = dragRef.current;
       if (!layer || !previous) return;
 
-      const pointer = { x: event.clientX - layer.left, y: event.clientY - layer.top };
-      publish(nextToolbarDrag(previous, pointer, frameOf(layer)));
+      const pointer = CanvasSurface.screenPoint(layer, { x: event.clientX, y: event.clientY });
+      publish(nextToolbarDrag(previous, pointer, frameOf(layer.getBoundingClientRect())));
     };
     const release = (event: PointerEvent) => {
       if (ownsEvent(event)) drop();
@@ -105,27 +106,22 @@ export function useToolbarDrag({
   }, [dragging, layerRef, onDock, publish]);
 
   const onGripPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const layer = layerRef.current?.getBoundingClientRect();
+    const layer = layerRef.current;
     const bar = event.currentTarget.closest<HTMLElement>("[data-floating-toolbar]");
     // Ctrl+click opens the context menu on macOS, which would swallow the release.
     if (event.button !== 0 || event.ctrlKey || !layer || !bar) return;
 
     event.preventDefault();
     pointerIdRef.current = event.pointerId;
-    const grip = event.currentTarget.getBoundingClientRect();
-    const handle = {
-      x: grip.left + grip.width / 2 - layer.left,
-      y: grip.top + grip.height / 2 - layer.top,
-    };
 
     publish(
       startToolbarDrag({
         dock,
         length: Math.max(bar.offsetWidth, bar.offsetHeight),
-        pointer: { x: event.clientX - layer.left, y: event.clientY - layer.top },
-        handle,
+        pointer: CanvasSurface.screenPoint(layer, { x: event.clientX, y: event.clientY }),
+        handle: CanvasSurface.screenPoint(layer, centreOf(event.currentTarget)),
         handleInBar: handleInBar(event.currentTarget, bar),
-        frame: frameOf(layer),
+        frame: frameOf(layer.getBoundingClientRect()),
       }),
     );
   };

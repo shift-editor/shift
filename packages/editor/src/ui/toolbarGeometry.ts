@@ -12,6 +12,13 @@ export function frameOf(rect: DOMRect): ToolbarFrame {
   return { width: rect.width, height: rect.height };
 }
 
+/** Centre of an element's box, in viewport coordinates. */
+export function centreOf(element: HTMLElement): Point2D {
+  const rect = element.getBoundingClientRect();
+
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
 /** Share of the frame's height, from each of top and bottom, that docks the bar to that edge. */
 export const FLAT_ZONE_SHARE = 0.25;
 

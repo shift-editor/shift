@@ -1,4 +1,4 @@
-import type { Point2D } from "@shift/geo";
+import { Vec2, type Point2D } from "@shift/geo";
 import type {
   ToolbarDock,
   ToolbarDragStart,
@@ -25,7 +25,7 @@ export function startToolbarDrag(start: ToolbarDragStart): ToolbarDragState {
     pointer: start.pointer,
     handle: start.handle,
     handleInBar: start.handleInBar,
-    grab: { x: start.handle.x - start.pointer.x, y: start.handle.y - start.pointer.y },
+    grab: Vec2.sub(start.handle, start.pointer),
     seatDock: start.dock,
     target: start.dock,
     length: start.length,
@@ -52,10 +52,10 @@ export function toolbarBarReach(drag: ToolbarDragState): Point2D {
 
   // The far end is the bar's left end when flat and its top end when standing.
   if (poseForDock(drag.seatDock) === "stand") {
-    return { x: origin.x + BAR_THICKNESS / 2, y: origin.y + reach };
+    return Vec2.add(origin, { x: BAR_THICKNESS / 2, y: reach });
   }
 
-  return { x: origin.x + reach, y: origin.y + BAR_THICKNESS / 2 };
+  return Vec2.add(origin, { x: reach, y: BAR_THICKNESS / 2 });
 }
 
 /**
@@ -102,7 +102,7 @@ function isTethered(drag: ToolbarDragState, pointer: Point2D): boolean {
   const { tether } = drag;
   if (!tether) return false;
 
-  return Math.hypot(pointer.x - tether.x, pointer.y - tether.y) <= TEAR_DISTANCE;
+  return Vec2.dist(pointer, tether) <= TEAR_DISTANCE;
 }
 
 /**
@@ -121,10 +121,7 @@ export function nextToolbarDrag(
 ): ToolbarDragState {
   if (isTethered(previous, pointer)) return { ...previous, pointer, frame };
 
-  const handle = clampHandleToFrame(
-    { x: pointer.x + previous.grab.x, y: pointer.y + previous.grab.y },
-    frame,
-  );
+  const handle = clampHandleToFrame(Vec2.add(pointer, previous.grab), frame);
   const moved = { ...previous, pointer, handle, frame, tether: null };
   const target = steeredDock(
     pointer,
@@ -139,7 +136,7 @@ export function nextToolbarDrag(
 
 /** Top-left corner of the carried bar, so its handle sits where the pointer holds it. */
 export function toolbarBarOrigin(drag: ToolbarDragState): Point2D {
-  return { x: drag.handle.x - drag.handleInBar.x, y: drag.handle.y - drag.handleInBar.y };
+  return Vec2.sub(drag.handle, drag.handleInBar);
 }
 
 /**
