@@ -191,7 +191,8 @@ export declare class Bridge {
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   /**
    * Shapes a paragraph with the font's feature code, split into runs of one
-   * script, each in its script's direction.
+   * script and bidi level, each shaped in its level's direction and
+   * returned in screen order.
    *
    * Characters map through the live font's Unicode values and every
    * glyph's own advance is zero while shaping, so the result carries the
@@ -202,7 +203,7 @@ export declare class Bridge {
    * The shaping tables are rebuilt only when a font change since the last
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
-  shapeParagraph(request: NapiParagraphRequest): Array<NapiShapedRun>
+  shapeParagraph(request: NapiParagraphRequest): NapiShapedParagraph
   /**
    * Returns the compiled shaping tables, for the editor to shape with
    * itself, or `null` when they are still at `known_revision`. Compiles
@@ -302,7 +303,7 @@ export interface NapiNewWorkspace {
   unitsPerEm?: number
 }
 
-/** A paragraph to shape, split into runs of one script. */
+/** A paragraph to shape, split into runs of one script and bidi level. */
 export interface NapiParagraphRequest {
   units: Array<NapiShapeUnit>
   /** User-space location to shape at; omitted axes are at their default. */
@@ -329,7 +330,14 @@ export interface NapiShapedGlyph {
   yOffset: number
 }
 
-/** One run of a shaped paragraph, in one script and direction. */
+/** A shaped paragraph: its base direction and its runs in screen order. */
+export interface NapiShapedParagraph {
+  /** The paragraph's base direction, from its first strong character. */
+  direction: "ltr" | "rtl"
+  runs: Array<NapiShapedRun>
+}
+
+/** One run of a shaped paragraph, in one script and bidi level. */
 export interface NapiShapedRun {
   /** First paragraph unit in the run. */
   start: number
@@ -340,6 +348,11 @@ export interface NapiShapedRun {
    * characters common to all scripts.
    */
   script?: string
+  /**
+   * Resolved bidi level; odd levels read right to left. Runs already come
+   * in screen order, reordered by level.
+   */
+  level: number
   direction: "ltr" | "rtl"
   /** Glyphs in visual order; clusters index the paragraph's units. */
   glyphs: Array<NapiShapedGlyph>

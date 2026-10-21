@@ -120,7 +120,10 @@ export interface PositionedRun {
 }
 
 export interface Line {
+  /** Runs in screen order, left to right. */
   runs: PositionedRun[];
+  /** The paragraph's base direction. */
+  direction: Direction;
   y: number;
   ascent: number;
   descent: number;
@@ -134,14 +137,19 @@ export interface Line {
   clusterEnd: number;
 }
 
-export interface Hit {
-  lineIndex: number;
-  runIndex: number;
-  cluster: number;
-  side: "left" | "right";
+/** A place on a line where a caret can stand, and where it draws. */
+export interface CaretStop {
+  readonly cluster: number;
+  readonly x: number;
 }
 
-/** A selection highlight on one line, in layout coordinates. */
+/** A horizontal stretch of a line, in layout coordinates. */
+export interface Span {
+  readonly left: number;
+  readonly right: number;
+}
+
+/** A selection highlight box in layout coordinates. */
 export interface SelectionRect {
   readonly x: number;
   readonly width: number;

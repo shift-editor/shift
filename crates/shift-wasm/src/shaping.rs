@@ -10,7 +10,23 @@
 //! table, so nothing here crosses as an interned name: units, locations, and
 //! tags are numbers.
 
-use crate::layout::layout;
+use crate::layout::{enum_layout, layout};
+
+/// The direction text reads in, as it crosses to the editor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ShapedDirection {
+    #[default]
+    LeftToRight,
+    RightToLeft,
+}
+
+enum_layout! {
+    /// The direction text reads in.
+    ShapedDirection {
+        LeftToRight => "ltr",
+        RightToLeft => "rtl",
+    }
+}
 
 layout! {
     /// How one shaper axis's user coordinates normalize, at each mapping point.
@@ -77,16 +93,28 @@ layout! {
 }
 
 layout! {
-    /// One run of a shaped paragraph, in logical order.
+    /// One run of a shaped paragraph; a paragraph's runs come in screen order.
     pub struct ShapedRunOutput {
         /// The paragraph units the run covers, from `start` up to `end`.
         pub start: usize,
         pub end: usize,
         /// The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script.
         pub script: f64,
-        pub right_to_left: bool,
+        /// The run's resolved bidi level; odd levels read right to left.
+        pub level: usize,
+        pub direction: ShapedDirection,
         /// The run's glyphs in visual order.
         pub glyphs: Vec<ShapedGlyphOutput>,
+    }
+}
+
+layout! {
+    /// A shaped paragraph: its base direction and its runs.
+    pub struct ShapedParagraphOutput {
+        /// The paragraph's base direction, from its first strong character.
+        pub direction: ShapedDirection,
+        /// Runs in screen order, left to right, reordered by bidi level.
+        pub runs: Vec<ShapedRunOutput>,
     }
 }
 
@@ -102,9 +130,19 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        ParagraphInput, ShapeParagraphs, ShapedGlyphOutput, ShapedRunOutput, ShaperGlyphs,
+        ParagraphInput, ShapeParagraphs, ShapedDirection, ShapedGlyphOutput, ShapedParagraphOutput,
+        ShapedRunOutput, ShaperGlyphs,
     };
     use crate::layout::call;
+
+    impl From<TextDirection> for ShapedDirection {
+        fn from(direction: TextDirection) -> Self {
+            match direction {
+                TextDirection::LeftToRight => Self::LeftToRight,
+                TextDirection::RightToLeft => Self::RightToLeft,
+            }
+        }
+    }
 
     thread_local! {
         static SHAPERS: RefCell<Vec<Option<Registered>>> = const { RefCell::new(Vec::new()) };
@@ -202,8 +240,8 @@ mod exports {
         })
     }
 
-    /// Input: `ShapeParagraphs`. Output: each paragraph's runs, or null for
-    /// a paragraph that cannot be shaped or an unregistered shaper.
+    /// Input: `ShapeParagraphs`. Output: each paragraph, or null for a
+    /// paragraph that cannot be shaped or an unregistered shaper.
     #[wasm_bindgen(js_name = shapeParagraphs)]
     pub fn shape_paragraphs(input: &[f64]) -> Vec<f64> {
         call(input, |request: ShapeParagraphs| {
@@ -223,7 +261,7 @@ mod exports {
     fn shape(
         registered: &Registered,
         paragraph: &ParagraphInput,
-    ) -> Result<Vec<ShapedRunOutput>, ShapeError> {
+    ) -> Result<ShapedParagraphOutput, ShapeError> {
         let units: Vec<Unit<u32>> = paragraph
             .units
             .iter()
@@ -255,7 +293,7 @@ mod exports {
             })
             .collect::<Vec<_>>();
 
-        let runs = registered.shaper.shape_paragraph(
+        let paragraph = registered.shaper.shape_paragraph(
             &registered.glyphs,
             &ParagraphRequest {
                 units: &units,
@@ -264,13 +302,15 @@ mod exports {
                 features: &features,
             },
         )?;
-        Ok(runs
+        let runs = paragraph
+            .runs
             .into_iter()
             .map(|run| ShapedRunOutput {
                 start: index_of(run.units.start),
                 end: index_of(run.units.end),
                 script: run.script.as_deref().map_or(0.0, script_tag),
-                right_to_left: run.direction == TextDirection::RightToLeft,
+                level: usize::from(run.level),
+                direction: run.direction.into(),
                 glyphs: run
                     .glyphs
                     .into_iter()
@@ -284,7 +324,11 @@ mod exports {
                     })
                     .collect(),
             })
-            .collect())
+            .collect();
+        Ok(ShapedParagraphOutput {
+            direction: paragraph.direction.into(),
+            runs,
+        })
     }
 
     /// Reads a unit: a code point, or `-(glyph + 1)` for an inserted glyph.
