@@ -37,6 +37,12 @@ allow = [
   "Zlib",
 ]
 confidence-threshold = 0.9
+# BSD-3-Clause is permissive; allowed per crate so each new one is reviewed.
+exceptions = [
+  # PNG proof rendering in shift-proof.
+  { crate = "tiny-skia", allow = ["BSD-3-Clause"] },
+  { crate = "tiny-skia-path", allow = ["BSD-3-Clause"] },
+]
 
 [bans]
 # Two versions of one crate add build time and WebAssembly size; report them
