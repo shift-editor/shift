@@ -90,7 +90,6 @@ impl GlyphsFont {
             .map(|master| {
                 master
                     .location_values(source.axes.len())
-                    .into_iter()
                     .enumerate()
                     .map(|(index, value)| value.unwrap_or(interpolation_axes[index].default))
                     .collect::<Vec<_>>()

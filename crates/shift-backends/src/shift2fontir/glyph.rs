@@ -7,7 +7,7 @@ use fontir::error::Error;
 use fontir::ir::{AnchorBuilder, Component, GlyphBuilder, GlyphInstance};
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
-use shift_font::{Contour, CurveSegment, Glyph, GlyphLayer};
+use shift_font::{Glyph, GlyphLayer};
 
 use super::source::ShiftSnapshot;
 
@@ -99,7 +99,7 @@ fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
         width: layer.width(),
         height: layer.height(),
         vertical_origin: None,
-        contours: layer.contours_iter().map(to_bez_path).collect(),
+        contours: layer.contours_iter().map(BezPath::from).collect(),
         components: layer
             .components_iter()
             .map(|component| {
@@ -138,77 +138,4 @@ fn add_anchors(
     }
 
     Ok(())
-}
-
-/// Builds a kurbo path whose start is the first segment's on-curve point.
-///
-/// Glyphs and UFO contours may begin with off-curve points; segment iteration
-/// already starts at the first on-curve point and wraps the leading controls
-/// into the closing segment, so the path must start there too.
-fn to_bez_path(contour: &Contour) -> BezPath {
-    let mut path = BezPath::new();
-    let mut segments = contour.segments().peekable();
-    let Some(
-        CurveSegment::Line(first, _)
-        | CurveSegment::Quad(first, _, _)
-        | CurveSegment::Cubic(first, _, _, _),
-    ) = segments.peek()
-    else {
-        return path;
-    };
-
-    path.move_to((first.x(), first.y()));
-    for segment in segments {
-        match segment {
-            CurveSegment::Line(_, end) => path.line_to((end.x(), end.y())),
-            CurveSegment::Quad(_, control, end) => {
-                path.quad_to((control.x(), control.y()), (end.x(), end.y()));
-            }
-            CurveSegment::Cubic(_, first_control, second_control, end) => {
-                path.curve_to(
-                    (first_control.x(), first_control.y()),
-                    (second_control.x(), second_control.y()),
-                    (end.x(), end.y()),
-                );
-            }
-        }
-    }
-
-    if contour.is_closed() {
-        path.close_path();
-    }
-
-    path
-}
-
-#[cfg(test)]
-mod tests {
-    use kurbo::PathEl;
-    use shift_font::{Contour, PointType};
-
-    use super::to_bez_path;
-
-    #[test]
-    fn contour_starting_off_curve_starts_path_on_curve() {
-        let mut contour = Contour::new();
-        contour.add_point(10.0, 0.0, PointType::OffCurve, false);
-        contour.add_point(20.0, 10.0, PointType::OffCurve, false);
-        contour.add_point(20.0, 20.0, PointType::OnCurve, false);
-        contour.add_point(0.0, 20.0, PointType::OnCurve, false);
-        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
-        contour.close();
-
-        let elements = to_bez_path(&contour).elements().to_vec();
-
-        assert_eq!(
-            elements,
-            vec![
-                PathEl::MoveTo((20.0, 20.0).into()),
-                PathEl::LineTo((0.0, 20.0).into()),
-                PathEl::LineTo((0.0, 0.0).into()),
-                PathEl::CurveTo((10.0, 0.0).into(), (20.0, 10.0).into(), (20.0, 20.0).into()),
-                PathEl::ClosePath,
-            ]
-        );
-    }
 }

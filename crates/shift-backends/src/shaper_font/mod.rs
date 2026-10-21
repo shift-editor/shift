@@ -100,7 +100,6 @@ impl ShaperFontRequest {
         ))
         .chain(
             font.glyphs()
-                .into_iter()
                 .filter(|glyph| glyph.name() != NOTDEF)
                 .map(|glyph| (glyph.name().to_string(), Some(glyph.id()))),
         )

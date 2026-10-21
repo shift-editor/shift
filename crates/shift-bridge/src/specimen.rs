@@ -91,14 +91,12 @@ pub(crate) fn acquire_specimen_glyphs(
   }
 
   let planned = FontView::glyphs(font)
-    .into_iter()
     .filter(|glyph| shows_planned_character(glyph, &plan.characters) || glyph.name() == ".notdef")
     .map(Glyph::id)
     .collect::<Vec<_>>();
   workspace.acquire_glyphs(&planned, AcquireScope::ComponentClosure)?;
 
   let leading = FontView::glyphs(workspace.font())
-    .into_iter()
     .filter(|glyph| glyph.name() != ".notdef")
     .map(Glyph::id)
     .collect::<Vec<GlyphId>>();
@@ -108,7 +106,7 @@ pub(crate) fn acquire_specimen_glyphs(
     let font = workspace.font();
     drawn += batch
       .iter()
-      .filter(|glyph_id| font.glyph(glyph_id).is_some_and(has_outline))
+      .filter(|glyph_id| font.glyph(glyph_id).is_some_and(Glyph::has_outline))
       .count();
     if drawn >= LEADING_DRAWN_GLYPHS {
       break;
@@ -120,7 +118,6 @@ pub(crate) fn acquire_specimen_glyphs(
 fn font_characters(font: &impl FontView) -> Vec<char> {
   font
     .glyphs()
-    .iter()
     .flat_map(|glyph| {
       glyph
         .unicodes()
@@ -146,7 +143,6 @@ fn shows_planned_character(glyph: &Glyph, planned: &[char]) -> bool {
 fn source_specimen(
   font: &impl FontView,
 ) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
-  let glyphs = font.glyphs();
   let characters = font_characters(font);
   let plan = shift_specimen::subset_plan(&characters);
 
@@ -154,17 +150,14 @@ fn source_specimen(
   let binary = if plan.needs_features {
     exporter.compile_ttf(font)
   } else {
-    let planned = glyphs
-      .iter()
+    let planned = font
+      .glyphs()
       .filter(|glyph| shows_planned_character(glyph, &plan.characters));
-    let leading = glyphs
-      .iter()
-      .filter(|glyph| glyph.name() != ".notdef" && has_outline(glyph))
+    let leading = font
+      .glyphs()
+      .filter(|glyph| glyph.name() != ".notdef" && glyph.has_outline())
       .take(LEADING_DRAWN_GLYPHS);
-    let names = planned
-      .chain(leading)
-      .map(|glyph| glyph.name())
-      .chain([".notdef"]);
+    let names = planned.chain(leading).map(Glyph::name).chain([".notdef"]);
     exporter.compile_ttf(&GlyphSubsetView::new(font, names))
   }
   .map_err(|error| error.to_string())?;
@@ -173,13 +166,6 @@ fn source_specimen(
     &binary,
     &characters,
   ))
-}
-
-fn has_outline(glyph: &Glyph) -> bool {
-  glyph
-    .layers()
-    .values()
-    .any(|layer| !layer.contours().is_empty() || !layer.components().is_empty())
 }
 
 impl Task for SpecimenTask {

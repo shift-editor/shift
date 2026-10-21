@@ -888,25 +888,16 @@ impl FontView for FontSaveSnapshot {
     self.font.default_source_id()
   }
 
-  fn glyphs(&self) -> Vec<&Glyph> {
-    let override_name = self
-      .active_glyph_override
-      .as_ref()
-      .map(|glyph| glyph.name().to_string());
-    let mut glyphs = Vec::new();
+  fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
+    let active_glyph = self.active_glyph_override.as_deref();
+    let override_name = active_glyph.map(Glyph::name);
 
-    if let Some(active_glyph) = self.active_glyph_override.as_ref() {
-      glyphs.push(active_glyph.as_ref());
-    }
-
-    glyphs.extend(
+    active_glyph.into_iter().chain(
       self
         .font
         .glyphs()
-        .filter(|glyph| override_name.as_deref() != Some(glyph.name())),
-    );
-
-    glyphs
+        .filter(move |glyph| override_name != Some(glyph.name())),
+    )
   }
 
   fn glyph(&self, name: &str) -> Option<&Glyph> {

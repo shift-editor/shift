@@ -454,11 +454,7 @@ mod tests {
             })
             .collect();
         let category = categories.get(glyph_id).copied().unwrap_or_default();
-        let attaching = glyph
-            .layers()
-            .values()
-            .flat_map(|layer| layer.anchors())
-            .any(|anchor| !anchor.name().is_some_and(|name| name.starts_with('_')));
+        let attaching = glyph.has_attaching_anchor();
         compiled_anchors(&PropagationGlyph {
             anchors: &own,
             components: &components,

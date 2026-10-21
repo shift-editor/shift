@@ -400,9 +400,8 @@ impl UfoWriter {
         let mut norad_font = NoradFont::new();
         norad_font.font_info = Self::build_font_info(font)?;
 
-        let glyphs = font.glyphs();
-        let glyph_names = glyphs
-            .iter()
+        let glyph_names = font
+            .glyphs()
             .map(|glyph| (glyph.id(), glyph.name()))
             .collect();
         let default_source_id = font.default_source_id();

@@ -98,8 +98,8 @@ impl FontView for UfoFileView<'_> {
         self.default_source_id.clone()
     }
 
-    fn glyphs(&self) -> Vec<&Glyph> {
-        self.font.glyphs().collect()
+    fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
+        self.font.glyphs()
     }
 
     fn glyph(&self, name: &str) -> Option<&Glyph> {

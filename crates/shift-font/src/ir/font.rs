@@ -879,6 +879,26 @@ impl Font {
         glyph.shared_layer_for_source(&self.default_master()?.id())
     }
 
+    /// Returns the layer that stands for `glyph` when no location picks one.
+    ///
+    /// That is its [default master layer](Self::default_master_layer), or else
+    /// the master layer with the most contours and components, taking the
+    /// earliest in [`Self::master_layers`] order on a tie.
+    pub fn fallback_layer<'a>(&'a self, glyph: &'a Glyph) -> Option<&'a Arc<GlyphLayer>> {
+        if let Some(layer) = self.default_master_layer(glyph) {
+            return Some(layer);
+        }
+
+        let complexity = |layer: &GlyphLayer| layer.contours().len() + layer.components().len();
+        self.master_layers(glyph).reduce(|preferred, candidate| {
+            if complexity(candidate) > complexity(preferred) {
+                candidate
+            } else {
+                preferred
+            }
+        })
+    }
+
     /// Returns each master that `glyph` draws, paired with the glyph's layer on it, in source
     /// order.
     pub fn masters_with_layers<'a>(
@@ -2931,6 +2951,27 @@ mod tests {
             elapsed,
             "glyph layer membership index rebuild should stay comfortably sub-second",
         );
+    }
+
+    #[test]
+    fn fallback_layer_takes_the_earliest_master_among_equally_complex_layers() {
+        let mut font = Font::new();
+        let first = font.add_source(Source::new("Light".to_string(), DesignLocation::new()));
+        let second = font.add_source(Source::new("Bold".to_string(), DesignLocation::new()));
+        // Layer ids sort in source order, so keeping the last tie by id would pick `second`.
+        let mut on_first = GlyphLayer::new(LayerId::from_raw("a"), first.clone());
+        on_first.add_empty_contour();
+        let mut on_second = GlyphLayer::new(LayerId::from_raw("b"), second);
+        on_second.add_empty_contour();
+        let mut glyph = Glyph::new("A".to_string());
+        glyph.set_layer(on_first);
+        glyph.set_layer(on_second);
+        font.insert_glyph(glyph).unwrap();
+        let glyph = font.glyphs().next().unwrap();
+
+        let fallback = font.fallback_layer(glyph).map(|layer| layer.source_id());
+
+        assert_eq!(fallback, Some(first));
     }
 
     #[test]

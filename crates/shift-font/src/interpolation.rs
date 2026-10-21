@@ -454,7 +454,7 @@ impl Font {
             return Ok(None);
         }
 
-        let Some(reference_layer) = interpolation_reference_layer(self, glyph) else {
+        let Some(reference_layer) = self.fallback_layer(glyph).cloned() else {
             return Ok(None);
         };
 
@@ -505,26 +505,6 @@ impl Font {
             sources,
         }))
     }
-}
-
-fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
-    if let Some(layer) = font.default_master_layer(glyph) {
-        return Some(Arc::clone(layer));
-    }
-
-    font.master_layers(glyph)
-        .cloned()
-        .reduce(|preferred, candidate| {
-            if layer_complexity(&candidate) > layer_complexity(&preferred) {
-                candidate
-            } else {
-                preferred
-            }
-        })
-}
-
-fn layer_complexity(layer: &GlyphLayer) -> usize {
-    layer.contours().len() + layer.components().len()
 }
 
 fn interpolation_basis(

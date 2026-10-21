@@ -242,26 +242,40 @@ impl From<&BezPath> for Contours {
     }
 }
 
+/// Draws the contour from its first segment's on-curve start.
+///
+/// Glyphs and UFO contours may begin with off-curve points; segment iteration
+/// starts at the first on-curve point and wraps the leading controls into the
+/// closing segment, so the path starts there too. A contour with no segments
+/// draws nothing.
 impl From<&Contour> for BezPath {
     fn from(contour: &Contour) -> Self {
+        use crate::segment::CurveSegment;
+
         let mut path = Self::new();
-
-        if let Some(first) = contour.points().first() {
-            path.move_to((first.x(), first.y()));
-        } else {
+        let mut segments = contour.segments().peekable();
+        let Some(
+            CurveSegment::Line(first, _)
+            | CurveSegment::Quad(first, _, _)
+            | CurveSegment::Cubic(first, _, _, _),
+        ) = segments.peek()
+        else {
             return path;
-        }
+        };
 
-        for segment in contour.segments() {
+        path.move_to((first.x(), first.y()));
+        for segment in segments {
             match segment {
-                crate::segment::CurveSegment::Line(_, p2) => {
-                    path.line_to((p2.x(), p2.y()));
+                CurveSegment::Line(_, end) => path.line_to((end.x(), end.y())),
+                CurveSegment::Quad(_, control, end) => {
+                    path.quad_to((control.x(), control.y()), (end.x(), end.y()));
                 }
-                crate::segment::CurveSegment::Quad(_, c, p3) => {
-                    path.quad_to((c.x(), c.y()), (p3.x(), p3.y()));
-                }
-                crate::segment::CurveSegment::Cubic(_, c1, c2, p4) => {
-                    path.curve_to((c1.x(), c1.y()), (c2.x(), c2.y()), (p4.x(), p4.y()));
+                CurveSegment::Cubic(_, first_control, second_control, end) => {
+                    path.curve_to(
+                        (first_control.x(), first_control.y()),
+                        (second_control.x(), second_control.y()),
+                        (end.x(), end.y()),
+                    );
                 }
             }
         }
@@ -277,6 +291,34 @@ impl From<&Contour> for BezPath {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_contour_starting_off_curve_draws_from_an_on_curve_point() {
+        let mut contour = Contour::new();
+        contour.add_point(10.0, 0.0, PointType::OffCurve, false);
+        contour.add_point(20.0, 10.0, PointType::OffCurve, false);
+        contour.add_point(20.0, 20.0, PointType::OnCurve, false);
+        contour.add_point(0.0, 20.0, PointType::OnCurve, false);
+        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        contour.close();
+
+        let elements = BezPath::from(&contour).elements().to_vec();
+
+        assert_eq!(
+            elements,
+            vec![
+                kurbo::PathEl::MoveTo((20.0, 20.0).into()),
+                kurbo::PathEl::LineTo((0.0, 20.0).into()),
+                kurbo::PathEl::LineTo((0.0, 0.0).into()),
+                kurbo::PathEl::CurveTo(
+                    (10.0, 0.0).into(),
+                    (20.0, 10.0).into(),
+                    (20.0, 20.0).into()
+                ),
+                kurbo::PathEl::ClosePath,
+            ]
+        );
+    }
 
     #[test]
     fn closed_contour_starts_at_first_on_curve() {
@@ -344,12 +386,11 @@ mod tests {
     }
 
     #[test]
-    fn single_point_to_bezpath() {
+    fn single_point_to_bezpath_draws_nothing() {
         let mut c = Contour::new();
         c.add_point(10.0, 20.0, PointType::OnCurve, false);
         let path = BezPath::from(&c);
-        assert_eq!(path.elements().len(), 1);
-        assert!(matches!(path.elements()[0], PathEl::MoveTo(_)));
+        assert!(path.elements().is_empty());
     }
 
     #[test]

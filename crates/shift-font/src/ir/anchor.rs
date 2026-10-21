@@ -36,6 +36,14 @@ impl Anchor {
         self.name.as_deref()
     }
 
+    /// Whether marks attach to this anchor.
+    ///
+    /// An anchor whose name starts with `_` is a mark's own attachment point;
+    /// every other anchor, named or not, is one marks attach to.
+    pub fn attaches_marks(&self) -> bool {
+        !self.name().is_some_and(|name| name.starts_with('_'))
+    }
+
     pub fn x(&self) -> f64 {
         self.x
     }

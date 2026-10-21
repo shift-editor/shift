@@ -323,6 +323,11 @@ impl GlyphLayer {
         self.anchors.iter()
     }
 
+    /// Returns each anchor's name, in anchor order; `None` for an unnamed anchor.
+    pub fn anchor_names(&self) -> impl Iterator<Item = Option<&str>> {
+        self.anchors.iter().map(Anchor::name)
+    }
+
     pub fn anchors_iter_mut(&mut self) -> impl Iterator<Item = &mut Anchor> {
         self.anchors.iter_mut()
     }
@@ -487,6 +492,21 @@ impl Glyph {
         &self.layers
     }
 
+    /// Whether any layer draws something: a contour or a component.
+    pub fn has_outline(&self) -> bool {
+        self.layers
+            .values()
+            .any(|layer| !layer.contours().is_empty() || !layer.components().is_empty())
+    }
+
+    /// Whether any layer has an anchor that marks attach to.
+    pub fn has_attaching_anchor(&self) -> bool {
+        self.layers
+            .values()
+            .flat_map(|layer| layer.anchors())
+            .any(Anchor::attaches_marks)
+    }
+
     /// Returns the ids of the glyph's layers.
     pub fn layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {
         self.layers.keys().cloned()
@@ -567,6 +587,32 @@ mod tests {
     use super::*;
     use crate::Anchor;
     use std::sync::Arc;
+
+    #[test]
+    fn a_glyph_has_an_outline_when_a_layer_draws_a_contour() {
+        let mut glyph = Glyph::new("A".to_string());
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_anchor(Anchor::new(Some("top".to_string()), 0.0, 0.0));
+        assert!(!glyph.has_outline());
+
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_empty_contour();
+
+        assert!(glyph.has_outline());
+    }
+
+    #[test]
+    fn only_anchors_without_a_leading_underscore_attach_marks() {
+        let mut glyph = Glyph::new("acutecomb".to_string());
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_anchor(Anchor::new(Some("_top".to_string()), 0.0, 0.0));
+        assert!(!glyph.has_attaching_anchor());
+
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_anchor(Anchor::new(None, 0.0, 0.0));
+
+        assert!(glyph.has_attaching_anchor());
+    }
 
     #[test]
     fn glyph_creation() {
