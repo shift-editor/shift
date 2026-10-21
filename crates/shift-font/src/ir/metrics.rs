@@ -37,6 +37,46 @@ pub enum MetricKind {
     Custom,
 }
 
+impl MetricKind {
+    /// The standard Latin rows a new font gets, in display order.
+    pub const STANDARD: [Self; 5] = [
+        Self::Ascender,
+        Self::CapHeight,
+        Self::XHeight,
+        Self::Baseline,
+        Self::Descender,
+    ];
+
+    /// The name a new font gives this row.
+    pub fn default_name(self) -> &'static str {
+        match self {
+            Self::Ascender => "Ascender",
+            Self::CapHeight => "Cap Height",
+            Self::XHeight => "x-Height",
+            Self::Baseline => "Baseline",
+            Self::Descender => "Descender",
+            Self::Custom => "Custom",
+        }
+    }
+
+    /// The default position for this row, as a fraction of the em.
+    pub fn default_position_fraction(self) -> f64 {
+        self.default_fractions().0
+    }
+
+    /// The default position and overshoot, as fractions of the em.
+    fn default_fractions(self) -> (f64, f64) {
+        match self {
+            Self::Ascender => (0.8, 0.016),
+            Self::CapHeight => (0.7, 0.016),
+            Self::XHeight => (0.5, 0.016),
+            Self::Baseline => (0.0, -0.016),
+            Self::Descender => (-0.2, -0.016),
+            Self::Custom => (0.0, 0.0),
+        }
+    }
+}
+
 /// Font-owned identity and meaning for one metric row.
 ///
 /// Sources store positions and overshoots by [`MetricId`], so renaming or
@@ -78,16 +118,10 @@ impl MetricDefinition {
 
     /// Creates the standard Latin metric rows used by a new font.
     pub fn defaults() -> Vec<Self> {
-        [
-            (MetricKind::Ascender, "Ascender"),
-            (MetricKind::CapHeight, "Cap Height"),
-            (MetricKind::XHeight, "x-Height"),
-            (MetricKind::Baseline, "Baseline"),
-            (MetricKind::Descender, "Descender"),
-        ]
-        .into_iter()
-        .map(|(kind, name)| Self::new(kind, name.to_string()))
-        .collect()
+        MetricKind::STANDARD
+            .into_iter()
+            .map(|kind| Self::new(kind, kind.default_name().to_string()))
+            .collect()
     }
 }
 
@@ -112,14 +146,7 @@ impl MetricValue {
 
     /// Returns the initial authored value for a new definition at `units_per_em`.
     pub fn for_kind(kind: MetricKind, units_per_em: f64) -> Self {
-        let (position, overshoot) = match kind {
-            MetricKind::Ascender => (0.8, 0.016),
-            MetricKind::CapHeight => (0.7, 0.016),
-            MetricKind::XHeight => (0.5, 0.016),
-            MetricKind::Baseline => (0.0, -0.016),
-            MetricKind::Descender => (-0.2, -0.016),
-            MetricKind::Custom => (0.0, 0.0),
-        };
+        let (position, overshoot) = kind.default_fractions();
         Self::new(
             (position * units_per_em).round(),
             (overshoot * units_per_em).round(),

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::FontFormat;
 use crate::font_source::FontReadError;
+use shift_font::MetricKind;
 
 macro_rules! index_type {
     ($name:ident) => {
@@ -170,6 +171,25 @@ pub struct FontMetrics {
     pub italic_angle: Option<f64>,
     pub underline_position: Option<f64>,
     pub underline_thickness: Option<f64>,
+}
+
+impl FontMetrics {
+    /// This font's position for a standard metric row, in font units.
+    ///
+    /// A missing cap height or x-height falls back to the row's default
+    /// fraction of the em. Returns `None` for [`MetricKind::Custom`], which
+    /// a compiled font does not carry.
+    pub fn position(&self, kind: MetricKind) -> Option<f64> {
+        let fallback = || kind.default_position_fraction() * self.units_per_em;
+        match kind {
+            MetricKind::Ascender => Some(self.ascender),
+            MetricKind::CapHeight => Some(self.cap_height.unwrap_or_else(fallback)),
+            MetricKind::XHeight => Some(self.x_height.unwrap_or_else(fallback)),
+            MetricKind::Baseline => Some(0.0),
+            MetricKind::Descender => Some(self.descender),
+            MetricKind::Custom => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -733,6 +753,42 @@ pub struct ProjectedGlyph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn metrics(cap_height: Option<f64>, x_height: Option<f64>) -> FontMetrics {
+        FontMetrics {
+            units_per_em: 2048.0,
+            ascender: 1900.0,
+            descender: -500.0,
+            line_gap: 0.0,
+            cap_height,
+            x_height,
+            italic_angle: None,
+            underline_position: None,
+            underline_thickness: None,
+        }
+    }
+
+    #[test]
+    fn standard_positions_fall_back_to_em_fractions_without_rounding() {
+        let fallback = metrics(None, None);
+        let positions = MetricKind::STANDARD.map(|kind| fallback.position(kind));
+
+        assert_eq!(
+            positions,
+            [
+                Some(1900.0),
+                Some(2048.0 * 0.7),
+                Some(1024.0),
+                Some(0.0),
+                Some(-500.0)
+            ]
+        );
+        assert_eq!(
+            metrics(Some(1400.0), Some(980.0)).position(MetricKind::CapHeight),
+            Some(1400.0)
+        );
+        assert_eq!(fallback.position(MetricKind::Custom), None);
+    }
 
     fn directory() -> FontDirectory {
         FontDirectory::new(

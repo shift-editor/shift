@@ -6,11 +6,11 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_backends::{
-  AxisIndex as SourceAxisIndex, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
-  FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
-  GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
-  SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind, build_binary_atlas_page,
-  font_loader::FontLoader, variable_glyph_inputs,
+  AxisIndex as SourceAxisIndex, DirectoryGlyph, DirectoryInstance, DirectorySource, ExportFormat,
+  FontDirectory, FontExportRequest, FontExportResult, FontExporter, FontSource, FontView,
+  GlyphIndex, GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
+  GlyphShape as SourceGlyphShape, OpenedFont, SourceAtlasDescriptor, SourceGlyphIds,
+  VariationAxisKind, build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -63,9 +63,9 @@ use shift_wire::{
   GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
   GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
   InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
-  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition,
-  MetricKind as WireMetricKind, NamedInstance, PointData, PointType, Source, SourceMetricValue,
-  SourceMetricsInterpolationSnapshot, VariationBasis, VariationDelta,
+  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition, NamedInstance,
+  PointData, PointType, Source, SourceMetricValue, SourceMetricsInterpolationSnapshot,
+  VariationBasis, VariationDelta,
   bridges::napi::{
     NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
     NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
@@ -255,132 +255,26 @@ impl RetainedSource {
   /// The font snapshot the editor shows for the retained source.
   fn snapshot(&self) -> BridgeResult<FontSnapshot> {
     let directory = self.font.directory();
-    let identity = &self.identity;
-    let metadata = FontMetadata {
-      family_name: directory.family_name().map(str::to_string),
-      style_name: directory.style_name().map(str::to_string),
-      version_major: None,
-      version_minor: None,
-      copyright: None,
-      trademark: None,
-      designer: None,
-      designer_url: None,
-      manufacturer: None,
-      manufacturer_url: None,
-      license: None,
-      license_url: None,
-      description: None,
-      note: None,
-    };
-    let metric_rows = |metrics: &shift_backends::FontMetrics| {
-      [
-        (WireMetricKind::Ascender, "Ascender", metrics.ascender),
-        (
-          WireMetricKind::CapHeight,
-          "Cap Height",
-          metrics.cap_height.unwrap_or(metrics.units_per_em * 0.7),
-        ),
-        (
-          WireMetricKind::XHeight,
-          "x-Height",
-          metrics.x_height.unwrap_or(metrics.units_per_em * 0.5),
-        ),
-        (WireMetricKind::Baseline, "Baseline", 0.0),
-        (WireMetricKind::Descender, "Descender", metrics.descender),
-      ]
-    };
-    let default_metric_rows = metric_rows(&directory.metrics());
-    let metric_definitions = default_metric_rows
-      .iter()
-      .zip(identity.metric_ids.iter())
-      .map(|((kind, name, _), id)| MetricDefinition {
-        id: id.clone(),
-        kind: *kind,
-        name: (*name).into(),
-      })
-      .collect::<Vec<_>>();
-    let font_axes = identity.font_axes.to_vec();
-    let axes = font_axes.iter().map(Axis::from).collect::<Vec<_>>();
-    let sources = directory
-      .sources()
-      .iter()
-      .zip(identity.source_ids.iter())
-      .map(|(source, id)| {
-        let values = identity
-          .axis_values(source.location.iter().copied())
-          .collect::<HashMap<_, _>>();
-        Source {
-          id: id.clone(),
-          name: source.name.clone(),
-          location: WireLocation { values },
-          filename: source.filename.clone(),
-          metric_values: metric_rows(&source.metrics)
-            .iter()
-            .zip(identity.metric_ids.iter())
-            .map(|((_, _, position), metric_id)| SourceMetricValue {
-              metric_id: metric_id.clone(),
-              position: *position,
-              overshoot: 0.0,
-            })
-            .collect(),
-          italic_angle: source.metrics.italic_angle,
-          line_gap: Some(source.metrics.line_gap),
-          underline_position: source.metrics.underline_position,
-          underline_thickness: source.metrics.underline_thickness,
-        }
-      })
-      .collect::<Vec<_>>();
-    let font_axis_mappings = identity.axis_mappings_of(directory)?;
-    let axis_mappings = font_axis_mappings
-      .iter()
-      .map(AxisMapping::from)
-      .collect::<Vec<_>>();
-    let axis_mapping_bases = identity
-      .mapping_bases
-      .iter()
-      .map(AxisMappingBasis::from)
-      .collect();
-    let named_instances = directory
-      .instances()
-      .iter()
-      .zip(identity.instance_ids.iter())
-      .map(|(instance, id)| NamedInstance {
-        id: id.clone(),
-        name: instance.name.clone(),
-        location: WireLocation {
-          values: identity
-            .axis_values(instance.location.iter().copied())
-            .collect(),
-        },
-        postscript_name: instance.postscript_name.clone(),
-      })
-      .collect();
+    let ids = &self.identity;
     Ok(FontSnapshot {
-      metadata,
+      metadata: FontMetadata {
+        family_name: directory.family_name().map(str::to_string),
+        style_name: directory.style_name().map(str::to_string),
+        ..Default::default()
+      },
       metrics: FontMetrics {
         units_per_em: directory.metrics().units_per_em,
       },
-      metric_definitions,
-      source_metrics_interpolation: None,
-      glyphs: directory
-        .glyphs()
-        .iter()
-        .zip(identity.glyph_ids.iter())
-        .map(|(glyph, id)| GlyphEntry {
-          id: id.clone(),
-          name: glyph.name.clone().into(),
-          unicodes: glyph.unicodes.to_vec(),
-        })
-        .collect(),
-      sources,
-      axes,
-      axis_mappings,
-      axis_mapping_bases,
-      named_instances,
-      // Preview sources expose only the directory, which carries no font lib
-      // or kerning.
-      language_ids: None,
-      kerning: KerningSnapshot::default(),
+      metric_definitions: ids.wire(&ids.metric_ids, &MetricKind::STANDARD),
+      glyphs: ids.wire(&ids.glyph_ids, directory.glyphs()),
+      sources: ids.wire(&ids.source_ids, directory.sources()),
+      named_instances: ids.wire(&ids.instance_ids, directory.instances()),
+      axes: ids.font_axes.iter().into_each(),
+      axis_mappings: ids.axis_mappings_of(directory)?.iter().into_each(),
+      axis_mapping_bases: ids.mapping_bases.iter().into_each(),
+      // A preview reads only its source's directory: no lib, kerning or
+      // metric interpolation.
+      ..Default::default()
     })
   }
 
@@ -959,6 +853,89 @@ impl Task for ExportFontTask {
   }
 }
 
+/// Converts a retained source's directory entry or standard metric row to its
+/// wire form, given the id the bridge minted for it.
+///
+/// `From` cannot carry the id or the identity's axis order, so each entry type
+/// converts through this instead.
+trait ToWire {
+  type Id;
+  type Wire;
+
+  fn to_wire(&self, id: &Self::Id, identity: &SourceIdentity) -> Self::Wire;
+}
+
+impl ToWire for MetricKind {
+  type Id = MetricId;
+  type Wire = MetricDefinition;
+
+  fn to_wire(&self, id: &MetricId, _identity: &SourceIdentity) -> MetricDefinition {
+    MetricDefinition {
+      id: id.clone(),
+      kind: (*self).into(),
+      name: self.default_name().into(),
+    }
+  }
+}
+
+impl ToWire for DirectoryGlyph {
+  type Id = GlyphId;
+  type Wire = GlyphEntry;
+
+  fn to_wire(&self, id: &GlyphId, _identity: &SourceIdentity) -> GlyphEntry {
+    GlyphEntry {
+      id: id.clone(),
+      name: self.name.clone().into(),
+      unicodes: self.unicodes.to_vec(),
+    }
+  }
+}
+
+impl ToWire for DirectorySource {
+  type Id = SourceId;
+  type Wire = Source;
+
+  fn to_wire(&self, id: &SourceId, identity: &SourceIdentity) -> Source {
+    let metrics = &self.metrics;
+    Source {
+      id: id.clone(),
+      name: self.name.clone(),
+      location: identity.location(&self.location),
+      filename: self.filename.clone(),
+      metric_values: identity
+        .metric_ids
+        .iter()
+        .zip(MetricKind::STANDARD)
+        .filter_map(|(metric_id, kind)| {
+          Some(SourceMetricValue {
+            metric_id: metric_id.clone(),
+            position: metrics.position(kind)?,
+            overshoot: 0.0,
+          })
+        })
+        .collect(),
+      italic_angle: metrics.italic_angle,
+      line_gap: Some(metrics.line_gap),
+      underline_position: metrics.underline_position,
+      underline_thickness: metrics.underline_thickness,
+    }
+  }
+}
+
+impl ToWire for DirectoryInstance {
+  type Id = NamedInstanceId;
+  type Wire = NamedInstance;
+
+  fn to_wire(&self, id: &NamedInstanceId, identity: &SourceIdentity) -> NamedInstance {
+    NamedInstance {
+      id: id.clone(),
+      name: self.name.clone(),
+      location: identity.location(&self.location),
+      postscript_name: self.postscript_name.clone(),
+    }
+  }
+}
+
 struct SourceIdentity {
   glyph_ids: Box<[GlyphId]>,
   glyph_indices: HashMap<GlyphId, GlyphIndex>,
@@ -1000,7 +977,9 @@ impl SourceIdentity {
       instance_ids: iter::repeat_with(NamedInstanceId::new)
         .take(directory.instances().len())
         .collect(),
-      metric_ids: iter::repeat_with(MetricId::new).take(5).collect(),
+      metric_ids: iter::repeat_with(MetricId::new)
+        .take(MetricKind::STANDARD.len())
+        .collect(),
       font_axes: Box::new([]),
       mapping_bases: Box::new([]),
     };
@@ -1103,6 +1082,22 @@ impl SourceIdentity {
     values: impl IntoIterator<Item = f64>,
   ) -> impl Iterator<Item = (AxisId, f64)> {
     self.axis_ids.iter().cloned().zip(values)
+  }
+
+  /// A location from positional values in source axis order.
+  fn location(&self, values: &[f64]) -> WireLocation {
+    WireLocation {
+      values: self.axis_values(values.iter().copied()).collect(),
+    }
+  }
+
+  /// Each directory entry with the id the bridge gave it, in wire form.
+  fn wire<T: ToWire>(&self, ids: &[T::Id], entries: &[T]) -> Vec<T::Wire> {
+    ids
+      .iter()
+      .zip(entries)
+      .map(|(id, entry)| entry.to_wire(id, self))
+      .collect()
   }
 
   fn glyph_id(&self, index: GlyphIndex) -> BridgeResult<GlyphId> {
