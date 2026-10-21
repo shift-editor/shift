@@ -225,7 +225,7 @@ fn get_xy_rotation(xform: Affine) -> Vec2 {
     // and careful testing.
     let [xx, xy, ..] = xform.as_coeffs();
     // first take the rotation
-    let angle = xy.atan2(xx);
+    let angle = libm::atan2(xy, xx);
     // then remove the rotation, and take the scale
     let rotated = xform.pre_rotate(-angle).as_coeffs();
     let mut scale = Vec2::new(rotated[0], rotated[3]);

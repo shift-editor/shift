@@ -301,8 +301,8 @@ fn a_round_contour_starting_elsewhere_is_not_reported_when_it_keeps_its_shape() 
         for step in 0..8 {
             let angle = std::f64::consts::TAU * ((step + offset) % 8) as f64 / 8.0;
             contour.add_point(
-                300.0 + 200.0 * angle.cos(),
-                300.0 + 200.0 * angle.sin(),
+                300.0 + 200.0 * libm::cos(angle),
+                300.0 + 200.0 * libm::sin(angle),
                 PointType::OnCurve,
                 false,
             );

@@ -2484,6 +2484,18 @@ mod tests {
     }
 
     #[test]
+    fn serialized_fonts_are_stable_across_a_round_trip() {
+        let fonts = [sample_font(), crate::test_support::sample_variable_font()];
+        for font in fonts {
+            let first = serde_json::to_vec(&font).unwrap();
+            let decoded: Font = serde_json::from_slice(&first).unwrap();
+            let second = serde_json::to_vec(&decoded).unwrap();
+
+            assert_eq!(String::from_utf8(first), String::from_utf8(second));
+        }
+    }
+
+    #[test]
     fn deserialization_rebuilds_private_indexes() {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();

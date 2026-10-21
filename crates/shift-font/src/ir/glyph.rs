@@ -11,7 +11,7 @@ use crate::lib_data::LibData;
 use crate::point::Point;
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -24,7 +24,8 @@ pub struct Glyph {
     category: Option<GlyphCategory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sub_category: Option<GlyphSubcategory>,
-    layers: HashMap<LayerId, Arc<GlyphLayer>>,
+    /// Sorted by layer id, so a glyph serializes to the same bytes every time.
+    layers: BTreeMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
 }
 
@@ -387,7 +388,7 @@ impl Glyph {
             unicodes: Vec::new(),
             category: None,
             sub_category: None,
-            layers: HashMap::new(),
+            layers: BTreeMap::new(),
             lib: LibData::new(),
         }
     }
@@ -399,7 +400,7 @@ impl Glyph {
             unicodes: vec![unicode],
             category: None,
             sub_category: None,
-            layers: HashMap::new(),
+            layers: BTreeMap::new(),
             lib: LibData::new(),
         }
     }
@@ -462,7 +463,7 @@ impl Glyph {
         self.sub_category = sub_category;
     }
 
-    pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {
+    pub fn layers(&self) -> &BTreeMap<LayerId, Arc<GlyphLayer>> {
         &self.layers
     }
 

@@ -326,8 +326,7 @@ pub(crate) fn font_header(
                                     .map(|value| mapping.unmap(value.into_inner()))
                                     .unwrap_or_else(|| font.axes()[index].default());
                                 (axis_id.clone(), value)
-                            })
-                            .collect(),
+                            }),
                     ),
                     None,
                 )
