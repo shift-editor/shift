@@ -19,6 +19,27 @@ TypeScript makes `{ points?: … }`, `?.` and `?? []` free to write, so a vague 
 - **Use the built-ins before spreading.** Query an iterator directly (`map.values().filter(…).toArray()`; `.some`/`.every`/`.find` need no array), copy-sort with `toSorted`, merge sets with `union`/`intersection`/`difference`, group with `Map.groupBy`. Enforced by `shift/prefer-iterator-helpers`.
 - **A combined collection used in several places is a type.** `ThemeCatalog` builds the shipped-then-user theme list once; `KerningGroups.atPosition` sorts once per change. Spread to build a value once, not at every read.
 
+## Order and subsets
+
+**A sort or filter written at a call site means the collection is missing a method.** When an order is part of the domain (kerning groups by name, recent documents newest first), the owning type keeps it, and callers read it already ordered. When a subset has a name ("the external axes", "the root contours", "the one glyph node"), the owner exposes it, as a `computed` when it is reactive (see `signals`), so no caller filters.
+
+```ts
+// Before: every caller sorts and filters, each with its own inline comparator.
+const groups = groupsById
+  .values()
+  .filter((group) => group.position === position)
+  .toArray()
+  .sort((a, b) => a.name.localeCompare(b.name));
+const axes = useAxes().filter((axis) => axis.role === "external");
+
+// After: the owners hold the order and the subset.
+const groups = kerning.groups.atPosition(position); // Map.groupBy over toSorted(byName), once per change
+const axes = useExternalAxes(); // font.externalAxesCell, a computed
+```
+
+- **Name every order.** Pass a named comparator to `sort`/`toSorted`: `ascending`, `descending`, `alphabetical`, `byName`, `comparing(key, order)` and `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a comparator named next to the type it orders (`newestFirst`, `byMappingInput(axis)`). Enforced by `shift/no-inline-comparator`.
+- **Sort once, where the collection changes,** not at every read. An immutable owner sorts in its constructor (`KerningGroups`); a reactive owner sorts in a `computed`.
+
 ## Owners answer questions
 
 - **When a `?.` chain crosses two objects, the first object is missing a method.** `editor.glyphForId(id)?.layerForSource(sourceId) ?? null` is `editor.layerForGlyph(id, sourceId)`. Add the method to the owner, next to the data, and use it everywhere.
@@ -45,6 +66,7 @@ TypeScript makes `{ points?: … }`, `?.` and `?? []` free to write, so a vague 
 - [ ] No `nodesOfKind(kind)[0]`, `const [node] = nodesOfKind(kind)` or `nodesOfKind(kind).length === 1`.
 - [ ] No `?.` chain across two objects where the owner could answer; no `filter`/`find` repeated across files.
 - [ ] No `[...x.values()].filter(…)`, no `[...array].sort(…)` where `toSorted` fits.
+- [ ] No inline comparator in `sort`/`toSorted`; no sort or named filter repeated at call sites where the owner could keep it.
 - [ ] No `as <Brand>`; no cast of untrusted data; no hand-written interface duplicating a zod schema or a generated type.
 - [ ] Every `switch` on a union is exhaustive.
 - [ ] `pnpm lint:check`, `pnpm typecheck` and the affected tests pass.
