@@ -1,6 +1,6 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
-import type { ComponentCandidate } from "@/types/componentPicker";
+import type { ComponentCandidate, ComponentOwner } from "@/types/componentPicker";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 
 /**
@@ -20,7 +20,12 @@ export function componentPickerCandidates(
   query: string,
   glyphInfo: GlyphInfo,
 ): ComponentCandidate[] {
-  const existingGlyphs = componentPickerGlyphs(glyphs, records, currentGlyphId, query, glyphInfo);
+  const owner: ComponentOwner = {
+    id: currentGlyphId,
+    glyph: glyphs.find(({ id }) => id === currentGlyphId) ?? null,
+    record: records.find(({ id }) => id === currentGlyphId) ?? null,
+  };
+  const existingGlyphs = componentPickerGlyphs(glyphs, records, owner, query, glyphInfo);
   const candidates: ComponentCandidate[] = existingGlyphs.map((glyph) => ({
     availability: "existing",
     glyphId: glyph.id,
@@ -34,7 +39,7 @@ export function componentPickerCandidates(
   const currentFontNames = new Set(glyphs.map(({ name }) => name.toLowerCase()));
 
   if (query.trim() === "") {
-    const currentGlyph = glyphs.find(({ id }) => id === currentGlyphId);
+    const currentGlyph = owner.glyph;
     if (!currentGlyph) return candidates;
 
     const canonicalName = glyphInfo.resolveGlyphName(currentGlyph.name, currentGlyph.unicode);
@@ -87,7 +92,7 @@ export function componentPickerCandidates(
     ];
   }
 
-  const eligibleGlyphs = componentPickerGlyphs(glyphs, records, currentGlyphId, "", glyphInfo);
+  const eligibleGlyphs = componentPickerGlyphs(glyphs, records, owner, "", glyphInfo);
   const eligibleByUnicode = new Map(
     eligibleGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [[glyph.unicode, glyph]])),
   );
@@ -164,11 +169,11 @@ export function componentPickerCandidates(
 function componentPickerGlyphs(
   glyphs: readonly GlyphCatalogItem[],
   records: readonly GlyphRecord[],
-  currentGlyphId: GlyphId,
+  owner: ComponentOwner,
   query: string,
   glyphInfo: GlyphInfo,
 ): GlyphCatalogItem[] {
-  const excludedGlyphIds = cycleProducingGlyphIds(records, currentGlyphId);
+  const excludedGlyphIds = cycleProducingGlyphIds(records, owner.id);
   const normalizedQuery = query.trim().toLowerCase();
   const unicodeQuery = unicodeFromQuery(query);
 
@@ -184,17 +189,15 @@ function componentPickerGlyphs(
   });
   if (normalizedQuery !== "") return eligibleGlyphs;
 
-  return relatedGlyphsFirst(eligibleGlyphs, glyphs, records, currentGlyphId, glyphInfo);
+  return relatedGlyphsFirst(eligibleGlyphs, owner, glyphInfo);
 }
 
 function relatedGlyphsFirst(
   eligibleGlyphs: readonly GlyphCatalogItem[],
-  glyphs: readonly GlyphCatalogItem[],
-  records: readonly GlyphRecord[],
-  currentGlyphId: GlyphId,
+  owner: ComponentOwner,
   glyphInfo: GlyphInfo,
 ): GlyphCatalogItem[] {
-  const currentGlyph = glyphs.find(({ id }) => id === currentGlyphId);
+  const currentGlyph = owner.glyph;
   if (!currentGlyph) return [...eligibleGlyphs];
 
   const canonicalName = glyphInfo.resolveGlyphName(currentGlyph.name, currentGlyph.unicode);
@@ -204,7 +207,7 @@ function relatedGlyphsFirst(
   const eligibleByUnicode = new Map(
     eligibleGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [[glyph.unicode, glyph]])),
   );
-  const currentRecord = records.find(({ id }) => id === currentGlyphId);
+  const currentRecord = owner.record;
   const relatedGlyphIds = [
     ...decomposition.flatMap((codepoint) => {
       const glyph = eligibleByUnicode.get(codepoint);

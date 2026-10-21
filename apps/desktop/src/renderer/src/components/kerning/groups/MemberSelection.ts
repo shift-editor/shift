@@ -19,25 +19,31 @@ export interface SelectionModifiers {
  */
 export class MemberSelection {
   readonly members: readonly GlyphId[];
+  /** The selected members, in member order. */
   readonly ids: readonly GlyphId[];
   readonly anchor: GlyphId | null;
   readonly focus: GlyphId | null;
+  readonly #memberSet: ReadonlySet<GlyphId>;
+  readonly #selected: ReadonlySet<GlyphId>;
 
   private constructor(
     members: readonly GlyphId[],
+    memberSet: ReadonlySet<GlyphId>,
     ids: readonly GlyphId[],
     anchor: GlyphId | null,
     focus: GlyphId | null,
   ) {
     this.members = members;
+    this.#memberSet = memberSet;
     this.ids = ids;
+    this.#selected = new Set(ids);
     this.anchor = anchor;
     this.focus = focus;
   }
 
   /** Nothing selected among `members`. */
   static empty(members: readonly GlyphId[]): MemberSelection {
-    return new MemberSelection(members, [], null, null);
+    return new MemberSelection(members, new Set(members), [], null, null);
   }
 
   get isEmpty(): boolean {
@@ -45,7 +51,7 @@ export class MemberSelection {
   }
 
   has(member: GlyphId): boolean {
-    return this.ids.includes(member);
+    return this.#selected.has(member);
   }
 
   /** Nothing selected among the same members. */
@@ -106,21 +112,23 @@ export class MemberSelection {
   /** The selection carried over to `members`, without glyphs that are no longer members. */
   withMembers(members: readonly GlyphId[]): MemberSelection {
     if (members === this.members) return this;
-    const kept = (id: GlyphId | null) => (id !== null && members.includes(id) ? id : null);
+    const memberSet = new Set(members);
+    const kept = (id: GlyphId | null) => (id !== null && memberSet.has(id) ? id : null);
     return new MemberSelection(
       members,
-      this.ids.filter((id) => members.includes(id)),
+      memberSet,
+      this.ids.filter((id) => memberSet.has(id)),
       kept(this.anchor),
       kept(this.focus),
     );
   }
 
   #with(ids: readonly GlyphId[], anchor: GlyphId | null, focus: GlyphId | null): MemberSelection {
-    return new MemberSelection(this.members, ids, anchor, focus);
+    return new MemberSelection(this.members, this.#memberSet, ids, anchor, focus);
   }
 
   #isMember(id: GlyphId | null): id is GlyphId {
-    return id !== null && this.members.includes(id);
+    return id !== null && this.#memberSet.has(id);
   }
 
   #range(from: GlyphId, to: GlyphId): GlyphId[] {
@@ -130,6 +138,7 @@ export class MemberSelection {
   }
 
   #inMemberOrder(ids: readonly GlyphId[]): GlyphId[] {
-    return this.members.filter((member) => ids.includes(member));
+    const wanted = new Set(ids);
+    return this.members.filter((member) => wanted.has(member));
   }
 }
