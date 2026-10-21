@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { GlyphOutlineTarget } from "@shift/editor/types";
+import type { OutlineTargets } from "@shift/editor/model";
 import type { NodeId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
@@ -9,17 +9,14 @@ import { useEditor } from "@/workspace/WorkspaceContext";
  * @param glyphNodeId - Scene occurrence receiving outlines, or `null` while no glyph is mounted.
  * @param targets - Complete ordered outline collection for the current render.
  */
-export function useGlyphOutlineTargets(
-  glyphNodeId: NodeId | null,
-  targets: readonly GlyphOutlineTarget[],
-): void {
+export function useGlyphOutlineTargets(glyphNodeId: NodeId | null, targets: OutlineTargets): void {
   const editor = useEditor();
   const outlines = editor.nodeDefinition("glyph").outlines;
 
   useEffect(() => {
     if (!glyphNodeId) return;
 
-    outlines.set(glyphNodeId, targets);
+    outlines.set(glyphNodeId, targets.all);
   }, [glyphNodeId, outlines, targets]);
 
   useEffect(() => {

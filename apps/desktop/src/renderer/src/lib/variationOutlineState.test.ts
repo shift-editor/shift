@@ -19,9 +19,7 @@ function reduce(...actions: VariationOutlineAction[]): VariationOutlineState {
 }
 
 function sourceIds(state: VariationOutlineState, editing: readonly (typeof active)[] = []) {
-  return sourceOutlineTargets(state, active, new Set([active, ...editing])).targets.map((target) =>
-    target.kind === "source" ? target.sourceId : null,
-  );
+  return sourceOutlineTargets(state, active, new Set([active, ...editing])).targets.sources();
 }
 
 describe("variation outline visibility intent", () => {
@@ -121,7 +119,7 @@ describe("variation outline targets follow visibility intent", () => {
       { type: "toggleInstanceGroup", instanceIds: [instanceA, instanceB] },
     );
 
-    expect(instanceOutlineTargets(state).targets).toEqual([
+    expect(instanceOutlineTargets(state).targets.all).toEqual([
       { kind: "instance", instanceId: instanceB },
       { kind: "instance", instanceId: instanceA },
     ]);

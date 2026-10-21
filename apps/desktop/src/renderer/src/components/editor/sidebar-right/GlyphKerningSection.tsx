@@ -1,6 +1,7 @@
 import { useSignalState } from "@shift/editor/signals";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
 import { KerningGroupsPanel } from "@/components/kerning/groups/KerningGroupsPanel";
+import { KerningGroupsTarget } from "@/lib/kerning/KerningGroupsTarget";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarSection, SidebarSubsection } from "./SidebarSection";
 
@@ -31,7 +32,9 @@ export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => 
   return (
     <SidebarSection
       title="Kerning"
-      actions={<KerningGroupsPanel target={{ kind: "glyph", glyphId }} anchorRef={anchorRef} />}
+      actions={
+        <KerningGroupsPanel target={KerningGroupsTarget.glyph(glyphId)} anchorRef={anchorRef} />
+      }
     >
       <SidebarSubsection title="Groups">
         <div className="flex gap-2">

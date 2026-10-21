@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
+import type { OutlineTargets } from "@shift/editor/model";
 import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
 import type { SourceId } from "@shift/types";
 import {
@@ -54,17 +55,13 @@ export function useVariationOutlineControls(
   );
 
   const toggleSourceGroup = useCallback(
-    (targets: readonly GlyphOutlineTarget[]) => {
+    (targets: OutlineTargets) => {
       dispatch({
         type: "toggleSourceGroup",
-        sourceIds: targets.flatMap((target) =>
-          target.kind === "source" && !sources.visibleIds.has(target.sourceId)
-            ? [target.sourceId]
-            : [],
-        ),
+        sourceIds: targets.sources().filter((sourceId) => !sources.targets.hasSource(sourceId)),
       });
     },
-    [sources.visibleIds],
+    [sources.targets],
   );
 
   const toggleInstance = useCallback((target: GlyphOutlineTarget) => {
@@ -74,17 +71,15 @@ export function useVariationOutlineControls(
   }, []);
 
   const toggleInstanceGroup = useCallback(
-    (targets: readonly GlyphOutlineTarget[]) => {
+    (targets: OutlineTargets) => {
       dispatch({
         type: "toggleInstanceGroup",
-        instanceIds: targets.flatMap((target) =>
-          target.kind === "instance" && !instances.visibleIds.has(target.instanceId)
-            ? [target.instanceId]
-            : [],
-        ),
+        instanceIds: targets
+          .instances()
+          .filter((instanceId) => !instances.targets.hasInstance(instanceId)),
       });
     },
-    [instances.visibleIds],
+    [instances.targets],
   );
 
   const sourceControls = useMemo<GlyphOutlineControls>(
@@ -109,7 +104,7 @@ export function useVariationOutlineControls(
   );
 
   const targets = useMemo(
-    () => [...sources.targets, ...instances.targets],
+    () => sources.targets.concat(instances.targets),
     [instances.targets, sources.targets],
   );
 

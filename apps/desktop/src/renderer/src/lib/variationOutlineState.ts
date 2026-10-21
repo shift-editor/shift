@@ -1,5 +1,5 @@
 import type { NamedInstanceId, SourceId } from "@shift/types";
-import type { GlyphOutlineTarget } from "@shift/editor/types";
+import { OutlineTargets } from "@shift/editor/model";
 import type {
   OutlineGroup,
   OutlineTargetSet,
@@ -133,29 +133,19 @@ export function sourceOutlineTargets(
   state: VariationOutlineState,
   activeSourceId: SourceId | null,
   editingSourceIds: ReadonlySet<SourceId>,
-): OutlineTargetSet<SourceId> {
-  const visibleIds = new Set<SourceId>();
-  const include = (sourceIds: Iterable<SourceId>, skip: (sourceId: SourceId) => boolean) =>
-    Array.from(sourceIds).flatMap((sourceId): GlyphOutlineTarget[] => {
-      if (sourceId === activeSourceId || visibleIds.has(sourceId) || skip(sourceId)) return [];
-
-      visibleIds.add(sourceId);
-      return [{ kind: "source", sourceId }];
-    });
-
-  const targets = [
-    ...include(state.sources.explicitIds, () => false),
-    ...include(editingSourceIds, (sourceId) => state.hiddenSelectedSourceIds.has(sourceId)),
-    ...include(state.sources.groupIds, () => false),
-  ];
+): OutlineTargetSet {
+  const shownEditingIds = editingSourceIds
+    .values()
+    .filter((sourceId) => !state.hiddenSelectedSourceIds.has(sourceId));
+  const visibleIds = [
+    ...state.sources.explicitIds,
+    ...shownEditingIds,
+    ...state.sources.groupIds,
+  ].filter((sourceId) => sourceId !== activeSourceId);
 
   return {
-    targets,
-    inheritedTargets: Array.from(
-      state.sources.groupIds,
-      (sourceId): GlyphOutlineTarget => ({ kind: "source", sourceId }),
-    ),
-    visibleIds,
+    targets: OutlineTargets.sources(visibleIds),
+    inheritedTargets: OutlineTargets.sources(state.sources.groupIds),
   };
 }
 
@@ -165,25 +155,12 @@ export function sourceOutlineTargets(
  * @param state - Reducer-owned outline visibility intent.
  * @returns Instance targets without duplicates, explicit targets first.
  */
-export function instanceOutlineTargets(
-  state: VariationOutlineState,
-): OutlineTargetSet<NamedInstanceId> {
-  const visibleIds = new Set<NamedInstanceId>();
-  const targets = [...state.instances.explicitIds, ...state.instances.groupIds].flatMap(
-    (instanceId): GlyphOutlineTarget[] => {
-      if (visibleIds.has(instanceId)) return [];
-
-      visibleIds.add(instanceId);
-      return [{ kind: "instance", instanceId }];
-    },
-  );
-
+export function instanceOutlineTargets(state: VariationOutlineState): OutlineTargetSet {
   return {
-    targets,
-    inheritedTargets: Array.from(
-      state.instances.groupIds,
-      (instanceId): GlyphOutlineTarget => ({ kind: "instance", instanceId }),
-    ),
-    visibleIds,
+    targets: OutlineTargets.instances([
+      ...state.instances.explicitIds,
+      ...state.instances.groupIds,
+    ]),
+    inheritedTargets: OutlineTargets.instances(state.instances.groupIds),
   };
 }

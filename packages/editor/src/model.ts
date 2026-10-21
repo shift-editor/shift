@@ -12,6 +12,7 @@ export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
+export { OutlineTargets } from "./lib/nodes/OutlineTargets";
 export {
   AngleSnap,
   DirectionSnap,
