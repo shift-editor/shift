@@ -15,5 +15,12 @@ export type {
   SegmentedRun,
   TextItem,
 } from "./lib/text/layout/types";
-export type { FeatureDefault, FontFeature, TextRunRecord } from "./types/text";
+export type {
+  FeatureDefault,
+  FeatureSubstitution,
+  FontFeature,
+  TextAlign,
+  TextRunRecord,
+  TextRunSettings,
+} from "./types/text";
 export { fallbackGlyphNameForUnicode, formatCodepointAsUPlus } from "./lib/utils/unicode";

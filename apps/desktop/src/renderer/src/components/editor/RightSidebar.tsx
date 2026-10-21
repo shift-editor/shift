@@ -11,6 +11,7 @@ import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
+import { SidebarGroup } from "./sidebar-right/SidebarGroup";
 import { TextSection } from "./sidebar-right/TextSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
@@ -106,16 +107,3 @@ export const RightSidebar = () => {
     />
   );
 };
-
-/**
- * One group of the selection's sections. An empty group, whose section has
- * nothing to show, is hidden; each shown group has a divider below it.
- */
-const SidebarGroup = ({ children }: { readonly children: React.ReactNode }) => (
-  <div
-    data-sidebar-group=""
-    className="flex flex-col gap-4 border-b border-line-subtle px-3 py-3 empty:hidden"
-  >
-    {children}
-  </div>
-);

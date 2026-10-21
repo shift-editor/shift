@@ -24,10 +24,16 @@
 	<string>fatha-ar.glif</string>
 	<key>i</key>
 	<string>i.glif</string>
+	<key>i.loclTRK</key>
+	<string>i.loclT_R_K_.glif</string>
 	<key>noon-ar</key>
 	<string>noon-ar.glif</string>
 	<key>noonDotless-ar</key>
 	<string>noonDotless-ar.glif</string>
+	<key>one</key>
+	<string>one.glif</string>
+	<key>one.arab</key>
+	<string>one.arab.glif</string>
 	<key>shadda-ar</key>
 	<string>shadda-ar.glif</string>
 	<key>space</key>

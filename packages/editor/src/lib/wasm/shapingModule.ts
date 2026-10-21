@@ -9,14 +9,16 @@ import type {
   ShapeUnit,
 } from "@shift/types";
 import { registerShaper, releaseShaper } from "@shift/wasm/shaping";
-import type { FontFeature } from "../../types/text";
+import type { FeatureSubstitution, FontFeature } from "../../types/text";
 import {
   setShaperGlyphs,
   shapeParagraphs,
   shaperFeatures,
+  shaperSubstitutions,
   type ParagraphInput,
   type ShapedParagraphOutput,
   type ShapedRunOutput,
+  type SubstitutionOutput,
 } from "./generated/shapingLayouts";
 
 const released = new FinalizationRegistry<number>(releaseShaper);
@@ -98,6 +100,28 @@ export class RegisteredShaper {
       name: feature.name ?? null,
       default: feature.default,
     }));
+  }
+
+  /**
+   * Lists every substitution a feature can make, ordered by output glyph:
+   * each rule of each lookup the feature reaches, lookups that contextual
+   * rules call included, as shift-shape reads them from `GSUB`.
+   *
+   * @returns An empty list for a positioning feature, a tag the font does
+   * not define, a `GSUB` that cannot be read, or once the shaper is released.
+   */
+  substitutions(tag: string): FeatureSubstitution[] {
+    const substitutions = shaperSubstitutions({ shaper: this.#handle, tag: tagNumber(tag) }) ?? [];
+    return substitutions.flatMap((substitution) => this.#substitution(substitution) ?? []);
+  }
+
+  /** A substitution in the editor's glyphs; null when one of its glyphs is not in the font. */
+  #substitution(substitution: SubstitutionOutput): FeatureSubstitution | null {
+    const output = this.#glyphIds[substitution.output] ?? null;
+    const input = substitution.input.map((glyph) => this.#glyphIds[glyph] ?? null);
+    if (output === null || input.includes(null)) return null;
+
+    return { input: input.filter((glyph) => glyph !== null), output };
   }
 
   #paragraph(paragraph: ShapedParagraphOutput): ShapedParagraph {

@@ -20,6 +20,8 @@ crates/shift-shape/src/
   source.rs         GlyphSource, FontGlyphs, NOTDEF, character_glyphs
   axis.rs           AxisNormalization
   shape.rs          Shaper, requests, shaped runs and glyphs
+  features.rs       the features a font defines, and how the shaper treats each
+  substitutions.rs  the glyphs each substitution of a feature replaces and brings in
   itemize.rs        script runs
   breaks.rs   UAX #14 line-break opportunities over units
 ```
@@ -31,6 +33,7 @@ crates/shift-shape/src/
 - `GlyphSource` — the host seam: glyph identity both ways, character mapping, and own advances.
 - `ShapedParagraph<G>` / `ShapedRun<G>` / `ShapedGlyph<G>` — a paragraph's base `TextDirection` and its runs in screen order, each with its bidi level; glyphs in visual order, as host glyphs, with clusters indexing the paragraph's units.
 - `LineBreak` — a unit a line may (or must) start with.
+- `Substitution<G>` — one rule a feature can apply, as host glyphs: the glyphs it replaces (several for a ligature) and the glyph it brings in. `Shaper::feature_substitutions` lists them per lookup kind, following the lookups contextual rules call; a font without `GSUB` has none, and a `GSUB` that cannot be read is `ShapeError::InvalidFont`, never an empty list.
 
 ## How it works
 
@@ -57,6 +60,7 @@ crates/shift-shape/src/
 ```bash
 nix develop --command cargo test -p shift-shape
 nix develop --command cargo test -p shift-backends --lib shaper_font
+nix develop --command cargo test -p shift-backends --test feature_substitutions
 nix develop --command cargo clippy -p shift-shape --all-targets -- -D warnings
 ```
 

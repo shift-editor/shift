@@ -1,4 +1,4 @@
-import type { CaretStop, Direction, Line, Point2D } from "./types";
+import type { CaretStop, Direction, Line } from "./types";
 import type { PlacedGlyph } from "./TextLayout";
 
 /**
@@ -19,13 +19,8 @@ export class LineCarets {
    * @param placed - the line's placed glyphs.
    * @param boundaries - clusters a caret may rest at.
    */
-  constructor(
-    line: Line,
-    placed: readonly PlacedGlyph[],
-    origin: Point2D,
-    boundaries: ReadonlySet<number>,
-  ) {
-    const positions = clusterPositions(line, placed, origin);
+  constructor(line: Line, placed: readonly PlacedGlyph[], boundaries: ReadonlySet<number>) {
+    const positions = clusterPositions(line, placed);
     this.#xByCluster = new Map(positions.map((stop) => [stop.cluster, stop.x]));
     this.#onScreen = positions
       .filter((stop) => boundaries.has(stop.cluster))
@@ -113,11 +108,7 @@ function onScreen(direction: Direction): (a: CaretStop, b: CaretStop) => number 
  * by zero-advance glyphs (an unattached mark) stand at the glyph; anything
  * left, such as an empty line's end, stands at the line's end.
  */
-function clusterPositions(
-  line: Line,
-  placed: readonly PlacedGlyph[],
-  origin: Point2D,
-): CaretStop[] {
+function clusterPositions(line: Line, placed: readonly PlacedGlyph[]): CaretStop[] {
   const xs = new Map<number, number>();
   const claim = (cluster: number, x: number) => {
     if (!xs.has(cluster)) xs.set(cluster, x);
@@ -138,7 +129,7 @@ function clusterPositions(
   for (const glyph of placed) claim(glyph.glyph.cluster, glyph.left);
 
   const advance = line.runs.reduce((sum, run) => sum + run.advance, 0);
-  const lineEnd = line.direction === "rtl" ? origin.x : origin.x + advance;
+  const lineEnd = line.direction === "rtl" ? line.x : line.x + advance;
   const positions: CaretStop[] = [];
   for (let cluster = line.clusterStart; cluster < line.clusterEnd; cluster++) {
     positions.push({ cluster, x: xs.get(cluster) ?? lineEnd });

@@ -7,7 +7,7 @@ use harfrust::{
     ShaperData, ShaperInstance, Tag, UnicodeBuffer,
 };
 
-use read_fonts::TableProvider;
+use read_fonts::{ReadError, TableProvider};
 use unicode_bidi::Level;
 
 use crate::itemize::itemize;
@@ -228,7 +228,7 @@ pub enum ShapeError {
     InvalidLanguage(String),
 
     #[error("cannot read the shaping font")]
-    InvalidFont,
+    InvalidFont(#[source] ReadError),
 }
 
 /// Shapes text with one font's compiled features.
@@ -251,7 +251,7 @@ impl Shaper {
     ///
     /// Returns [`ShapeError::InvalidFont`] when `bytes` is not a font.
     pub fn new(bytes: Vec<u8>) -> Result<Self, ShapeError> {
-        let font = FontRef::new(&bytes).map_err(|_| ShapeError::InvalidFont)?;
+        let font = FontRef::new(&bytes).map_err(ShapeError::InvalidFont)?;
         let data = ShaperData::new(&font);
         let marks = mark_glyphs(&font);
         Ok(Self { bytes, data, marks })
@@ -361,8 +361,8 @@ impl Shaper {
         })
     }
 
-    fn font(&self) -> Result<FontRef<'_>, ShapeError> {
-        FontRef::new(&self.bytes).map_err(|_| ShapeError::InvalidFont)
+    pub(crate) fn font(&self) -> Result<FontRef<'_>, ShapeError> {
+        FontRef::new(&self.bytes).map_err(ShapeError::InvalidFont)
     }
 }
 

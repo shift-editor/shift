@@ -20,6 +20,9 @@
 		<string>dotabove-ar</string>
 		<string>alefabove-ar</string>
 		<string>tick</string>
+		<string>one</string>
+		<string>one.arab</string>
+		<string>i.loclTRK</string>
 	</array>
 	<key>public.openTypeCategories</key>
 	<dict>

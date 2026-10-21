@@ -19,6 +19,7 @@ import type {
   PositionedRun,
   SelectionRect,
   Span,
+  TextAlign,
   TextItemId,
 } from "./types";
 import { literalRun, shapedRuns, splitParagraphs } from "./paragraphs";
@@ -39,6 +40,13 @@ export interface TextLayoutParams {
    * lays out literally, glyph by glyph.
    */
   shaped?: readonly (ShapedParagraph | null)[] | null;
+  /**
+   * How lines line up within the widest one; null or absent follows each
+   * line's direction, left for left-to-right and right for right-to-left.
+   */
+  align?: TextAlign | null;
+  /** The distance between baselines in font units; null or absent uses the font's line spacing. */
+  lineHeight?: number | null;
 }
 
 /** One positioned glyph with its layout-local placement resolved. */
@@ -106,11 +114,14 @@ export class TextLayout {
       };
     });
 
-    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
+    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics, {
+      align: params.align ?? null,
+      lineHeight: params.lineHeight ?? null,
+    });
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
-    this.placedGlyphs = placeGlyphs(lines, origin);
+    this.placedGlyphs = placeGlyphs(lines);
     const placedByItem = new Map<TextItemId, PlacedGlyph>();
     const partsByItem = new Map<TextItemId, PlacedGlyph[]>();
     for (const placed of this.placedGlyphs) {
@@ -138,7 +149,6 @@ export class TextLayout {
         new LineCarets(
           line,
           this.placedGlyphs.filter((placed) => placed.lineIndex === index),
-          origin,
           boundaries,
         ),
     );
@@ -305,6 +315,11 @@ export class TextLayout {
  *     line 1  baseline y = -1000   ──────────  [C D]
  *     line 2  baseline y = -2000   ──────────  []        ← empty paragraph still gets a line
  *
+ * Lines line up within the widest line: a left-aligned line starts at
+ * `origin.x`, a right-aligned one ends at `origin.x` plus the widest line's
+ * advance, and a centred one sits midway. Without an alignment each line
+ * follows its direction, so Arabic lines sit right.
+ *
  * `totalAdvance` is summed from `run.advance` (which Positioner already
  * computed as the sum of its glyphs' xAdvance).
  *
@@ -318,16 +333,27 @@ interface PositionedParagraph {
   clusterEnd: number;
 }
 
+/** How a layout's lines are set: their alignment and baseline distance, null for the defaults. */
+interface LineSetting {
+  readonly align: TextAlign | null;
+  readonly lineHeight: number | null;
+}
+
 function assembleLayout(
   paragraphs: PositionedParagraph[],
   origin: Point2D,
   metrics: SourceMetrics,
+  setting: LineSetting,
 ): AssembledLayout {
-  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const lineHeight =
+    setting.lineHeight ?? metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const advances = paragraphs.map(paragraphAdvance);
+  const widest = Math.max(0, ...advances);
 
   const lines: Line[] = paragraphs.map((p, i) => ({
     runs: p.runs,
     direction: p.direction,
+    x: origin.x + alignOffset(setting.align ?? directionAlign(p.direction), widest - advances[i]!),
     y: origin.y - lineHeight * i,
     ascent: metrics.ascender,
     descent: metrics.descender,
@@ -345,10 +371,31 @@ function assembleLayout(
   return { lines, totalAdvance, bounds: null };
 }
 
-function placeGlyphs(lines: readonly Line[], origin: Point2D): PlacedGlyph[] {
+function paragraphAdvance(paragraph: PositionedParagraph): number {
+  return paragraph.runs.reduce((sum, run) => sum + run.advance, 0);
+}
+
+/** The alignment a line takes without one chosen: its reading direction's start. */
+function directionAlign(direction: Direction): TextAlign {
+  return direction === "rtl" ? "right" : "left";
+}
+
+/** How far a line moves right to align it, given the room the widest line leaves it. */
+function alignOffset(align: TextAlign, room: number): number {
+  switch (align) {
+    case "left":
+      return 0;
+    case "center":
+      return room / 2;
+    case "right":
+      return room;
+  }
+}
+
+function placeGlyphs(lines: readonly Line[]): PlacedGlyph[] {
   const placed: PlacedGlyph[] = [];
   for (const [lineIndex, line] of lines.entries()) {
-    let runBase = origin.x;
+    let runBase = line.x;
     for (const [runIndex, run] of line.runs.entries()) {
       for (const glyph of run.glyphs) {
         const left = runBase + glyph.origin.x;

@@ -119,11 +119,16 @@ export interface PositionedRun {
   advance: number;
 }
 
+/** Where a text's lines sit against each other. */
+export type TextAlign = "left" | "center" | "right";
+
 export interface Line {
   /** Runs in screen order, left to right. */
   runs: PositionedRun[];
   /** The paragraph's base direction. */
   direction: Direction;
+  /** The line's left edge, after alignment. */
+  x: number;
   y: number;
   ascent: number;
   descent: number;

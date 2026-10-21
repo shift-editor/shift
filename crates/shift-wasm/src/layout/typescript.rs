@@ -17,6 +17,7 @@ use crate::cursive::CursiveRun;
 use crate::decomposition::DecomposedGlyph;
 use crate::shaping::{
     FontFeatureOutput, ShapeParagraphs, ShapedParagraphOutput, ShaperFeatures, ShaperGlyphs,
+    ShaperSubstitutions, SubstitutionOutput,
 };
 
 /// One WebAssembly module and the hot calls it exports, generated into one
@@ -101,6 +102,12 @@ fn shaping_calls() -> Vec<Call> {
             doc: "Lists a registered shaper's features in tag order; null for an unregistered shaper.",
             input: ShaperFeatures::kind(),
             output: Option::<Vec<FontFeatureOutput>>::kind(),
+        },
+        Call {
+            name: "shaperSubstitutions",
+            doc: "Lists every substitution a registered shaper's feature can make, ordered by output glyph; null for an unregistered shaper or an unreadable GSUB.",
+            input: ShaperSubstitutions::kind(),
+            output: Option::<Vec<SubstitutionOutput>>::kind(),
         },
     ]
 }

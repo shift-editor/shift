@@ -59,6 +59,8 @@ function run(...characters: string[]): TextRunRecord {
     features: {},
     language: null,
     script: null,
+    lineHeight: null,
+    align: null,
     items: characters.map((char) => characterTextItem(char.codePointAt(0)!)),
   };
 }
