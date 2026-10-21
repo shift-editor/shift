@@ -92,6 +92,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: shift-rust
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Cache node_modules
         id: modules-cache
@@ -150,6 +151,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: shift-rust-macos
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Restore node_modules
         id: modules-cache
