@@ -2,11 +2,10 @@ import { GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
 import { isAnchorId, isComponentId, isContourId, isPointId, type GlyphId } from "@shift/types";
-import { useRef } from "react";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
-import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
+import { GlyphKerningGroups } from "./sidebar-right/GlyphKerningGroups";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
@@ -33,7 +32,6 @@ export const RightSidebar = () => {
   const hasTransformSelection = selection.ids.some(
     (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),
   );
-  const selectionBlockRef = useRef<HTMLDivElement>(null);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
@@ -42,6 +40,7 @@ export const RightSidebar = () => {
       session={session}
       host={{
         glyphLabel,
+        glyph: <GlyphKerningGroups />,
         header: (
           <>
             <div className="flex min-w-0 items-center gap-1.5">
@@ -65,11 +64,8 @@ export const RightSidebar = () => {
           <KerningPairSection />
         ) : (
           <TransformOriginProvider>
-            {/* Kerning | Handle | Transform, each a group with a divider between. */}
-            <div ref={selectionBlockRef} className="flex flex-col">
-              <SidebarGroup>
-                <GlyphKerningSection anchorRef={selectionBlockRef} />
-              </SidebarGroup>
+            {/* Handle | Transform | Anchor, each a group with a divider between. */}
+            <div className="flex flex-col">
               {hasTransformSelection ? (
                 <SidebarGroup>
                   <HandleSection />

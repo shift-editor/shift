@@ -56,6 +56,7 @@ export function GlyphSidebar(input: GlyphSidebarProps): JSX.Element;
 
 // @public
 export interface GlyphSidebarHost {
+    glyph?: ReactNode;
     glyphLabel?: (glyphId: GlyphId) => string | undefined;
     header?: ReactNode;
     selection?: ReactNode;
