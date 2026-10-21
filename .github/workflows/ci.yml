@@ -610,7 +610,9 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-          key: native-module-e2e-v2-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
+            packages/wasm/src/generated-reference
+            packages/wasm/src/generated-shaping
+          key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
       - uses: Swatinem/rust-cache@v2
         if: steps.native-cache.outputs.cache-hit != 'true'
