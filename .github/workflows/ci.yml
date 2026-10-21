@@ -530,6 +530,11 @@ jobs:
       - name: Lint the reference module
         run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo clippy -p shift-wasm --features reference --target wasm32-unknown-unknown -- -D warnings
 
+      # Shaping and page layout ship in @shift/wasm/shaping, also behind
+      # features.
+      - name: Lint the shaping module
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo clippy -p shift-wasm --features shaping --target wasm32-unknown-unknown -- -D warnings
+
       - name: Check Shift-independent crate boundaries
         run: |
           for crate in fontsrc rumil rumil-build; do
@@ -541,6 +546,9 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --exclude shift-bridge
+
+      - name: Run page layout export tests
+        run: cargo test -p shift-wasm --lib --features layout
 
       # Time budgets hold for optimised code, so they are only asserted here.
       - name: Check performance budgets

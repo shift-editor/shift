@@ -2426,6 +2426,7 @@ dependencies = [
  "fontir",
  "serde",
  "shift-font",
+ "shift-layout",
  "shift-shape",
  "tsify",
  "wasm-bindgen",
