@@ -10,6 +10,8 @@ import {
   type KerningSnapshot,
   type KerningValueEdit,
   type SourceId,
+  EntityMap,
+  type ReadonlyEntityMap,
 } from "@shift/types";
 import { interpolationWeights } from "../interpolation/InterpolationBasis";
 import type { DesignAxisLocation } from "../../types/variation";
@@ -68,14 +70,14 @@ type MembershipByPosition = Readonly<Record<KerningPairPosition, GroupMembership
 export class KerningGroups {
   static readonly EMPTY = new KerningGroups(new Map(), { first: new Map(), second: new Map() });
 
-  readonly #byId: ReadonlyMap<KerningGroupId, KerningGroup>;
+  readonly #byId: ReadonlyEntityMap<KerningGroupId, KerningGroup>;
   readonly #membership: MembershipByPosition;
 
   private constructor(
     byId: ReadonlyMap<KerningGroupId, KerningGroup>,
     membership: MembershipByPosition,
   ) {
-    this.#byId = byId;
+    this.#byId = new EntityMap("kerning group", byId);
     this.#membership = membership;
   }
 
@@ -94,7 +96,7 @@ export class KerningGroups {
 
   /** The group with this id, or null when the font has none. */
   group(groupId: KerningGroupId): KerningGroup | null {
-    return this.#byId.get(groupId) ?? null;
+    return this.#byId.get(groupId);
   }
 
   /** The group `glyphId` kerns through at a pair position. */

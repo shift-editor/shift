@@ -1,3 +1,6 @@
 {
-  "extends": ["../../.oxlintrc.json"]
+  "extends": ["../../.oxlintrc.json"],
+  "rules": {
+    "shift/no-map-get-to-null": "off"
+  }
 }

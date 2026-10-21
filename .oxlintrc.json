@@ -53,7 +53,8 @@
     "shift/brand-cast-via-helper": "error",
     "shift/prefer-iterator-helpers": "error",
     "shift/prefer-scene-only": "error",
-    "shift/no-optional-collection-field": "error"
+    "shift/no-optional-collection-field": "error",
+    "shift/no-map-get-to-null": "error"
   },
   "overrides": [
     {

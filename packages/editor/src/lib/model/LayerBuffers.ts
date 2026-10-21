@@ -1,3 +1,4 @@
+import { EntityMap } from "@shift/types";
 import {
   Bounds,
   Mat,
@@ -50,7 +51,7 @@ export class LayerBuffers {
   readonly components: readonly ComponentBuffer[];
 
   // non-reactive: routes imperative point edits; render readers track contour/structure cells.
-  readonly #pointContours = new Map<PointId, ContourBuffer>();
+  readonly #pointContours = new EntityMap<PointId, ContourBuffer>("point contour");
 
   readonly structureCell: ComputedSignal<GlyphStructure>;
   readonly snapshotCell: ComputedSignal<Float64Array>;
@@ -458,7 +459,7 @@ export class LayerBuffers {
   }
 
   #contourForPoint(pointId: PointId): ContourBuffer | null {
-    return this.#pointContours.get(pointId) ?? null;
+    return this.#pointContours.get(pointId);
   }
 
   static #snapshot(

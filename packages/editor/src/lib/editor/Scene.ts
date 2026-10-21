@@ -1,4 +1,4 @@
-import { mintNodeId, type NodeId } from "@shift/types";
+import { EntityMap, mintNodeId, type NodeId, type ReadonlyEntityMap } from "@shift/types";
 import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -21,7 +21,7 @@ export interface SceneValue {
 export class Scene {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #cell: Signal<SceneValue>;
-  readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
+  readonly #nodesById: Signal<ReadonlyEntityMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
@@ -51,11 +51,10 @@ export class Scene {
     );
     this.#nodesById = computed(
       () => {
-        const nodes = new Map<NodeId, ShiftNode>();
-        for (const node of this.#cell.value.nodes) {
-          nodes.set(node.id, node);
-        }
-        return nodes;
+        return new EntityMap(
+          "node",
+          this.#cell.value.nodes.map((node) => [node.id, node] as const),
+        );
       },
       { name: "editor.scene.nodesById" },
     );
@@ -99,7 +98,7 @@ export class Scene {
   node(nodeId: NodeId | null): ShiftNode | null {
     if (!nodeId) return null;
 
-    return this.#nodesById.peek().get(nodeId) ?? null;
+    return this.#nodesById.peek().get(nodeId);
   }
 
   /**

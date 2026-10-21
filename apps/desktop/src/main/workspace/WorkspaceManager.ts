@@ -1,3 +1,4 @@
+import { EntityMap } from "@shift/types";
 import { BrowserWindow, type WebContents } from "electron";
 import path from "node:path";
 import { DocumentClient } from "../document/DocumentClient";
@@ -42,7 +43,7 @@ export class WorkspaceManager {
   readonly #onSessionCrashed: (session: FontSessionHost) => void;
   readonly #onDocumentVisited: (visit: RecentDocumentVisit, session: FontSessionHost) => void;
   readonly #onDocumentSaved: (visit: RecentDocumentVisit, session: FontSessionHost) => void;
-  readonly #sessionsById = new Map<FontSessionId, FontSessionHost>();
+  readonly #sessionsById = new EntityMap<FontSessionId, FontSessionHost>("font session");
   readonly #sessionIdByWindowId = new Map<number, FontSessionId>();
   readonly #documentSessions = new DocumentSessionIndex();
   readonly #documentOpenById = new Map<string, Promise<FontSessionHost>>();
@@ -176,7 +177,7 @@ export class WorkspaceManager {
    * @returns null when no live session is registered for the id.
    */
   get(workspaceId: FontSessionId): FontSessionHost | null {
-    return this.#sessionsById.get(workspaceId) ?? null;
+    return this.#sessionsById.get(workspaceId);
   }
 
   /**

@@ -16,13 +16,14 @@ import type {
   LayerId,
   PointId,
   PointSeed,
+  ReadonlyEntityMap,
   SegmentId,
   Source,
   SourceId,
   Unicode,
   SetComponentAlignmentIntent,
 } from "@shift/types";
-import { mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
+import { mintAnchorId, mintComponentId, mintContourId, mintPointId, EntityMap } from "@shift/types";
 import {
   computed,
   keyedCache,
@@ -1430,7 +1431,7 @@ export class GlyphRenderModel {
   readonly #propagating = new Set<GlyphId>();
   readonly #propagatedAnchorsCell: Signal<readonly PropagationAnchor[]>;
   readonly #placementsCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>;
-  readonly #anchorsByNameCell: Signal<ReadonlyMap<string, PropagationAnchor>>;
+  readonly #anchorsByNameCell: Signal<ReadonlyEntityMap<string, PropagationAnchor>>;
 
   /**
    * Creates a Glyph render model tied to a live external location and optional exact source.
@@ -1494,7 +1495,11 @@ export class GlyphRenderModel {
       { name: "glyph.renderModel.anchorsWithComponents" },
     );
     this.#anchorsByNameCell = computed(
-      () => new Map(this.#propagatedAnchorsCell.value.map((anchor) => [anchor.name, anchor])),
+      () =>
+        new EntityMap(
+          "anchor",
+          this.#propagatedAnchorsCell.value.map((anchor) => [anchor.name, anchor] as const),
+        ),
       { name: "glyph.renderModel.anchorsByName" },
     );
     this.#externalLocation = externalLocation;
@@ -1625,7 +1630,7 @@ export class GlyphRenderModel {
    */
   anchorNamed(name: string): PropagationAnchor | null {
     track(this.#anchorsByNameCell);
-    return this.#anchorsByNameCell.peek().get(name) ?? null;
+    return this.#anchorsByNameCell.peek().get(name);
   }
 
   /**
@@ -2260,11 +2265,19 @@ export class Glyph {
   readonly #defaultSourceId: SourceId;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #layersBySourceIdCell = computed(
-    () => new Map(this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const)),
+    () =>
+      new EntityMap(
+        "source layer",
+        this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const),
+      ),
     { name: "glyph.layersBySourceId" },
   );
   readonly #layersByIdCell = computed(
-    () => new Map(this.#layersCell.value.map((layer) => [layer.id, layer] as const)),
+    () =>
+      new EntityMap(
+        "layer",
+        this.#layersCell.value.map((layer) => [layer.id, layer] as const),
+      ),
     { name: "glyph.layersById" },
   );
   readonly #componentGlyphsCell = signal<ReadonlyMap<GlyphId, Glyph>>(new Map(), {
@@ -2315,11 +2328,11 @@ export class Glyph {
   layerForSource(sourceId: SourceId): GlyphLayer | null {
     track(this.#layersBySourceIdCell);
 
-    return this.#layersBySourceIdCell.peek().get(sourceId) ?? null;
+    return this.#layersBySourceIdCell.peek().get(sourceId);
   }
 
   layerForId(layerId: LayerId): GlyphLayer | null {
-    return this.#layersByIdCell.peek().get(layerId) ?? null;
+    return this.#layersByIdCell.peek().get(layerId);
   }
 
   layerAt(location: ExternalAxisLocation): GlyphLayer | null {

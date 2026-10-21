@@ -1,3 +1,4 @@
+import { EntityMap } from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceDocumentIdentity,
@@ -19,7 +20,7 @@ export type IndexedDocumentSession = {
  * changes because Save As gives the session a new identity.
  */
 export class DocumentSessionIndex {
-  readonly #workspaceIdByDocumentId = new Map<string, FontSessionId>();
+  readonly #workspaceIdByDocumentId = new EntityMap<string, FontSessionId>("document session");
   readonly #documentIdByWorkspaceId = new Map<FontSessionId, string>();
   readonly #unlistenByWorkspaceId = new Map<FontSessionId, () => void>();
 
@@ -85,7 +86,7 @@ export class DocumentSessionIndex {
    * @returns null when no live session owns the `DocumentId`.
    */
   workspaceIdForDocument(identity: WorkspaceDocumentIdentity): FontSessionId | null {
-    return this.#workspaceIdByDocumentId.get(identity.documentId) ?? null;
+    return this.#workspaceIdByDocumentId.get(identity.documentId);
   }
 
   /**
@@ -95,7 +96,7 @@ export class DocumentSessionIndex {
    * @returns null when the state is not document-backed or is not indexed.
    */
   workspaceIdForState(state: WorkspaceDocumentState): FontSessionId | null {
-    return state.documentId ? (this.#workspaceIdByDocumentId.get(state.documentId) ?? null) : null;
+    return state.documentId ? this.#workspaceIdByDocumentId.get(state.documentId) : null;
   }
 
   #remove(workspaceId: FontSessionId): void {
