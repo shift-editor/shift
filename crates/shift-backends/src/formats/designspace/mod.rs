@@ -251,4 +251,53 @@ mod tests {
             .collect();
         location
     }
+
+    #[test]
+    fn reports_an_instance_left_out_for_sharing_a_location() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let designspace_path = temp_dir.path().join("Instances.designspace");
+        let mut font = test_font();
+        let weight = Axis::weight();
+        let weight_id = weight.id();
+        font.add_axis(weight).expect("weight axis should be valid");
+        font.set_named_instances(vec![NamedInstance::new(
+            "Bold".to_string(),
+            ExternalLocation::from_untyped(location(&[(weight_id, 700.0)])),
+            None,
+        )])
+        .unwrap();
+        DesignspaceWriter::new()
+            .save(&font, designspace_path.to_str().unwrap())
+            .unwrap();
+
+        let xml = fs::read_to_string(&designspace_path).unwrap();
+        let start = xml
+            .find("<instance ")
+            .expect("the writer should write the instance");
+        let end = start + xml[start..].find("</instance>").unwrap() + "</instance>".len();
+        let copy = xml[start..end].replace("stylename=\"Bold\"", "stylename=\"Bold Copy\"");
+        assert_ne!(copy, xml[start..end], "the copy should rename the instance");
+        let xml = format!("{}\n{copy}{}", &xml[..end], &xml[end..]);
+        fs::write(&designspace_path, xml).unwrap();
+
+        let (font, _, report) = stream_font(designspace_path.to_str().unwrap()).unwrap();
+
+        let names = font
+            .named_instances()
+            .iter()
+            .map(NamedInstance::name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["Bold"]);
+        let messages = report
+            .losses
+            .iter()
+            .map(|loss| loss.message.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            messages
+                .iter()
+                .any(|message| message.contains("'Bold Copy' (at the same location as 'Bold')")),
+            "{messages:?}"
+        );
+    }
 }
