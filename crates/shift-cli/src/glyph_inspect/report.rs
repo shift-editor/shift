@@ -389,41 +389,49 @@ fn inspect_variation(
         .unwrap_or_default();
     let regions = interpolation
         .map(|interpolation| {
-            interpolation
-                .basis()
+            let basis = interpolation.basis();
+            basis
                 .variation_basis()
                 .deltas()
                 .iter()
-                .map(|delta| VariationRegion {
-                    supports: delta
+                .map(|delta| {
+                    let scalar = delta
                         .region()
-                        .supports()
-                        .iter()
-                        .map(|support| VariationSupport {
-                            axis_tag: font
-                                .axis(&support.axis_id())
-                                .map(|axis| axis.tag().to_string())
-                                .unwrap_or_else(|| support.axis_id().to_string()),
-                            minimum: support.minimum(),
-                            peak: support.peak(),
-                            maximum: support.maximum(),
-                        })
-                        .collect(),
-                    scalar: interpolation_region_scalar(
-                        delta.region(),
-                        location,
-                        interpolation.basis().design_normalization(),
-                    ),
-                    value_count: delta.values().len(),
-                    non_zero_value_count: delta
-                        .values()
-                        .iter()
-                        .filter(|value| **value != 0.0)
-                        .count(),
-                    values: delta.values().to_vec(),
+                        .scalar_at(
+                            location.as_untyped(),
+                            font.axes(),
+                            Some(basis.design_normalization()),
+                        )
+                        .into_diagnostic()
+                        .wrap_err("failed to evaluate a variation region")?;
+                    Ok(VariationRegion {
+                        supports: delta
+                            .region()
+                            .supports()
+                            .iter()
+                            .map(|support| VariationSupport {
+                                axis_tag: font
+                                    .axis(&support.axis_id())
+                                    .map(|axis| axis.tag().to_string())
+                                    .unwrap_or_else(|| support.axis_id().to_string()),
+                                minimum: support.minimum(),
+                                peak: support.peak(),
+                                maximum: support.maximum(),
+                            })
+                            .collect(),
+                        scalar,
+                        value_count: delta.values().len(),
+                        non_zero_value_count: delta
+                            .values()
+                            .iter()
+                            .filter(|value| **value != 0.0)
+                            .count(),
+                        values: delta.values().to_vec(),
+                    })
                 })
-                .collect()
+                .collect::<Result<Vec<_>>>()
         })
+        .transpose()?
         .unwrap_or_default();
     let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(&source.id()));
     let selection = if exact_layer.is_some() {
@@ -452,41 +460,6 @@ fn inspect_variation(
         source_weights,
         regions,
     })
-}
-
-fn interpolation_region_scalar(
-    region: &shift_font::InterpolationRegion,
-    location: &DesignLocation,
-    design_normalization: &[shift_font::DesignNormalization],
-) -> f64 {
-    let mut scalar = 1.0;
-    for support in region.supports() {
-        let Some(normalization) = design_normalization
-            .iter()
-            .find(|normalization| normalization.axis_id == support.axis_id())
-        else {
-            return 0.0;
-        };
-        let value = location
-            .get(&normalization.axis_id)
-            .unwrap_or(normalization.default);
-        let normalized = normalization.normalize(value);
-        if normalized == support.peak()
-            || (support.minimum() == 0.0 && support.peak() == 0.0 && support.maximum() == 0.0)
-        {
-            continue;
-        }
-        if normalized <= support.minimum() || support.maximum() <= normalized {
-            return 0.0;
-        }
-        let edge = if normalized < support.peak() {
-            support.minimum()
-        } else {
-            support.maximum()
-        };
-        scalar *= (normalized - edge) / (support.peak() - edge);
-    }
-    scalar
 }
 
 fn inspect_resolved(advance: f64, contours: &[FontResolvedContour]) -> ResolvedGlyph {

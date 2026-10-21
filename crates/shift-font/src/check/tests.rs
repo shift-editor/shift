@@ -4,10 +4,10 @@ use crate::{
     KerningPosition, KerningSide, PointType, SourceId,
 };
 
-use super::{Charset, Check, CheckOptions, check_font, check_font_with, check_glyph};
+use super::{Charset, Check, CheckOptions};
 
 fn checks(font: &Font) -> Vec<Check> {
-    check_font(font)
+    font.check()
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -41,7 +41,7 @@ fn glyph_a_checks(font: &Font) -> Vec<Check> {
 
 fn glyph_a_findings(font: &Font) -> Vec<Check> {
     let glyph_id = font.glyph_id_by_name("A").unwrap();
-    check_glyph(font, &glyph_id)
+    font.check_glyph(&glyph_id)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -232,7 +232,7 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
         ..CheckOptions::default()
     };
 
-    let with = check_font_with(&font, &options).unwrap();
+    let with = font.check_with(&options).unwrap();
     assert!(
         with.iter()
             .any(|finding| finding.check == Check::CharsetMissingGlyph
@@ -249,7 +249,7 @@ fn a_glyph_off_the_monospace_cell_is_reported() {
         ..CheckOptions::default()
     };
 
-    let found = check_font_with(&font, &options).unwrap();
+    let found = font.check_with(&options).unwrap();
     assert!(
         found
             .iter()
@@ -283,7 +283,8 @@ fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     }
     let b = font.insert_glyph(b).unwrap();
 
-    let found = check_glyph(&font, &b)
+    let found = font
+        .check_glyph(&b)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)

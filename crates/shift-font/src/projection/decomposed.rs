@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::FontProjection;
-use crate::placed_blend::{ContourShape, mirrors, placed_point_index};
+use crate::placed_blend::{ContourShape, placed_point_index};
 
 /// A glyph's flattened outline split by where each contour comes from: the
 /// glyph's own contours first, then one part per component occurrence in
@@ -410,7 +410,7 @@ fn placed(
         point_count: contour.points.len(),
         closed: contour.closed,
     };
-    let reversing = placement == Placement::Decomposed && mirrors(&transform);
+    let reversing = placement == Placement::Decomposed && transform.mirrors();
     let points = (0..shape.point_count)
         .filter_map(|index| {
             contour

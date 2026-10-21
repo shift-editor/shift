@@ -264,6 +264,16 @@ pub struct TouchedLayer {
     pub structural: bool,
 }
 
+impl TouchedLayer {
+    /// A touched layer sharing `layer`'s allocation.
+    pub fn new(layer: &Arc<GlyphLayer>, structural: bool) -> Self {
+        Self {
+            layer: Arc::clone(layer),
+            structural,
+        }
+    }
+}
+
 /// Outcome of applying an intent set: one reversible changeset plus
 /// replace-grade layer state for echo assembly.
 pub struct AppliedIntents {

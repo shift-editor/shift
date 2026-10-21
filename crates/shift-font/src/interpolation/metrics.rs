@@ -25,6 +25,18 @@ pub enum SourceMetricField {
     UnderlineThickness,
 }
 
+impl SourceMetricField {
+    /// Returns this metric's value on `source`, when the source sets one.
+    pub fn value_of(self, source: &Source) -> Option<f64> {
+        match self {
+            Self::ItalicAngle => source.italic_angle(),
+            Self::LineGap => source.line_gap(),
+            Self::UnderlinePosition => source.underline_position(),
+            Self::UnderlineThickness => source.underline_thickness(),
+        }
+    }
+}
+
 /// Ordered metric values authored by one source.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceMetricValues {
@@ -210,7 +222,7 @@ impl Font {
         .filter(|field| {
             sources
                 .iter()
-                .all(|source| technical_metric(source, *field).is_some())
+                .all(|source| field.value_of(source).is_some())
         })
         .collect::<Vec<_>>();
 
@@ -229,7 +241,7 @@ impl Font {
                 values.extend(metric_values);
             }
             for field in &technical_fields {
-                values.push(technical_metric(source, *field)?);
+                values.push(field.value_of(source)?);
             }
             source_locations.push((source.id(), source.location().clone()));
             source_values.push(SourceMetricValues {
@@ -249,15 +261,6 @@ impl Font {
             basis,
             sources: source_values,
         })
-    }
-}
-
-fn technical_metric(source: &Source, field: SourceMetricField) -> Option<f64> {
-    match field {
-        SourceMetricField::ItalicAngle => source.italic_angle(),
-        SourceMetricField::LineGap => source.line_gap(),
-        SourceMetricField::UnderlinePosition => source.underline_position(),
-        SourceMetricField::UnderlineThickness => source.underline_thickness(),
     }
 }
 

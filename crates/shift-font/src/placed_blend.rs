@@ -22,12 +22,6 @@ pub struct ContourShape {
     pub closed: bool,
 }
 
-/// Returns whether `transform` mirrors, so a decomposed placement reverses
-/// closed contours.
-pub fn mirrors(transform: &Transform) -> bool {
-    transform.xx * transform.yy - transform.xy * transform.yx < 0.0
-}
-
 /// Returns the index in the authored contour of the point a decomposed
 /// placement puts at `index`.
 ///
@@ -94,7 +88,7 @@ pub fn blend_placed_contours(
 
     let mirrored = masters
         .iter()
-        .map(|master| mirrors(&master.transform))
+        .map(|master| master.transform.mirrors())
         .collect::<Vec<_>>();
     out.reserve(point_total);
     let mut contour_start = 0;

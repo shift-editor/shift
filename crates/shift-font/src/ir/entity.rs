@@ -217,34 +217,31 @@ pub enum GlyphEntityId {
     Guideline(GuidelineId),
 }
 
-impl From<ContourId> for GlyphEntityId {
-    fn from(id: ContourId) -> Self {
-        Self::Contour(id)
-    }
+/// Converts each id, and each entity holding one, into a [`GlyphEntityId`].
+macro_rules! glyph_entities {
+    ($($variant:ident($id:ty, $entity:ty)),+ $(,)?) => {
+        $(
+            impl From<$id> for GlyphEntityId {
+                fn from(id: $id) -> Self {
+                    Self::$variant(id)
+                }
+            }
+
+            impl From<&$entity> for GlyphEntityId {
+                fn from(entity: &$entity) -> Self {
+                    Self::$variant(entity.id())
+                }
+            }
+        )+
+    };
 }
 
-impl From<PointId> for GlyphEntityId {
-    fn from(id: PointId) -> Self {
-        Self::Point(id)
-    }
-}
-
-impl From<ComponentId> for GlyphEntityId {
-    fn from(id: ComponentId) -> Self {
-        Self::Component(id)
-    }
-}
-
-impl From<AnchorId> for GlyphEntityId {
-    fn from(id: AnchorId) -> Self {
-        Self::Anchor(id)
-    }
-}
-
-impl From<GuidelineId> for GlyphEntityId {
-    fn from(id: GuidelineId) -> Self {
-        Self::Guideline(id)
-    }
+glyph_entities! {
+    Contour(ContourId, crate::Contour),
+    Point(PointId, crate::Point),
+    Component(ComponentId, crate::Component),
+    Anchor(AnchorId, crate::Anchor),
+    Guideline(GuidelineId, crate::Guideline),
 }
 
 #[cfg(test)]
