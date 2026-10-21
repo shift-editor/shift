@@ -16,7 +16,7 @@ import type {
   ScreenVector,
   SpaceTransform,
 } from "../../../types/coordinates";
-import { SCREEN_HIT_RADIUS } from "../rendering/constants";
+import { SCREEN_HANDLE_DRAG_THRESHOLD, SCREEN_HIT_RADIUS } from "../rendering/constants";
 import {
   applyLinear,
   applyTransform,
@@ -235,6 +235,16 @@ export class Camera {
    */
   get hitRadius(): number {
     return this.screenToSceneDistance(SCREEN_HIT_RADIUS);
+  }
+
+  /**
+   * Distance in scene units a pen drag must travel before it pulls a handle.
+   *
+   * @remarks
+   * Constant on screen, like {@link hitRadius}, so a small drag reads the same at every zoom.
+   */
+  get handleDragThreshold(): number {
+    return this.screenToSceneDistance(SCREEN_HANDLE_DRAG_THRESHOLD);
   }
 
   /**

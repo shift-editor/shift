@@ -38,6 +38,10 @@ pub struct RenderParams {
 }
 
 /// Packs visible instances into the exact little-endian shared WGSL layout.
+///
+/// # Errors
+///
+/// Returns [`SlugError::LengthOverflow`] when the packed length overflows `usize`.
 pub fn pack_render_instances(instances: &[RenderInstance]) -> Result<Vec<u8>, SlugError> {
     let byte_length = instances
         .len()

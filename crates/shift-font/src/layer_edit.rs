@@ -1,7 +1,7 @@
 use crate::Require;
 use crate::{
-    Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
-    Point, PointId, PointType, Transform, boolean,
+    AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer, Point,
+    PointId, PointType, Transform, boolean,
     error::{CoreError, CoreResult},
 };
 use std::collections::{HashMap, HashSet};
@@ -182,10 +182,6 @@ impl GlyphLayer {
             .ok_or(CoreError::PointInContourNotFound(point_id))
     }
 
-    fn require_anchor_mut(&mut self, anchor_id: &AnchorId) -> CoreResult<&mut Anchor> {
-        self.anchor_mut(anchor_id).require(&anchor_id)
-    }
-
     fn require_point_contours(
         &self,
         point_ids: &[PointId],
@@ -223,7 +219,7 @@ impl GlyphLayer {
 
         let point_id = remaining
             .into_iter()
-            .next()
+            .min()
             .expect("unmatched point remains");
         Err(CoreError::PointInContourNotFound(point_id))
     }
@@ -232,10 +228,13 @@ impl GlyphLayer {
         &self,
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
-        for anchor_id in updates.keys() {
-            if self.anchor(anchor_id).is_none() {
-                return Err(CoreError::AnchorNotFound(anchor_id.clone()));
-            }
+        // The smallest missing id, so the error is the same on every run.
+        let missing = updates
+            .keys()
+            .filter(|anchor_id| self.anchor(anchor_id).is_none())
+            .min();
+        if let Some(anchor_id) = missing {
+            return Err(CoreError::AnchorNotFound(anchor_id.clone()));
         }
         Ok(())
     }
@@ -260,7 +259,7 @@ impl GlyphLayer {
             }
         }
 
-        if let Some(point_id) = remaining.into_iter().next() {
+        if let Some(point_id) = remaining.into_iter().min() {
             Err(CoreError::PointNotFound(point_id))
         } else {
             Ok(())
@@ -289,22 +288,19 @@ impl GlyphLayer {
             }
         }
 
-        if let Some(point_id) = remaining.into_iter().next() {
+        if let Some(point_id) = remaining.into_iter().min() {
             Err(CoreError::PointNotFound(point_id))
         } else {
             Ok(())
         }
     }
 
-    fn set_anchor_positions_validated(
-        &mut self,
-        updates: &HashMap<AnchorId, NodePosition>,
-    ) -> CoreResult<()> {
-        for (anchor_id, position) in updates {
-            self.require_anchor_mut(anchor_id)?
-                .set_position(position.x, position.y);
+    fn set_anchor_positions_validated(&mut self, updates: &HashMap<AnchorId, NodePosition>) {
+        for anchor in self.anchors_iter_mut() {
+            if let Some(position) = updates.get(&anchor.id()) {
+                anchor.set_position(position.x, position.y);
+            }
         }
-        Ok(())
     }
 
     fn bulk_node_position_updates(
@@ -321,7 +317,8 @@ impl GlyphLayer {
         self.require_anchor_positions(&groups.anchors)?;
 
         self.set_point_positions_validated(&groups.points)?;
-        self.set_anchor_positions_validated(&groups.anchors)
+        self.set_anchor_positions_validated(&groups.anchors);
+        Ok(())
     }
 }
 
@@ -398,22 +395,42 @@ impl GlyphLayer {
         created_contour
     }
 
+    /// Removes a contour and returns it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ContourNotFound`] when the layer has no such contour.
     pub fn remove_contour_checked(&mut self, contour_id: &ContourId) -> CoreResult<Contour> {
         self.remove_contour(contour_id).require(&contour_id)
     }
 
+    /// Closes a contour.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ContourNotFound`] when the layer has no such contour.
     pub fn close_contour(&mut self, contour_id: &ContourId) -> CoreResult<()> {
         let contour = self.require_contour_mut(contour_id)?;
         contour.close();
         Ok(())
     }
 
+    /// Opens a contour.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ContourNotFound`] when the layer has no such contour.
     pub fn open_contour(&mut self, contour_id: &ContourId) -> CoreResult<()> {
         let contour = self.require_contour_mut(contour_id)?;
         contour.open();
         Ok(())
     }
 
+    /// Reverses a contour's point order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ContourNotFound`] when the layer has no such contour.
     pub fn reverse_contour(&mut self, contour_id: &ContourId) -> CoreResult<()> {
         let contour = self.require_contour_mut(contour_id)?;
         contour.reverse();
@@ -446,6 +463,13 @@ impl GlyphLayer {
         Ok(true)
     }
 
+    /// Replaces two contours with the result of `op` on them and returns the new contour ids.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ContourNotFound`] when either contour is missing, and
+    /// [`CoreError::BooleanOperationFailed`] when the contours cannot be combined. The layer is
+    /// unchanged on failure.
     pub fn apply_boolean_op(
         &mut self,
         contour_id_a: &ContourId,
@@ -455,8 +479,7 @@ impl GlyphLayer {
         let a = self.contour(contour_id_a).require(&contour_id_a)?.clone();
         let b = self.contour(contour_id_b).require(&contour_id_b)?.clone();
 
-        let result =
-            boolean(op, &a, &b).map_err(|e| CoreError::BooleanOperationFailed(e.to_string()))?;
+        let result = boolean(op, &a, &b).map_err(CoreError::BooleanOperationFailed)?;
 
         self.remove_contour_checked(contour_id_a)?;
         self.remove_contour_checked(contour_id_b)?;
@@ -481,6 +504,11 @@ impl GlyphLayer {
 }
 
 impl GlyphLayer {
+    /// Appends a point to a contour.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ContourNotFound`] when the layer has no such contour.
     pub fn add_point_to_contour(
         &mut self,
         contour_id: &ContourId,
@@ -498,6 +526,11 @@ impl GlyphLayer {
         })
     }
 
+    /// Inserts a point before `before_id` in its contour.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when no contour holds `before_id`.
     pub fn insert_point_before(
         &mut self,
         before_id: &PointId,
@@ -519,6 +552,11 @@ impl GlyphLayer {
         })
     }
 
+    /// Removes a point from its contour.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn remove_point(&mut self, point_id: &PointId) -> CoreResult<()> {
         let contour_id = self.require_point_contour(point_id.clone())?;
         let contour = self.require_contour_mut(&contour_id)?;
@@ -526,10 +564,21 @@ impl GlyphLayer {
         Ok(())
     }
 
+    /// Moves points by `(dx, dy)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when a point is not in the layer; no point
+    /// moves on failure.
     pub fn move_points(&mut self, point_ids: &[PointId], dx: f64, dy: f64) -> CoreResult<()> {
         self.update_points(point_ids, |point| point.translate(dx, dy))
     }
 
+    /// Sets whether a point is smooth.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn set_point_smooth(&mut self, point_id: &PointId, smooth: bool) -> CoreResult<()> {
         let contour_id = self.require_point_contour(point_id.clone())?;
         self.require_point_mut(&contour_id, point_id)?
@@ -537,6 +586,11 @@ impl GlyphLayer {
         Ok(())
     }
 
+    /// Returns the contour that holds `point_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn contour_of_point(&self, point_id: PointId) -> CoreResult<ContourId> {
         self.require_point_contour(point_id)
     }
@@ -545,6 +599,11 @@ impl GlyphLayer {
         self.require_point_contour(point_id.clone()).is_ok()
     }
 
+    /// Flips whether a point is smooth and returns the new value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn toggle_smooth(&mut self, point_id: &PointId) -> CoreResult<bool> {
         let contour_id = self.require_point_contour(point_id.clone())?;
         let point = self.require_point_mut(&contour_id, point_id)?;
@@ -554,6 +613,12 @@ impl GlyphLayer {
         Ok(point.is_smooth())
     }
 
+    /// Removes points, then any contour left empty, and returns the removed contours' ids.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::PointInContourNotFound`] when a point is not in the layer; no point is
+    /// removed on failure.
     pub fn remove_points(&mut self, point_ids: &[PointId]) -> CoreResult<Vec<ContourId>> {
         let point_contours = self.require_point_contours(point_ids)?;
         let mut empty_contours = Vec::new();
@@ -578,6 +643,12 @@ impl GlyphLayer {
         self.anchor(anchor_id).is_some()
     }
 
+    /// Removes anchors.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AnchorNotFound`] when an anchor is missing; no anchor is removed on
+    /// failure.
     pub fn remove_anchors(&mut self, anchor_ids: &[AnchorId]) -> CoreResult<()> {
         for anchor_id in anchor_ids {
             if !self.has_anchor(anchor_id) {
@@ -594,6 +665,13 @@ impl GlyphLayer {
 }
 
 impl GlyphLayer {
+    /// Moves points and anchors to packed coordinates, all or none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidPositionUpdateInput`] when the ids and coordinates do not pair
+    /// up, and [`CoreError::PointInContourNotFound`] or [`CoreError::AnchorNotFound`] when a point
+    /// or anchor is missing.
     pub fn apply_bulk_node_positions(
         &mut self,
         updates: BulkNodePositionUpdates<'_>,
@@ -811,6 +889,28 @@ mod tests {
             Err(CoreError::PointInContourNotFound(id)) if id == missing_id
         ));
         assert_eq!(point_position(&session, &contour_id, &point_id), (0.0, 0.0));
+    }
+
+    #[test]
+    fn unknown_anchors_report_the_same_id_every_time() {
+        let mut session = create_session();
+        let anchor_id = add_anchor(&mut session, 0.0, 0.0);
+        let unknown = (0..8).map(|_| AnchorId::new()).collect::<Vec<_>>();
+        let anchor_ids = std::iter::once(anchor_id.clone())
+            .chain(unknown.iter().cloned())
+            .collect::<Vec<_>>();
+        let anchor_coords = vec![5.0; anchor_ids.len() * 2];
+
+        let result = session.apply_bulk_node_positions(BulkNodePositionUpdates {
+            point_ids: None,
+            point_coords: None,
+            anchor_ids: Some(&anchor_ids),
+            anchor_coords: Some(&anchor_coords),
+        });
+
+        let smallest = unknown.iter().min().unwrap();
+        assert!(matches!(result, Err(CoreError::AnchorNotFound(id)) if id == *smallest));
+        assert_eq!(anchor_position(&session, &anchor_id), (0.0, 0.0));
     }
 
     #[test]

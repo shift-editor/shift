@@ -11,11 +11,10 @@ use super::localized_string;
 use crate::font_source::{
     FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
-use crate::metrics::set_metric_position;
 use crate::{FontFormat, distinct_named_instances};
 use shift_font::{
     Axis, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Font as ShiftFont,
-    Location, MetricKind, NamedInstance,
+    Location, NamedInstance, StandardMetrics,
 };
 
 /// Retained bytes and indexes for one OpenType TTF, OTF, or variable font.
@@ -28,6 +27,12 @@ pub struct OpenTypeFont {
 }
 
 impl OpenTypeFont {
+    /// Opens a TrueType or OpenType file for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::Io`] when the file cannot be read, and
+    /// [`FontReadError::MalformedSource`] when it is not a valid font.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
         let bytes: Arc<[u8]> = std::fs::read(path)
             .map_err(|source| FontReadError::Io {
@@ -84,16 +89,15 @@ fn binary_directory(
         .into_iter()
         .enumerate()
         .map(|(index, unicodes)| {
-            let raw_id = GlyphId::new(index as u32);
-            (
+            let raw_id = GlyphId::new(u32::try_from(index)?);
+            Ok((
                 names
                     .get(raw_id)
-                    .map(|name| name.to_string())
-                    .unwrap_or_else(|| format!("gid{index}")),
+                    .map_or_else(|| format!("gid{index}"), |name| name.to_string()),
                 unicodes.into_boxed_slice(),
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<Vec<_>, FontReadError>>()?;
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
     let family_name = localized_string(font, StringId::FAMILY_NAME);
     let style_name = localized_string(font, StringId::SUBFAMILY_NAME);
@@ -105,25 +109,22 @@ fn binary_directory(
     let default_source_id = header
         .default_source_id()
         .expect("new font should have a default source");
-    let metric_definitions = header.metric_definitions().to_vec();
+    header
+        .set_standard_metrics(
+            &default_source_id,
+            StandardMetrics {
+                ascender: Some(metrics.ascent as f64),
+                descender: Some(metrics.descent as f64),
+                cap_height: metrics.cap_height.map(|value| value as f64),
+                x_height: metrics.x_height.map(|value| value as f64),
+                baseline: None,
+            },
+        )
+        .expect("new font should contain its default source");
     let default_source = header
         .source_mut(&default_source_id)
         .expect("new font should contain its default source");
     default_source.set_name(style_name.unwrap_or_else(|| "Default".to_string()));
-    for (kind, value) in [
-        (MetricKind::Ascender, Some(metrics.ascent as f64)),
-        (MetricKind::Descender, Some(metrics.descent as f64)),
-        (
-            MetricKind::CapHeight,
-            metrics.cap_height.map(|value| value as f64),
-        ),
-        (
-            MetricKind::XHeight,
-            metrics.x_height.map(|value| value as f64),
-        ),
-    ] {
-        set_metric_position(&metric_definitions, default_source, kind, value);
-    }
     default_source.set_line_gap(Some(metrics.leading as f64));
 
     let mut axis_ids = Vec::new();
@@ -232,8 +233,7 @@ fn binary_directory(
                 axis_ids
                     .iter()
                     .cloned()
-                    .zip(instance.user_coords().map(|coordinate| coordinate as f64))
-                    .collect(),
+                    .zip(instance.user_coords().map(|coordinate| coordinate as f64)),
             );
             NamedInstance::new(
                 localized_string(font, instance.subfamily_name_id())
@@ -255,14 +255,8 @@ fn binary_directory(
 }
 
 fn format_for_path(path: &Path) -> Result<FontFormat, FontReadError> {
-    match path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("ttf") => Ok(FontFormat::Ttf),
-        Some("otf") => Ok(FontFormat::Otf),
+    match FontFormat::of_path(path) {
+        Some(format @ (FontFormat::Ttf | FontFormat::Otf)) => Ok(format),
         _ => Err(FontReadError::UnsupportedFormat {
             path: path.to_path_buf(),
         }),
@@ -273,16 +267,7 @@ fn format_for_path(path: &Path) -> Result<FontFormat, FontReadError> {
 mod tests {
     use super::*;
     use crate::font_source::GlyphPointKind;
-
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
+    use shift_font::test_support::fixtures;
 
     #[test]
     fn avar_on_an_axis_whose_default_is_its_minimum_imports_a_valid_mapping() {
@@ -310,7 +295,7 @@ mod tests {
 
     #[test]
     fn retained_true_type_projection_infers_smooth_points() {
-        let font = OpenTypeFont::open(&fixture("mutatorsans/MutatorSans.ttf")).unwrap();
+        let font = OpenTypeFont::open(&fixtures::font("mutatorsans/MutatorSans.ttf")).unwrap();
         let glyph = font
             .directory()
             .glyphs

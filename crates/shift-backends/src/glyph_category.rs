@@ -153,7 +153,7 @@ pub(crate) fn gdef_classes<'a>(
         .filter_map(|glyph| {
             let class = match explicit.get(glyph.name()) {
                 Some(class) => *class,
-                None => class_for(categories.resolve(glyph), has_attaching_anchor(glyph))?,
+                None => class_for(categories.resolve(glyph), glyph.has_attaching_anchor())?,
             };
             Some((glyph.name().to_string(), class))
         })
@@ -172,15 +172,6 @@ fn class_for(resolved: ResolvedCategory, attaching_anchor: bool) -> Option<Glyph
         _ if attaching_anchor => Some(GlyphClassDef::Base),
         _ => None,
     }
-}
-
-/// Any anchor not starting with `_` is one marks attach to.
-fn has_attaching_anchor(glyph: &Glyph) -> bool {
-    glyph
-        .layers()
-        .values()
-        .flat_map(|layer| layer.anchors())
-        .any(|anchor| !anchor.name().is_some_and(|name| name.starts_with('_')))
 }
 
 fn opentype_categories(font_lib: &LibData) -> BTreeMap<&str, GlyphClassDef> {

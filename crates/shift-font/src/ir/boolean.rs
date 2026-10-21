@@ -2,14 +2,22 @@ use crate::contour::{Contour, Contours};
 use kurbo::BezPath;
 use linesweeper::binary_op;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BooleanOp {
-    Union,
-    Subtract,
-    Intersect,
-    Difference,
+crate::string_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum BooleanOp {
+        Union => "union",
+        Subtract => "subtract",
+        Intersect => "intersect",
+        Difference => "difference",
+    }
+    parse_error: String = |text| format!("unknown boolean operation \"{text}\"");
 }
 
+/// Combines two contours with `op`, using the even-odd fill rule.
+///
+/// # Errors
+///
+/// Returns the [`linesweeper::Error`] when the contours cannot be combined.
 pub fn boolean(op: BooleanOp, a: &Contour, b: &Contour) -> Result<Contours, linesweeper::Error> {
     let path_a = BezPath::from(a);
     let path_b = BezPath::from(b);
@@ -34,16 +42,9 @@ pub fn boolean(op: BooleanOp, a: &Contour, b: &Contour) -> Result<Contours, line
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::point::PointType;
 
     fn square(x: f64, y: f64, size: f64) -> Contour {
-        let mut c = Contour::new();
-        c.add_point(x, y, PointType::OnCurve, false);
-        c.add_point(x + size, y, PointType::OnCurve, false);
-        c.add_point(x + size, y + size, PointType::OnCurve, false);
-        c.add_point(x, y + size, PointType::OnCurve, false);
-        c.close();
-        c
+        crate::contour![(x, y), (x + size, y), (x + size, y + size), (x, y + size)]
     }
 
     #[test]

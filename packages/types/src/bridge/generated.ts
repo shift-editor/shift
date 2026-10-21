@@ -71,7 +71,7 @@ export interface BridgeApi {
   getGlyphs(): Array<GlyphRecord>
   /**
    * Applies one intent set as a single atomic workspace apply: every kind
-   * — editing and create alike — decodes through `map_intent` into one
+   * — editing and create alike — decodes into one
    * `FontWorkspace::apply` call. One call = one SQLite transaction = one
    * undo step, however many intents the set batches.
    */

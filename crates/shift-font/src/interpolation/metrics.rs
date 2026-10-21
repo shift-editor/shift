@@ -25,6 +25,18 @@ pub enum SourceMetricField {
     UnderlineThickness,
 }
 
+impl SourceMetricField {
+    /// Returns this metric's value on `source`, when the source sets one.
+    pub fn value_of(self, source: &Source) -> Option<f64> {
+        match self {
+            Self::ItalicAngle => source.italic_angle(),
+            Self::LineGap => source.line_gap(),
+            Self::UnderlinePosition => source.underline_position(),
+            Self::UnderlineThickness => source.underline_thickness(),
+        }
+    }
+}
+
 /// Ordered metric values authored by one source.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SourceMetricValues {
@@ -191,8 +203,7 @@ impl Font {
         }
 
         let sources = self.masters().collect::<Vec<_>>();
-        let default_source = self.default_source()?;
-        if !default_source.is_master() || sources.is_empty() {
+        if self.default_master().is_none() || sources.is_empty() {
             return None;
         }
 
@@ -211,7 +222,7 @@ impl Font {
         .filter(|field| {
             sources
                 .iter()
-                .all(|source| technical_metric(source, *field).is_some())
+                .all(|source| field.value_of(source).is_some())
         })
         .collect::<Vec<_>>();
 
@@ -230,7 +241,7 @@ impl Font {
                 values.extend(metric_values);
             }
             for field in &technical_fields {
-                values.push(technical_metric(source, *field)?);
+                values.push(field.value_of(source)?);
             }
             source_locations.push((source.id(), source.location().clone()));
             source_values.push(SourceMetricValues {
@@ -253,19 +264,10 @@ impl Font {
     }
 }
 
-fn technical_metric(source: &Source, field: SourceMetricField) -> Option<f64> {
-    match field {
-        SourceMetricField::ItalicAngle => source.italic_angle(),
-        SourceMetricField::LineGap => source.line_gap(),
-        SourceMetricField::UnderlinePosition => source.underline_position(),
-        SourceMetricField::UnderlineThickness => source.underline_thickness(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::test_support::generated::{TypeScriptModule, assert_generated_file};
-    use crate::{DesignLocation, Font, MetricKind, MetricValue, Source};
+    use crate::{DesignLocation, Font, MetricDefinitionList, MetricKind, MetricValue, Source};
 
     use super::{
         SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
@@ -307,8 +309,7 @@ mod tests {
 
         let ascender_id = font
             .metric_definitions()
-            .iter()
-            .find(|definition| definition.kind() == MetricKind::Ascender)
+            .definition_for_kind(MetricKind::Ascender)
             .unwrap()
             .id();
         let default_id = font.default_source_id().unwrap();

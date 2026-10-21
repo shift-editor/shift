@@ -48,12 +48,12 @@ impl Polygon {
     }
 
     /// Whether every vertex lies inside `outer`; callers rule out crossing edges.
-    pub(super) fn is_inside(&self, outer: &Polygon) -> bool {
+    pub(super) fn is_inside(&self, outer: &Self) -> bool {
         self.0.iter().all(|&point| outer.contains(point))
     }
 
     /// Whether an edge of this polygon properly crosses an edge of `other`.
-    pub(super) fn crosses(&self, other: &Polygon) -> bool {
+    pub(super) fn crosses(&self, other: &Self) -> bool {
         self.edges().any(|edge| {
             other
                 .edges()

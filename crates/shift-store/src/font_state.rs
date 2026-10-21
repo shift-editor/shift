@@ -1,19 +1,35 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
 use std::collections::{BTreeMap, HashMap};
 
+use rusqlite::OptionalExtension;
 use shift_font as font;
 
-use crate::{FontInfo, ShiftStore, StoreError, source::SourceKind};
+use crate::{
+    FontInfo, ShiftStore, StoreError,
+    columns::{AxisRoleColumn, KerningPositionColumn, KerningSideColumns, MetricKindColumn},
+    source::SourceKind,
+};
 
 impl ShiftStore {
     /// Materializes the complete font. Use only for export/save boundaries;
     /// interactive open should use [`Self::load_font_directory`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a record cannot be read, a decoding error such as
+    /// [`StoreError::LayerDecoding`] when a layer payload is invalid, and [`StoreError::Font`] when
+    /// the records do not form a valid font.
     pub fn load_font_state(&self) -> Result<font::Font, StoreError> {
         self.load_font(true)
     }
 
     /// Loads eager font metadata and the glyph/layer directory without
     /// reading any layer payload BLOB.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a record cannot be read, and [`StoreError::Font`] when
+    /// the records do not form a valid font.
     pub fn load_font_directory(&self) -> Result<font::Font, StoreError> {
         self.load_font(false)
     }
@@ -22,7 +38,7 @@ impl ShiftStore {
         let mut font = font::Font::empty();
 
         if let Some(info) = self.get_font_info()? {
-            apply_font_info(&mut font, info);
+            apply_font_info(&mut font, info)?;
         }
 
         let metric_definitions = load_metric_definitions(&self.conn)?;
@@ -55,7 +71,7 @@ impl ShiftStore {
         }
 
         for glyph in load_glyphs(&self.conn, include_layer_payloads)? {
-            font.insert_glyph(glyph).map_err(StoreError::from)?;
+            font.insert_glyph(glyph)?;
         }
 
         *font.kerning_mut() = load_kerning(&self.conn)?;
@@ -64,7 +80,7 @@ impl ShiftStore {
     }
 }
 
-fn apply_font_info(font: &mut font::Font, info: FontInfo) {
+fn apply_font_info(font: &mut font::Font, info: FontInfo) -> Result<(), StoreError> {
     font.metadata_mut().family_name = info.family_name;
     font.metadata_mut().style_name = info.style_name;
     font.metadata_mut().copyright = info.copyright;
@@ -77,10 +93,11 @@ fn apply_font_info(font: &mut font::Font, info: FontInfo) {
     font.metadata_mut().manufacturer_url = info.manufacturer_url;
     font.metadata_mut().license = info.license_description;
     font.metadata_mut().license_url = info.license_info_url;
-    font.metadata_mut().version_major = info.version_major.map(|value| value as i32);
-    font.metadata_mut().version_minor = info.version_minor.map(|value| value as i32);
+    font.metadata_mut().version_major = info.version_major.map(i32::try_from).transpose()?;
+    font.metadata_mut().version_minor = info.version_minor.map(i32::try_from).transpose()?;
 
     font.metrics_mut().units_per_em = info.units_per_em;
+    Ok(())
 }
 
 fn load_metric_definitions(
@@ -89,15 +106,7 @@ fn load_metric_definitions(
     let mut stmt =
         conn.prepare("SELECT id, kind, name FROM metric_definitions ORDER BY order_index, id")?;
     let rows = stmt.query_map([], |row| {
-        let kind = match row.get::<_, String>(1)?.as_str() {
-            "ascender" => font::MetricKind::Ascender,
-            "cap_height" => font::MetricKind::CapHeight,
-            "x_height" => font::MetricKind::XHeight,
-            "baseline" => font::MetricKind::Baseline,
-            "descender" => font::MetricKind::Descender,
-            "custom" => font::MetricKind::Custom,
-            value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
-        };
+        let MetricKindColumn(kind) = row.get(1)?;
         Ok(font::MetricDefinition::with_id(
             row.get::<_, font::MetricId>(0)?,
             kind,
@@ -120,12 +129,11 @@ fn load_default_source_id(
         ",
     )?;
 
-    match stmt.query_row([], |row| row.get::<_, Option<String>>(0)) {
-        Ok(Some(source_id)) => Ok(Some(font::SourceId::from_raw(source_id))),
-        Ok(None) => Ok(None),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(err) => Err(err.into()),
-    }
+    let source_id = stmt
+        .query_row([], |row| row.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten();
+    Ok(source_id.map(font::SourceId::from_raw))
 }
 
 fn load_feature_data(conn: &rusqlite::Connection) -> Result<font::FeatureData, StoreError> {
@@ -170,11 +178,7 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
         } else {
             font::Axis::continuous_with_id(axis_id, tag, name, row.get(3)?, default, row.get(5)?)
         };
-        axis.set_role(match row.get::<_, String>(6)?.as_str() {
-            "external" => font::AxisRole::External,
-            "internal" => font::AxisRole::Internal,
-            value => return Err(rusqlite::Error::InvalidParameterName(value.to_string())),
-        });
+        axis.set_role(row.get::<_, AxisRoleColumn>(6)?.0);
         let labels_json = row.get::<_, String>(8)?;
         axis.set_labels(serde_json::from_str(&labels_json).map_err(json_column_error)?);
         axis.set_hidden(row.get(9)?);
@@ -234,9 +238,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
         );
         source.set_color(row.get(3)?);
 
-        let kind = SourceKind::parse(row.get(4)?).map_err(|err| {
-            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(err))
-        })?;
+        let kind: SourceKind = row.get(4)?;
         source.set_role(kind.into());
         source.set_layer_name(row.get(5)?);
         source.set_italic_angle(row.get(6)?);
@@ -247,9 +249,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
         Ok(source)
     })?;
 
-    let mut sources = rows
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)?;
+    let mut sources = rows.collect::<Result<Vec<_>, _>>()?;
 
     for source in &mut sources {
         *source.lib_mut() = load_lib_data(
@@ -335,7 +335,7 @@ fn load_glyphs(
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, font::GlyphId>(0)?,
-                row.get::<_, i64>(1)? as u32,
+                row.get::<_, u32>(1)?,
                 row.get::<_, i64>(2)?,
             ))
         })?;
@@ -401,7 +401,7 @@ fn load_glyphs(
         let layer = if include_layer_payloads {
             loaded_layers
                 .remove(&layer_id)
-                .or_missing("glyph layer payload", &layer_id)?
+                .or_missing(StoreEntity::GlyphLayerPayload, &layer_id)?
         } else {
             let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
             layer.set_height(height);
@@ -470,26 +470,39 @@ fn load_kerning(conn: &rusqlite::Connection) -> Result<font::Kerning, StoreError
         FROM kerning_pairs
         ",
     )?;
-    let rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-            row.get::<_, String>(4)?,
-            row.get::<_, f64>(5)?,
-        ))
-    })?;
-    for row in rows {
-        let (source_id, first_kind, first_value, second_kind, second_value, value) = row?;
+    for row in stmt.query_map([], KerningPairRow::read)? {
+        let row = row?;
         let pair = font::KerningPair::new(
-            kerning_side(&first_kind, first_value)?,
-            kerning_side(&second_kind, second_value)?,
+            KerningSideColumns::read(&row.first_kind, row.first_value)?,
+            KerningSideColumns::read(&row.second_kind, row.second_value)?,
         );
-        kerning.set_value(font::SourceId::from_raw(source_id), pair, value);
+        kerning.set_value(row.source_id, pair, row.value);
     }
 
     Ok(kerning)
+}
+
+/// One `kerning_pairs` row.
+struct KerningPairRow {
+    source_id: font::SourceId,
+    first_kind: String,
+    first_value: String,
+    second_kind: String,
+    second_value: String,
+    value: f64,
+}
+
+impl KerningPairRow {
+    fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            source_id: row.get("source_id")?,
+            first_kind: row.get("first_kind")?,
+            first_value: row.get("first_value")?,
+            second_kind: row.get("second_kind")?,
+            second_value: row.get("second_value")?,
+            value: row.get("value")?,
+        })
+    }
 }
 
 fn load_kerning_groups(
@@ -506,7 +519,7 @@ fn load_kerning_groups(
         .query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
+                row.get::<_, KerningPositionColumn>(1)?.0,
                 row.get::<_, String>(2)?,
             ))
         })?
@@ -528,32 +541,10 @@ fn load_kerning_groups(
                 .collect::<Result<Vec<_>, _>>()?;
             Ok((
                 font::KerningGroupId::from_raw(group_id),
-                font::KerningGroup::new(kerning_position(position)?, name, members),
+                font::KerningGroup::new(position, name, members),
             ))
         })
         .collect()
-}
-
-fn kerning_position(column: i64) -> Result<font::KerningPosition, StoreError> {
-    match column {
-        1 => Ok(font::KerningPosition::First),
-        2 => Ok(font::KerningPosition::Second),
-        _ => Err(StoreError::InvalidDocument(format!(
-            "unknown kerning group position {column}"
-        ))),
-    }
-}
-
-fn kerning_side(kind: &str, value: String) -> Result<font::KerningSide, StoreError> {
-    match kind {
-        "glyph" => Ok(font::KerningSide::Glyph(font::GlyphId::from_raw(value))),
-        "group" => Ok(font::KerningSide::Group(font::KerningGroupId::from_raw(
-            value,
-        ))),
-        _ => Err(StoreError::InvalidDocument(format!(
-            "unknown kerning side kind {kind:?}"
-        ))),
-    }
 }
 
 fn load_lib_data(

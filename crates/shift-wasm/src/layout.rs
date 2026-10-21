@@ -41,6 +41,11 @@ impl<'a> Reader<'a> {
         value
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a count read as f64; negatives clamp to 0 and `as` saturates"
+    )]
     pub fn count(&mut self) -> usize {
         self.number().max(0.0) as usize
     }
@@ -128,8 +133,8 @@ pub(crate) enum Kind {
     Flag,
     Count,
     Name,
-    List(Box<Kind>),
-    Optional(Box<Kind>),
+    List(Box<Self>),
+    Optional(Box<Self>),
     Struct(StructKind),
     Enum(EnumKind),
 }
@@ -227,7 +232,7 @@ impl<T: Layout> Layout for Vec<T> {
         let count = read.count();
         // A corrupt count must not reserve unbounded memory; items past the
         // end of the input read as zeros.
-        let mut items = Vec::with_capacity(count.min(read.values.len()));
+        let mut items = Self::with_capacity(count.min(read.values.len()));
         for _ in 0..count {
             items.push(T::read(read));
         }

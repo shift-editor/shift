@@ -5,6 +5,7 @@ use shift_backends::shaper_font::{
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
 
+use crate::bridge::IntoDomain;
 use crate::errors::{BridgeError, BridgeResult};
 use crate::input::parse;
 
@@ -129,7 +130,7 @@ impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
       .into_iter()
       .map(shape_unit)
       .collect::<BridgeResult<_>>()?;
-    let location = ExternalLocation::from_untyped(crate::bridge::map_location(request.location)?);
+    let location = ExternalLocation::from_untyped(request.location.into_domain()?);
     let features = request
       .features
       .unwrap_or_default()

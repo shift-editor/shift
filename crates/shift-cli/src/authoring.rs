@@ -4,14 +4,15 @@
 //! cloned [`Font`]. The destination is written only after the complete intent
 //! set validates, so a failed command cannot partially mutate a package.
 
+use shift_font::{CreateAxis, CreateSource};
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    Axis, AxisId, BinaryData, DesignLocation, FeatureData, Font, FontIntent, FontIntentSet,
-    Kerning, LibData, SourceId,
+    Axis, AxisId, BinaryData, DesignLocation, FeatureData, Font, FontIntentSet, Kerning, LibData,
+    SourceId,
 };
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
@@ -29,19 +30,18 @@ mod kerning;
 mod layer_payload;
 mod report;
 
-pub use axis::set_axis;
-pub use font_info::{font_info, set_font};
-pub use glyph::{add_glyph, add_layer, copy_layer, set_layer};
-pub(crate) use glyph::{resolve_glyph_id, resolve_source_id};
-pub use glyph_batch::set_glyphs;
-pub use glyph_export::{ExportSources, export_glyphs};
-pub use instance::{add_instance, remove_instance, set_instance};
-pub use kerning::{
+pub(crate) use axis::set_axis;
+pub(crate) use font_info::{font_info, set_font};
+pub(crate) use glyph::{add_glyph, add_layer, copy_layer, set_layer};
+pub(crate) use glyph_batch::set_glyphs;
+pub(crate) use glyph_export::{ExportSources, export_glyphs};
+pub(crate) use instance::{add_instance, remove_instance, set_instance};
+pub(crate) use kerning::{
     assign_kerning_group, create_kerning_group, delete_kerning_group, remove_kerning,
     rename_kerning_group, set_kerning, unassign_kerning_group,
 };
 use report::report_changes;
-pub use report::{AuthoringChange, AuthoringReport};
+pub(crate) use report::{AuthoringChange, AuthoringReport};
 
 /// Creates a canonical SQLite `.shift` document with the model's default source.
 ///
@@ -51,7 +51,7 @@ pub use report::{AuthoringChange, AuthoringReport};
 ///
 /// Returns an error for a non-`.shift` path, an existing destination, or a
 /// document serialization or filesystem failure.
-pub fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
+pub(crate) fn create_font(args: CreateFontArgs) -> Result<AuthoringReport> {
     validate_new_document_path(&args.path)?;
     let font = match &args.from {
         Some(source) => font_structure(source)?,
@@ -112,7 +112,7 @@ fn font_structure(path: &Path) -> Result<Font> {
 ///
 /// Returns an error when the document cannot be loaded, the axis is invalid or
 /// conflicts with existing authoring data, or the destination cannot be saved.
-pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
     let axis = Axis::new(
         args.tag,
         args.name,
@@ -120,9 +120,7 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
         args.default,
         args.maximum,
     );
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CreateAxis { axis }],
-    };
+    let set = FontIntentSet::from(CreateAxis { axis });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }
@@ -136,20 +134,18 @@ pub fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
 ///
 /// Returns an error for malformed coordinates, unknown or repeated tags,
 /// non-finite values, invalid source authoring, or persistence failures.
-pub fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
     let font = glyph::load_font(&args.path)?;
     let mut location = DesignLocation::at_defaults(font.axes());
     for (axis_id, value) in parse_location(&font, &args.location)? {
         location.set(axis_id, value);
     }
     let source_id = SourceId::new();
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CreateSource {
-            source_id,
-            name: args.name,
-            location,
-        }],
-    };
+    let set = FontIntentSet::from(CreateSource {
+        source_id,
+        name: args.name,
+        location,
+    });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }

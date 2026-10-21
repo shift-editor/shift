@@ -6,7 +6,7 @@
 //! within two units; compiling converts curves to quadratics and rounds
 //! coordinates, so points are not compared one by one.
 
-use std::path::{Path, PathBuf};
+use shift_font::test_support::fixtures;
 
 use kurbo::{BezPath, Shape};
 use shift_backends::FontExporter;
@@ -15,12 +15,6 @@ use shift_font::{Contour, ExternalLocation, Font};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, MetadataProvider};
-
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/fonts")
-        .join(name)
-}
 
 #[derive(Default)]
 struct PathPen(BezPath);
@@ -156,7 +150,7 @@ fn disagreements(source: &str) -> Vec<String> {
 
 #[test]
 fn designspace_preview_matches_export() {
-    let path = fixture("mutatorsans-variable/MutatorSans.designspace");
+    let path = fixtures::font("mutatorsans-variable/MutatorSans.designspace");
     assert_eq!(disagreements(path.to_str().unwrap()), Vec::<String>::new());
 }
 
@@ -169,7 +163,7 @@ fn glyphs_preview_matches_export() {
         "LightDefault.glyphs",
         "ScaledComponent.glyphs",
     ] {
-        let path = fixture(name);
+        let path = fixtures::font(name);
         assert_eq!(
             disagreements(path.to_str().unwrap()),
             Vec::<String>::new(),

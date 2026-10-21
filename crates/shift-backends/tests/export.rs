@@ -1,5 +1,6 @@
+use shift_font::test_support::fixtures;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
@@ -8,19 +9,6 @@ use shift_font::test_support::sample_variable_font;
 use shift_store::ShiftStore;
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, MetadataProvider};
-
-fn fixtures_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("fixtures")
-}
-
-fn mutatorsans_ufo_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans/MutatorSansLightCondensed.ufo")
-}
 
 fn load_font(path: &Path) -> Font {
     assert!(path.exists(), "missing font fixture at {}", path.display());
@@ -75,7 +63,7 @@ fn compiles_mutatorsans_fixture_to_ttf_tables() {
     let temp_dir = tempfile::tempdir().expect("tempdir should be created");
     let shift_path = temp_dir.path().join("MutatorSansLightCondensed.shift");
     let output_path = temp_dir.path().join("MutatorSansLightCondensed.ttf");
-    let imported_fixture = load_font(&mutatorsans_ufo_path());
+    let imported_fixture = load_font(&fixtures::mutatorsans_ufo());
     drop(
         ShiftStore::create_document(&shift_path, &imported_fixture)
             .expect("MutatorSans fixture should save as canonical Shift document"),

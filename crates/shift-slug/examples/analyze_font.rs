@@ -1,3 +1,8 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::{env, error::Error, fs, path::PathBuf, time::Instant};
 
 use shift_slug::{AtlasBuilder, CurveIndexEncoding, DEFAULT_BAND_COUNT, OutlineCommand};

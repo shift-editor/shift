@@ -7,7 +7,7 @@ use shift_font::{
 
 use crate::errors::{BridgeError, BridgeResult};
 
-pub trait BridgeParse: Sized + FromStr {
+pub(crate) trait BridgeParse: Sized + FromStr {
   const KIND: &'static str;
 
   fn parse_bridge(value: &str) -> BridgeResult<Self> {
@@ -18,7 +18,7 @@ pub trait BridgeParse: Sized + FromStr {
   }
 }
 
-pub fn parse<T: BridgeParse>(value: &str) -> BridgeResult<T> {
+pub(crate) fn parse<T: BridgeParse>(value: &str) -> BridgeResult<T> {
   T::parse_bridge(value)
 }
 
