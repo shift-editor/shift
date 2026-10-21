@@ -14,6 +14,7 @@ mod layer;
 mod recovery;
 mod schema;
 mod source;
+mod sql_text;
 mod store;
 mod types;
 mod workspace_state;

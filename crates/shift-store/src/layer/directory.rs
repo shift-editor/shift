@@ -58,7 +58,7 @@ impl DirectoryFacts {
                 self.inner_format.clone(),
             ));
         }
-        LayerPayloadCompression::try_from(self.compression.as_str())?;
+        self.compression.parse::<LayerPayloadCompression>()?;
         if self.stored_byte_length != self.actual_stored_byte_length {
             return Err(StoreError::LayerDirectoryMismatch {
                 layer_id: self.layer_id.clone(),
@@ -105,7 +105,7 @@ impl DirectoryFacts {
             }
         })?;
         Ok(StoredLayerPayload {
-            compression: self.compression.as_str().try_into()?,
+            compression: self.compression.parse()?,
             stored_byte_length: self.stored_byte_length as u64,
             decoded_byte_length: self.decoded_byte_length as u64,
             decoded_blake3,

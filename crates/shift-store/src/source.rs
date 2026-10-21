@@ -40,28 +40,16 @@ pub struct SourceRecord {
     pub kind: SourceKind,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SourceKind {
-    Master,
-    Layer,
+shift_font::string_enum! {
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum SourceKind {
+        Master => "master",
+        Layer => "layer",
+    }
+    parse_error: StoreError = |value| StoreError::UnknownSourceKind(value.to_string());
 }
 
-impl SourceKind {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            SourceKind::Master => "master",
-            SourceKind::Layer => "layer",
-        }
-    }
-
-    pub(crate) fn parse(value: String) -> Result<Self, StoreError> {
-        match value.as_str() {
-            "master" => Ok(SourceKind::Master),
-            "layer" => Ok(SourceKind::Layer),
-            _ => Err(StoreError::UnknownSourceKind(value)),
-        }
-    }
-}
+crate::sql_text::sql_text!(SourceKind);
 
 impl From<shift_font::SourceRole> for SourceKind {
     fn from(role: shift_font::SourceRole) -> Self {
@@ -261,9 +249,7 @@ fn map_axis_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AxisRecord> {
 }
 
 fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRecord> {
-    let kind = SourceKind::parse(row.get(5)?).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(err))
-    })?;
+    let kind: SourceKind = row.get(5)?;
 
     Ok(SourceRecord {
         id: SourceId::new(row.get::<_, String>(0)?),

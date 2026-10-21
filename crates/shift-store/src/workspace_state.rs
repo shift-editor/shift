@@ -7,34 +7,18 @@ use rusqlite::{Transaction, params};
 
 use crate::{ShiftStore, StoreError};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WorkspaceSourceKind {
-    Untitled,
-    Imported,
-}
-
-impl WorkspaceSourceKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Untitled => "untitled",
-            Self::Imported => "imported",
-        }
+shift_font::string_enum! {
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum WorkspaceSourceKind {
+        Untitled => "untitled",
+        Imported => "imported",
     }
+    parse_error: StoreError = |value| {
+        StoreError::InvalidWorkspaceState(format!("unknown source kind {value:?}"))
+    };
 }
 
-impl TryFrom<&str> for WorkspaceSourceKind {
-    type Error = StoreError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "untitled" => Ok(Self::Untitled),
-            "imported" => Ok(Self::Imported),
-            other => Err(StoreError::InvalidWorkspaceState(format!(
-                "unknown source kind {other:?}"
-            ))),
-        }
-    }
-}
+crate::sql_text::sql_text!(WorkspaceSourceKind);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WorkspaceState {
@@ -183,10 +167,7 @@ pub(crate) fn mark_workspace_changed_in_tx(
 }
 
 fn map_workspace_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceState> {
-    let source_kind = row.get::<_, String>(1)?;
-    let source_kind = WorkspaceSourceKind::try_from(source_kind.as_str()).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(err))
-    })?;
+    let source_kind: WorkspaceSourceKind = row.get(1)?;
 
     Ok(WorkspaceState {
         document_id: row.get(0)?,

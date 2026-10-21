@@ -234,9 +234,7 @@ fn load_sources(conn: &rusqlite::Connection) -> Result<Vec<font::Source>, StoreE
         );
         source.set_color(row.get(3)?);
 
-        let kind = SourceKind::parse(row.get(4)?).map_err(|err| {
-            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(err))
-        })?;
+        let kind: SourceKind = row.get(4)?;
         source.set_role(kind.into());
         source.set_layer_name(row.get(5)?);
         source.set_italic_angle(row.get(6)?);

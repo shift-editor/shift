@@ -46,6 +46,7 @@ pub mod ir;
 pub mod layer_edit;
 pub mod placed_blend;
 pub mod projection;
+mod string_enum;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 

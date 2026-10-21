@@ -1,30 +1,21 @@
 use crate::entity::PointId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(
-    clippy::enum_variant_names,
-    reason = "the font-format names for point types"
-)]
-pub enum PointType {
-    #[default]
-    OnCurve,
-    OffCurve,
-    QCurve,
-}
-
-impl std::str::FromStr for PointType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "onCurve" => Ok(Self::OnCurve),
-            "offCurve" => Ok(Self::OffCurve),
-            "qCurve" => Ok(Self::QCurve),
-            _ => Err(format!("Invalid point type: {s}")),
-        }
+crate::string_enum! {
+    // The names match serde's camelCase names, which stored layers use.
+    #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[allow(
+        clippy::enum_variant_names,
+        reason = "the font-format names for point types"
+    )]
+    pub enum PointType {
+        #[default]
+        OnCurve => "onCurve",
+        OffCurve => "offCurve",
+        QCurve => "qCurve",
     }
+    parse_error: String = |text| format!("Invalid point type: {text}");
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
