@@ -379,9 +379,10 @@ export class GlyphInfo {
       });
     }
 
-    const sortedScripts = [...scripts.values()].sort((left, right) =>
-      left.script.localeCompare(right.script),
-    );
+    const sortedScripts = scripts
+      .values()
+      .toArray()
+      .sort((left, right) => left.script.localeCompare(right.script));
     for (const script of sortedScripts) {
       script.languages.sort(
         (left, right) =>

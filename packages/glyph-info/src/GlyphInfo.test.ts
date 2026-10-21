@@ -163,7 +163,7 @@ describe("getGlyphCategories", () => {
     expect(categories.length).toBeGreaterThan(0);
     expect(categories).toContain("Letter");
     expect(categories).toContain("Symbol");
-    const sorted = [...categories].sort();
+    const sorted = categories.toSorted();
     expect(categories).toEqual(sorted);
   });
 
@@ -413,7 +413,7 @@ describe("language coverage catalogs", () => {
 
     expect(required).toHaveLength(56);
     expect(required).toContain(0x61);
-    expect(required).toEqual([...required].sort((left, right) => left - right));
+    expect(required).toEqual(required.toSorted((left, right) => left - right));
     expect(catalog.required("unknown-language")).toEqual([]);
   });
 
@@ -442,9 +442,9 @@ describe("language coverage catalogs", () => {
     const latin = catalog.scripts.find((script) => script.script === "Latin");
     const languageNames = latin?.languages.map(({ language }) => language.name) ?? [];
 
-    expect(scripts).toEqual([...scripts].sort((left, right) => left.localeCompare(right)));
+    expect(scripts).toEqual(scripts.toSorted((left, right) => left.localeCompare(right)));
     expect(languageNames).toEqual(
-      [...languageNames].sort((left, right) => left.localeCompare(right)),
+      languageNames.toSorted((left, right) => left.localeCompare(right)),
     );
   });
 });

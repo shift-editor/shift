@@ -119,7 +119,7 @@ export class AnchorBuffer {
   /** Renames anchors by id; returns false, changing nothing, when an id is missing. */
   rename(names: ReadonlyMap<AnchorId, string>): boolean {
     const data = this.#dataCell.peek();
-    if ([...names.keys()].some((id) => !data.some((anchor) => anchor.id === id))) return false;
+    if (names.keys().some((id) => !data.some((anchor) => anchor.id === id))) return false;
 
     this.#dataCell.set(
       data.map((anchor) => {

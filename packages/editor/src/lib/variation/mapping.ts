@@ -66,7 +66,7 @@ function unmapIndependentAxis(target: number, axis: Axis, mapping: IndependentMa
 
 function inverseCandidates(target: number, axis: Axis, mapping: IndependentMapping): number[] {
   const authoredValues = axis.axisType === "discrete" ? (axis.values ?? [axis.default]) : [];
-  if (authoredValues.length > 0) return [...authoredValues].sort((left, right) => left - right);
+  if (authoredValues.length > 0) return authoredValues.toSorted((left, right) => left - right);
 
   const minimum = axis.minimum ?? axis.default;
   const maximum = axis.maximum ?? axis.default;

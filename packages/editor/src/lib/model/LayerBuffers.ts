@@ -321,9 +321,7 @@ export class LayerBuffers {
       for (const [contour, ids] of contours) contour.removePoints(ids);
       for (const pointId of removed) this.#pointContours.delete(pointId);
 
-      const emptyContours = new Set(
-        [...contours.keys()].filter((contour) => contour.pointCount === 0),
-      );
+      const emptyContours = new Set(contours.keys().filter((contour) => contour.pointCount === 0));
       if (emptyContours.size > 0) {
         this.contoursCell.set(this.contours.filter((contour) => !emptyContours.has(contour)));
       }

@@ -709,7 +709,10 @@ function recordIndex(
   return {
     entries: [...entries],
     records: knownRecords,
-    unicodes: [...nameByUnicode.keys()].sort((a, b) => a - b),
+    unicodes: nameByUnicode
+      .keys()
+      .toArray()
+      .sort((a, b) => a - b),
     glyphById,
     recordsById,
     entryByName,
