@@ -4,11 +4,11 @@ mod report;
 
 use clap::ValueEnum;
 
-pub use render::RenderMode;
-pub use report::InspectReport;
+pub(crate) use render::RenderMode;
+pub(crate) use report::InspectReport;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum InspectView {
+pub(crate) enum InspectView {
     Summary,
     Axes,
     Mappings,

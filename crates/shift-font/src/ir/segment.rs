@@ -95,15 +95,13 @@ mod tests {
     #[test]
     fn empty_points_yields_nothing() {
         let points: Vec<Point> = vec![];
-        let segs: Vec<_> = CurveSegmentIter::new(&points, false).collect();
-        assert!(segs.is_empty());
+        assert!(CurveSegmentIter::new(&points, false).next().is_none());
     }
 
     #[test]
     fn single_point_yields_nothing() {
         let points = vec![on(0.0, 0.0)];
-        let segs: Vec<_> = CurveSegmentIter::new(&points, false).collect();
-        assert!(segs.is_empty());
+        assert!(CurveSegmentIter::new(&points, false).next().is_none());
     }
 
     #[test]

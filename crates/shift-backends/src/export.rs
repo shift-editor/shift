@@ -26,7 +26,7 @@ impl ExportFormat {
     /// Returns the lowercase format token used by file extensions and commands.
     pub fn as_str(self) -> &'static str {
         match self {
-            ExportFormat::Ttf => "ttf",
+            Self::Ttf => "ttf",
         }
     }
 }
@@ -127,6 +127,10 @@ impl FontExporter {
     ///
     /// Returns [`ExportError`] when the source cannot be represented in the
     /// supported compiler model or compilation fails.
+    #[allow(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
         let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
         compile_ttf(source)
@@ -148,6 +152,10 @@ impl FontExporter {
     /// # Errors
     ///
     /// Returns [`ExportError`] when the font cannot be compiled.
+    #[allow(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
     pub fn propagated_anchors(
         &self,
         font: &impl FontView,
@@ -446,11 +454,7 @@ mod tests {
             })
             .collect();
         let category = categories.get(glyph_id).copied().unwrap_or_default();
-        let attaching = glyph
-            .layers()
-            .values()
-            .flat_map(|layer| layer.anchors())
-            .any(|anchor| !anchor.name().is_some_and(|name| name.starts_with('_')));
+        let attaching = glyph.has_attaching_anchor();
         compiled_anchors(&PropagationGlyph {
             anchors: &own,
             components: &components,

@@ -60,7 +60,7 @@ fn in_memory_document_round_trips_complete_model() {
 fn malformed_in_memory_document_returns_an_error() {
     let result = DesignSpaceDocument::load_from_reader(Cursor::new(b"<designspace>"));
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 fn assert_referenced_ufos_exist(path: &Path, document: &DesignSpaceDocument) {

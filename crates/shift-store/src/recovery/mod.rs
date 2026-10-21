@@ -25,6 +25,12 @@ impl ShiftStore {
     ///
     /// Existing unsaved changes are reconciled by document and commit identity,
     /// then exposed through merged lazy reads without modifying the canonical file.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::open_document`]; [`StoreError::RecoveryDocumentMismatch`] when
+    /// the overlay belongs to another document; and [`StoreError::Sqlite`] or a metadata error when
+    /// the overlay cannot be created, opened or reconciled.
     pub fn open_document_with_recovery(
         document_path: impl AsRef<Path>,
         recovery_path: impl AsRef<Path>,
@@ -56,6 +62,11 @@ impl ShiftStore {
     }
 
     /// Returns the attached recovery lifecycle state, if this is a recovered document.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the overlay metadata cannot be read, and
+    /// [`StoreError::InvalidDocumentId`] or [`StoreError::InvalidCommitId`] when it is malformed.
     pub fn recovery_state(&self) -> Result<Option<RecoveryState>, StoreError> {
         self.recovery
             .as_ref()
@@ -63,6 +74,11 @@ impl ShiftStore {
             .transpose()
     }
 
+    /// Returns the attached recovery overlay's revision, if this is a recovered document.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the revision cannot be read.
     pub fn recovery_revision(&self) -> Result<Option<i64>, StoreError> {
         self.recovery
             .as_ref()
@@ -71,6 +87,11 @@ impl ShiftStore {
     }
 
     /// Clears unsaved overlay changes and exposes the canonical saved rows immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::DocumentRequiresRecoveryOverlay`] when the store has no recovery
+    /// overlay, and [`StoreError::Sqlite`] when the overlay cannot be cleared.
     pub fn discard_recovery(&mut self) -> Result<(), StoreError> {
         let saved_commit_id = self.document_metadata()?.saved_commit_id;
         let recovery = self
@@ -81,6 +102,13 @@ impl ShiftStore {
     }
 
     /// Applies sparse unsaved changes to the canonical document and acknowledges the commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::DocumentRequiresRecoveryOverlay`] when the store has no recovery
+    /// overlay, [`StoreError::InvalidRecoveryTransition`] when the overlay is in conflict or
+    /// mid-save, and [`StoreError::Sqlite`], [`StoreError::Io`] or a layer-encoding error when the
+    /// changes cannot be written to the document.
     pub fn save_document(&mut self) -> Result<crate::DocumentMetadata, StoreError> {
         let document = self.document_metadata()?;
         let state = self

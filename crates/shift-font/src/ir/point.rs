@@ -1,30 +1,21 @@
 use crate::entity::PointId;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(
-    clippy::enum_variant_names,
-    reason = "the font-format names for point types"
-)]
-pub enum PointType {
-    #[default]
-    OnCurve,
-    OffCurve,
-    QCurve,
-}
-
-impl std::str::FromStr for PointType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "onCurve" => Ok(Self::OnCurve),
-            "offCurve" => Ok(Self::OffCurve),
-            "qCurve" => Ok(Self::QCurve),
-            _ => Err(format!("Invalid point type: {s}")),
-        }
+crate::string_enum! {
+    // The names match serde's camelCase names, which stored layers use.
+    #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    #[allow(
+        clippy::enum_variant_names,
+        reason = "the font-format names for point types"
+    )]
+    pub enum PointType {
+        #[default]
+        OnCurve => "onCurve",
+        OffCurve => "offCurve",
+        QCurve => "qCurve",
     }
+    parse_error: String = |text| format!("Invalid point type: {text}");
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -61,6 +52,22 @@ impl Point {
 
     pub fn position(&self) -> kurbo::Point {
         kurbo::Point::new(self.x, self.y)
+    }
+
+    /// Returns a copy of this point at `position`, under a new id.
+    pub fn copied_to(&self, position: kurbo::Point) -> Self {
+        Self::new(
+            PointId::new(),
+            position.x,
+            position.y,
+            self.point_type,
+            self.smooth,
+        )
+    }
+
+    /// Returns a copy of this point under a new id.
+    pub fn with_fresh_id(&self) -> Self {
+        self.copied_to(self.position())
     }
 
     pub fn x(&self) -> f64 {
@@ -143,8 +150,8 @@ mod tests {
             PointType::OffCurve
         );
         assert_eq!("qCurve".parse::<PointType>().unwrap(), PointType::QCurve);
-        assert!("invalid".parse::<PointType>().is_err());
-        assert!("OnCurve".parse::<PointType>().is_err());
+        "invalid".parse::<PointType>().unwrap_err();
+        "OnCurve".parse::<PointType>().unwrap_err();
     }
 
     #[test]
@@ -155,5 +162,21 @@ mod tests {
         assert!(p.is_smooth());
         p.toggle_smooth();
         assert!(!p.is_smooth());
+    }
+
+    #[test]
+    fn copies_keep_type_and_smoothness_under_a_new_id() {
+        let mut point = Point::off_curve(10.0, 20.0);
+        point.set_smooth(true);
+
+        let moved = point.copied_to(kurbo::Point::new(30.0, 40.0));
+        let fresh = point.with_fresh_id();
+
+        assert_ne!(moved.id(), point.id());
+        assert_eq!(moved.position(), kurbo::Point::new(30.0, 40.0));
+        assert_eq!(moved.point_type(), PointType::OffCurve);
+        assert!(moved.is_smooth());
+        assert_ne!(fresh.id(), point.id());
+        assert_eq!(fresh.position(), point.position());
     }
 }

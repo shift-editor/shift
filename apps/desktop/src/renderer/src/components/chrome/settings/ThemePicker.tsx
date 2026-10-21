@@ -12,7 +12,7 @@ import {
 import CheckIcon from "@/assets/general/check.svg";
 import ExpandMoreIcon from "@/assets/general/expand-more.svg";
 import SearchIcon from "@/assets/general/search.svg";
-import type { ColorTheme } from "@/lib/themes";
+import { themeById, type ColorTheme } from "@/lib/themes";
 import { NameQuery } from "@/lib/utils/NameQuery";
 
 interface ThemePickerProps {
@@ -38,7 +38,7 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
   const [query, setQuery] = useState("");
   const [highlightedId, setHighlightedId] = useState<string>(value);
 
-  const chosen = themeById(themes, value);
+  const chosen = themeById(value, themes);
   const matching = NameQuery.from(query).filter(themes);
   const builtIn = matching.filter((theme) => !theme.file).sort(compareShipped);
   const yours = matching.filter((theme) => theme.file);
@@ -186,8 +186,4 @@ function compareShipped(a: ColorTheme, b: ColorTheme): number {
 
 function isShiftTheme(theme: ColorTheme): boolean {
   return theme.id === "shift-light" || theme.id === "shift-dark";
-}
-
-function themeById(themes: readonly ColorTheme[], id: string): ColorTheme {
-  return themes.find((theme) => theme.id === id) ?? themes[0];
 }

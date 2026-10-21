@@ -34,6 +34,11 @@ struct PackedImportBatch {
 /// channels keep one batch active per stage without retaining queued batches.
 /// The observer runs after each batch is staged in the open transaction; it
 /// must remain lightweight so it does not throttle the writer.
+///
+/// # Errors
+///
+/// Returns the first failure from parsing a batch ([`WorkspaceError::Backend`]), encoding it
+/// ([`WorkspaceError::Store`]), or writing it to the store.
 pub fn stream_into(
     mut import: FontImport,
     writer: &mut FontImportWriter<'_>,

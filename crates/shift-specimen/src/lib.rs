@@ -176,7 +176,7 @@ enum SpecimenScript {
 
 impl SpecimenScript {
     /// Checked in this order; the first script the font covers wins.
-    const ALL: [SpecimenScript; 9] = [
+    const ALL: [Self; 9] = [
         Self::Arabic,
         Self::Hebrew,
         Self::Devanagari,
@@ -290,7 +290,7 @@ struct Coverage {
 
 impl Coverage {
     fn from_characters(characters: impl IntoIterator<Item = char>) -> Self {
-        let mut coverage = Coverage {
+        let mut coverage = Self {
             characters: 0,
             symbols: 0,
             letters_by_script: HashMap::new(),
@@ -317,6 +317,10 @@ impl Coverage {
                 .push(character);
         }
 
+        #[allow(
+            clippy::iter_over_hash_type,
+            reason = "sorts each script's letters in place; scripts are independent"
+        )]
         for letters in coverage.letters_by_script.values_mut() {
             letters.sort_unstable();
         }
@@ -573,7 +577,7 @@ impl Bounds {
         }
     }
 
-    fn union(self, other: Bounds) -> Self {
+    fn union(self, other: Self) -> Self {
         Self {
             min_x: self.min_x.min(other.min_x),
             min_y: self.min_y.min(other.min_y),

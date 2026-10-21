@@ -10,7 +10,7 @@
 //! again from the new anchors, in component order, so a mark stacked on a
 //! moved mark follows it too.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use kurbo::{Point, Vec2};
 
@@ -33,7 +33,7 @@ pub(crate) fn realign_attached_components<'a>(
     after: &mut Font,
     touched: impl IntoIterator<Item = &'a LayerId>,
 ) -> Vec<(LayerId, bool)> {
-    let touched: HashSet<&LayerId> = touched.into_iter().collect();
+    let touched: BTreeSet<&LayerId> = touched.into_iter().collect();
     let mut anchor_glyphs = HashSet::new();
     for &layer_id in &touched {
         let (Some(old), Some(new)) = (before.layer(layer_id), after.layer(layer_id)) else {
@@ -132,7 +132,7 @@ impl AnchorLike for Anchor {
     }
 
     fn position(&self) -> Point {
-        Anchor::position(self)
+        Self::position(self)
     }
 }
 
@@ -235,18 +235,9 @@ fn sits_on_anchors<A: AnchorLike>(
     placed: &[(Transform, &[A])],
     anchors: &[A],
 ) -> bool {
-    is_translation(transform)
+    transform.is_translation()
         && aligned_offset(placed, anchors).is_some_and(|offset| {
             let gap = transform.offset() - offset;
             gap.x.abs() < EPSILON && gap.y.abs() < EPSILON
         })
-}
-
-/// Whether the placement only moves the component, as anchor alignment places it.
-fn is_translation(transform: &DecomposedTransform) -> bool {
-    transform.rotation == 0.0
-        && transform.scale_x == 1.0
-        && transform.scale_y == 1.0
-        && transform.skew_x == 0.0
-        && transform.skew_y == 0.0
 }
