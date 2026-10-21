@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use shift_font::test_support::sample_variable_font;
-use shift_font::{ExternalLocation, Font, Glyph};
+use shift_font::{ExternalLocation, Font, Glyph, GlyphCategory, GlyphSubcategory};
 
 use super::*;
 
@@ -270,7 +270,8 @@ fn an_arabic_paragraph_joins_and_reads_right_to_left() {
 
     let runs = shaper(&font)
         .shape_paragraph(&paragraph(&units, &location))
-        .unwrap();
+        .unwrap()
+        .runs;
 
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].script.as_deref(), Some("Arab"));
@@ -293,7 +294,8 @@ fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
 
     let runs = shaper(&font)
         .shape_paragraph(&paragraph(&units, &location))
-        .unwrap();
+        .unwrap()
+        .runs;
 
     let summary: Vec<_> = runs
         .iter()
@@ -310,4 +312,81 @@ fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
         names_and_clusters(&font, &runs[1].glyphs),
         vec![named("beh-ar.fina", 3), named("beh-ar.init", 2)]
     );
+}
+
+#[test]
+fn digits_inside_an_arabic_paragraph_shape_left_to_right() {
+    let font = joining_font();
+    let location = ExternalLocation::new();
+    let units = characters("\u{0628} 12");
+
+    let paragraph = shaper(&font)
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+
+    assert_eq!(paragraph.direction, TextDirection::RightToLeft);
+    let runs: Vec<_> = paragraph
+        .runs
+        .iter()
+        .map(|run| {
+            let clusters: Vec<u32> = run.glyphs.iter().map(|glyph| glyph.cluster).collect();
+            (run.level, clusters)
+        })
+        .collect();
+    assert_eq!(runs, vec![(1, vec![1, 0]), (2, vec![2, 3])]);
+}
+
+#[test]
+fn features_list_each_tag_once_with_stylistic_set_names() {
+    let font = font_with(
+        &[
+            ("a", Some('a')),
+            ("a.ss01", None),
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+        ],
+        "languagesystem DFLT dflt;
+         languagesystem latn dflt;
+         feature liga { sub f i by f_i; } liga;
+         feature ss01 {
+             featureNames { name \"Single-storey a\"; };
+             sub a by a.ss01;
+         } ss01;",
+    );
+
+    let features = shaper(&font).font().features().unwrap();
+
+    assert_eq!(
+        features,
+        vec![
+            FontFeature {
+                tag: "liga".to_string(),
+                name: None,
+            },
+            FontFeature {
+                tag: "ss01".to_string(),
+                name: Some("Single-storey a".to_string()),
+            },
+        ]
+    );
+}
+
+#[test]
+fn glyphs_the_font_classes_as_marks_are_flagged() {
+    let mut font = font_with(&[("f", Some('f')), ("acute", Some('\u{301}'))], "");
+    let acute = font.glyph_by_name("acute").unwrap().id();
+    font.set_glyph_category(
+        &acute,
+        Some(GlyphCategory::Mark),
+        Some(GlyphSubcategory::Nonspacing),
+    )
+    .unwrap();
+    let location = ExternalLocation::new();
+    let units = characters("f\u{301}");
+
+    let shaped = shaper(&font).shape(&request(&units, &location)).unwrap();
+
+    let marks: Vec<bool> = shaped.iter().map(|glyph| glyph.is_mark).collect();
+    assert_eq!(marks, [false, true]);
 }

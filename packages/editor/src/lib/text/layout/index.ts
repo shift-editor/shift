@@ -12,7 +12,6 @@ export type {
   Paragraph,
   ParagraphItem,
   GlyphTextItem,
-  Hit,
   Line,
   LineBreakTextItem,
   PositionedGlyph,

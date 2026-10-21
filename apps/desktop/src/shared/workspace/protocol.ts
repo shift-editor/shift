@@ -12,9 +12,10 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FontFeature,
   Location,
   ParagraphRequest,
-  ShapedRun,
+  ShapedParagraph,
   ShaperFont,
   SlugAtlas,
   Specimen,
@@ -308,10 +309,12 @@ export type SyncCallMap = {
   };
   /** Evaluates font-owned independent and cross-axis mappings in Rust. */
   "workspace.mapLocation": { request: Location; response: Location };
-  /** Shapes paragraphs with the font's feature code, each split into runs of one script. */
+  /** Lists the features the font's compiled feature code defines. */
+  "workspace.features": { request: null; response: FontFeature[] };
+  /** Shapes paragraphs with the font's feature code, each split into runs of one script and bidi level. */
   "workspace.shapeParagraphs": {
     request: { paragraphs: ParagraphRequest[] };
-    response: ShapedRun[][];
+    response: ShapedParagraph[];
   };
   /**
    * Compiles the font's feature code into a shaper font for the editor to

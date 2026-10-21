@@ -38,7 +38,7 @@ test("edits a selected cubic handle by angle and length", async ({ page, editor 
   const handle = await page.evaluate(() => {
     const editor = window.shift!.editor;
     const node = editor.scene.nodesOfKind("glyph")[0]!;
-    const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
+    const layer = editor.glyphOf(node)!.layerForSource(node.sourceId)!;
 
     for (const contour of layer.contours) {
       const segments = contour.segments();

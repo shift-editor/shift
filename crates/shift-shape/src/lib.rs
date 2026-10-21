@@ -2,10 +2,11 @@
 //!
 //! One implementation of text shaping for every Shift host: the editor's
 //! workspace (through NAPI), the editor itself (through WebAssembly), and the
-//! command line. A paragraph is split into runs of one script, each run is
-//! shaped with HarfRust, and runs come back in logical order. [`line_breaks`]
-//! gives the places a line may break
-//! ([UAX #14](https://www.unicode.org/reports/tr14/)).
+//! command line. A paragraph is split into runs of one bidi level and script
+//! ([UAX #9](https://www.unicode.org/reports/tr9/)), each run is shaped with
+//! HarfRust in its level's direction, and runs come back in logical order
+//! with their levels for the line to reorder. [`line_breaks`] gives the
+//! places a line may break ([UAX #14](https://www.unicode.org/reports/tr14/)).
 //!
 //! What differs between hosts is how glyphs are identified, where characters
 //! map, and what a glyph's own advance is; a [`GlyphSource`] supplies all
@@ -27,8 +28,8 @@ pub use axis::AxisNormalization;
 pub use breaks::{LineBreak, line_breaks};
 pub use harfrust::{NormalizedCoord, Tag};
 pub use shape::{
-    FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedRun, Shaper,
-    TextDirection,
+    FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedParagraph,
+    ShapedRun, Shaper, TextDirection,
 };
 pub use source::{FontGlyphs, GlyphSource, NOTDEF, character_glyphs};
 
@@ -41,6 +42,6 @@ pub enum Unit<G> {
     /// A glyph inserted by name, such as an alternate with no Unicode value.
     /// It is shaped as itself: features can still substitute or position it,
     /// but it never joins or forms context the way a character would, and
-    /// line breaking reads it as an inline object (U+FFFC).
+    /// bidi and line breaking read it as an inline object (U+FFFC).
     Glyph(G),
 }

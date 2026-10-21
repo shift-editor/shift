@@ -1,15 +1,6 @@
 import type { TextItem } from "./layout";
+import { graphemes, segmentItems, wordSegments, type ItemSegment } from "./layout/segmentation";
 import type { TextCaret, TextSelectionRange } from "../../types/text";
-
-/** A segment of the items, in item indexes. */
-interface ItemSegment {
-  readonly start: number;
-  readonly end: number;
-  readonly isWordLike: boolean;
-}
-
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-const words = new Intl.Segmenter(undefined, { granularity: "word" });
 
 /**
  * A run's items with a selection, edited by value.
@@ -103,42 +94,22 @@ export class TextBuffer {
     return this.#graphemes.findLast((segment) => segment.start < cluster)?.start ?? cluster;
   }
 
-  /** Returns the end of the next word, or the start of the previous one. */
+  /** The word-like segments of the items, such as words and numbers, not spaces or punctuation. */
+  get words(): readonly ItemSegment[] {
+    this.#words ??= wordSegments(this.items);
+    return this.#words;
+  }
+
+  /** Returns the end of the next word, or the start of the previous one, in reading order. */
   wordStep(cluster: number, direction: -1 | 1): number {
-    this.#words ??= segmentItems(this.items, words).filter((segment) => segment.isWordLike);
     if (direction === 1) {
-      return this.#words.find((segment) => segment.end > cluster)?.end ?? this.items.length;
+      return this.words.find((segment) => segment.end > cluster)?.end ?? this.items.length;
     }
-    return this.#words.findLast((segment) => segment.start < cluster)?.start ?? 0;
+    return this.words.findLast((segment) => segment.start < cluster)?.start ?? 0;
   }
 }
 
 function collapsed(items: readonly TextItem[], cluster: number): TextBuffer {
   const caret = items[cluster - 1]?.id ?? null;
   return new TextBuffer(items, caret);
-}
-
-/**
- * Segments items with a Unicode segmenter.
- *
- * @remarks
- * Each item reads as one code point: a line break as `\n` and a picked glyph
- * as U+FFFC, the object replacement character, so it stands alone like an
- * inline object.
- */
-function segmentItems(items: readonly TextItem[], segmenter: Intl.Segmenter): ItemSegment[] {
-  let text = "";
-  const itemAt = new Map<number, number>();
-  items.forEach((item, index) => {
-    itemAt.set(text.length, index);
-    if (item.kind === "character") text += String.fromCodePoint(item.codepoint);
-    else text += item.kind === "linebreak" ? "\n" : "￼";
-  });
-  itemAt.set(text.length, items.length);
-
-  return [...segmenter.segment(text)].map((segment) => ({
-    start: itemAt.get(segment.index)!,
-    end: itemAt.get(segment.index + segment.segment.length)!,
-    isWordLike: segment.isWordLike ?? false,
-  }));
 }

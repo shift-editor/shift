@@ -191,7 +191,7 @@ export declare class Bridge {
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   /**
    * Shapes a paragraph with the font's feature code, split into runs of one
-   * script, each in its script's direction.
+   * script and bidi level, each shaped in its level's direction.
    *
    * Characters map through the live font's Unicode values and every
    * glyph's own advance is zero while shaping, so the result carries the
@@ -202,7 +202,7 @@ export declare class Bridge {
    * The shaping tables are rebuilt only when a font change since the last
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
-  shapeParagraph(request: NapiParagraphRequest): Array<NapiShapedRun>
+  shapeParagraph(request: NapiParagraphRequest): NapiShapedParagraph
   /**
    * Returns the compiled shaping tables, for the editor to shape with
    * itself, or `null` when they are still at `known_revision`. Compiles
@@ -210,6 +210,11 @@ export declare class Bridge {
    * glyph categories, feature code, or axes.
    */
   shaperFont(knownRevision?: number | undefined | null): NapiShaperFont | null
+  /**
+   * Returns the features the font's compiled feature code defines, once per
+   * tag, in tag order, with stylistic set and character variant names.
+   */
+  shapingFeatures(): Array<NapiFontFeature>
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -297,6 +302,14 @@ export interface NapiFontExportResult {
   format: string
 }
 
+/** A feature the font's feature code defines. */
+export interface NapiFontFeature {
+  /** The feature tag, such as `liga` or `ss01`. */
+  tag: string
+  /** The name a `featureNames` block gives a stylistic set or character variant. */
+  name?: string
+}
+
 export interface NapiNewWorkspace {
   familyName?: string
   unitsPerEm?: number
@@ -327,9 +340,18 @@ export interface NapiShapedGlyph {
   yAdvance: number
   xOffset: number
   yOffset: number
+  /** Whether the font classes the glyph as a mark. */
+  isMark: boolean
 }
 
-/** One run of a shaped paragraph, in one script and direction. */
+/** A shaped paragraph: its base direction and its runs in logical order. */
+export interface NapiShapedParagraph {
+  /** The paragraph's base direction, from its first strong character. */
+  direction: "ltr" | "rtl"
+  runs: Array<NapiShapedRun>
+}
+
+/** One run of a shaped paragraph, in one script and bidi level. */
 export interface NapiShapedRun {
   /** First paragraph unit in the run. */
   start: number
@@ -340,6 +362,11 @@ export interface NapiShapedRun {
    * characters common to all scripts.
    */
   script?: string
+  /**
+   * Resolved bidi level; odd levels read right to left. A line lays its
+   * runs out by level.
+   */
+  level: number
   direction: "ltr" | "rtl"
   /** Glyphs in visual order; clusters index the paragraph's units. */
   glyphs: Array<NapiShapedGlyph>

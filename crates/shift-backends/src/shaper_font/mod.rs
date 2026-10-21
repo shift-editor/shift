@@ -18,6 +18,7 @@
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
 mod diagnostics;
+mod features;
 mod shape;
 mod state;
 mod tables;
@@ -42,9 +43,10 @@ use write_fonts::tables::gdef::GlyphClassDef;
 use write_fonts::types::Tag;
 
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
+pub use features::FontFeature;
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
-    ShapedRun, TextDirection,
+    ShapedParagraph, ShapedRun, TextDirection,
 };
 pub use state::ShaperFontState;
 

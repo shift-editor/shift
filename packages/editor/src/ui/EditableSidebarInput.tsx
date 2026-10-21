@@ -27,6 +27,8 @@ export interface EditableSidebarInputProps {
   disabled?: boolean;
   suffix?: string;
   defaultValue?: number;
+  /** Shown while there is no value, such as "Mixed" for values that differ. */
+  placeholder?: string;
 }
 
 const parseNumericValue = (input: string): number | null => {
@@ -52,6 +54,7 @@ export const EditableSidebarInput = forwardRef<
       disabled = false,
       suffix = "",
       defaultValue = 0,
+      placeholder,
     },
     ref,
   ) => {
@@ -78,10 +81,12 @@ export const EditableSidebarInput = forwardRef<
     const handleBlur = useCallback(() => {
       setIsEditing(false);
       focus?.onEditEnd();
+      // Leaving an empty field that started empty, such as a mixed value, changes nothing.
+      if (parseNumericValue(editValue) === null && displayValue === null) return;
       const numericValue = parseNumericValue(editValue) ?? defaultValue;
       setDisplayValue(numericValue);
       if (onValueChange) onValueChange(numericValue);
-    }, [editValue, defaultValue, onValueChange, focus]);
+    }, [editValue, defaultValue, displayValue, onValueChange, focus]);
 
     const handleKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -125,6 +130,7 @@ export const EditableSidebarInput = forwardRef<
             label={label}
             labelPosition={labelPosition}
             value={isEditing ? editValue : displayText}
+            placeholder={placeholder}
             icon={icon}
             iconPosition={iconPosition}
             readOnly={!isEditing}

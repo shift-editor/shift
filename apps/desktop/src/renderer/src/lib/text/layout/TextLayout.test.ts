@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { characterTextItem as char, lineBreakTextItem } from "@shift/editor/text";
+import { signal } from "@shift/editor/signals";
+import { characterTextItem as char, glyphTextItem, lineBreakTextItem } from "@shift/editor/text";
+import { TextLayout } from "@shift/editor/testing";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 import type { TestEditor } from "@/testing/TestEditor";
 
@@ -50,23 +52,17 @@ describe("TextLayout", () => {
     expect(layout.lines[1].y).toBe(-lineHeight);
   });
 
-  // hit-test → pointAt round trip. Pin side resolution: a point inside the
-  // left half of B's advance box hits cluster=1, side="left".
-  it("pointAt after hitTest recovers cluster's leading edge", () => {
+  // Click → caret round trip: a point in the left half of B's advance box
+  // lands before B, and that caret draws at B's leading edge.
+  it("a point in a glyph's left half places the caret on its leading edge", () => {
     const layout = makeLayout([char(65), char(66)], editor);
     const aAdvance = xAdvance("A", editor);
     const bAdvance = xAdvance("B", editor);
-    const bLeftHalfX = aAdvance + bAdvance / 4;
 
-    const hit = layout.hitTest({ x: bLeftHalfX, y: 0 });
+    const cluster = layout.caretAtPoint({ x: aAdvance + bAdvance / 4, y: 0 });
 
-    expect(hit).toEqual({
-      lineIndex: 0,
-      runIndex: 0,
-      cluster: 1,
-      side: "left",
-    });
-    expect(layout.pointAt(1)?.x).toBe(aAdvance);
+    expect(cluster).toBe(1);
+    expect(layout.caretPosition(1).x).toBe(aAdvance);
   });
 
   it("places an item's glyph by item id on the current line", () => {
@@ -79,6 +75,37 @@ describe("TextLayout", () => {
     expect(placed?.origin).toEqual({ x: aAdvance, y: 0 });
     expect(placed?.glyph.sourceItemIds).toEqual([b.id]);
     expect(placed?.glyph.glyphId).toBe(editor.font.recordForName("B")?.id);
+  });
+
+  // The shaper answers .notdef, or a glyph its compiled font does not have yet, with no glyph.
+  it("shows a picked glyph that shaping answers with no glyph", () => {
+    const b = editor.font.recordForName("B")!;
+    const pick = glyphTextItem(b.id);
+    const layout = new TextLayout({
+      items: [pick],
+      origin: { x: 0, y: 0 },
+      editor,
+      externalLocation: signal(editor.font.defaultLocation()),
+      shaped: [
+        {
+          direction: "ltr",
+          runs: [
+            {
+              start: 0,
+              end: 1,
+              level: 0,
+              direction: "ltr",
+              glyphs: [
+                { cluster: 0, xAdvance: 0, yAdvance: 0, xOffset: 0, yOffset: 0, isMark: false },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(layout.partsOfItem(pick.id).map((placed) => placed.glyph.glyphId)).toEqual([b.id]);
+    expect(layout.totalAdvance).toBe(xAdvance("B", editor));
   });
 
   it("places an item's glyph by item id after a linebreak", () => {

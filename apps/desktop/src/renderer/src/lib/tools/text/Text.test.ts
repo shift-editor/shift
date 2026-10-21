@@ -159,6 +159,17 @@ describe("Select over the page run", () => {
     expect(bounds.value!.min.x).toBeCloseTo(before + 100);
   });
 
+  it("Shift-double-clicking another run glyph edits it alongside the first", async () => {
+    const first = editor.runGlyph!;
+    const second = editor.localToScreen({ x: secondOrigin() + 200, y: 200 });
+    await editor.click(second.x, second.y, { shiftKey: true });
+    await editor.click(second.x, second.y, { shiftKey: true });
+
+    const children = editor.nodeDefinition("textRun").childGlyphs(run());
+    expect(children.map((child) => child.itemId)).toEqual([first.itemId, secondItem().id]);
+    expect(editor.editing.nodeIds).toEqual(children.map((child) => child.id));
+  });
+
   it("clicking a run glyph selects its item", async () => {
     const screen = editor.localToScreen({ x: secondOrigin() + 200, y: 200 });
     await editor.click(screen.x, screen.y);
@@ -166,7 +177,7 @@ describe("Select over the page run", () => {
     expect(editor.object(secondItem().id)).toMatchObject({
       kind: "textItem",
       node: { id: run().id },
-      glyphId: editor.runGlyph!.glyphId,
+      glyphId: editor.glyphIdOf(editor.runGlyph!),
     });
   });
 
@@ -380,7 +391,8 @@ describe("double-clicking a component", () => {
       bRecord.id,
     ]);
     const child = editor.runGlyph!;
-    expect(child).toMatchObject({ glyphId: bRecord.id, itemId: items[1]!.id });
+    expect(child).toMatchObject({ itemId: items[1]!.id });
+    expect(editor.glyphIdOf(child)).toBe(bRecord.id);
     expect(editor.editing.nodeIds).toEqual([child.id]);
 
     await editor.undo();

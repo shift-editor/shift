@@ -28,9 +28,10 @@ import type {
   LayerId,
   LayerMatch,
   LayerRead,
+  FontFeature,
   Location,
   ParagraphRequest,
-  ShapedRun,
+  ShapedParagraph,
   ShaperFont,
   SlugAtlas,
 } from "@shift/types";
@@ -412,9 +413,9 @@ export class FontSessionClient {
   /**
    * Shapes paragraphs with the current font's feature code in the utility process.
    *
-   * @returns Each paragraph's runs, in request order.
+   * @returns Each paragraph's direction and runs, in request order.
    */
-  async shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
+  async shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedParagraph[]> {
     await this.connect();
 
     return this.#require().call("workspace.shapeParagraphs", { paragraphs: [...paragraphs] });
@@ -428,6 +429,13 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.shaperFont", { knownRevision });
+  }
+
+  /** Lists the features the current font's compiled feature code defines. */
+  async features(): Promise<FontFeature[]> {
+    await this.connect();
+
+    return this.#require().call("workspace.features", null);
   }
 
   #fold(applied: AppliedChange): AppliedChange {
