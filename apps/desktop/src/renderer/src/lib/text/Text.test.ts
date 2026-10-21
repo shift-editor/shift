@@ -59,6 +59,7 @@ describe("text items resolve to glyphs", () => {
     await editor.addGlyph("B", 66);
     const b = editor.font.recordForName("B" as GlyphName)!;
     const run = editor.text.createRun(editor.text.itemsFromText("B"));
+    await editor.settle();
     expect(glyphIds(editor, run.id)).toEqual([b.id]);
 
     editor.font.updateGlyphIdentity(b.id, "B" as GlyphName, []);
