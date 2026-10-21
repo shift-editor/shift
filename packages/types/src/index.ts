@@ -27,6 +27,7 @@ export type {
 } from "./ids";
 export { EntityMap, EntityNotFoundError, type ReadonlyEntityMap } from "./EntityMap";
 export { RecentList, type RecentListRules } from "./RecentList";
+export { removeBy, replaceBy, upsertBy } from "./keyed";
 export {
   alphabetical,
   ascending,

@@ -1,5 +1,11 @@
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
-import type { ContourData, PointId, PointSeed, SegmentId } from "@shift/types";
+import {
+  replaceBy,
+  type ContourData,
+  type PointId,
+  type PointSeed,
+  type SegmentId,
+} from "@shift/types";
 import { Contour, type GlyphPosition, Point, type Segment } from "@shift/glyph-state";
 import {
   batch,
@@ -178,11 +184,14 @@ export class ContourBuffer {
 
   setPointSmooth(pointId: PointId, smooth: boolean): boolean {
     const data = this.#dataCell.peek();
-    const pointIndex = data.points.findIndex((point) => point.id === pointId);
-    if (pointIndex < 0) return false;
+    if (!data.points.some((point) => point.id === pointId)) return false;
 
-    const points = [...data.points];
-    points[pointIndex] = { ...points[pointIndex], smooth };
+    const points = replaceBy(
+      data.points,
+      pointId,
+      (point) => ({ ...point, smooth }),
+      (point) => point.id,
+    );
     this.#dataCell.set({ ...data, points });
     return true;
   }
