@@ -14,6 +14,7 @@ use shift_font::test_support::generated::assert_generated_file;
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
 use crate::decomposition::DecomposedGlyph;
+use crate::page_layout::{LayoutPageInput, LayoutPageOutput};
 use crate::shaping::{ShapeParagraphs, ShapedRunOutput, ShaperGlyphs};
 
 /// One WebAssembly module and the hot calls it exports, generated into one
@@ -86,6 +87,12 @@ fn shaping_calls() -> Vec<Call> {
             doc: "Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null.",
             input: ShapeParagraphs::kind(),
             output: Vec::<Option<Vec<ShapedRunOutput>>>::kind(),
+        },
+        Call {
+            name: "layoutPage",
+            doc: "Lays out one page: a box for every node and the lines of every text run, or null for a malformed tree.",
+            input: LayoutPageInput::kind(),
+            output: Option::<LayoutPageOutput>::kind(),
         },
     ]
 }

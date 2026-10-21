@@ -13,15 +13,20 @@ crate-type = ["cdylib", "rlib"]
 # Test-only exports of shift-font rules the editor keeps in TypeScript, built
 # into @shift/wasm/reference so tests compare the two. Never shipped.
 reference = []
+# Page layout (shift-layout over Taffy's flexbox). Shipped inside the shaping
+# module, which `shaping` turns it on for: laying out a page needs its text
+# shaped first, so the module is already loaded.
+layout = ["dep:shift-layout"]
 # Text shaping (shift-shape and HarfRust, about 0.6 MB), built into
 # @shift/wasm/shaping, a separate module the editor loads when text first
 # needs shaping.
-shaping = ["dep:shift-shape"]
+shaping = ["dep:shift-shape", "layout"]
 
 [dependencies]
 fontir = "1.0.0"
 serde = { version = "1.0", features = ["derive"] }
 shift-font = { workspace = true }
+shift-layout = { workspace = true, optional = true }
 shift-shape = { workspace = true, optional = true }
 # Generates the TypeScript types of exported values and converts them.
 tsify = { version = "0.5", default-features = false, features = ["js"] }

@@ -25,6 +25,7 @@ pub mod anchors;
 pub mod decomposition;
 mod layout;
 pub mod names;
+pub mod page_layout;
 #[cfg(feature = "reference")]
 pub mod reference;
 pub mod shaping;

@@ -1,7 +1,9 @@
 /**
- * Text shaping, compiled from `crates/shift-wasm` with its `shaping` feature:
- * shift-shape and HarfRust, the same shaper the workspace and command line
- * use. Instantiated synchronously at import, like `@shift/wasm`.
+ * Text shaping and page layout, compiled from `crates/shift-wasm` with its
+ * `shaping` feature: shift-shape and HarfRust, the same shaper the workspace
+ * and command line use, and shift-layout over Taffy, which lays out pages
+ * once their text is shaped. Instantiated synchronously at import, like
+ * `@shift/wasm`.
  *
  * @remarks
  * Built into `src/generated-shaping`, a module of its own because HarfRust
@@ -17,6 +19,7 @@ import { embeddedModule } from "./embedded";
 initSync({ module: embeddedModule(moduleBase64) });
 
 export {
+  layoutPage,
   registerShaper,
   releaseShaper,
   setShaperGlyphs,
