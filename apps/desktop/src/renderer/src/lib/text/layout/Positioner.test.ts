@@ -125,7 +125,9 @@ describe("Positioner", () => {
     });
 
     it("lays out a character with no glyph as spacing, then as a mark once the glyph exists", async () => {
+      // Laid out as typed: shaped text gives a mark the font classes as one no advance.
       const run = editor.text.createRun([char(65), char(0x064e)]);
+      editor.history.capture("Shaping off", () => editor.text.setShaping(run.id, false));
       const layoutCell = editor.text.layoutCell(run.id);
       const advances: number[] = [];
       const subscription = effect(() => {
@@ -161,20 +163,18 @@ describe("Positioner mark attachment", () => {
     for (const record of editor.font.glyphRecords()) await editor.font.loadGlyph(record.id);
   });
 
-  const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
-
   // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
-  it("attaches a mark to an anchor a composite takes from its components", () => {
-    const run = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+  it("attaches a mark to an anchor a composite takes from its components", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("\u00e1\u0301")).id;
+    const layout = () => editor.text.layoutCell(runId).peek();
+    // Literal layout sets the mark beside the letter; wait for the shaper's run.
+    await expect.poll(() => layout()?.lines[0]?.runs[0]?.script).toBe("Latn");
 
-    const [base, mark] = new Positioner(editor, signal(editor.font.defaultLocation())).position(
-      run,
-      "anchors",
-    ).glyphs;
+    const [base, mark] = layout()!.placedGlyphs;
 
-    expect(mark!.origin).toEqual(base!.origin);
+    expect(base!.origin).toEqual({ x: 0, y: 0 });
     // acutecomb's `top` (100, 700) moved by its component offset (150, 0), less its `_top` (100, 500).
-    expect({ x: mark!.xOffset, y: mark!.yOffset }).toEqual({ x: 150, y: 200 });
-    expect(mark!.xAdvance).toBe(0);
+    expect(mark!.origin).toEqual({ x: 150, y: 200 });
+    expect(mark!.glyph.xAdvance).toBe(0);
   });
 });
