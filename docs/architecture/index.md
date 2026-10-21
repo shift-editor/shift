@@ -52,6 +52,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | -------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `packages/editor/src/lib/editor/**`    | [`editor/docs/DOCS.md`](../../packages/editor/src/lib/editor/docs/DOCS.md)       | Editor facade, viewport, selection, and rendering                  |
 | `packages/editor/src/lib/model/**`     | [`model/docs/DOCS.md`](../../packages/editor/src/lib/model/docs/DOCS.md)         | Reactive font, glyph layers, interpolation, and editing            |
+| `packages/editor/src/ui/**`            | [`ui/docs/DOCS.md`](../../packages/editor/src/ui/docs/DOCS.md)                   | Floating toolbar docking, drag, and animation                      |
 | `packages/editor/src/lib/tools/**`     | [`tools/docs/DOCS.md`](../../packages/editor/src/lib/tools/docs/DOCS.md)         | Tool state machines and interaction behaviors                      |
 | `packages/editor/src/lib/signals/**`   | [`signals/docs/DOCS.md`](../../packages/editor/src/lib/signals/docs/DOCS.md)     | Fine-grained reactive graph                                        |
 | `packages/editor/src/lib/text/**`      | [`text/docs/DOCS.md`](../../packages/editor/src/lib/text/docs/DOCS.md)           | Text records, interaction, and layout                              |
