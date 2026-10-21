@@ -43,6 +43,10 @@ macro_rules! contour {
 /// Ordered collections need multiple entries whose identity sort order differs
 /// from their authored order so deterministic serializers cannot reorder them
 /// unnoticed.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one corpus, populated field by field"
+)]
 pub fn sample_font() -> Font {
     let mut font = Font::empty();
     font.metadata_mut().family_name = Some("Dogfood Sans".to_string());
