@@ -13,8 +13,8 @@ export interface AxesPanelProps {
 
 export function AxesPanel({ session, actions }: AxesPanelProps) {
   const { editor, font } = session;
-  const axes = useSignalState(font.axesCell).filter(
-    (axis) => axis.role === "external" && axis.minimum !== axis.maximum,
+  const axes = useSignalState(font.externalAxesCell).filter(
+    (axis) => axis.minimum !== axis.maximum,
   );
   const location = useSignalState(editor.externalLocationCell);
 

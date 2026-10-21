@@ -516,9 +516,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.editor.activeSourceId === null &&
       this.editor.font.sourceAt(this.editor.externalLocation) === null;
 
-    track(view.contoursCell);
-    const rootContours = view.contours.filter(
-      (contour) => contour.component === null && this.editor.handlesVisible(contour.contour.id),
+    track(view.rootContoursCell);
+    const rootContours = view.rootContours.filter((contour) =>
+      this.editor.handlesVisible(contour.contour.id),
     );
     return { interpolated, rootContours };
   }

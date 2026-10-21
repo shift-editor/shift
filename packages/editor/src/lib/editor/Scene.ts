@@ -23,6 +23,7 @@ export class Scene {
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyEntityMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
+  readonly #onlyCellsByKind = new Map<NodeKind, Signal<ShiftNode | null>>();
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
   /**
@@ -152,6 +153,30 @@ export class Scene {
   only<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
     const nodes = this.nodesOfKind(kind);
     return nodes.length === 1 ? (nodes[0] ?? null) : null;
+  }
+
+  /**
+   * Reactive {@link only}: the scene's one node of `kind`, or null with none or
+   * several.
+   *
+   * @remarks
+   * Readers rerun when the nodes of `kind` change, not on every scene change.
+   * One cell per kind, created on first use.
+   */
+  onlyCell<K extends NodeKind>(kind: K): Signal<NodeOfKind<K> | null> {
+    let cell = this.#onlyCellsByKind.get(kind);
+    if (!cell) {
+      cell = computed(
+        () => {
+          const nodes = this.#nodesByKind.value.get(kind) ?? [];
+          return nodes.length === 1 ? (nodes[0] ?? null) : null;
+        },
+        { name: `editor.scene.only.${kind}` },
+      );
+      this.#onlyCellsByKind.set(kind, cell);
+    }
+
+    return cell as Signal<NodeOfKind<K> | null>;
   }
 
   /** Returns the first node of `kind` in scene order, or null when there is none. */

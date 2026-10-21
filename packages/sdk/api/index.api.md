@@ -499,6 +499,7 @@ export class Font {
     entryForId(glyphId: GlyphId): GlyphEntry | null;
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
+    get externalAxesCell(): Signal<readonly Axis[]>;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
