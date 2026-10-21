@@ -1,5 +1,7 @@
-import type { ListSelectionMode } from "@shift/editor/types";
-import type { SelectableId } from "@shift/types";
+import type { GlyphNode, ListSelectionMode } from "@shift/editor/types";
+import type { MatModel } from "@shift/geo";
+import type { SegmentedContour } from "@shift/glyph-state";
+import type { NodeId, SelectableId } from "@shift/types";
 
 export type ObjectTreeIcon =
   | "anchor"
@@ -70,4 +72,30 @@ export interface ObjectRowProps {
   readonly onOpenChange: (id: SelectableId, open: boolean) => void;
   readonly row: VisibleObjectRow;
   readonly selectObject: ObjectTreeSelectionHandler;
+}
+
+/** One edited glyph's object tree in the objects panel. */
+export interface GlyphObjects {
+  readonly node: GlyphNode;
+  readonly name: string;
+  /** A filled SVG path previewing the glyph in a 16 × 16 box. */
+  readonly iconPath: string | undefined;
+  readonly tree: ObjectTree;
+}
+
+/** A section of one glyph's tree, such as that glyph's contours. */
+export type GlyphSectionKey = `${NodeId}:${ObjectTreeSectionId}`;
+
+/** A contour of a glyph as drawn: its own points and where it sits in the glyph. */
+export interface PlacedContour {
+  readonly contour: SegmentedContour;
+  /** Maps the contour's coordinates into the glyph's, placing a component's outline. */
+  readonly transform: MatModel;
+}
+
+/** The vertical frame and width a glyph preview is fitted to. */
+export interface GlyphIconFrame {
+  readonly ascender: number;
+  readonly descender: number;
+  readonly advance: number;
 }

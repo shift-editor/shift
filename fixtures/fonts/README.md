@@ -79,7 +79,7 @@ repeated-instance handling, and skipped export.
 ligature (`liga`, and an off-by-default `dlig`), Arabic beh with `init`/`medi`/`fina` forms, and fatha and
 shadda marks with `_top`/`top` anchors for mark-to-base and mark-to-mark
 attachment, and noon, which `ccmp` decomposes into a dotless body and a dot
-mark. Written for Shift's tests and released under the same terms as
+mark, and a `.notdef` the shaper maps to no glyph, so a pick of it tests the editor's fallback. Written for Shift's tests and released under the same terms as
 the repository.
 
 ## LightDefault.glyphs

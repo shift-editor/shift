@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName, RunId, ShapeUnit } from "@shift/types";
+import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import { lineBreakTextItem, TextBuffer, type TextItem } from "@shift/editor/text";
 import { effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
@@ -132,7 +133,7 @@ describe("double-clicking a character the font decomposes", () => {
     const body = placedNamed("noonDotless-ar")!;
     await doubleClickRun(body.origin.x + 250, 250);
 
-    expect(editor.runGlyph?.glyphId).toBe(glyphId("noonDotless-ar"));
+    expect(editor.glyphIdOf(editor.runGlyph!)).toBe(glyphId("noonDotless-ar"));
     // The body is now the open glyph, so points are measured from its origin.
     const dot = placedNamed("dotabove-ar")!;
     const screen = editor.localToScreen({
@@ -147,7 +148,7 @@ describe("double-clicking a character the font decomposes", () => {
     const dot = placedNamed("dotabove-ar")!;
     await doubleClickRun(dot.origin.x - 100, dot.origin.y + 550);
 
-    expect(editor.runGlyph?.glyphId).toBe(glyphId("dotabove-ar"));
+    expect(editor.glyphIdOf(editor.runGlyph!)).toBe(glyphId("dotabove-ar"));
   });
 });
 
@@ -388,5 +389,190 @@ describe("a substituted glyph appears only once it has loaded", () => {
     watcher.dispose();
 
     expect(seen).not.toContainEqual({ names: ["f_i"], advance: 0 });
+  });
+});
+
+describe("an edited glyph follows its item's shaping", () => {
+  it("shows the ligature its item forms, drops the old glyph's selection, and returns", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const child = editor.runGlyph!;
+    const runId = editor.textRun!.runId;
+    const glyphId = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
+    const pointId = editor.requireGlyphLayer().contours[0]!.points[0]!.id;
+    editor.selection.select([pointId]);
+
+    editor.text.insertAfter(runId, child.itemId, editor.text.itemsFromText("i"));
+    await expect.poll(() => editor.glyphIdOf(child)).toBe(glyphId("f_i"));
+
+    expect(editor.runGlyph?.id).toBe(child.id);
+    expect(editor.selection.ids).toEqual([]);
+
+    editor.history.capture("Set liga", () => editor.text.setFeature(runId, "liga", false));
+    await expect.poll(() => editor.glyphIdOf(child)).toBe(glyphId("f"));
+  });
+});
+
+describe("editing several glyphs at once", () => {
+  let editor: TestEditor;
+  let run: TextRunNode;
+  let fNode: GlyphNode;
+  let iNode: GlyphNode;
+
+  /** Lays out "fi" as two glyphs and edits both; setup, not the behavior under test. */
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    run = editor.textRun!;
+    editor.history.capture("Set liga", () => editor.text.setFeature(run.runId, "liga", false));
+    const [f] = editor.text.run(run.runId)!.items;
+    editor.text.insertAfter(run.runId, f!.id, editor.text.itemsFromText("i"));
+    const [, i] = editor.text.run(run.runId)!.items;
+    await expect.poll(() => editor.text.layoutCell(run.runId).peek()?.totalAdvance).toBe(550);
+    const definition = editor.nodeDefinition("textRun");
+    editor.history.capture("Edit both", () => {
+      fNode = definition.editItem(run, f!.id)!;
+      iNode = definition.editItem(run, i!.id, 0, { add: true })!;
+      editor.editing.set([fNode.id, iNode.id]);
+    });
+  });
+
+  const lsb = (name: string) =>
+    editor
+      .glyphForId(editor.font.recordForName(name as GlyphName)!.id)!
+      .layerForSource(editor.font.defaultSource.id)!.sidebearings.lsb;
+  const firstPoint = (node: GlyphNode) =>
+    editor.layerOf(node, editor.font.defaultSource.id)!.contours[0]!.points[0]!.id;
+  const children = () => editor.nodeDefinition("textRun").childGlyphs(run);
+
+  it("sets a sidebearing on every edited glyph as one undo step", async () => {
+    editor.setLeftSidebearing(10);
+    await editor.settle();
+    expect([lsb("f"), lsb("i")]).toEqual([10, 10]);
+
+    await editor.undo();
+    expect([lsb("f"), lsb("i")]).toEqual([50, 50]);
+  });
+
+  it("select all covers every edited glyph, and closing one keeps the other open", async () => {
+    editor.selectAll();
+    expect(editor.selection.ids).toHaveLength(8);
+
+    editor.closeGlyphNode(iNode.id);
+    expect(children().map((child) => child.id)).toEqual([fNode.id]);
+
+    await editor.undo();
+    expect(children()).toHaveLength(2);
+  });
+
+  it("keeps the other edited glyphs when a double-click cannot open its target", () => {
+    // `f` shapes to one glyph, so it has no second part to edit.
+    const opened = editor.nodeDefinition("textRun").editItem(run, fNode.itemId, 1);
+
+    expect(opened).toBeNull();
+    expect(children().map((child) => child.id)).toEqual([fNode.id, iNode.id]);
+  });
+
+  it("draws the full metric box for the glyph being worked on and a baseline for the rest", () => {
+    const glyphs = editor.nodeDefinition("glyph");
+    const seen: boolean[][] = [];
+    // Read the way a render pass does, so a selection change must reach it.
+    const pass = effect(() => {
+      seen.push([glyphs.showsMetrics(fNode), glyphs.showsMetrics(iNode)]);
+    });
+
+    editor.selection.select([firstPoint(fNode)]);
+    pass.dispose();
+
+    expect(seen).toEqual([
+      [false, true],
+      [true, false],
+    ]);
+  });
+});
+
+describe("a slot whose glyph shaping removes", () => {
+  it("shows no glyph once its item stops shaping to that many glyphs", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const run = editor.textRun!;
+    editor.text.setItems(run.runId, editor.text.itemsFromText("\u0646"));
+    const noon = editor.text.run(run.runId)!.items[0]!;
+    await expect
+      .poll(() => editor.text.layoutCell(run.runId).peek()?.partsOfItem(noon.id).length)
+      .toBe(2);
+    await editor.text.settled();
+    const dot = editor.history.capture("Edit the dot", () =>
+      editor.nodeDefinition("textRun").editItem(run, noon.id, 1),
+    )!;
+    expect(editor.glyphOf(dot)?.name).toBe("dotabove-ar");
+
+    // Without ccmp, noon shapes to itself: one glyph, so the dot's slot is gone.
+    editor.history.capture("Set ccmp", () => editor.text.setFeature(run.runId, "ccmp", false));
+
+    await expect.poll(() => editor.glyphIdOf(dot)).toBeNull();
+  });
+});
+
+describe("a glyph shaping swaps keeps the rest of the selection", () => {
+  it("deselects only the points of the glyph that changed", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const run = editor.textRun!;
+    // Load the medial form first, so the reshape below shows at once.
+    const medial = editor.text.createRun(editor.text.itemsFromText("\u0628\u0628\u0628")).id;
+    await expect
+      .poll(() => editor.text.layoutCell(medial).peek()?.placedGlyphs[1]?.glyph.glyphName)
+      .toBe("beh-ar.medi");
+    editor.text.setItems(run.runId, editor.text.itemsFromText("\u0628\u0628"));
+    const [first, second] = editor.text.run(run.runId)!.items;
+    const names = () =>
+      editor.text
+        .layoutCell(run.runId)
+        .peek()
+        ?.placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(names).toEqual(["beh-ar.fina", "beh-ar.init"]);
+    await editor.text.settled();
+    const definition = editor.nodeDefinition("textRun");
+    const [initNode, finaNode] = editor.history.capture("Edit both", () => {
+      const nodes = [
+        definition.editItem(run, first!.id)!,
+        definition.editItem(run, second!.id, 0, { add: true })!,
+      ];
+      editor.editing.set(nodes.map((node) => node.id));
+      return nodes;
+    });
+    const point = (node: GlyphNode) =>
+      editor.layerOf(node, editor.font.defaultSource.id)!.contours[0]!.points[0]!.id;
+    const kept = point(initNode!);
+    editor.selection.select([kept, point(finaNode!)]);
+
+    // A third beh turns the second one's final form into a medial one.
+    editor.text.insertAfter(run.runId, second!.id, editor.text.itemsFromText("\u0628"));
+    await expect.poll(() => editor.glyphOf(finaNode!)?.name).toBe("beh-ar.medi");
+
+    expect(editor.selection.ids).toEqual([kept]);
+  });
+});
+
+describe("a picked glyph the shaper answers with no glyph", () => {
+  it("still shows, and opens, the glyph picked", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const run = editor.textRun!;
+    // The shaper maps .notdef to no glyph; the pick names it all the same.
+    editor.text.setItems(run.runId, editor.text.itemsFromText("/.notdef"));
+    const pick = editor.text.run(run.runId)!.items[0]!;
+    await expect.poll(() => editor.text.featuresCell.peek().length).toBeGreaterThan(0);
+    const layout = editor.text.layoutCell(run.runId).peek()!;
+
+    expect(layout.partsOfItem(pick.id).map((placed) => placed.glyph.glyphName)).toEqual([
+      ".notdef",
+    ]);
+    expect(layout.totalAdvance).toBe(500);
+    const opened = editor.history.capture("Open", () =>
+      editor.nodeDefinition("textRun").editItem(run, pick.id),
+    );
+    expect(opened && editor.glyphOf(opened)?.name).toBe(".notdef");
   });
 });

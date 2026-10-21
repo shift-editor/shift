@@ -184,13 +184,9 @@ export class Renderer {
     };
 
     this.#markerLayer.begin();
-    try {
-      canvas.withSceneSpace(() => {
-        this.#sceneLayer.draw(ctx);
-      });
-    } finally {
-      this.#markerLayer.commit();
-    }
+    canvas.withSceneSpace(() => {
+      this.#sceneLayer.draw(ctx);
+    });
   }
 
   #renderOverlay(): void {

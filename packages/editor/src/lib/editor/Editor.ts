@@ -114,7 +114,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
+import type { DoubleClickOptions, GlyphNode, NodeKind, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -129,6 +129,7 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { GlyphSubjects } from "./GlyphSubjects";
 
 interface EditorOptions {
   font: Font;
@@ -233,6 +234,7 @@ export class Editor {
   #multiSourceEditing: MultiSourceEditing;
 
   #cursorEffect: Effect;
+  #glyphSubjects: GlyphSubjects;
 
   #clipboard: Clipboard;
 
@@ -282,6 +284,7 @@ export class Editor {
       this.font,
       this.scene,
       (glyphId) => this.#fontStore.glyphForId(glyphId),
+      (node) => this.glyphIdOf(node),
       this.#activeSourceIdCell,
       this.#editingSourceIdsCell,
     );
@@ -407,6 +410,8 @@ export class Editor {
       },
       { name: "editor.cursor" },
     );
+
+    this.#glyphSubjects = new GlyphSubjects(this);
   }
 
   /**
@@ -474,6 +479,24 @@ export class Editor {
    */
   public get toolIdCell(): Signal<ToolName | null> {
     return this.#toolId;
+  }
+
+  /**
+   * The glyph nodes the sidebar and metric edits describe: those the
+   * selection belongs to, otherwise those being edited, otherwise every
+   * glyph node in the scene.
+   *
+   * @remarks
+   * A handle from one glyph and a point from another make both the subject,
+   * so metric fields show what they share and edits apply to each.
+   */
+  public get subjectGlyphNodesCell(): Signal<readonly GlyphNode[]> {
+    return this.#glyphSubjects.nodesCell;
+  }
+
+  /** The glyphs the subject glyph nodes show; see {@link subjectGlyphNodesCell}. Follows shaping. */
+  public get subjectGlyphIdsCell(): Signal<readonly GlyphId[]> {
+    return this.#glyphSubjects.glyphIdsCell;
   }
 
   /**
@@ -641,7 +664,8 @@ export class Editor {
     const node = this.scene.only("glyph");
     if (!node) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const glyphId = this.glyphIdOf(node);
+    const layers = glyphId ? this.#multiSourceEditing.layersFor(glyphId) : null;
     if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
@@ -680,9 +704,10 @@ export class Editor {
     await this.font.loadGlyph(baseGlyphId);
 
     const node = this.scene.only("glyph");
-    if (!node || node.glyphId === baseGlyphId) return null;
+    if (!node || this.glyphIdOf(node) === baseGlyphId) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const glyphId = this.glyphIdOf(node);
+    const layers = glyphId ? this.#multiSourceEditing.layersFor(glyphId) : null;
     if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
@@ -781,7 +806,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.glyphOf(node)?.geometryAt(this.externalLocation);
         if (!geometry?.point(id)) continue;
 
         const contourId = geometry.contourIdOfPoint(id);
@@ -800,7 +825,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.glyphOf(node)?.geometryAt(this.externalLocation);
         if (!geometry?.anchor(id)) continue;
 
         return new AnchorObject(id, geometry, node);
@@ -818,7 +843,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.glyphOf(node)?.geometryAt(this.externalLocation);
         const segment = geometry?.segment(id);
         if (!geometry || !segment) continue;
 
@@ -840,7 +865,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.glyphOf(node)?.geometryAt(this.externalLocation);
         if (!geometry?.contour(id)) continue;
 
         return new ContourObject(id, geometry, node);
@@ -850,7 +875,7 @@ export class Editor {
 
     if (isComponentId(id)) {
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const glyph = this.glyphForId(node.glyphId);
+        const glyph = this.glyphOf(node);
         const renderModel = glyph?.renderModelAt(
           this.externalLocationCell,
           this.activeSourceIdCell,
@@ -1085,8 +1110,8 @@ export class Editor {
     const glyphId = this.font.glyphIdForLayer(layer.id);
     if (!glyphId) return null;
 
-    for (const node of this.scene.nodesReferencing(glyphId)) {
-      if (node.kind === "glyph" && node.sourceId === layer.sourceId) return node;
+    for (const node of this.scene.nodesOfKind("glyph")) {
+      if (node.sourceId === layer.sourceId && this.glyphIdOf(node) === glyphId) return node;
     }
     return null;
   }
@@ -1097,7 +1122,7 @@ export class Editor {
     const node = this.scene.only("glyph");
     if (!sourceId || !node) return null;
 
-    return this.layerForGlyph(node.glyphId, sourceId);
+    return this.layerOf(node, sourceId);
   }
 
   /**
@@ -1124,7 +1149,7 @@ export class Editor {
   editableLayer(node: GlyphNode): GlyphLayer | null {
     if (node.sourceId !== this.#activeSourceIdCell.peek()) return null;
 
-    return this.layerForGlyph(node.glyphId, node.sourceId);
+    return this.layerOf(node, node.sourceId);
   }
 
   /**
@@ -1140,6 +1165,45 @@ export class Editor {
    */
   glyphForId(glyphId: GlyphId): Glyph | null {
     return this.#fontStore.glyphForId(glyphId);
+  }
+
+  /**
+   * Returns the glyph a glyph node shows: the one its run item shapes to now.
+   *
+   * @remarks
+   * Resolved from the run's layout, so it follows shaping. Inside a computed
+   * or effect, the reader reruns when the layout changes.
+   *
+   * @returns null when the node's run or item is gone, or the item shapes to
+   * no glyph, such as a character the font has none for.
+   */
+  glyphIdOf(node: GlyphNode): GlyphId | null {
+    return this.nodeDefinition("textRun").placedGlyphOf(node)?.glyph.glyphId ?? null;
+  }
+
+  /** Applies one edit to each subject glyph's layer at the active source, as one undo step. */
+  #editSubjectLayers(label: string, edit: (layer: GlyphLayer) => void): void {
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+    // Two nodes can show the same glyph; edit its layer once.
+    const layers = new Set(
+      this.#glyphSubjects.nodesCell.peek().flatMap((node) => this.layerOf(node, sourceId) ?? []),
+    );
+    if (layers.size === 0) return;
+    this.font.editCoordinator.transaction(label, () => {
+      for (const layer of layers) edit(layer);
+    });
+  }
+
+  /** Returns the loaded glyph a node shows; null when it resolves to none or is not loaded. */
+  glyphOf(node: GlyphNode): Glyph | null {
+    const glyphId = this.glyphIdOf(node);
+    return glyphId ? this.#fontStore.glyphForId(glyphId) : null;
+  }
+
+  /** Returns the layer at a source of the glyph a node shows. */
+  layerOf(node: GlyphNode, sourceId: SourceId): GlyphLayer | null {
+    return this.glyphOf(node)?.layerForSource(sourceId) ?? null;
   }
 
   nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
@@ -1311,7 +1375,7 @@ export class Editor {
   }
 
   /**
-   * Select every point in the active authored glyph layer, or every run glyph when none is edited.
+   * Select every point of the edited glyphs' authored layers, or every run glyph when none is edited.
    *
    * This intentionally uses the authored glyph layer rather than interpolated
    * design-location geometry: selection mutates an authored layer, so it must
@@ -1323,11 +1387,42 @@ export class Editor {
       return;
     }
 
-    const layer = this.#soleActiveLayer();
-    if (!layer) return;
+    const edited = this.scene.nodesOfKind("glyph").filter((node) => this.editing.has(node.id));
+    this.selectGlyphContents(edited.length > 0 ? edited : this.scene.nodesOfKind("glyph"));
+  }
 
-    this.history.capture("Select all", () => {
-      this.selection.select(layer.allPoints.map((point) => point.id));
+  /**
+   * Selects every point of the given glyph nodes' layers at the active source.
+   *
+   * @remarks
+   * One undo step. Does nothing without an active source or any points.
+   */
+  public selectGlyphContents(nodes: readonly GlyphNode[]): void {
+    const sourceId = this.activeSourceId;
+    if (!sourceId) return;
+
+    const pointIds = nodes.flatMap(
+      (node) => this.layerOf(node, sourceId)?.allPoints.map((point) => point.id) ?? [],
+    );
+    if (pointIds.length === 0) return;
+
+    this.history.capture("Select all", () => this.selection.select(pointIds));
+  }
+
+  /**
+   * Stops editing one glyph node and removes it, so its run draws the glyph again.
+   *
+   * @remarks
+   * One undo step; the other edited glyphs stay open.
+   */
+  public closeGlyphNode(nodeId: NodeId): void {
+    if (!this.scene.nodeOfKind(nodeId, "glyph")) return;
+
+    this.history.capture("Close glyph", () => {
+      this.selection.clear();
+      this.hover.clear();
+      this.editing.set(this.editing.nodeIds.filter((id) => id !== nodeId));
+      this.scene.deleteNode(nodeId);
     });
   }
 
@@ -1479,14 +1574,14 @@ export class Editor {
     const node = this.scene.only("glyph");
     if (!node) return;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
+    const glyph = this.glyphOf(node);
     if (!glyph) return;
 
     if (!glyph.layerForSource(sourceId)) {
       const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
       if (!defaultLayer) return;
 
-      this.font.materializeGlyphLayer(node.glyphId, sourceId, defaultLayer.id, valuesFor(glyph));
+      this.font.materializeGlyphLayer(glyph.id, sourceId, defaultLayer.id, valuesFor(glyph));
     }
 
     this.scene.updateNode({ id: node.id, sourceId });
@@ -1663,6 +1758,17 @@ export class Editor {
     this.editing.enter(nodeId);
   }
 
+  /**
+   * Adds a node to what is being edited, keeping the others and the selection.
+   *
+   * @remarks
+   * A session record, so inside a capture undo removes it again.
+   */
+  addEditedNode(nodeId: NodeId): void {
+    this.hover.clear();
+    this.editing.set([...this.editing.nodeIds, nodeId]);
+  }
+
   /** Leaves every edited node, so glyphs draw and hit as plain content. */
   exitNodes(): void {
     this.selection.clear();
@@ -1673,15 +1779,16 @@ export class Editor {
   /**
    * Offers a double-click to the hit node's definition, then to each ancestor's.
    *
+   * @param options.add - add what was hit to what is being edited, as Shift does.
    * @returns true when a definition handled it.
    */
-  doubleClickNode(target: PointerTarget): boolean {
+  doubleClickNode(target: PointerTarget, options: DoubleClickOptions = { add: false }): boolean {
     const hit = targetNode(this.scene, target);
     if (!hit) return false;
 
     return this.history.captureOrJoin("Double-click", () => {
       for (const node of [hit, ...this.scene.ancestors(hit.id)]) {
-        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target)) return true;
+        if (this.nodeDefinition(node.kind).onDoubleClick?.(node, target, options)) return true;
       }
       return false;
     });
@@ -1761,30 +1868,30 @@ export class Editor {
   }
 
   /**
-   * Sets the current glyph layer's horizontal advance.
+   * Sets the horizontal advance of each subject glyph's layer at the active source.
    *
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
-    this.#soleActiveLayer()?.setXAdvance(width);
+    this.#editSubjectLayers("Set advance", (layer) => layer.setXAdvance(width));
   }
 
   /**
-   * Sets the current glyph layer's left sidebearing.
+   * Sets the left sidebearing of each subject glyph's layer at the active source.
    *
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
-    this.#soleActiveLayer()?.setLeftSidebearing(value);
+    this.#editSubjectLayers("Set left sidebearing", (layer) => layer.setLeftSidebearing(value));
   }
 
   /**
-   * Sets the current glyph layer's right sidebearing.
+   * Sets the right sidebearing of each subject glyph's layer at the active source.
    *
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
-    this.#soleActiveLayer()?.setRightSidebearing(value);
+    this.#editSubjectLayers("Set right sidebearing", (layer) => layer.setRightSidebearing(value));
   }
 
   public get screenMousePositionCell(): Signal<ScreenPoint> {
@@ -2140,7 +2247,8 @@ export class Editor {
   public addAnchorAt(position: Point2D): boolean {
     const activeSourceId = this.activeSourceId;
     const node = this.scene.only("glyph");
-    const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
+    const glyphId = node ? this.glyphIdOf(node) : null;
+    const layers = glyphId ? this.#multiSourceEditing.layersFor(glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
     const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, position));
@@ -2342,6 +2450,7 @@ export class Editor {
   public destroy() {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
+    this.#glyphSubjects.dispose();
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();

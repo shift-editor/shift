@@ -1,7 +1,7 @@
 import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
-import type { ShiftNode } from "../../types/node";
+import type { DoubleClickOptions, ShiftNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
@@ -134,9 +134,11 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    *
    * @param node - the node asked; the hit node or one of its ancestors.
    * @param target - what the pointer hit.
+   * @param options.add - add what was hit to what is being edited instead of
+   *   replacing it, as Shift does.
    * @returns true when handled.
    */
-  onDoubleClick?(node: N, target: PointerTarget): boolean;
+  onDoubleClick?(node: N, target: PointerTarget, options: DoubleClickOptions): boolean;
 
   /**
    * Brings the node's children and fields back in step after its content changed.

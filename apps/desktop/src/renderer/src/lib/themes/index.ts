@@ -538,6 +538,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-selection-stroke": withAlpha(palette.base0D, 0.55),
     "--editor-glyph-fill": glyphForeground,
     "--editor-glyph-editable-fill": withAlpha(glyphForeground, 0.14),
+    // Solid, so letters that overlap where they join read as one shape.
+    "--editor-text-context-fill": mix(palette.base00, glyphForeground, 0.3),
     "--editor-glyph-stroke": glyphForeground,
     "--editor-component-fill": withAlpha(palette.base04, 0.38),
     "--editor-control-line-color": muted,

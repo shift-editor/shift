@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
+import type { NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 
 /**
  * Describes a placed object in the editor scene.
@@ -33,30 +33,32 @@ export interface Node {
 }
 
 /**
- * Places an authored glyph source in the editor scene.
+ * Edits one glyph of a text run in place: a slot in the text, not a glyph.
  *
  * @remarks
- * A glyph node is the scene occurrence for editable glyph geometry. It points
- * at canonical font data by `glyphId` and `sourceId`; it does not own glyph
- * outlines, layer geometry, or display state.
+ * A glyph node is always a child of a text run. It names an item of the run
+ * and which of the glyphs that item shapes to, and the glyph it shows is
+ * resolved from the run's layout each time ({@link Editor.glyphIdOf}), so it
+ * follows shaping: turning `frac` on makes the node over `1` show
+ * `one.numr`. It does not own glyph outlines, layer geometry, or display state.
  */
 export interface GlyphNode extends Node {
   readonly kind: "glyph";
 
-  /** Glyph identity whose authored layer is shown by this scene node. */
-  readonly glyphId: GlyphId;
-
   /** Source identity selecting the authored layer shown by this scene node. */
   readonly sourceId: SourceId;
 
+  /** The run item this node edits. */
+  readonly itemId: TextItemId;
+
   /**
-   * Run item this glyph occupies when its parent is a text run.
+   * Which of the glyphs the item shapes to, in logical order: 0 for the
+   * first, such as a letter's body, 1 for the next, such as its dot.
    *
    * @remarks
-   * The run places the node at the item's layout position and stops drawing
-   * the item itself. Absent for glyph nodes placed directly in the scene.
+   * Past the item's last glyph, the node shows its first.
    */
-  readonly itemId?: TextItemId;
+  readonly part: number;
 }
 
 /**
@@ -132,3 +134,12 @@ export type CreateNode<N extends ShiftNode = ShiftNode> = N extends ShiftNode
 export type UpdateNode<N extends ShiftNode = ShiftNode> = N extends ShiftNode
   ? Pick<N, "id"> & Partial<Omit<N, "id" | "type" | "kind">>
   : never;
+
+/** Which glyph of a run a glyph node edits: an item, and which of the glyphs it shapes to. */
+export type GlyphSlot = Pick<GlyphNode, "itemId" | "part">;
+
+/** How a double-click edits what it hits. */
+export interface DoubleClickOptions {
+  /** Add to what is being edited instead of replacing it, as Shift does. */
+  readonly add: boolean;
+}
