@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName, RunId, ShapeUnit } from "@shift/types";
 import { lineBreakTextItem, TextBuffer, type TextItem } from "@shift/editor/text";
+import { effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
@@ -292,5 +293,100 @@ describe("Option-arrows in mixed-direction text", () => {
 
     const strictlyLeftward = xs.slice(1).every((x, press) => x < xs[press]!);
     expect(strictlyLeftward).toBe(true);
+  });
+});
+
+describe("features can be turned on or off per proof text", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  const features = () =>
+    editor.text.featuresCell.peek().map((feature) => [feature.tag, feature.default]);
+
+  it("lists the features the font's feature code defines, with the shaper's defaults", async () => {
+    editor.text.createRun(editor.text.itemsFromText("fi"));
+
+    await expect.poll(features).toEqual([
+      ["ccmp", "required"],
+      ["dlig", "off"],
+      ["fina", "required"],
+      ["init", "required"],
+      ["liga", "on"],
+      ["medi", "required"],
+    ]);
+  });
+
+  it("keeps listing the features from each new shaper the text shapes with", async () => {
+    editor.text.createRun(editor.text.itemsFromText("fi"));
+    await expect.poll(() => features().length).toBe(6);
+    const seen: string[][] = [];
+    const watcher = effect(() => {
+      seen.push(editor.text.featuresCell.value.map((feature) => feature.tag));
+    });
+
+    // A new glyph registers a new shaper; the list is read from it, not fetched once.
+    await editor.addGlyph("g", 0x67);
+    await editor.text.settled();
+    watcher.dispose();
+
+    expect(seen.at(-1)).toEqual(["ccmp", "dlig", "fina", "init", "liga", "medi"]);
+  });
+
+  it("turning liga off breaks the ligature and reset brings it back", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(names).toEqual(["f_i"]);
+
+    editor.history.capture("Set liga", () => editor.text.setFeature(runId, "liga", false));
+    await expect.poll(names).toEqual(["f", "i"]);
+
+    editor.history.capture("Reset features", () => editor.text.resetFeatures(runId));
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+
+  it("turning an off-by-default feature on applies it", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("ff")).id;
+    const names = () =>
+      editor.text
+        .layoutCell(runId)
+        .peek()!
+        .placedGlyphs.map((placed) => placed.glyph.glyphName);
+    await expect.poll(() => editor.text.featuresCell.peek().length).toBe(6);
+    expect(names()).toEqual(["f", "f"]);
+
+    editor.history.capture("Set dlig", () => editor.text.setFeature(runId, "dlig", true));
+
+    await expect.poll(names).toEqual(["f_i"]);
+  });
+});
+
+describe("a substituted glyph appears only once it has loaded", () => {
+  it("never shows the ligature before its outline and advance are there", async () => {
+    const editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const layoutCell = editor.text.layoutCell(runId);
+    const seen: { names: string[]; advance: number }[] = [];
+    const watcher = effect(() => {
+      const layout = layoutCell.value;
+      if (!layout) return;
+      seen.push({
+        names: layout.placedGlyphs.map((placed) => placed.glyph.glyphName),
+        advance: layout.totalAdvance,
+      });
+    });
+
+    await expect.poll(() => seen.at(-1)?.names).toEqual(["f_i"]);
+    watcher.dispose();
+
+    expect(seen).not.toContainEqual({ names: ["f_i"], advance: 0 });
   });
 });

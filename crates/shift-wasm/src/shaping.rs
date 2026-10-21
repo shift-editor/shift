@@ -64,6 +64,8 @@ layout! {
         pub units: Vec<f64>,
         /// The user coordinate on each shaper axis, in order; NaN for the axis default.
         pub location: Vec<f64>,
+        /// An ISO 15924 script tag's four bytes, big-endian, to shape every run in; 0 for each run's own script.
+        pub script: f64,
         /// A BCP 47 language tag as UTF-16 code units; empty for the default language system.
         pub language: Vec<f64>,
         pub features: Vec<FeatureInput>,
@@ -118,20 +120,59 @@ layout! {
     }
 }
 
+/// What a feature does when text does not set it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FeatureDefaultOutput {
+    /// The shaper always applies it; text never switches it.
+    Required,
+    /// Applied unless text turns it off.
+    On,
+    /// Applied only when text turns it on.
+    #[default]
+    Off,
+}
+
+enum_layout! {
+    /// What a feature does when text does not set it.
+    FeatureDefaultOutput {
+        Required => "required",
+        On => "on",
+        Off => "off",
+    }
+}
+
+layout! {
+    /// Which registered shaper's features to list.
+    pub struct ShaperFeatures {
+        pub shaper: usize,
+    }
+}
+
+layout! {
+    /// A feature the shaping font defines.
+    pub struct FontFeatureOutput {
+        /// The feature tag's four bytes, big-endian.
+        pub tag: f64,
+        /// The name a `featureNames` block gives a stylistic set or character variant.
+        pub name: Option<String>,
+        pub default: FeatureDefaultOutput,
+    }
+}
+
 #[cfg(feature = "shaping")]
 mod exports {
     use std::cell::RefCell;
     use std::collections::HashMap;
 
     use shift_shape::{
-        AxisNormalization, FeatureSetting, GlyphSource, NOTDEF, ParagraphRequest, ShapeError,
-        Shaper, Tag, TextDirection, Unit, character_glyphs,
+        AxisNormalization, FeatureDefault, FeatureSetting, GlyphSource, NOTDEF, ParagraphRequest,
+        ShapeError, Shaper, Tag, TextDirection, Unit, character_glyphs,
     };
     use wasm_bindgen::prelude::*;
 
     use super::{
-        ParagraphInput, ShapeParagraphs, ShapedDirection, ShapedGlyphOutput, ShapedParagraphOutput,
-        ShapedRunOutput, ShaperGlyphs,
+        FeatureDefaultOutput, FontFeatureOutput, ParagraphInput, ShapeParagraphs, ShapedDirection,
+        ShapedGlyphOutput, ShapedParagraphOutput, ShapedRunOutput, ShaperFeatures, ShaperGlyphs,
     };
     use crate::layout::call;
 
@@ -140,6 +181,16 @@ mod exports {
             match direction {
                 TextDirection::LeftToRight => Self::LeftToRight,
                 TextDirection::RightToLeft => Self::RightToLeft,
+            }
+        }
+    }
+
+    impl From<FeatureDefault> for FeatureDefaultOutput {
+        fn from(default: FeatureDefault) -> Self {
+            match default {
+                FeatureDefault::Required => Self::Required,
+                FeatureDefault::On => Self::On,
+                FeatureDefault::Off => Self::Off,
             }
         }
     }
@@ -258,6 +309,28 @@ mod exports {
         })
     }
 
+    /// Input: `ShaperFeatures`. Output: the shaping font's features in tag
+    /// order, or null for an unregistered shaper or an unreadable font.
+    #[wasm_bindgen(js_name = shaperFeatures)]
+    pub fn shaper_features(input: &[f64]) -> Vec<f64> {
+        call(input, |request: ShaperFeatures| {
+            SHAPERS.with_borrow(|shapers| {
+                let registered = shapers.get(request.shaper).and_then(Option::as_ref)?;
+                let features = registered.shaper.features().ok()?;
+                Some(
+                    features
+                        .into_iter()
+                        .map(|feature| FontFeatureOutput {
+                            tag: f64::from(u32::from_be_bytes(feature.tag.to_be_bytes())),
+                            name: feature.name,
+                            default: feature.default.into(),
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+        })
+    }
+
     fn shape(
         registered: &Registered,
         paragraph: &ParagraphInput,
@@ -282,6 +355,9 @@ mod exports {
                 .collect();
             String::from_utf16_lossy(&code_units)
         });
+        let script = whole(paragraph.script)
+            .filter(|&tag| tag != 0)
+            .map(|tag| String::from_utf8_lossy(&tag.to_be_bytes()).into_owned());
         let features = paragraph
             .features
             .iter()
@@ -298,6 +374,7 @@ mod exports {
             &ParagraphRequest {
                 units: &units,
                 location: coords.as_slice(),
+                script: script.as_deref(),
                 language: language.as_deref(),
                 features: &features,
             },

@@ -20,12 +20,14 @@
 
 mod axis;
 mod breaks;
+mod features;
 mod itemize;
 mod shape;
 mod source;
 
 pub use axis::AxisNormalization;
 pub use breaks::{LineBreak, line_breaks};
+pub use features::{FeatureDefault, FontFeature};
 pub use harfrust::{NormalizedCoord, Tag};
 pub use shape::{
     FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedParagraph,

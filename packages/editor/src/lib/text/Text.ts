@@ -6,7 +6,7 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextRunRecord } from "../../types/text";
+import type { FontFeature, TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -48,7 +48,10 @@ export class Text {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
             shaperCell: this.#textShaper().shaperCell,
-            onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
+            isLoaded: (shaped) => this.#unloadedGlyphs(shaped).length === 0,
+            load: (shaped) => {
+              for (const id of this.#unloadedGlyphs(shaped)) void this.#loadGlyph(id);
+            },
           }),
       ),
   });
@@ -69,6 +72,23 @@ export class Text {
       return node ? this.run(node.runId) : null;
     },
     { name: "text.currentRun" },
+  );
+  /**
+   * The features the font's compiled feature code defines, in tag order.
+   *
+   * @remarks
+   * Read from the shaper the editor shapes with, so it follows the shaper
+   * font: editing feature code lists the new features once the shaper
+   * recompiles. Empty until the shaper is ready, and in a preview, which
+   * has no shaper.
+   */
+  readonly featuresCell: Signal<readonly FontFeature[]> = computed(
+    () => {
+      // Creating the shaper starts its refresh effect, which must not join this computed.
+      const shaper = untracked(() => this.#textShaper()).shaperCell.value;
+      return shaper?.features() ?? [];
+    },
+    { name: "text.features", equals: sameFeatures },
   );
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
@@ -126,6 +146,9 @@ export class Text {
       scope: "document",
       items: [...items],
       shaping: true,
+      features: {},
+      language: null,
+      script: null,
     };
     this.#store.put(record);
     return record;
@@ -178,6 +201,33 @@ export class Text {
   setShaping(id: RunId, shaping: boolean): void {
     const run = this.run(id);
     if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
+  }
+
+  /**
+   * Turns a feature on or off for a run, or back to the font's default.
+   *
+   * @param on - `true` or `false` to force the feature; `null` for the default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setFeature(id: RunId, tag: string, on: boolean | null): void {
+    const run = this.run(id);
+    if (!run || (run.features[tag] ?? null) === on) return;
+
+    const { [tag]: _previous, ...rest } = run.features;
+    this.#store.put({ ...run, features: on === null ? rest : { ...rest, [tag]: on } });
+  }
+
+  /**
+   * Returns every feature of a run to the font's default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  resetFeatures(id: RunId): void {
+    const run = this.run(id);
+    if (run && Object.keys(run.features).length > 0) this.#store.put({ ...run, features: {} });
   }
 
   /**
@@ -249,22 +299,20 @@ export class Text {
     }
   }
 
-  /** Loads glyphs the shaper substituted in, which no item names directly. */
+  /** Made with the first run's layout or features list, so shaping loads only once text needs it. */
   #textShaper(): TextShaper {
     this.#shaper ??= new TextShaper(this.#editor);
     return this.#shaper;
   }
 
-  #acquireShapedGlyphs(shaped: ShapedText): void {
-    for (const paragraph of shaped.paragraphs) {
-      for (const run of paragraph?.runs ?? []) {
-        for (const glyph of run.glyphs) {
-          if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
-            void this.#loadGlyph(glyph.glyphId);
-          }
-        }
-      }
-    }
+  /** Returns the glyphs a shaping result shows that are not loaded yet. */
+  #unloadedGlyphs(shaped: ShapedText): GlyphId[] {
+    return shaped.paragraphs
+      .flatMap((paragraph) => paragraph.shaped?.runs ?? [])
+      .flatMap((run) => run.glyphs)
+      .flatMap((glyph) =>
+        glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId) ? [glyph.glyphId] : [],
+      );
   }
 
   #loadGlyph(id: GlyphId): Promise<void> {
@@ -285,4 +333,18 @@ export class Text {
       this.#loading.delete(id);
     }
   }
+}
+
+function sameFeatures(a: readonly FontFeature[], b: readonly FontFeature[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((feature, index) => {
+      const other = b[index]!;
+      return (
+        feature.tag === other.tag &&
+        feature.name === other.name &&
+        feature.default === other.default
+      );
+    })
+  );
 }

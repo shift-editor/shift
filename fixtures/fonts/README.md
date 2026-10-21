@@ -76,7 +76,7 @@ repeated-instance handling, and skipped export.
 ## ShapingTest
 
 `ShapingTest.ufo` is a hand-written UFO for live shaping tests: an `f_i`
-ligature (`liga`), Arabic beh with `init`/`medi`/`fina` forms, and fatha and
+ligature (`liga`, and an off-by-default `dlig`), Arabic beh with `init`/`medi`/`fina` forms, and fatha and
 shadda marks with `_top`/`top` anchors for mark-to-base and mark-to-mark
 attachment, and noon, which `ccmp` decomposes into a dotless body and a dot
 mark. Written for Shift's tests and released under the same terms as

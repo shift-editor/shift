@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 harfrust = "0.13.3"
+# The version harfrust reads fonts with, so the WebAssembly module carries one copy.
+read-fonts = "0.43.3"
 thiserror = "2.0.18"
 unicode-bidi = "0.3"
 unicode-linebreak = "0.1.5"
