@@ -9,7 +9,6 @@ import type {
   SourceId,
 } from "@shift/types";
 import type { ListSelectionMode, RenderGlyph } from "@shift/editor/types";
-import type { Dispatch, SetStateAction } from "react";
 import type { ColorTheme } from "@/lib/themes";
 import type { GlyphAtlasSource } from "./glyphAtlas";
 
@@ -57,7 +56,8 @@ export interface GlyphCatalogSource {
   selectedLanguageId: string | null;
   visibleCategoryFilters: readonly GlyphCategoryFilter[];
   expandedCategories: ReadonlySet<GlyphCategory>;
-  setExpandedCategories: Dispatch<SetStateAction<ReadonlySet<GlyphCategory>>>;
+  /** Expands or collapses one category in the sidebar. */
+  setCategoryExpanded: (category: GlyphCategory, expanded: boolean) => void;
   query: string;
   setQuery: (nextQuery: string) => void;
   createQuickGlyph: () => GlyphName;
