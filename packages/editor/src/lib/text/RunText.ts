@@ -1,4 +1,4 @@
-import type { RunId, ShapedParagraph, ShapeUnit } from "@shift/types";
+import type { RunId, ShapedParagraph, ShapedRun, ShapeUnit } from "@shift/types";
 import { computed, effect, signal, track } from "../signals";
 import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -10,7 +10,13 @@ import type {
 } from "../../types/text";
 import type { RegisteredShaper } from "../wasm/shaping";
 import { locationFromExternalAxisLocation } from "../variation/location";
-import { splitParagraphs, TextLayout, type Paragraph, type ParagraphItem } from "./layout";
+import {
+  splitParagraphs,
+  TextLayout,
+  type Direction,
+  type Paragraph,
+  type ParagraphItem,
+} from "./layout";
 
 /** A run's paragraphs as shaped, indexed like `splitParagraphs`. */
 export interface ShapedText {
@@ -54,6 +60,8 @@ export class RunText {
   readonly #readyCell: WritableSignal<ShapedText | null> = signal(null, { name: "text.ready" });
   readonly #loads: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
+  readonly #scriptsCell: ComputedSignal<readonly string[]>;
+  readonly #directionCell: ComputedSignal<Direction>;
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
     this.#requestCell = computed(
@@ -112,6 +120,7 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         track(owner.glyphsLoadedCell);
         if (!record) return null;
+        const { unitsPerEm } = editor.font.metricsCell.value;
         const shaped = record.shaping ? this.#shapedCell.value : null;
         const loaded = shaped !== null && owner.isLoaded(shaped);
         // Read, and so subscribed to, only while the current result waits on loads,
@@ -124,10 +133,38 @@ export class RunText {
           externalLocation: editor.externalLocationCell,
           shaped:
             loaded && shaped ? shaped.paragraphs.map(shapingOf) : readyParagraphs(record, ready),
+          align: record.align,
+          lineHeight: record.lineHeight === null ? null : record.lineHeight * unitsPerEm,
         });
       },
       { name: "text.layoutForRun" },
     );
+
+    this.#scriptsCell = computed(
+      () => {
+        // Runs come in screen order; read each paragraph's in the order its text is written.
+        const runs = this.#shapedCell.value?.paragraphs.flatMap(
+          ({ shaped }) => shaped?.runs.toSorted(byStart) ?? [],
+        );
+        const scripts = new Set(runs?.flatMap((run) => (run.script ? [run.script] : [])));
+        return [...scripts];
+      },
+      { name: "text.scripts", equals: sameStrings },
+    );
+
+    this.#directionCell = computed(() => this.#layoutCell.value?.lines[0]?.direction ?? "ltr", {
+      name: "text.direction",
+    });
+  }
+
+  /** The scripts the run's text was shaped in, in order of first use; empty until it is shaped. */
+  get scriptsCell(): ComputedSignal<readonly string[]> {
+    return this.#scriptsCell;
+  }
+
+  /** The direction of the run's first line; left to right until the text is shaped. */
+  get directionCell(): ComputedSignal<Direction> {
+    return this.#directionCell;
   }
 
   /** The run's layout; invalidates on content, location, source, glyph loads, shaping results, and the run's shaping settings. */
@@ -136,6 +173,8 @@ export class RunText {
   }
 
   dispose(): void {
+    this.#directionCell.dispose();
+    this.#scriptsCell.dispose();
     this.#loads.dispose();
     this.#layoutCell.dispose();
     this.#shapedCell.dispose();
@@ -167,6 +206,14 @@ function shapingSettings(record: TextRunRecord): ShapingSettings {
     ...(record.language === null ? {} : { language: record.language }),
     ...(record.script === null ? {} : { script: record.script }),
   };
+}
+
+function byStart(a: ShapedRun, b: ShapedRun): number {
+  return a.start - b.start;
+}
+
+function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function shapingOf(paragraph: ShapedTextParagraph): ShapedParagraph | null {

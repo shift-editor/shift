@@ -1,6 +1,15 @@
 languagesystem DFLT dflt;
 languagesystem latn dflt;
+languagesystem latn TRK;
 languagesystem arab dflt;
+
+feature locl {
+    script latn;
+    language TRK;
+    sub i by i.loclTRK;
+    script arab;
+    sub one by one.arab;
+} locl;
 
 feature ccmp {
     sub noon-ar by noonDotless-ar dotabove-ar;

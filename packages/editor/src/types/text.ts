@@ -1,5 +1,7 @@
 import type { NodeId, ParagraphRequest, RunId, ShapedParagraph, TextItemId } from "@shift/types";
-import type { TextItem } from "../lib/text/layout/types";
+import type { TextAlign, TextItem } from "../lib/text/layout/types";
+
+export type { TextAlign };
 
 /** Caret immediately after an item; null denotes the start of a run. */
 export type TextCaret = TextItemId | null;
@@ -56,7 +58,23 @@ export interface TextRunRecord {
    * null shapes each stretch in the script of its own characters.
    */
   readonly script: string | null;
+  /**
+   * The distance between baselines, in ems (1.5 is one and a half ems); null
+   * uses the font's own line spacing: ascender, descender, and line gap.
+   */
+  readonly lineHeight: number | null;
+  /** How lines line up; null follows each line's direction, so Arabic lines sit right. */
+  readonly align: TextAlign | null;
 }
+
+/**
+ * How a run's text is shaped and set: the fields of its record that the
+ * Text section edits.
+ */
+export type TextRunSettings = Pick<
+  TextRunRecord,
+  "shaping" | "language" | "script" | "lineHeight" | "align"
+>;
 
 /** One paragraph's shaping, with the text it was shaped from. */
 export interface ShapedTextParagraph {

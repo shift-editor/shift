@@ -1,4 +1,4 @@
-import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
+import { mintRunId, type GlyphId, type NodeId, type RunId, type TextItemId } from "@shift/types";
 import { computed, keyedCache, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -6,17 +6,23 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { FontFeature, TextRunRecord } from "../../types/text";
+import type { FontFeature, TextAlign, TextRunRecord, TextRunSettings } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
   glyphIdForItem,
+  type Direction,
   type TextItem,
   type TextLayout,
 } from "./layout";
 import { RunText, type ShapedText } from "./RunText";
 import { TextShaper } from "./TextShaper";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
+
+/** The smallest size text is set at, in scene units. */
+const MIN_TEXT_SIZE = 1;
+/** The smallest distance between baselines, in ems. */
+const MIN_LINE_HEIGHT = 0.1;
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -56,19 +62,26 @@ export class Text {
       ),
   });
   /**
-   * The run the user is working in: the one being typed in, otherwise the
-   * scene's only run, such as the page run around an edited glyph.
+   * The run node the user is working in: the one being typed in, otherwise
+   * the scene's only run, such as the page run around an edited glyph.
    *
    * @remarks
    * Null when no text is being typed and the scene holds no run or several.
    */
-  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+  readonly currentRunNodeCell: Signal<TextRunNode | null> = computed(
     () => {
       const editing = this.#editor.textEditing.stateCell.value;
       const scene = this.#editor.scene;
       // Scene lookups read without subscribing; rerun when its nodes change.
       track(scene.cell);
-      const node = scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
+      return scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
+    },
+    { name: "text.currentRunNode" },
+  );
+  /** The record of {@link currentRunNodeCell}'s run. */
+  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+    () => {
+      const node = this.currentRunNodeCell.value;
       return node ? this.run(node.runId) : null;
     },
     { name: "text.currentRun" },
@@ -90,7 +103,6 @@ export class Text {
     },
     { name: "text.features", equals: sameFeatures },
   );
-
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
     this.#editor = editor;
@@ -149,6 +161,8 @@ export class Text {
       features: {},
       language: null,
       script: null,
+      lineHeight: null,
+      align: null,
     };
     this.#store.put(record);
     return record;
@@ -199,8 +213,72 @@ export class Text {
    * Writes the run record, so call it inside a history capture.
    */
   setShaping(id: RunId, shaping: boolean): void {
-    const run = this.run(id);
-    if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
+    this.#updateRun(id, { shaping });
+  }
+
+  /**
+   * Sets the language a run is shaped as.
+   *
+   * @param language - A BCP 47 tag such as `ur`; null for the font's default language.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLanguage(id: RunId, language: string | null): void {
+    this.#updateRun(id, { language });
+  }
+
+  /**
+   * Sets the script a run is shaped in.
+   *
+   * @param script - An ISO 15924 tag such as `Arab`; null to use each stretch's own script.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setScript(id: RunId, script: string | null): void {
+    this.#updateRun(id, { script });
+  }
+
+  /**
+   * Sets how a run's lines line up; null follows each line's direction.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setAlign(id: RunId, align: TextAlign | null): void {
+    this.#updateRun(id, { align });
+  }
+
+  /**
+   * Sets the distance between a run's baselines.
+   *
+   * @param lineHeight - In ems, such as 1.5, and at least a tenth of an em;
+   * null for the font's own line spacing.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLineHeight(id: RunId, lineHeight: number | null): void {
+    this.#updateRun(id, {
+      lineHeight: lineHeight === null ? null : Math.max(MIN_LINE_HEIGHT, lineHeight),
+    });
+  }
+
+  /**
+   * Sets the size a run node sets its text at: the scene units one em spans.
+   *
+   * @param size - At least one scene unit.
+   *
+   * @remarks
+   * Writes the node record, so call it inside a history capture.
+   */
+  setSize(nodeId: NodeId, size: number): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    const clamped = Math.max(MIN_TEXT_SIZE, size);
+    if (node && node.size !== clamped) {
+      this.#editor.scene.updateNode({ id: nodeId, size: clamped });
+    }
   }
 
   /**
@@ -253,6 +331,28 @@ export class Text {
     return this.#runs.get(id).layoutCell;
   }
 
+  /**
+   * Returns the scripts a run's text was shaped in, in order of first use.
+   *
+   * @remarks
+   * Reactive, and unchanged while the scripts stay the same, so a reader
+   * doesn't rerun on every keystroke. Empty until the text is shaped.
+   */
+  scriptsCell(id: RunId): ComputedSignal<readonly string[]> {
+    return this.#runs.get(id).scriptsCell;
+  }
+
+  /**
+   * Returns the direction of a run's first line: right to left when it
+   * starts with Arabic or Hebrew, say.
+   *
+   * @remarks
+   * Reactive. Left to right until the text is shaped.
+   */
+  directionCell(id: RunId): ComputedSignal<Direction> {
+    return this.#runs.get(id).directionCell;
+  }
+
   /** The parser for typed and pasted text; replace it to change the input syntax for every run. */
   get parser(): TextParser {
     return this.#parser;
@@ -289,6 +389,16 @@ export class Text {
     this.#shaper?.dispose();
     this.#runsByItem.dispose();
     this.#runs.clear();
+  }
+
+  /** Writes the settings that differ from a run's own; writes nothing when none do. */
+  #updateRun(id: RunId, patch: Partial<TextRunSettings>): void {
+    const run = this.run(id);
+    if (!run) return;
+    const next = { ...run, ...patch };
+    if (SETTING_KEYS.every((key) => next[key] === run[key])) return;
+
+    this.#store.put(next);
   }
 
   #acquireGlyphs(items: readonly TextItem[]): void {
@@ -334,6 +444,14 @@ export class Text {
     }
   }
 }
+
+const SETTING_KEYS: readonly (keyof TextRunSettings)[] = [
+  "shaping",
+  "language",
+  "script",
+  "lineHeight",
+  "align",
+];
 
 function sameFeatures(a: readonly FontFeature[], b: readonly FontFeature[]): boolean {
   return (

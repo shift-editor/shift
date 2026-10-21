@@ -84,7 +84,8 @@ units per letter by cursive attachment; fatha and shadda marks with `_top`/`top`
 anchors for mark-to-base and mark-to-mark attachment; an anchorless
 superscript alef classed as a mark; `tick`, an unencoded spacing glyph
 classed as a mark; noon, which `ccmp` decomposes into a dotless body and a
-dot mark; and a `.notdef` the shaper maps to no glyph, so a pick of it
+dot mark; `locl` forms for Turkish (`i.loclTRK`) and for Arabic script (`one`
+becomes `one.arab`), so a chosen language or script changes the glyphs; and a `.notdef` the shaper maps to no glyph, so a pick of it
 tests the editor's fallback. Written for Shift's tests and released under
 the same terms as the repository.
 
