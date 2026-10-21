@@ -24,6 +24,7 @@ import DistributeHorizontalIcon from "@/assets/sidebar-right/distribute-h.svg";
 import DistributeVerticalIcon from "@/assets/sidebar-right/distribute-v.svg";
 
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
+import { PositionTargets } from "@shift/editor/model";
 
 const AlignButtonsRow = React.memo(function AlignButtonsRow({
   onAlign,
@@ -123,7 +124,7 @@ export const TransformSection = () => {
     () => editor.componentTransformSelection(selection.ids),
     [editor, selection],
   );
-  const selectedPointIds = positionSelection?.targets.points ?? [];
+  const selectedPointIds = (positionSelection?.targets ?? PositionTargets.NONE).points;
   const isEditing = useSignalState(editor.isEditingCell);
   const selectionBounds = useSelectionBounds();
   const [rotation, setRotation] = useState(0);

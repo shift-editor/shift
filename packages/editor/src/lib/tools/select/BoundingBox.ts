@@ -35,7 +35,8 @@ type RawRotateHitResult = { type: "rotate"; corner: CornerHandle } | null;
 
 interface SelectBoundingBoxStyle {
   readonly widthPx: number;
-  readonly dashPx?: number[];
+  /** Dash pattern in screen pixels; empty draws a solid outline. */
+  readonly dashPx: readonly number[];
   readonly hitRadiusPx: number;
   readonly handle: {
     readonly radiusPx: number;
@@ -47,6 +48,7 @@ interface SelectBoundingBoxStyle {
 
 export const SELECT_BOUNDING_BOX_STYLE: SelectBoundingBoxStyle = {
   widthPx: 1,
+  dashPx: [],
   hitRadiusPx: 8,
   handle: {
     radiusPx: 4,
@@ -113,8 +115,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     const selection = this.#editor.positionSelection(ids);
     let transformsWhole = false;
     if (selection) {
-      const pointCount = selection.targets.points?.length ?? 0;
-      const anchorCount = selection.targets.anchors?.length ?? 0;
+      const pointCount = selection.targets.points.length;
+      const anchorCount = selection.targets.anchors.length;
       if (pointCount + anchorCount <= 1) return null;
     } else {
       if (!this.#editor.transformTarget(ids)) return null;

@@ -1484,5 +1484,58 @@ export default {
         };
       },
     },
+
+    /**
+     * Ban optional collection fields.
+     *
+     * `readonly points?: readonly PointId[]` makes every reader write
+     * `points ?? []`. Make the field required and let an empty collection mean
+     * "none". When absence really differs from empty (an option that falls back
+     * to a default, a wire format), keep it and say why in a disable comment.
+     */
+    "no-optional-collection-field": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          requiredCollection:
+            "`{{name}}` is an optional collection, so readers must write `?? []`. Make it required and use an empty collection for none, or justify the absence in a disable comment.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (filename.includes(".test.") || filename.includes("/testing/")) return {};
+        // Generated bindings mirror Rust's Option<Vec<_>> wire fields.
+        if (filename.includes("/generated")) return {};
+
+        const isCollection = (type) => {
+          if (!type) return false;
+          if (type.type === "TSArrayType") return true;
+          if (type.type === "TSTypeOperator" && type.operator === "readonly") {
+            return isCollection(type.typeAnnotation);
+          }
+          return (
+            type.type === "TSTypeReference" &&
+            type.typeName?.type === "Identifier" &&
+            ["Array", "ReadonlyArray", "Set", "ReadonlySet", "Map", "ReadonlyMap"].includes(
+              type.typeName.name,
+            )
+          );
+        };
+
+        return {
+          TSPropertySignature(node) {
+            if (!node.optional || !isCollection(node.typeAnnotation?.typeAnnotation)) return;
+
+            const name = node.key?.name ?? source(node.key);
+            context.report({ node, messageId: "requiredCollection", data: { name } });
+          },
+        };
+
+        function source(key) {
+          return (context.sourceCode ?? context.getSourceCode()).getText(key);
+        }
+      },
+    },
   },
 };
