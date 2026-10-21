@@ -1,0 +1,53 @@
+# cargo-deny: run `cargo deny check` in the dev shell. CI runs it too.
+
+[graph]
+all-features = true
+
+[advisories]
+# Security advisories, unmaintained and yanked crates fail the check.
+# Add an ignored advisory only with its id and the reason it is accepted,
+# and remove it when the dependency that pulls it in is upgraded.
+ignore = [
+  # quick-xml 0.38 through norad 0.18.4: quadratic duplicate-attribute
+  # checks and unbounded namespace declarations. Shift parses only files
+  # the user opens. Fixed in quick-xml 0.41; needs a norad release.
+  { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 via norad; awaiting a norad release" },
+  { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38 via norad; awaiting a norad release" },
+  # Unmaintained, not vulnerable: pulled in by fontc (fea-rs, ufo2fontir).
+  { id = "RUSTSEC-2021-0139", reason = "ansi_term via fea-rs; unmaintained, no known vulnerability" },
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via serde_yaml in ufo2fontir; unmaintained" },
+]
+
+[licenses]
+# Shift is MIT OR Apache-2.0, so every dependency must be usable under a
+# permissive license. A crate with a choice of licenses passes when one of
+# them is listed here.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Two versions of one crate add build time and WebAssembly size; report them
+# so upgrades can converge, but do not fail on them.
+multiple-versions = "warn"
+# Workspace crates depend on each other by path, which cargo-deny counts as
+# wildcard versions; none of them is published.
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# fontsrc follows norad's main branch until its changes are released.
+allow-git = ["https://github.com/linebender/norad"]

@@ -1,4 +1,5 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
+use crate::numeric::sql_int;
 use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
@@ -6,17 +7,15 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shift_font as font;
 
 use super::{
-    MAX_LAYER_PAYLOAD_BYTES,
+    MAX_LAYER_PAYLOAD_BYTES_SQL,
     directory::{map_directory_facts_row, validate_directory_facts},
     format::decode_layer,
-    payload::decompress_layer,
     references::{validate_component_index, validate_component_rows},
 };
 use crate::{ShiftStore, StoreError};
 
 pub const MAX_LAYER_READ_BATCH_COUNT: usize = 512;
 pub const MAX_LAYER_READ_BATCH_DECODED_BYTES: u64 = 256 * 1024 * 1024;
-const MAX_LAYER_PAYLOAD_BYTES_SQL: i64 = MAX_LAYER_PAYLOAD_BYTES as i64;
 
 struct LayerDirectoryRead {
     facts: HashMap<String, super::directory::DirectoryFacts>,
@@ -25,6 +24,13 @@ struct LayerDirectoryRead {
 
 impl ShiftStore {
     /// Fetches, bounds-checks, decodes, and cross-checks one canonical layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the payload cannot be read, a size or decompression
+    /// error such as [`StoreError::LayerPayloadTooLarge`] when it is out of bounds or corrupt, and
+    /// [`StoreError::LayerDecoding`] or [`StoreError::LayerDirectoryMismatch`] when it does not
+    /// decode to the layer its directory row describes.
     pub fn load_glyph_layer(
         &self,
         layer_id: &font::LayerId,
@@ -34,6 +40,11 @@ impl ShiftStore {
 
     /// Fetches and cross-validates requested layers through count- and
     /// decoded-byte-bounded batches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::MissingEntity`] when a requested layer is not stored, and the errors
+    /// of [`Self::load_glyph_layer`] for each payload.
     pub fn load_glyph_layers(
         &self,
         layer_ids: &[font::LayerId],
@@ -91,7 +102,9 @@ pub(crate) fn load_glyph_layer_from_conn(
             layer_id: layer_id.to_string(),
             detail: "payload changed during bounded read".to_string(),
         })?;
-    let decoded = decompress_layer(facts.layer_id.as_str(), facts.stored_layer(payload)?)?;
+    let decoded = facts
+        .stored_layer(payload)?
+        .decode(facts.layer_id.as_str())?;
     let layer = decode_layer(&decoded)?;
     validate_directory_facts(
         layer_id,
@@ -225,7 +238,12 @@ fn read_layer_directory(
 
     let decoded_byte_lengths = keys
         .iter()
-        .map(|key| facts.get(key).or_missing("glyph layer", key)?.validate())
+        .map(|key| {
+            facts
+                .get(key)
+                .or_missing(StoreEntity::GlyphLayer, key)?
+                .validate()
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(LayerDirectoryRead {
@@ -278,7 +296,7 @@ fn load_glyph_layer_batch_with_directory(
                 detail: "payload has no directory row".to_string(),
             })?;
         if actual_len != facts.actual_stored_byte_length
-            || payload.len() as i64 != facts.actual_stored_byte_length
+            || sql_int(payload.len()) != facts.actual_stored_byte_length
         {
             return Err(StoreError::LayerDirectoryMismatch {
                 layer_id,
@@ -298,7 +316,7 @@ fn load_glyph_layer_batch_with_directory(
                     layer_id: layer_id.clone(),
                     detail: "payload has no directory row".to_string(),
                 })?;
-            let decoded = decompress_layer(layer_id.as_str(), facts.stored_layer(payload)?)?;
+            let decoded = facts.stored_layer(payload)?.decode(layer_id.as_str())?;
             let layer = decode_layer(&decoded)?;
             let expected_id = font::LayerId::from_raw(layer_id.clone());
             validate_directory_facts(

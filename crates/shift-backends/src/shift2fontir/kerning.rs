@@ -23,7 +23,7 @@ pub(super) struct KerningLocationsWork {
 }
 
 impl KerningLocationsWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }
@@ -58,7 +58,7 @@ pub(super) struct KerningInstanceWork {
 }
 
 impl KerningInstanceWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>, location: NormalizedLocation) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>, location: NormalizedLocation) -> Self {
         Self { snapshot, location }
     }
 }

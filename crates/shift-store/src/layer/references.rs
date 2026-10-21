@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite::Connection;
 use shift_font as font;
 
+use crate::numeric::sql_int;
 use crate::{ShiftStore, StoreError};
 
 pub(super) const MAX_COMPONENT_QUERY_BATCH_COUNT: usize = 512;
@@ -17,6 +18,10 @@ thread_local! {
 impl ShiftStore {
     /// Returns every direct glyph-component edge from one ordered relational
     /// scan. Glyphs without components are absent from the map.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn glyph_component_references(
         &self,
     ) -> Result<HashMap<font::GlyphId, Vec<font::GlyphId>>, StoreError> {
@@ -46,6 +51,10 @@ impl ShiftStore {
     }
 
     /// Returns direct component bases for one glyph from the relational index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn referenced_glyph_ids_for_glyph(
         &self,
         glyph_id: &font::GlyphId,
@@ -57,6 +66,10 @@ impl ShiftStore {
     ///
     /// Queries canonical/recovery merged truth in batches of at most
     /// `MAX_COMPONENT_QUERY_BATCH_COUNT` roots and returns stable identity order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn referenced_glyph_ids_for_glyphs(
         &self,
         glyph_ids: &[font::GlyphId],
@@ -100,6 +113,10 @@ impl ShiftStore {
     /// Traversal is cycle-safe and expands one deduplicated frontier through
     /// [`Self::referenced_glyph_ids_for_glyphs`], so query work scales with
     /// graph depth and bounded frontier batches rather than reachable nodes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a read fails.
     pub fn referenced_glyph_closure(
         &self,
         roots: impl IntoIterator<Item = font::GlyphId>,
@@ -123,6 +140,10 @@ impl ShiftStore {
     }
 
     /// Reverse-reference lookup used for dependent invalidation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn dependent_glyph_ids_for_layers(
         &self,
         layer_ids: &[font::LayerId],
@@ -199,7 +220,7 @@ pub(super) fn validate_component_rows(
             (
                 component.id().to_string(),
                 component.base_glyph_id().to_string(),
-                order_index as i64,
+                sql_int(order_index),
             )
         })
         .collect();

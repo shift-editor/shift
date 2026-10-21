@@ -47,24 +47,16 @@ pub(crate) fn project_glif_glyph(
             )
         })?;
         let layer = convert_norad_layer(path, glyphs_by_name, glyph, &parsed)?;
-        layers.push((
-            SourceIndex::new(source_index as u32),
-            location.clone(),
-            layer,
-        ));
+        layers.push((SourceIndex::at(source_index), location.clone(), layer));
     }
     if layers.is_empty() {
         layers.push((
-            SourceIndex::new(default_source as u32),
+            SourceIndex::at(default_source),
             sources[default_source].0.clone(),
             empty_projection_layer(glyph),
         ));
     }
-    project_layers(
-        layers,
-        interpolation_axes,
-        SourceIndex::new(default_source as u32),
-    )
+    project_layers(layers, interpolation_axes, SourceIndex::at(default_source))
 }
 
 pub(crate) fn retained_layer(
@@ -139,14 +131,7 @@ fn convert_norad_layer(
         })?;
         components.push(SourceComponent {
             glyph: base,
-            transform: AffineTransform {
-                xx: component.transform.x_scale,
-                xy: component.transform.xy_scale,
-                yx: component.transform.yx_scale,
-                yy: component.transform.y_scale,
-                dx: component.transform.x_offset,
-                dy: component.transform.y_offset,
-            },
+            transform: AffineTransform::from(&component.transform),
         });
     }
     Ok(ProjectionLayer {

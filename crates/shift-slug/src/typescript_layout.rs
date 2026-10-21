@@ -4,6 +4,7 @@ use std::mem::{offset_of, size_of};
 
 use shift_font::test_support::generated::{TypeScriptModule, assert_generated_file};
 
+use crate::GlyphIndex;
 use crate::variable::{
     COMPONENT_GLYPH_FLAG, CURVE_BYTES, GLYPH_OFFSET_MASK, VARIABLE_COMPONENT_GLYPH_BYTES,
     VARIABLE_GLYPH_BYTES, pack_component_glyphs, params_word,
@@ -162,7 +163,7 @@ fn component_glyphs_pack_fields_at_their_struct_offsets() {
             part_count: 3,
             component_start: 5,
             component_count: 7,
-            root_glyph_index: 11,
+            root_glyph_index: GlyphIndex::new(11),
             _padding: 13,
         },
     ];

@@ -1,13 +1,13 @@
-use crate::test_support::sample_variable_font;
+use crate::test_support::{closed_contour, sample_variable_font};
 use crate::{
     Contour, DesignLocation, Font, GlyphLayer, KerningGroup, KerningGroupId, KerningPair,
     KerningPosition, KerningSide, PointType, SourceId,
 };
 
-use super::{Charset, Check, CheckOptions, check_font, check_font_with, check_glyph};
+use super::{Charset, Check, CheckOptions, MonospaceCell};
 
 fn checks(font: &Font) -> Vec<Check> {
-    check_font(font)
+    font.check()
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -41,7 +41,7 @@ fn glyph_a_checks(font: &Font) -> Vec<Check> {
 
 fn glyph_a_findings(font: &Font) -> Vec<Check> {
     let glyph_id = font.glyph_id_by_name("A").unwrap();
-    check_glyph(font, &glyph_id)
+    font.check_glyph(&glyph_id)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -53,12 +53,7 @@ fn first_contour(layer: &mut GlyphLayer) -> &mut Contour {
 }
 
 fn square(x: f64, y: f64, size: f64) -> Contour {
-    let mut contour = Contour::new();
-    for (dx, dy) in [(0.0, 0.0), (0.0, size), (size, size), (size, 0.0)] {
-        contour.add_point(x + dx, y + dy, PointType::OnCurve, false);
-    }
-    contour.close();
-    contour
+    closed_contour(&[(x, y), (x, y + size), (x + size, y + size), (x + size, y)])
 }
 
 #[test]
@@ -237,7 +232,7 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
         ..CheckOptions::default()
     };
 
-    let with = check_font_with(&font, &options).unwrap();
+    let with = font.check_with(&options).unwrap();
     assert!(
         with.iter()
             .any(|finding| finding.check == Check::CharsetMissingGlyph
@@ -250,11 +245,11 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
 fn a_glyph_off_the_monospace_cell_is_reported() {
     let font = sample_variable_font();
     let options = CheckOptions {
-        monospace: Some(Some(500.0)),
+        monospace: Some(MonospaceCell::Width(500.0)),
         ..CheckOptions::default()
     };
 
-    let found = check_font_with(&font, &options).unwrap();
+    let found = font.check_with(&options).unwrap();
     assert!(
         found
             .iter()
@@ -288,7 +283,8 @@ fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     }
     let b = font.insert_glyph(b).unwrap();
 
-    let found = check_glyph(&font, &b)
+    let found = font
+        .check_glyph(&b)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -306,8 +302,8 @@ fn a_round_contour_starting_elsewhere_is_not_reported_when_it_keeps_its_shape() 
         for step in 0..8 {
             let angle = std::f64::consts::TAU * ((step + offset) % 8) as f64 / 8.0;
             contour.add_point(
-                300.0 + 200.0 * angle.cos(),
-                300.0 + 200.0 * angle.sin(),
+                300.0 + 200.0 * libm::cos(angle),
+                300.0 + 200.0 * libm::sin(angle),
                 PointType::OnCurve,
                 false,
             );

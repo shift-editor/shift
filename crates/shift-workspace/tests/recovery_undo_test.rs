@@ -1,35 +1,27 @@
 //! Undoing font-level edits in a document must keep earlier unsaved edits,
 //! on disk as well as in memory.
 
-use std::path::{Path, PathBuf};
+use shift_font::test_support::fixtures;
+use shift_font::{AddAnchors, CreateSource, UpdateSource};
+use std::path::PathBuf;
 
 use shift_font::{AnchorId, AnchorSeed, DesignLocation, FontIntent, FontIntentSet, SourceId};
 use shift_workspace::{AcquireScope, FontWorkspace};
 use tempfile::TempDir;
 
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/fonts")
-        .join(name)
-}
-
 fn apply(workspace: &mut FontWorkspace, intent: FontIntent) {
-    workspace
-        .apply(
-            &FontIntentSet {
-                intents: vec![intent],
-            },
-            None,
-        )
-        .unwrap();
+    workspace.apply(&FontIntentSet::from(intent), None).unwrap();
 }
 
 /// A saved document opened with a recovery overlay.
 fn open_document(dir: &TempDir) -> (FontWorkspace, PathBuf, PathBuf) {
     let path = dir.path().join("Homenaje.shift");
     let recovery = dir.path().join("recovery.sqlite");
-    let mut imported =
-        FontWorkspace::open(fixture("Homenaje.glyphs"), dir.path().join("import.sqlite")).unwrap();
+    let mut imported = FontWorkspace::open(
+        fixtures::font("Homenaje.glyphs"),
+        dir.path().join("import.sqlite"),
+    )
+    .unwrap();
     imported
         .save_as_document(&path, dir.path().join("save-recovery.sqlite"))
         .unwrap();
@@ -52,7 +44,7 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
 
     apply(
         &mut workspace,
-        FontIntent::AddAnchors {
+        AddAnchors {
             layer_id: layer_id.clone(),
             anchors: vec![AnchorSeed {
                 id: AnchorId::new(),
@@ -60,12 +52,13 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
                 x: 10.0,
                 y: 700.0,
             }],
-        },
+        }
+        .into(),
     );
     let source = workspace.font().sources()[0].clone();
     apply(
         &mut workspace,
-        FontIntent::UpdateSource {
+        UpdateSource {
             source_id: source.id(),
             name: "Renamed".into(),
             location: source.location().clone(),
@@ -74,7 +67,8 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
             line_gap: source.line_gap(),
             underline_position: Some(-111.0),
             underline_thickness: source.underline_thickness(),
-        },
+        }
+        .into(),
     );
     let mut location = DesignLocation::new();
     if let Some(axis) = workspace.font().axes().first() {
@@ -82,11 +76,12 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
     }
     apply(
         &mut workspace,
-        FontIntent::CreateSource {
+        CreateSource {
             source_id: SourceId::new(),
             name: "Added".into(),
             location,
-        },
+        }
+        .into(),
     );
 
     if evict_before_undo {

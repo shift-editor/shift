@@ -10,11 +10,10 @@ use super::{Check, Finding};
 const EXAMPLES: usize = 5;
 
 pub(super) fn check(font: &Font) -> Vec<Finding> {
-    let mut findings = Vec::new();
     let used = used_pairs(font);
-    empty_groups(font, &used, &mut findings);
-    unresolved(font, &used, &mut findings);
-    findings
+    empty_groups(font, &used)
+        .chain(unresolved(font, &used))
+        .collect()
 }
 
 /// Every pair with a value in some master, and how many masters kern it.
@@ -31,32 +30,36 @@ fn used_pairs(font: &Font) -> BTreeMap<&KerningPair, usize> {
     used
 }
 
-fn empty_groups(font: &Font, used: &BTreeMap<&KerningPair, usize>, out: &mut Vec<Finding>) {
-    for (group_id, group) in font.kerning().all_groups() {
-        if !group.members.is_empty() {
-            continue;
-        }
+fn empty_groups<'a>(
+    font: &'a Font,
+    used: &'a BTreeMap<&KerningPair, usize>,
+) -> impl Iterator<Item = Finding> + 'a {
+    let empty = font
+        .kerning()
+        .all_groups()
+        .filter(|(_, group)| group.members.is_empty());
+    empty.filter_map(|(group_id, group)| {
         let side = KerningSide::Group(group_id.clone());
         let pairs = used
             .keys()
             .filter(|pair| pair.first == side || pair.second == side)
             .count();
         if pairs == 0 {
-            continue;
+            return None;
         }
 
-        out.push(Finding::font(
+        Some(Finding::font(
             Check::EmptyKerningGroup,
             format!(
                 "kerning group '{}' has no glyphs, so its {pairs} pair{} do nothing",
                 group.name,
                 plural(pairs)
             ),
-        ));
-    }
+        ))
+    })
 }
 
-fn unresolved(font: &Font, used: &BTreeMap<&KerningPair, usize>, out: &mut Vec<Finding>) {
+fn unresolved(font: &Font, used: &BTreeMap<&KerningPair, usize>) -> Option<Finding> {
     let kerning = font.kerning();
     let resolves = |side: &KerningSide, position: KerningPosition| match side {
         KerningSide::Glyph(glyph_id) => font.glyph(glyph_id).is_some(),
@@ -73,7 +76,7 @@ fn unresolved(font: &Font, used: &BTreeMap<&KerningPair, usize>, out: &mut Vec<F
         })
         .collect::<Vec<_>>();
     if broken.is_empty() {
-        return;
+        return None;
     }
 
     let examples = broken
@@ -82,14 +85,14 @@ fn unresolved(font: &Font, used: &BTreeMap<&KerningPair, usize>, out: &mut Vec<F
         .map(|pair| label(font, pair))
         .collect::<Vec<_>>()
         .join(", ");
-    out.push(Finding::font(
+    Some(Finding::font(
         Check::UnresolvedKerning,
         format!(
             "{} kerning pair{} never apply because a side isn't in the font or is on the wrong side: {examples}",
             broken.len(),
             plural(broken.len())
         ),
-    ));
+    ))
 }
 
 fn label(font: &Font, pair: &KerningPair) -> String {
