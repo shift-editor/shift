@@ -301,7 +301,7 @@ mod tests {
     use super::*;
     use crate::font_source::geometry::SMOOTH_ANGLE_TOLERANCE;
     use shift_font::test_support::fixtures;
-    use shift_font::{CurveSegment, MetricKind};
+    use shift_font::{CurveSegment, StandardMetrics};
     use skrifa::outline::pen::PathElement;
 
     #[test]
@@ -325,17 +325,11 @@ mod tests {
         assert_eq!(header.axes().len(), directory.axes.len());
         assert_eq!(header.named_instances().len(), directory.instances.len());
         assert_eq!(default_source.line_gap(), Some(directory.metrics.line_gap));
-        for (kind, expected) in [
-            (MetricKind::Ascender, Some(directory.metrics.ascender)),
-            (MetricKind::Descender, Some(directory.metrics.descender)),
-            (MetricKind::CapHeight, directory.metrics.cap_height),
-            (MetricKind::XHeight, directory.metrics.x_height),
-        ] {
-            assert_eq!(
-                crate::metrics::metric_position(header.metric_definitions(), default_source, kind,),
-                expected,
-            );
-        }
+        let metrics = StandardMetrics::of(default_source, header.metric_definitions());
+        assert_eq!(metrics.ascender, Some(directory.metrics.ascender));
+        assert_eq!(metrics.descender, Some(directory.metrics.descender));
+        assert_eq!(metrics.cap_height, directory.metrics.cap_height);
+        assert_eq!(metrics.x_height, directory.metrics.x_height);
     }
 
     fn point_types(contour: &Contour) -> Vec<PointType> {

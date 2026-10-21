@@ -29,13 +29,7 @@ pub struct DesignspaceFont {
 
 impl DesignspaceFont {
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
-        if !matches!(
-            path.extension()
-                .and_then(|extension| extension.to_str())
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("designspace")
-        ) {
+        if FontFormat::of_path(path) != Some(FontFormat::Designspace) {
             return Err(FontReadError::UnsupportedFormat {
                 path: path.to_path_buf(),
             });

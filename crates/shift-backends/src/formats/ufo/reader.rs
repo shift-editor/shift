@@ -1,12 +1,12 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::feature_includes::inline_feature_includes;
+use crate::font_source::AffineTransform;
 use crate::import::collect_streamed_font;
-use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, LayerId,
-    LibData, LibValue, MetricKind, PointType, SourceId, Transform,
+    LibData, LibValue, PointType, SourceId, StandardMetrics, Transform,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -85,14 +85,7 @@ impl UfoReader {
     fn convert_component(component: &norad::Component) -> PendingComponent {
         PendingComponent {
             base_glyph_name: component.base.to_string(),
-            matrix: Transform {
-                xx: component.transform.x_scale,
-                xy: component.transform.xy_scale,
-                yx: component.transform.yx_scale,
-                yy: component.transform.y_scale,
-                dx: component.transform.x_offset,
-                dy: component.transform.y_offset,
-            },
+            matrix: Transform::from_values(AffineTransform::from(&component.transform).to_values()),
         }
     }
 
@@ -296,34 +289,19 @@ impl UfoReader {
             .units_per_em
             .map(|value| *value)
             .unwrap_or(1000.0);
-        let metric_definitions = font.metric_definitions().to_vec();
+        font.set_standard_metrics(
+            &default_source_id,
+            StandardMetrics {
+                ascender: norad_font.font_info.ascender,
+                descender: norad_font.font_info.descender,
+                cap_height: norad_font.font_info.cap_height,
+                x_height: norad_font.font_info.x_height,
+                baseline: None,
+            },
+        )?;
         let default_source = font
             .source_mut(&default_source_id)
             .expect("new font should contain its default source");
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::Ascender,
-            norad_font.font_info.ascender,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::Descender,
-            norad_font.font_info.descender,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::CapHeight,
-            norad_font.font_info.cap_height,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::XHeight,
-            norad_font.font_info.x_height,
-        );
         default_source.set_italic_angle(norad_font.font_info.italic_angle);
         default_source.set_line_gap(
             norad_font

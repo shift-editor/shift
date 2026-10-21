@@ -5,8 +5,8 @@ use std::sync::Arc;
 use glyphs_reader::{Font as ParsedGlyphsFont, Glyph as ParsedGlyph, Layer, Node, NodeType, Shape};
 
 use super::{
-    InstanceFamilies, anchor_parts, component_transform, default_design_value, font_header,
-    master_design_values, master_location_values, missing_component_details,
+    InstanceFamilies, anchor_parts, default_design_value, font_header, master_design_values,
+    master_location_values, missing_component_details,
 };
 use crate::font_source::geometry::{
     ContourPoint, SourceComponent, SourceContour, SourceGeometry, control_point_kind,
@@ -226,17 +226,9 @@ fn convert_glyphs_layer(
                             missing_component_details(component.name.as_str()),
                         )
                     })?;
-                let coefficients = component_transform(component);
                 components.push(SourceComponent {
                     glyph: base,
-                    transform: AffineTransform {
-                        xx: coefficients[0],
-                        xy: coefficients[1],
-                        yx: coefficients[2],
-                        yy: coefficients[3],
-                        dx: coefficients[4],
-                        dy: coefficients[5],
-                    },
+                    transform: AffineTransform::from_values(component.transform.as_coeffs()),
                 });
             }
         }

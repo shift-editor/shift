@@ -10,7 +10,7 @@ use fontir::ir::{
     PreliminaryGdefCategories, StaticMetadata,
 };
 use fontir::orchestration::{Context, WorkId};
-use shift_font::{MetricKind, Source};
+use shift_font::{Source, StandardMetrics};
 use write_fonts::types::NameId;
 
 use super::axes::{normalized_source_location, to_ir_named_instances};
@@ -217,15 +217,20 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
             .filter(|source| source.is_master())
         {
             let location = normalized_source_location(source, &self.snapshot.axes, &axes)?;
-            let ascender = self.metric_position(source, MetricKind::Ascender);
-            let descender = self.metric_position(source, MetricKind::Descender);
-            let cap_height = self.metric_position(source, MetricKind::CapHeight);
-            let x_height = self.metric_position(source, MetricKind::XHeight);
+            let standard = StandardMetrics::of(source, &self.snapshot.metric_definitions);
 
-            metrics.set_if_some(GlobalMetric::Ascender, location.clone(), ascender);
-            metrics.set_if_some(GlobalMetric::Descender, location.clone(), descender);
-            metrics.set_if_some(GlobalMetric::CapHeight, location.clone(), cap_height);
-            metrics.set_if_some(GlobalMetric::XHeight, location.clone(), x_height);
+            metrics.set_if_some(GlobalMetric::Ascender, location.clone(), standard.ascender);
+            metrics.set_if_some(
+                GlobalMetric::Descender,
+                location.clone(),
+                standard.descender,
+            );
+            metrics.set_if_some(
+                GlobalMetric::CapHeight,
+                location.clone(),
+                standard.cap_height,
+            );
+            metrics.set_if_some(GlobalMetric::XHeight, location.clone(), standard.x_height);
             metrics.set_if_some(
                 GlobalMetric::HheaLineGap,
                 location.clone(),
@@ -249,28 +254,15 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
             metrics.populate_defaults(
                 &location,
                 metadata.units_per_em,
-                x_height,
-                ascender,
-                descender,
+                standard.x_height,
+                standard.ascender,
+                standard.descender,
                 source.italic_angle(),
             );
         }
 
         context.global_metrics.set(metrics.build(&metadata.axes)?);
         Ok(())
-    }
-}
-
-impl GlobalMetricsWork {
-    fn metric_position(&self, source: &Source, kind: MetricKind) -> Option<f64> {
-        let definition = self
-            .snapshot
-            .metric_definitions
-            .iter()
-            .find(|definition| definition.kind() == kind)?;
-        source
-            .metric_value(&definition.id())
-            .map(|value| value.position)
     }
 }
 

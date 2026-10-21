@@ -280,6 +280,18 @@ impl Transform {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
     }
 
+    /// Decodes a matrix from [`Self::VALUE_FIELDS`] order.
+    pub fn from_values([xx, xy, yx, yy, dx, dy]: [f64; Self::VALUE_COUNT]) -> Self {
+        Self {
+            xx,
+            xy,
+            yx,
+            yy,
+            dx,
+            dy,
+        }
+    }
+
     pub fn identity() -> Self {
         Self {
             xx: 1.0,

@@ -20,8 +20,9 @@ use crate::{
     formats::ufo::{UfoKerning, load_header, read_glyph_paths},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     kerning_import::KerningImport,
-    metrics::copy_source_metrics,
 };
+
+use shift_font::StandardMetrics;
 
 use super::{
     axis_labels,
@@ -318,12 +319,12 @@ fn register_designspace_sources(
             &source_names,
         );
         source_names.insert(source.name().to_string());
-        copy_source_metrics(
-            &material.metric_definitions,
-            &material.metrics,
-            &metric_definitions,
-            &mut source,
-        );
+        StandardMetrics::of(&material.metrics, &material.metric_definitions)
+            .apply_to(&mut source, &metric_definitions);
+        source.set_italic_angle(material.metrics.italic_angle());
+        source.set_line_gap(material.metrics.line_gap());
+        source.set_underline_position(material.metrics.underline_position());
+        source.set_underline_thickness(material.metrics.underline_thickness());
         let source_id = header.add_source(source);
         if material.index == default_index {
             header.set_default_source_id(source_id.clone());

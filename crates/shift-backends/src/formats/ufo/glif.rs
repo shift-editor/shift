@@ -131,14 +131,7 @@ fn convert_norad_layer(
         })?;
         components.push(SourceComponent {
             glyph: base,
-            transform: AffineTransform {
-                xx: component.transform.x_scale,
-                xy: component.transform.xy_scale,
-                yx: component.transform.yx_scale,
-                yy: component.transform.y_scale,
-                dx: component.transform.x_offset,
-                dy: component.transform.y_offset,
-            },
+            transform: AffineTransform::from(&component.transform),
         });
     }
     Ok(ProjectionLayer {

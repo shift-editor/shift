@@ -45,7 +45,7 @@ pub use kerning::{
     SourceKerning,
 };
 pub use lib_data::{LibData, LibValue};
-pub use metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
+pub use metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue, StandardMetrics};
 pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};

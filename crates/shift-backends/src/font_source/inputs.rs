@@ -405,17 +405,11 @@ fn flatten_shape(
     }
     cursor = cursor.checked_add(shape.anchors.len() * 2).or_overflow()?;
     for component in &shape.components {
-        let transform_values = values
+        let local = values
             .get(cursor..cursor + 6)
+            .and_then(|transform_values| transform_values.try_into().ok())
+            .map(AffineTransform::from_values)
             .ok_or_else(|| invalid("source atlas component transform is missing"))?;
-        let local = AffineTransform {
-            xx: transform_values[0],
-            xy: transform_values[1],
-            yx: transform_values[2],
-            yy: transform_values[3],
-            dx: transform_values[4],
-            dy: transform_values[5],
-        };
         let child = projections
             .get(&component.glyph)
             .ok_or_else(|| invalid("source atlas component projection is missing"))?;

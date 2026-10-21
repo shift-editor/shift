@@ -11,11 +11,10 @@ use super::localized_string;
 use crate::font_source::{
     FontDirectory, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
-use crate::metrics::set_metric_position;
 use crate::{FontFormat, distinct_named_instances};
 use shift_font::{
     Axis, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Font as ShiftFont,
-    Location, MetricKind, NamedInstance,
+    Location, NamedInstance, StandardMetrics,
 };
 
 /// Retained bytes and indexes for one OpenType TTF, OTF, or variable font.
@@ -105,25 +104,22 @@ fn binary_directory(
     let default_source_id = header
         .default_source_id()
         .expect("new font should have a default source");
-    let metric_definitions = header.metric_definitions().to_vec();
+    header
+        .set_standard_metrics(
+            &default_source_id,
+            StandardMetrics {
+                ascender: Some(metrics.ascent as f64),
+                descender: Some(metrics.descent as f64),
+                cap_height: metrics.cap_height.map(|value| value as f64),
+                x_height: metrics.x_height.map(|value| value as f64),
+                baseline: None,
+            },
+        )
+        .expect("new font should contain its default source");
     let default_source = header
         .source_mut(&default_source_id)
         .expect("new font should contain its default source");
     default_source.set_name(style_name.unwrap_or_else(|| "Default".to_string()));
-    for (kind, value) in [
-        (MetricKind::Ascender, Some(metrics.ascent as f64)),
-        (MetricKind::Descender, Some(metrics.descent as f64)),
-        (
-            MetricKind::CapHeight,
-            metrics.cap_height.map(|value| value as f64),
-        ),
-        (
-            MetricKind::XHeight,
-            metrics.x_height.map(|value| value as f64),
-        ),
-    ] {
-        set_metric_position(&metric_definitions, default_source, kind, value);
-    }
     default_source.set_line_gap(Some(metrics.leading as f64));
 
     let mut axis_ids = Vec::new();
@@ -254,14 +250,8 @@ fn binary_directory(
 }
 
 fn format_for_path(path: &Path) -> Result<FontFormat, FontReadError> {
-    match path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("ttf") => Ok(FontFormat::Ttf),
-        Some("otf") => Ok(FontFormat::Otf),
+    match FontFormat::of_path(path) {
+        Some(format @ (FontFormat::Ttf | FontFormat::Otf)) => Ok(format),
         _ => Err(FontReadError::UnsupportedFormat {
             path: path.to_path_buf(),
         }),

@@ -14,7 +14,7 @@ use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::Kerning;
 use crate::lib_data::{LibData, LibValue};
-use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
+use crate::metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue, StandardMetrics};
 use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::Source;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
@@ -925,6 +925,33 @@ impl Font {
             reordered.push(source);
         }
         self.data_mut().sources = reordered;
+        Ok(())
+    }
+
+    /// Returns `source_id`'s standard metric positions.
+    pub fn standard_metrics(&self, source_id: &SourceId) -> CoreResult<StandardMetrics> {
+        let source = self.require_source(source_id)?;
+        Ok(StandardMetrics::of(source, self.metric_definitions()))
+    }
+
+    /// Writes each present position in `metrics` into `source_id`, keeping
+    /// the overshoot the source already has.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::SourceNotFound`] when the font has no such source.
+    pub fn set_standard_metrics(
+        &mut self,
+        source_id: &SourceId,
+        metrics: StandardMetrics,
+    ) -> CoreResult<()> {
+        let data = self.data_mut();
+        let source = data
+            .sources
+            .iter_mut()
+            .find(|source| source.id() == *source_id)
+            .require(source_id)?;
+        metrics.apply_to(source, &data.metric_definitions);
         Ok(())
     }
 
