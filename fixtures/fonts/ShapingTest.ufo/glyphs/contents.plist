@@ -4,6 +4,8 @@
 <dict>
 	<key>.notdef</key>
 	<string>_notdef.glif</string>
+	<key>alefabove-ar</key>
+	<string>alefabove-ar.glif</string>
 	<key>beh-ar</key>
 	<string>beh-ar.glif</string>
 	<key>beh-ar.fina</key>
@@ -30,5 +32,7 @@
 	<string>shadda-ar.glif</string>
 	<key>space</key>
 	<string>space.glif</string>
+	<key>tick</key>
+	<string>tick.glif</string>
 </dict>
 </plist>

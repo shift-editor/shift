@@ -320,6 +320,8 @@ export interface ShapedGlyph {
   yAdvance: number
   xOffset: number
   yOffset: number
+  /** Whether the font classes the glyph as a mark. */
+  isMark: boolean
 }
 
 /** A shaped paragraph: its base direction and its runs in screen order. */

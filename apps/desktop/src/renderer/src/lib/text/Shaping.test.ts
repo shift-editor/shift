@@ -576,3 +576,44 @@ describe("a picked glyph the shaper answers with no glyph", () => {
     expect(opened && editor.glyphOf(opened)?.name).toBe(".notdef");
   });
 });
+
+describe("marks the font classes as marks", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  const placed = (runId: RunId) =>
+    (editor.text.layoutCell(runId).peek()?.placedGlyphs ?? []).map((glyph) => [
+      glyph.glyph.glyphName,
+      glyph.left,
+      glyph.glyph.xAdvance,
+    ]);
+
+  it("give a nonspacing mark no advance, though it has no anchor to attach by", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("\u0628\u0670\u0628")).id;
+
+    await expect
+      .poll(() => placed(runId))
+      .toEqual([
+        ["beh-ar.fina", 0, 450],
+        ["alefabove-ar", 450, 0],
+        ["beh-ar.init", 450, 400],
+      ]);
+  });
+
+  // `tick` is classed as a mark but glyph data does not make it a nonspacing one, so export keeps its width.
+  it("keep a spacing mark's width", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("i/tick/i")).id;
+
+    await expect
+      .poll(() => placed(runId))
+      .toEqual([
+        ["i", 0, 250],
+        ["tick", 250, 200],
+        ["i", 450, 250],
+      ]);
+  });
+});
