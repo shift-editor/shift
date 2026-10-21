@@ -11,7 +11,7 @@ import type {
   ToolbarDragState,
   UseToolbarDragOptions,
 } from "../types/toolbar";
-import { nextToolbarDrag, startToolbarDrag } from "./toolbarDrag";
+import { isPress, nextToolbarDrag, releasedDock, startToolbarDrag } from "./toolbarDrag";
 import { CanvasSurface } from "../lib/editor/rendering/CanvasSurface";
 import { centreOf, frameOf } from "./toolbarGeometry";
 
@@ -39,6 +39,7 @@ export function useToolbarDrag({
   const [drag, setDrag] = useState<ToolbarDragState | null>(null);
   const dragRef = useRef<ToolbarDragState | null>(null);
   const pointerIdRef = useRef<number | null>(null);
+  const lastPressAtRef = useRef(Number.NEGATIVE_INFINITY);
   const dragging = drag !== null;
 
   const publish = useCallback((next: ToolbarDragState | null) => {
@@ -51,10 +52,19 @@ export function useToolbarDrag({
   useEffect(() => {
     if (!dragging) return;
 
+    // A press covers the window to hold the grabbing cursor, so the second click of a
+    // double-click lands on that cover; presses are paired here instead of by `dblclick`.
     const drop = () => {
       const current = dragRef.current;
       publish(null);
-      if (current) onDock(current.target);
+      if (!current) return;
+
+      const now = performance.now();
+      const landing = releasedDock(current, now - lastPressAtRef.current);
+      const flipped = landing !== current.target;
+      // A flip uses up both presses, so a third press starts a new pair.
+      lastPressAtRef.current = isPress(current) && !flipped ? now : Number.NEGATIVE_INFINITY;
+      onDock(landing);
     };
     const cancel = () => publish(null);
     const ownsEvent = (event: PointerEvent) => event.pointerId === pointerIdRef.current;

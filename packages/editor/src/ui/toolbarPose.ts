@@ -15,6 +15,18 @@ export function poseForDock(dock: ToolbarDock): ToolbarPose {
   return dock === "left" || dock === "right" ? "stand" : "flat";
 }
 
+const OPPOSITE_DOCK: Record<ToolbarDock, ToolbarDock> = {
+  top: "bottom",
+  bottom: "top",
+  left: "right",
+  right: "left",
+};
+
+/** The slot across the canvas, which keeps the bar's pose. */
+export function oppositeDock(dock: ToolbarDock): ToolbarDock {
+  return OPPOSITE_DOCK[dock];
+}
+
 /** Whether the frame is too short for a standing bar. */
 export function isShortToolbarFrame(frame: ToolbarFrame, barLength: number): boolean {
   return frame.height < barLength + 2 * TOOLBAR_INSET;

@@ -7,7 +7,7 @@ import type {
   ToolbarLift,
 } from "../types/toolbar";
 import { BAR_THICKNESS, clampHandleToFrame, isInDockZone } from "./toolbarGeometry";
-import { allowedDocksInFrame, isShortToolbarFrame, poseForDock } from "./toolbarPose";
+import { allowedDocksInFrame, isShortToolbarFrame, oppositeDock, poseForDock } from "./toolbarPose";
 import { TOOL_FLOOR_OPACITY } from "./toolbarPresence";
 
 /** How far the pointer may stray past the target's zone before a neighbouring zone takes over. */
@@ -18,6 +18,9 @@ export const ZONE_MARGIN = 16;
  * the slot it started in: half the bar's thickness, so it detaches at once.
  */
 export const TEAR_DISTANCE = BAR_THICKNESS / 2;
+
+/** Longest gap between two presses of the handle that still counts as a double press. */
+export const DOUBLE_PRESS_MS = 400;
 
 /** Begins a drag with the bar held in the slot it was docked to. */
 export function startToolbarDrag(start: ToolbarDragStart): ToolbarDragState {
@@ -132,6 +135,26 @@ export function nextToolbarDrag(
   );
 
   return { ...moved, target };
+}
+
+/** Whether the handle was pressed and let go without pulling the bar loose. */
+export function isPress(drag: ToolbarDragState): boolean {
+  return drag.tether !== null;
+}
+
+/**
+ * Slot the bar lands in on release.
+ *
+ * @remarks
+ * A second press within `DOUBLE_PRESS_MS` of the first flips the bar to the
+ * opposite edge. Its pose stays the same, so it slides across without turning.
+ *
+ * @param sincePreviousPress - milliseconds since the last press on the handle.
+ */
+export function releasedDock(drag: ToolbarDragState, sincePreviousPress: number): ToolbarDock {
+  if (isPress(drag) && sincePreviousPress <= DOUBLE_PRESS_MS) return oppositeDock(drag.seatDock);
+
+  return drag.target;
 }
 
 /** Top-left corner of the carried bar, so its handle sits where the pointer holds it. */

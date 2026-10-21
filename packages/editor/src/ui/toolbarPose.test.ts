@@ -3,6 +3,7 @@ import {
   allowedDocksInFrame,
   fitDockToFrame,
   isShortToolbarFrame,
+  oppositeDock,
   poseAngle,
   poseForDock,
 } from "./toolbarPose";
@@ -18,6 +19,15 @@ describe("the bar swings a quarter turn about its handle", () => {
   it("stands on both side edges, so crossing between them does not turn it", () => {
     expect(poseForDock("left")).toBe("stand");
     expect(poseForDock("right")).toBe("stand");
+  });
+});
+
+describe("each slot has one across the canvas", () => {
+  it("pairs top with bottom and left with right, keeping the pose", () => {
+    expect(oppositeDock("top")).toBe("bottom");
+    expect(oppositeDock("bottom")).toBe("top");
+    expect(oppositeDock("left")).toBe("right");
+    expect(oppositeDock("right")).toBe("left");
   });
 });
 

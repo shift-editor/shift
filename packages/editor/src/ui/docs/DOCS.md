@@ -42,7 +42,7 @@ ui/
 
 A drag starts tethered: the bar stays in its slot until the pointer has moved `TEAR_DISTANCE` (half the bar's thickness), then follows the pointer with the handle clamped inside the frame. The rest of the bar may overflow, and the panel clips it. The bar lifts for the whole drag. Once it is loose, a thin accent line runs along the target edge with a dashed outline where the bar will sit, and the tools dim while that target would turn the bar.
 
-On release `useToolbarDrag` calls `onDock(drag.target)`. `ToolbarBar` sees the new slot and pose, lays itself out in the new place at once, and animates a slide and a turn from where it was drawn, with the tools dipping through the turn.
+On release `useToolbarDrag` calls `onDock(releasedDock(…))`: the drag's target, or the opposite edge (`oppositeDock`) when this is the second press within `DOUBLE_PRESS_MS` that never tore the bar loose. Presses are paired in the hook rather than with `dblclick`, because the cover laid over the window on the first press takes the second click. `ToolbarBar` sees the new slot and pose, lays itself out in the new place at once, and animates a slide and a turn from where it was drawn, with the tools dipping through the turn.
 
 ## Workflow recipes
 

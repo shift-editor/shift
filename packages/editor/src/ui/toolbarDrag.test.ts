@@ -5,10 +5,12 @@ import { TOOLBAR_INSET } from "./toolbarGeometry";
 import { poseForDock } from "./toolbarPose";
 import { TOOL_FLOOR_OPACITY } from "./toolbarPresence";
 import {
+  DOUBLE_PRESS_MS,
   TEAR_DISTANCE,
   TRAILING_REACH,
   ZONE_MARGIN,
   nextToolbarDrag,
+  releasedDock,
   startToolbarDrag,
   toolbarBarReach,
   toolbarBarOrigin,
@@ -107,6 +109,23 @@ describe("a bar held in its slot comes loose after a short pull", () => {
     const drag = dragTo(start, { x: 700, y: 600 });
 
     expect(drag).toMatchObject({ tether: null, target: "bottom" });
+  });
+});
+
+describe("a double press on the handle flips the bar across the canvas", () => {
+  it("sends it to the opposite edge when the second press comes quickly", () => {
+    expect(releasedDock(startFrom("bottom"), DOUBLE_PRESS_MS)).toBe("top");
+    expect(releasedDock(startFrom("left"), 100)).toBe("right");
+  });
+
+  it("leaves it in its slot when the presses are too far apart", () => {
+    expect(releasedDock(startFrom("bottom"), DOUBLE_PRESS_MS + 1)).toBe("bottom");
+  });
+
+  it("lands where it was dragged when the second press pulled it loose", () => {
+    const drag = dragTo(startFrom("bottom"), { x: 900, y: 350 });
+
+    expect(releasedDock(drag, 100)).toBe("right");
   });
 });
 

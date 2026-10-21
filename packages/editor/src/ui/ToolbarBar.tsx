@@ -198,7 +198,7 @@ export function ToolbarBar({
     <div
       ref={gripRef}
       role="presentation"
-      title="Drag to move"
+      title="Drag to move, double-click to flip"
       className={cn(
         "flex shrink-0 touch-none items-center justify-center rounded-md text-muted opacity-60 transition-opacity hover:opacity-100",
         vertical ? "h-5 w-9" : "h-9 w-5",
