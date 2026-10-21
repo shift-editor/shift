@@ -28,7 +28,7 @@ use super::{AuthoringReport, apply_mutation};
 ///
 /// Returns an error when a Unicode value is malformed, the glyph conflicts
 /// with existing identity, the package cannot be loaded, or saving fails.
-pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
     let unicodes = parse_unicodes(&args.unicode)?;
     let set = FontIntentSet {
         intents: vec![FontIntent::CreateGlyph(CreateGlyph {
@@ -52,7 +52,7 @@ pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
 /// Returns an error for unreadable or invalid JSON, unsupported payload
 /// fields, non-finite values, unresolved selectors, invalid authoring, or
 /// persistence failures.
-pub fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let source_id = resolve_source_id(&font, &args.source)?;
@@ -80,7 +80,7 @@ pub fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
 /// # Errors
 ///
 /// Rejects invalid payloads or selectors without writing; persistence failures are reported.
-pub fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let source_id = resolve_source_id(&font, &args.source)?;
@@ -110,7 +110,7 @@ pub fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
 ///
 /// Returns an error when selectors cannot be resolved, the origin layer is
 /// absent, the destination already owns a layer for the glyph, or saving fails.
-pub fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
+pub(crate) fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
     let from_source_id = resolve_source_id(&font, &args.from_source)?;

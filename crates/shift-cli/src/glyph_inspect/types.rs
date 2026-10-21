@@ -2,7 +2,7 @@ use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphInspection {
+pub(crate) struct GlyphInspection {
     pub path: String,
     pub format: String,
     pub glyph: GlyphIdentity,
@@ -17,7 +17,7 @@ pub struct GlyphInspection {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphIdentity {
+pub(crate) struct GlyphIdentity {
     pub id: String,
     pub name: String,
     pub unicodes: Vec<String>,
@@ -25,21 +25,21 @@ pub struct GlyphIdentity {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphLocation {
+pub(crate) struct GlyphLocation {
     pub external: Vec<LocationValue>,
     pub design: Vec<LocationValue>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LocationValue {
+pub(crate) struct LocationValue {
     pub axis_tag: String,
     pub value: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphSummary {
+pub(crate) struct GlyphSummary {
     pub advance: f64,
     pub bounds: Option<Bounds>,
     pub contour_count: usize,
@@ -53,7 +53,7 @@ pub struct GlyphSummary {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Bounds {
+pub(crate) struct Bounds {
     pub min_x: f64,
     pub min_y: f64,
     pub max_x: f64,
@@ -62,14 +62,14 @@ pub struct Bounds {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphStructure {
+pub(crate) struct GlyphStructure {
     pub contours: Vec<ContourInspection>,
     pub anchors: Vec<AnchorInspection>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ContourInspection {
+pub(crate) struct ContourInspection {
     pub id: String,
     pub closed: bool,
     pub points: Vec<PointInspection>,
@@ -77,7 +77,7 @@ pub struct ContourInspection {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PointInspection {
+pub(crate) struct PointInspection {
     pub id: Option<String>,
     pub x: f64,
     pub y: f64,
@@ -87,7 +87,7 @@ pub struct PointInspection {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AnchorInspection {
+pub(crate) struct AnchorInspection {
     pub id: String,
     pub name: Option<String>,
     pub x: f64,
@@ -96,7 +96,7 @@ pub struct AnchorInspection {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ComponentInspection {
+pub(crate) struct ComponentInspection {
     pub order: usize,
     pub parent_glyph_id: String,
     pub parent_glyph_name: String,
@@ -111,7 +111,7 @@ pub struct ComponentInspection {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DecomposedTransform {
+pub(crate) struct DecomposedTransform {
     pub translate_x: f64,
     pub translate_y: f64,
     pub rotation: f64,
@@ -125,7 +125,7 @@ pub struct DecomposedTransform {
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AffineTransform {
+pub(crate) struct AffineTransform {
     pub xx: f64,
     pub xy: f64,
     pub yx: f64,
@@ -136,7 +136,7 @@ pub struct AffineTransform {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceInspection {
+pub(crate) struct SourceInspection {
     pub id: String,
     pub name: String,
     pub master: bool,
@@ -148,7 +148,7 @@ pub struct SourceInspection {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LayerInspection {
+pub(crate) struct LayerInspection {
     pub id: String,
     pub advance: f64,
     pub contour_count: usize,
@@ -159,7 +159,7 @@ pub struct LayerInspection {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VariationInspection {
+pub(crate) struct VariationInspection {
     pub model: String,
     pub selection: String,
     pub exact_source: Option<SourceReference>,
@@ -172,14 +172,14 @@ pub struct VariationInspection {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceReference {
+pub(crate) struct SourceReference {
     pub id: String,
     pub name: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceWeight {
+pub(crate) struct SourceWeight {
     pub source_id: String,
     pub source_name: String,
     pub weight: f64,
@@ -187,7 +187,7 @@ pub struct SourceWeight {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VariationRegion {
+pub(crate) struct VariationRegion {
     pub supports: Vec<VariationSupport>,
     pub scalar: f64,
     pub value_count: usize,
@@ -197,7 +197,7 @@ pub struct VariationRegion {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VariationSupport {
+pub(crate) struct VariationSupport {
     pub axis_tag: String,
     pub minimum: f64,
     pub peak: f64,
@@ -206,7 +206,7 @@ pub struct VariationSupport {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResolvedGlyph {
+pub(crate) struct ResolvedGlyph {
     pub advance: f64,
     pub bounds: Option<Bounds>,
     pub contours: Vec<ResolvedContour>,
@@ -214,7 +214,7 @@ pub struct ResolvedGlyph {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResolvedContour {
+pub(crate) struct ResolvedContour {
     pub closed: bool,
     pub points: Vec<PointInspection>,
 }

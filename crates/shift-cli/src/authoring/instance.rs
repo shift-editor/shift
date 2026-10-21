@@ -33,7 +33,7 @@ const STANDARD_WEIGHTS: [(f64, &str); 9] = [
 ///
 /// Returns an error for invalid location syntax, missing external `wght` for
 /// presets, invalid product authoring, or document/persistence failure.
-pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = if args.standard_weights {
         standard_weights(&font)?
@@ -61,7 +61,7 @@ pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
 ///
 /// Returns an error for an unknown/ambiguous selector, empty edit, invalid
 /// location or product authoring, or document/persistence failure.
-pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let current = resolve_instance(&font, &args.instance)?;
     if args.name.is_none()
@@ -99,7 +99,7 @@ pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
 /// # Errors
 ///
 /// Returns an error for an unknown/ambiguous selector or document/persistence failure.
-pub fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringReport> {
+pub(crate) fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let instance = resolve_instance(&font, &args.instance)?;
     apply_mutation(

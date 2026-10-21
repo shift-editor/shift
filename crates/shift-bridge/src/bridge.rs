@@ -886,7 +886,7 @@ fn napi_slug_atlas(
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DocumentVersion(u64);
+pub(crate) struct DocumentVersion(u64);
 
 impl DocumentVersion {
   fn next(self) -> Self {
@@ -895,7 +895,7 @@ impl DocumentVersion {
 }
 
 #[derive(Clone)]
-pub struct FontSaveSnapshot {
+pub(crate) struct FontSaveSnapshot {
   font: Font,
   active_glyph_override: Option<Arc<Glyph>>,
 }

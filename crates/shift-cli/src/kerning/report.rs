@@ -11,7 +11,7 @@ use super::selector::{GROUP_PREFIX, position_label};
 /// font no longer has; such a pair is kept but never applies.
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
-pub enum SideReport {
+pub(crate) enum SideReport {
     Glyph { id: String, name: Option<String> },
     Group { id: String, name: Option<String> },
 }
@@ -47,7 +47,7 @@ impl SideReport {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PairReport {
+pub(crate) struct PairReport {
     pub first: SideReport,
     pub second: SideReport,
 }
@@ -67,14 +67,14 @@ impl PairReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceReference {
+pub(crate) struct SourceReference {
     pub source_id: String,
     pub name: String,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphReference {
+pub(crate) struct GlyphReference {
     pub glyph_id: String,
     pub name: Option<String>,
 }
@@ -95,7 +95,7 @@ impl GlyphReference {
 /// Authored pairs, with one value column per listed source.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KerningListReport {
+pub(crate) struct KerningListReport {
     pub document: PathBuf,
     pub sources: Vec<SourceReference>,
     pub pairs: Vec<PairRow>,
@@ -103,7 +103,7 @@ pub struct KerningListReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PairRow {
+pub(crate) struct PairRow {
     #[serde(flatten)]
     pub pair: PairReport,
     /// Values in the order of the report's `sources`; `None` is not authored there.
@@ -111,7 +111,7 @@ pub struct PairRow {
 }
 
 impl KerningListReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         if self.pairs.is_empty() {
             lines.push("No kerning pairs.".to_string());
@@ -136,14 +136,14 @@ impl KerningListReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KerningGroupsReport {
+pub(crate) struct KerningGroupsReport {
     pub document: PathBuf,
     pub groups: Vec<GroupReport>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GroupReport {
+pub(crate) struct GroupReport {
     pub group_id: String,
     pub position: &'static str,
     pub name: String,
@@ -179,7 +179,7 @@ impl GroupReport {
 }
 
 impl KerningGroupsReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         if self.groups.is_empty() {
             lines.push("No kerning groups.".to_string());
@@ -193,7 +193,7 @@ impl KerningGroupsReport {
 /// Where a glyph pair's value at one master comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum KerningOrigin {
+pub(crate) enum KerningOrigin {
     /// An authored pair at this master applies.
     Authored,
     /// The master authors other pairs but none applies, so the value is zero.
@@ -205,7 +205,7 @@ pub enum KerningOrigin {
 /// The kind of authored pair that supplied a value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum KerningRule {
+pub(crate) enum KerningRule {
     /// A glyph-to-glyph pair.
     Glyph,
     /// A glyph-to-group or group-to-glyph pair, overriding the group pair.
@@ -218,7 +218,7 @@ pub enum KerningRule {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KerningResolutionReport {
+pub(crate) struct KerningResolutionReport {
     pub document: PathBuf,
     pub first: GlyphSides,
     pub second: GlyphSides,
@@ -229,7 +229,7 @@ pub struct KerningResolutionReport {
 /// A glyph and the group it belongs to at its side of the pair.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphSides {
+pub(crate) struct GlyphSides {
     #[serde(flatten)]
     pub glyph: GlyphReference,
     pub group: Option<SideReport>,
@@ -237,7 +237,7 @@ pub struct GlyphSides {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MasterKerning {
+pub(crate) struct MasterKerning {
     #[serde(flatten)]
     pub source: SourceReference,
     pub value: f64,
@@ -249,7 +249,7 @@ pub struct MasterKerning {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LocationKerning {
+pub(crate) struct LocationKerning {
     pub external: Vec<AxisValue>,
     pub design: Vec<AxisValue>,
     pub value: f64,
@@ -257,13 +257,13 @@ pub struct LocationKerning {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AxisValue {
+pub(crate) struct AxisValue {
     pub axis_tag: String,
     pub value: f64,
 }
 
 impl KerningResolutionReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let side = |sides: &GlyphSides| match &sides.group {
             Some(group) => format!("{} ({})", sides.glyph.label(), group.label()),
             None => sides.glyph.label().to_string(),

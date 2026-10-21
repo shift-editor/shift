@@ -17,7 +17,7 @@ use skrifa::{
     raw::{TableProvider, tables::hmtx::Hmtx, types::GlyphId},
 };
 
-pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
+pub(super) fn read_font_file(path: &str) -> FormatBackendResult<Font> {
     let (header, mut stream) = stream_font_file(path)?;
     collect_streamed_font(header, &mut stream)
 }
@@ -59,7 +59,7 @@ impl ShiftPen {
             .expect("move_to must be called before other pen methods")
     }
 
-    pub fn contours(self) -> Vec<Contour> {
+    pub(crate) fn contours(self) -> Vec<Contour> {
         self.contours
     }
 }

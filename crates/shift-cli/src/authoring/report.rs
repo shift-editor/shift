@@ -16,7 +16,7 @@ use crate::kerning::{GroupReport, PairReport, SideReport};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AuthoringReport {
+pub(crate) struct AuthoringReport {
     pub valid: bool,
     pub document: PathBuf,
     pub output: PathBuf,
@@ -30,7 +30,7 @@ pub struct AuthoringReport {
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
-pub enum AuthoringChange {
+pub(crate) enum AuthoringChange {
     FontCreated {
         document_id: Option<String>,
     },
@@ -118,7 +118,7 @@ pub enum AuthoringChange {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LayerReport {
+pub(crate) struct LayerReport {
     layer_id: String,
     glyph_id: String,
     source_id: String,
@@ -162,7 +162,7 @@ impl LayerReport {
 }
 
 impl AuthoringReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         for change in &self.changes {
             match change {

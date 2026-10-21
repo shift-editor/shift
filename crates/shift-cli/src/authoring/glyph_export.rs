@@ -11,7 +11,7 @@ use shift_font::{Font, Glyph, GlyphLayer, PointType, SourceId};
 use super::glyph_batch::GLYPH_BATCH_FORMAT;
 
 /// Which of a font's sources to read layers from.
-pub enum ExportSources {
+pub(crate) enum ExportSources {
     /// The default source, written without a source name so `glyph set` uses the
     /// target's default.
     Default,
@@ -29,7 +29,11 @@ pub enum ExportSources {
 ///
 /// Fails when the font cannot be read, a requested glyph or source does not exist,
 /// or no glyphs were requested.
-pub fn export_glyphs(path: &Path, names: &[String], sources: &ExportSources) -> Result<Value> {
+pub(crate) fn export_glyphs(
+    path: &Path,
+    names: &[String],
+    sources: &ExportSources,
+) -> Result<Value> {
     if names.is_empty() {
         bail!("name at least one glyph to export");
     }

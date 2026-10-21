@@ -7,7 +7,7 @@ use super::GlyphInspectView;
 use super::types::{Bounds, GlyphInspection, LocationValue};
 
 impl GlyphInspection {
-    pub fn render(&self, view: GlyphInspectView, _mode: RenderMode) -> String {
+    pub(crate) fn render(&self, view: GlyphInspectView, _mode: RenderMode) -> String {
         match view {
             GlyphInspectView::Summary => self.render_summary(),
             GlyphInspectView::Structure => self.render_structure(),

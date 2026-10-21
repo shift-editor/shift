@@ -9,6 +9,7 @@ members = ["crates/*"]
 [workspace.lints.rust]
 unsafe_code = "deny"
 unused_qualifications = "warn"
+unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 # `unwrap_used` and `print_stdout` are set in each library's lib.rs, so they

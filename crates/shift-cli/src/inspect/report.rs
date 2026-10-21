@@ -15,7 +15,7 @@ use super::kerning::KerningSummary;
 
 #[derive(Debug, Error)]
 #[error("failed to inspect Shift document {path}")]
-pub struct InspectError {
+pub(crate) struct InspectError {
     path: PathBuf,
     #[source]
     source: StoreError,
@@ -35,7 +35,7 @@ impl Diagnostic for InspectError {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DocumentSummary {
+pub(crate) struct DocumentSummary {
     pub application_id: String,
     pub schema_version: i64,
     pub document_id: String,
@@ -43,7 +43,7 @@ pub struct DocumentSummary {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MetadataSummary {
+pub(crate) struct MetadataSummary {
     pub family_name: Option<String>,
     pub style_name: Option<String>,
     pub display_name: String,
@@ -51,7 +51,7 @@ pub struct MetadataSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AxisSummary {
+pub(crate) struct AxisSummary {
     pub id: String,
     pub tag: String,
     pub name: String,
@@ -67,7 +67,7 @@ pub struct AxisSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AxisLabelSummary {
+pub(crate) struct AxisLabelSummary {
     pub id: String,
     pub name: String,
     pub value: f64,
@@ -79,7 +79,7 @@ pub struct AxisLabelSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct NamedInstanceSummary {
+pub(crate) struct NamedInstanceSummary {
     pub id: String,
     pub name: String,
     pub location: Vec<LocationValue>,
@@ -88,7 +88,7 @@ pub struct NamedInstanceSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AxisMappingSummary {
+pub(crate) struct AxisMappingSummary {
     pub id: String,
     pub name: String,
     pub description: Option<String>,
@@ -100,7 +100,7 @@ pub struct AxisMappingSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AxisMappingPointSummary {
+pub(crate) struct AxisMappingPointSummary {
     pub description: Option<String>,
     pub input: Vec<LocationValue>,
     pub output: Vec<LocationValue>,
@@ -108,14 +108,14 @@ pub struct AxisMappingPointSummary {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AxisReference {
+pub(crate) struct AxisReference {
     pub id: String,
     pub tag: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceSummary {
+pub(crate) struct SourceSummary {
     pub id: String,
     pub name: String,
     pub location: Vec<LocationValue>,
@@ -130,7 +130,7 @@ pub struct SourceSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MetricDefinitionSummary {
+pub(crate) struct MetricDefinitionSummary {
     pub id: String,
     pub kind: String,
     pub name: String,
@@ -138,7 +138,7 @@ pub struct MetricDefinitionSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MetricValueSummary {
+pub(crate) struct MetricValueSummary {
     pub metric_id: String,
     pub name: String,
     pub kind: String,
@@ -148,7 +148,7 @@ pub struct MetricValueSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LocationValue {
+pub(crate) struct LocationValue {
     pub axis_id: String,
     pub axis_tag: String,
     pub value: f64,
@@ -156,7 +156,7 @@ pub struct LocationValue {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphSummary {
+pub(crate) struct GlyphSummary {
     pub id: String,
     pub name: String,
     pub unicodes: Vec<String>,
@@ -166,7 +166,7 @@ pub struct GlyphSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GlyphLayerSummary {
+pub(crate) struct GlyphLayerSummary {
     pub id: String,
     pub source_id: String,
     pub source_name: Option<String>,
@@ -180,7 +180,7 @@ pub struct GlyphLayerSummary {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InspectReport {
+pub(crate) struct InspectReport {
     pub path: String,
     pub file_name: String,
     pub document: DocumentSummary,
@@ -196,7 +196,7 @@ pub struct InspectReport {
 }
 
 impl InspectReport {
-    pub fn load(path: impl AsRef<Path>) -> Result<Self, InspectError> {
+    pub(crate) fn load(path: impl AsRef<Path>) -> Result<Self, InspectError> {
         let path = path.as_ref();
         let store = ShiftStore::open_document(path).map_err(|source| InspectError {
             path: path.to_path_buf(),

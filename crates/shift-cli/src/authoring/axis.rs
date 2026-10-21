@@ -17,7 +17,7 @@ use super::{AuthoringReport, apply_mutation, glyph::load_font, resolve_axis_id};
 ///
 /// Returns an error for an unknown selector, empty edit, unsupported discrete
 /// range edit, invalid dependent authoring, or document/persistence failure.
-pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let axis_id = resolve_axis_id(&font, &args.axis)?;
     let current = font

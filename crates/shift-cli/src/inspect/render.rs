@@ -6,13 +6,13 @@ use super::InspectView;
 use super::report::{AxisReference, InspectReport, LocationValue};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RenderMode {
+pub(crate) enum RenderMode {
     Plain,
     Styled,
 }
 
 impl InspectReport {
-    pub fn render(&self, view: InspectView, mode: RenderMode) -> String {
+    pub(crate) fn render(&self, view: InspectView, mode: RenderMode) -> String {
         match view {
             InspectView::Summary => self.render_summary(mode),
             InspectView::Axes => self.render_axes(mode),

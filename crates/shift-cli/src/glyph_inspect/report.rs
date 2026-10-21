@@ -19,7 +19,7 @@ use super::types::{
 };
 
 impl GlyphInspection {
-    pub fn load(path: &Path, selector: &str, coordinates: &[String]) -> Result<Self> {
+    pub(crate) fn load(path: &Path, selector: &str, coordinates: &[String]) -> Result<Self> {
         let path_text = path
             .to_str()
             .ok_or_else(|| miette!("font path is not valid UTF-8"))?;

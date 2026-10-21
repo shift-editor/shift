@@ -22,7 +22,7 @@ pub(super) mod report;
 /// # Errors
 ///
 /// Reports unreadable documents or unresolved source selectors.
-pub fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
+pub(crate) fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let source = font
@@ -49,7 +49,7 @@ pub fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
 ///
 /// Rejects empty requests, blank metadata, ambiguous versions, non-finite metrics,
 /// unresolved selectors, or metric edits on layer-only sources. Reports persistence failures.
-pub fn set_font(args: &SetFontArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_font(args: &SetFontArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let mut metadata = font.metadata().clone();
     let mut intents = Vec::new();

@@ -36,7 +36,7 @@ use super::{AuthoringReport, apply_mutation, require_finite};
 ///
 /// Rejects non-finite values, unresolved selectors, invalid batches, and
 /// invalid kerning edits without writing. Reports persistence failures.
-pub fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = match &args.input {
         Some(input) => {
@@ -69,7 +69,7 @@ pub fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
 ///
 /// Rejects unresolved selectors and a pair with no value at that master.
 /// Reports persistence failures.
-pub fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport> {
+pub(crate) fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let pair = resolve_pair(&font, &args.first, &args.second)?;
@@ -102,7 +102,7 @@ pub fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport> {
 ///
 /// Rejects blank or duplicate names and unresolved glyphs. Reports
 /// persistence failures.
-pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = KerningGroupId::new();
@@ -127,7 +127,7 @@ pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringRep
 ///
 /// Rejects an unresolved group and a blank or duplicate name. Reports
 /// persistence failures.
-pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
     let set = FontIntentSet {
@@ -145,7 +145,7 @@ pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringRep
 /// # Errors
 ///
 /// Rejects an unresolved group. Reports persistence failures.
-pub fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
     let set = FontIntentSet {
@@ -163,7 +163,7 @@ pub fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringRe
 ///
 /// Rejects an unresolved group or glyph, and a repeated glyph. Reports
 /// persistence failures.
-pub fn assign_kerning_group(args: &AssignKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn assign_kerning_group(args: &AssignKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = resolve_group_id(&font, position, &args.group)?;
@@ -177,7 +177,7 @@ pub fn assign_kerning_group(args: &AssignKerningGroupArgs) -> Result<AuthoringRe
 /// # Errors
 ///
 /// Rejects an unresolved or repeated glyph. Reports persistence failures.
-pub fn unassign_kerning_group(args: &UnassignKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn unassign_kerning_group(args: &UnassignKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = member_intents(&font, args.position.into(), &args.members, None)?;
 

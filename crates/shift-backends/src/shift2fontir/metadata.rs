@@ -28,7 +28,7 @@ pub(super) struct StaticMetadataWork {
 }
 
 impl StaticMetadataWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }
@@ -191,7 +191,7 @@ pub(super) struct GlobalMetricsWork {
 }
 
 impl GlobalMetricsWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }
@@ -281,7 +281,7 @@ pub(super) struct FeatureWork {
 }
 
 impl FeatureWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }

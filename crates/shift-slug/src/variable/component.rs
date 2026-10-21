@@ -11,7 +11,7 @@ pub(super) const VARIABLE_COMPONENT_PART_BYTES: usize = 16;
 pub(super) const VARIABLE_COMPONENT_BYTES: usize = 12;
 pub(super) const VARIABLE_COMPONENT_SOURCE_BYTES: usize = 40;
 
-pub const ROOT_COMPONENT: u32 = u32::MAX;
+pub(crate) const ROOT_COMPONENT: u32 = u32::MAX;
 
 /// Sparse descriptor for one glyph whose direct and component contours are assembled on GPU.
 #[repr(C)]

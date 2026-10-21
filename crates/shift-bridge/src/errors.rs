@@ -38,7 +38,7 @@ pub enum BridgeError {
   Shape(#[from] ShapeError),
 }
 
-pub fn to_napi_error(error: BridgeError) -> Error {
+pub(crate) fn to_napi_error(error: BridgeError) -> Error {
   let status = match &error {
     BridgeError::InvalidInput { .. }
     | BridgeError::Backend(
@@ -81,6 +81,6 @@ impl From<BridgeError> for JsError {
   }
 }
 
-pub type Result<T> = std::result::Result<T, BridgeError>;
+pub(crate) type Result<T> = std::result::Result<T, BridgeError>;
 
-pub type BridgeResult<T> = Result<T>;
+pub(crate) type BridgeResult<T> = Result<T>;
