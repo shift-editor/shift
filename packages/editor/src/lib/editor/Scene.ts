@@ -4,7 +4,7 @@ import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
-import type { CreateNode, ShiftNode, UpdateNode } from "../../types/node";
+import type { CreateNode, NodeKind, NodeOfKind, ShiftNode, UpdateNode } from "../../types/node";
 
 export interface SceneValue {
   /** Every node, parents before children, siblings by `index`. */
@@ -22,7 +22,7 @@ export class Scene {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
-  readonly #nodesByKind: Signal<ReadonlyMap<ShiftNode["kind"], readonly ShiftNode[]>>;
+  readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
   /**
@@ -61,7 +61,7 @@ export class Scene {
     );
     this.#nodesByKind = computed(
       () => {
-        const nodes = new Map<ShiftNode["kind"], ShiftNode[]>();
+        const nodes = new Map<NodeKind, ShiftNode[]>();
         for (const node of this.#cell.value.nodes) {
           const list = nodes.get(node.kind);
           if (list) {
@@ -130,18 +130,34 @@ export class Scene {
     return this.#cell.peek().tree.parent(nodeId);
   }
 
-  nodeOfKind<K extends ShiftNode["kind"]>(
-    nodeId: NodeId | null,
-    kind: K,
-  ): Extract<ShiftNode, { kind: K }> | null {
+  /** Returns the node with `nodeId` when it is of `kind`, else null. */
+  nodeOfKind<K extends NodeKind>(nodeId: NodeId | null, kind: K): NodeOfKind<K> | null {
     const node = this.node(nodeId);
     if (node?.kind !== kind) return null;
 
-    return node as Extract<ShiftNode, { kind: K }>;
+    return node as NodeOfKind<K>;
   }
 
-  nodesOfKind<K extends ShiftNode["kind"]>(kind: K): readonly Extract<ShiftNode, { kind: K }>[] {
-    return (this.#nodesByKind.peek().get(kind) ?? []) as readonly Extract<ShiftNode, { kind: K }>[];
+  /** Returns every node of `kind`, parents before children. */
+  nodesOfKind<K extends NodeKind>(kind: K): readonly NodeOfKind<K>[] {
+    return (this.#nodesByKind.peek().get(kind) ?? []) as readonly NodeOfKind<K>[];
+  }
+
+  /**
+   * Returns the scene's one node of `kind`.
+   *
+   * @remarks
+   * Commands that act on "the glyph" need exactly one; with none or several
+   * there is no single target, so this returns null.
+   */
+  only<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
+    const nodes = this.nodesOfKind(kind);
+    return nodes.length === 1 ? (nodes[0] ?? null) : null;
+  }
+
+  /** Returns the first node of `kind` in scene order, or null when there is none. */
+  first<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
+    return this.nodesOfKind(kind)[0] ?? null;
   }
 
   /**

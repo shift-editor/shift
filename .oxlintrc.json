@@ -51,7 +51,8 @@
     "typescript/consistent-type-imports": "error",
     "shift/no-manual-index-wrap": "error",
     "shift/brand-cast-via-helper": "error",
-    "shift/prefer-iterator-helpers": "error"
+    "shift/prefer-iterator-helpers": "error",
+    "shift/prefer-scene-only": "error"
   },
   "overrides": [
     {

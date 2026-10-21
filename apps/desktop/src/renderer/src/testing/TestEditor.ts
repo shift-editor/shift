@@ -171,7 +171,7 @@ export class TestEditor extends Editor {
 
   /** The canvas's text run; the editor route creates it on the first open. */
   get textRun(): TextRunNode | null {
-    return this.scene.nodesOfKind("textRun")[0] ?? null;
+    return this.scene.first("textRun");
   }
 
   /** The glyph edited in place in {@link textRun}. */
@@ -281,7 +281,7 @@ export class TestEditor extends Editor {
   }
 
   get glyphNode(): GlyphNode | null {
-    return this.scene.nodesOfKind("glyph")[0] ?? null;
+    return this.scene.first("glyph");
   }
 
   get sceneGlyphRenderModel(): GlyphRenderModel | null {
