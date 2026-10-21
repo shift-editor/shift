@@ -115,7 +115,7 @@ fn invalid_axis_does_not_change_the_document() {
     args.minimum = 500.0;
     args.default = 400.0;
 
-    assert!(add_axis(args).is_err());
+    add_axis(args).unwrap_err();
     assert_eq!(load_font(&path), before);
 }
 

@@ -40,6 +40,10 @@ pub enum AnchorKind {
 }
 
 /// Returns the kind fontc reads from an anchor name.
+///
+/// # Errors
+///
+/// Returns a [`JsError`] when the kind cannot be converted to a JavaScript value.
 #[wasm_bindgen(js_name = anchorKind)]
 pub fn anchor_kind(name: &str) -> Result<Ts<AnchorKind>, JsError> {
     let index = |index: usize| u32::try_from(index).unwrap_or(u32::MAX);

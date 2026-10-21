@@ -45,6 +45,11 @@ export class TextShaper {
     return this.#shaperCell;
   }
 
+  /** Resolves once the shaper reflects the latest glyph directory. */
+  settled(): Promise<void> {
+    return this.#refresh.settled();
+  }
+
   dispose(): void {
     this.#refreshes.dispose();
     this.#refresh.dispose();

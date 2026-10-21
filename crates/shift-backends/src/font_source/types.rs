@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use crate::FontFormat;
 use crate::font_source::FontReadError;
+use shift_font::MetricKind;
 
 macro_rules! index_type {
     ($name:ident) => {
@@ -19,6 +20,15 @@ macro_rules! index_type {
 
             pub const fn to_usize(self) -> usize {
                 self.0 as usize
+            }
+
+            /// The index of the item at `position` in a directory list.
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "directory lists are far shorter than u32::MAX; OpenType caps glyphs at 65,535"
+            )]
+            pub const fn at(position: usize) -> Self {
+                Self(position as u32)
             }
         }
     };
@@ -163,6 +173,25 @@ pub struct FontMetrics {
     pub underline_thickness: Option<f64>,
 }
 
+impl FontMetrics {
+    /// This font's position for a standard metric row, in font units.
+    ///
+    /// A missing cap height or x-height falls back to the row's default
+    /// fraction of the em. Returns `None` for [`MetricKind::Custom`], which
+    /// a compiled font does not carry.
+    pub fn position(&self, kind: MetricKind) -> Option<f64> {
+        let fallback = || kind.default_position_fraction() * self.units_per_em;
+        match kind {
+            MetricKind::Ascender => Some(self.ascender),
+            MetricKind::CapHeight => Some(self.cap_height.unwrap_or_else(fallback)),
+            MetricKind::XHeight => Some(self.x_height.unwrap_or_else(fallback)),
+            MetricKind::Baseline => Some(0.0),
+            MetricKind::Descender => Some(self.descender),
+            MetricKind::Custom => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct DirectorySource {
     pub index: SourceIndex,
@@ -214,6 +243,11 @@ pub struct FontDirectory {
 }
 
 impl FontDirectory {
+    /// The number of glyphs, saturating at `u32::MAX` for error messages.
+    pub fn glyph_count(&self) -> u32 {
+        u32::try_from(self.glyphs.len()).unwrap_or(u32::MAX)
+    }
+
     pub fn format(&self) -> FontFormat {
         self.format
     }
@@ -381,6 +415,14 @@ impl FontDirectory {
         &self.default_location
     }
 
+    /// Returns the default location with `coordinates` applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnknownAxis`] or [`FontReadError::DuplicateAxis`] when a coordinate
+    /// names a missing or repeated axis, and [`FontReadError::NonFiniteCoordinate`],
+    /// [`FontReadError::CoordinateOutOfRange`] or [`FontReadError::CoordinateNotAllowed`] when its
+    /// value does not fit the axis.
     pub fn location(
         &self,
         coordinates: &[VariationCoordinate],
@@ -422,10 +464,37 @@ pub struct AffineTransform {
     pub dy: f64,
 }
 
+impl From<&norad::AffineTransform> for AffineTransform {
+    fn from(transform: &norad::AffineTransform) -> Self {
+        Self {
+            xx: transform.x_scale,
+            xy: transform.xy_scale,
+            yx: transform.yx_scale,
+            yy: transform.y_scale,
+            dx: transform.x_offset,
+            dy: transform.y_offset,
+        }
+    }
+}
+
 impl AffineTransform {
     /// Encodes the transform in [`shift_font::Transform::VALUE_FIELDS`] order.
     pub fn to_values(self) -> [f64; shift_font::Transform::VALUE_COUNT] {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
+    }
+
+    /// Decodes a transform from [`shift_font::Transform::VALUE_FIELDS`] order.
+    pub fn from_values(
+        [xx, xy, yx, yy, dx, dy]: [f64; shift_font::Transform::VALUE_COUNT],
+    ) -> Self {
+        Self {
+            xx,
+            xy,
+            yx,
+            yy,
+            dx,
+            dy,
+        }
     }
 
     pub const fn identity() -> Self {
@@ -550,6 +619,12 @@ impl GlyphShape {
             + self.components.len() * shift_font::Transform::VALUE_COUNT
     }
 
+    /// Checks that the shape's values match its structure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::InvalidProjection`] when the value count does not match the
+    /// structure, a value is not finite, or a contour is empty or malformed.
     pub fn validate(&self) -> Result<(), FontReadError> {
         let expected = self.expected_value_count();
         if self.values.len() != expected {
@@ -621,6 +696,13 @@ pub struct GlyphProjection {
 }
 
 impl GlyphProjection {
+    /// Checks the fallback shape, variation deltas and exact-source shapes against the font's axis
+    /// and source counts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::InvalidProjection`] when a shape is invalid, a delta does not match
+    /// the fallback or has an invalid region, or an exact source is out of range.
     pub fn validate(&self, axis_count: usize, source_count: usize) -> Result<(), FontReadError> {
         self.fallback.validate()?;
         let value_count = self.fallback.values.len();
@@ -671,6 +753,42 @@ pub struct ProjectedGlyph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn metrics(cap_height: Option<f64>, x_height: Option<f64>) -> FontMetrics {
+        FontMetrics {
+            units_per_em: 2048.0,
+            ascender: 1900.0,
+            descender: -500.0,
+            line_gap: 0.0,
+            cap_height,
+            x_height,
+            italic_angle: None,
+            underline_position: None,
+            underline_thickness: None,
+        }
+    }
+
+    #[test]
+    fn standard_positions_fall_back_to_em_fractions_without_rounding() {
+        let fallback = metrics(None, None);
+        let positions = MetricKind::STANDARD.map(|kind| fallback.position(kind));
+
+        assert_eq!(
+            positions,
+            [
+                Some(1900.0),
+                Some(2048.0 * 0.7),
+                Some(1024.0),
+                Some(0.0),
+                Some(-500.0)
+            ]
+        );
+        assert_eq!(
+            metrics(Some(1400.0), Some(980.0)).position(MetricKind::CapHeight),
+            Some(1400.0)
+        );
+        assert_eq!(fallback.position(MetricKind::Custom), None);
+    }
 
     fn directory() -> FontDirectory {
         FontDirectory::new(

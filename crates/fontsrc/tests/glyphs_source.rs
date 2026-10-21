@@ -36,7 +36,7 @@ fn assert_in_memory_file_matches_native(path: &Path) {
 fn malformed_in_memory_file_returns_an_error() {
     let result = Font::load_from_string("{ glyphs = (");
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]

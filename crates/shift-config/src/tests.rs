@@ -1,9 +1,9 @@
 use super::*;
 
-fn values(theme: Option<&str>) -> Option<ConfigValues> {
-    Some(ConfigValues {
+fn values(theme: Option<&str>) -> ConfigValues {
+    ConfigValues {
         theme: theme.map(name),
-    })
+    }
 }
 
 fn name(theme: &str) -> ThemeSetting {
@@ -26,7 +26,7 @@ fn system_slots(light: &str, dark: &str) -> ThemeSetting {
 fn reads_the_theme() {
     let read = read_config("theme = \"nord\"\n");
 
-    assert_eq!(read.values, values(Some("nord")));
+    assert_eq!(read.values, Some(values(Some("nord"))));
     assert!(read.problems.is_empty());
 }
 
@@ -35,7 +35,7 @@ fn reads_an_empty_file_as_choosing_no_theme() {
     assert_eq!(
         read_config(""),
         ConfigRead {
-            values: values(None),
+            values: Some(values(None)),
             problems: Vec::new(),
         }
     );
@@ -73,7 +73,7 @@ fn rejects_a_theme_that_is_not_a_string_at_its_line() {
 fn warns_about_unknown_keys_but_still_applies_known_ones() {
     let read = read_config("theme = \"nord\"\nacent = \"#fff\"\n\n[\"weird.(key\"]\n");
 
-    assert_eq!(read.values, values(Some("nord")));
+    assert_eq!(read.values, Some(values(Some("nord"))));
     assert_eq!(
         read.problems,
         vec![
@@ -153,7 +153,7 @@ fn adds_a_missing_theme_among_the_top_level_settings() {
         edited,
         "# header\nscale = 2\ntheme = \"nord\"\n\n[future]\nkey = 1\n"
     );
-    assert_eq!(read_config(&edited).values, values(Some("nord")));
+    assert_eq!(read_config(&edited).values, Some(values(Some("nord"))));
 }
 
 #[test]
@@ -346,6 +346,6 @@ fn turns_a_theme_section_into_a_top_level_name() {
     )
     .unwrap();
 
-    assert_eq!(read_config(&edited).values, values(Some("dracula")));
+    assert_eq!(read_config(&edited).values, Some(values(Some("dracula"))));
     assert!(edited.contains("[future]\nkey = 1"), "{edited}");
 }

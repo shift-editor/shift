@@ -34,7 +34,12 @@ impl AxisNormalization {
             Some(user) => self.interpolate(user),
             None => 0.0,
         };
-        NormalizedCoord::from_f32(normalized as f32)
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "normalized coordinates lie in -1..=1 and become F2Dot14"
+        )]
+        let normalized = normalized as f32;
+        NormalizedCoord::from_f32(normalized)
     }
 
     fn interpolate(&self, user: f64) -> f64 {

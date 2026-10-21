@@ -3,6 +3,7 @@
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
 mod change_set;
+mod columns;
 mod connection;
 mod document;
 mod error;
@@ -11,16 +12,18 @@ mod font_state;
 mod glyph;
 mod import_writer;
 mod layer;
+mod numeric;
 mod recovery;
 mod schema;
 mod source;
+mod sql_text;
 mod store;
 mod types;
 mod workspace_state;
 mod write_mode;
 
 pub use document::DocumentMetadata;
-pub use error::StoreError;
+pub use error::{StoreEntity, StoreError};
 pub use font::FontInfo;
 pub use glyph::{GlyphRecord, NewGlyph};
 pub use import_writer::{FontImportWriter, encode_glyph_batch};

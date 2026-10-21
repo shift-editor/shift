@@ -189,7 +189,7 @@ mod tests {
         let location = ExternalLocation::from([(axis.id(), 700.0)]);
         let instance = NamedInstance::new("Bold".to_string(), location, None);
 
-        assert!(instance.validate(&[axis]).is_ok());
+        instance.validate(&[axis]).unwrap();
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
         let regular = NamedInstance::new("Text".to_string(), regular_location, None);
         let display = NamedInstance::new("Text".to_string(), display_location, None);
 
-        assert!(validate_named_instances(&[regular, display], &[axis]).is_ok());
+        validate_named_instances(&[regular, display], &[axis]).unwrap();
     }
 
     #[test]

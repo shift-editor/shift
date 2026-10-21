@@ -475,7 +475,7 @@ mod tests {
             [recovery_path.to_str().unwrap()],
         )
         .unwrap();
-        assert!(load_recovery_table_shapes(&conn).is_ok());
+        load_recovery_table_shapes(&conn).unwrap();
 
         conn.execute_batch("ALTER TABLE recovery.sources ADD COLUMN unexpected TEXT")
             .unwrap();

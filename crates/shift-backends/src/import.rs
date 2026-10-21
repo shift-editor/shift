@@ -211,6 +211,11 @@ impl FontImport {
         self.stream.glyph_count()
     }
 
+    /// Parses the next batch of at most `limit` glyphs; an empty batch ends the stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::Load`] when the source cannot be parsed.
     pub fn next_batch(&mut self, limit: ImportBatchLimit) -> BackendResult<Vec<Glyph>> {
         self.stream
             .next_batch(limit)
@@ -220,6 +225,11 @@ impl FontImport {
     /// Drains the same bounded stream used by native import into one eager
     /// font for compatibility callers. Streaming semantics are therefore the
     /// only parsing semantics for formats that implement them.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::Load`] when the source cannot be parsed or its glyphs do not form a
+    /// valid font.
     pub fn collect_font(self) -> BackendResult<Font> {
         let Self {
             header,

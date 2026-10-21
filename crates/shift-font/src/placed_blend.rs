@@ -22,12 +22,6 @@ pub struct ContourShape {
     pub closed: bool,
 }
 
-/// Returns whether `transform` mirrors, so a decomposed placement reverses
-/// closed contours.
-pub fn mirrors(transform: &Transform) -> bool {
-    transform.xx * transform.yy - transform.xy * transform.yx < 0.0
-}
-
 /// Returns the index in the authored contour of the point a decomposed
 /// placement puts at `index`.
 ///
@@ -39,12 +33,6 @@ pub fn placed_point_index(index: usize, shape: ContourShape, mirrored: bool) -> 
         return index;
     }
     shape.point_count - index
-}
-
-/// Returns whether two outlines line up point for point: the same number of
-/// contours, each with the same closure and point count.
-pub fn shapes_match(a: &[ContourShape], b: &[ContourShape]) -> bool {
-    a == b
 }
 
 /// One master's outline of a component occurrence, before placement.
@@ -91,16 +79,16 @@ pub fn blend_placed_contours(
         .iter()
         .map(|shape| shape.point_count)
         .sum::<usize>();
-    let lines_up = masters.iter().all(|master| {
-        shapes_match(master.shapes, first.shapes) && master.coordinates.len() == point_total * 2
-    });
+    let lines_up = masters
+        .iter()
+        .all(|master| master.shapes == first.shapes && master.coordinates.len() == point_total * 2);
     if !lines_up || weights.len() != masters.len() {
         return false;
     }
 
     let mirrored = masters
         .iter()
-        .map(|master| mirrors(&master.transform))
+        .map(|master| master.transform.mirrors())
         .collect::<Vec<_>>();
     out.reserve(point_total);
     let mut contour_start = 0;

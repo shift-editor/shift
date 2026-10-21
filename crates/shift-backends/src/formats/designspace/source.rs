@@ -14,7 +14,7 @@ use crate::formats::ufo::glif::{
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
-use super::{derive_axis_range, find_default_source_index, map_axis_value, stream_retained};
+use super::{DesignspaceAxisExt, DesignspaceDocumentExt, stream_retained};
 
 /// Retained source locations and UFO glyph bytes for one Designspace.
 pub struct DesignspaceFont {
@@ -28,14 +28,15 @@ pub struct DesignspaceFont {
 }
 
 impl DesignspaceFont {
+    /// Opens a Designspace and its UFO sources for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnsupportedFormat`] when `path` is not a `.designspace`, and
+    /// [`FontReadError::MalformedSource`] when the document or a source cannot be parsed, it has no
+    /// sources, or no source sits at the default location.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
-        if !matches!(
-            path.extension()
-                .and_then(|extension| extension.to_str())
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("designspace")
-        ) {
+        if FontFormat::of_path(path) != Some(FontFormat::Designspace) {
             return Err(FontReadError::UnsupportedFormat {
                 path: path.to_path_buf(),
             });
@@ -46,7 +47,7 @@ impl DesignspaceFont {
         if document.sources.is_empty() {
             return Err(malformed(path, "Designspace has no sources".into()));
         }
-        let default_source = find_default_source_index(&document).ok_or_else(|| {
+        let default_source = document.default_source_index().ok_or_else(|| {
             malformed(
                 path,
                 "Designspace has no source at the mapped default location".into(),
@@ -83,12 +84,12 @@ impl DesignspaceFont {
             .axes
             .iter()
             .map(|axis| {
-                let (user_minimum, user_maximum) = derive_axis_range(axis);
-                let default = map_axis_value(axis, f64::from(axis.default));
+                let (user_minimum, user_maximum) = axis.user_range();
+                let default = axis.default_design_value();
                 let mut design_values = vec![
-                    map_axis_value(axis, user_minimum),
+                    axis.map_forward(user_minimum),
                     default,
-                    map_axis_value(axis, user_maximum),
+                    axis.map_forward(user_maximum),
                 ];
                 if let Some(mapping) = &axis.map {
                     design_values.extend(mapping.iter().map(|point| f64::from(point.output)));
@@ -165,25 +166,16 @@ impl FontImporter for DesignspaceFont {
 
 #[cfg(test)]
 mod tests {
+    use shift_font::test_support::fixtures;
     use std::fs;
 
     use super::*;
 
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
-
     #[test]
     fn directory_sources_keep_retained_ufo_order() {
-        let path = fixture("mutatorsans-variable/MutatorSans.designspace");
+        let path = fixtures::font("mutatorsans-variable/MutatorSans.designspace");
         let document = DesignSpaceDocument::load(&path).unwrap();
-        let default_source = find_default_source_index(&document).unwrap();
+        let default_source = document.default_source_index().unwrap();
         let expected_filenames = std::iter::once(default_source)
             .chain((0..document.sources.len()).filter(|index| *index != default_source))
             .map(|index| document.sources[index].filename.as_str())
@@ -206,7 +198,7 @@ mod tests {
     fn designspace_nondefault_glyph_matches_authored_import() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("LayerOnlyDesignspace");
-        copy_directory(&fixture("mutatorsans-variable"), &copied);
+        copy_directory(&fixtures::font("mutatorsans-variable"), &copied);
         add_layer_only_glyph(
             &copied.join("MutatorSansBoldCondensed.ufo"),
             "glyphs",
@@ -221,7 +213,7 @@ mod tests {
     fn designspace_projection_retains_variation_after_source_removal() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("Removed");
-        copy_directory(&fixture("mutatorsans-variable"), &copied);
+        copy_directory(&fixtures::font("mutatorsans-variable"), &copied);
         let font = DesignspaceFont::open(&copied.join("MutatorSans.designspace")).unwrap();
         let glyph = font
             .directory()

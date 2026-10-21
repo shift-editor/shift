@@ -20,16 +20,16 @@ use crate::{
     formats::ufo::{UfoKerning, load_header, read_glyph_paths},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     kerning_import::KerningImport,
-    metrics::copy_source_metrics,
 };
 
+use shift_font::StandardMetrics;
+
 use super::{
-    axis_labels,
+    DesignspaceAxisExt, DesignspaceDocumentExt, axis_labels,
     error::{DesignspaceError, DesignspaceResult},
     reader::{
-        axis_mappings_from_designspace, axisless_source_name, find_default_source_index,
-        location_from_dimensions, named_instances_from_designspace, parse_axisless_sources,
-        source_name, variation_axis_kind,
+        axis_mappings_from_designspace, axisless_source_name, location_from_dimensions,
+        named_instances_from_designspace, parse_axisless_sources, source_name,
     },
 };
 
@@ -97,8 +97,9 @@ fn stream_designspace(
             details: "retained source path count does not match Designspace sources".into(),
         });
     }
-    let default_index =
-        find_default_source_index(&document).ok_or(DesignspaceError::MissingDefaultSource)?;
+    let default_index = document
+        .default_source_index()
+        .ok_or(DesignspaceError::MissingDefaultSource)?;
     let default_descriptor = &document.sources[default_index];
     let default_path = designspace_dir.join(&default_descriptor.filename);
     let (mut header, default_kerning) =
@@ -119,7 +120,7 @@ fn stream_designspace(
     add_axes(&mut header, &document, &mut labels)?;
     header.set_axis_mappings(axis_mappings_from_designspace(&document, header.axes())?)?;
     let (instances, instance_loss) =
-        distinct_named_instances(named_instances_from_designspace(&document, header.axes())?);
+        distinct_named_instances(named_instances_from_designspace(&document, header.axes()));
     header.set_named_instances(instances)?;
 
     let source_order = std::iter::once(default_index)
@@ -318,12 +319,12 @@ fn register_designspace_sources(
             &source_names,
         );
         source_names.insert(source.name().to_string());
-        copy_source_metrics(
-            &material.metric_definitions,
-            &material.metrics,
-            &metric_definitions,
-            &mut source,
-        );
+        StandardMetrics::of(&material.metrics, &material.metric_definitions)
+            .apply_to(&mut source, &metric_definitions);
+        source.set_italic_angle(material.metrics.italic_angle());
+        source.set_line_gap(material.metrics.line_gap());
+        source.set_underline_position(material.metrics.underline_position());
+        source.set_underline_thickness(material.metrics.underline_thickness());
         let source_id = header.add_source(source);
         if material.index == default_index {
             header.set_default_source_id(source_id.clone());
@@ -365,7 +366,7 @@ fn add_axes(
     labels: &mut HashMap<String, Vec<shift_font::AxisLabel>>,
 ) -> DesignspaceResult<()> {
     for axis in &document.axes {
-        let mut imported = match variation_axis_kind(axis) {
+        let mut imported = match axis.variation_kind() {
             VariationAxisKind::Discrete { values, default } => Axis::discrete_with_id(
                 AxisId::new(),
                 axis.tag.clone(),

@@ -14,8 +14,8 @@ use crate::composite::{
     resolved_layer_geometry_from_layers,
 };
 use crate::{
-    Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId,
-    GlyphInterpolation, GlyphLayer, InterpolationBasis, LayerId, Source, SourceId,
+    Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphInterpolation,
+    GlyphLayer, InterpolationBasis, LayerId, Source, SourceId,
 };
 
 /// One exact-source shape that cannot be represented by compatible variation.
@@ -247,18 +247,14 @@ impl Font {
             .as_ref()
             .and_then(|interpolation| glyph.layers().get(&interpolation.reference_layer().id()))
             .cloned()
-            .or_else(|| fallback_layer(self, glyph));
+            .or_else(|| self.fallback_layer(glyph).cloned());
         let Some(fallback) = fallback else {
             return Ok(None);
         };
         let exact_source_shapes = self
             .masters()
             .filter_map(|source| {
-                let layer = glyph
-                    .layers()
-                    .values()
-                    .find(|layer| layer.source_id() == source.id())?
-                    .clone();
+                let layer = Arc::clone(glyph.shared_layer_for_source(&source.id())?);
                 if layer.id() == fallback.id() {
                     return None;
                 }
@@ -345,7 +341,6 @@ impl Font {
     /// never a compatible authored layer, whose per-layer component identities
     /// interpolation does not carry. No geometry is evaluated.
     fn structural_components(
-        &self,
         root_glyph_id: &GlyphId,
         root_projection: &GlyphLayerProjection,
         projections: &HashMap<GlyphId, Option<Arc<GlyphLayerProjection>>>,
@@ -393,13 +388,13 @@ impl Font {
     ) -> CoreResult<GlyphProjection> {
         let fallback_source_id = layers.fallback.source_id();
         let components =
-            self.structural_components(glyph_id, &layers, projections, &fallback_source_id)?;
+            Self::structural_components(glyph_id, &layers, projections, &fallback_source_id)?;
 
         let mut exact_source_components = Vec::new();
         for source in self.masters() {
             let source_id = source.id();
             let source_components =
-                self.structural_components(glyph_id, &layers, projections, &source_id)?;
+                Self::structural_components(glyph_id, &layers, projections, &source_id)?;
             if source_components != components {
                 exact_source_components.push(GlyphSourceComponents {
                     source_id,
@@ -435,6 +430,11 @@ impl Font {
     /// Interpolation bases are shared when the ordered compatible source identities match.
     /// The result owns no mutable font state and must be discarded after the current read or
     /// compilation so projections cannot outlive authored edits.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when a requested glyph is missing, and
+    /// [`CoreError::UnresolvableComponentGlyph`] when a component's glyph cannot be projected.
     pub fn glyph_projection_set(&self, glyph_ids: &[GlyphId]) -> CoreResult<GlyphProjectionSet> {
         for glyph_id in glyph_ids {
             if self.glyph(glyph_id).is_none() {
@@ -522,6 +522,11 @@ impl GlyphProjectionSet {
     }
 
     /// Resolves one prepared glyph without rebuilding its projection or component closure.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] or [`CoreError::UnresolvableComponentGlyph`] when the
+    /// glyph or a component cannot be resolved at `location`.
     pub fn resolve_glyph(
         &self,
         glyph_id: &GlyphId,
@@ -735,8 +740,7 @@ fn structural_layer<'a>(
         .exact_source_shapes
         .iter()
         .find(|shape| shape.source_id == *source_id)
-        .map(|shape| &shape.layer)
-        .unwrap_or(&projection.fallback)
+        .map_or(&projection.fallback, |shape| &shape.layer)
 }
 
 /// Component base ids across the fallback and every exact-source shape.
@@ -750,34 +754,7 @@ fn component_base_glyph_ids(
                 .iter()
                 .map(|shape| &shape.layer),
         )
-        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
-}
-
-fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
-    if let Some(default_source_id) = font.default_source_id() {
-        let is_master = source_for_id(font, &default_source_id).is_some_and(Source::is_master);
-        if is_master
-            && let Some(layer) = glyph
-                .layers()
-                .values()
-                .find(|layer| layer.source_id() == default_source_id)
-        {
-            return Some(layer.clone());
-        }
-    }
-
-    glyph
-        .layers()
-        .values()
-        .filter(|layer| source_for_id(font, &layer.source_id()).is_some_and(Source::is_master))
-        .max_by_key(|layer| layer.contours().len() + layer.components().len())
-        .cloned()
-}
-
-fn source_for_id<'a>(font: &'a Font, source_id: &SourceId) -> Option<&'a Source> {
-    font.sources()
-        .iter()
-        .find(|source| source.id() == *source_id)
+        .flat_map(|layer| layer.component_glyph_ids())
 }
 
 fn exact_source_id(

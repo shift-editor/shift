@@ -1,3 +1,4 @@
+mod axis_ext;
 mod axis_labels;
 mod error;
 mod import;
@@ -5,10 +6,10 @@ mod reader;
 mod source;
 mod writer;
 
+pub(crate) use axis_ext::{DesignspaceAxisExt, DesignspaceDocumentExt};
 pub use error::DesignspaceError;
 pub(crate) use import::{stream_font, stream_retained};
 pub use reader::DesignspaceReader;
-pub(crate) use reader::{derive_axis_range, find_default_source_index, map_axis_value};
 pub use source::DesignspaceFont;
 pub use writer::DesignspaceWriter;
 
@@ -17,8 +18,8 @@ mod tests {
     use super::*;
     use crate::traits::{FontReader, FontWriter};
     use shift_font::{
-        Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, Contour,
-        ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location, NamedInstance, PointType,
+        Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, ExternalLocation,
+        Font, Glyph, GlyphLayer, LayerId, Location, NamedInstance,
     };
     use std::fs;
 
@@ -31,12 +32,8 @@ mod tests {
         let mut glyph = Glyph::with_unicode("o".to_string(), 'o' as u32);
         let mut layer =
             GlyphLayer::with_width(LayerId::new(), font.default_source_id().unwrap(), 520.0);
-        let mut contour = Contour::new();
-        contour.add_point(100.0, 0.0, PointType::OnCurve, false);
-        contour.add_point(420.0, 0.0, PointType::OnCurve, false);
-        contour.add_point(420.0, 500.0, PointType::OnCurve, false);
-        contour.add_point(100.0, 500.0, PointType::OnCurve, false);
-        contour.close();
+        let contour =
+            shift_font::contour![(100.0, 0.0), (420.0, 0.0), (420.0, 500.0), (100.0, 500.0)];
         layer.add_contour(contour);
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
@@ -234,7 +231,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(loaded_italic.labels()[0].linked_value, Some(1.0));
-        assert!(loaded_italic.validate().is_ok());
+        loaded_italic.validate().unwrap();
     }
 
     fn mapping_point(
@@ -254,5 +251,54 @@ mod tests {
             .map(|(axis_id, value)| (axis_id.clone(), *value))
             .collect();
         location
+    }
+
+    #[test]
+    fn reports_an_instance_left_out_for_sharing_a_location() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let designspace_path = temp_dir.path().join("Instances.designspace");
+        let mut font = test_font();
+        let weight = Axis::weight();
+        let weight_id = weight.id();
+        font.add_axis(weight).expect("weight axis should be valid");
+        font.set_named_instances(vec![NamedInstance::new(
+            "Bold".to_string(),
+            ExternalLocation::from_untyped(location(&[(weight_id, 700.0)])),
+            None,
+        )])
+        .unwrap();
+        DesignspaceWriter::new()
+            .save(&font, designspace_path.to_str().unwrap())
+            .unwrap();
+
+        let xml = fs::read_to_string(&designspace_path).unwrap();
+        let start = xml
+            .find("<instance ")
+            .expect("the writer should write the instance");
+        let end = start + xml[start..].find("</instance>").unwrap() + "</instance>".len();
+        let copy = xml[start..end].replace("stylename=\"Bold\"", "stylename=\"Bold Copy\"");
+        assert_ne!(copy, xml[start..end], "the copy should rename the instance");
+        let xml = format!("{}\n{copy}{}", &xml[..end], &xml[end..]);
+        fs::write(&designspace_path, xml).unwrap();
+
+        let (font, _, report) = stream_font(designspace_path.to_str().unwrap()).unwrap();
+
+        let names = font
+            .named_instances()
+            .iter()
+            .map(NamedInstance::name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["Bold"]);
+        let messages = report
+            .losses
+            .iter()
+            .map(|loss| loss.message.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            messages
+                .iter()
+                .any(|message| message.contains("'Bold Copy' (at the same location as 'Bold')")),
+            "{messages:?}"
+        );
     }
 }

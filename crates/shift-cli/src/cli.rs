@@ -8,20 +8,20 @@ use crate::glyph_inspect::GlyphInspectView;
 use crate::inspect::InspectView;
 
 mod font;
-pub use font::{FontInfoArgs, SetFontArgs};
+pub(crate) use font::{FontInfoArgs, SetFontArgs};
 mod kerning;
-pub use kerning::{
+pub(crate) use kerning::{
     AssignKerningGroupArgs, CreateKerningGroupArgs, DeleteKerningGroupArgs, GetKerningArgs,
     KerningCommand, KerningGroupCommand, KerningGroupsArgs, KerningPositionArg, ListKerningArgs,
     RemoveKerningArgs, RenameKerningGroupArgs, SetKerningArgs, UnassignKerningGroupArgs,
 };
 mod skill;
-pub use skill::{
+pub(crate) use skill::{
     InstallSkillArgs, ShowSkillArgs, SkillAgent, SkillCommand, SkillIdentityArgs, SkillStatusArgs,
     SkillTopic,
 };
 mod variation;
-pub use variation::{
+pub(crate) use variation::{
     AddInstanceArgs, InstanceCommand, RemoveInstanceArgs, SetAxisArgs, SetInstanceArgs,
 };
 
@@ -42,13 +42,13 @@ const CLAP_STYLES: Styles = Styles::styled()
     color = ColorChoice::Auto,
     styles = CLAP_STYLES
 )]
-pub struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum Command {
+pub(crate) enum Command {
     /// Inspect a SQLite .shift document without modifying it.
     Inspect(InspectArgs),
 
@@ -108,7 +108,7 @@ pub enum Command {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum FontCommand {
+pub(crate) enum FontCommand {
     /// Create a new .shift document with its default Regular source.
     Create(CreateFontArgs),
 
@@ -120,7 +120,7 @@ pub enum FontCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum AxisCommand {
+pub(crate) enum AxisCommand {
     /// Add a continuous axis.
     Add(AddAxisArgs),
 
@@ -129,13 +129,13 @@ pub enum AxisCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum SourceCommand {
+pub(crate) enum SourceCommand {
     /// Add a master source at a design-space location.
     Add(AddSourceArgs),
 }
 
 #[derive(Debug, Subcommand)]
-pub enum GlyphCommand {
+pub(crate) enum GlyphCommand {
     /// Add glyph identity and Unicode assignments without creating layers.
     Add(AddGlyphArgs),
 
@@ -150,7 +150,7 @@ pub enum GlyphCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum LayerCommand {
+pub(crate) enum LayerCommand {
     /// Add one authored layer from a semantic JSON payload.
     Add(LayerPayloadArgs),
 
@@ -162,7 +162,7 @@ pub enum LayerCommand {
 }
 
 #[derive(Debug, Args)]
-pub struct CreateFontArgs {
+pub(crate) struct CreateFontArgs {
     /// Path for the new canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -183,7 +183,7 @@ pub struct CreateFontArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct AddAxisArgs {
+pub(crate) struct AddAxisArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -213,7 +213,7 @@ pub struct AddAxisArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct AddSourceArgs {
+pub(crate) struct AddSourceArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -231,7 +231,7 @@ pub struct AddSourceArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct ExportGlyphsArgs {
+pub(crate) struct ExportGlyphsArgs {
     /// Path to a .shift, UFO, Designspace, Glyphs, TTF, or OTF font source.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -252,7 +252,7 @@ pub struct ExportGlyphsArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct CheckArgs {
+pub(crate) struct CheckArgs {
     /// Path to a .shift, UFO, Designspace, or Glyphs font source.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -276,7 +276,7 @@ pub struct CheckArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct InspectGlyphArgs {
+pub(crate) struct InspectGlyphArgs {
     /// Path to a .shift, UFO, Designspace, Glyphs, TTF, or OTF font source.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -298,7 +298,7 @@ pub struct InspectGlyphArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct AddGlyphArgs {
+pub(crate) struct AddGlyphArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -315,7 +315,7 @@ pub struct AddGlyphArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct LayerPayloadArgs {
+pub(crate) struct LayerPayloadArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -337,7 +337,7 @@ pub struct LayerPayloadArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct SetGlyphsArgs {
+pub(crate) struct SetGlyphsArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -351,7 +351,7 @@ pub struct SetGlyphsArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct CopyLayerArgs {
+pub(crate) struct CopyLayerArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -373,7 +373,7 @@ pub struct CopyLayerArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct MutationArgs {
+pub(crate) struct MutationArgs {
     /// Write a new independent document instead of modifying the input.
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub output: Option<PathBuf>,
@@ -388,7 +388,7 @@ pub struct MutationArgs {
 }
 
 #[derive(Debug, Parser)]
-pub struct CompileArgs {
+pub(crate) struct CompileArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -399,7 +399,7 @@ pub struct CompileArgs {
 }
 
 #[derive(Debug, Parser)]
-pub struct InspectArgs {
+pub(crate) struct InspectArgs {
     /// Path to the SQLite .shift document to inspect.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,

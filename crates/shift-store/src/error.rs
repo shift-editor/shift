@@ -13,10 +13,13 @@ pub enum StoreError {
     Font(#[from] shift_font::error::CoreError),
 
     #[error("glyph layer encoding failed: {0}")]
-    LayerEncoding(String),
+    LayerEncoding(#[from] rmp_serde::encode::Error),
 
     #[error("glyph layer decoding failed: {0}")]
-    LayerDecoding(String),
+    LayerDecoding(#[from] rmp_serde::decode::Error),
+
+    #[error("glyph layer decoding failed: payload has {0} trailing bytes")]
+    TrailingLayerBytes(usize),
 
     #[error("invalid glyph layer payload: {0}")]
     InvalidLayerPayload(String),
@@ -28,10 +31,10 @@ pub enum StoreError {
     UnsupportedLayerCompression(String),
 
     #[error("glyph layer compression failed: {0}")]
-    LayerCompression(String),
+    LayerCompression(#[source] std::io::Error),
 
     #[error("glyph layer decompression failed: {0}")]
-    LayerDecompression(String),
+    LayerDecompression(#[source] std::io::Error),
 
     #[error("glyph layer payload has {bytes} bytes; limit is {limit}")]
     LayerPayloadTooLarge { bytes: u64, limit: u64 },
@@ -99,8 +102,23 @@ pub enum StoreError {
     #[error("recovery edits require the committed post-edit font")]
     RecoveryRequiresPostFont,
 
+    #[error("invalid glyph order: one committed change set cannot both append and pop glyphs")]
+    AppendAndPopGlyphs,
+
+    #[error("invalid glyph order: appended identity {0} is not in the tail segment")]
+    AppendedGlyphNotAtTail(shift_font::GlyphId),
+
+    #[error("invalid glyph order: popped identity {0} is not the directory tail")]
+    PoppedGlyphNotAtTail(shift_font::GlyphId),
+
+    #[error("invalid glyph order: identity {0} is not the directory tail")]
+    GlyphNotAtTail(shift_font::GlyphId),
+
+    #[error("integer out of range: {0}")]
+    IntegerOutOfRange(#[from] std::num::TryFromIntError),
+
     #[error("missing {kind}: {id}")]
-    MissingEntity { kind: &'static str, id: String },
+    MissingEntity { kind: StoreEntity, id: String },
 
     #[error("store schema version {found} is newer than supported version {supported}")]
     UnsupportedSchemaVersion { found: i64, supported: i64 },
@@ -109,6 +127,28 @@ pub enum StoreError {
         "Shift document schema version {found} is unsupported; this build supports {supported}"
     )]
     UnsupportedDocumentSchemaVersion { found: i64, supported: i64 },
+}
+
+/// A kind of row the store looks up by id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoreEntity {
+    FontInfo,
+    Glyph,
+    GlyphLayer,
+    GlyphLayerPayload,
+    GlyphOrder,
+}
+
+impl std::fmt::Display for StoreEntity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::FontInfo => "font info",
+            Self::Glyph => "glyph",
+            Self::GlyphLayer => "glyph layer",
+            Self::GlyphLayerPayload => "glyph layer payload",
+            Self::GlyphOrder => "glyph order",
+        })
+    }
 }
 
 /// Turns the `Option` of a store lookup into [`StoreError::MissingEntity`].
@@ -120,11 +160,11 @@ pub(crate) trait OrMissing<T> {
     /// # Errors
     ///
     /// Returns [`StoreError::MissingEntity`] when the lookup found nothing.
-    fn or_missing(self, kind: &'static str, id: &impl ToString) -> Result<T, StoreError>;
+    fn or_missing(self, kind: StoreEntity, id: &impl ToString) -> Result<T, StoreError>;
 }
 
 impl<T> OrMissing<T> for Option<T> {
-    fn or_missing(self, kind: &'static str, id: &impl ToString) -> Result<T, StoreError> {
+    fn or_missing(self, kind: StoreEntity, id: &impl ToString) -> Result<T, StoreError> {
         self.ok_or_else(|| StoreError::MissingEntity {
             kind,
             id: id.to_string(),

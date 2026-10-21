@@ -1,10 +1,15 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines,
+    reason = "test and benchmark arithmetic on small known values; benchmarks and GPU tests run as one long scenario"
+)]
 #![cfg(feature = "wgpu-benchmark")]
 
 use std::sync::mpsc;
 
 use shift_font::{
-    Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
-    LayerId, PointType, test_support::sample_variable_font,
+    Anchor, Component, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer, LayerId,
+    test_support::sample_variable_font,
 };
 use shift_slug::{
     AuthoredWeightSet, Curve, RenderInstance, VARIABLE_SLUG_WGSL, VariableAtlasBuilder,
@@ -48,7 +53,7 @@ fn gpu_resolves_varying_component_transforms() {
     let expected_advance = atlas
         .resolve_advance_with_weights(authored.default_glyph, &weights)
         .unwrap();
-    let glyph = atlas.glyphs()[authored.default_glyph as usize];
+    let glyph = atlas.glyphs()[authored.default_glyph.get() as usize];
     let descriptor = atlas.component_glyphs()[(glyph.source_start & 0x7fff_ffff) as usize];
     let packed = atlas.pack(256).unwrap();
     let layout = packed.layout();
@@ -56,7 +61,7 @@ fn gpu_resolves_varying_component_transforms() {
     let instance = RenderInstance {
         pixel_rect: [0.0, 0.0, 64.0, 64.0],
         em_transform: [1.0, 1.0, 0.0, 0.0],
-        glyph_index: authored.default_glyph,
+        glyph_index: authored.default_glyph.get(),
         scratch_curve_start: 0,
         scratch_band_start: 0,
         scratch_index_start: 0,
@@ -330,11 +335,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
 
 fn triangle_layer(source_id: shift_font::SourceId, shift: f64) -> GlyphLayer {
     let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
-    let mut contour = Contour::new();
-    contour.add_point(shift, 0.0, PointType::OnCurve, false);
-    contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);
-    contour.add_point(100.0 + shift, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(shift, 0.0), (50.0 + shift, 100.0), (100.0 + shift, 0.0)];
     layer.add_contour(contour);
     layer
 }

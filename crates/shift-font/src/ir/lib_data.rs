@@ -21,8 +21,8 @@ pub enum LibValue {
     UnsignedInteger(u64),
     Float(f64),
     Boolean(bool),
-    Array(Vec<LibValue>),
-    Dict(BTreeMap<String, LibValue>),
+    Array(Vec<Self>),
+    Dict(BTreeMap<String, Self>),
     Data(Vec<u8>),
     /// A plist date, carried as the RFC 3339 / ISO 8601 string used by XML
     /// plists (`plist::Date::to_xml_format`), e.g. `2024-02-02T02:02:02Z`.
