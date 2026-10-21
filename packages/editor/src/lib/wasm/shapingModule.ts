@@ -3,6 +3,7 @@ import type {
   GlyphEntry,
   GlyphId,
   ParagraphRequest,
+  ShapedParagraph,
   ShapedRun,
   ShaperFont,
   ShapeUnit,
@@ -12,6 +13,7 @@ import {
   setShaperGlyphs,
   shapeParagraphs,
   type ParagraphInput,
+  type ShapedParagraphOutput,
   type ShapedRunOutput,
 } from "./generated/shapingLayouts";
 
@@ -70,15 +72,22 @@ export class RegisteredShaper {
   /**
    * Shapes paragraphs, as `Font.shapeParagraphs` does in the workspace.
    *
-   * @returns Each paragraph's runs in logical order, in request order; null
-   * for a paragraph that cannot be shaped.
+   * @returns Each paragraph's direction and its runs in screen order, in
+   * request order; null for a paragraph that cannot be shaped.
    */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): (ShapedRun[] | null)[] {
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): (ShapedParagraph | null)[] {
     const shaped = shapeParagraphs({
       shaper: this.#handle,
       paragraphs: paragraphs.map((paragraph) => this.#input(paragraph)),
     });
-    return shaped.map((runs) => (runs ? runs.map((run) => this.#run(run)) : null));
+    return shaped.map((paragraph) => (paragraph ? this.#paragraph(paragraph) : null));
+  }
+
+  #paragraph(paragraph: ShapedParagraphOutput): ShapedParagraph {
+    return {
+      direction: paragraph.direction,
+      runs: paragraph.runs.map((run) => this.#run(run)),
+    };
   }
 
   #input(paragraph: ParagraphRequest): ParagraphInput {
@@ -105,7 +114,8 @@ export class RegisteredShaper {
       start: run.start,
       end: run.end,
       ...(script ? { script } : {}),
-      direction: run.rightToLeft ? "rtl" : "ltr",
+      level: run.level,
+      direction: run.direction,
       glyphs: run.glyphs.map((glyph) => {
         const glyphId = glyph.glyph == null ? null : (this.#glyphIds[glyph.glyph] ?? null);
         return {

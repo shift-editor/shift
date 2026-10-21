@@ -38,7 +38,13 @@ export function splitParagraphs(items: readonly TextItem[]): Paragraph[] {
   return paragraphs;
 }
 
-/** Returns a paragraph's shaped runs as layout runs, with clusters made run-relative. */
+/**
+ * Returns a paragraph's shaped runs as layout runs, with clusters made run-relative.
+ *
+ * @remarks
+ * Runs keep the order shaping gives them: screen order, one per script and
+ * bidi level, already reordered by level in shift-shape.
+ */
 export function shapedRuns(paragraph: Paragraph, runs: readonly ShapedRun[]): SegmentedRun[] {
   return runs.map((run) => ({
     items: paragraph.items.slice(run.start, run.end),

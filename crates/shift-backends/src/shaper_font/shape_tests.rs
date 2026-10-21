@@ -270,7 +270,8 @@ fn an_arabic_paragraph_joins_and_reads_right_to_left() {
 
     let runs = shaper(&font)
         .shape_paragraph(&paragraph(&units, &location))
-        .unwrap();
+        .unwrap()
+        .runs;
 
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].script.as_deref(), Some("Arab"));
@@ -293,7 +294,8 @@ fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
 
     let runs = shaper(&font)
         .shape_paragraph(&paragraph(&units, &location))
-        .unwrap();
+        .unwrap()
+        .runs;
 
     let summary: Vec<_> = runs
         .iter()
@@ -310,4 +312,27 @@ fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
         names_and_clusters(&font, &runs[1].glyphs),
         vec![named("beh-ar.fina", 3), named("beh-ar.init", 2)]
     );
+}
+
+#[test]
+fn digits_inside_an_arabic_paragraph_shape_left_to_right_left_of_it() {
+    let font = joining_font();
+    let location = ExternalLocation::new();
+    let units = characters("\u{0628} 12");
+
+    let paragraph = shaper(&font)
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+
+    assert_eq!(paragraph.direction, TextDirection::RightToLeft);
+    let runs: Vec<_> = paragraph
+        .runs
+        .iter()
+        .map(|run| {
+            let clusters: Vec<u32> = run.glyphs.iter().map(|glyph| glyph.cluster).collect();
+            (run.level, clusters)
+        })
+        .collect();
+    // Screen order: the digits read left to right, left of the Arabic they follow.
+    assert_eq!(runs, vec![(2, vec![2, 3]), (1, vec![1, 0])]);
 }

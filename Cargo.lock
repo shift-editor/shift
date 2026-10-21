@@ -2383,6 +2383,7 @@ version = "0.1.0"
 dependencies = [
  "harfrust",
  "thiserror",
+ "unicode-bidi",
  "unicode-linebreak",
  "unicode-script",
 ]

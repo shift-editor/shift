@@ -5,6 +5,11 @@
 import { setShaperGlyphs as setShaperGlyphsCall, shapeParagraphs as shapeParagraphsCall } from "@shift/wasm/shaping";
 import { NumberReader, NumberWriter } from "../numbers";
 
+/** The direction text reads in. */
+export type ShapedDirection = "ltr" | "rtl";
+
+const SHAPED_DIRECTION_VARIANTS: readonly ShapedDirection[] = ["ltr", "rtl"];
+
 /** A feature setting for every run of a paragraph. */
 export interface FeatureInput {
   /** The feature tag's four bytes, big-endian. */
@@ -42,14 +47,24 @@ export interface ShapedGlyphOutput {
   readonly yOffset: number;
 }
 
-/** One run of a shaped paragraph, in logical order. */
+/** A shaped paragraph: its base direction and its runs. */
+export interface ShapedParagraphOutput {
+  /** The paragraph's base direction, from its first strong character. */
+  readonly direction: ShapedDirection;
+  /** Runs in screen order, left to right, reordered by bidi level. */
+  readonly runs: readonly ShapedRunOutput[];
+}
+
+/** One run of a shaped paragraph; a paragraph's runs come in screen order. */
 export interface ShapedRunOutput {
   /** The paragraph units the run covers, from `start` up to `end`. */
   readonly start: number;
   readonly end: number;
   /** The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script. */
   readonly script: number;
-  readonly rightToLeft: boolean;
+  /** The run's resolved bidi level; odd levels read right to left. */
+  readonly level: number;
+  readonly direction: ShapedDirection;
   /** The run's glyphs in visual order. */
   readonly glyphs: readonly ShapedGlyphOutput[];
 }
@@ -78,11 +93,11 @@ export function setShaperGlyphs(input: ShaperGlyphs): boolean {
 }
 
 /** Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null. */
-export function shapeParagraphs(input: ShapeParagraphs): (readonly ShapedRunOutput[] | null)[] {
+export function shapeParagraphs(input: ShapeParagraphs): (ShapedParagraphOutput | null)[] {
   const write = NumberWriter.shared();
   writeShapeParagraphs(write, input);
   const read = new NumberReader(shapeParagraphsCall(write.finish()));
-  return read.list(() => read.flag() ? read.list(() => readShapedRunOutput(read)) : null);
+  return read.list(() => read.flag() ? readShapedParagraphOutput(read) : null);
 }
 
 function writeFeatureInput(write: NumberWriter, value: FeatureInput): void {
@@ -155,12 +170,20 @@ function readShapedGlyphOutput(read: NumberReader): ShapedGlyphOutput {
   };
 }
 
+function readShapedParagraphOutput(read: NumberReader): ShapedParagraphOutput {
+  return {
+    direction: SHAPED_DIRECTION_VARIANTS[read.count()] ?? "ltr",
+    runs: read.list(() => readShapedRunOutput(read)),
+  };
+}
+
 function readShapedRunOutput(read: NumberReader): ShapedRunOutput {
   return {
     start: read.count(),
     end: read.count(),
     script: read.number(),
-    rightToLeft: read.flag(),
+    level: read.count(),
+    direction: SHAPED_DIRECTION_VARIANTS[read.count()] ?? "ltr",
     glyphs: read.list(() => readShapedGlyphOutput(read)),
   };
 }
