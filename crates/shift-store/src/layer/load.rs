@@ -10,7 +10,6 @@ use super::{
     MAX_LAYER_PAYLOAD_BYTES_SQL,
     directory::{map_directory_facts_row, validate_directory_facts},
     format::decode_layer,
-    payload::decompress_layer,
     references::{validate_component_index, validate_component_rows},
 };
 use crate::{ShiftStore, StoreError};
@@ -103,7 +102,9 @@ pub(crate) fn load_glyph_layer_from_conn(
             layer_id: layer_id.to_string(),
             detail: "payload changed during bounded read".to_string(),
         })?;
-    let decoded = decompress_layer(facts.layer_id.as_str(), facts.stored_layer(payload)?)?;
+    let decoded = facts
+        .stored_layer(payload)?
+        .decode(facts.layer_id.as_str())?;
     let layer = decode_layer(&decoded)?;
     validate_directory_facts(
         layer_id,
@@ -315,7 +316,7 @@ fn load_glyph_layer_batch_with_directory(
                     layer_id: layer_id.clone(),
                     detail: "payload has no directory row".to_string(),
                 })?;
-            let decoded = decompress_layer(layer_id.as_str(), facts.stored_layer(payload)?)?;
+            let decoded = facts.stored_layer(payload)?.decode(layer_id.as_str())?;
             let layer = decode_layer(&decoded)?;
             let expected_id = font::LayerId::from_raw(layer_id.clone());
             validate_directory_facts(

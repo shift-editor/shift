@@ -80,10 +80,7 @@ fn sqlite_payload_preserves_canonical_bytes() {
         .unwrap();
     assert_eq!(stored.compression, LayerPayloadCompression::ZstandardV1);
     assert!(stored.stored_byte_length < stored.decoded_byte_length);
-    assert_eq!(
-        decompress_layer(layer.id().as_str(), stored).unwrap(),
-        encoded
-    );
+    assert_eq!(stored.decode(layer.id().as_str()).unwrap(), encoded);
     let decoded = store.load_glyph_layer(&layer.id()).unwrap().unwrap();
     assert_eq!(encode_layer(&decoded).unwrap(), encoded);
 }

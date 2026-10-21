@@ -27,118 +27,134 @@ pub(crate) struct StoredLayerPayload {
     pub(crate) decoded_blake3: [u8; 32],
 }
 
-pub(crate) fn compress_layer(decoded: &[u8]) -> Result<StoredLayerPayload, StoreError> {
-    check_layer_length(decoded.len() as u64)?;
-    let compressed = ZSTD_COMPRESSOR.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        if slot.is_none() {
-            *slot = Some(
-                zstd::bulk::Compressor::new(ZSTD_COMPRESSION_LEVEL)
-                    .map_err(StoreError::LayerCompression)?,
-            );
-        }
-        slot.as_mut()
-            .expect("compressor was initialized")
-            .compress(decoded)
-            .map_err(StoreError::LayerCompression)
-    })?;
-    let decoded_byte_length = decoded.len() as u64;
-    let decoded_blake3 = *blake3::hash(decoded).as_bytes();
+impl StoredLayerPayload {
+    /// Compresses a decoded layer payload with zstd, or keeps it as it is when
+    /// compression would not make it smaller.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError::LayerPayloadTooLarge`] when `decoded` exceeds the layer
+    /// size limit, and [`StoreError::LayerCompression`] when zstd fails.
+    pub(crate) fn compress(decoded: &[u8]) -> Result<Self, StoreError> {
+        check_layer_length(decoded.len() as u64)?;
+        let compressed = ZSTD_COMPRESSOR.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if slot.is_none() {
+                *slot = Some(
+                    zstd::bulk::Compressor::new(ZSTD_COMPRESSION_LEVEL)
+                        .map_err(StoreError::LayerCompression)?,
+                );
+            }
+            slot.as_mut()
+                .expect("compressor was initialized")
+                .compress(decoded)
+                .map_err(StoreError::LayerCompression)
+        })?;
+        let decoded_byte_length = decoded.len() as u64;
+        let decoded_blake3 = *blake3::hash(decoded).as_bytes();
 
-    if compressed.len() < decoded.len() {
-        return Ok(StoredLayerPayload {
-            compression: LayerPayloadCompression::ZstandardV1,
-            stored_byte_length: compressed.len() as u64,
+        if compressed.len() < decoded.len() {
+            return Ok(Self {
+                compression: LayerPayloadCompression::ZstandardV1,
+                stored_byte_length: compressed.len() as u64,
+                decoded_byte_length,
+                decoded_blake3,
+                bytes: compressed,
+            });
+        }
+
+        Ok(Self {
+            compression: LayerPayloadCompression::None,
+            stored_byte_length: decoded_byte_length,
             decoded_byte_length,
             decoded_blake3,
-            bytes: compressed,
-        });
+            bytes: decoded.to_vec(),
+        })
     }
 
-    Ok(StoredLayerPayload {
-        compression: LayerPayloadCompression::None,
-        stored_byte_length: decoded_byte_length,
-        decoded_byte_length,
-        decoded_blake3,
-        bytes: decoded.to_vec(),
-    })
-}
-
-pub(crate) fn decompress_layer(
-    layer_id: &str,
-    stored: StoredLayerPayload,
-) -> Result<Vec<u8>, StoreError> {
-    check_layer_length(stored.stored_byte_length)?;
-    check_layer_length(stored.decoded_byte_length)?;
-    if stored.bytes.len() as u64 != stored.stored_byte_length {
-        return Err(directory_mismatch(
-            layer_id,
-            format!(
-                "stored byte length {} != actual {}",
-                stored.stored_byte_length,
-                stored.bytes.len()
-            ),
-        ));
-    }
-
-    let decoded = match stored.compression {
-        LayerPayloadCompression::None => stored.bytes,
-        LayerPayloadCompression::ZstandardV1 => {
-            let frame_length =
-                zstd::zstd_safe::find_frame_compressed_size(&stored.bytes).map_err(|code| {
-                    let reason = zstd::zstd_safe::get_error_name(code);
-                    StoreError::LayerDecompression(std::io::Error::other(reason))
-                })?;
-            if frame_length != stored.bytes.len() {
-                return Err(directory_mismatch(
-                    layer_id,
-                    format!(
-                        "zstd frame has {frame_length} bytes, stored payload has {}",
-                        stored.bytes.len()
-                    ),
-                ));
-            }
-            let decoded_capacity = usize::try_from(stored.decoded_byte_length).map_err(|_| {
-                StoreError::LayerPayloadTooLarge {
-                    bytes: stored.decoded_byte_length,
-                    limit: MAX_LAYER_PAYLOAD_BYTES as u64,
-                }
-            })?;
-            ZSTD_DECOMPRESSOR.with(|slot| {
-                let mut slot = slot.borrow_mut();
-                if slot.is_none() {
-                    *slot = Some(
-                        zstd::bulk::Decompressor::new().map_err(StoreError::LayerDecompression)?,
-                    );
-                }
-                slot.as_mut()
-                    .expect("decompressor was initialized")
-                    .decompress(&stored.bytes, decoded_capacity)
-                    .map_err(StoreError::LayerDecompression)
-            })?
+    /// Decodes this payload, checking its stored and decoded lengths, its zstd
+    /// frame and its BLAKE3 hash.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError::LayerDirectoryMismatch`] when a recorded length, the zstd
+    /// frame or the hash disagrees with the bytes; [`StoreError::LayerPayloadTooLarge`]
+    /// past the layer size limit; and [`StoreError::LayerDecompression`] when zstd
+    /// fails.
+    pub(crate) fn decode(self, layer_id: &str) -> Result<Vec<u8>, StoreError> {
+        check_layer_length(self.stored_byte_length)?;
+        check_layer_length(self.decoded_byte_length)?;
+        if self.bytes.len() as u64 != self.stored_byte_length {
+            return Err(Self::mismatch(
+                layer_id,
+                format!(
+                    "stored byte length {} != actual {}",
+                    self.stored_byte_length,
+                    self.bytes.len()
+                ),
+            ));
         }
-    };
 
-    if decoded.len() as u64 != stored.decoded_byte_length {
-        return Err(directory_mismatch(
-            layer_id,
-            format!(
-                "decoded byte length {} != actual {}",
-                stored.decoded_byte_length,
-                decoded.len()
-            ),
-        ));
-    }
-    if blake3::hash(&decoded).as_bytes() != &stored.decoded_blake3 {
-        return Err(directory_mismatch(layer_id, "decoded BLAKE3 mismatch"));
-    }
-    Ok(decoded)
-}
+        let decoded = match self.compression {
+            LayerPayloadCompression::None => self.bytes,
+            LayerPayloadCompression::ZstandardV1 => {
+                let frame_length = zstd::zstd_safe::find_frame_compressed_size(&self.bytes)
+                    .map_err(|code| {
+                        let reason = zstd::zstd_safe::get_error_name(code);
+                        StoreError::LayerDecompression(std::io::Error::other(reason))
+                    })?;
+                if frame_length != self.bytes.len() {
+                    return Err(Self::mismatch(
+                        layer_id,
+                        format!(
+                            "zstd frame has {frame_length} bytes, stored payload has {}",
+                            self.bytes.len()
+                        ),
+                    ));
+                }
+                let decoded_capacity = usize::try_from(self.decoded_byte_length).map_err(|_| {
+                    StoreError::LayerPayloadTooLarge {
+                        bytes: self.decoded_byte_length,
+                        limit: MAX_LAYER_PAYLOAD_BYTES as u64,
+                    }
+                })?;
+                ZSTD_DECOMPRESSOR.with(|slot| {
+                    let mut slot = slot.borrow_mut();
+                    if slot.is_none() {
+                        *slot = Some(
+                            zstd::bulk::Decompressor::new()
+                                .map_err(StoreError::LayerDecompression)?,
+                        );
+                    }
+                    slot.as_mut()
+                        .expect("decompressor was initialized")
+                        .decompress(&self.bytes, decoded_capacity)
+                        .map_err(StoreError::LayerDecompression)
+                })?
+            }
+        };
 
-fn directory_mismatch(layer_id: &str, detail: impl Into<String>) -> StoreError {
-    StoreError::LayerDirectoryMismatch {
-        layer_id: layer_id.to_owned(),
-        detail: detail.into(),
+        if decoded.len() as u64 != self.decoded_byte_length {
+            return Err(Self::mismatch(
+                layer_id,
+                format!(
+                    "decoded byte length {} != actual {}",
+                    self.decoded_byte_length,
+                    decoded.len()
+                ),
+            ));
+        }
+        if blake3::hash(&decoded).as_bytes() != &self.decoded_blake3 {
+            return Err(Self::mismatch(layer_id, "decoded BLAKE3 mismatch"));
+        }
+        Ok(decoded)
+    }
+
+    fn mismatch(layer_id: &str, detail: impl Into<String>) -> StoreError {
+        StoreError::LayerDirectoryMismatch {
+            layer_id: layer_id.to_owned(),
+            detail: detail.into(),
+        }
     }
 }
 
@@ -156,29 +172,29 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let stored = compress_layer(&decoded).unwrap();
+        let stored = StoredLayerPayload::compress(&decoded).unwrap();
 
         assert_eq!(stored.compression, LayerPayloadCompression::None);
-        assert_eq!(decompress_layer("layer_test", stored).unwrap(), decoded);
+        assert_eq!(stored.decode("layer_test").unwrap(), decoded);
     }
 
     #[test]
     fn compressed_bytes_reject_truncation_trailing_data_and_wrong_hash() {
         let decoded = vec![0; 4096];
-        let mut truncated = compress_layer(&decoded).unwrap();
+        let mut truncated = StoredLayerPayload::compress(&decoded).unwrap();
         assert_eq!(truncated.compression, LayerPayloadCompression::ZstandardV1);
         truncated.bytes.pop();
         truncated.stored_byte_length -= 1;
-        decompress_layer("layer_test", truncated).unwrap_err();
+        truncated.decode("layer_test").unwrap_err();
 
-        let mut trailing = compress_layer(&decoded).unwrap();
+        let mut trailing = StoredLayerPayload::compress(&decoded).unwrap();
         trailing.bytes.push(0);
         trailing.stored_byte_length += 1;
-        decompress_layer("layer_test", trailing).unwrap_err();
+        trailing.decode("layer_test").unwrap_err();
 
-        let mut wrong_hash = compress_layer(&decoded).unwrap();
+        let mut wrong_hash = StoredLayerPayload::compress(&decoded).unwrap();
         wrong_hash.decoded_blake3[0] ^= 1;
-        decompress_layer("layer_test", wrong_hash).unwrap_err();
+        wrong_hash.decode("layer_test").unwrap_err();
     }
 
     #[test]
@@ -188,10 +204,10 @@ mod tests {
             Err(StoreError::UnsupportedLayerCompression(_))
         ));
 
-        let mut stored = compress_layer(&vec![0; 4096]).unwrap();
+        let mut stored = StoredLayerPayload::compress(&vec![0; 4096]).unwrap();
         stored.decoded_byte_length = MAX_LAYER_PAYLOAD_BYTES as u64 + 1;
         assert!(matches!(
-            decompress_layer("layer_test", stored),
+            stored.decode("layer_test"),
             Err(StoreError::LayerPayloadTooLarge { .. })
         ));
     }
