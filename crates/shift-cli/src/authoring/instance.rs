@@ -1,9 +1,7 @@
 //! Product presets use complete external locations and never create master sources.
 
 use miette::{Result, bail, miette};
-use shift_font::{
-    AxisKind, AxisRole, ExternalLocation, Font, FontIntent, FontIntentSet, NamedInstance,
-};
+use shift_font::{AxisRole, ExternalLocation, Font, FontIntent, FontIntentSet, NamedInstance};
 use shift_font::{CreateNamedInstance, DeleteNamedInstance, UpdateNamedInstance};
 
 use crate::cli::{AddInstanceArgs, RemoveInstanceArgs, SetInstanceArgs};
@@ -150,13 +148,7 @@ fn standard_weights(font: &Font) -> Result<Vec<FontIntent>> {
         .ok_or_else(|| miette!("--standard-weights requires an external wght axis"))?;
     let mut intents = Vec::new();
     for (value, name) in STANDARD_WEIGHTS {
-        let in_range = match axis.kind() {
-            AxisKind::Continuous {
-                minimum, maximum, ..
-            } => value >= *minimum && value <= *maximum,
-            AxisKind::Discrete { values, .. } => values.contains(&value),
-        };
-        if !in_range {
+        if !axis.accepts(value) {
             continue;
         }
         let mut location = default_location(font);

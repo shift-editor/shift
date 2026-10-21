@@ -4,7 +4,6 @@
 
 use kurbo::BezPath;
 
-use crate::curve::segment_bounds;
 use crate::{CurveSegmentIter, DesignLocation, Font, Glyph, GlyphLayer, Point, Source};
 
 use super::polygon::Polygon;
@@ -263,7 +262,7 @@ pub(super) fn extent<'a>(
     for (points, closed) in contours {
         let on_curve = Extent::of(points.iter().filter(|point| point.is_on_curve()));
         let segments = CurveSegmentIter::new(points, closed).map(|segment| {
-            let (min_x, min_y, max_x, max_y) = segment_bounds(&segment);
+            let (min_x, min_y, max_x, max_y) = segment.bounds();
             Extent {
                 min_x,
                 min_y,

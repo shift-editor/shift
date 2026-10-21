@@ -5,8 +5,8 @@
 //! names a [`Check`] with a stable code, the glyph and source it concerns
 //! when there is one, and a message written for a type designer.
 //!
-//! The editor runs [`check_glyph`] on the glyph being edited; command-line
-//! and CI callers run [`check_font`] over a whole source.
+//! The editor runs [`Font::check_glyph`] on the glyph being edited; command-line
+//! and CI callers run [`Font::check`] over a whole source.
 
 use serde::Serialize;
 
@@ -229,57 +229,59 @@ impl Finding {
     }
 }
 
-/// Runs every check over `font`.
-///
-/// Findings come in a stable order: font-wide problems first, then glyphs in
-/// font order, then kerning and the opt-in checks.
-///
-/// # Errors
-///
-/// Returns an axis-mapping error when an authored mapping cannot compile.
-pub fn check_font(font: &Font) -> CoreResult<Vec<Finding>> {
-    check_font_with(font, &CheckOptions::default())
-}
+impl Font {
+    /// Runs every check over the font.
+    ///
+    /// Findings come in a stable order: font-wide problems first, then glyphs in
+    /// font order, then kerning and the opt-in checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an axis-mapping error when an authored mapping cannot compile.
+    pub fn check(&self) -> CoreResult<Vec<Finding>> {
+        self.check_with(&CheckOptions::default())
+    }
 
-/// Runs every check over `font`, plus the opt-in checks in `options`.
-///
-/// # Errors
-///
-/// Returns an axis-mapping error when an authored mapping cannot compile.
-pub fn check_font_with(font: &Font, options: &CheckOptions) -> CoreResult<Vec<Finding>> {
-    let mut findings = designspace::check(font)?;
-    let thresholds = OutlineThresholds::default();
-    for glyph in font.glyphs() {
-        findings.extend(health::check(font, glyph));
-        findings.extend(outline::check(font, &glyph.id(), &thresholds)?);
+    /// Runs every check over the font, plus the opt-in checks in `options`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an axis-mapping error when an authored mapping cannot compile.
+    pub fn check_with(&self, options: &CheckOptions) -> CoreResult<Vec<Finding>> {
+        let mut findings = designspace::check(self)?;
+        let thresholds = OutlineThresholds::default();
+        for glyph in self.glyphs() {
+            findings.extend(health::check(self, glyph));
+            findings.extend(outline::check(self, &glyph.id(), &thresholds)?);
+        }
+        findings.extend(kerning::check(self));
+        if let Some(charset) = &options.charset {
+            findings.extend(coverage::charset(self, charset));
+        }
+        if let Some(width) = options.monospace {
+            findings.extend(coverage::monospace(self, width));
+        }
+        Ok(findings)
     }
-    findings.extend(kerning::check(font));
-    if let Some(charset) = &options.charset {
-        findings.extend(coverage::charset(font, charset));
-    }
-    if let Some(width) = options.monospace {
-        findings.extend(coverage::monospace(font, width));
-    }
-    Ok(findings)
-}
 
-/// Runs the checks that concern one glyph.
-///
-/// This is cheap enough to run after every edit of that glyph.
-///
-/// # Errors
-///
-/// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the
-/// font, or an axis-mapping error when an authored mapping cannot compile.
-pub fn check_glyph(font: &Font, glyph_id: &GlyphId) -> CoreResult<Vec<Finding>> {
-    let glyph = font.require_glyph(glyph_id)?;
-    let mut findings = health::check(font, glyph);
-    findings.extend(outline::check(
-        font,
-        glyph_id,
-        &OutlineThresholds::default(),
-    )?);
-    Ok(findings)
+    /// Runs the checks that concern one glyph.
+    ///
+    /// This is cheap enough to run after every edit of that glyph.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the
+    /// font, or an axis-mapping error when an authored mapping cannot compile.
+    pub fn check_glyph(&self, glyph_id: &GlyphId) -> CoreResult<Vec<Finding>> {
+        let glyph = self.require_glyph(glyph_id)?;
+        let mut findings = health::check(self, glyph);
+        findings.extend(outline::check(
+            self,
+            glyph_id,
+            &OutlineThresholds::default(),
+        )?);
+        Ok(findings)
+    }
 }
 
 #[cfg(test)]

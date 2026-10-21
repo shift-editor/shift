@@ -1,15 +1,19 @@
 use crate::CurveSegment;
 
-/// Tight axis-aligned bounding box for a curve segment.
-/// Returns `(min_x, min_y, max_x, max_y)`.
-pub fn segment_bounds(segment: &CurveSegment) -> (f64, f64, f64, f64) {
-    match segment {
-        CurveSegment::Line(p0, p1) => line_bounds(p0.x(), p0.y(), p1.x(), p1.y()),
-        CurveSegment::Quad(p0, c, p1) => quad_bounds(p0.x(), p0.y(), c.x(), c.y(), p1.x(), p1.y()),
-        CurveSegment::Cubic(p0, c0, c1, p1) => cubic_bounds(
-            [p0.x(), c0.x(), c1.x(), p1.x()],
-            [p0.y(), c0.y(), c1.y(), p1.y()],
-        ),
+impl CurveSegment<'_> {
+    /// Tight axis-aligned bounding box of the segment, as
+    /// `(min_x, min_y, max_x, max_y)`.
+    pub fn bounds(&self) -> (f64, f64, f64, f64) {
+        match self {
+            CurveSegment::Line(p0, p1) => line_bounds(p0.x(), p0.y(), p1.x(), p1.y()),
+            CurveSegment::Quad(p0, c, p1) => {
+                quad_bounds(p0.x(), p0.y(), c.x(), c.y(), p1.x(), p1.y())
+            }
+            CurveSegment::Cubic(p0, c0, c1, p1) => cubic_bounds(
+                [p0.x(), c0.x(), c1.x(), p1.x()],
+                [p0.y(), c0.y(), c1.y(), p1.y()],
+            ),
+        }
     }
 }
 
@@ -154,7 +158,7 @@ mod tests {
         let p0 = on(10.0, 50.0);
         let p1 = on(90.0, 50.0);
         let seg = CurveSegment::Line(&p0, &p1);
-        assert_bbox_approx(segment_bounds(&seg), (10.0, 50.0, 90.0, 50.0));
+        assert_bbox_approx(seg.bounds(), (10.0, 50.0, 90.0, 50.0));
     }
 
     #[test]
@@ -162,7 +166,7 @@ mod tests {
         let p0 = on(50.0, 10.0);
         let p1 = on(50.0, 90.0);
         let seg = CurveSegment::Line(&p0, &p1);
-        assert_bbox_approx(segment_bounds(&seg), (50.0, 10.0, 50.0, 90.0));
+        assert_bbox_approx(seg.bounds(), (50.0, 10.0, 50.0, 90.0));
     }
 
     #[test]
@@ -170,7 +174,7 @@ mod tests {
         let p0 = on(100.0, 0.0);
         let p1 = on(0.0, 100.0);
         let seg = CurveSegment::Line(&p0, &p1);
-        assert_bbox_approx(segment_bounds(&seg), (0.0, 0.0, 100.0, 100.0));
+        assert_bbox_approx(seg.bounds(), (0.0, 0.0, 100.0, 100.0));
     }
 
     #[test]
@@ -180,7 +184,7 @@ mod tests {
         let c = off(50.0, 100.0);
         let p1 = on(100.0, 0.0);
         let seg = CurveSegment::Quad(&p0, &c, &p1);
-        let bbox = segment_bounds(&seg);
+        let bbox = seg.bounds();
 
         // Tight y-max should be 50, not 100 (control point hull)
         assert!(bbox.3 < 51.0, "tight y-max should be ~50, got {}", bbox.3);
@@ -198,7 +202,7 @@ mod tests {
         let c1 = off(100.0, 200.0);
         let p1 = on(100.0, 0.0);
         let seg = CurveSegment::Cubic(&p0, &c0, &c1, &p1);
-        let bbox = segment_bounds(&seg);
+        let bbox = seg.bounds();
 
         // Control-point hull would give y_max=200, tight bounds should be 150
         assert!(
@@ -218,7 +222,7 @@ mod tests {
         let c1 = off(-100.0, -200.0);
         let p1 = on(100.0, 0.0);
         let seg = CurveSegment::Cubic(&p0, &c0, &c1, &p1);
-        let bbox = segment_bounds(&seg);
+        let bbox = seg.bounds();
 
         // Tight bounds should be smaller than control-point hull [-100, -200, 100, 200]
         assert!(
@@ -243,10 +247,10 @@ mod tests {
     fn degenerate_all_same_point() {
         let p = on(42.0, 42.0);
         let seg = CurveSegment::Line(&p, &p);
-        assert_bbox_approx(segment_bounds(&seg), (42.0, 42.0, 42.0, 42.0));
+        assert_bbox_approx(seg.bounds(), (42.0, 42.0, 42.0, 42.0));
 
         let seg = CurveSegment::Cubic(&p, &p, &p, &p);
-        assert_bbox_approx(segment_bounds(&seg), (42.0, 42.0, 42.0, 42.0));
+        assert_bbox_approx(seg.bounds(), (42.0, 42.0, 42.0, 42.0));
     }
 
     #[test]
@@ -257,7 +261,7 @@ mod tests {
         let c1 = off(75.0, 75.0);
         let p1 = on(100.0, 100.0);
         let seg = CurveSegment::Cubic(&p0, &c0, &c1, &p1);
-        assert_bbox_approx(segment_bounds(&seg), (0.0, 0.0, 100.0, 100.0));
+        assert_bbox_approx(seg.bounds(), (0.0, 0.0, 100.0, 100.0));
     }
 
     #[test]
@@ -268,7 +272,7 @@ mod tests {
         let c1 = off(200.0, -100.0);
         let p1 = on(80.0, 40.0);
         let seg = CurveSegment::Cubic(&p0, &c0, &c1, &p1);
-        let (min_x, min_y, max_x, max_y) = segment_bounds(&seg);
+        let (min_x, min_y, max_x, max_y) = seg.bounds();
 
         // Control-point hull
         let hull_min_x = 10.0_f64.min(-50.0).min(200.0).min(80.0);

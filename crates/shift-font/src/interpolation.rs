@@ -88,6 +88,63 @@ impl InterpolationRegion {
     pub fn supports(&self) -> &[AxisSupport] {
         &self.supports
     }
+
+    /// Returns how much this region contributes at `location`: the product of
+    /// each valid support's scalar, after normalizing the location with
+    /// `design_normalization` when given, or with `axes` otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] when a support names an axis that
+    /// `axes` or `design_normalization` does not have.
+    pub fn scalar_at(
+        &self,
+        location: &Location,
+        axes: &[Axis],
+        design_normalization: Option<&[DesignNormalization]>,
+    ) -> CoreResult<f64> {
+        let mut scalar = 1.0;
+
+        for support in self.supports() {
+            if support.minimum > support.peak
+                || support.peak > support.maximum
+                || (support.minimum < 0.0 && support.maximum > 0.0)
+            {
+                continue;
+            }
+
+            let axis = axes.axis(&support.axis_id).require(&support.axis_id)?;
+            let normalized = if let Some(design_normalization) = design_normalization {
+                let normalization = design_normalization
+                    .iter()
+                    .find(|normalization| normalization.axis_id == axis.id())
+                    .require(&support.axis_id)?;
+                normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
+            } else {
+                axis.normalize(location.value_on(axis))
+            }
+            .clamp(-1.0, 1.0);
+
+            if normalized == support.peak
+                || (support.minimum == 0.0 && support.peak == 0.0 && support.maximum == 0.0)
+            {
+                continue;
+            }
+
+            if normalized <= support.minimum || support.maximum <= normalized {
+                return Ok(0.0);
+            }
+
+            let edge = if normalized < support.peak {
+                support.minimum
+            } else {
+                support.maximum
+            };
+            scalar *= (normalized - edge) / (support.peak - edge);
+        }
+
+        Ok(scalar)
+    }
 }
 
 /// One coordinate-independent contribution produced by Fontdrasil.
@@ -185,7 +242,9 @@ impl VariationBasis {
         let mut values = vec![0.0; value_count];
 
         for delta in &self.deltas {
-            let scalar = region_scalar(&delta.region, location, axes, design_normalization)?;
+            let scalar = delta
+                .region
+                .scalar_at(location, axes, design_normalization)?;
             if scalar == 0.0 {
                 continue;
             }
@@ -590,55 +649,6 @@ fn normalized_location(
             Some((tag, NormalizedCoord::new(normalization.normalize(value))))
         })
         .collect()
-}
-
-fn region_scalar(
-    region: &InterpolationRegion,
-    location: &Location,
-    axes: &[Axis],
-    design_normalization: Option<&[DesignNormalization]>,
-) -> CoreResult<f64> {
-    let mut scalar = 1.0;
-
-    for support in region.supports() {
-        if support.minimum > support.peak
-            || support.peak > support.maximum
-            || (support.minimum < 0.0 && support.maximum > 0.0)
-        {
-            continue;
-        }
-
-        let axis = axes.axis(&support.axis_id).require(&support.axis_id)?;
-        let normalized = if let Some(design_normalization) = design_normalization {
-            let normalization = design_normalization
-                .iter()
-                .find(|normalization| normalization.axis_id == axis.id())
-                .require(&support.axis_id)?;
-            normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
-        } else {
-            axis.normalize(location.value_on(axis))
-        }
-        .clamp(-1.0, 1.0);
-
-        if normalized == support.peak
-            || (support.minimum == 0.0 && support.peak == 0.0 && support.maximum == 0.0)
-        {
-            continue;
-        }
-
-        if normalized <= support.minimum || support.maximum <= normalized {
-            return Ok(0.0);
-        }
-
-        let edge = if normalized < support.peak {
-            support.minimum
-        } else {
-            support.maximum
-        };
-        scalar *= (normalized - edge) / (support.peak - edge);
-    }
-
-    Ok(scalar)
 }
 
 #[cfg(test)]

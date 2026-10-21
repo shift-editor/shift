@@ -14,7 +14,6 @@
 //!   non-cyclic branches still contribute geometry.
 
 use crate::Require;
-use crate::curve::segment_bounds;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
     GlyphLayer, Point, Transform,
@@ -544,7 +543,7 @@ fn accumulate_contour_bbox(
     any: &mut bool,
 ) {
     for segment in CurveSegmentIter::new(points, closed) {
-        let (sx, sy, ex, ey) = segment_bounds(&segment);
+        let (sx, sy, ex, ey) = segment.bounds();
         *min_x = min_x.min(sx);
         *min_y = min_y.min(sy);
         *max_x = max_x.max(ex);
