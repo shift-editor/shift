@@ -115,6 +115,6 @@ mod tests {
             "Spacing Combining".parse(),
             Ok(GlyphSubcategory::SpacingCombining)
         );
-        assert!("Vowel".parse::<GlyphCategory>().is_err());
+        "Vowel".parse::<GlyphCategory>().unwrap_err();
     }
 }

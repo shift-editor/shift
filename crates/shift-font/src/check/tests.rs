@@ -1,4 +1,4 @@
-use crate::test_support::sample_variable_font;
+use crate::test_support::{closed_contour, sample_variable_font};
 use crate::{
     Contour, DesignLocation, Font, GlyphLayer, KerningGroup, KerningGroupId, KerningPair,
     KerningPosition, KerningSide, PointType, SourceId,
@@ -53,12 +53,7 @@ fn first_contour(layer: &mut GlyphLayer) -> &mut Contour {
 }
 
 fn square(x: f64, y: f64, size: f64) -> Contour {
-    let mut contour = Contour::new();
-    for (dx, dy) in [(0.0, 0.0), (0.0, size), (size, size), (size, 0.0)] {
-        contour.add_point(x + dx, y + dy, PointType::OnCurve, false);
-    }
-    contour.close();
-    contour
+    closed_contour(&[(x, y), (x, y + size), (x + size, y + size), (x + size, y)])
 }
 
 #[test]

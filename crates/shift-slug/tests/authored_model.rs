@@ -757,7 +757,7 @@ fn authored_glyph_keeps_exact_source_topology_resident() {
     let interpolation = projection.interpolation().unwrap();
     let weight_indices = (1..=interpolation.sources().len() as u32).collect::<Vec<_>>();
     let mut invalid_builder = VariableAtlasBuilder::default();
-    assert!(add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).is_err());
+    add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).unwrap_err();
     assert!(invalid_builder.finish().glyphs().is_empty());
 
     let mut builder = VariableAtlasBuilder::default();
@@ -859,11 +859,7 @@ fn triangle_layer_for_source(source_id: SourceId) -> GlyphLayer {
 
 fn triangle_layer_for_source_shifted(source_id: SourceId, shift: f64) -> GlyphLayer {
     let mut layer = GlyphLayer::new(LayerId::new(), source_id);
-    let mut contour = Contour::new();
-    contour.add_point(shift, 0.0, PointType::OnCurve, false);
-    contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);
-    contour.add_point(100.0 + shift, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(shift, 0.0), (50.0 + shift, 100.0), (100.0 + shift, 0.0)];
     layer.add_contour(contour);
     layer
 }

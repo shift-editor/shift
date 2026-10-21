@@ -34,16 +34,9 @@ pub fn boolean(op: BooleanOp, a: &Contour, b: &Contour) -> Result<Contours, line
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::point::PointType;
 
     fn square(x: f64, y: f64, size: f64) -> Contour {
-        let mut c = Contour::new();
-        c.add_point(x, y, PointType::OnCurve, false);
-        c.add_point(x + size, y, PointType::OnCurve, false);
-        c.add_point(x + size, y + size, PointType::OnCurve, false);
-        c.add_point(x, y + size, PointType::OnCurve, false);
-        c.close();
-        c
+        crate::contour![(x, y), (x + size, y), (x + size, y + size), (x, y + size)]
     }
 
     #[test]

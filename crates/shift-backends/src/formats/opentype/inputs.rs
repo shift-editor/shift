@@ -594,7 +594,7 @@ pub(super) fn tuple_region(tuple: &TupleVariation<'_, GlyphDelta>) -> AtlasRegio
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use shift_font::test_support::fixtures;
 
     use shift_slug::{AtlasBuilder, Curve, DEFAULT_BAND_COUNT, OutlineCommand};
     use skrifa::outline::pen::PathStyle;
@@ -641,22 +641,7 @@ mod tests {
         "apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf";
 
     fn host_grotesk() -> OpenTypeFont {
-        OpenTypeFont::open(&repository_root().join(HOST_GROTESK_VARIABLE)).unwrap()
-    }
-
-    fn repository_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .to_path_buf()
-    }
-
-    fn fixture(name: &str) -> PathBuf {
-        repository_root()
-            .join("fixtures/fonts/mutatorsans")
-            .join(name)
+        OpenTypeFont::open(&fixtures::repository_root().join(HOST_GROTESK_VARIABLE)).unwrap()
     }
 
     #[test]
@@ -735,7 +720,9 @@ mod tests {
 
     #[test]
     fn rotated_skewed_composite_matches_skrifa() {
-        let source = OpenTypeFont::open(&fixture("RotatedSkewedComposite.ttf")).unwrap();
+        let source =
+            OpenTypeFont::open(&fixtures::font("mutatorsans").join("RotatedSkewedComposite.ttf"))
+                .unwrap();
         let root = source.directory().glyphs[34].index;
         let page = build_binary_atlas_page(&source, &[root], DEFAULT_BAND_COUNT).unwrap();
         let preview_extents = page.preview_extents().unwrap();
@@ -851,7 +838,8 @@ mod tests {
 
     #[test]
     fn static_cff_projection_and_page_match_skrifa() {
-        let source = OpenTypeFont::open(&fixture("MutatorSans.otf")).unwrap();
+        let source =
+            OpenTypeFont::open(&fixtures::font("mutatorsans").join("MutatorSans.otf")).unwrap();
         let root = source.directory().glyphs[0].index;
         let projected = source.glyph(root).unwrap();
         assert_eq!(projected.root.glyph, root);

@@ -1,3 +1,4 @@
+use shift_font::test_support::fixtures;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -7,15 +8,6 @@ use shift_backends::font_loader::FontLoader;
 use shift_backends::{BackendError, FormatBackendError};
 use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
 use shift_store::ShiftStore;
-
-fn fixtures_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("fixtures")
-}
 
 fn copy_directory(source: &Path, destination: &Path) {
     fs::create_dir_all(destination).unwrap();
@@ -30,16 +22,8 @@ fn copy_directory(source: &Path, destination: &Path) {
     }
 }
 
-fn mutatorsans_ufo_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans/MutatorSansLightCondensed.ufo")
-}
-
-fn mutatorsans_ttf_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans/MutatorSans.ttf")
-}
-
 fn mutatorsans_otf_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans/MutatorSans.otf")
+    fixtures::root().join("fonts/mutatorsans/MutatorSans.otf")
 }
 
 fn host_grotesk_variable_ttf_path() -> PathBuf {
@@ -52,15 +36,15 @@ fn host_grotesk_variable_ttf_path() -> PathBuf {
 }
 
 fn homenaje_glyphs_path() -> PathBuf {
-    fixtures_path().join("fonts/Homenaje.glyphs")
+    fixtures::root().join("fonts/Homenaje.glyphs")
 }
 
 fn mutatorsans_variable_glyphs_path() -> PathBuf {
-    fixtures_path().join("fonts/MutatorSansVariable.glyphs")
+    fixtures::root().join("fonts/MutatorSansVariable.glyphs")
 }
 
 fn mutatorsans_designspace_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans-variable/MutatorSans.designspace")
+    fixtures::root().join("fonts/mutatorsans-variable/MutatorSans.designspace")
 }
 
 fn load_font(path: &Path) -> Font {
@@ -102,11 +86,7 @@ fn simple_geometry_font() -> Font {
     let source_id = font.default_source_id().unwrap();
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
     let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), source_id, 640.0);
-    let mut contour = Contour::new();
-    contour.add_point(100.0, 0.0, PointType::OnCurve, false);
-    contour.add_point(320.0, 700.0, PointType::OnCurve, false);
-    contour.add_point(540.0, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(100.0, 0.0), (320.0, 700.0), (540.0, 0.0)];
     layer.add_contour(contour);
     glyph.set_layer(layer);
     font.insert_glyph(glyph).unwrap();
@@ -115,7 +95,7 @@ fn simple_geometry_font() -> Font {
 
 #[test]
 fn loads_ufo_metadata_metrics_and_geometry() {
-    let font = load_font(&mutatorsans_ufo_path());
+    let font = load_font(&fixtures::mutatorsans_ufo());
     let metadata = font.metadata();
     let metrics = font.metrics();
 
@@ -162,7 +142,7 @@ fn loads_ufo_metadata_metrics_and_geometry() {
 
 #[test]
 fn loads_ufo_components_anchors_layers_and_kerning() {
-    let font = load_font(&mutatorsans_ufo_path());
+    let font = load_font(&fixtures::mutatorsans_ufo());
 
     let aacute = font
         .glyph_by_name("Aacute")
@@ -212,7 +192,7 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
 
 #[test]
 fn loads_binary_fonts_with_contours() {
-    for path in [mutatorsans_ttf_path(), mutatorsans_otf_path()] {
+    for path in [fixtures::mutatorsans_ttf(), mutatorsans_otf_path()] {
         let font = load_font(&path);
         let glyph_a = font
             .glyphs_by_unicode(65)
@@ -226,7 +206,7 @@ fn loads_binary_fonts_with_contours() {
 
 #[test]
 fn streams_binary_ufo_designspace_and_glyphs_without_eager_shift_geometry() {
-    let binary_path = mutatorsans_ttf_path();
+    let binary_path = fixtures::mutatorsans_ttf();
     let binary_bytes = fs::read(&binary_path).unwrap();
     let binary = skrifa::FontRef::new(&binary_bytes).unwrap();
     let expected_binary_glyphs = skrifa::raw::TableProvider::maxp(&binary)
@@ -235,7 +215,11 @@ fn streams_binary_ufo_designspace_and_glyphs_without_eager_shift_geometry() {
     let streamed_binary = stream_font(&binary_path);
     assert_eq!(streamed_binary.glyph_count(), expected_binary_glyphs);
 
-    for path in [binary_path, mutatorsans_ufo_path(), homenaje_glyphs_path()] {
+    for path in [
+        binary_path,
+        fixtures::mutatorsans_ufo(),
+        homenaje_glyphs_path(),
+    ] {
         let eager = load_font(&path);
         let streamed = stream_font(&path);
         assert_eq!(streamed.glyph_count(), eager.glyph_count());
@@ -268,7 +252,7 @@ fn streams_binary_ufo_designspace_and_glyphs_without_eager_shift_geometry() {
 fn ufo_import_keeps_nondefault_layer_order_when_default_was_not_first() {
     let temp = tempfile::tempdir().unwrap();
     let ufo_path = temp.path().join("Reordered.ufo");
-    copy_directory(&mutatorsans_ufo_path(), &ufo_path);
+    copy_directory(&fixtures::mutatorsans_ufo(), &ufo_path);
     let layercontents_path = ufo_path.join("layercontents.plist");
     let mut layercontents = plist::Value::from_file(&layercontents_path).unwrap();
     let layers = layercontents.as_array_mut().unwrap();
@@ -292,8 +276,8 @@ fn ufo_import_keeps_nondefault_layer_order_when_default_was_not_first() {
 #[test]
 fn streaming_batches_preserve_published_directory_order() {
     for path in [
-        mutatorsans_ttf_path(),
-        mutatorsans_ufo_path(),
+        fixtures::mutatorsans_ttf(),
+        fixtures::mutatorsans_ufo(),
         mutatorsans_designspace_path(),
         homenaje_glyphs_path(),
         mutatorsans_variable_glyphs_path(),
@@ -442,7 +426,7 @@ fn assert_curve_point_runs(contour: &Contour, context: &str) {
 
 #[test]
 fn binary_import_produces_valid_curve_point_runs() {
-    for path in [mutatorsans_ttf_path(), mutatorsans_otf_path()] {
+    for path in [fixtures::mutatorsans_ttf(), mutatorsans_otf_path()] {
         let font = load_font(&path);
         let mut curve_contours = 0;
         for glyph in font.glyphs() {
@@ -470,7 +454,7 @@ fn binary_import_produces_valid_curve_point_runs() {
 
 #[test]
 fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
-    let mut bytes = fs::read(mutatorsans_ttf_path()).unwrap();
+    let mut bytes = fs::read(fixtures::mutatorsans_ttf()).unwrap();
 
     // Rename the hmtx tag in the table directory so the table lookup fails
     // while the rest of the font stays parseable.
@@ -496,7 +480,7 @@ fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
 
 #[test]
 fn truncated_binary_font_returns_error_instead_of_panicking() {
-    let bytes = fs::read(mutatorsans_ttf_path()).unwrap();
+    let bytes = fs::read(fixtures::mutatorsans_ttf()).unwrap();
 
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("truncated.ttf");

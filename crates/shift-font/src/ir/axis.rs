@@ -853,7 +853,7 @@ mod tests {
         axis.set_labels(vec![label.clone()]);
 
         assert_eq!(axis.labels()[0].id(), label_id);
-        assert!(axis.validate().is_ok());
+        axis.validate().unwrap();
 
         axis.set_labels(vec![label.clone(), label]);
         assert!(matches!(
@@ -926,7 +926,7 @@ mod tests {
             true,
         )]);
 
-        assert!(axis.validate().is_ok());
+        axis.validate().unwrap();
     }
 
     #[test]

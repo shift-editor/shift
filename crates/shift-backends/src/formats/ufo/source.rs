@@ -100,25 +100,17 @@ impl FontImporter for UfoFont {
 
 #[cfg(test)]
 mod tests {
+    use shift_font::test_support::fixtures;
     use std::collections::BTreeMap;
     use std::fs;
 
     use super::*;
     use crate::font_source::{FontImporter, PointProvenance};
 
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
-
     #[test]
     fn ufo_directory_and_projection_need_no_shift_identity() {
-        let font = UfoFont::open(&fixture("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
+        let font =
+            UfoFont::open(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -150,7 +142,7 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("LayerOnly.ufo");
         copy_directory(
-            &fixture("mutatorsans/MutatorSansLightCondensed.ufo"),
+            &fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo"),
             &copied,
         );
         add_layer_only_glyph(&copied, "glyphs.background", "S_.closed.glif");
@@ -164,7 +156,7 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("Removed.ufo");
         copy_directory(
-            &fixture("mutatorsans/MutatorSansLightCondensed.ufo"),
+            &fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo"),
             &copied,
         );
         let font = UfoFont::open(&copied).unwrap();

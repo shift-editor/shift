@@ -1,8 +1,8 @@
 //! Kerning edits reach the compiled font: each master's value, a glyph
 //! exception at one master, and a renamed group, measured by shaping.
 
+use shift_font::test_support::fixtures;
 use shift_font::{RenameKerningGroup, SetKerningGroupMember, SetKerningValues};
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use harfrust::{Feature, ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
@@ -14,8 +14,7 @@ use shift_font::{
 };
 
 fn mutatorsans() -> Font {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    let path = fixtures::mutatorsans_designspace();
     FontLoader::new()
         .read_font(path.to_str().unwrap())
         .expect("MutatorSans should load")

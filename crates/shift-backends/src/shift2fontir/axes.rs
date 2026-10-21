@@ -356,7 +356,7 @@ mod tests {
             ],
         );
 
-        assert!(to_ir_axes(std::slice::from_ref(&axis), &[repeated]).is_ok());
+        to_ir_axes(std::slice::from_ref(&axis), &[repeated]).unwrap();
         assert!(matches!(
             to_ir_axes(std::slice::from_ref(&axis), &[conflicting]).unwrap_err(),
             AxisConversionError::NonIncreasingMapping {

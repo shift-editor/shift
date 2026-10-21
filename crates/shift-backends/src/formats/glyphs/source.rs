@@ -312,19 +312,10 @@ fn glyphs_point_kind(
 
 #[cfg(test)]
 mod tests {
+    use shift_font::test_support::fixtures;
     use std::fs;
 
     use super::*;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(name)
-    }
 
     const MAPPED_INSTANCE_GLYPHS: &str = r#"{
 .appVersion = "3414";
@@ -386,7 +377,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn directory_sources_keep_retained_master_order() {
-        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("MutatorSansVariable.glyphs")).unwrap();
         let expected_names = font
             .source
             .masters
@@ -452,7 +443,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn glyphs_projection_resolves_component_closure_without_shift_identity() {
-        let font = GlyphsFont::open(&fixture("Homenaje.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("Homenaje.glyphs")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -470,7 +461,7 @@ unitsPerEm = 1000;
     fn glyphs_projection_uses_retained_source_after_removal() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("Removed.glyphs");
-        fs::copy(fixture("Homenaje.glyphs"), &copied).unwrap();
+        fs::copy(fixtures::font("Homenaje.glyphs"), &copied).unwrap();
         let font = GlyphsFont::open(&copied).unwrap();
         let glyph = font.directory().glyphs[0].index;
         let expected = font.glyph(glyph).unwrap();
@@ -481,7 +472,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn glyphs_projection_retains_non_default_variation() {
-        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("MutatorSansVariable.glyphs")).unwrap();
         let glyph = font
             .directory()
             .glyphs

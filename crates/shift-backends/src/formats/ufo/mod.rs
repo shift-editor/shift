@@ -49,18 +49,10 @@ mod tests {
         let mut glyph = Glyph::with_unicode("A".to_string(), 65);
         let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 600.0);
 
-        let mut contour = Contour::new();
-        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
-        contour.add_point(300.0, 700.0, PointType::OnCurve, false);
-        contour.add_point(600.0, 0.0, PointType::OnCurve, false);
-        contour.close();
+        let contour = shift_font::contour![(0.0, 0.0), (300.0, 700.0), (600.0, 0.0)];
         layer.add_contour(contour);
 
-        let mut inner = Contour::new();
-        inner.add_point(150.0, 200.0, PointType::OnCurve, false);
-        inner.add_point(300.0, 400.0, PointType::OnCurve, false);
-        inner.add_point(450.0, 200.0, PointType::OnCurve, false);
-        inner.close();
+        let inner = shift_font::contour![(150.0, 200.0), (300.0, 400.0), (450.0, 200.0)];
         layer.add_contour(inner);
 
         glyph.set_layer(layer);
@@ -382,11 +374,7 @@ mod tests {
         let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
         let mut layer = GlyphLayer::with_width(LayerId::new(), default_source_id, 512.5);
 
-        let mut contour = Contour::new();
-        contour.add_point(100.5, 33.25, PointType::OnCurve, false);
-        contour.add_point(300.125, 700.75, PointType::OnCurve, false);
-        contour.add_point(600.0625, 0.5, PointType::OnCurve, false);
-        contour.close();
+        let contour = shift_font::contour![(100.5, 33.25), (300.125, 700.75), (600.0625, 0.5)];
         layer.add_contour(contour);
         layer.add_anchor(shift_font::Anchor::new("top".to_string(), 10.75, 720.5));
 

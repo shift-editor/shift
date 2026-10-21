@@ -1,21 +1,11 @@
-use std::path::PathBuf;
+use shift_font::test_support::fixtures;
 
 use shift_backends::{ImportLossKind, font_loader::FontLoader};
 use shift_font::test_support::kerning_between;
 
-fn fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("fixtures/fonts")
-        .join(name)
-}
-
 #[test]
 fn glyphs_import_reports_unrepresented_bracket_layers() {
-    let path = fixture("GlyphsImportLosses.glyphs");
+    let path = fixtures::font("GlyphsImportLosses.glyphs");
     let import = FontLoader::new()
         .stream_font(path.to_str().unwrap())
         .expect("Glyphs source should import");
@@ -35,7 +25,7 @@ fn glyphs_import_reports_unrepresented_bracket_layers() {
 
 #[test]
 fn glyphs_import_keeps_non_default_master_kerning() {
-    let path = fixture("GlyphsImportLosses.glyphs");
+    let path = fixtures::font("GlyphsImportLosses.glyphs");
     let font = FontLoader::new()
         .stream_font(path.to_str().unwrap())
         .expect("Glyphs source should import")

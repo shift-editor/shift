@@ -219,7 +219,7 @@ mod tests {
 
         let mut trailing = complete;
         trailing.push(0);
-        assert!(decode_layer(&trailing).is_err());
+        decode_layer(&trailing).unwrap_err();
     }
 
     #[test]
@@ -232,7 +232,7 @@ mod tests {
         bytes.push(0xc0);
         bytes.extend_from_slice(&[0xdd, 0xff, 0xff, 0xff, 0xff]);
 
-        assert!(decode_layer(&bytes).is_err());
+        decode_layer(&bytes).unwrap_err();
     }
 
     #[test]
@@ -253,9 +253,9 @@ mod tests {
         }
         layer.lib_mut().set("nested".into(), value);
 
-        assert!(encode_layer(&layer).is_err());
+        encode_layer(&layer).unwrap_err();
         let encoded = rmp_serde::to_vec(&layer).unwrap();
-        assert!(decode_layer(&encoded).is_err());
+        decode_layer(&encoded).unwrap_err();
     }
 
     #[test]
@@ -272,7 +272,7 @@ mod tests {
             font::LibData::new(),
         ))
         .unwrap();
-        assert!(decode_layer(&invalid_id).is_err());
+        decode_layer(&invalid_id).unwrap_err();
 
         let non_finite = rmp_serde::to_vec(&(
             "layer_test",

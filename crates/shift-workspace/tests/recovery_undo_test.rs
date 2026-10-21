@@ -1,18 +1,13 @@
 //! Undoing font-level edits in a document must keep earlier unsaved edits,
 //! on disk as well as in memory.
 
+use shift_font::test_support::fixtures;
 use shift_font::{AddAnchors, CreateSource, UpdateSource};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use shift_font::{AnchorId, AnchorSeed, DesignLocation, FontIntent, FontIntentSet, SourceId};
 use shift_workspace::{AcquireScope, FontWorkspace};
 use tempfile::TempDir;
-
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/fonts")
-        .join(name)
-}
 
 fn apply(workspace: &mut FontWorkspace, intent: FontIntent) {
     workspace
@@ -29,8 +24,11 @@ fn apply(workspace: &mut FontWorkspace, intent: FontIntent) {
 fn open_document(dir: &TempDir) -> (FontWorkspace, PathBuf, PathBuf) {
     let path = dir.path().join("Homenaje.shift");
     let recovery = dir.path().join("recovery.sqlite");
-    let mut imported =
-        FontWorkspace::open(fixture("Homenaje.glyphs"), dir.path().join("import.sqlite")).unwrap();
+    let mut imported = FontWorkspace::open(
+        fixtures::font("Homenaje.glyphs"),
+        dir.path().join("import.sqlite"),
+    )
+    .unwrap();
     imported
         .save_as_document(&path, dir.path().join("save-recovery.sqlite"))
         .unwrap();
