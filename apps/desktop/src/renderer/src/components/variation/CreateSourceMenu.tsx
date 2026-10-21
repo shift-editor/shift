@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   Button,
   Field,
@@ -14,7 +14,7 @@ import {
   Tooltip,
   X,
 } from "@shift/ui";
-import type { Axis, AxisId, Source, SourceId } from "@shift/types";
+import type { Axis, Source, SourceId } from "@shift/types";
 import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
@@ -23,29 +23,22 @@ import { useSources } from "@/hooks/useSources";
 import { axisValue } from "@shift/editor/variation";
 import type { ExternalAxisLocation } from "@shift/editor/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import type { LocationDraftValues } from "./locationDraft";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
+import { useLocationDraftForm } from "./useLocationDraftForm";
 
 interface CreateSourceMenuProps {
   onSourceCreated?: (sourceId: SourceId) => void;
   onOpenChange?: (open: boolean) => void;
 }
 
-interface CreateSourceFormValues {
-  name: string;
-  location: Record<string, string>;
-}
-
-const emptyValues: CreateSourceFormValues = {
-  name: "",
-  location: {},
-};
 const SOURCE_CREATION_ERROR_ID = "create-source-error";
 
 function defaultValues(
   axes: readonly Axis[],
   sources: readonly Source[],
   externalLocation: ExternalAxisLocation,
-): CreateSourceFormValues {
+): LocationDraftValues {
   return {
     name: suggestedSourceName(axes, sources, externalLocation),
     location: Object.fromEntries(
@@ -59,58 +52,30 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const axes = useAxes();
   const sources = useSources();
   const [open, setOpen] = useState(false);
-  const [values, setValues] = useState<CreateSourceFormValues>(emptyValues);
-  const [validationVisible, setValidationVisible] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const axisInputRefs = useRef(new Map<AxisId, HTMLInputElement>());
+  const form = useLocationDraftForm(axes);
+  const { values, nameInputRef } = form;
 
   const handleOpenChange = (nextOpen: boolean) => {
     // Read the location only when opening: subscribing would re-render this menu
     // on every step of a weight scrub just to prefill a form that is closed.
-    if (nextOpen) setValues(defaultValues(axes, sources, editor.externalLocationCell.peek()));
-    setValidationVisible(false);
+    form.reset(nextOpen ? defaultValues(axes, sources, editor.externalLocationCell.peek()) : null);
     setOpen(nextOpen);
     if (onOpenChange) onOpenChange(nextOpen);
-  };
-
-  const updateName = (event: ChangeEvent<HTMLInputElement>) => {
-    const { value } = event.currentTarget;
-    setValues((current) => ({ ...current, name: value }));
-  };
-
-  const updateAxisValue = (axisId: AxisId) => (event: ChangeEvent<HTMLInputElement>) => {
-    const { value } = event.currentTarget;
-    setValues((current) => ({
-      ...current,
-      location: { ...current.location, [axisId]: value },
-    }));
   };
 
   const trimmedName = values.name.trim();
   const location = sourceLocation(axes, values.location);
   const issue = sourceCreationIssue(values.name, values.location, editor.font.designspace);
-  const visibleIssue = validationVisible ? issue : null;
-  const nameIssue = visibleIssue && visibleIssue.kind === "name" ? visibleIssue : null;
-  const locationIssue = visibleIssue && visibleIssue.kind === "location" ? visibleIssue : null;
+  const issues = form.shown(issue);
+  const visibleIssue = issues.shown;
+  const nameIssue = issues.of("name");
+  const locationIssue = issues.of("location");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (issue) {
-      setValidationVisible(true);
-
-      switch (issue.kind) {
-        case "name":
-          nameInputRef.current?.focus();
-          return;
-        case "axis":
-          axisInputRefs.current.get(issue.axisId)?.focus();
-          return;
-        case "location": {
-          const firstAxis = axes[0];
-          if (firstAxis) axisInputRefs.current.get(firstAxis.id)?.focus();
-          return;
-        }
-      }
+      form.report(issue);
+      return;
     }
     if (!location) return;
 
@@ -162,7 +127,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                     ref={nameInputRef}
                     id="create-source-name"
                     value={values.name}
-                    onChange={updateName}
+                    onChange={form.updateName}
                     aria-describedby={nameIssue ? SOURCE_CREATION_ERROR_ID : undefined}
                     variant="plain"
                     className="min-w-0 max-w-full text-right text-ui"
@@ -184,12 +149,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                   )}
 
                   {axes.map((axis) => {
-                    const axisIssue =
-                      visibleIssue &&
-                      visibleIssue.kind === "axis" &&
-                      visibleIssue.axisId === axis.id
-                        ? visibleIssue
-                        : null;
+                    const axisIssue = issues.forAxis(axis.id);
 
                     return (
                       <Field key={axis.id} className="contents" invalid={!!axisIssue}>
@@ -202,17 +162,10 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
                           {axis.name}
                         </FieldLabel>
                         <FieldControl
-                          ref={(input) => {
-                            if (input) {
-                              axisInputRefs.current.set(axis.id, input);
-                              return;
-                            }
-
-                            axisInputRefs.current.delete(axis.id);
-                          }}
+                          ref={form.axisInputRef(axis.id)}
                           id={`create-source-${axis.id}`}
                           value={values.location[axis.id] ?? ""}
-                          onChange={updateAxisValue(axis.id)}
+                          onChange={form.updateAxisValue(axis.id)}
                           aria-describedby={axisIssue ? SOURCE_CREATION_ERROR_ID : undefined}
                           variant="plain"
                           className="min-w-0 max-w-full text-right text-ui"
