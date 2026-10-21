@@ -26,7 +26,7 @@ export class Text {
   /** Made with the first run's layout, so shaping loads only once text exists. */
   #shaper: TextShaper | null = null;
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
-  readonly #loading = new Set<GlyphId>();
+  readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
   readonly #parseContext: TextParseContext = {
@@ -187,6 +187,23 @@ export class Text {
     return this.#parser.parse(text, this.#parseContext);
   }
 
+  /**
+   * Resolves once the shaper reflects the latest glyph directory and every
+   * glyph text needs has loaded.
+   *
+   * @remarks
+   * Loading a glyph can reshape text and ask for more glyphs, so this waits
+   * until a pass finds nothing pending.
+   */
+  async settled(): Promise<void> {
+    for (;;) {
+      await this.#shaper?.settled();
+      const loads = this.#loading.values().toArray();
+      if (loads.length === 0) return;
+      await Promise.all(loads);
+    }
+  }
+
   dispose(): void {
     this.#unsubscribeStore();
     this.#shaper?.dispose();
@@ -220,9 +237,15 @@ export class Text {
     }
   }
 
-  async #loadGlyph(id: GlyphId): Promise<void> {
-    if (this.#loading.has(id)) return;
-    this.#loading.add(id);
+  #loadGlyph(id: GlyphId): Promise<void> {
+    const pending = this.#loading.get(id);
+    if (pending) return pending;
+    const load = this.#loadGlyphOnce(id);
+    this.#loading.set(id, load);
+    return load;
+  }
+
+  async #loadGlyphOnce(id: GlyphId): Promise<void> {
     try {
       await this.#editor.font.loadGlyph(id);
       this.#glyphsLoadedCell.update((version) => version + 1);

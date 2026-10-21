@@ -217,9 +217,13 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
+  /**
+   * Awaits every queued and in-flight apply, then text shaping and the glyph
+   * loads it asks for; geometry and text reads see confirmed truth after.
+   */
   async settle(): Promise<this> {
     await this.font.editCoordinator.settled();
+    await this.text.settled();
     return this;
   }
 
