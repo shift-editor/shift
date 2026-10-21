@@ -7,7 +7,7 @@ use shift_font::{Font, FontMetadata, MetricKind, Source, SourceRole};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FontInfoReport {
+pub(crate) struct FontInfoReport {
     pub document: PathBuf,
     #[serde(flatten)]
     pub metadata: FontMetadata,
@@ -18,7 +18,7 @@ pub struct FontInfoReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceMetrics {
+pub(crate) struct SourceMetrics {
     pub source_id: String,
     pub name: String,
     pub role: SourceRole,
@@ -31,7 +31,7 @@ pub struct SourceMetrics {
 }
 
 impl FontInfoReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let metadata = &self.metadata;
         let mut lines = vec![self.document.display().to_string(), String::new()];
         for (label, value) in [
@@ -90,8 +90,4 @@ impl SourceMetrics {
         }
         lines.join("\n")
     }
-}
-
-pub(crate) fn format_version(major: Option<i32>, minor: Option<i32>) -> Option<String> {
-    major.map(|major| format!("{major}.{:03}", minor.unwrap_or_default()))
 }

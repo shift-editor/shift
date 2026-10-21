@@ -1,12 +1,12 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::feature_includes::inline_feature_includes;
+use crate::font_source::AffineTransform;
 use crate::import::collect_streamed_font;
-use crate::metrics::set_metric_position;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
     Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, LayerId,
-    LibData, LibValue, MetricKind, PointType, SourceId, Transform,
+    LibData, LibValue, PointType, SourceId, StandardMetrics, Transform,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -57,9 +57,9 @@ impl UfoReader {
 
     fn convert_point_type(typ: norad::PointType) -> PointType {
         match typ {
-            norad::PointType::Move => PointType::OnCurve,
-            norad::PointType::Line => PointType::OnCurve,
-            norad::PointType::Curve => PointType::OnCurve,
+            norad::PointType::Move | norad::PointType::Line | norad::PointType::Curve => {
+                PointType::OnCurve
+            }
             norad::PointType::QCurve => PointType::QCurve,
             norad::PointType::OffCurve => PointType::OffCurve,
         }
@@ -85,14 +85,7 @@ impl UfoReader {
     fn convert_component(component: &norad::Component) -> PendingComponent {
         PendingComponent {
             base_glyph_name: component.base.to_string(),
-            matrix: Transform {
-                xx: component.transform.x_scale,
-                xy: component.transform.xy_scale,
-                yx: component.transform.yx_scale,
-                yy: component.transform.y_scale,
-                dx: component.transform.x_offset,
-                dy: component.transform.y_offset,
-            },
+            matrix: Transform::from_values(AffineTransform::from(&component.transform).to_values()),
         }
     }
 
@@ -275,7 +268,10 @@ impl UfoReader {
             font.metadata_mut().style_name = Some(style.clone());
         }
         font.metadata_mut().version_major = norad_font.font_info.version_major;
-        font.metadata_mut().version_minor = norad_font.font_info.version_minor.map(|v| v as i32);
+        font.metadata_mut().version_minor = norad_font
+            .font_info
+            .version_minor
+            .and_then(|v| i32::try_from(v).ok());
         font.metadata_mut().copyright = norad_font.font_info.copyright.clone();
         font.metadata_mut().trademark = norad_font.font_info.trademark.clone();
         font.metadata_mut().designer = norad_font.font_info.open_type_name_designer.clone();
@@ -291,36 +287,20 @@ impl UfoReader {
         font.metrics_mut().units_per_em = norad_font
             .font_info
             .units_per_em
-            .map(|value| *value)
-            .unwrap_or(1000.0);
-        let metric_definitions = font.metric_definitions().to_vec();
+            .map_or(1000.0, |value| *value);
+        font.set_standard_metrics(
+            &default_source_id,
+            StandardMetrics {
+                ascender: norad_font.font_info.ascender,
+                descender: norad_font.font_info.descender,
+                cap_height: norad_font.font_info.cap_height,
+                x_height: norad_font.font_info.x_height,
+                baseline: None,
+            },
+        )?;
         let default_source = font
             .source_mut(&default_source_id)
             .expect("new font should contain its default source");
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::Ascender,
-            norad_font.font_info.ascender,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::Descender,
-            norad_font.font_info.descender,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::CapHeight,
-            norad_font.font_info.cap_height,
-        );
-        set_metric_position(
-            &metric_definitions,
-            default_source,
-            MetricKind::XHeight,
-            norad_font.font_info.x_height,
-        );
         default_source.set_italic_angle(norad_font.font_info.italic_angle);
         default_source.set_line_gap(
             norad_font

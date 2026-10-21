@@ -1,9 +1,14 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
     Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
     InterpolationBasis, LayerId, PointType, SourceId,
     test_support::{sample_font, sample_variable_font},
 };
+use shift_slug::GlyphIndex;
 use shift_slug::{
     AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
     VariableAtlasBuilder, add_authored_component_projection_glyph, add_authored_glyph,
@@ -69,7 +74,9 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     for (weight_index, source_weight) in weight_indices.iter().zip(source_weights) {
         weights[*weight_index as usize] = source_weight as f32;
     }
-    let actual = atlas.resolve_glyph_with_weights(0, &weights).unwrap();
+    let actual = atlas
+        .resolve_glyph_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
 
     let expected_layer = interpolation.resolve(&location, font.axes()).unwrap();
     let source_layers = interpolation
@@ -88,7 +95,9 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     .unwrap();
     let expected = topology.curves_from_layer(&expected_layer).unwrap();
     assert_curves_close(&actual, &expected, 0.001);
-    let actual_advance = atlas.resolve_advance_with_weights(0, &weights).unwrap();
+    let actual_advance = atlas
+        .resolve_advance_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
     assert!((actual_advance - expected_layer.width() as f32).abs() <= 0.001);
     assert_eq!(atlas.sources()[0].weight_index, 2);
     assert_eq!(atlas.sources()[1].weight_index, 5);
@@ -216,7 +225,12 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
             .add_glyph(&font, &projection, &[weight_set], 0)
             .unwrap()
             .default_glyph;
-        records.push((glyph.id(), atlas_index, weight_indices, component_glyph));
+        records.push((
+            glyph.id(),
+            atlas_index.get(),
+            weight_indices,
+            component_glyph,
+        ));
     }
     let atlas = builder.finish();
     let shared = build_authored_atlas(&font, 8).unwrap();
@@ -284,7 +298,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
                 weights[*weight_index as usize] = weight as f32;
             }
             let actual = atlas
-                .resolve_glyph_with_weights(atlas_index, &weights)
+                .resolve_glyph_with_weights(GlyphIndex::new(atlas_index), &weights)
                 .unwrap();
             let expected_advance = if component_glyph {
                 // Component curve order is validated by the dedicated component CPU/GPU tests.
@@ -299,7 +313,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
                 expected_layer.width() as f32
             };
             let actual_advance = atlas
-                .resolve_advance_with_weights(atlas_index, &weights)
+                .resolve_advance_with_weights(GlyphIndex::new(atlas_index), &weights)
                 .unwrap();
             maximum_advance_error =
                 maximum_advance_error.max((actual_advance - expected_advance).abs());
@@ -753,7 +767,7 @@ fn authored_glyph_keeps_exact_source_topology_resident() {
     let interpolation = projection.interpolation().unwrap();
     let weight_indices = (1..=interpolation.sources().len() as u32).collect::<Vec<_>>();
     let mut invalid_builder = VariableAtlasBuilder::default();
-    assert!(add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).is_err());
+    add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).unwrap_err();
     assert!(invalid_builder.finish().glyphs().is_empty());
 
     let mut builder = VariableAtlasBuilder::default();
@@ -855,11 +869,7 @@ fn triangle_layer_for_source(source_id: SourceId) -> GlyphLayer {
 
 fn triangle_layer_for_source_shifted(source_id: SourceId, shift: f64) -> GlyphLayer {
     let mut layer = GlyphLayer::new(LayerId::new(), source_id);
-    let mut contour = Contour::new();
-    contour.add_point(shift, 0.0, PointType::OnCurve, false);
-    contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);
-    contour.add_point(100.0 + shift, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(shift, 0.0), (50.0 + shift, 100.0), (100.0 + shift, 0.0)];
     layer.add_contour(contour);
     layer
 }

@@ -8,3 +8,21 @@ allow-indexing-slicing-in-tests = true
 
 # Shift's crates are not a published API, so lints also check public functions.
 avoid-breaking-exported-api = false
+
+# A ratchet: today's longest function. Lower it as long functions are split
+# into named steps; never raise it.
+too-many-lines-threshold = 192
+
+# Engine maths must give identical bits natively and in WebAssembly, and std
+# trigonometry differs between targets. shift-slug and shift-backends run
+# natively only and allow these. `sqrt` is correctly rounded everywhere.
+disallowed-methods = [
+  { path = "f64::sin", reason = "use libm::sin: identical bits native and WASM" },
+  { path = "f64::cos", reason = "use libm::cos: identical bits native and WASM" },
+  { path = "f64::tan", reason = "use libm::tan: identical bits native and WASM" },
+  { path = "f64::atan", reason = "use libm::atan: identical bits native and WASM" },
+  { path = "f64::atan2", reason = "use libm::atan2: identical bits native and WASM" },
+  { path = "f64::sin_cos", reason = "use libm::sin and libm::cos" },
+  { path = "f64::powf", reason = "use libm::pow: identical bits native and WASM" },
+  { path = "f64::hypot", reason = "use libm::hypot: identical bits native and WASM" },
+]

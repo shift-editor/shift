@@ -86,12 +86,10 @@ impl<F: FontView> FontView for GlyphSubsetView<'_, F> {
         self.font.default_source_id()
     }
 
-    fn glyphs(&self) -> Vec<&Glyph> {
+    fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
         self.font
             .glyphs()
-            .into_iter()
             .filter(|glyph| self.kept.contains(glyph.name()))
-            .collect()
     }
 
     fn glyph(&self, name: &str) -> Option<&Glyph> {

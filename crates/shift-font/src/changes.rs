@@ -1,11 +1,15 @@
+use indexmap::IndexSet;
 use std::sync::Arc;
 
 use bitflags::bitflags;
 
+use crate::collection::Identified;
+use crate::error::{CoreError, CoreResult, EntityKind};
+
 use crate::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
     KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId,
+    SourceId, TouchedLayer,
 };
 
 bitflags! {
@@ -35,9 +39,107 @@ pub struct Replacement<T> {
     pub after: T,
 }
 
+impl<T> Replacement<Option<T>> {
+    /// The values this replacement holds, before then after.
+    pub fn sides(&self) -> impl Iterator<Item = &T> {
+        self.before.iter().chain(&self.after)
+    }
+
+    /// Whether this replacement creates its value.
+    pub fn creates(&self) -> bool {
+        self.before.is_none() && self.after.is_some()
+    }
+}
+
 impl<T> Replacement<T> {
     pub fn new(before: T, after: T) -> Self {
         Self { before, after }
+    }
+
+    /// Checks that `current` still equals the original value, so the
+    /// replacement applies to the state it was recorded against.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ChangeOriginMismatch`] naming `target` when it differs.
+    pub fn require_before<C>(&self, current: &C, target: &'static str) -> CoreResult<()>
+    where
+        C: PartialEq<T> + ?Sized,
+    {
+        if current == &self.before {
+            return Ok(());
+        }
+
+        Err(CoreError::ChangeOriginMismatch { target })
+    }
+}
+
+impl Replacement<Option<Glyph>> {
+    /// The glyph this replacement creates, replaces, or deletes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ReplacementIdentityChanged`] when the two sides
+    /// name different glyphs and [`CoreError::EmptyReplacement`] when neither
+    /// side has a glyph.
+    pub fn glyph_id(&self) -> CoreResult<GlyphId> {
+        same_identity(
+            EntityKind::Glyph,
+            self.before.as_ref().map(Glyph::id),
+            self.after.as_ref().map(Glyph::id),
+        )
+    }
+}
+
+impl Replacement<Option<Arc<GlyphLayer>>> {
+    /// The layer this replacement creates, replaces, or deletes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ReplacementIdentityChanged`] when the two sides
+    /// name different layers and [`CoreError::EmptyReplacement`] when neither
+    /// side has a layer.
+    pub fn layer_id(&self) -> CoreResult<LayerId> {
+        same_identity(
+            EntityKind::Layer,
+            self.before.as_deref().map(GlyphLayer::id),
+            self.after.as_deref().map(GlyphLayer::id),
+        )
+    }
+}
+
+/// The one identity both sides of a replacement share.
+fn same_identity<Id>(kind: EntityKind, before: Option<Id>, after: Option<Id>) -> CoreResult<Id>
+where
+    Id: PartialEq + std::fmt::Display,
+{
+    match (before, after) {
+        (Some(before), Some(after)) if before != after => {
+            Err(CoreError::ReplacementIdentityChanged {
+                kind,
+                before: before.to_string(),
+                after: after.to_string(),
+            })
+        }
+        (Some(id), _) | (_, Some(id)) => Ok(id),
+        (None, None) => Err(CoreError::EmptyReplacement { kind }),
+    }
+}
+
+impl<T> Replacement<Vec<T>>
+where
+    T: Identified + PartialEq,
+{
+    /// The entities this replacement creates, updates, and deletes; reordering alone is not a change.
+    pub fn entity_changes(&self) -> impl Iterator<Item = EntityChange<'_, T>> {
+        collection_entity_changes(&self.before, &self.after, Identified::id).into_iter()
+    }
+}
+
+impl Replacement<SourceCollection> {
+    /// The sources this replacement creates, updates, and deletes.
+    pub fn entity_changes(&self) -> impl Iterator<Item = EntityChange<'_, Source>> {
+        collection_entity_changes(&self.before.sources, &self.after.sources, Source::id).into_iter()
     }
 }
 
@@ -108,12 +210,48 @@ pub enum FontChange {
 }
 
 impl FontChange {
+    /// The glyphs whose record or layer this change replaces.
+    pub fn glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        let replaced = match self {
+            Self::Glyph(value) => Some(value.sides().map(Glyph::id)),
+            _ => None,
+        };
+        let owner = match self {
+            Self::Layer { glyph_id, .. } => Some(glyph_id.clone()),
+            _ => None,
+        };
+        replaced.into_iter().flatten().chain(owner)
+    }
+
+    /// The layers this change leaves behind; a created glyph's layers are
+    /// structural.
+    pub fn touched_layers(&self) -> impl Iterator<Item = TouchedLayer> + '_ {
+        let replaced = match self {
+            Self::Layer {
+                layer, structural, ..
+            } => layer
+                .after
+                .as_ref()
+                .map(|layer| TouchedLayer::new(layer, *structural)),
+            _ => None,
+        };
+        let created = match self {
+            Self::Glyph(value) if value.creates() => value.after.as_ref(),
+            _ => None,
+        };
+        replaced.into_iter().chain(
+            created
+                .into_iter()
+                .flat_map(|glyph| glyph.layers().values())
+                .map(|layer| TouchedLayer::new(layer, true)),
+        )
+    }
+
     /// Returns every domain projection invalidated by this replacement.
     pub fn impact(&self) -> FontChangeImpact {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
-            Self::LibValue { .. } => FontChangeImpact::empty(),
             Self::Axes(_) => {
                 FontChangeImpact::AXES
                     | FontChangeImpact::SOURCES
@@ -136,12 +274,12 @@ impl FontChange {
                     | FontChangeImpact::SOURCE_METRICS
                     | FontChangeImpact::KERNING
             }
-            Self::Glyph(_) => FontChangeImpact::GLYPHS,
-            Self::Layer {
+            Self::Glyph(_)
+            | Self::Layer {
                 structural: true, ..
             } => FontChangeImpact::GLYPHS,
-            Self::Layer { .. } => FontChangeImpact::empty(),
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
+            Self::LibValue { .. } | Self::Layer { .. } => FontChangeImpact::empty(),
         }
     }
 
@@ -207,7 +345,7 @@ impl FontChange {
                 .iter()
                 .chain(layer.after.iter())
                 .next()
-                .map(|layer| layer.id()),
+                .map(Identified::id),
             _ => None,
         }
     }
@@ -246,6 +384,24 @@ impl FontChangeSet {
         self.changes.is_empty()
     }
 
+    /// Returns the glyphs whose own record or any layer this changeset
+    /// replaces, in first-touched order.
+    pub fn touched_glyph_ids(&self) -> IndexSet<GlyphId> {
+        self.changes
+            .iter()
+            .flat_map(FontChange::glyph_ids)
+            .collect()
+    }
+
+    /// Returns the layers this changeset leaves behind: each replaced layer,
+    /// and every layer of a glyph it creates, which counts as structural.
+    pub fn touched_layers(&self) -> Vec<TouchedLayer> {
+        self.changes
+            .iter()
+            .flat_map(FontChange::touched_layers)
+            .collect()
+    }
+
     /// Returns the union of domain projections invalidated by this changeset.
     pub fn impact(&self) -> FontChangeImpact {
         self.changes
@@ -263,35 +419,25 @@ impl FontChangeSet {
         let mut entities = Vec::new();
         for change in &self.changes {
             match change {
-                FontChange::Axes(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, Axis::id)
-                        .into_iter()
-                        .map(FontEntityChange::Axis),
-                ),
-                FontChange::AxisMappings(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, AxisMapping::id)
-                        .into_iter()
-                        .map(FontEntityChange::AxisMapping),
-                ),
-                FontChange::MetricDefinitions(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, MetricDefinition::id)
-                        .into_iter()
-                        .map(FontEntityChange::MetricDefinition),
-                ),
-                FontChange::NamedInstances(value) => entities.extend(
-                    collection_entity_changes(&value.before, &value.after, NamedInstance::id)
-                        .into_iter()
-                        .map(FontEntityChange::NamedInstance),
-                ),
-                FontChange::Sources(value) => entities.extend(
-                    collection_entity_changes(
-                        &value.before.sources,
-                        &value.after.sources,
-                        Source::id,
-                    )
-                    .into_iter()
-                    .map(FontEntityChange::Source),
-                ),
+                FontChange::Axes(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::Axis));
+                }
+                FontChange::AxisMappings(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::AxisMapping));
+                }
+                FontChange::MetricDefinitions(value) => {
+                    entities.extend(
+                        value
+                            .entity_changes()
+                            .map(FontEntityChange::MetricDefinition),
+                    );
+                }
+                FontChange::NamedInstances(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::NamedInstance));
+                }
+                FontChange::Sources(value) => {
+                    entities.extend(value.entity_changes().map(FontEntityChange::Source));
+                }
                 FontChange::Glyph(value) => {
                     entities.extend(
                         optional_entity_changes(
@@ -454,6 +600,121 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn glyph_with_layer() -> (Glyph, Arc<GlyphLayer>) {
+        let layer = GlyphLayer::new(LayerId::new(), SourceId::new());
+        let mut glyph = Glyph::with_id(GlyphId::new(), "a");
+        glyph.set_layer(layer);
+        let layer = Arc::clone(glyph.layers().values().next().expect("layer was set"));
+        (glyph, layer)
+    }
+
+    #[test]
+    fn touched_glyphs_come_once_in_first_touched_order_and_created_layers_are_structural() {
+        let (edited, edited_layer) = glyph_with_layer();
+        let (created, created_layer) = glyph_with_layer();
+        let layer_edit = FontChange::Layer {
+            glyph_id: edited.id(),
+            layer: Replacement::new(
+                Some(Arc::clone(&edited_layer)),
+                Some(Arc::clone(&edited_layer)),
+            ),
+            structural: false,
+        };
+        let change_set = FontChangeSet {
+            changes: vec![
+                layer_edit.clone(),
+                FontChange::Glyph(Box::new(Replacement::new(None, Some(created.clone())))),
+                layer_edit,
+            ],
+        };
+
+        let glyph_ids = change_set
+            .touched_glyph_ids()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let layers = change_set.touched_layers();
+
+        assert_eq!(glyph_ids, [edited.id(), created.id()]);
+        assert_eq!(
+            layers
+                .iter()
+                .map(|touched| (touched.layer.id(), touched.structural))
+                .collect::<Vec<_>>(),
+            [
+                (edited_layer.id(), false),
+                (created_layer.id(), true),
+                (edited_layer.id(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn collection_replacements_report_created_updated_and_deleted_entities() {
+        let kept = Axis::weight();
+        let removed = Axis::width();
+        let mut renamed = kept.clone();
+        renamed.set_name("Heaviness".to_string());
+        let added = Axis::new("opsz".into(), "Optical size".into(), 6.0, 12.0, 72.0);
+        let replacement = Replacement::new(
+            vec![kept.clone(), removed.clone()],
+            vec![added.clone(), renamed.clone()],
+        );
+
+        let changes = replacement.entity_changes().collect::<Vec<_>>();
+
+        assert_eq!(
+            changes,
+            vec![
+                EntityChange::Updated {
+                    before: &kept,
+                    after: &renamed,
+                },
+                EntityChange::Deleted(&removed),
+                EntityChange::Created(&added),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_glyph_replacement_names_one_glyph() {
+        let glyph = Glyph::new("A".to_string());
+        let other = Glyph::new("B".to_string());
+
+        let created = Replacement::new(None, Some(glyph.clone()));
+        let renamed = Replacement::new(Some(glyph.clone()), Some(other));
+        let empty: Replacement<Option<Glyph>> = Replacement::new(None, None);
+
+        assert_eq!(created.glyph_id().unwrap(), glyph.id());
+        assert!(matches!(
+            renamed.glyph_id(),
+            Err(CoreError::ReplacementIdentityChanged {
+                kind: EntityKind::Glyph,
+                ..
+            })
+        ));
+        let Err(error) = empty.glyph_id() else {
+            panic!("an empty replacement names no glyph");
+        };
+        assert_eq!(
+            error.to_string(),
+            "invalid changeset order: glyph replacement has no value on either side"
+        );
+    }
+
+    #[test]
+    fn a_replacement_applies_only_to_its_original_value() {
+        let replacement = Replacement::new(vec![1, 2], vec![2, 1]);
+
+        replacement.require_before(&[1, 2][..], "order").unwrap();
+        let Err(error) = replacement.require_before(&[2, 1][..], "order") else {
+            panic!("a changed original must be rejected");
+        };
+        assert!(matches!(
+            error,
+            CoreError::ChangeOriginMismatch { target: "order" }
+        ));
+    }
 
     #[test]
     fn double_inversion_recovers_the_original_changeset() {

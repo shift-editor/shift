@@ -140,5 +140,5 @@ fn malformed_in_memory_source_returns_an_error() {
 
     let result = Font::load_from_source(&DataRequest::all(), &source);
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }

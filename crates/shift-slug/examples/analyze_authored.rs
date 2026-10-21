@@ -1,3 +1,7 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::{env, error::Error};
 
 use shift_backends::font_loader::FontLoader;

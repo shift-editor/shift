@@ -5,7 +5,7 @@ use clap::{Args, Subcommand, ValueHint};
 use super::MutationArgs;
 
 #[derive(Debug, Args)]
-pub struct SetAxisArgs {
+pub(crate) struct SetAxisArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -38,7 +38,7 @@ pub struct SetAxisArgs {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum InstanceCommand {
+pub(crate) enum InstanceCommand {
     /// Add one product preset, or missing standard weight presets.
     Add(AddInstanceArgs),
     /// Edit a product preset without replacing its identity or author order.
@@ -48,7 +48,7 @@ pub enum InstanceCommand {
 }
 
 #[derive(Debug, Args)]
-pub struct AddInstanceArgs {
+pub(crate) struct AddInstanceArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -74,7 +74,7 @@ pub struct AddInstanceArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct SetInstanceArgs {
+pub(crate) struct SetInstanceArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -103,7 +103,7 @@ pub struct SetInstanceArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct RemoveInstanceArgs {
+pub(crate) struct RemoveInstanceArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,

@@ -33,11 +33,26 @@ use crate::{BackendResult, FontImport};
 pub trait FontSource: Send + Sync {
     fn directory(&self) -> &FontDirectory;
 
+    /// Projects one glyph, with its variation and exact-source shapes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::GlyphOutOfRange`] when `glyph` is not in the font, and
+    /// [`FontReadError::MalformedSource`] or [`FontReadError::UnsupportedProjection`] when the
+    /// glyph cannot be read or projected.
     fn glyph(&self, glyph: GlyphIndex) -> Result<ProjectedGlyph, FontReadError>;
 }
 
 /// Exhaustive authored conversion from the original retained source semantics.
 pub trait FontImporter: FontSource {
+    /// Starts a bounded glyph stream that imports the whole font.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::Load`](crate::BackendError::Load) when the source
+    /// cannot be read, and
+    /// [`BackendError::StreamingUnsupported`](crate::BackendError::StreamingUnsupported)
+    /// when its format cannot stream.
     fn begin_import(&self) -> BackendResult<FontImport>;
 }
 

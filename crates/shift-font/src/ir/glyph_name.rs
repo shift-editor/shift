@@ -14,6 +14,11 @@ pub enum GlyphNameError {
 }
 
 impl GlyphName {
+    /// Creates a glyph name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GlyphNameError::Empty`] when `value` is empty.
     pub fn new(value: impl Into<String>) -> Result<Self, GlyphNameError> {
         let value = value.into();
         if value.is_empty() {

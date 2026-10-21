@@ -15,6 +15,8 @@ export class SerialRequest<Request, Result> {
   #inFlight = false;
   #waiting: Request | null = null;
   #disposed = false;
+  // non-reactive: resolvers for settled() callers, drained when the queue empties
+  #idle: (() => void)[] = [];
 
   /**
    * @param send - Starts one request.
@@ -41,10 +43,20 @@ export class SerialRequest<Request, Result> {
     void this.#run(request);
   }
 
+  /**
+   * Resolves once no request is in flight or waiting, including any queued
+   * while this one was outstanding.
+   */
+  settled(): Promise<void> {
+    if (!this.#inFlight) return Promise.resolve();
+    return new Promise((resolve) => this.#idle.push(resolve));
+  }
+
   /** Drops the waiting request and any result still to arrive. */
   dispose(): void {
     this.#disposed = true;
     this.#waiting = null;
+    this.#resolveIdle();
   }
 
   async #run(request: Request): Promise<void> {
@@ -59,6 +71,13 @@ export class SerialRequest<Request, Result> {
       const next = this.#waiting;
       this.#waiting = null;
       if (next !== null && !this.#disposed) void this.#run(next);
+      else this.#resolveIdle();
     }
+  }
+
+  #resolveIdle(): void {
+    const idle = this.#idle;
+    this.#idle = [];
+    for (const resolve of idle) resolve();
   }
 }
