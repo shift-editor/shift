@@ -37,6 +37,16 @@ pub(crate) struct LocationValue {
     pub value: f64,
 }
 
+impl crate::format::Coordinate for LocationValue {
+    fn axis_tag(&self) -> &str {
+        &self.axis_tag
+    }
+
+    fn value(&self) -> f64 {
+        self.value
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GlyphSummary {

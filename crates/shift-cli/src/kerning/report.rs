@@ -6,6 +6,7 @@ use serde::Serialize;
 use shift_font::{Font, GlyphId, KerningGroup, KerningGroupId, KerningPair, KerningSide};
 
 use super::selector::{GROUP_PREFIX, position_label};
+use crate::format::Number;
 
 /// One side of an authored pair. `name` is `None` for a glyph or group the
 /// font no longer has; such a pair is kept but never applies.
@@ -288,7 +289,7 @@ impl KerningResolutionReport {
             };
             rows.push(vec![
                 master.source.name.clone(),
-                format_number(master.value),
+                Number(master.value).to_string(),
                 source,
             ]);
         }
@@ -298,29 +299,18 @@ impl KerningResolutionReport {
             let coordinates = location
                 .external
                 .iter()
-                .map(|axis| format!("{}={}", axis.axis_tag, format_number(axis.value)))
+                .map(|axis| format!("{}={}", axis.axis_tag, Number(axis.value)))
                 .collect::<Vec<_>>()
                 .join(", ");
             lines.push(String::new());
-            lines.push(format!(
-                "At {coordinates}: {}",
-                format_number(location.value)
-            ));
+            lines.push(format!("At {coordinates}: {}", Number(location.value)));
         }
         lines.join("\n")
     }
 }
 
 fn format_value(value: Option<f64>) -> String {
-    value.map_or_else(|| "-".to_string(), format_number)
-}
-
-pub(crate) fn format_number(value: f64) -> String {
-    let rounded = (value * 1000.0).round() / 1000.0;
-    if rounded == 0.0 {
-        return "0".to_string();
-    }
-    rounded.to_string()
+    value.map_or_else(|| "-".to_string(), |value| Number(value).to_string())
 }
 
 /// Pads cells into columns, right-aligning the `numeric` ones.

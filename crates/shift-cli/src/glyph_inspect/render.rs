@@ -1,10 +1,11 @@
 use comfy_table::presets::NOTHING;
 use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 
+use crate::format::{Coordinates, Number};
 use crate::inspect::RenderMode;
 
 use super::GlyphInspectView;
-use super::types::{Bounds, GlyphInspection, LocationValue};
+use super::types::{Bounds, GlyphInspection};
 
 impl GlyphInspection {
     pub(crate) fn render(&self, view: GlyphInspectView, _mode: RenderMode) -> String {
@@ -22,10 +23,10 @@ impl GlyphInspection {
             format!("{}  {}", self.glyph.name, self.glyph.id),
             format!("format      {}", self.format),
             format!("unicode     {}", display_list(&self.glyph.unicodes)),
-            format!("external    {}", format_location(&self.location.external)),
-            format!("design      {}", format_location(&self.location.design)),
+            format!("external    {}", Coordinates::of(&self.location.external)),
+            format!("design      {}", Coordinates::of(&self.location.design)),
             format!("selection   {}", self.variation.selection),
-            format!("advance     {}", format_number(self.summary.advance)),
+            format!("advance     {}", Number(self.summary.advance)),
             format!("bounds      {}", format_bounds(self.summary.bounds)),
             format!(
                 "structure   {} contours, {} points, {} anchors, {} direct components",
@@ -71,8 +72,8 @@ impl GlyphInspection {
                 table.add_row(vec![
                     Cell::new(anchor.name.as_deref().unwrap_or("-")),
                     Cell::new(&anchor.id),
-                    right(format_number(anchor.x)),
-                    right(format_number(anchor.y)),
+                    right(Number(anchor.x)),
+                    right(Number(anchor.y)),
                 ]);
             }
             lines.push(table.to_string());
@@ -92,11 +93,11 @@ impl GlyphInspection {
                     Cell::new(&component.parent_glyph_name),
                     Cell::new(&component.base_glyph_name),
                     Cell::new(component.component_path.join("/")),
-                    right(format_number(component.decomposed_transform.translate_x)),
-                    right(format_number(component.decomposed_transform.translate_y)),
-                    right(format_number(component.decomposed_transform.rotation)),
-                    right(format_number(component.decomposed_transform.scale_x)),
-                    right(format_number(component.decomposed_transform.scale_y)),
+                    right(Number(component.decomposed_transform.translate_x)),
+                    right(Number(component.decomposed_transform.translate_y)),
+                    right(Number(component.decomposed_transform.rotation)),
+                    right(Number(component.decomposed_transform.scale_x)),
+                    right(Number(component.decomposed_transform.scale_y)),
                 ]);
             }
             lines.push(table.to_string());
@@ -124,7 +125,7 @@ impl GlyphInspection {
                 } else {
                     format!("{} (layer)", source.name)
                 }),
-                Cell::new(format_location(&source.location)),
+                Cell::new(Coordinates::of(&source.location)),
                 Cell::new(layer.map_or("-", |layer| layer.id.as_str())),
                 Cell::new(match source.compatible_with_reference {
                     Some(true) => "yes",
@@ -170,7 +171,7 @@ impl GlyphInspection {
                 table.add_row(vec![
                     Cell::new(&source.source_name),
                     Cell::new(&source.source_id),
-                    right(format_number(source.weight)),
+                    right(Number(source.weight)),
                 ]);
             }
             lines.push(table.to_string());
@@ -190,9 +191,9 @@ impl GlyphInspection {
                         format!(
                             "{}={}/{}/{}",
                             support.axis_tag,
-                            format_number(support.minimum),
-                            format_number(support.peak),
-                            format_number(support.maximum)
+                            Number(support.minimum),
+                            Number(support.peak),
+                            Number(support.maximum)
                         )
                     })
                     .collect::<Vec<_>>()
@@ -200,7 +201,7 @@ impl GlyphInspection {
                 table.add_row(vec![
                     right(order),
                     Cell::new(supports),
-                    right(format_number(region.scalar)),
+                    right(Number(region.scalar)),
                     right(region.value_count),
                     right(region.non_zero_value_count),
                 ]);
@@ -228,8 +229,8 @@ impl GlyphInspection {
                 table.add_row(vec![
                     right(contour_index),
                     right(point_index),
-                    right(format_number(point.x)),
-                    right(format_number(point.y)),
+                    right(Number(point.x)),
+                    right(Number(point.y)),
                     Cell::new(&point.point_type),
                     Cell::new(point.smooth),
                 ]);
@@ -264,46 +265,17 @@ fn display_list(values: &[String]) -> String {
     }
 }
 
-fn format_location(location: &[LocationValue]) -> String {
-    location
-        .iter()
-        .map(|coordinate| {
-            format!(
-                "{}={}",
-                coordinate.axis_tag,
-                format_number(coordinate.value)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn format_bounds(bounds: Option<Bounds>) -> String {
     bounds.map_or_else(
         || "-".to_string(),
         |bounds| {
             format!(
                 "{},{}, {},{}",
-                format_number(bounds.min_x),
-                format_number(bounds.min_y),
-                format_number(bounds.max_x),
-                format_number(bounds.max_y)
+                Number(bounds.min_x),
+                Number(bounds.min_y),
+                Number(bounds.max_x),
+                Number(bounds.max_y)
             )
         },
     )
-}
-
-fn format_number(value: f64) -> String {
-    if value.fract().abs() < f64::EPSILON {
-        return format!("{value:.0}");
-    }
-
-    let mut text = format!("{value:.6}");
-    while text.ends_with('0') {
-        text.pop();
-    }
-    if text.ends_with('.') {
-        text.pop();
-    }
-    text
 }

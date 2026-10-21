@@ -91,7 +91,3 @@ impl SourceMetrics {
         lines.join("\n")
     }
 }
-
-pub(crate) fn format_version(major: Option<i32>, minor: Option<i32>) -> Option<String> {
-    major.map(|major| format!("{major}.{:03}", minor.unwrap_or_default()))
-}

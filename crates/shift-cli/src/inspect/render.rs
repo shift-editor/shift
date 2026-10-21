@@ -2,8 +2,10 @@ use anstyle::AnsiColor;
 use comfy_table::presets::NOTHING;
 use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 
+use crate::format::{Coordinates, Number};
+
 use super::InspectView;
-use super::report::{AxisReference, InspectReport, LocationValue};
+use super::report::{AxisReference, InspectReport};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RenderMode {
@@ -286,7 +288,7 @@ impl InspectReport {
             table.add_row(vec![
                 Cell::new(instance.name.clone()),
                 mode.muted(compact_id(&instance.id)),
-                Cell::new(format_location(&instance.location)),
+                Cell::new(Coordinates::of(&instance.location)),
                 Cell::new(instance.postscript_name.as_deref().unwrap_or("-")),
             ]);
         }
@@ -341,7 +343,7 @@ impl InspectReport {
                     Cell::new(glyph.name.clone()),
                     mode.muted(compact_id(&layer.id)),
                     Cell::new(source_label(layer.source_name.as_deref(), &layer.source_id)),
-                    right(format_number(layer.advance)),
+                    right(Number(layer.advance)),
                     right(layer.contour_count),
                     right(layer.point_count),
                     right(layer.anchor_count),
@@ -409,7 +411,7 @@ impl InspectReport {
             table.add_row(vec![
                 Cell::new(source_name(source.name.as_str(), source.is_default)),
                 mode.muted(compact_id(&source.id)),
-                Cell::new(format_location(&source.location)),
+                Cell::new(Coordinates::of(&source.location)),
                 Cell::new(
                     source
                         .metric_values
@@ -418,8 +420,8 @@ impl InspectReport {
                             format!(
                                 "{} {}/{}",
                                 value.name,
-                                format_number(value.position),
-                                format_number(value.overshoot)
+                                Number(value.position),
+                                Number(value.overshoot)
                             )
                         })
                         .collect::<Vec<_>>()
@@ -449,7 +451,7 @@ fn align_right(table: &mut Table, columns: &[usize]) {
 }
 
 fn number(value: f64) -> Cell {
-    Cell::new(format_number(value)).set_alignment(CellAlignment::Right)
+    Cell::new(Number(value)).set_alignment(CellAlignment::Right)
 }
 
 fn optional_number(value: Option<f64>) -> Cell {
@@ -490,18 +492,6 @@ fn display_list(values: &[String]) -> String {
     }
 }
 
-fn format_location(location: &[LocationValue]) -> String {
-    if location.is_empty() {
-        "{}".to_string()
-    } else {
-        location
-            .iter()
-            .map(|entry| format!("{}={}", entry.axis_tag, format_number(entry.value)))
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-}
-
 fn format_axis_references(axes: &[AxisReference]) -> String {
     if axes.is_empty() {
         return "-".to_string();
@@ -511,21 +501,6 @@ fn format_axis_references(axes: &[AxisReference]) -> String {
         .map(|axis| axis.tag.as_str())
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn format_number(value: f64) -> String {
-    if value.fract().abs() < f64::EPSILON {
-        return format!("{value:.0}");
-    }
-
-    let mut text = format!("{value:.4}");
-    while text.contains('.') && text.ends_with('0') {
-        text.pop();
-    }
-    if text.ends_with('.') {
-        text.pop();
-    }
-    text
 }
 
 fn compact_id(value: &str) -> String {
