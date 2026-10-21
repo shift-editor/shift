@@ -1,7 +1,8 @@
 //! Axis edits preserve identity, role, labels, visibility, and dependent coordinates.
 
 use miette::{Result, bail, miette};
-use shift_font::{AxisKind, FontIntent, FontIntentSet};
+use shift_font::UpdateAxis;
+use shift_font::{AxisKind, FontIntentSet};
 
 use crate::cli::SetAxisArgs;
 
@@ -16,7 +17,7 @@ use super::{AuthoringReport, apply_mutation, glyph::load_font, resolve_axis_id};
 ///
 /// Returns an error for an unknown selector, empty edit, unsupported discrete
 /// range edit, invalid dependent authoring, or document/persistence failure.
-pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let axis_id = resolve_axis_id(&font, &args.axis)?;
     let current = font
@@ -54,8 +55,6 @@ pub fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        &FontIntentSet {
-            intents: vec![FontIntent::UpdateAxis { axis }],
-        },
+        &FontIntentSet::from(UpdateAxis { axis }),
     )
 }

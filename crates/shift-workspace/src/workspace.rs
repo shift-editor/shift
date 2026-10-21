@@ -1,3 +1,4 @@
+use shift_font::{AddComponent, DecomposeComponents, ReplaceGlyphLayerContent};
 use std::{
     collections::{HashMap, HashSet},
     io,
@@ -9,8 +10,8 @@ use shift_backends::{
     FontExportRequest, FontExportResult, FontExporter, ImportBatchLimit, font_loader::FontLoader,
 };
 use shift_font::{
-    AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, GlyphId, GlyphLayer,
-    LayerId, TouchedLayer, error::CoreError,
+    AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId,
+    GlyphLayer, LayerId, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -93,6 +94,12 @@ impl FontWorkspace {
         }
     }
 
+    /// Creates a workspace for a new, untitled font in a store at `store_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the store cannot be opened or the new font cannot be
+    /// written to it.
     pub fn create_untitled(
         store_path: impl AsRef<Path>,
         new_workspace: NewWorkspace,
@@ -113,6 +120,15 @@ impl FontWorkspace {
         ))
     }
 
+    /// Imports the font at `source_path` into a working store at `store_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::DocumentRequiresRecoveryPath`] for a `.shift` document, which
+    /// opens with [`Self::open_document`]; [`WorkspaceError::InvalidPathUtf8`] when `source_path`
+    /// is not UTF-8; [`WorkspaceError::Backend`] when the source cannot be read; and
+    /// [`WorkspaceError::Store`] or [`WorkspaceError::Io`] when the import cannot be staged and
+    /// written, including when `store_path` already holds a workspace.
     pub fn open(
         source_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
@@ -131,6 +147,12 @@ impl FontWorkspace {
         Self::import_font(source_path, store_path)
     }
 
+    /// Opens a `.shift` document, keeping unsaved edits in `recovery_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the document or its recovery store cannot be opened,
+    /// or the font directory cannot be loaded.
     pub fn open_document(
         document_path: impl AsRef<Path>,
         recovery_path: impl AsRef<Path>,
@@ -142,10 +164,7 @@ impl FontWorkspace {
             _ => SaveState::Unsaved,
         };
         let font = store.load_font_directory()?;
-        let residency = LayerResidency::with_unloaded(
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned()),
-        );
+        let residency = LayerResidency::with_unloaded(font.layer_ids());
 
         Ok(Self::from_store(
             font,
@@ -158,12 +177,24 @@ impl FontWorkspace {
         ))
     }
 
+    /// Reads the identity of the document at `document_path` without opening it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the file is not a readable `.shift` document, and
+    /// [`WorkspaceError::Io`] when its path cannot be resolved.
     pub fn inspect_document(
         document_path: impl AsRef<Path>,
     ) -> Result<DocumentIdentity, WorkspaceError> {
         document_identity(document_path)
     }
 
+    /// Saves the open document in place.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::NeedsSaveAs`] when the workspace is untitled or imported, and
+    /// [`WorkspaceError::Store`] when the document cannot be written.
     pub fn save(&mut self) -> Result<(), WorkspaceError> {
         match &self.source {
             WorkspaceSource::Document { .. } => {
@@ -177,6 +208,12 @@ impl FontWorkspace {
         }
     }
 
+    /// Saves the workspace as a `.shift` document and continues editing it there.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the document cannot be written or reopened with its
+    /// recovery store.
     pub fn save_as_document(
         &mut self,
         document_path: impl AsRef<Path>,
@@ -194,18 +231,26 @@ impl FontWorkspace {
         Ok(metadata)
     }
 
+    /// Drops unsaved edits and reloads the document as last saved.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the recovery store cannot be cleared or the saved
+    /// font cannot be loaded.
     pub fn discard_recovery(&mut self) -> Result<(), WorkspaceError> {
         self.store.discard_recovery()?;
         let font = self.store.load_font_directory()?;
-        self.residency = LayerResidency::with_unloaded(
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned()),
-        );
+        self.residency = LayerResidency::with_unloaded(font.layer_ids());
         self.font = font;
         self.ledger = Ledger::default();
         Ok(())
     }
 
+    /// Returns the saved document's metadata, or `None` when the workspace is not a document.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the metadata cannot be read.
     pub fn document_metadata(&self) -> Result<Option<DocumentMetadata>, WorkspaceError> {
         match &self.source {
             WorkspaceSource::Document { .. } => Ok(Some(self.store.document_metadata()?)),
@@ -213,16 +258,20 @@ impl FontWorkspace {
         }
     }
 
+    /// Reopens a working store left by an earlier session.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the store cannot be opened or read, and
+    /// [`WorkspaceError::CorruptWorkingStore`] when it has no workspace state or records a source
+    /// it cannot describe.
     pub fn resume(store_path: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let store = ShiftStore::open(store_path)?;
         let state = store
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
         let font = store.load_font_directory()?;
-        let residency = LayerResidency::with_unloaded(
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned()),
-        );
+        let residency = LayerResidency::with_unloaded(font.layer_ids());
         let source = source_from_workspace_state(&state)?;
 
         Ok(Self::from_store(
@@ -238,6 +287,12 @@ impl FontWorkspace {
         ))
     }
 
+    /// Loads every layer and exports the font as `request` describes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when an unloaded layer cannot be read, and
+    /// [`WorkspaceError::Export`] when the export fails.
     pub fn export(
         &mut self,
         request: FontExportRequest,
@@ -252,6 +307,13 @@ impl FontWorkspace {
     /// persist the canonical records, swap the live font, record one ledger
     /// entry. One call = one SQLite transaction = one undo step — including
     /// sets that batch several create intents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when a required layer cannot be loaded or the changes
+    /// cannot be persisted, [`WorkspaceError::Font`] when an intent is invalid for the font, and
+    /// [`WorkspaceError::UnloadedLayerMutation`] when an intent would persist a layer that is not
+    /// loaded. The live font is unchanged on failure.
     pub fn apply(
         &mut self,
         set: &FontIntentSet,
@@ -267,17 +329,20 @@ impl FontWorkspace {
         let mut component_roots = Vec::new();
         for intent in &set.intents {
             match intent {
-                FontIntent::AddComponent { base_glyph_id, .. } => {
+                FontIntent::AddComponent(AddComponent { base_glyph_id, .. }) => {
                     component_roots.push(base_glyph_id.clone());
                 }
-                FontIntent::ReplaceGlyphLayerContent { components, .. } => {
+                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
+                    components,
+                    ..
+                }) => {
                     component_roots
                         .extend(components.iter().map(shift_font::Component::base_glyph_id));
                 }
-                FontIntent::DecomposeComponents {
+                FontIntent::DecomposeComponents(DecomposeComponents {
                     layer_id,
                     component_ids,
-                } => {
+                }) => {
                     let Some(layer) = self.font.layer(layer_id) else {
                         continue;
                     };
@@ -314,6 +379,11 @@ impl FontWorkspace {
     /// `None` when the undo stack is empty. The echo is the same
     /// replace-grade shape as `apply`. A failed replay hands the entry back
     /// so the change stays available for retry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] or [`WorkspaceError::Font`] when the inverse changes
+    /// cannot be loaded, applied or persisted; the entry stays on the undo stack.
     pub fn undo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
         let Some(entry) = self.ledger.pop_undo() else {
             return Ok(None);
@@ -335,6 +405,11 @@ impl FontWorkspace {
     /// Reapplies the most recently undone reversible changeset.
     /// A failed replay hands the entry back so the change stays available
     /// for retry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] or [`WorkspaceError::Font`] when the changes cannot be
+    /// loaded, applied or persisted; the entry stays on the redo stack.
     pub fn redo(&mut self) -> Result<Option<AppliedIntents>, WorkspaceError> {
         let Some(entry) = self.ledger.pop_redo() else {
             return Ok(None);
@@ -372,7 +447,7 @@ impl FontWorkspace {
         };
         self.commit_edit(save_state, move |font| {
             font.apply_change_set(&change_set)?;
-            let layers = touched_layers(&change_set);
+            let layers = change_set.touched_layers();
             let outcome = AppliedIntents {
                 changes: change_set.clone(),
                 layers,
@@ -444,10 +519,7 @@ impl FontWorkspace {
                 store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
                 store.finish_import()?;
                 let font = store.load_font_directory()?;
-                let residency = LayerResidency::with_unloaded(
-                    font.glyphs()
-                        .flat_map(|glyph| glyph.layers().keys().cloned()),
-                );
+                let residency = LayerResidency::with_unloaded(font.layer_ids());
                 drop(store);
                 install_import_store(staged_path, store_path)?;
                 let store = ShiftStore::open(store_path)?;
@@ -485,6 +557,11 @@ impl FontWorkspace {
 
     /// Explicitly acquires requested glyph payloads. Component closure expands
     /// dependencies from relational indexes before any BLOB is read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the component closure or a layer payload cannot be
+    /// read, and [`WorkspaceError::Font`] when a loaded layer cannot replace its placeholder.
     pub fn acquire_glyphs(
         &mut self,
         glyph_ids: &[GlyphId],
@@ -510,13 +587,19 @@ impl FontWorkspace {
                 self.font
                     .glyph(&glyph_id)
                     .into_iter()
-                    .flat_map(|glyph| glyph.layers().keys().cloned())
+                    .flat_map(Glyph::layer_ids)
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
         self.acquire_layers(layer_ids)
     }
 
+    /// Loads every layer that is still a directory placeholder.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when a layer payload cannot be read, and
+    /// [`WorkspaceError::Font`] when a loaded layer cannot replace its placeholder.
     pub fn acquire_all_layers(&mut self) -> Result<(), WorkspaceError> {
         let layer_ids = self
             .residency
@@ -567,6 +650,10 @@ impl FontWorkspace {
     ///
     /// This is currently a test/profiler surface; the bridge does not yet own
     /// a production eviction policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Font`] when a placeholder cannot replace its layer.
     pub fn evict_glyphs(&mut self, glyph_ids: &[GlyphId]) -> Result<(), WorkspaceError> {
         let mut placeholders = Vec::new();
         let mut evicted = Vec::new();
@@ -594,16 +681,26 @@ impl FontWorkspace {
 
     /// Residency instrumentation for tests and import profiling.
     pub fn loaded_layer_count(&self) -> usize {
-        let directory_layer_count = self.font.glyphs().map(|glyph| glyph.layers().len()).sum();
+        let directory_layer_count = self.font.layer_count();
         self.residency.loaded_count(directory_layer_count)
     }
 
+    /// Returns, for each glyph, the glyphs its components reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the references cannot be read.
     pub fn glyph_component_references(
         &self,
     ) -> Result<HashMap<GlyphId, Vec<GlyphId>>, WorkspaceError> {
         self.store.glyph_component_references().map_err(Into::into)
     }
 
+    /// Returns the glyphs `glyph_id`'s components reference.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the references cannot be read.
     pub fn referenced_glyph_ids_for_glyph(
         &self,
         glyph_id: &GlyphId,
@@ -613,6 +710,11 @@ impl FontWorkspace {
             .map_err(Into::into)
     }
 
+    /// Returns the glyphs whose components reference a glyph owning one of `layer_ids`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the references cannot be read.
     pub fn dependent_glyph_ids_for_layers(
         &self,
         layer_ids: &[LayerId],
@@ -647,10 +749,20 @@ impl FontWorkspace {
         &mut self.store
     }
 
+    /// Returns the stored font info, or `None` when none was written.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the font info cannot be read.
     pub fn font_info(&self) -> Result<Option<shift_store::FontInfo>, WorkspaceError> {
         self.store.get_font_info().map_err(WorkspaceError::from)
     }
 
+    /// Returns whether the workspace has edits that are not saved.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the recovery or workspace state cannot be read.
     pub fn is_dirty(&self) -> Result<bool, WorkspaceError> {
         if matches!(&self.source, WorkspaceSource::Document { .. }) {
             return Ok(!matches!(
@@ -666,6 +778,12 @@ impl FontWorkspace {
     }
 
     /// Returns the durable authored revision used to address disposable derived artifacts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the document metadata or workspace state cannot be
+    /// read, and [`WorkspaceError::CorruptWorkingStore`] when the workspace state is missing or its
+    /// revision is negative.
     pub fn slug_atlas_cache_revision(&self) -> Result<String, WorkspaceError> {
         if matches!(&self.source, WorkspaceSource::Document { .. }) {
             let metadata = self.store.document_metadata()?;
@@ -686,6 +804,12 @@ impl FontWorkspace {
         Ok(state.revision.to_string())
     }
 
+    /// Records `workspace_id` in an untitled or imported workspace's store; documents keep their
+    /// own id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the id cannot be written.
     pub fn set_workspace_id(&mut self, workspace_id: &str) -> Result<(), WorkspaceError> {
         if matches!(&self.source, WorkspaceSource::Document { .. }) {
             return Ok(());
@@ -701,35 +825,6 @@ impl FontWorkspace {
 enum ReplaySide {
     Pre,
     Post,
-}
-
-fn touched_layers(change_set: &FontChangeSet) -> Vec<TouchedLayer> {
-    change_set
-        .changes
-        .iter()
-        .flat_map(|change| match change {
-            FontChange::Layer {
-                layer, structural, ..
-            } => layer
-                .after
-                .iter()
-                .map(|layer| TouchedLayer {
-                    layer: layer.clone(),
-                    structural: *structural,
-                })
-                .collect(),
-            FontChange::Glyph(value) if value.before.is_none() => value
-                .after
-                .iter()
-                .flat_map(|glyph| glyph.layers().values())
-                .map(|layer| TouchedLayer {
-                    layer: layer.clone(),
-                    structural: true,
-                })
-                .collect(),
-            _ => Vec::new(),
-        })
-        .collect()
 }
 
 fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {

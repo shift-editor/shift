@@ -3,6 +3,10 @@ use crate::{
     CoreError, FontChange, FontChangeImpact, FontIntent, FontIntentSet, GlyphId, KerningGroupId,
     KerningPair, KerningPosition, KerningSide, KerningValueEdit, SourceId,
 };
+use crate::{
+    CreateKerningGroup, DeleteKerningGroup, RenameKerningGroup, SetKerningGroupMember,
+    SetKerningValues,
+};
 
 fn regular() -> SourceId {
     SourceId::from_raw("regular")
@@ -29,9 +33,7 @@ fn exception() -> KerningPair {
 }
 
 fn set(edits: Vec<KerningValueEdit>) -> FontIntentSet {
-    FontIntentSet {
-        intents: vec![FontIntent::SetKerningValues { edits }],
-    }
+    FontIntentSet::from(SetKerningValues { edits })
 }
 
 #[test]
@@ -176,18 +178,13 @@ fn a_group_on_the_wrong_side_of_a_pair_is_rejected() {
     assert_eq!(font, original);
 }
 
-fn one(intent: FontIntent) -> FontIntentSet {
-    FontIntentSet {
-        intents: vec![intent],
-    }
-}
-
 fn create(group_id: &KerningGroupId, position: KerningPosition, name: &str) -> FontIntent {
-    FontIntent::CreateKerningGroup {
+    CreateKerningGroup {
         group_id: group_id.clone(),
         position,
         name: name.to_string(),
     }
+    .into()
 }
 
 #[test]
@@ -201,11 +198,12 @@ fn moving_a_glyph_into_a_new_group_is_one_reversible_step() {
         .apply_intents(&FontIntentSet {
             intents: vec![
                 create(&round, KerningPosition::First, " Round "),
-                FontIntent::SetKerningGroupMember {
+                SetKerningGroupMember {
                     position: KerningPosition::First,
                     glyph_id: a.clone(),
                     group_id: Some(round.clone()),
-                },
+                }
+                .into(),
             ],
         })
         .unwrap();
@@ -227,7 +225,7 @@ fn taking_a_glyph_out_of_its_group_keeps_the_group() {
     let mut font = sample_font();
     let a = GlyphId::from_raw("A");
 
-    font.apply_intents(&one(FontIntent::SetKerningGroupMember {
+    font.apply_intents(&FontIntentSet::from(SetKerningGroupMember {
         position: KerningPosition::Second,
         glyph_id: a.clone(),
         group_id: None,
@@ -244,7 +242,7 @@ fn renaming_a_group_keeps_its_pairs() {
     let original = font.clone();
 
     let outcome = font
-        .apply_intents(&one(FontIntent::RenameKerningGroup {
+        .apply_intents(&FontIntentSet::from(RenameKerningGroup {
             group_id: first_a(),
             name: "Round".to_string(),
         }))
@@ -264,7 +262,7 @@ fn deleting_a_group_keeps_its_pairs_for_undo() {
     let a = GlyphId::from_raw("A");
 
     let outcome = font
-        .apply_intents(&one(FontIntent::DeleteKerningGroup {
+        .apply_intents(&FontIntentSet::from(DeleteKerningGroup {
             group_id: second_a(),
         }))
         .unwrap();
@@ -292,22 +290,25 @@ fn group_edits_reject_bad_names_ids_and_positions_without_changing_anything() {
             KerningPosition::First,
             "A",
         ),
-        FontIntent::RenameKerningGroup {
+        RenameKerningGroup {
             group_id: first_a(),
             name: "bad\nname".to_string(),
-        },
-        FontIntent::SetKerningGroupMember {
+        }
+        .into(),
+        SetKerningGroupMember {
             position: KerningPosition::First,
             glyph_id: GlyphId::from_raw("A"),
             group_id: Some(second_a()),
-        },
-        FontIntent::DeleteKerningGroup {
+        }
+        .into(),
+        DeleteKerningGroup {
             group_id: KerningGroupId::from_raw("missing"),
-        },
+        }
+        .into(),
     ];
 
     for intent in rejected {
-        assert!(font.apply_intents(&one(intent)).is_err());
+        assert!(font.apply_intents(&FontIntentSet::from(intent)).is_err());
         assert_eq!(font, original);
     }
 }

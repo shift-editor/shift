@@ -9,14 +9,15 @@ use shift_font::{
     FontMetadata, GlyphLayer, KerningGroup, KerningGroupId, KerningPair, SourceId,
 };
 
-use super::font_info::report::{SourceMetrics, format_version};
+use super::font_info::report::SourceMetrics;
 use super::instance::report::InstanceReport;
+use crate::format::FontVersion;
 use crate::kerning::selector::position_label;
 use crate::kerning::{GroupReport, PairReport, SideReport};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AuthoringReport {
+pub(crate) struct AuthoringReport {
     pub valid: bool,
     pub document: PathBuf,
     pub output: PathBuf,
@@ -30,7 +31,7 @@ pub struct AuthoringReport {
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
-pub enum AuthoringChange {
+pub(crate) enum AuthoringChange {
     FontCreated {
         document_id: Option<String>,
     },
@@ -118,7 +119,7 @@ pub enum AuthoringChange {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct LayerReport {
+pub(crate) struct LayerReport {
     layer_id: String,
     glyph_id: String,
     source_id: String,
@@ -162,7 +163,7 @@ impl LayerReport {
 }
 
 impl AuthoringReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         for change in &self.changes {
             match change {
@@ -303,7 +304,8 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
     if impact.contains(FontChangeImpact::METADATA) {
         let metadata = font.metadata().clone();
         report.push(AuthoringChange::FontMetadataUpdated {
-            version: format_version(metadata.version_major, metadata.version_minor),
+            version: FontVersion::from_metadata(metadata.version_major, metadata.version_minor)
+                .map(|version| version.to_string()),
             metadata,
         });
     }

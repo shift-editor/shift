@@ -31,7 +31,7 @@ impl Identified for Component {
     type Id = ComponentId;
 
     fn id(&self) -> Self::Id {
-        Component::id(self)
+        Self::id(self)
     }
 }
 
@@ -86,6 +86,16 @@ impl Default for DecomposedTransform {
 }
 
 impl DecomposedTransform {
+    /// Returns whether the placement only moves the component, as anchor
+    /// alignment places it.
+    pub fn is_translation(&self) -> bool {
+        self.rotation == 0.0
+            && self.scale_x == 1.0
+            && self.scale_y == 1.0
+            && self.skew_x == 0.0
+            && self.skew_y == 0.0
+    }
+
     /// Number of values in one transform's numeric encoding.
     pub const VALUE_COUNT: usize = 9;
 
@@ -165,10 +175,10 @@ impl DecomposedTransform {
     ///
     /// Order: translate to center → scale → skew → rotate → translate back → translate
     pub fn to_matrix(self) -> Transform {
-        let cos_r = self.rotation.to_radians().cos();
-        let sin_r = self.rotation.to_radians().sin();
-        let tan_sx = self.skew_x.to_radians().tan();
-        let tan_sy = self.skew_y.to_radians().tan();
+        let cos_r = libm::cos(self.rotation.to_radians());
+        let sin_r = libm::sin(self.rotation.to_radians());
+        let tan_sx = libm::tan(self.skew_x.to_radians());
+        let tan_sy = libm::tan(self.skew_y.to_radians());
 
         let xx = self.scale_x * cos_r + self.scale_y * tan_sx * sin_r;
         let xy = self.scale_x * sin_r - self.scale_y * tan_sx * cos_r;
@@ -201,13 +211,11 @@ impl DecomposedTransform {
         let det = m.xx * m.yy - m.xy * m.yx;
         let scale_y = if det < 0.0 { -scale_y } else { scale_y };
 
-        let rotation = m.xy.atan2(m.xx).to_degrees();
+        let rotation = libm::atan2(m.xy, m.xx).to_degrees();
 
         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.
         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {
-            ((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y))
-                .atan()
-                .to_degrees()
+            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()
         } else {
             0.0
         };
@@ -250,6 +258,12 @@ impl DecomposedTransform {
 }
 
 impl Transform {
+    /// Returns whether this transform mirrors, so a decomposed placement
+    /// reverses closed contours.
+    pub fn mirrors(&self) -> bool {
+        self.xx * self.yy - self.xy * self.yx < 0.0
+    }
+
     /// Number of values in one matrix's numeric encoding.
     pub const VALUE_COUNT: usize = 6;
 
@@ -264,6 +278,18 @@ impl Transform {
     /// Encodes the matrix in [`Self::VALUE_FIELDS`] order.
     pub fn to_values(self) -> [f64; Self::VALUE_COUNT] {
         [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
+    }
+
+    /// Decodes a matrix from [`Self::VALUE_FIELDS`] order.
+    pub fn from_values([xx, xy, yx, yy, dx, dy]: [f64; Self::VALUE_COUNT]) -> Self {
+        Self {
+            xx,
+            xy,
+            yx,
+            yy,
+            dx,
+            dy,
+        }
     }
 
     pub fn identity() -> Self {
@@ -572,5 +598,12 @@ mod tests {
         c.translate(10.0, 20.0);
         assert!((c.transform().translate_x - 10.0).abs() < 1e-10);
         assert!((c.transform().translate_y - 20.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn only_a_negative_determinant_mirrors() {
+        assert!(!Transform::identity().mirrors());
+        assert!(Transform::scale(-1.0, 1.0).mirrors());
+        assert!(!Transform::scale(-1.0, -1.0).mirrors());
     }
 }

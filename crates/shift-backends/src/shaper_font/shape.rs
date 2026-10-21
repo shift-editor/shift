@@ -114,7 +114,7 @@ impl LiveGlyphs {
             .filter_map(|(index, glyph_id)| Some((glyph_id.clone()?, u32::try_from(index).ok()?)))
             .collect();
 
-        let characters = character_glyphs(view.glyphs().into_iter().flat_map(|glyph| {
+        let characters = character_glyphs(view.glyphs().flat_map(|glyph| {
             let shaper_glyph = shaper_glyphs.get(&glyph.id()).copied();
             glyph
                 .unicodes()

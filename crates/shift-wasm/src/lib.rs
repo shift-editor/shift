@@ -16,6 +16,10 @@
     clippy::needless_pass_by_value,
     reason = "wasm-bindgen exports take owned arguments"
 )]
+#![allow(
+    unreachable_pub,
+    reason = "wasm-bindgen exports items from private modules; their `pub` is the export"
+)]
 
 pub mod anchors;
 pub mod decomposition;

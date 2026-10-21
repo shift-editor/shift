@@ -1,6 +1,8 @@
 import type { Bounds, MatModel } from "@shift/geo";
 import type { SegmentedContour } from "@shift/glyph-state";
 import type { AnchorId, ContourId, SourceId } from "@shift/types";
+import type { Signal } from "../lib/signals/signal";
+import type { ExternalAxisLocation } from "./variation";
 
 /** Font metrics needed by glyph guide drawing. */
 export interface GlyphGuideMetrics {
@@ -44,4 +46,17 @@ export interface WeightedSource {
 export interface PlacedContours {
   readonly matrix: MatModel;
   readonly contours: readonly GlyphRenderContour[];
+}
+
+/**
+ * Stable render-model inputs for one source.
+ *
+ * @remarks
+ * `Glyph.renderModelAt` caches by cell identity, so callers that evaluate a
+ * source repeatedly reuse these cells for as long as the source stays where it is.
+ */
+export interface SourceRenderInputs {
+  readonly location: ExternalAxisLocation;
+  readonly locationCell: Signal<ExternalAxisLocation>;
+  readonly sourceIdCell: Signal<SourceId | null>;
 }

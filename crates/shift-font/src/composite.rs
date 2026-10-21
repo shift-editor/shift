@@ -14,10 +14,9 @@
 //!   non-cyclic branches still contribute geometry.
 
 use crate::Require;
-use crate::curve::segment_bounds;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
-    GlyphLayer, Point, PointId, Transform,
+    GlyphLayer, Point, Transform,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -215,10 +214,7 @@ fn transform_contour_points(contour: &Contour, transform: Transform) -> Resolved
     let points = contour
         .points()
         .iter()
-        .map(|point| {
-            let kurbo::Point { x, y } = transform.transform_point(point.position());
-            Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
-        })
+        .map(|point| point.copied_to(transform.transform_point(point.position())))
         .collect();
 
     ResolvedContour {
@@ -302,7 +298,7 @@ fn resolved_occurrences<'a>(
                 .get(component_glyph.parent_path())
                 .ok_or_else(|| invalid_component(component_glyph))?
         };
-        let resolved_transform = compose_transform(parent_transform, local_transform);
+        let resolved_transform = parent_transform.compose(local_transform);
         resolved_transforms.insert(component_glyph.component_path().clone(), resolved_transform);
 
         let layer = layer_for_component(
@@ -547,7 +543,7 @@ fn accumulate_contour_bbox(
     any: &mut bool,
 ) {
     for segment in CurveSegmentIter::new(points, closed) {
-        let (sx, sy, ex, ey) = segment_bounds(&segment);
+        let (sx, sy, ex, ey) = segment.bounds();
         *min_x = min_x.min(sx);
         *min_y = min_y.min(sy);
         *max_x = max_x.max(ex);
@@ -672,18 +668,6 @@ fn contour_to_svg_d(points: &[Point], closed: bool) -> String {
         out.push("Z".to_string());
     }
     out.join(" ")
-}
-
-/// Composes transforms as `outer ∘ inner` (apply `inner`, then `outer`).
-fn compose_transform(outer: Transform, inner: Transform) -> Transform {
-    Transform {
-        xx: outer.xx * inner.xx + outer.yx * inner.xy,
-        xy: outer.xy * inner.xx + outer.yy * inner.xy,
-        yx: outer.xx * inner.yx + outer.yx * inner.yy,
-        yy: outer.xy * inner.yx + outer.yy * inner.yy,
-        dx: outer.xx * inner.dx + outer.yx * inner.dy + outer.dx,
-        dy: outer.xy * inner.dx + outer.yy * inner.dy + outer.dy,
-    }
 }
 
 #[cfg(test)]

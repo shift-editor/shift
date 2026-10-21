@@ -9,6 +9,15 @@ use shift_font::{
     GlyphInterpolationValues, GlyphLayer, LayerId, PointId, PointType as IrPointType, SourceId,
 };
 
+/// Builds a layer from a glyph structure and its packed values.
+///
+/// # Errors
+///
+/// Returns [`CoreError::InvalidContourId`], [`CoreError::InvalidPointId`],
+/// [`CoreError::InvalidAnchorId`], [`CoreError::InvalidComponentId`] or
+/// [`CoreError::InvalidGlyphId`] when `structure` holds an id that does not parse;
+/// [`CoreError::MissingGlyphValue`] or [`CoreError::TrailingGlyphValues`] when `values` does not
+/// match it; and [`CoreError::InvalidPositionUpdateInput`] when a value is not finite.
 pub fn layer_from_state(
     layer_id: LayerId,
     source_id: SourceId,

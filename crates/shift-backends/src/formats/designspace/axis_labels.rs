@@ -1,6 +1,6 @@
 use super::error::{DesignspaceError, DesignspaceResult};
 use quick_xml::events::{BytesEnd, BytesStart, Event};
-use quick_xml::{Reader, Writer};
+use quick_xml::{Reader, Writer, XmlVersion};
 use shift_font::{Axis, AxisLabel, AxisLabelRange};
 use std::collections::HashMap;
 
@@ -14,19 +14,19 @@ pub(super) fn parse(xml: &str) -> DesignspaceResult<HashMap<String, Vec<AxisLabe
     loop {
         match reader.read_event() {
             Ok(Event::Start(event)) => match event.name().as_ref() {
-                b"axis" => current_axis = attribute(&reader, &event, b"name")?,
-                b"labels" if current_axis.is_some() => in_axis_labels = true,
-                b"label" if in_axis_labels => {
-                    push_label(&reader, &event, current_axis.as_deref(), &mut labels)?;
+                "axis" => current_axis = attribute(&event, "name")?,
+                "labels" if current_axis.is_some() => in_axis_labels = true,
+                "label" if in_axis_labels => {
+                    push_label(&event, current_axis.as_deref(), &mut labels)?;
                 }
                 _ => {}
             },
-            Ok(Event::Empty(event)) if event.name().as_ref() == b"label" && in_axis_labels => {
-                push_label(&reader, &event, current_axis.as_deref(), &mut labels)?;
+            Ok(Event::Empty(event)) if event.name().as_ref() == "label" && in_axis_labels => {
+                push_label(&event, current_axis.as_deref(), &mut labels)?;
             }
             Ok(Event::End(event)) => match event.name().as_ref() {
-                b"labels" if current_axis.is_some() => in_axis_labels = false,
-                b"axis" => {
+                "labels" if current_axis.is_some() => in_axis_labels = false,
+                "axis" => {
                     current_axis = None;
                     in_axis_labels = false;
                 }
@@ -57,14 +57,14 @@ pub(super) fn insert(xml: &str, axes: &[Axis]) -> DesignspaceResult<Vec<u8>> {
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(event)) if event.name().as_ref() == b"axis" => {
-                current_labels = attribute(&reader, &event, b"name")?
-                    .and_then(|name| labels.get(name.as_str()).copied());
+            Ok(Event::Start(event)) if event.name().as_ref() == "axis" => {
+                current_labels =
+                    attribute(&event, "name")?.and_then(|name| labels.get(name.as_str()).copied());
                 write_event(&mut writer, Event::Start(event))?;
             }
-            Ok(Event::Empty(event)) if event.name().as_ref() == b"axis" => {
-                let axis_labels = attribute(&reader, &event, b"name")?
-                    .and_then(|name| labels.get(name.as_str()).copied());
+            Ok(Event::Empty(event)) if event.name().as_ref() == "axis" => {
+                let axis_labels =
+                    attribute(&event, "name")?.and_then(|name| labels.get(name.as_str()).copied());
                 if let Some(axis_labels) = axis_labels {
                     write_event(&mut writer, Event::Start(event.into_owned()))?;
                     write_labels(&mut writer, axis_labels)?;
@@ -73,7 +73,7 @@ pub(super) fn insert(xml: &str, axes: &[Axis]) -> DesignspaceResult<Vec<u8>> {
                     write_event(&mut writer, Event::Empty(event))?;
                 }
             }
-            Ok(Event::End(event)) if event.name().as_ref() == b"axis" => {
+            Ok(Event::End(event)) if event.name().as_ref() == "axis" => {
                 if let Some(axis_labels) = current_labels.take() {
                     write_labels(&mut writer, axis_labels)?;
                 }
@@ -89,7 +89,6 @@ pub(super) fn insert(xml: &str, axes: &[Axis]) -> DesignspaceResult<Vec<u8>> {
 }
 
 fn push_label(
-    reader: &Reader<&[u8]>,
     event: &BytesStart,
     axis_name: Option<&str>,
     labels: &mut HashMap<String, Vec<AxisLabel>>,
@@ -97,14 +96,14 @@ fn push_label(
     let axis_name = axis_name.ok_or_else(|| DesignspaceError::ParseDesignspaceXml {
         details: "axis label is not nested in an axis".to_string(),
     })?;
-    let name = required_attribute(reader, event, b"name")?;
-    let value = number_attribute(reader, event, b"uservalue")?.ok_or_else(|| {
+    let name = required_attribute(event, "name")?;
+    let value = number_attribute(event, "uservalue")?.ok_or_else(|| {
         DesignspaceError::ParseDesignspaceXml {
             details: format!("axis label {name:?} has no uservalue"),
         }
     })?;
-    let minimum = number_attribute(reader, event, b"userminimum")?;
-    let maximum = number_attribute(reader, event, b"usermaximum")?;
+    let minimum = number_attribute(event, "userminimum")?;
+    let maximum = number_attribute(event, "usermaximum")?;
     let range = match (minimum, maximum) {
         (None, None) => None,
         (Some(minimum), Some(maximum)) => Some(AxisLabelRange { minimum, maximum }),
@@ -116,9 +115,9 @@ fn push_label(
             });
         }
     };
-    let linked_value = number_attribute(reader, event, b"linkeduservalue")?;
-    let elidable = attribute(reader, event, b"elidable")?
-        .is_some_and(|value| matches!(value.as_str(), "true" | "1"));
+    let linked_value = number_attribute(event, "linkeduservalue")?;
+    let elidable =
+        attribute(event, "elidable")?.is_some_and(|value| matches!(value.as_str(), "true" | "1"));
 
     labels
         .entry(axis_name.to_string())
@@ -157,49 +156,30 @@ fn write_labels(writer: &mut Writer<Vec<u8>>, labels: &[AxisLabel]) -> Designspa
     write_event(writer, Event::End(BytesEnd::new("labels")))
 }
 
-fn required_attribute(
-    reader: &Reader<&[u8]>,
-    event: &BytesStart,
-    name: &[u8],
-) -> DesignspaceResult<String> {
-    attribute(reader, event, name)?.ok_or_else(|| DesignspaceError::ParseDesignspaceXml {
-        details: format!(
-            "{} element is missing {}",
-            String::from_utf8_lossy(event.name().as_ref()),
-            String::from_utf8_lossy(name)
-        ),
+fn required_attribute(event: &BytesStart, name: &str) -> DesignspaceResult<String> {
+    attribute(event, name)?.ok_or_else(|| DesignspaceError::ParseDesignspaceXml {
+        details: format!("{} element is missing {}", event.name().as_ref(), name),
     })
 }
 
-fn number_attribute(
-    reader: &Reader<&[u8]>,
-    event: &BytesStart,
-    name: &[u8],
-) -> DesignspaceResult<Option<f64>> {
-    attribute(reader, event, name)?
+fn number_attribute(event: &BytesStart, name: &str) -> DesignspaceResult<Option<f64>> {
+    attribute(event, name)?
         .map(|value| {
             value
                 .parse::<f64>()
                 .map_err(|error| DesignspaceError::ParseDesignspaceXml {
-                    details: format!(
-                        "invalid {} value {value:?}: {error}",
-                        String::from_utf8_lossy(name)
-                    ),
+                    details: format!("invalid {name} value {value:?}: {error}"),
                 })
         })
         .transpose()
 }
 
-fn attribute(
-    reader: &Reader<&[u8]>,
-    event: &BytesStart,
-    name: &[u8],
-) -> DesignspaceResult<Option<String>> {
+fn attribute(event: &BytesStart, name: &str) -> DesignspaceResult<Option<String>> {
     for attribute in event.attributes() {
         let attribute = attribute.map_err(parse_error)?;
         if attribute.key.as_ref() == name {
             return attribute
-                .decode_and_unescape_value(reader.decoder())
+                .normalized_value(XmlVersion::Implicit1_0)
                 .map(|value| Some(value.into_owned()))
                 .map_err(parse_error);
         }
