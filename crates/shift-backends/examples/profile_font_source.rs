@@ -1,3 +1,8 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::hint::black_box;
 use std::path::Path;
 use std::time::{Duration, Instant};

@@ -23,6 +23,11 @@ pub struct FontInfo {
 }
 
 impl ShiftStore {
+    /// Writes the font's naming and licensing info, replacing any stored before.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the write fails.
     pub fn set_font_info(&mut self, font_info: &FontInfo) -> Result<(), StoreError> {
         self.conn.execute(
             "
@@ -96,6 +101,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the stored font info, or `None` when none was written.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_font_info(&self) -> Result<Option<FontInfo>, StoreError> {
         let mut stmt = self.conn.prepare(
             "

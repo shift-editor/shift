@@ -5,10 +5,10 @@ mod types;
 use clap::ValueEnum;
 
 pub(crate) use report::parse_location;
-pub use types::GlyphInspection;
+pub(crate) use types::GlyphInspection;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum GlyphInspectView {
+pub(crate) enum GlyphInspectView {
     Summary,
     Structure,
     Sources,

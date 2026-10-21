@@ -245,23 +245,18 @@ fn compare_anchors(
         return;
     }
 
-    let sequence_differs = reference
-        .anchors_iter()
-        .zip(source.anchors_iter())
-        .any(|(reference, source)| reference.name() != source.name());
-    if sequence_differs {
+    if reference.anchor_names().ne(source.anchor_names()) {
+        let owned_names = |layer: &GlyphLayer| {
+            layer
+                .anchor_names()
+                .map(|name| name.map(ToOwned::to_owned))
+                .collect()
+        };
         differences.push(LayerDifference::AnchorSequence {
-            reference: anchor_sequence(reference),
-            source: anchor_sequence(source),
+            reference: owned_names(reference),
+            source: owned_names(source),
         });
     }
-}
-
-fn anchor_sequence(layer: &GlyphLayer) -> Vec<Option<String>> {
-    layer
-        .anchors_iter()
-        .map(|anchor| anchor.name().map(ToOwned::to_owned))
-        .collect()
 }
 
 fn compare_components(
@@ -276,17 +271,10 @@ fn compare_components(
             .any(|(reference, source)| reference.base_glyph_id() != source.base_glyph_id());
     if sequence_differs {
         differences.push(LayerDifference::ComponentSequence {
-            reference: component_sequence(reference),
-            source: component_sequence(source),
+            reference: reference.component_glyph_ids().collect(),
+            source: source.component_glyph_ids().collect(),
         });
     }
-}
-
-fn component_sequence(layer: &GlyphLayer) -> Vec<GlyphId> {
-    layer
-        .components_iter()
-        .map(crate::Component::base_glyph_id)
-        .collect()
 }
 
 #[cfg(test)]

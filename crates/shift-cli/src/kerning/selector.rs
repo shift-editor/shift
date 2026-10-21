@@ -3,8 +3,8 @@
 use miette::{Result, bail, miette};
 use shift_font::{Font, KerningGroupId, KerningPosition, KerningSide};
 
-use crate::authoring::resolve_glyph_id;
 use crate::cli::KerningPositionArg;
+use crate::selector::FontSelectors;
 
 /// Prefix that marks a pair side as a group name rather than a glyph.
 pub(crate) const GROUP_PREFIX: char = '@';
@@ -84,5 +84,5 @@ pub(crate) fn resolve_side(
         )?));
     }
 
-    Ok(KerningSide::Glyph(resolve_glyph_id(font, selector)?))
+    Ok(KerningSide::Glyph(font.glyph_id_for(selector)?))
 }

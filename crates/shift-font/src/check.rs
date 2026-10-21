@@ -5,8 +5,8 @@
 //! names a [`Check`] with a stable code, the glyph and source it concerns
 //! when there is one, and a message written for a type designer.
 //!
-//! The editor runs [`check_glyph`] on the glyph being edited; command-line
-//! and CI callers run [`check_font`] over a whole source.
+//! The editor runs [`Font::check_glyph`] on the glyph being edited; command-line
+//! and CI callers run [`Font::check`] over a whole source.
 
 use serde::Serialize;
 
@@ -28,9 +28,27 @@ pub use outline::OutlineThresholds;
 pub struct CheckOptions {
     /// Characters every master must map and draw.
     pub charset: Option<Charset>,
-    /// Checks the font as monospaced; the cell width is the given advance, or
-    /// each master's most common advance when `Some(None)`.
-    pub monospace: Option<Option<f64>>,
+    /// Checks the font as monospaced against this cell width.
+    pub monospace: Option<MonospaceCell>,
+}
+
+/// The width a monospace check expects every advance to have.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MonospaceCell {
+    /// One width for every master.
+    Width(f64),
+    /// Each master's most common advance.
+    MostCommonAdvance,
+}
+
+impl MonospaceCell {
+    /// The fixed width, when one was given.
+    pub fn width(self) -> Option<f64> {
+        match self {
+            Self::Width(width) => Some(width),
+            Self::MostCommonAdvance => None,
+        }
+    }
 }
 
 /// How much a finding matters.
@@ -108,33 +126,33 @@ pub enum Check {
 
 impl Check {
     /// Every check, in code order.
-    pub const ALL: [Check; 26] = [
-        Check::NoDefaultMaster,
-        Check::DuplicateMasterLocation,
-        Check::MasterOutsideAxis,
-        Check::MappingNotMonotonic,
-        Check::AxisBeyondMasters,
-        Check::MissingDefaultLayer,
-        Check::IncompatibleMaster,
-        Check::MixedComponents,
-        Check::NotInterpolatable,
-        Check::WrongStartPoint,
-        Check::WrongContourDirection,
-        Check::WrongContourOrder,
-        Check::ContourInsideOut,
-        Check::OpenContour,
-        Check::DegenerateContour,
-        Check::NonFinitePoint,
-        Check::InvalidAdvance,
-        Check::ContourDirection,
-        Check::EmptyOutline,
-        Check::UnresolvedGlyph,
-        Check::EmptyKerningGroup,
-        Check::UnresolvedKerning,
-        Check::CharsetMissingGlyph,
-        Check::CharsetMissingLayer,
-        Check::MonoWidthMismatch,
-        Check::MonoInkOverflow,
+    pub const ALL: [Self; 26] = [
+        Self::NoDefaultMaster,
+        Self::DuplicateMasterLocation,
+        Self::MasterOutsideAxis,
+        Self::MappingNotMonotonic,
+        Self::AxisBeyondMasters,
+        Self::MissingDefaultLayer,
+        Self::IncompatibleMaster,
+        Self::MixedComponents,
+        Self::NotInterpolatable,
+        Self::WrongStartPoint,
+        Self::WrongContourDirection,
+        Self::WrongContourOrder,
+        Self::ContourInsideOut,
+        Self::OpenContour,
+        Self::DegenerateContour,
+        Self::NonFinitePoint,
+        Self::InvalidAdvance,
+        Self::ContourDirection,
+        Self::EmptyOutline,
+        Self::UnresolvedGlyph,
+        Self::EmptyKerningGroup,
+        Self::UnresolvedKerning,
+        Self::CharsetMissingGlyph,
+        Self::CharsetMissingLayer,
+        Self::MonoWidthMismatch,
+        Self::MonoInkOverflow,
     ];
 
     /// Returns the stable code, such as `D001`.
@@ -154,34 +172,32 @@ impl Check {
 
     fn describe(self) -> (&'static str, &'static str, Severity) {
         match self {
-            Check::NoDefaultMaster => ("D001", "no-default-master", Severity::Error),
-            Check::DuplicateMasterLocation => {
-                ("D002", "duplicate-master-location", Severity::Error)
-            }
-            Check::MasterOutsideAxis => ("D003", "master-outside-axis", Severity::Error),
-            Check::MappingNotMonotonic => ("D004", "mapping-not-monotonic", Severity::Error),
-            Check::AxisBeyondMasters => ("D005", "axis-beyond-masters", Severity::Warning),
-            Check::MissingDefaultLayer => ("I001", "missing-default-layer", Severity::Error),
-            Check::IncompatibleMaster => ("I002", "incompatible-master", Severity::Error),
-            Check::MixedComponents => ("I008", "mixed-components", Severity::Warning),
-            Check::NotInterpolatable => ("I003", "not-interpolatable", Severity::Warning),
-            Check::WrongStartPoint => ("I004", "wrong-start-point", Severity::Error),
-            Check::WrongContourDirection => ("I005", "wrong-contour-direction", Severity::Error),
-            Check::WrongContourOrder => ("I006", "wrong-contour-order", Severity::Error),
-            Check::ContourInsideOut => ("I007", "contour-inside-out", Severity::Error),
-            Check::OpenContour => ("O001", "open-contour", Severity::Warning),
-            Check::DegenerateContour => ("O002", "degenerate-contour", Severity::Warning),
-            Check::NonFinitePoint => ("O003", "non-finite-point", Severity::Error),
-            Check::InvalidAdvance => ("O004", "invalid-advance", Severity::Error),
-            Check::ContourDirection => ("O005", "contour-direction", Severity::Warning),
-            Check::EmptyOutline => ("O006", "empty-outline", Severity::Error),
-            Check::UnresolvedGlyph => ("O007", "unresolved-glyph", Severity::Error),
-            Check::EmptyKerningGroup => ("K001", "empty-kerning-group", Severity::Warning),
-            Check::UnresolvedKerning => ("K002", "unresolved-kerning", Severity::Warning),
-            Check::CharsetMissingGlyph => ("C001", "charset-missing-glyph", Severity::Error),
-            Check::CharsetMissingLayer => ("C002", "charset-missing-layer", Severity::Error),
-            Check::MonoWidthMismatch => ("M001", "mono-width-mismatch", Severity::Error),
-            Check::MonoInkOverflow => ("M002", "mono-ink-overflow", Severity::Warning),
+            Self::NoDefaultMaster => ("D001", "no-default-master", Severity::Error),
+            Self::DuplicateMasterLocation => ("D002", "duplicate-master-location", Severity::Error),
+            Self::MasterOutsideAxis => ("D003", "master-outside-axis", Severity::Error),
+            Self::MappingNotMonotonic => ("D004", "mapping-not-monotonic", Severity::Error),
+            Self::AxisBeyondMasters => ("D005", "axis-beyond-masters", Severity::Warning),
+            Self::MissingDefaultLayer => ("I001", "missing-default-layer", Severity::Error),
+            Self::IncompatibleMaster => ("I002", "incompatible-master", Severity::Error),
+            Self::MixedComponents => ("I008", "mixed-components", Severity::Warning),
+            Self::NotInterpolatable => ("I003", "not-interpolatable", Severity::Warning),
+            Self::WrongStartPoint => ("I004", "wrong-start-point", Severity::Error),
+            Self::WrongContourDirection => ("I005", "wrong-contour-direction", Severity::Error),
+            Self::WrongContourOrder => ("I006", "wrong-contour-order", Severity::Error),
+            Self::ContourInsideOut => ("I007", "contour-inside-out", Severity::Error),
+            Self::OpenContour => ("O001", "open-contour", Severity::Warning),
+            Self::DegenerateContour => ("O002", "degenerate-contour", Severity::Warning),
+            Self::NonFinitePoint => ("O003", "non-finite-point", Severity::Error),
+            Self::InvalidAdvance => ("O004", "invalid-advance", Severity::Error),
+            Self::ContourDirection => ("O005", "contour-direction", Severity::Warning),
+            Self::EmptyOutline => ("O006", "empty-outline", Severity::Error),
+            Self::UnresolvedGlyph => ("O007", "unresolved-glyph", Severity::Error),
+            Self::EmptyKerningGroup => ("K001", "empty-kerning-group", Severity::Warning),
+            Self::UnresolvedKerning => ("K002", "unresolved-kerning", Severity::Warning),
+            Self::CharsetMissingGlyph => ("C001", "charset-missing-glyph", Severity::Error),
+            Self::CharsetMissingLayer => ("C002", "charset-missing-layer", Severity::Error),
+            Self::MonoWidthMismatch => ("M001", "mono-width-mismatch", Severity::Error),
+            Self::MonoInkOverflow => ("M002", "mono-ink-overflow", Severity::Warning),
         }
     }
 }
@@ -229,58 +245,59 @@ impl Finding {
     }
 }
 
-/// Runs every check over `font`.
-///
-/// Findings come in a stable order: font-wide problems first, then glyphs in
-/// font order, then kerning and the opt-in checks.
-///
-/// # Errors
-///
-/// Returns an axis-mapping error when an authored mapping cannot compile.
-pub fn check_font(font: &Font) -> CoreResult<Vec<Finding>> {
-    check_font_with(font, &CheckOptions::default())
-}
+impl Font {
+    /// Runs every check over the font.
+    ///
+    /// Findings come in a stable order: font-wide problems first, then glyphs in
+    /// font order, then kerning and the opt-in checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an axis-mapping error when an authored mapping cannot compile.
+    pub fn check(&self) -> CoreResult<Vec<Finding>> {
+        self.check_with(&CheckOptions::default())
+    }
 
-/// Runs every check over `font`, plus the opt-in checks in `options`.
-///
-/// # Errors
-///
-/// Returns an axis-mapping error when an authored mapping cannot compile.
-pub fn check_font_with(font: &Font, options: &CheckOptions) -> CoreResult<Vec<Finding>> {
-    let mut findings = designspace::check(font)?;
-    let thresholds = OutlineThresholds::default();
-    for glyph in font.glyphs() {
-        health::check(font, glyph, &mut findings);
-        findings.extend(outline::check(font, &glyph.id(), &thresholds)?);
+    /// Runs every check over the font, plus the opt-in checks in `options`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an axis-mapping error when an authored mapping cannot compile.
+    pub fn check_with(&self, options: &CheckOptions) -> CoreResult<Vec<Finding>> {
+        let mut findings = designspace::check(self)?;
+        let thresholds = OutlineThresholds::default();
+        for glyph in self.glyphs() {
+            findings.extend(health::check(self, glyph));
+            findings.extend(outline::check(self, &glyph.id(), &thresholds)?);
+        }
+        findings.extend(kerning::check(self));
+        if let Some(charset) = &options.charset {
+            findings.extend(coverage::charset(self, charset));
+        }
+        if let Some(cell) = options.monospace {
+            findings.extend(coverage::monospace(self, cell));
+        }
+        Ok(findings)
     }
-    findings.extend(kerning::check(font));
-    if let Some(charset) = &options.charset {
-        coverage::charset(font, charset, &mut findings);
-    }
-    if let Some(width) = options.monospace {
-        coverage::monospace(font, width, &mut findings);
-    }
-    Ok(findings)
-}
 
-/// Runs the checks that concern one glyph.
-///
-/// This is cheap enough to run after every edit of that glyph.
-///
-/// # Errors
-///
-/// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the
-/// font, or an axis-mapping error when an authored mapping cannot compile.
-pub fn check_glyph(font: &Font, glyph_id: &GlyphId) -> CoreResult<Vec<Finding>> {
-    let glyph = font.require_glyph(glyph_id)?;
-    let mut findings = Vec::new();
-    health::check(font, glyph, &mut findings);
-    findings.extend(outline::check(
-        font,
-        glyph_id,
-        &OutlineThresholds::default(),
-    )?);
-    Ok(findings)
+    /// Runs the checks that concern one glyph.
+    ///
+    /// This is cheap enough to run after every edit of that glyph.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the
+    /// font, or an axis-mapping error when an authored mapping cannot compile.
+    pub fn check_glyph(&self, glyph_id: &GlyphId) -> CoreResult<Vec<Finding>> {
+        let glyph = self.require_glyph(glyph_id)?;
+        let mut findings = health::check(self, glyph);
+        findings.extend(outline::check(
+            self,
+            glyph_id,
+            &OutlineThresholds::default(),
+        )?);
+        Ok(findings)
+    }
 }
 
 #[cfg(test)]

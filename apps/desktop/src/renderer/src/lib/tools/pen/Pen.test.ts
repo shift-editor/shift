@@ -359,6 +359,52 @@ describe("Pen tool", () => {
       expect(next?.start.smooth).toBe(false);
     });
 
+    it("pulls a handle a few font units long when zoomed in", async () => {
+      editor.setZoom(10);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
+
+      // 2 units at 10× zoom is a 20-pixel drag: a deliberate pull, not a jiggle.
+      await editor.dragLocal({
+        down: { x: 300, y: 100 },
+        start: { x: 300.5, y: 100 },
+        end: { x: 302, y: 100 },
+      });
+      await editor.dragLocal({
+        down: { x: 310, y: 100 },
+        start: { x: 310.5, y: 100.5 },
+        end: { x: 312, y: 102 },
+      });
+
+      const next = editor.openContour?.segments()[1]?.asCubic();
+      expect(next?.controlStart.x).toBeCloseTo(302);
+      expect(next?.controlStart.y).toBeCloseTo(100);
+    });
+
+    it("ignores a pull that ends within a few pixels of the end when zoomed out", async () => {
+      editor.setZoom(0.25);
+      await editor.clickLocal(100, 100);
+      await editor.clickLocal(300, 100);
+
+      // Pressed 5 pixels off the end point, then moved to 6 units (1.5 pixels at
+      // 0.25× zoom) from it: a jiggle, not a pull.
+      await editor.dragLocal({
+        down: { x: 320, y: 100 },
+        start: { x: 306, y: 100 },
+        end: { x: 306, y: 100 },
+      });
+      await editor.dragLocal({
+        down: { x: 500, y: 100 },
+        start: { x: 520, y: 120 },
+        end: { x: 560, y: 160 },
+      });
+
+      // No pulled handle, so the next curve's first control sits a third of the way along.
+      const next = editor.openContour?.segments()[1]?.asCubic();
+      expect(next?.controlStart.x).toBeCloseTo(300 + (500 - 300) / 3);
+      expect(next?.controlStart.y).toBeCloseTo(100);
+    });
+
     it("keeps a handle pulled with Option on the line's direction", async () => {
       await editor.clickLocal(100, 100);
       await editor.clickLocal(300, 100);

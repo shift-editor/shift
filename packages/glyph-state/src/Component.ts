@@ -10,7 +10,6 @@ import {
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
 import { componentValueCount, componentsValueOffset, readDecomposedTransform } from "./valueLayout";
 
-export type ComponentTransform = DecomposedTransform;
 export type Matrix = MatModel;
 
 export class Component {
@@ -64,7 +63,7 @@ export class Component {
     return this.#data.alignment ?? "unset";
   }
 
-  get transform(): ComponentTransform {
+  get transform(): DecomposedTransform {
     if (this.#transformKind === "affine") return Mat.toDecomposed(this.matrix);
 
     return readDecomposedTransform(this.#values, this.#cursor);

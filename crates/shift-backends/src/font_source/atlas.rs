@@ -27,7 +27,7 @@ pub(crate) fn validate_roots(
         if directory.glyphs.get(root.to_usize()).is_none() {
             return Err(FontReadError::GlyphOutOfRange {
                 glyph: *root,
-                glyph_count: directory.glyphs.len() as u32,
+                glyph_count: directory.glyph_count(),
             }
             .into());
         }

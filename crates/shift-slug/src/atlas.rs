@@ -83,10 +83,23 @@ impl Atlas {
         }
     }
 
+    /// Lays out the atlas sections at `alignment` with global `u32` curve indices.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidAlignment`] when `alignment` is not a power of two, and
+    /// [`SlugError::LengthOverflow`] when a section does not fit in `u32` offsets.
     pub fn layout(&self, alignment: usize) -> Result<Layout, SlugError> {
         self.layout_with_encoding(alignment, CurveIndexEncoding::GlobalU32)
     }
 
+    /// Lays out the atlas sections at `alignment` with `index_encoding`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidAlignment`] when `alignment` is not a power of two,
+    /// [`SlugError::CompactIndexOverflow`] when a glyph has too many curves for the compact
+    /// encoding, and [`SlugError::LengthOverflow`] when a section does not fit in `u32` offsets.
     pub fn layout_with_encoding(
         &self,
         alignment: usize,
@@ -95,10 +108,23 @@ impl Atlas {
         Layout::new(self, alignment, index_encoding)
     }
 
+    /// Packs the atlas into bytes at `alignment` with global `u32` curve indices.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidAlignment`] when `alignment` is not a power of two, and
+    /// [`SlugError::LengthOverflow`] when a section does not fit in `u32` offsets.
     pub fn pack(&self, alignment: usize) -> Result<PackedAtlas, SlugError> {
         self.pack_with_encoding(alignment, CurveIndexEncoding::GlobalU32)
     }
 
+    /// Packs the atlas into bytes at `alignment` with `index_encoding`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidAlignment`] when `alignment` is not a power of two,
+    /// [`SlugError::CompactIndexOverflow`] when a glyph has too many curves for the compact
+    /// encoding, and [`SlugError::LengthOverflow`] when a section does not fit in `u32` offsets.
     pub fn pack_with_encoding(
         &self,
         alignment: usize,
@@ -127,6 +153,12 @@ pub struct AtlasBuilder {
 }
 
 impl AtlasBuilder {
+    /// Starts an atlas whose glyphs each split into `band_count` bands.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidBandCount`] when `band_count` is zero or above
+    /// [`MAX_BAND_COUNT`].
     pub fn new(band_count: u32) -> Result<Self, SlugError> {
         if !(1..=MAX_BAND_COUNT).contains(&band_count) {
             return Err(SlugError::InvalidBandCount(band_count));
@@ -143,6 +175,14 @@ impl AtlasBuilder {
         })
     }
 
+    /// Adds a glyph drawn by `commands` and returns its index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::NonFiniteCoordinate`] or a malformed-outline error
+    /// ([`SlugError::DrawingCommandWithoutContour`], [`SlugError::CloseWithoutContour`],
+    /// [`SlugError::CloseWithoutDrawingSegment`]) when the commands do not describe valid contours,
+    /// and [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_glyph(
         &mut self,
         commands: impl IntoIterator<Item = OutlineCommand<f32>>,
@@ -150,7 +190,7 @@ impl AtlasBuilder {
         let curves = curves_from_commands(commands)?;
         let curve_start = to_u32(self.atlas.curves.len())?;
         let curve_count = to_u32(curves.len())?;
-        let bounds = glyph_bounds(&curves);
+        let bounds = Bounds::of_curves(&curves);
         let (local_bands, local_indices) = build_bands(&curves, bounds, self.atlas.band_count)?;
         let index_start = to_u32(self.atlas.curve_indices.len())?;
         let band_start = to_u32(self.atlas.bands.len())?;
@@ -198,23 +238,6 @@ impl Default for AtlasBuilder {
     fn default() -> Self {
         Self::new(DEFAULT_BAND_COUNT).expect("default Slug band count is valid")
     }
-}
-
-fn glyph_bounds(curves: &[Curve]) -> Bounds {
-    let Some(first) = curves.first() else {
-        return Bounds::default();
-    };
-    let mut bounds = first.bounds();
-
-    for curve in &curves[1..] {
-        let curve_bounds = curve.bounds();
-        bounds.min_x = bounds.min_x.min(curve_bounds.min_x);
-        bounds.min_y = bounds.min_y.min(curve_bounds.min_y);
-        bounds.max_x = bounds.max_x.max(curve_bounds.max_x);
-        bounds.max_y = bounds.max_y.max(curve_bounds.max_y);
-    }
-
-    bounds
 }
 
 fn build_bands(
@@ -293,6 +316,11 @@ fn band_span(
         return (0, 0);
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to 0..band_count above"
+    )]
     let band = |value: f32| {
         (((value - glyph_minimum) / glyph_span) * band_count as f32)
             .floor()

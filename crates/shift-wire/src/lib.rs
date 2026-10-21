@@ -49,7 +49,7 @@ pub type GlyphValue = f64;
 
 pub type GlyphValues = Vec<GlyphValue>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetadata {
     pub family_name: Option<String>,
@@ -95,6 +95,15 @@ pub struct FontMetrics {
     pub units_per_em: f64,
 }
 
+impl Default for FontMetrics {
+    /// A new font's em.
+    fn default() -> Self {
+        Self {
+            units_per_em: shift_font::FontMetrics::default().units_per_em,
+        }
+    }
+}
+
 impl From<&IrFontMetrics> for FontMetrics {
     fn from(metrics: &IrFontMetrics) -> Self {
         Self {
@@ -122,19 +131,24 @@ pub enum MetricKind {
     Custom,
 }
 
+impl From<IrMetricKind> for MetricKind {
+    fn from(kind: IrMetricKind) -> Self {
+        match kind {
+            IrMetricKind::Ascender => Self::Ascender,
+            IrMetricKind::CapHeight => Self::CapHeight,
+            IrMetricKind::XHeight => Self::XHeight,
+            IrMetricKind::Baseline => Self::Baseline,
+            IrMetricKind::Descender => Self::Descender,
+            IrMetricKind::Custom => Self::Custom,
+        }
+    }
+}
+
 impl From<&IrMetricDefinition> for MetricDefinition {
     fn from(definition: &IrMetricDefinition) -> Self {
-        let kind = match definition.kind() {
-            IrMetricKind::Ascender => MetricKind::Ascender,
-            IrMetricKind::CapHeight => MetricKind::CapHeight,
-            IrMetricKind::XHeight => MetricKind::XHeight,
-            IrMetricKind::Baseline => MetricKind::Baseline,
-            IrMetricKind::Descender => MetricKind::Descender,
-            IrMetricKind::Custom => MetricKind::Custom,
-        };
         Self {
             id: definition.id(),
-            kind,
+            kind: definition.kind().into(),
             name: definition.name().to_string(),
         }
     }
@@ -758,7 +772,10 @@ pub struct GlyphEntry {
 }
 
 /// Source-neutral font state required to construct the renderer model.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// The default is an empty font with a new font's em, which a preview fills
+/// from its source's directory and leaves without a lib or kerning.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontSnapshot {
     pub metadata: FontMetadata,
@@ -1126,9 +1143,9 @@ impl From<IrPointType> for PointType {
 impl From<PointType> for IrPointType {
     fn from(point_type: PointType) -> Self {
         match point_type {
-            PointType::OnCurve => IrPointType::OnCurve,
-            PointType::OffCurve => IrPointType::OffCurve,
-            PointType::QCurve => IrPointType::QCurve,
+            PointType::OnCurve => Self::OnCurve,
+            PointType::OffCurve => Self::OffCurve,
+            PointType::QCurve => Self::QCurve,
         }
     }
 }

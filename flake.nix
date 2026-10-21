@@ -42,6 +42,10 @@
             wasm-bindgen-cli
             # Runs Rust test binaries in parallel for the pre-push hook.
             cargo-nextest
+            # Check dependency licenses and advisories (deny.toml), and
+            # dependencies no code uses. CI installs the same versions.
+            cargo-deny
+            cargo-machete
             cmake
             git
             nodejs_24

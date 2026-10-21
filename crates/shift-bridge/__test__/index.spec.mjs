@@ -314,3 +314,174 @@ describe("Bridge", () => {
     ).toThrow(/contour ID/i);
   });
 });
+
+/**
+ * Opens a font source and replaces every minted id with a readable label, so a
+ * test can compare the whole preview snapshot.
+ */
+function openPreview(relativePath) {
+  const snapshot = new Bridge().openFontSource(join(repositoryRoot, relativePath));
+  const labels = new Map([
+    ...snapshot.axes.map(({ id, tag }) => [id, `axis:${tag}`]),
+    ...snapshot.metricDefinitions.map(({ id, kind }) => [id, `metric:${kind}`]),
+    ...snapshot.sources.map(({ id, name }) => [id, `source:${name}`]),
+    ...snapshot.namedInstances.map(({ id, name }) => [id, `instance:${name}`]),
+    ...snapshot.glyphs.map(({ id, name }) => [id, `glyph:${name}`]),
+  ]);
+  const label = (value) => labels.get(value) ?? value;
+
+  return JSON.parse(JSON.stringify(snapshot), (key, value) => {
+    if (typeof value === "string") return label(value);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
+
+    return Object.fromEntries(Object.entries(value).map(([field, entry]) => [label(field), entry]));
+  });
+}
+
+/** One row per source: name, file, location and standard metric positions. */
+function sourceRows(snapshot) {
+  return snapshot.sources.map((source) => [
+    source.name,
+    source.filename,
+    source.location.values,
+    source.metricValues.map(({ position }) => position),
+  ]);
+}
+
+const standardMetricDefinitions = [
+  { id: "metric:ascender", kind: "ascender", name: "Ascender" },
+  { id: "metric:capHeight", kind: "capHeight", name: "Cap Height" },
+  { id: "metric:xHeight", kind: "xHeight", name: "x-Height" },
+  { id: "metric:baseline", kind: "baseline", name: "Baseline" },
+  { id: "metric:descender", kind: "descender", name: "Descender" },
+];
+
+/** Standard metric values at the given positions, without overshoot. */
+function metricValues(positions) {
+  return standardMetricDefinitions.map(({ id }, index) => ({
+    metricId: id,
+    position: positions[index],
+    overshoot: 0,
+  }));
+}
+
+describe("font source previews", () => {
+  it("describes a Designspace from its directory", () => {
+    const snapshot = openPreview("fixtures/fonts/mutatorsans-variable/MutatorSans.designspace");
+    const axis = (tag, name) => ({
+      id: `axis:${tag}`,
+      tag,
+      name,
+      minimum: 0,
+      default: 0,
+      maximum: 1000,
+      hidden: false,
+      axisType: "continuous",
+      role: "external",
+      labels: [],
+    });
+    const location = (wght, wdth) => ({ "axis:wght": wght, "axis:wdth": wdth });
+    const instance = (name, wght, wdth, postscriptName) => ({
+      id: `instance:${name}`,
+      name,
+      location: { values: location(wght, wdth) },
+      ...(postscriptName && { postscriptName }),
+    });
+    const lightMetrics = [700, 700, 500, 0, -200];
+    const boldMetrics = [800, 800, 500, 0, -200];
+    const lightCondensed = "MutatorSansLightCondensed.ufo";
+
+    expect(Object.keys(snapshot).sort()).toEqual([
+      "axes",
+      "axisMappingBases",
+      "axisMappings",
+      "glyphs",
+      "kerning",
+      "metadata",
+      "metricDefinitions",
+      "metrics",
+      "namedInstances",
+      "sources",
+    ]);
+    expect(snapshot.metadata).toEqual({
+      familyName: "MutatorMathTest",
+      styleName: "LightCondensed",
+    });
+    expect(snapshot.metrics).toEqual({ unitsPerEm: 1000 });
+    expect(snapshot.metricDefinitions).toEqual(standardMetricDefinitions);
+    expect(snapshot.axes).toEqual([axis("wdth", "width"), axis("wght", "weight")]);
+    expect(snapshot.axisMappings).toEqual([]);
+    expect(snapshot.axisMappingBases).toEqual([]);
+    expect(snapshot.kerning).toEqual({ groups: [], sources: [] });
+
+    expect(snapshot.sources[0]).toEqual({
+      id: "source:LightCondensed",
+      name: "LightCondensed",
+      location: { values: location(0, 0) },
+      filename: lightCondensed,
+      metricValues: metricValues(lightMetrics),
+      italicAngle: 0,
+      lineGap: 0,
+    });
+    expect(sourceRows(snapshot)).toEqual([
+      ["LightCondensed", lightCondensed, location(0, 0), lightMetrics],
+      ["BoldCondensed", "MutatorSansBoldCondensed.ufo", location(1000, 0), boldMetrics],
+      ["LightWide", "MutatorSansLightWide.ufo", location(0, 1000), lightMetrics],
+      ["BoldWide", "MutatorSansBoldWide.ufo", location(1000, 1000), boldMetrics],
+      ["MutatorSansLightCondensed", lightCondensed, location(700, 0), lightMetrics],
+      ["Source 5", lightCondensed, location(700, 1000), lightMetrics],
+      ["Source 6", lightCondensed, location(700, 569.0780029296875), lightMetrics],
+    ]);
+    for (const source of snapshot.sources) {
+      expect(source).toMatchObject({ italicAngle: 0, lineGap: 0 });
+      expect(source.metricValues.map(({ overshoot }) => overshoot)).toEqual([0, 0, 0, 0, 0]);
+    }
+
+    expect(snapshot.namedInstances).toEqual([
+      instance("LightCondensed", 0, 0, "MutatorMathTest-LightCondensed"),
+      instance("BoldCondensed", 1000, 0, "MutatorMathTest-BoldCondensed"),
+      instance("LightWide", 0, 1000, "MutatorMathTest-LightWide"),
+      instance("BoldWide", 1000, 1000, "MutatorMathTest-BoldWide"),
+      instance("Medium_Narrow_I", 500, 327, "MutatorMathTest-Medium_Narrow_I"),
+      instance("Two", 1000, 569.0780029296875, "MutatorMathTest-Two"),
+      instance("One", 500, 1000, "MutatorMathTest-One"),
+      instance("UserLocation_700", 775.6090087890625, 700, "MutatorSans-UserLocation_700"),
+      instance("UserLocation_100", 658.5969848632812, 100),
+      instance("Medium_Wide_I", 500, 328),
+      instance("Anisotropic_one", 200, 500),
+      instance("Support_Layer_Demo", 700, 569.0780029296875),
+      instance("Rule_result_1", 140, 140),
+      instance("Rule_result_2", 700, 700),
+    ]);
+
+    expect(snapshot.glyphs).toHaveLength(49);
+    expect(snapshot.glyphs.slice(0, 3)).toEqual([
+      { id: "glyph:.notdef", name: ".notdef", unicodes: [] },
+      { id: "glyph:A", name: "A", unicodes: [65] },
+      { id: "glyph:Aacute", name: "Aacute", unicodes: [193] },
+    ]);
+    for (const glyph of snapshot.glyphs) {
+      expect(glyph.id).toBe(`glyph:${glyph.name}`);
+    }
+  });
+
+  it("describes a compiled font as one source without a location", () => {
+    const snapshot = openPreview("fixtures/fonts/mutatorsans/MutatorSans.ttf");
+
+    expect(snapshot.metadata).toEqual({ styleName: "Regular" });
+    expect(snapshot.metrics).toEqual({ unitsPerEm: 1000 });
+    expect(snapshot.metricDefinitions).toEqual(standardMetricDefinitions);
+    expect(snapshot.sources).toEqual([
+      {
+        id: "source:Regular",
+        name: "Regular",
+        location: { values: {} },
+        metricValues: metricValues([1000, 700, 500, 0, -200]),
+        lineGap: 0,
+      },
+    ]);
+    expect(snapshot.axes).toEqual([]);
+    expect(snapshot.namedInstances).toEqual([]);
+    expect(snapshot.glyphs).toHaveLength(49);
+  });
+});

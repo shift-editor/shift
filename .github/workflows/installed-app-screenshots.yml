@@ -81,7 +81,9 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-          key: installed-native-v2-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
+            packages/wasm/src/generated-reference
+            packages/wasm/src/generated-shaping
+          key: installed-native-v3-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
 
       - name: Install Rust toolchain
         if: steps.native-cache.outputs.cache-hit != 'true'

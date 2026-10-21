@@ -1,10 +1,11 @@
 use crate::atomic::sync_parent;
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use crate::metrics::metric_position;
+use crate::numeric::{rounded_i32, saturating_u32};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
-    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, MetricKind, Point, PointType,
+    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, Point, PointType,
+    StandardMetrics,
 };
 use std::path::{Path, PathBuf};
 
@@ -243,8 +244,7 @@ impl UfoWriter {
             }
             LibValue::Data(d) => plist::Value::Data(d.clone()),
             LibValue::Date(d) => plist::Date::from_xml_format(d)
-                .map(plist::Value::Date)
-                .unwrap_or_else(|_| plist::Value::String(d.clone())),
+                .map_or_else(|_| plist::Value::String(d.clone()), plist::Value::Date),
             LibValue::Uid(u) => plist::Value::Uid(plist::Uid::new(*u)),
         }
     }
@@ -331,6 +331,16 @@ impl UfoWriter {
         Ok(())
     }
 
+    /// Writes any font view to a UFO at `path`, replacing it atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`] when the view cannot be represented as a UFO or the files
+    /// cannot be written.
+    #[allow(
+        clippy::unused_self,
+        reason = "a writer method beside the FontWriter trait methods"
+    )]
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
         let norad_font = Self::build_norad_font(font)?;
         Self::write_atomic(&norad_font, Path::new(path))
@@ -352,7 +362,10 @@ impl UfoWriter {
         font_info.family_name = font.metadata().family_name.clone();
         font_info.style_name = font.metadata().style_name.clone();
         font_info.version_major = font.metadata().version_major;
-        font_info.version_minor = font.metadata().version_minor.map(|v| v as u32);
+        font_info.version_minor = font
+            .metadata()
+            .version_minor
+            .and_then(|v| u32::try_from(v).ok());
         font_info.copyright = font.metadata().copyright.clone();
         font_info.trademark = font.metadata().trademark.clone();
         font_info.open_type_name_designer = font.metadata().designer.clone();
@@ -364,42 +377,18 @@ impl UfoWriter {
         font_info.open_type_name_description = font.metadata().description.clone();
         font_info.note = font.metadata().note.clone();
 
-        font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
-        let default_source_id = font
-            .default_source_id()
-            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
+        font_info.units_per_em = Some(saturating_u32(font.metrics().units_per_em).into());
         let default_source = font
-            .sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
-            .ok_or_else(|| {
-                FormatBackendError::Ufo("the default source does not exist".to_string())
-            })?;
-        font_info.ascender = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::Ascender,
-        );
-        font_info.descender = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::Descender,
-        );
-        font_info.cap_height = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::CapHeight,
-        );
-        font_info.x_height = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::XHeight,
-        );
+            .default_source()
+            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
+        let metrics = StandardMetrics::of(default_source, font.metric_definitions());
+        font_info.ascender = metrics.ascender;
+        font_info.descender = metrics.descender;
+        font_info.cap_height = metrics.cap_height;
+        font_info.x_height = metrics.x_height;
         font_info.italic_angle = default_source.italic_angle();
-        font_info.open_type_hhea_line_gap =
-            default_source.line_gap().map(|value| value.round() as i32);
-        font_info.open_type_os2_typo_line_gap =
-            default_source.line_gap().map(|value| value.round() as i32);
+        font_info.open_type_hhea_line_gap = default_source.line_gap().map(rounded_i32);
+        font_info.open_type_os2_typo_line_gap = default_source.line_gap().map(rounded_i32);
         font_info.postscript_underline_position = default_source.underline_position();
         font_info.postscript_underline_thickness = default_source.underline_thickness();
         font_info.guidelines = None;
@@ -411,9 +400,8 @@ impl UfoWriter {
         let mut norad_font = NoradFont::new();
         norad_font.font_info = Self::build_font_info(font)?;
 
-        let glyphs = font.glyphs();
-        let glyph_names = glyphs
-            .iter()
+        let glyph_names = font
+            .glyphs()
             .map(|glyph| (glyph.id(), glyph.name()))
             .collect();
         let default_source_id = font.default_source_id();
@@ -430,24 +418,13 @@ impl UfoWriter {
             norad_font.lib = Self::convert_lib(font.lib());
         }
 
-        let default_source_id = font.default_source_id();
         let default_layer = norad_font.layers.default_layer_mut();
-
-        for glyph in font.glyphs() {
-            let Some(ref source_id) = default_source_id else {
-                continue;
-            };
-            if let Some(layer_data) = glyph.layer_for_source(source_id) {
-                let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
-                default_layer.insert_glyph(norad_glyph);
+        if let Some(default_source) = font.default_source() {
+            for glyph in font.glyphs() {
+                if let Some(layer_data) = glyph.layer_for_source(&default_source.id()) {
+                    default_layer.insert_glyph(Self::convert_glyph(glyph, layer_data)?);
+                }
             }
-        }
-
-        if let Some(default_source) = font
-            .sources()
-            .iter()
-            .find(|source| Some(source.id()) == default_source_id)
-        {
             Self::apply_layer_metadata(default_source, default_layer)?;
         }
 

@@ -42,7 +42,7 @@ export const WindowControls = ({ side }: { side: "start" | "end" }) => {
               aria-label={label}
               variant="toolbar"
               size="icon"
-              onClick={() => runCommand(command)}
+              onClick={() => runWindowCommand(command)}
             />
           </Tooltip>
         );
@@ -77,7 +77,12 @@ async function loadLayout(publish: (layout: WindowButtonLayout | null) => void):
   }
 }
 
-async function runCommand(command: CommandId): Promise<void> {
+/**
+ * Runs a window command, logging a failure instead of leaving the promise unhandled.
+ *
+ * @param command - The window command to run.
+ */
+export async function runWindowCommand(command: CommandId): Promise<void> {
   try {
     await getShiftHost().commands.run(command);
   } catch (error) {

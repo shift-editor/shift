@@ -52,6 +52,11 @@ impl AuthoredAtlasPage {
     }
 
     /// Shared all-source preview overflow for this ordered root page.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when a page glyph is missing from the atlas, and
+    /// [`SlugError::LengthOverflow`] when its source range is out of bounds.
     pub fn preview_extents(&self) -> Result<SlugPreviewExtents, SlugError> {
         let glyph_indices = self
             .glyphs
@@ -88,6 +93,10 @@ pub struct AuthoredAtlasProfile {
 }
 
 /// Compiles every authored font glyph into one resident Slug generation.
+///
+/// # Errors
+///
+/// Returns the errors of [`build_authored_atlas_page`].
 pub fn build_authored_atlas(
     font: &Font,
     band_count: u32,
@@ -96,6 +105,10 @@ pub fn build_authored_atlas(
 }
 
 /// Compiles every glyph and reports CPU phase durations from the same product path.
+///
+/// # Errors
+///
+/// Returns the errors of [`build_authored_atlas_page`].
 pub fn build_authored_atlas_profiled(
     font: &Font,
     band_count: u32,
@@ -109,6 +122,12 @@ pub fn build_authored_atlas_profiled(
 /// Root identities are deduplicated in caller order. Interpolation bases are
 /// collected only from those roots and their component closures, so a local
 /// edit patch does not scan or compile unrelated glyphs.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::Core`] when a glyph is missing or cannot be projected,
+/// [`AuthoredSlugError::Slug`] when `band_count` is invalid or the atlas outgrows its limits, and
+/// the topology, weight and finiteness errors of [`AuthoredAtlasBuilder::add_glyph`].
 pub fn build_authored_atlas_page(
     font: &Font,
     glyph_ids: &[GlyphId],
@@ -118,6 +137,10 @@ pub fn build_authored_atlas_page(
 }
 
 /// Compiles an ordered root batch and reports CPU phase durations from the same product path.
+///
+/// # Errors
+///
+/// Returns the errors of [`build_authored_atlas_page`].
 pub fn build_authored_atlas_page_profiled(
     font: &Font,
     glyph_ids: &[GlyphId],

@@ -77,4 +77,7 @@ pub enum FontReadError {
 
     #[error("invalid glyph projection: {details}")]
     InvalidProjection { details: String },
+
+    #[error("index out of range: {0}")]
+    IndexOutOfRange(#[from] std::num::TryFromIntError),
 }

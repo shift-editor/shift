@@ -6,7 +6,7 @@ use serde::Deserialize;
 use super::MutationArgs;
 
 #[derive(Debug, Subcommand)]
-pub enum KerningCommand {
+pub(crate) enum KerningCommand {
     /// List authored kerning pairs with their value at each master.
     List(ListKerningArgs),
 
@@ -30,7 +30,7 @@ pub enum KerningCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum KerningGroupCommand {
+pub(crate) enum KerningGroupCommand {
     /// Create a group at one pair position, optionally with members.
     Create(CreateKerningGroupArgs),
 
@@ -58,7 +58,7 @@ pub enum KerningPositionArg {
 }
 
 #[derive(Debug, Args)]
-pub struct ListKerningArgs {
+pub(crate) struct ListKerningArgs {
     /// Path to a .shift, UFO, Designspace, or Glyphs source; compiled fonts carry no authored kerning.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -77,7 +77,7 @@ pub struct ListKerningArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct KerningGroupsArgs {
+pub(crate) struct KerningGroupsArgs {
     /// Path to a .shift, UFO, Designspace, or Glyphs source; compiled fonts carry no authored kerning.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -92,7 +92,7 @@ pub struct KerningGroupsArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct GetKerningArgs {
+pub(crate) struct GetKerningArgs {
     /// Path to a .shift, UFO, Designspace, or Glyphs source; compiled fonts carry no authored kerning.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -118,7 +118,7 @@ pub struct GetKerningArgs {
         .required(true)
         .args(["input", "first"])
 ))]
-pub struct SetKerningArgs {
+pub(crate) struct SetKerningArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -147,7 +147,7 @@ pub struct SetKerningArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct RemoveKerningArgs {
+pub(crate) struct RemoveKerningArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -167,7 +167,7 @@ pub struct RemoveKerningArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct CreateKerningGroupArgs {
+pub(crate) struct CreateKerningGroupArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -187,7 +187,7 @@ pub struct CreateKerningGroupArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct RenameKerningGroupArgs {
+pub(crate) struct RenameKerningGroupArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -207,7 +207,7 @@ pub struct RenameKerningGroupArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteKerningGroupArgs {
+pub(crate) struct DeleteKerningGroupArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -224,7 +224,7 @@ pub struct DeleteKerningGroupArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct AssignKerningGroupArgs {
+pub(crate) struct AssignKerningGroupArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -245,7 +245,7 @@ pub struct AssignKerningGroupArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct UnassignKerningGroupArgs {
+pub(crate) struct UnassignKerningGroupArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,

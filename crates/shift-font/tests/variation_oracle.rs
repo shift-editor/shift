@@ -8,6 +8,11 @@
 //! interpolates to itself. A failure prints the case so it can become a
 //! focused test.
 
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
+
 use fontdrasil::coords::{CoordConverter, DesignCoord, UserCoord};
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingPoint, Contour, DesignLocation, ExternalLocation, Font,

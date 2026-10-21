@@ -4,21 +4,21 @@ use std::process::{Command, Output, Stdio};
 use shift_font::Font;
 use shift_store::ShiftStore;
 
-pub fn shift(args: &[&str]) -> Output {
+pub(crate) fn shift(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_shift-cli"))
         .args(args)
         .output()
         .expect("shift CLI should run")
 }
 
-pub fn load_font(path: &str) -> Font {
+pub(crate) fn load_font(path: &str) -> Font {
     ShiftStore::open_document(path)
         .unwrap()
         .load_font_state()
         .unwrap()
 }
 
-pub fn shift_with_stdin(args: &[&str], input: &str) -> Output {
+pub(crate) fn shift_with_stdin(args: &[&str], input: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_shift-cli"))
         .args(args)
         .stdin(Stdio::piped())

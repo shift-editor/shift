@@ -92,7 +92,12 @@ fn hvar_contributions(
             })?,
         None => DeltaSetIndex {
             outer: 0,
-            inner: glyph.to_u32() as u16,
+            inner: u16::try_from(glyph.to_u32()).map_err(|_| {
+                malformed(
+                    path,
+                    format!("glyph {glyph} is past HVAR's implicit advance mapping"),
+                )
+            })?,
         },
     };
     let store = hvar.item_variation_store().map_err(|error| {

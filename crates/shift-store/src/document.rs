@@ -25,6 +25,12 @@ impl ShiftStore {
     ///
     /// The destination is never overwritten. All schema and font writes happen
     /// at a sibling staging path before one no-clobber publication step.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::DocumentAlreadyExists`] when `path` exists, [`StoreError::Io`] when
+    /// the staging file cannot be created, synced or published, and [`StoreError::Sqlite`] or a
+    /// layer-encoding error when the font cannot be written.
     pub fn create_document(path: impl AsRef<Path>, font: &Font) -> Result<Self, StoreError> {
         let path = path.as_ref();
         if path.exists() {
@@ -74,6 +80,13 @@ impl ShiftStore {
     /// The source remains open and unchanged. The destination receives a new
     /// document identity, excludes app-local workspace state, and atomically
     /// replaces any existing file only after sibling staging, validation, and sync.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] when the staging file cannot be created, synced or moved into
+    /// place, [`StoreError::Sqlite`] when the snapshot cannot be copied or rewritten, and
+    /// [`StoreError::InvalidDocument`] when the staged copy fails validation. `path` is unchanged
+    /// on failure.
     pub fn save_as_document(&self, path: impl AsRef<Path>) -> Result<DocumentMetadata, StoreError> {
         let path = path.as_ref();
         let parent = parent_directory(path);
@@ -159,6 +172,11 @@ impl ShiftStore {
     ///
     /// A document written by an older supported schema is upgraded in place
     /// before it is returned, so older app versions can no longer open it.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::verify_document`], and [`StoreError::Sqlite`] when the
+    /// document cannot be opened for writing or upgraded.
     pub fn open_document(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
 
@@ -185,6 +203,13 @@ impl ShiftStore {
     /// [`Self::verify_document`] before anything is read or written; running the
     /// full integrity check here as well cost about 300 ms per inspection on a
     /// large font, and opening a document inspects it twice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the file cannot be opened,
+    /// [`StoreError::InvalidApplicationId`] when it is not a Shift document,
+    /// [`StoreError::UnsupportedDocumentSchemaVersion`] when its schema is not supported, and
+    /// [`StoreError::InvalidDocument`] when its tables or metadata are malformed.
     pub fn inspect_document_identity(
         path: impl AsRef<Path>,
     ) -> Result<DocumentMetadata, StoreError> {
@@ -195,6 +220,14 @@ impl ShiftStore {
 
     /// Performs format, schema, relational, and SQLite integrity validation
     /// without opening the document for writes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the file cannot be opened,
+    /// [`StoreError::InvalidApplicationId`] when it is not a Shift document,
+    /// [`StoreError::UnsupportedDocumentSchemaVersion`] when its schema is not supported, and
+    /// [`StoreError::InvalidDocument`] when its tables or metadata are malformed or SQLite's
+    /// integrity or foreign-key check fails.
     pub fn verify_document(path: impl AsRef<Path>) -> Result<DocumentMetadata, StoreError> {
         let conn = open_document_read_only(path.as_ref())?;
         schema::validate_document_header(&conn)?;
@@ -217,6 +250,12 @@ impl ShiftStore {
         Ok(metadata)
     }
 
+    /// Returns the document's identity and saved commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the metadata cannot be read, and
+    /// [`StoreError::InvalidDocument`] when it is malformed.
     pub fn document_metadata(&self) -> Result<DocumentMetadata, StoreError> {
         load_document_metadata(&self.conn)
     }

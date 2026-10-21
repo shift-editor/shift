@@ -10,14 +10,14 @@ use serde::Serialize;
 use shift_backends::font_loader::FontLoader;
 use shift_backends::{BackendError, ImportLoss, ImportLossKind};
 use shift_font::Font;
-use shift_font::check::{Charset, CheckOptions, Finding, Severity, check_font_with};
+use shift_font::check::{Charset, CheckOptions, Finding, MonospaceCell, Severity};
 
 use crate::cli::CheckArgs;
 
 /// Findings for one source, with what Shift changed while reading it.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CheckReport {
+pub(crate) struct CheckReport {
     pub document: PathBuf,
     pub findings: Vec<ReportedFinding>,
     /// What reading the source into Shift dropped or approximated.
@@ -26,7 +26,7 @@ pub struct CheckReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReportedFinding {
+pub(crate) struct ReportedFinding {
     pub code: &'static str,
     pub name: &'static str,
     pub severity: Severity,
@@ -38,13 +38,13 @@ pub struct ReportedFinding {
 
 impl CheckReport {
     /// Whether any finding is an error.
-    pub fn has_errors(&self) -> bool {
+    pub(crate) fn has_errors(&self) -> bool {
         self.findings
             .iter()
             .any(|finding| finding.severity == Severity::Error)
     }
 
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut lines = Vec::new();
         for finding in &self.findings {
             let severity = match finding.severity {
@@ -84,13 +84,17 @@ impl CheckReport {
 /// # Errors
 ///
 /// Reports unreadable sources and axis mappings that cannot compile.
-pub fn check(args: &CheckArgs) -> Result<CheckReport> {
+pub(crate) fn check(args: &CheckArgs) -> Result<CheckReport> {
     let options = CheckOptions {
         charset: args.charset.as_deref().map(read_charset).transpose()?,
-        monospace: args.mono.then_some(args.width),
+        monospace: args.mono.then(|| {
+            args.width
+                .map_or(MonospaceCell::MostCommonAdvance, MonospaceCell::Width)
+        }),
     };
     let (font, losses) = read_font(&args.path)?;
-    let findings = check_font_with(&font, &options)
+    let findings = font
+        .check_with(&options)
         .into_diagnostic()
         .wrap_err("failed to check the font")?;
 
