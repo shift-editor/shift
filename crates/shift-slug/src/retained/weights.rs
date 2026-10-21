@@ -36,6 +36,11 @@ impl AtlasAxis {
         self.normalize_design(map_value(value, &self.user_mapping), axis_index)
     }
 
+    /// Normalizes a design-space `value` to this axis's F2Dot14 coordinate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::NonFiniteRetainedCoordinate`] when `value` is not finite.
     pub fn normalize_design(&self, value: f64, axis_index: usize) -> Result<i16, SlugError> {
         if !value.is_finite() {
             return Err(SlugError::NonFiniteRetainedCoordinate { axis_index });
@@ -76,6 +81,12 @@ impl AtlasRegion {
         &self.axes
     }
 
+    /// Returns this region's scalar at normalized `coordinates`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedRegionAxisCountMismatch`] when `coordinates` does not have one
+    /// value per region axis.
     pub fn scalar(&self, coordinates: &[i16]) -> Result<f32, SlugError> {
         if self.axes.len() != coordinates.len() {
             return Err(SlugError::RetainedRegionAxisCountMismatch {
@@ -124,6 +135,11 @@ pub struct RegionRegistry {
 }
 
 impl RegionRegistry {
+    /// Returns the weight slot for `region`, registering it on first use.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::LengthOverflow`] when the slot index overflows `u32`.
     pub fn weight_index(&mut self, region: AtlasRegion) -> Result<u32, SlugError> {
         if let Some(index) = self.indices.get(&region) {
             return Ok(*index);
@@ -161,6 +177,11 @@ pub struct ComplementRegistry {
 }
 
 impl ComplementRegistry {
+    /// Starts complement slots after `region_count` region slots.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::LengthOverflow`] when the first slot index overflows `u32`.
     pub fn new(region_count: usize) -> Result<Self, SlugError> {
         let start = u32::try_from(region_count)
             .or_overflow()?
@@ -173,6 +194,11 @@ impl ComplementRegistry {
         })
     }
 
+    /// Returns the slot of one minus the sum of `source_weights`, registering it on first use.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::LengthOverflow`] when the slot index overflows `u32`.
     pub fn weight_index(&mut self, source_weights: &[u32]) -> Result<u32, SlugError> {
         if source_weights.is_empty() {
             return Ok(0);

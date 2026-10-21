@@ -13,6 +13,11 @@ crate::string_enum! {
     parse_error: String = |text| format!("unknown boolean operation \"{text}\"");
 }
 
+/// Combines two contours with `op`, using the even-odd fill rule.
+///
+/// # Errors
+///
+/// Returns the [`linesweeper::Error`] when the contours cannot be combined.
 pub fn boolean(op: BooleanOp, a: &Contour, b: &Contour) -> Result<Contours, linesweeper::Error> {
     let path_a = BezPath::from(a);
     let path_b = BezPath::from(b);

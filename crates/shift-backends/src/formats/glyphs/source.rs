@@ -34,6 +34,12 @@ pub struct GlyphsFont {
 }
 
 impl GlyphsFont {
+    /// Opens a Glyphs source for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::MalformedSource`] when the file cannot be parsed or its masters do
+    /// not form a valid directory.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
         let source = Arc::new(
             ParsedGlyphsFont::load(path)

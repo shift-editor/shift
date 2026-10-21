@@ -77,6 +77,11 @@ pub struct SourceAxisLocation {
 }
 
 impl ShiftStore {
+    /// Inserts an external axis record.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the insert fails, for example because the id is taken.
     pub fn create_axis(&mut self, axis: &NewAxis) -> Result<(), StoreError> {
         self.conn.execute(
             "
@@ -107,6 +112,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the axis record with `id`, or `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_axis(&self, id: &AxisId) -> Result<Option<AxisRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -130,6 +140,11 @@ impl ShiftStore {
         }
     }
 
+    /// Inserts a source record.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the insert fails, for example because the id is taken.
     pub fn create_source(&mut self, source: &NewSource) -> Result<(), StoreError> {
         self.conn.execute(
             "
@@ -156,6 +171,12 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the source record with `id`, or `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails, including when the stored source kind is
+    /// unknown.
     pub fn get_source(&self, id: &SourceId) -> Result<Option<SourceRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -178,6 +199,12 @@ impl ShiftStore {
         }
     }
 
+    /// Lists every source record in source order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails, including when a stored source kind is
+    /// unknown.
     pub fn list_sources(&self) -> Result<Vec<SourceRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -198,6 +225,11 @@ impl ShiftStore {
             .map_err(StoreError::from)
     }
 
+    /// Sets a source's value on one axis, replacing any stored before.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the write fails.
     pub fn set_source_location(
         &mut self,
         source_id: &SourceId,
@@ -217,6 +249,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns a source's stored axis values, ordered by axis id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_source_locations(
         &self,
         source_id: &SourceId,

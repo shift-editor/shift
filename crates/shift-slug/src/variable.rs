@@ -172,6 +172,10 @@ pub struct VariableParams {
 }
 
 /// Packs the variable shader uniform as sixteen little-endian `u32` words.
+///
+/// # Errors
+///
+/// Returns [`SlugError::LengthOverflow`] when a section offset does not fit in `u32`.
 pub fn pack_variable_params(
     params: VariableParams,
 ) -> Result<[u8; VARIABLE_PARAMS_BYTES], SlugError> {
@@ -345,6 +349,11 @@ impl VariableAtlas {
     }
 
     /// Derives shared preview overflow without changing the existing pixels-per-em scale.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when a glyph index is missing from the atlas,
+    /// and [`SlugError::LengthOverflow`] when its source range is out of bounds.
     pub fn preview_extents(&self, glyph_indices: &[u32]) -> Result<SlugPreviewExtents, SlugError> {
         let mut horizontal = 0.0_f32;
         let mut minimum_y = f32::INFINITY;
@@ -386,6 +395,11 @@ impl VariableAtlas {
     }
 
     /// Resolves the common two-source model with the compute shader's f32 arithmetic.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::NonFiniteVariableWeight`] when `source_weight` is not finite, and the
+    /// errors of [`Self::resolve_glyph_with_weights`].
     pub fn resolve_glyph(
         &self,
         glyph_index: u32,
@@ -398,6 +412,13 @@ impl VariableAtlas {
     }
 
     /// Resolves one glyph from an arbitrary deduplicated source-weight buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::NonFiniteVariableWeight`] when a weight is not finite,
+    /// [`SlugError::GlyphIndexOutOfRange`] when the glyph is missing,
+    /// [`SlugError::VariableWeightIndexOutOfRange`] when a source reads past `weights`, and
+    /// [`SlugError::LengthOverflow`] when a stored range is out of bounds.
     pub fn resolve_glyph_with_weights(
         &self,
         glyph_index: u32,
@@ -469,6 +490,13 @@ impl VariableAtlas {
     }
 
     /// Resolves horizontal advance from the same resident source weights.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::NonFiniteVariableWeight`] when a weight is not finite,
+    /// [`SlugError::GlyphIndexOutOfRange`] when the glyph is missing,
+    /// [`SlugError::VariableWeightIndexOutOfRange`] when a source reads past `weights`, and
+    /// [`SlugError::LengthOverflow`] when a stored range is out of bounds.
     pub fn resolve_advance_with_weights(
         &self,
         glyph_index: u32,
@@ -493,6 +521,12 @@ impl VariableAtlas {
             })
     }
 
+    /// Lays out the resident atlas sections at `alignment`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidAlignment`] when `alignment` is not a power of two, and
+    /// [`SlugError::LengthOverflow`] when a section does not fit in `u32` offsets.
     pub fn layout(&self, alignment: usize) -> Result<VariableLayout, SlugError> {
         if alignment == 0 || !alignment.is_power_of_two() {
             return Err(SlugError::InvalidAlignment(alignment));
@@ -574,6 +608,11 @@ impl VariableAtlas {
         })
     }
 
+    /// Packs the resident atlas into one byte buffer at `alignment`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::layout`].
     pub fn pack(&self, alignment: usize) -> Result<PackedVariableAtlas, SlugError> {
         let expected = self.layout(alignment)?;
         let mut bytes = Vec::with_capacity(expected.total_length);
@@ -590,6 +629,11 @@ impl VariableAtlas {
     /// Consumers can write each callback slice directly into its final GPU-buffer
     /// offset. No full packed copy coexists with the authored atlas, and dropping
     /// the atlas after the callback releases all redundant CPU geometry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidChunkSize`] when `maximum_length` is zero or not a multiple of
+    /// four, and the errors of [`Self::layout`].
     pub fn write_packed_chunks(
         &self,
         alignment: usize,
@@ -699,6 +743,12 @@ pub(crate) struct VariableAtlasCheckpoint {
 }
 
 impl VariableAtlasBuilder {
+    /// Starts a variable atlas whose glyphs each split into `band_count` bands.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidBandCount`] when `band_count` is zero or above
+    /// [`crate::MAX_BAND_COUNT`].
     pub fn new(band_count: u32) -> Result<Self, SlugError> {
         if !(1..=crate::MAX_BAND_COUNT).contains(&band_count) {
             return Err(SlugError::InvalidBandCount(band_count));
@@ -712,6 +762,13 @@ impl VariableAtlasBuilder {
         })
     }
 
+    /// Adds a two-source glyph from outline commands and returns its index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::VariableTopologyMismatch`] when the two outlines differ in structure,
+    /// an outline error such as [`SlugError::NonFiniteCoordinate`] when the commands are malformed,
+    /// and [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_glyph(
         &mut self,
         base_commands: impl IntoIterator<Item = OutlineCommand<f32>>,
@@ -763,6 +820,10 @@ impl VariableAtlasBuilder {
     /// because a binary outline drawer may change emitted command kinds at
     /// degeneracies. Production adapters must use the authored topology boundary,
     /// including line flags for controls regenerated after interpolation.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::add_curve_glyph_with_sources_and_lines`].
     pub fn add_curve_glyph(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
@@ -776,6 +837,10 @@ impl VariableAtlasBuilder {
     }
 
     /// Adds compatible curves that contain no synthetic Slug line controls.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::add_curve_glyph_with_sources_and_lines`].
     pub fn add_curve_glyph_with_sources(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
@@ -793,6 +858,12 @@ impl VariableAtlasBuilder {
     }
 
     /// Adds stable source curves and marks controls regenerated from line endpoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::VariableTopologyMismatch`] when a source's curve count differs from the
+    /// base's, [`SlugError::VariableLineFlagMismatch`] when `line_flags` does not have one flag per
+    /// curve, and [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_curve_glyph_with_sources_and_lines(
         &mut self,
         base_curves: impl IntoIterator<Item = Curve>,
@@ -925,6 +996,12 @@ impl VariableAtlasBuilder {
     }
 
     /// Assigns one finite horizontal advance per resident source contribution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when the glyph is missing,
+    /// [`SlugError::VariableAdvanceCountMismatch`] when there is not one advance per source, and
+    /// [`SlugError::NonFiniteVariableAdvance`] when an advance is not finite.
     pub fn set_glyph_source_advances(
         &mut self,
         glyph_index: u32,
@@ -1034,6 +1111,11 @@ impl PackedVariableAtlas {
     }
 
     /// Borrows queue-write-sized pieces without duplicating the packed atlas.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidChunkSize`] when `maximum_length` is zero or not a multiple of
+    /// four.
     pub fn chunks(&self, maximum_length: usize) -> Result<PackedVariableChunks<'_>, SlugError> {
         if maximum_length == 0 || !maximum_length.is_multiple_of(4) {
             return Err(SlugError::InvalidChunkSize(maximum_length));

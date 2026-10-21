@@ -70,6 +70,12 @@ struct StoredMetadata {
 }
 
 impl RecoveryOverlay {
+    /// Creates a recovery overlay for a document at its saved commit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::RecoveryAlreadyExists`] when `path` exists, and [`StoreError::Sqlite`]
+    /// when the overlay cannot be created.
     pub fn create(
         path: impl AsRef<Path>,
         document_id: &DocumentId,
@@ -113,6 +119,14 @@ impl RecoveryOverlay {
         })
     }
 
+    /// Opens an existing recovery overlay, upgrading its schema when needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the file cannot be opened,
+    /// [`StoreError::InvalidApplicationId`] or [`StoreError::UnsupportedSchemaVersion`] when it is
+    /// not a supported recovery overlay, and [`StoreError::InvalidDocumentId`] or
+    /// [`StoreError::InvalidCommitId`] when its metadata is malformed.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
@@ -127,22 +141,51 @@ impl RecoveryOverlay {
         Ok(overlay)
     }
 
+    /// Returns the overlay's lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the metadata cannot be read, and
+    /// [`StoreError::InvalidDocumentId`] or [`StoreError::InvalidCommitId`] when it is malformed.
     pub fn state(&self) -> Result<RecoveryState, StoreError> {
         Ok(self.metadata()?.state)
     }
 
+    /// Returns the id of the document this overlay belongs to.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the metadata cannot be read, and
+    /// [`StoreError::InvalidDocumentId`] or [`StoreError::InvalidCommitId`] when it is malformed.
     pub fn document_id(&self) -> Result<DocumentId, StoreError> {
         Ok(self.metadata()?.document_id)
     }
 
+    /// Returns the saved commit this overlay's changes apply to.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the metadata cannot be read, and
+    /// [`StoreError::InvalidDocumentId`] or [`StoreError::InvalidCommitId`] when it is malformed.
     pub fn base_commit_id(&self) -> Result<CommitId, StoreError> {
         Ok(self.metadata()?.base_commit_id)
     }
 
+    /// Returns the commit a save in progress will write, if any.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the metadata cannot be read, and
+    /// [`StoreError::InvalidDocumentId`] or [`StoreError::InvalidCommitId`] when it is malformed.
     pub fn pending_commit_id(&self) -> Result<Option<CommitId>, StoreError> {
         Ok(self.metadata()?.pending_commit_id)
     }
 
+    /// Returns the overlay's revision, which advances with each change.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the revision cannot be read.
     pub fn revision(&self) -> Result<i64, StoreError> {
         self.conn
             .query_row(
@@ -153,6 +196,11 @@ impl RecoveryOverlay {
             .map_err(StoreError::from)
     }
 
+    /// Moves the overlay to the state that matches the document's `saved_commit_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the metadata cannot be read or updated.
     pub fn reconcile(&mut self, saved_commit_id: &CommitId) -> Result<RecoveryState, StoreError> {
         let metadata = self.metadata()?;
         let next = match metadata.state {
@@ -192,6 +240,11 @@ impl RecoveryOverlay {
         Ok(next)
     }
 
+    /// Drops every unsaved change and marks the overlay clean at `saved_commit_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the overlay cannot be cleared.
     pub fn discard(&mut self, saved_commit_id: &CommitId) -> Result<(), StoreError> {
         self.set_clean(saved_commit_id)
     }

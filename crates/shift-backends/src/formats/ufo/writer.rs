@@ -331,6 +331,12 @@ impl UfoWriter {
         Ok(())
     }
 
+    /// Writes any font view to a UFO at `path`, replacing it atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`] when the view cannot be represented as a UFO or the files
+    /// cannot be written.
     #[allow(
         clippy::unused_self,
         reason = "a writer method beside the FontWriter trait methods"

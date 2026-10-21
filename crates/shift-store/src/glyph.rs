@@ -12,6 +12,11 @@ pub struct GlyphRecord {
 }
 
 impl ShiftStore {
+    /// Inserts a glyph record without layers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the insert fails, for example because the id is taken.
     pub fn create_glyph(&mut self, glyph: &NewGlyph) -> Result<(), StoreError> {
         self.conn.execute(
             "
@@ -24,6 +29,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the glyph record with `id`, or `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_glyph(&self, id: &GlyphId) -> Result<Option<GlyphRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -40,6 +50,11 @@ impl ShiftStore {
         }
     }
 
+    /// Returns a glyph's code points in stored order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn list_glyph_unicodes(&self, id: &GlyphId) -> Result<Vec<u32>, StoreError> {
         let mut stmt = self.conn.prepare(
             "

@@ -107,10 +107,22 @@ impl RetainedAtlasPage {
         self.descriptor.exact_glyphs()
     }
 
+    /// Returns every weight slot's value at a user-space `location`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedLocationAxisCountMismatch`] when `location` does not have one
+    /// value per axis, and [`SlugError::NonFiniteRetainedCoordinate`] when a value is not finite.
     pub fn weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         self.descriptor.weights(location)
     }
 
+    /// Returns the page's shared preview overflow across every glyph and variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when a page glyph is missing from the atlas, and
+    /// [`SlugError::LengthOverflow`] when its source range is out of bounds.
     pub fn preview_extents(&self) -> Result<SlugPreviewExtents, SlugError> {
         self.descriptor.preview_extents(&self.atlas)
     }
@@ -138,6 +150,12 @@ impl RetainedAtlasDescriptor {
         &self.exact_glyphs
     }
 
+    /// Returns the shared preview overflow of this page's glyphs in `atlas`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when a page glyph is missing from `atlas`, and
+    /// [`SlugError::LengthOverflow`] when its source range is out of bounds.
     pub fn preview_extents(&self, atlas: &VariableAtlas) -> Result<SlugPreviewExtents, SlugError> {
         let glyphs = self
             .glyphs
@@ -148,10 +166,22 @@ impl RetainedAtlasDescriptor {
         atlas.preview_extents(&glyphs)
     }
 
+    /// Returns every weight slot's value at a user-space `location`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedLocationAxisCountMismatch`] when `location` does not have one
+    /// value per axis, and [`SlugError::NonFiniteRetainedCoordinate`] when a value is not finite.
     pub fn weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         weights::weights(&self.axes, &self.regions, &self.complements, location)
     }
 
+    /// Returns every weight slot's value at a design-space `location`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedLocationAxisCountMismatch`] when `location` does not have one
+    /// value per axis, and [`SlugError::NonFiniteRetainedCoordinate`] when a value is not finite.
     pub fn design_weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         weights::design_weights(&self.axes, &self.regions, &self.complements, location)
     }
@@ -167,6 +197,12 @@ pub struct PageCompiler {
 }
 
 impl PageCompiler {
+    /// Starts a page compiler for `axes` and `regions`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidBandCount`] when `band_count` is out of range, and
+    /// [`SlugError::LengthOverflow`] when the region count overflows `u32`.
     pub fn new(
         band_count: u32,
         axes: Vec<AtlasAxis>,
@@ -182,6 +218,14 @@ impl PageCompiler {
         })
     }
 
+    /// Adds a root glyph's default curves and weighted source curves; returns its atlas index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::VariableTopologyMismatch`] or [`SlugError::VariableLineFlagMismatch`]
+    /// when the source curves or line flags do not match the default,
+    /// [`SlugError::NonFiniteVariableAdvance`] when an advance is not finite, and
+    /// [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_glyph(
         &mut self,
         root: u32,
@@ -217,6 +261,13 @@ impl PageCompiler {
         Ok(atlas_glyph)
     }
 
+    /// Adds a root glyph's exact-source variant; returns its atlas index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::VariableLineFlagMismatch`] when `line_flags` does not match `curves`,
+    /// [`SlugError::NonFiniteVariableAdvance`] when `advance` is not finite, and
+    /// [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_exact_variant(
         &mut self,
         root: u32,
@@ -249,6 +300,14 @@ impl PageCompiler {
     }
 }
 
+/// Compiles a retained page's glyphs and their variants into one atlas page.
+///
+/// # Errors
+///
+/// Returns [`SlugError::RetainedShapeValueCountMismatch`] when a sample does not fit its glyph's
+/// shape, [`SlugError::VariableTopologyMismatch`] when samples disagree in structure,
+/// [`SlugError::InvalidBandCount`] when `band_count` is out of range, and
+/// [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
 pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasPage, SlugError> {
     let mut compiler = PageCompiler::new(band_count, input.axes.clone(), input.regions.clone())?;
 

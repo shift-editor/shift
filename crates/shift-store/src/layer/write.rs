@@ -16,6 +16,12 @@ impl ShiftStore {
     /// Replaces one independently-addressed layer and its earned reference
     /// rows in one transaction. The workspace revision advances only after
     /// encoding and index derivation have succeeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::MissingEntity`] when no glyph owns the layer,
+    /// [`StoreError::DocumentRequiresRecoveryOverlay`] in a document opened without one, and
+    /// [`StoreError::Sqlite`] or a layer-encoding error when the write fails.
     pub fn replace_glyph_layer(&mut self, layer: &font::GlyphLayer) -> Result<(), StoreError> {
         let owner = layer_owner(&self.conn, &layer.id())?
             .or_missing(StoreEntity::GlyphLayer, &layer.id())?;

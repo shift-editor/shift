@@ -59,6 +59,8 @@ use_self = "warn"
 map_unwrap_or = "warn"
 # `Arc::clone(&x)` shows a reference-count bump, not a deep copy.
 clone_on_ref_ptr = "warn"
+# The rustdoc skill requires `# Errors` on every public fallible function.
+missing_errors_doc = "warn"
 
 [workspace.package]
 license = "MIT OR Apache-2.0"

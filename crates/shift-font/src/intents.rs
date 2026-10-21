@@ -342,6 +342,11 @@ impl Font {
     ///
     /// Mutations are staged on a copy. Repeated writes to the same scope are
     /// coalesced into the first original value and final replacement value.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first intent's error, such as a missing entity or an invalid value; the font is
+    /// unchanged when any intent fails.
     pub fn apply_intents(&mut self, set: &FontIntentSet) -> CoreResult<AppliedIntents> {
         let before = self.clone();
         let mut after = self.clone();

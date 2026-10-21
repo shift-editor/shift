@@ -20,6 +20,11 @@ pub struct GlyphLayerDirectoryEntry {
 }
 
 impl ShiftStore {
+    /// Lists every layer's directory entry without reading payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn list_glyph_layer_directory(&self) -> Result<Vec<GlyphLayerDirectoryEntry>, StoreError> {
         let mut stmt = self.conn.prepare(
             "

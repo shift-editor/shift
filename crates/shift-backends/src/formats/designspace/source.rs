@@ -28,6 +28,13 @@ pub struct DesignspaceFont {
 }
 
 impl DesignspaceFont {
+    /// Opens a Designspace and its UFO sources for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnsupportedFormat`] when `path` is not a `.designspace`, and
+    /// [`FontReadError::MalformedSource`] when the document or a source cannot be parsed, it has no
+    /// sources, or no source sits at the default location.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
         if FontFormat::of_path(path) != Some(FontFormat::Designspace) {
             return Err(FontReadError::UnsupportedFormat {

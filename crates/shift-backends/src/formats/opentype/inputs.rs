@@ -400,6 +400,12 @@ fn source_atlas_read_error(error: SourceAtlasError) -> FontReadError {
 }
 
 /// Compiles one deterministic root batch directly from retained glyf/gvar semantics.
+///
+/// # Errors
+///
+/// Returns [`SourceAtlasError::Read`] when a root is out of range or a table cannot be read,
+/// [`SourceAtlasError::UnsupportedBinary`] when a glyph uses variation features the atlas does not
+/// model, and [`SourceAtlasError::Slug`] when the page outgrows the atlas limits.
 pub fn build_binary_atlas_page(
     source: &OpenTypeFont,
     roots: &[GlyphIndex],
