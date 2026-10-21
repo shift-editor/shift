@@ -370,6 +370,40 @@ describe("features can be turned on or off per proof text", () => {
   });
 });
 
+describe("what a feature changes in proof text", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  const id = (name: string) => editor.font.entryForName(name as GlyphName)!.id;
+
+  it("lists the glyphs each substitution of a feature replaces and brings in", async () => {
+    editor.text.createRun(editor.text.itemsFromText("fi"));
+    const liga = editor.text.featureSubstitutionsCell("liga");
+
+    await expect
+      .poll(() => liga.peek())
+      .toEqual([{ input: [id("f"), id("i")], output: id("f_i") }]);
+    expect(editor.text.featureSubstitutionsCell("smcp").peek()).toEqual([]);
+  });
+
+  it("highlights what a feature brings in while it is on, and what it replaces while off", async () => {
+    const runId = editor.text.createRun(editor.text.itemsFromText("fi")).id;
+    const highlighted = () => [...(editor.text.highlightCell.peek()?.glyphs ?? [])];
+    editor.text.setFeatureHighlight({ runId, tag: "liga" });
+    await expect.poll(highlighted).toEqual([id("f_i")]);
+
+    editor.history.capture("Set liga", () => editor.text.setFeature(runId, "liga", false));
+    expect(highlighted()).toEqual([id("f"), id("i")]);
+
+    editor.text.setFeatureHighlight(null);
+    expect(editor.text.highlightCell.peek()).toBeNull();
+  });
+});
+
 describe("proof text is shaped in a chosen language and script", () => {
   let editor: TestEditor;
 

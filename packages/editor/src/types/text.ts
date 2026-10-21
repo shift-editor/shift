@@ -1,4 +1,11 @@
-import type { NodeId, ParagraphRequest, RunId, ShapedParagraph, TextItemId } from "@shift/types";
+import type {
+  GlyphId,
+  NodeId,
+  ParagraphRequest,
+  RunId,
+  ShapedParagraph,
+  TextItemId,
+} from "@shift/types";
 import type { TextAlign, TextItem } from "../lib/text/layout/types";
 
 export type { TextAlign };
@@ -109,4 +116,23 @@ export interface FontFeature {
   readonly name: string | null;
   /** Required features shape every text and are never switched. */
   readonly default: FeatureDefault;
+}
+
+/** One substitution a feature can make: `input` in the text becomes `output`. */
+export interface FeatureSubstitution {
+  /** The glyphs replaced; more than one for a ligature. */
+  readonly input: readonly GlyphId[];
+  readonly output: GlyphId;
+}
+
+/** A feature whose changes one run highlights, such as the one under the pointer. */
+export interface FeatureHighlight {
+  readonly runId: RunId;
+  readonly tag: string;
+}
+
+/** Glyphs one run draws highlighted. */
+export interface TextHighlight {
+  readonly runId: RunId;
+  readonly glyphs: ReadonlySet<GlyphId>;
 }

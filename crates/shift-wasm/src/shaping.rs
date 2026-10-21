@@ -161,6 +161,26 @@ layout! {
     }
 }
 
+layout! {
+    /// Which registered shaper, and which of its features, to list the
+    /// substitutions of.
+    pub struct ShaperSubstitutions {
+        pub shaper: usize,
+        /// The feature tag's four bytes, big-endian.
+        pub tag: f64,
+    }
+}
+
+layout! {
+    /// One substitution a feature can make, in shaper glyphs: `input` in the
+    /// text becomes `output`.
+    pub struct SubstitutionOutput {
+        /// The glyphs replaced; more than one for a ligature.
+        pub input: Vec<usize>,
+        pub output: usize,
+    }
+}
+
 #[cfg(feature = "shaping")]
 mod exports {
     use std::cell::RefCell;
@@ -175,6 +195,7 @@ mod exports {
     use super::{
         FeatureDefaultOutput, FontFeatureOutput, ParagraphInput, ShapeParagraphs, ShapedDirection,
         ShapedGlyphOutput, ShapedParagraphOutput, ShapedRunOutput, ShaperFeatures, ShaperGlyphs,
+        ShaperSubstitutions, SubstitutionOutput,
     };
     use crate::layout::call;
 
@@ -326,6 +347,32 @@ mod exports {
                             tag: f64::from(u32::from_be_bytes(feature.tag.to_be_bytes())),
                             name: feature.name,
                             default: feature.default.into(),
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+        })
+    }
+
+    /// Input: `ShaperSubstitutions`. Output: every substitution the feature
+    /// can make, ordered by output glyph, or null for an unregistered shaper,
+    /// a tag that is not four bytes, or a `GSUB` that cannot be read.
+    #[wasm_bindgen(js_name = shaperSubstitutions)]
+    pub fn shaper_substitutions(input: &[f64]) -> Vec<f64> {
+        call(input, |request: ShaperSubstitutions| {
+            SHAPERS.with_borrow(|shapers| {
+                let registered = shapers.get(request.shaper).and_then(Option::as_ref)?;
+                let tag = Tag::new(&whole(request.tag)?.to_be_bytes());
+                let substitutions = registered
+                    .shaper
+                    .feature_substitutions(&registered.glyphs, tag)
+                    .ok()?;
+                Some(
+                    substitutions
+                        .into_iter()
+                        .map(|substitution| SubstitutionOutput {
+                            input: substitution.input.into_iter().map(index_of).collect(),
+                            output: index_of(substitution.output),
                         })
                         .collect::<Vec<_>>(),
                 )

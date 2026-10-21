@@ -69,7 +69,7 @@ impl Shaper {
     ///
     /// Returns [`ShapeError::InvalidFont`] when the font cannot be read.
     pub fn features(&self) -> Result<Vec<FontFeature>, ShapeError> {
-        let font = FontRef::new(self.bytes()).map_err(|_| ShapeError::InvalidFont)?;
+        let font = self.font()?;
         let lists = [
             font.gsub().ok().and_then(|gsub| gsub.feature_list().ok()),
             font.gpos().ok().and_then(|gpos| gpos.feature_list().ok()),

@@ -17,6 +17,7 @@ export type {
 } from "./lib/text/layout/types";
 export type {
   FeatureDefault,
+  FeatureSubstitution,
   FontFeature,
   TextAlign,
   TextRunRecord,

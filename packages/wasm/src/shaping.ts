@@ -22,4 +22,5 @@ export {
   setShaperGlyphs,
   shapeParagraphs,
   shaperFeatures,
+  shaperSubstitutions,
 } from "./generated-shaping/shift_wasm.js";

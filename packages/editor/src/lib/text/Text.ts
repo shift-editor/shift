@@ -6,7 +6,15 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { FontFeature, TextAlign, TextRunRecord, TextRunSettings } from "../../types/text";
+import type {
+  FeatureHighlight,
+  FeatureSubstitution,
+  FontFeature,
+  TextAlign,
+  TextHighlight,
+  TextRunRecord,
+  TextRunSettings,
+} from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -23,6 +31,8 @@ import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsi
 const MIN_TEXT_SIZE = 1;
 /** The smallest distance between baselines, in ems. */
 const MIN_LINE_HEIGHT = 0.1;
+
+const NO_SUBSTITUTIONS: readonly FeatureSubstitution[] = [];
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -103,6 +113,47 @@ export class Text {
     },
     { name: "text.features", equals: sameFeatures },
   );
+  readonly #substitutions = keyedCache({
+    name: "text.featureSubstitutions",
+    key: (tag: string) => tag,
+    dispose: (substitutionsCell: ComputedSignal<readonly FeatureSubstitution[]>) =>
+      substitutionsCell.dispose(),
+    create: (tagCell: Signal<string>) =>
+      computed(
+        () => {
+          const shaper = untracked(() => this.#textShaper()).shaperCell.value;
+          return shaper?.substitutions(tagCell.value) ?? NO_SUBSTITUTIONS;
+        },
+        { name: "text.featureSubstitutions" },
+      ),
+  });
+  readonly #featureHighlightCell = signal<FeatureHighlight | null>(null, {
+    name: "text.featureHighlight",
+  });
+  /**
+   * The glyphs a highlighted feature changes in its run: what it puts in the
+   * text while it is on there, what it would replace while it is off.
+   *
+   * @remarks
+   * Null while no feature is highlighted. Follows the run's setting, the
+   * font's default, and the shaper, so turning the feature on or off while
+   * it is highlighted moves the highlight.
+   */
+  readonly highlightCell: Signal<TextHighlight | null> = computed(
+    () => {
+      const highlight = this.#featureHighlightCell.value;
+      const run = highlight ? this.run(highlight.runId) : null;
+      if (!highlight || !run) return null;
+
+      const feature = this.featuresCell.value.find(({ tag }) => tag === highlight.tag);
+      const on = run.features[highlight.tag] ?? feature?.default === "on";
+      const substitutions = this.featureSubstitutionsCell(highlight.tag).value;
+      const glyphs = new Set(substitutions.flatMap(({ input, output }) => (on ? [output] : input)));
+      return { runId: run.id, glyphs };
+    },
+    { name: "text.highlight" },
+  );
+
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
     this.#editor = editor;
@@ -353,6 +404,27 @@ export class Text {
     return this.#runs.get(id).directionCell;
   }
 
+  /**
+   * Returns every substitution a feature can make, ordered by output glyph:
+   * the glyphs each rule replaces and the glyph it puts in their place.
+   *
+   * @remarks
+   * Reactive: read from the shaper the editor shapes with, so it follows
+   * edits to the font's features. Empty for a positioning feature, a tag the
+   * font does not define, until the shaper is ready, and in a preview.
+   */
+  featureSubstitutionsCell(tag: string): ComputedSignal<readonly FeatureSubstitution[]> {
+    return this.#substitutions.get(tag);
+  }
+
+  /**
+   * Highlights what a feature changes in one run's text, as
+   * {@link highlightCell} describes, or clears the highlight with null.
+   */
+  setFeatureHighlight(highlight: FeatureHighlight | null): void {
+    this.#featureHighlightCell.set(highlight);
+  }
+
   /** The parser for typed and pasted text; replace it to change the input syntax for every run. */
   get parser(): TextParser {
     return this.#parser;
@@ -388,6 +460,7 @@ export class Text {
     this.#unsubscribeStore();
     this.#shaper?.dispose();
     this.#runsByItem.dispose();
+    this.#substitutions.clear();
     this.#runs.clear();
   }
 

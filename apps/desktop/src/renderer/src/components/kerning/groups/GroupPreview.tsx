@@ -5,6 +5,7 @@ import type { GlyphId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { drawGroupPreview, type MemberWord } from "./drawGroupPreview";
 import type { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import { copyGlyphNames } from "../../glyph-grid/glyphNames";
 import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import type { PreviewLayout } from "./PreviewLayout";
 import { glyphName } from "./previewGlyphs";
@@ -27,8 +28,8 @@ interface GroupPreviewProps {
  * at the active source or location, so a member whose edge does not match
  * shows as a collision or a gap. It is also the member list: click to
  * select, Shift-click or drag for a range, ⌘-click to add or remove one;
- * the arrow keys move (Shift extends), ⌘A selects all, and Delete takes the
- * selection out of the group.
+ * the arrow keys move (Shift extends), ⌘A selects all, ⌘C copies the
+ * selection's names, and Delete takes it out of the group.
  */
 export function GroupPreview({
   position,
@@ -82,6 +83,7 @@ export function GroupPreview({
     containerRef,
     glyphAt: memberAt,
     onRemove,
+    onCopy: () => void copyGlyphNames(editor, selection.ids),
   });
 
   return (
