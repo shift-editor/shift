@@ -20,7 +20,7 @@ use std::sync::Arc;
 use crate::composite::ResolvedContour;
 use crate::{
     CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer,
-    InterpolationBasis, Point, PointId, SourceId, Transform,
+    InterpolationBasis, Point, SourceId, Transform,
 };
 
 use super::FontProjection;
@@ -94,7 +94,7 @@ impl FontProjection<'_> {
         let own = layer
             .contours_iter()
             .map(|contour| ResolvedContour {
-                points: contour.points().iter().map(fresh_point).collect(),
+                points: contour.points().iter().map(Point::with_fresh_id).collect(),
                 closed: contour.is_closed(),
             })
             .collect::<Vec<_>>();
@@ -258,7 +258,7 @@ impl Font {
 
         let mut masters = source_ids.iter().cloned().collect::<HashSet<_>>();
         let mut visited = HashSet::from([glyph.id()]);
-        let mut pending = component_glyphs(glyph);
+        let mut pending = glyph.component_glyph_ids().collect::<Vec<_>>();
         while let Some(component_id) = pending.pop() {
             if !visited.insert(component_id.clone()) {
                 continue;
@@ -271,7 +271,7 @@ impl Font {
             {
                 masters.extend(component_interpolation.basis().source_ids().iter().cloned());
             }
-            pending.extend(component_glyphs(component));
+            pending.extend(component.component_glyph_ids());
         }
 
         let locations = self
@@ -297,15 +297,6 @@ impl Font {
         interpolation_bases.insert(key, basis.clone());
         Ok(Some(basis))
     }
-}
-
-/// The glyphs a glyph's layers draw as components.
-fn component_glyphs(glyph: &Glyph) -> Vec<GlyphId> {
-    glyph
-        .layers()
-        .values()
-        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
-        .collect()
 }
 
 fn same_structure(a: &OutlineParts, b: &OutlineParts) -> bool {
@@ -372,13 +363,7 @@ fn blend(outlines: &[OutlineParts], weights: &[f64]) -> Option<OutlineParts> {
                     let source = &outline[part][contour].points[index];
                     sum + *weight * source.position().to_vec2()
                 });
-        Point::new(
-            PointId::new(),
-            blended.x,
-            blended.y,
-            point.point_type(),
-            point.is_smooth(),
-        )
+        point.copied_to(blended.to_point())
     };
     let blended_contour = |part: usize, contour: usize, first: &ResolvedContour| ResolvedContour {
         points: first
@@ -402,16 +387,6 @@ fn blend(outlines: &[OutlineParts], weights: &[f64]) -> Option<OutlineParts> {
                     .collect()
             })
             .collect(),
-    )
-}
-
-fn fresh_point(point: &Point) -> Point {
-    Point::new(
-        PointId::new(),
-        point.x(),
-        point.y(),
-        point.point_type(),
-        point.is_smooth(),
     )
 }
 
@@ -442,10 +417,7 @@ fn placed(
                 .points
                 .get(placed_point_index(index, shape, reversing))
         })
-        .map(|point| {
-            let kurbo::Point { x, y } = transform.transform_point(point.position());
-            Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
-        })
+        .map(|point| point.copied_to(transform.transform_point(point.position())))
         .collect();
     ResolvedContour {
         points,

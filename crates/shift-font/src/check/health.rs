@@ -23,7 +23,7 @@ pub(super) fn check(font: &Font, glyph: &Glyph) -> Vec<Finding> {
         return Vec::new();
     }
     let role = GlyphRole::of(glyph);
-    let default = font.default_source().filter(|source| source.is_master());
+    let default = font.default_master();
     let encoded = !glyph.unicodes().is_empty() && !role.space_like;
 
     let mut findings = Vec::new();
@@ -45,10 +45,7 @@ pub(super) fn check(font: &Font, glyph: &Glyph) -> Vec<Finding> {
         );
     }
 
-    for source in font.masters() {
-        let Some(layer) = glyph.layer_for_source(&source.id()) else {
-            continue;
-        };
+    for (source, layer) in font.masters_with_layers(glyph) {
         let layer = LayerCheck {
             font,
             glyph,

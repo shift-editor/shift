@@ -249,7 +249,7 @@ fn axis_values(font: &Font, location: &Location) -> Vec<AxisValue> {
         .iter()
         .map(|axis| AxisValue {
             axis_tag: axis.tag().to_string(),
-            value: location.get(&axis.id()).unwrap_or(axis.default()),
+            value: location.value_on(axis),
         })
         .collect()
 }

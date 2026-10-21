@@ -9,8 +9,8 @@ use fontdrasil::{
 };
 
 use crate::{
-    Axis, AxisId, AxisMapping, AxisMappingId, AxisRole, CoreError, CoreResult, DesignLocation,
-    ExternalLocation, Font, Location, VariationBasis,
+    Axis, AxisId, AxisList, AxisMapping, AxisMappingId, AxisRole, CoreError, CoreResult,
+    DesignLocation, ExternalLocation, Font, Location, VariationBasis,
 };
 
 /// One axis's design-space bounds used to normalize authored source locations.
@@ -181,11 +181,8 @@ impl AxisMappingBasis {
         let mut result = Location::new();
 
         for (axis_id, adjustment) in self.output_axis_ids.iter().zip(adjustments) {
-            let axis = axes
-                .iter()
-                .find(|axis| axis.id() == *axis_id)
-                .require(&axis_id)?;
-            let base = location.get(axis_id).unwrap_or(axis.default());
+            let axis = axes.axis(axis_id).require(&axis_id)?;
+            let base = location.value_on(axis);
             result.set(axis_id.clone(), base + adjustment);
         }
 
@@ -213,7 +210,7 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
             let deltas = output_axes
                 .iter()
                 .map(|axis| {
-                    let base = point.input.get(&axis.id()).unwrap_or(axis.default());
+                    let base = point.input.value_on(axis);
                     let output = point.output.get(&axis.id()).unwrap_or(base);
                     output - base
                 })
@@ -276,7 +273,7 @@ pub fn map_location_with_bases(
     let mut mapped = DesignLocation::new();
     for axis in axes {
         let value = match axis.role() {
-            AxisRole::External => external.get(&axis.id()).unwrap_or(axis.default()),
+            AxisRole::External => external.value_on(axis),
             AxisRole::Internal => axis.default(),
         };
         mapped.set(axis.id(), value);
@@ -307,8 +304,7 @@ fn resolve_axes<'a>(
 ) -> CoreResult<Vec<&'a Axis>> {
     ids.iter()
         .map(|axis_id| {
-            axes.iter()
-                .find(|axis| axis.id() == *axis_id)
+            axes.axis(axis_id)
                 .ok_or_else(|| invalid_mapping(mapping, format!("unknown axis {axis_id}")))
         })
         .collect()
@@ -327,7 +323,7 @@ fn normalized_input(location: &Location, axes: &[&Axis], tags: &[Tag]) -> Normal
     axes.iter()
         .zip(tags)
         .map(|(axis, tag)| {
-            let value = location.get(&axis.id()).unwrap_or(axis.default());
+            let value = location.value_on(axis);
             (*tag, NormalizedCoord::new(axis.normalize(value)))
         })
         .collect()

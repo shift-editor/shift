@@ -17,7 +17,7 @@ use crate::Require;
 use crate::curve::segment_bounds;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
-    GlyphLayer, Point, PointId, Transform,
+    GlyphLayer, Point, Transform,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -215,10 +215,7 @@ fn transform_contour_points(contour: &Contour, transform: Transform) -> Resolved
     let points = contour
         .points()
         .iter()
-        .map(|point| {
-            let kurbo::Point { x, y } = transform.transform_point(point.position());
-            Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
-        })
+        .map(|point| point.copied_to(transform.transform_point(point.position())))
         .collect();
 
     ResolvedContour {

@@ -10,8 +10,8 @@ use shift_backends::{
     FontExportRequest, FontExportResult, FontExporter, ImportBatchLimit, font_loader::FontLoader,
 };
 use shift_font::{
-    AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, GlyphId, GlyphLayer,
-    LayerId, TouchedLayer, error::CoreError,
+    AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId,
+    GlyphLayer, LayerId, TouchedLayer, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -143,10 +143,7 @@ impl FontWorkspace {
             _ => SaveState::Unsaved,
         };
         let font = store.load_font_directory()?;
-        let residency = LayerResidency::with_unloaded(
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned()),
-        );
+        let residency = LayerResidency::with_unloaded(font.layer_ids());
 
         Ok(Self::from_store(
             font,
@@ -198,10 +195,7 @@ impl FontWorkspace {
     pub fn discard_recovery(&mut self) -> Result<(), WorkspaceError> {
         self.store.discard_recovery()?;
         let font = self.store.load_font_directory()?;
-        self.residency = LayerResidency::with_unloaded(
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned()),
-        );
+        self.residency = LayerResidency::with_unloaded(font.layer_ids());
         self.font = font;
         self.ledger = Ledger::default();
         Ok(())
@@ -220,10 +214,7 @@ impl FontWorkspace {
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
         let font = store.load_font_directory()?;
-        let residency = LayerResidency::with_unloaded(
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().keys().cloned()),
-        );
+        let residency = LayerResidency::with_unloaded(font.layer_ids());
         let source = source_from_workspace_state(&state)?;
 
         Ok(Self::from_store(
@@ -448,10 +439,7 @@ impl FontWorkspace {
                 store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
                 store.finish_import()?;
                 let font = store.load_font_directory()?;
-                let residency = LayerResidency::with_unloaded(
-                    font.glyphs()
-                        .flat_map(|glyph| glyph.layers().keys().cloned()),
-                );
+                let residency = LayerResidency::with_unloaded(font.layer_ids());
                 drop(store);
                 install_import_store(staged_path, store_path)?;
                 let store = ShiftStore::open(store_path)?;
@@ -514,7 +502,7 @@ impl FontWorkspace {
                 self.font
                     .glyph(&glyph_id)
                     .into_iter()
-                    .flat_map(|glyph| glyph.layers().keys().cloned())
+                    .flat_map(Glyph::layer_ids)
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -598,7 +586,7 @@ impl FontWorkspace {
 
     /// Residency instrumentation for tests and import profiling.
     pub fn loaded_layer_count(&self) -> usize {
-        let directory_layer_count = self.font.glyphs().map(|glyph| glyph.layers().len()).sum();
+        let directory_layer_count = self.font.layer_count();
         self.residency.loaded_count(directory_layer_count)
     }
 
