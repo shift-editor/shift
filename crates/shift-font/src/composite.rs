@@ -302,7 +302,7 @@ fn resolved_occurrences<'a>(
                 .get(component_glyph.parent_path())
                 .ok_or_else(|| invalid_component(component_glyph))?
         };
-        let resolved_transform = compose_transform(parent_transform, local_transform);
+        let resolved_transform = parent_transform.compose(local_transform);
         resolved_transforms.insert(component_glyph.component_path().clone(), resolved_transform);
 
         let layer = layer_for_component(
@@ -672,18 +672,6 @@ fn contour_to_svg_d(points: &[Point], closed: bool) -> String {
         out.push("Z".to_string());
     }
     out.join(" ")
-}
-
-/// Composes transforms as `outer ∘ inner` (apply `inner`, then `outer`).
-fn compose_transform(outer: Transform, inner: Transform) -> Transform {
-    Transform {
-        xx: outer.xx * inner.xx + outer.yx * inner.xy,
-        xy: outer.xy * inner.xx + outer.yy * inner.xy,
-        yx: outer.xx * inner.yx + outer.yx * inner.yy,
-        yy: outer.xy * inner.yx + outer.yy * inner.yy,
-        dx: outer.xx * inner.dx + outer.yx * inner.dy + outer.dx,
-        dy: outer.xy * inner.dx + outer.yy * inner.dy + outer.dy,
-    }
 }
 
 #[cfg(test)]

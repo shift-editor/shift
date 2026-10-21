@@ -755,7 +755,9 @@ fn component_base_glyph_ids(
 
 fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(default_source_id) = font.default_source_id() {
-        let is_master = source_for_id(font, &default_source_id).is_some_and(Source::is_master);
+        let is_master = font
+            .source(&default_source_id)
+            .is_some_and(Source::is_master);
         if is_master
             && let Some(layer) = glyph
                 .layers()
@@ -769,15 +771,12 @@ fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
     glyph
         .layers()
         .values()
-        .filter(|layer| source_for_id(font, &layer.source_id()).is_some_and(Source::is_master))
+        .filter(|layer| {
+            font.source(&layer.source_id())
+                .is_some_and(Source::is_master)
+        })
         .max_by_key(|layer| layer.contours().len() + layer.components().len())
         .cloned()
-}
-
-fn source_for_id<'a>(font: &'a Font, source_id: &SourceId) -> Option<&'a Source> {
-    font.sources()
-        .iter()
-        .find(|source| source.id() == *source_id)
 }
 
 fn exact_source_id(

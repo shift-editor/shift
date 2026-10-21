@@ -369,16 +369,9 @@ impl UfoWriter {
         font_info.note = font.metadata().note.clone();
 
         font_info.units_per_em = Some(saturating_u32(font.metrics().units_per_em).into());
-        let default_source_id = font
-            .default_source_id()
-            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
         let default_source = font
-            .sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
-            .ok_or_else(|| {
-                FormatBackendError::Ufo("the default source does not exist".to_string())
-            })?;
+            .default_source()
+            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
         font_info.ascender = metric_position(
             font.metric_definitions(),
             default_source,
@@ -432,24 +425,13 @@ impl UfoWriter {
             norad_font.lib = Self::convert_lib(font.lib());
         }
 
-        let default_source_id = font.default_source_id();
         let default_layer = norad_font.layers.default_layer_mut();
-
-        for glyph in font.glyphs() {
-            let Some(ref source_id) = default_source_id else {
-                continue;
-            };
-            if let Some(layer_data) = glyph.layer_for_source(source_id) {
-                let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
-                default_layer.insert_glyph(norad_glyph);
+        if let Some(default_source) = font.default_source() {
+            for glyph in font.glyphs() {
+                if let Some(layer_data) = glyph.layer_for_source(&default_source.id()) {
+                    default_layer.insert_glyph(Self::convert_glyph(glyph, layer_data)?);
+                }
             }
-        }
-
-        if let Some(default_source) = font
-            .sources()
-            .iter()
-            .find(|source| Some(source.id()) == default_source_id)
-        {
             Self::apply_layer_metadata(default_source, default_layer)?;
         }
 

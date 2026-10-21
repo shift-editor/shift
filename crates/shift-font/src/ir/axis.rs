@@ -633,13 +633,6 @@ impl Location {
             .collect()
     }
 
-    pub fn is_default_axis(&self, axes: &[Axis]) -> bool {
-        axes.iter().all(|axis| {
-            let value = self.get(&axis.id()).unwrap_or(axis.default());
-            (value - axis.default()).abs() < f64::EPSILON
-        })
-    }
-
     /// Returns whether two locations address the same position on `axes`.
     ///
     /// Missing coordinates use axis defaults, values within `1e-6` axis units

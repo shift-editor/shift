@@ -41,12 +41,6 @@ pub fn placed_point_index(index: usize, shape: ContourShape, mirrored: bool) -> 
     shape.point_count - index
 }
 
-/// Returns whether two outlines line up point for point: the same number of
-/// contours, each with the same closure and point count.
-pub fn shapes_match(a: &[ContourShape], b: &[ContourShape]) -> bool {
-    a == b
-}
-
 /// One master's outline of a component occurrence, before placement.
 #[derive(Clone, Copy, Debug)]
 pub struct PlacedMaster<'a> {
@@ -91,9 +85,9 @@ pub fn blend_placed_contours(
         .iter()
         .map(|shape| shape.point_count)
         .sum::<usize>();
-    let lines_up = masters.iter().all(|master| {
-        shapes_match(master.shapes, first.shapes) && master.coordinates.len() == point_total * 2
-    });
+    let lines_up = masters
+        .iter()
+        .all(|master| master.shapes == first.shapes && master.coordinates.len() == point_total * 2);
     if !lines_up || weights.len() != masters.len() {
         return false;
     }

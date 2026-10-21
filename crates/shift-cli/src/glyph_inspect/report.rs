@@ -4,10 +4,9 @@ use std::path::Path;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::composite::{GlyphComponents, ResolvedContour as FontResolvedContour};
-use shift_font::variation::map_location;
 use shift_font::{
     Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphId, GlyphLayer,
-    LayerDifference, Point, PointType, Source,
+    LayerDifference, Point, Source,
 };
 
 use super::types::{
@@ -32,7 +31,8 @@ impl GlyphInspection {
             .glyph(&glyph_id)
             .ok_or_else(|| miette!("glyph {selector:?} disappeared while inspecting the font"))?;
         let external = parse_location(&font, coordinates)?;
-        let design = map_location(&external, font.axes(), font.axis_mappings())
+        let design = font
+            .mapped_location(&external)
             .into_diagnostic()
             .wrap_err("failed to map the external location into design space")?;
         let projection = font
@@ -136,9 +136,8 @@ pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<Exte
             bail!("axis tag {tag:?} is blank or repeated in the location");
         }
         let axis = font
-            .axes()
-            .iter()
-            .find(|axis| axis.tag() == tag)
+            .axis_id_by_tag(tag)
+            .and_then(|axis_id| font.axis(&axis_id))
             .ok_or_else(|| miette!("axis tag {tag:?} does not exist"))?;
         let value = value
             .trim()
@@ -237,8 +236,7 @@ fn inspect_components(
                 .into_diagnostic()
                 .wrap_err("failed to resolve a component parent layer")?;
             let component = parent_layer
-                .components_iter()
-                .find(|component| component.id() == occurrence.component_id())
+                .component(&occurrence.component_id())
                 .ok_or_else(|| {
                     miette!(
                         "component {} is absent from resolved parent glyph {parent_id}",
@@ -379,9 +377,7 @@ fn inspect_variation(
                     .map(|(source_id, weight)| SourceWeight {
                         source_id: source_id.to_string(),
                         source_name: font
-                            .sources()
-                            .iter()
-                            .find(|source| source.id() == *source_id)
+                            .source(source_id)
                             .map(|source| source.name().to_string())
                             .unwrap_or_else(|| source_id.to_string()),
                         weight,
@@ -405,9 +401,7 @@ fn inspect_variation(
                         .iter()
                         .map(|support| VariationSupport {
                             axis_tag: font
-                                .axes()
-                                .iter()
-                                .find(|axis| axis.id() == support.axis_id())
+                                .axis(&support.axis_id())
                                 .map(|axis| axis.tag().to_string())
                                 .unwrap_or_else(|| support.axis_id().to_string()),
                             minimum: support.minimum(),
@@ -507,7 +501,7 @@ fn inspect_resolved(advance: f64, contours: &[FontResolvedContour]) -> ResolvedG
                     id: None,
                     x: point.x(),
                     y: point.y(),
-                    point_type: point_type_name(point.point_type()).to_string(),
+                    point_type: point.point_type().as_str().to_string(),
                     smooth: point.is_smooth(),
                 })
                 .collect(),
@@ -527,16 +521,8 @@ fn inspect_point(point: &Point) -> PointInspection {
         id: Some(point.id().to_string()),
         x: point.x(),
         y: point.y(),
-        point_type: point_type_name(point.point_type()).to_string(),
+        point_type: point.point_type().as_str().to_string(),
         smooth: point.is_smooth(),
-    }
-}
-
-fn point_type_name(point_type: PointType) -> &'static str {
-    match point_type {
-        PointType::OnCurve => "onCurve",
-        PointType::OffCurve => "offCurve",
-        PointType::QCurve => "qCurve",
     }
 }
 
@@ -589,8 +575,8 @@ fn format_difference(difference: &LayerDifference) -> String {
             source,
         } => format!(
             "path {contour} node {point} kind: reference {}, source {}",
-            point_type_name(*reference),
-            point_type_name(*source)
+            reference.as_str(),
+            source.as_str()
         ),
         LayerDifference::AnchorCount { reference, source } => {
             format!("anchor count: reference {reference}, source {source}")

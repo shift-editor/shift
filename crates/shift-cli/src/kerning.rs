@@ -9,7 +9,6 @@ use std::path::Path;
 
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
 use shift_backends::font_loader::FontLoader;
-use shift_font::variation::map_location;
 use shift_font::{Font, GlyphId, KerningPair, KerningPosition, KerningSide, Location, Source};
 
 use crate::authoring::{resolve_glyph_id, resolve_source_id};
@@ -229,7 +228,8 @@ fn location_kerning(
     second: &GlyphId,
 ) -> Result<LocationKerning> {
     let external = parse_location(font, coordinates)?;
-    let design = map_location(&external, font.axes(), font.axis_mappings())
+    let design = font
+        .mapped_location(&external)
         .into_diagnostic()
         .wrap_err("failed to map the external location into design space")?;
     let value = font

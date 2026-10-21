@@ -940,9 +940,7 @@ fn source_location<'a>(
     font: &'a Font,
     source_id: &SourceId,
 ) -> Result<&'a shift_font::DesignLocation, AuthoredSlugError> {
-    font.sources()
-        .iter()
-        .find(|source| source.id() == *source_id)
+    font.source(source_id)
         .map(shift_font::Source::location)
         .ok_or_else(|| AuthoredSlugError::MissingSourceLocation(source_id.clone()))
 }

@@ -1620,10 +1620,7 @@ impl Bridge {
   /// Parses layer identities and finds each owning glyph, in request order.
   fn layer_owners(&self, layer_ids: &[String]) -> errors::Result<(Vec<LayerId>, Vec<GlyphId>)> {
     let font = self.font()?;
-    let layer_ids = layer_ids
-      .iter()
-      .map(|layer_id| parse::<LayerId>(layer_id))
-      .collect::<errors::Result<Vec<_>>>()?;
+    let layer_ids = parse_id_list::<LayerId>(layer_ids)?;
     let glyph_ids = layer_ids
       .iter()
       .map(|layer_id| Ok(font.require_layer_owner(layer_id)?))
@@ -1677,10 +1674,7 @@ impl Bridge {
     &mut self,
     glyph_ids: Vec<String>,
   ) -> errors::Result<Vec<NapiGlyphProjection>> {
-    let glyph_ids = glyph_ids
-      .iter()
-      .map(|glyph_id| parse::<GlyphId>(glyph_id))
-      .collect::<errors::Result<Vec<_>>>()?;
+    let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projections = Vec::new();
     let mut pending = glyph_ids.into_iter().collect::<VecDeque<_>>();
@@ -1718,10 +1712,7 @@ impl Bridge {
     glyph_ids: Vec<String>,
     location: NapiLocation,
   ) -> errors::Result<Vec<NapiGlyphPreview>> {
-    let glyph_ids = glyph_ids
-      .iter()
-      .map(|glyph_id| parse::<GlyphId>(glyph_id))
-      .collect::<errors::Result<Vec<_>>>()?;
+    let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
     let location = shift_font::DesignLocation::from_untyped(map_location(location)?);
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projection = font.projection(&location);
@@ -1788,10 +1779,7 @@ impl Bridge {
     alignment: u32,
   ) -> errors::Result<NapiSlugAtlas> {
     let total_started = Instant::now();
-    let glyph_ids = glyph_ids
-      .iter()
-      .map(|glyph_id| parse::<GlyphId>(glyph_id))
-      .collect::<errors::Result<Vec<_>>>()?;
+    let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
     let started = Instant::now();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let acquisition = started.elapsed();
@@ -1919,12 +1907,11 @@ impl Bridge {
     let identity = self.source_identity()?;
     let glyph_index = identity.glyph_index(&glyph_id)?;
     let projected = source.glyph(glyph_index)?;
-    Ok(
-      wire_source_glyph(projected, source.directory(), identity)?
-        .into_iter()
-        .map(Into::into)
-        .collect(),
-    )
+    Ok(convert_all(wire_source_glyph(
+      projected,
+      source.directory(),
+      identity,
+    )?))
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
@@ -1944,10 +1931,7 @@ impl Bridge {
       let source = self.font_source()?;
       let identity = self.source_identity()?;
       let location = source_location(source.directory(), identity, coordinates)?;
-      let roots = glyph_ids
-        .iter()
-        .map(|glyph_id| parse::<GlyphId>(glyph_id))
-        .collect::<errors::Result<Vec<_>>>()?
+      let roots = parse_id_list::<GlyphId>(&glyph_ids)?
         .iter()
         .map(|glyph_id| identity.glyph_index(glyph_id))
         .collect::<BridgeResult<Vec<_>>>()?;
@@ -2148,7 +2132,7 @@ impl Bridge {
   ) -> errors::Result<Vec<NapiShapedRun>> {
     let request = ParsedParagraphRequest::try_from(request)?;
     let runs = self.live_shaper()?.shape_paragraph(&request.as_request())?;
-    Ok(runs.into_iter().map(NapiShapedRun::from).collect())
+    Ok(convert_all(runs))
   }
 
   /// Returns the compiled shaping tables, for the editor to shape with
@@ -3001,16 +2985,8 @@ fn map_axis_mapping(mapping: NapiAxisMapping) -> errors::Result<FontAxisMapping>
   let mut mapped = FontAxisMapping::with_id(
     parse::<AxisMappingId>(&mapping.id)?,
     mapping.name,
-    mapping
-      .inputs
-      .iter()
-      .map(|id| parse::<AxisId>(id))
-      .collect::<errors::Result<Vec<_>>>()?,
-    mapping
-      .outputs
-      .iter()
-      .map(|id| parse::<AxisId>(id))
-      .collect::<errors::Result<Vec<_>>>()?,
+    parse_id_list::<AxisId>(&mapping.inputs)?,
+    parse_id_list::<AxisId>(&mapping.outputs)?,
     mapping
       .points
       .into_iter()
