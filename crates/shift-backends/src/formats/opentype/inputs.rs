@@ -406,8 +406,7 @@ pub fn build_binary_atlas_page(
     band_count: u32,
 ) -> Result<SourceAtlasPage, SourceAtlasError> {
     validate_roots(source.directory(), roots)?;
-    let (font, variable_tables) =
-        tables::variable_tables(source).map_err(SourceAtlasError::from)?;
+    let (font, variable_tables) = tables::variable_tables(source)?;
     let Some((loca, glyf, gvar)) = variable_tables else {
         return build_static_cff_atlas_page(source, &font, roots, band_count);
     };
@@ -474,7 +473,7 @@ fn build_static_cff_atlas_page(
     roots: &[GlyphIndex],
     band_count: u32,
 ) -> Result<SourceAtlasPage, SourceAtlasError> {
-    validate_static_cff(source, font).map_err(SourceAtlasError::from)?;
+    validate_static_cff(source, font)?;
 
     let mut compiler = PageCompiler::new(band_count, Vec::new(), Vec::new())?;
     for root in roots {

@@ -49,7 +49,7 @@ pub enum CoreError {
     AnchorNotFound(AnchorId),
 
     #[error("boolean operation failed: {0}")]
-    BooleanOperationFailed(String),
+    BooleanOperationFailed(#[source] linesweeper::Error),
 
     #[error("missing glyph value at {index}")]
     MissingGlyphValue { index: usize },
@@ -133,8 +133,40 @@ pub enum CoreError {
     #[error("axis {0} not found")]
     AxisNotFound(AxisId),
 
-    #[error("invalid {kind} order: {message}")]
-    InvalidEntityOrder { kind: &'static str, message: String },
+    #[error("invalid {kind} order: expected {expected} identities, got {actual}")]
+    OrderLengthMismatch {
+        kind: EntityKind,
+        expected: usize,
+        actual: usize,
+    },
+
+    #[error("invalid {kind} order: identity {id} is unknown or repeated")]
+    UnknownOrRepeatedId { kind: EntityKind, id: String },
+
+    #[error("invalid axis order: identity {0} is repeated")]
+    RepeatedAxisId(AxisId),
+
+    #[error("invalid glyph order: identity {0} is not the directory tail")]
+    GlyphNotAtTail(GlyphId),
+
+    #[error("invalid source order: default identity must name a master")]
+    DefaultSourceNotMaster,
+
+    #[error("invalid source order: non-empty source collection has no default identity")]
+    MissingDefaultSource,
+
+    #[error("invalid changeset order: current {target} does not match its expected original value")]
+    ChangeOriginMismatch { target: &'static str },
+
+    #[error("invalid changeset order: {kind} identity changes from {before} to {after}")]
+    ReplacementIdentityChanged {
+        kind: EntityKind,
+        before: String,
+        after: String,
+    },
+
+    #[error("invalid changeset order: {kind} replacement has no value on either side")]
+    EmptyReplacement { kind: EntityKind },
 
     #[error("invalid axis {axis_id}: {message}")]
     InvalidAxis { axis_id: AxisId, message: String },
@@ -238,6 +270,26 @@ pub enum CoreError {
 
     #[error("kerning value {0} is not finite")]
     InvalidKerningValue(f64),
+}
+
+/// The kind of authoring entity an error is about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntityKind {
+    Axis,
+    Glyph,
+    Layer,
+    Source,
+}
+
+impl std::fmt::Display for EntityKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Axis => "axis",
+            Self::Glyph => "glyph",
+            Self::Layer => "layer",
+            Self::Source => "source",
+        })
+    }
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

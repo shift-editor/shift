@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bitflags::bitflags;
 
 use crate::collection::Identified;
-use crate::error::{CoreError, CoreResult};
+use crate::error::{CoreError, CoreResult, EntityKind};
 
 use crate::{
     Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
@@ -48,7 +48,7 @@ impl<T> Replacement<T> {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::InvalidEntityOrder`] naming `target` when it differs.
+    /// Returns [`CoreError::ChangeOriginMismatch`] naming `target` when it differs.
     pub fn require_before<C>(&self, current: &C, target: &'static str) -> CoreResult<()>
     where
         C: PartialEq<T> + ?Sized,
@@ -57,10 +57,59 @@ impl<T> Replacement<T> {
             return Ok(());
         }
 
-        Err(CoreError::InvalidEntityOrder {
-            kind: "changeset",
-            message: format!("current {target} does not match its expected original value"),
-        })
+        Err(CoreError::ChangeOriginMismatch { target })
+    }
+}
+
+impl Replacement<Option<Glyph>> {
+    /// The glyph this replacement creates, replaces, or deletes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ReplacementIdentityChanged`] when the two sides
+    /// name different glyphs and [`CoreError::EmptyReplacement`] when neither
+    /// side has a glyph.
+    pub fn glyph_id(&self) -> CoreResult<GlyphId> {
+        same_identity(
+            EntityKind::Glyph,
+            self.before.as_ref().map(Glyph::id),
+            self.after.as_ref().map(Glyph::id),
+        )
+    }
+}
+
+impl Replacement<Option<Arc<GlyphLayer>>> {
+    /// The layer this replacement creates, replaces, or deletes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::ReplacementIdentityChanged`] when the two sides
+    /// name different layers and [`CoreError::EmptyReplacement`] when neither
+    /// side has a layer.
+    pub fn layer_id(&self) -> CoreResult<LayerId> {
+        same_identity(
+            EntityKind::Layer,
+            self.before.as_deref().map(GlyphLayer::id),
+            self.after.as_deref().map(GlyphLayer::id),
+        )
+    }
+}
+
+/// The one identity both sides of a replacement share.
+fn same_identity<Id>(kind: EntityKind, before: Option<Id>, after: Option<Id>) -> CoreResult<Id>
+where
+    Id: PartialEq + std::fmt::Display,
+{
+    match (before, after) {
+        (Some(before), Some(after)) if before != after => {
+            Err(CoreError::ReplacementIdentityChanged {
+                kind,
+                before: before.to_string(),
+                after: after.to_string(),
+            })
+        }
+        (Some(id), _) | (_, Some(id)) => Ok(id),
+        (None, None) => Err(CoreError::EmptyReplacement { kind }),
     }
 }
 
@@ -513,6 +562,32 @@ mod tests {
     }
 
     #[test]
+    fn a_glyph_replacement_names_one_glyph() {
+        let glyph = Glyph::new("A".to_string());
+        let other = Glyph::new("B".to_string());
+
+        let created = Replacement::new(None, Some(glyph.clone()));
+        let renamed = Replacement::new(Some(glyph.clone()), Some(other));
+        let empty: Replacement<Option<Glyph>> = Replacement::new(None, None);
+
+        assert_eq!(created.glyph_id().unwrap(), glyph.id());
+        assert!(matches!(
+            renamed.glyph_id(),
+            Err(CoreError::ReplacementIdentityChanged {
+                kind: EntityKind::Glyph,
+                ..
+            })
+        ));
+        let Err(error) = empty.glyph_id() else {
+            panic!("an empty replacement names no glyph");
+        };
+        assert_eq!(
+            error.to_string(),
+            "invalid changeset order: glyph replacement has no value on either side"
+        );
+    }
+
+    #[test]
     fn a_replacement_applies_only_to_its_original_value() {
         let replacement = Replacement::new(vec![1, 2], vec![2, 1]);
 
@@ -520,7 +595,10 @@ mod tests {
         let Err(error) = replacement.require_before(&[2, 1][..], "order") else {
             panic!("a changed original must be rejected");
         };
-        assert!(matches!(error, CoreError::InvalidEntityOrder { .. }));
+        assert!(matches!(
+            error,
+            CoreError::ChangeOriginMismatch { target: "order" }
+        ));
     }
 
     #[test]

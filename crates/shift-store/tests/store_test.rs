@@ -304,13 +304,7 @@ fn glyph_edit_is_sparse() {
     let error = store
         .apply_change_set(&glyph_deleted(first).into())
         .unwrap_err();
-    assert!(matches!(
-        error,
-        shift_store::StoreError::Font(shift_font::CoreError::InvalidEntityOrder {
-            kind: "glyph",
-            ..
-        })
-    ));
+    assert!(matches!(error, shift_store::StoreError::GlyphNotAtTail(_)));
 
     let audit = rusqlite::Connection::open(&path).unwrap();
     let writes = audit

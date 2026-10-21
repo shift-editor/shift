@@ -4,6 +4,7 @@ use std::{
 };
 
 use shift_backends::font_loader::FontLoader;
+use shift_backends::{BackendError, FormatBackendError};
 use shift_font::{Contour, Font, Glyph, GlyphLayer, LayerId, MetricKind, PointType};
 use shift_store::ShiftStore;
 
@@ -665,7 +666,13 @@ fn reads_shift_document_without_exposing_generic_document_writes() {
     let error = loader
         .write_font(&original, path.to_str().unwrap())
         .unwrap_err();
-    assert!(error.to_string().contains("writing is not supported"));
+    assert!(matches!(
+        error,
+        BackendError::Save {
+            source: FormatBackendError::WriteUnsupported,
+            ..
+        }
+    ));
 
     let glyph = loaded.glyph_by_name("A").expect("A glyph should exist");
     let layer = main_layer(glyph);

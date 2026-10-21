@@ -50,7 +50,7 @@ pub mod projection;
 pub mod test_support;
 
 pub use changes::*;
-pub use error::{CoreError, CoreResult, EntityRef, Require};
+pub use error::{CoreError, CoreResult, EntityKind, EntityRef, Require};
 pub use intents::*;
 pub use interpolation::*;
 pub use ir::*;
