@@ -39,7 +39,7 @@ use shift_slug::{
   build_authored_atlas_page_profiled, build_authored_atlas_profiled,
   retained::compile_page as compile_retained_page,
 };
-use shift_wire::bridges::napi::convert_all;
+use shift_wire::bridges::napi::IntoEach;
 use shift_wire::bridges::napi::{
   NapiAddAnchorsIntent, NapiAddComponentIntent, NapiAddContourIntent, NapiAddPointsIntent,
   NapiBooleanOpIntent, NapiCloneGlyphLayerIntent, NapiCreateAxisIntent, NapiCreateGlyphIntent,
@@ -1582,7 +1582,7 @@ impl Bridge {
       });
     }
 
-    Ok(convert_all(snapshots))
+    Ok(snapshots.into_each())
   }
 
   /// Reads exact authored layers by stable layer identity.
@@ -1925,7 +1925,7 @@ impl Bridge {
   #[napi(ts_args_type = "glyphId: GlyphId")]
   pub fn read_font_source_glyph(&self, glyph_id: String) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let glyph_id = parse::<GlyphId>(&glyph_id)?;
-    Ok(convert_all(self.retained_source()?.glyph(&glyph_id)?))
+    Ok(self.retained_source()?.glyph(&glyph_id)?.into_each())
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
@@ -2143,7 +2143,7 @@ impl Bridge {
   ) -> errors::Result<Vec<NapiShapedRun>> {
     let request = ParsedParagraphRequest::try_from(request)?;
     let runs = self.live_shaper()?.shape_paragraph(&request.as_request())?;
-    Ok(convert_all(runs))
+    Ok(runs.into_each())
   }
 
   /// Returns the compiled shaping tables, for the editor to shape with

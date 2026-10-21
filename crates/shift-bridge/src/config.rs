@@ -3,7 +3,7 @@
 //! These functions hold no state and touch no files: main owns the file and
 //! passes its text in, so reads and writes stay atomic on the JavaScript side.
 
-use shift_wire::bridges::napi::convert_all;
+use shift_wire::bridges::napi::IntoEach;
 use std::collections::HashMap;
 
 use napi::{Error, Result, Status};
@@ -119,7 +119,7 @@ pub fn config_read(source: String) -> NapiConfigRead {
     valid,
     theme,
     theme_slots,
-    problems: convert_all(read.problems),
+    problems: read.problems.into_each(),
   }
 }
 
@@ -193,6 +193,6 @@ pub fn theme_read(source: String) -> NapiThemeRead {
       palette: theme.palette.into(),
       colors: theme.colors.into_iter().collect(),
     }),
-    problems: convert_all(read.problems),
+    problems: read.problems.into_each(),
   }
 }
