@@ -114,7 +114,9 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-          key: native-module-v2-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
+            packages/wasm/src/generated-reference
+            packages/wasm/src/generated-shaping
+          key: native-module-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -199,7 +201,9 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-          key: native-module-v2-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
+            packages/wasm/src/generated-reference
+            packages/wasm/src/generated-shaping
+          key: native-module-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
       - name: Build native module
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -212,6 +216,8 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
+            packages/wasm/src/generated-reference
+            packages/wasm/src/generated-shaping
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Run Playwright perf tests
