@@ -2,6 +2,7 @@
  * Pattern Matcher - Matches point patterns against rules
  */
 
+import { wrapIndex } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type {
   ConstrainDragGlyph,
@@ -59,8 +60,7 @@ function getPointAtOffset(
   if (index >= 0 && index < contour.points.length) return contour.points[index];
   if (!contour.closed || contour.points.length === 0) return undefined;
 
-  const wrapped = ((index % contour.points.length) + contour.points.length) % contour.points.length;
-  return contour.points[wrapped];
+  return contour.points[wrapIndex(index, contour.points.length)];
 }
 
 /**

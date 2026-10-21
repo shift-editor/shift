@@ -96,21 +96,6 @@ impl Default for FontLoader {
     }
 }
 
-fn format_from_extension(ext: &str) -> BackendResult<FontFormat> {
-    match ext.to_ascii_lowercase().as_str() {
-        "shift" => Ok(FontFormat::Shift),
-        "ufo" => Ok(FontFormat::Ufo),
-        "glyphs" => Ok(FontFormat::Glyphs),
-        "glyphspackage" => Ok(FontFormat::Glyphs),
-        "designspace" => Ok(FontFormat::Designspace),
-        "ttf" => Ok(FontFormat::Ttf),
-        "otf" => Ok(FontFormat::Otf),
-        _ => Err(BackendError::UnsupportedFormat {
-            extension: ext.to_string(),
-        }),
-    }
-}
-
 fn extension_from_path(path: &Path) -> BackendResult<&str> {
     path.extension()
         .ok_or_else(|| BackendError::MissingExtension {
@@ -133,7 +118,11 @@ fn resolve(path: &str) -> BackendResult<ResolvedPath<'_>> {
     let parsed = Path::new(path);
     let extension = extension_from_path(parsed)?;
     Ok(ResolvedPath {
-        format: format_from_extension(extension)?,
+        format: FontFormat::from_extension(extension).ok_or_else(|| {
+            BackendError::UnsupportedFormat {
+                extension: extension.to_string(),
+            }
+        })?,
         path,
         path_buf: parsed.to_path_buf(),
         extension,
@@ -159,17 +148,20 @@ impl FontLoader {
     }
 
     /// Opens a retained random-access source without constructing an authored Font.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnsupportedFormat`] for a `.shift` path or one without a font
+    /// extension, [`FontReadError::Io`] when the file cannot be read, and
+    /// [`FontReadError::MalformedSource`] when it cannot be parsed.
+    #[allow(
+        clippy::unused_self,
+        reason = "a loader method beside load; retained sources need no adaptor yet"
+    )]
     pub fn open_source(&self, path: &Path) -> Result<OpenedFont, FontReadError> {
-        let extension = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .ok_or_else(|| FontReadError::UnsupportedFormat {
-                path: path.to_path_buf(),
-            })?;
-        let format =
-            format_from_extension(extension).map_err(|_| FontReadError::UnsupportedFormat {
-                path: path.to_path_buf(),
-            })?;
+        let format = FontFormat::of_path(path).ok_or_else(|| FontReadError::UnsupportedFormat {
+            path: path.to_path_buf(),
+        })?;
 
         match format {
             FontFormat::Ttf | FontFormat::Otf => OpenTypeFont::open(path).map(OpenedFont::OpenType),
@@ -182,6 +174,13 @@ impl FontLoader {
         }
     }
 
+    /// Opens `path` as a bounded glyph stream for import.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::MissingExtension`] or [`BackendError::UnsupportedFormat`] when the
+    /// path does not name a supported format, [`BackendError::StreamingUnsupported`] when the
+    /// format cannot stream, and [`BackendError::Load`] when the source cannot be read.
     pub fn stream_font(&self, path: &str) -> BackendResult<FontImport> {
         let resolved = resolve(path)?;
         let adaptor = self
@@ -208,6 +207,13 @@ impl FontLoader {
         ))
     }
 
+    /// Reads the whole font at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::MissingExtension`] or [`BackendError::UnsupportedFormat`] when the
+    /// path does not name a supported format, and [`BackendError::Load`] when the source cannot be
+    /// read.
     pub fn read_font(&self, path: &str) -> BackendResult<Font> {
         let resolved = resolve(path)?;
         let adaptor = self
@@ -229,6 +235,12 @@ impl FontLoader {
             .map_err(|source| BackendError::load(resolved.format, resolved.path_buf, source))
     }
 
+    /// Writes `font` to `path` as a UFO or Designspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BackendError::UnsupportedWriteFormat`] for any other extension, and
+    /// [`BackendError::Save`] when the font cannot be written.
     pub fn write_font(&self, font: &Font, path: &str) -> BackendResult<()> {
         let resolved = resolve(path)?;
 
@@ -237,7 +249,7 @@ impl FontLoader {
             _ => {
                 return Err(BackendError::UnsupportedWriteFormat {
                     extension: resolved.extension.to_string(),
-                })
+                });
             }
         }
 
@@ -255,33 +267,25 @@ impl FontLoader {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use shift_font::test_support::fixtures;
 
-    use super::{format_from_extension, FontLoader};
+    use super::FontLoader;
+    use crate::ImportBatchLimit;
     use crate::font_source::OpenedFont;
     use crate::format::FontFormat;
-    use crate::ImportBatchLimit;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(name)
-    }
 
     #[test]
     fn retained_source_dispatch_preserves_import_capabilities() {
         let loader = FontLoader::new();
         let open_type = loader
-            .open_source(&fixture("mutatorsans/MutatorSans.ttf"))
+            .open_source(&fixtures::font("mutatorsans/MutatorSans.ttf"))
             .unwrap();
         let ufo = loader
-            .open_source(&fixture("mutatorsans/MutatorSansLightCondensed.ufo"))
+            .open_source(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo"))
             .unwrap();
-        let glyphs = loader.open_source(&fixture("Homenaje.glyphs")).unwrap();
+        let glyphs = loader
+            .open_source(&fixtures::font("Homenaje.glyphs"))
+            .unwrap();
 
         assert!(matches!(&open_type, OpenedFont::OpenType(_)));
         assert!(open_type.importer().is_none());
@@ -310,46 +314,52 @@ mod tests {
     #[test]
     fn supports_glyphs_extensions() {
         assert!(matches!(
-            format_from_extension("glyphs"),
-            Ok(FontFormat::Glyphs)
+            FontFormat::from_extension("glyphs"),
+            Some(FontFormat::Glyphs)
         ));
         assert!(matches!(
-            format_from_extension("glyphspackage"),
-            Ok(FontFormat::Glyphs)
+            FontFormat::from_extension("glyphspackage"),
+            Some(FontFormat::Glyphs)
         ));
     }
 
     #[test]
     fn supports_designspace_extension() {
         assert!(matches!(
-            format_from_extension("designspace"),
-            Ok(FontFormat::Designspace)
+            FontFormat::from_extension("designspace"),
+            Some(FontFormat::Designspace)
         ));
     }
 
     #[test]
     fn supports_shift_extension() {
         assert!(matches!(
-            format_from_extension("shift"),
-            Ok(FontFormat::Shift)
+            FontFormat::from_extension("shift"),
+            Some(FontFormat::Shift)
         ));
     }
 
     #[test]
     fn extension_matching_is_case_insensitive() {
-        assert!(matches!(format_from_extension("UFO"), Ok(FontFormat::Ufo)));
         assert!(matches!(
-            format_from_extension("SHIFT"),
-            Ok(FontFormat::Shift)
+            FontFormat::from_extension("UFO"),
+            Some(FontFormat::Ufo)
         ));
         assert!(matches!(
-            format_from_extension("GLYPHS"),
-            Ok(FontFormat::Glyphs)
+            FontFormat::from_extension("SHIFT"),
+            Some(FontFormat::Shift)
         ));
-        assert!(matches!(format_from_extension("OTF"), Ok(FontFormat::Otf)));
         assert!(matches!(
-            format_from_extension("DESIGNSPACE"),
-            Ok(FontFormat::Designspace)
+            FontFormat::from_extension("GLYPHS"),
+            Some(FontFormat::Glyphs)
+        ));
+        assert!(matches!(
+            FontFormat::from_extension("OTF"),
+            Some(FontFormat::Otf)
+        ));
+        assert!(matches!(
+            FontFormat::from_extension("DESIGNSPACE"),
+            Some(FontFormat::Designspace)
         ));
     }
 }

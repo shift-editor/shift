@@ -5,6 +5,7 @@ use shift_backends::shaper_font::{
 use shift_font::{ExternalLocation, GlyphId};
 use shift_wire::bridges::napi::NapiLocation;
 
+use crate::bridge::IntoDomain;
 use crate::errors::{BridgeError, BridgeResult};
 use crate::input::parse;
 
@@ -129,7 +130,7 @@ impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
       .into_iter()
       .map(shape_unit)
       .collect::<BridgeResult<_>>()?;
-    let location = ExternalLocation::from_untyped(crate::bridge::map_location(request.location)?);
+    let location = ExternalLocation::from_untyped(request.location.into_domain()?);
     let features = request
       .features
       .unwrap_or_default()
@@ -159,5 +160,65 @@ fn shape_unit(unit: NapiShapeUnit) -> BridgeResult<ShapeUnit> {
       kind: "shape unit",
       value: "needs exactly one of codepoint or glyphId".to_string(),
     }),
+  }
+}
+/// The compiled shaping tables and what the editor needs to shape with them
+/// itself: shaper glyph order and axis normalization.
+#[napi(object)]
+pub struct NapiShaperFont {
+  /// Changes exactly when the tables do.
+  pub revision: u32,
+  /// The shaper font: `GSUB`, `GPOS`, `GDEF`, `head`, and `fvar`, with no
+  /// outlines, `cmap`, or `hmtx`.
+  #[napi(ts_type = "Uint8Array")]
+  pub bytes: napi::bindgen_prelude::Buffer,
+  /// The Shift glyph at each shaper glyph id; null for a `.notdef` the font
+  /// does not have.
+  #[napi(ts_type = "Array<GlyphId | null>")]
+  pub glyph_ids: Vec<Option<String>>,
+  /// Each `fvar` axis, in order, with how its user coordinates normalize.
+  pub axes: Vec<NapiShaperAxis>,
+}
+
+/// How one axis's user coordinates normalize: linear between mapping
+/// points, clamped outside them.
+#[napi(object)]
+pub struct NapiShaperAxis {
+  #[napi(ts_type = "AxisId")]
+  pub axis_id: String,
+  /// User coordinate at each mapping point, increasing.
+  pub user: Vec<f64>,
+  /// Normalized coordinate at each mapping point.
+  pub normalized: Vec<f64>,
+}
+
+impl NapiShaperFont {
+  pub(crate) fn new(revision: u64, font: &shift_backends::shaper_font::ShaperFont) -> Self {
+    Self {
+      revision: u32::try_from(revision).unwrap_or(u32::MAX),
+      bytes: font.bytes().to_vec().into(),
+      glyph_ids: font
+        .glyph_ids()
+        .iter()
+        .map(|glyph_id| glyph_id.as_ref().map(ToString::to_string))
+        .collect(),
+      axes: font
+        .axis_normalizations()
+        .into_iter()
+        .map(|(axis_id, normalization)| NapiShaperAxis {
+          axis_id: axis_id.to_string(),
+          user: normalization
+            .points()
+            .iter()
+            .map(|&(user, _)| user)
+            .collect(),
+          normalized: normalization
+            .points()
+            .iter()
+            .map(|&(_, normalized)| normalized)
+            .collect(),
+        })
+        .collect(),
+    }
   }
 }

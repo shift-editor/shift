@@ -5,9 +5,9 @@ import type {
   FontIntent,
   FontSnapshot,
   GlyphId,
+  GlyphLayerSnapshot,
   GlyphPreview,
   GlyphProjection,
-  GlyphLayerSnapshot,
   GlyphSnapshot,
   LayerId,
   LayerMatch,
@@ -15,6 +15,7 @@ import type {
   Location,
   ParagraphRequest,
   ShapedRun,
+  ShaperFont,
   SlugAtlas,
   Specimen,
   WorkspaceDocumentState,
@@ -311,6 +312,14 @@ export type SyncCallMap = {
   "workspace.shapeParagraphs": {
     request: { paragraphs: ParagraphRequest[] };
     response: ShapedRun[][];
+  };
+  /**
+   * Compiles the font's feature code into a shaper font for the editor to
+   * shape with; null while the editor already has `knownRevision`.
+   */
+  "workspace.shaperFont": {
+    request: { knownRevision: number | null };
+    response: ShaperFont | null;
   };
 };
 

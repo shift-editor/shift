@@ -6,11 +6,11 @@
 
 use std::path::{Path, PathBuf};
 
+use write_fonts::FontBuilder;
 use write_fonts::from_obj::ToOwnedTable;
 use write_fonts::read::{FontRef, TableProvider};
 use write_fonts::tables::name::Name;
 use write_fonts::types::NameId;
-use write_fonts::FontBuilder;
 
 use crate::atomic::write_file_atomic;
 use crate::shift2fontir::{PropagatedGlyphAnchors, ShiftIrSource, ShiftIrSourceError};
@@ -26,7 +26,7 @@ impl ExportFormat {
     /// Returns the lowercase format token used by file extensions and commands.
     pub fn as_str(self) -> &'static str {
         match self {
-            ExportFormat::Ttf => "ttf",
+            Self::Ttf => "ttf",
         }
     }
 }
@@ -127,6 +127,10 @@ impl FontExporter {
     ///
     /// Returns [`ExportError`] when the source cannot be represented in the
     /// supported compiler model or compilation fails.
+    #[allow(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
         let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
         compile_ttf(source)
@@ -148,6 +152,10 @@ impl FontExporter {
     /// # Errors
     ///
     /// Returns [`ExportError`] when the font cannot be compiled.
+    #[allow(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
     pub fn propagated_anchors(
         &self,
         font: &impl FontView,
@@ -276,10 +284,12 @@ mod tests {
         assert!(!bytes.is_empty());
 
         let exported = FontRef::new(&bytes).unwrap();
-        assert!(exported
-            .charmap()
-            .mappings()
-            .any(|(codepoint, _)| codepoint == 0x0041));
+        assert!(
+            exported
+                .charmap()
+                .mappings()
+                .any(|(codepoint, _)| codepoint == 0x0041)
+        );
     }
 
     fn add_glyph_on_every_master(font: &mut Font, name: &str, unicode: u32, anchor: &str) {
@@ -412,10 +422,10 @@ mod tests {
         categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::RecordCategory>,
     ) -> shift_font::anchor_propagation::PropagatedAnchors {
         use shift_font::anchor_propagation::{
-            compiled_anchors, PropagationAnchor, PropagationComponent, PropagationGlyph,
+            PropagationAnchor, PropagationComponent, PropagationGlyph, compiled_anchors,
         };
         let glyph = font.glyph(glyph_id).unwrap();
-        let layer = glyph.layer_for_source(source_id.clone()).unwrap();
+        let layer = glyph.layer_for_source(source_id).unwrap();
         let own: Vec<_> = layer
             .anchors_iter()
             .filter_map(|anchor| {
@@ -444,11 +454,7 @@ mod tests {
             })
             .collect();
         let category = categories.get(glyph_id).copied().unwrap_or_default();
-        let attaching = glyph
-            .layers()
-            .values()
-            .flat_map(|layer| layer.anchors())
-            .any(|anchor| !anchor.name().is_some_and(|name| name.starts_with('_')));
+        let attaching = glyph.has_attaching_anchor();
         compiled_anchors(&PropagationGlyph {
             anchors: &own,
             components: &components,
@@ -463,7 +469,7 @@ mod tests {
 
     #[test]
     fn shift_font_propagation_matches_fontc_for_every_glyph_at_every_master() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../fixtures/fonts/AnchorPropagation.glyphs");
         let font = crate::font_loader::FontLoader::new()
             .read_font(path.to_str().unwrap())
@@ -556,10 +562,8 @@ mod tests {
             72.0,
         );
         optical.set_role(AxisRole::Internal);
-        let mut input = Location::new();
-        input.set(weight.id(), 400.0);
-        let mut output = Location::new();
-        output.set(optical.id(), 12.0);
+        let input = Location::from([(weight.id(), 400.0)]);
+        let output = Location::from([(optical.id(), 12.0)]);
         let mapping = AxisMapping::new(
             "Optical compensation".to_string(),
             vec![weight.id()],

@@ -126,9 +126,11 @@ mod tests {
         assert!(report.losses[0].message.contains("bracket layers"));
         assert_eq!(report.losses[1].kind, ImportLossKind::Approximated);
         assert!(report.losses[1].message.contains("smart-component"));
-        assert!(!report
-            .losses
-            .iter()
-            .any(|loss| loss.message.contains("intermediate")));
+        assert!(
+            !report
+                .losses
+                .iter()
+                .any(|loss| loss.message.contains("intermediate"))
+        );
     }
 }

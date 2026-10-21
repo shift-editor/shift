@@ -1,6 +1,7 @@
 use crate::length::OrOverflow;
+use crate::numeric::lossy_f32;
 use shift_font::Require;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::time::Instant;
 
 use shift_font::{
@@ -10,14 +11,14 @@ use shift_font::{
 
 use crate::variable::ROOT_COMPONENT;
 use crate::{
-    AuthoredAtlasProfile, Bounds, VariableAtlasBuilder, VariableComponent, VariableComponentPart,
-    VariableComponentSource,
+    AuthoredAtlasProfile, Bounds, GlyphIndex, VariableAtlasBuilder, VariableComponent,
+    VariableComponentPart, VariableComponentSource,
 };
 
 use super::{
-    add_default_projection_glyph, authored_advance, curves_from_resolved_contours, source_location,
     AuthoredDefaultGlyphs, AuthoredDefaultKey, AuthoredGlyph, AuthoredGlyphCompilation,
-    AuthoredSlugError, AuthoredSourceGlyph, ResolvedCurveTopology,
+    AuthoredSlugError, AuthoredSourceGlyph, CurveTopology, add_default_projection_glyph,
+    add_resolved_sources_glyph, authored_advance, curves_from_resolved_contours, source_location,
 };
 
 /// One deduplicated interpolation basis and its per-frame weight-buffer indexes.
@@ -28,6 +29,12 @@ pub struct AuthoredWeightSet {
 }
 
 impl AuthoredWeightSet {
+    /// Pairs an interpolation basis with the atlas weight slot of each of its sources.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthoredSlugError::WeightCountMismatch`] when `source_weight_indices` does not
+    /// have one entry per basis source.
     pub fn new(
         basis: InterpolationBasis,
         source_weight_indices: Vec<u32>,
@@ -56,6 +63,13 @@ impl AuthoredWeightSet {
 ///
 /// Rust owns topology, occurrence order, cycle pruning, and anchor matching. This adapter only
 /// turns those relationships and their canonical source samples into the resident GPU program.
+///
+/// # Errors
+///
+/// Returns [`AuthoredSlugError::Core`] when the glyph or a component cannot be projected,
+/// [`AuthoredSlugError::MissingWeightBasis`] when no weight set matches a glyph's basis, a topology
+/// or finiteness error when a source does not match its default, and [`AuthoredSlugError::Slug`]
+/// when the atlas outgrows its limits. The builder is rolled back on failure.
 pub fn add_authored_glyph_with_weight_sets(
     builder: &mut VariableAtlasBuilder,
     font: &Font,
@@ -133,11 +147,10 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
             projection,
             &source_id,
         )?;
-        let topology = ResolvedCurveTopology::from_contours(resolved.contours());
+        let topology = CurveTopology::from_contours(resolved.contours());
         let advance = authored_advance(resolved.x_advance(), 0)?;
-        let glyph_index = builder.add_curve_glyph_with_sources_and_lines(
-            topology.curves_from_contours(resolved.contours())?,
-            topology.line_flags(),
+        let glyph_index = builder.add_outline_glyph(
+            topology.outline_from_contours(resolved.contours())?,
             compilation.constant_weight_index,
             [],
         )?;
@@ -162,15 +175,21 @@ pub(super) fn add_default_component_projection_glyph(
     compilation: &mut AuthoredGlyphCompilation<'_, '_>,
     projection: &GlyphProjection,
     resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
-) -> Result<u32, AuthoredSlugError> {
+) -> Result<GlyphIndex, AuthoredSlugError> {
     let component_started = Instant::now();
-    let mut direct_glyphs = HashMap::<GlyphId, u32>::new();
+    if let Some(glyph_index) =
+        add_decomposed_component_glyph(builder, compilation, projection, resolved_sources)?
+    {
+        compilation.profile.component_preparation += component_started.elapsed();
+        return Ok(glyph_index);
+    }
+    let mut direct_glyphs = HashMap::<GlyphId, GlyphIndex>::new();
     for glyph_id in std::iter::once(projection.glyph_id()).chain(
         projection
             .components()
             .components()
             .iter()
-            .map(|component| component.base_glyph_id()),
+            .map(shift_font::composite::ComponentGlyph::base_glyph_id),
     ) {
         if direct_glyphs.contains_key(&glyph_id) {
             continue;
@@ -210,8 +229,8 @@ pub(super) fn add_default_component_projection_glyph(
         append_component_sources(
             &mut component_sources,
             parent_projection,
-            occurrence.component_id(),
-            occurrence.base_glyph_id(),
+            &occurrence.component_id(),
+            &occurrence.base_glyph_id(),
             &source_context,
         )?;
         let source_count = u32::try_from(component_sources.len())
@@ -268,6 +287,133 @@ pub(super) fn add_default_component_projection_glyph(
         .map_err(Into::into)
 }
 
+/// Adds a glyph that compiled fonts interpolate decomposed, keeping one part
+/// per component occurrence.
+///
+/// Each part's curves are that occurrence's outline as each decomposition
+/// master places it, weighted by the decomposition basis, and every occurrence
+/// keeps an identity transform. Returns `None` for any other glyph.
+fn add_decomposed_component_glyph(
+    builder: &mut VariableAtlasBuilder,
+    compilation: &mut AuthoredGlyphCompilation<'_, '_>,
+    projection: &GlyphProjection,
+    resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
+) -> Result<Option<GlyphIndex>, AuthoredSlugError> {
+    let glyph_id = projection.glyph_id();
+    if projection.decomposition().is_none() {
+        return Ok(None);
+    }
+    let Some(decomposition) = compilation.font.decomposition(&glyph_id)? else {
+        return Ok(None);
+    };
+    let outlines = decomposition.outlines();
+    let occurrences = projection.components().components();
+    let part_count = occurrences.len().checked_add(1).or_overflow()?;
+    if outlines.iter().any(|parts| parts.len() != part_count) {
+        return Ok(None);
+    }
+    let weight_indices = compilation
+        .weight_sets
+        .iter()
+        .find(|set| set.basis() == decomposition.basis())
+        .map(AuthoredWeightSet::source_weight_indices)
+        .ok_or_else(|| AuthoredSlugError::MissingWeightBasis(glyph_id.clone()))?;
+    if weight_indices.len() != outlines.len() {
+        return Err(AuthoredSlugError::WeightCountMismatch {
+            expected: outlines.len(),
+            actual: weight_indices.len(),
+        });
+    }
+
+    let mut parts = Vec::with_capacity(part_count);
+    let mut output_curve_start = 0_u32;
+    let mut root_glyph_index = None;
+    for part_index in 0..part_count {
+        let part_sources = outlines
+            .iter()
+            .zip(weight_indices)
+            .map(|(parts, weight_index)| (*weight_index, parts[part_index].as_slice()))
+            .collect::<Vec<_>>();
+        let glyph_index = add_resolved_sources_glyph(builder, &part_sources)?;
+        if part_index == 0 {
+            builder.set_glyph_source_advances(
+                glyph_index,
+                decomposition_advances(compilation.font, &glyph_id, decomposition.basis())?,
+            )?;
+            root_glyph_index = Some(glyph_index);
+        }
+        let component_index = match part_index {
+            0 => ROOT_COMPONENT,
+            _ => u32::try_from(part_index - 1).or_overflow()?,
+        };
+        append_part(
+            builder,
+            &mut parts,
+            glyph_index,
+            component_index,
+            &mut output_curve_start,
+        )?;
+    }
+
+    // Parts are already placed, so every occurrence gets an identity
+    // transform: one identity sample per source, whose weights sum to one.
+    let source_count = u32::try_from(weight_indices.len()).or_overflow()?;
+    let mut component_sources = Vec::new();
+    let mut components = Vec::with_capacity(occurrences.len());
+    for _ in occurrences {
+        components.push(VariableComponent {
+            parent_component: ROOT_COMPONENT,
+            source_start: u32::try_from(component_sources.len()).or_overflow()?,
+            source_count,
+        });
+        component_sources.extend(weight_indices.iter().map(|weight_index| {
+            VariableComponentSource {
+                weight_index: *weight_index,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                ..VariableComponentSource::default()
+            }
+        }));
+    }
+
+    let bounds = fallback_bounds(
+        compilation.font,
+        compilation.projection_set,
+        projection,
+        resolved_sources,
+    )?;
+    let root_glyph_index = root_glyph_index.expect("a decomposed glyph has a root part");
+    let glyph_index = builder.add_component_glyph(
+        bounds,
+        root_glyph_index,
+        parts,
+        components,
+        component_sources,
+    )?;
+    Ok(Some(glyph_index))
+}
+
+/// The glyph's advance at each master of `basis`, in its source order.
+fn decomposition_advances(
+    font: &Font,
+    glyph_id: &GlyphId,
+    basis: &InterpolationBasis,
+) -> Result<Vec<f32>, AuthoredSlugError> {
+    basis
+        .source_ids()
+        .iter()
+        .enumerate()
+        .map(|(source_index, source_id)| {
+            let location = font.require_source(source_id)?.location();
+            let glyph = font
+                .projection(location)
+                .glyph(glyph_id)?
+                .require(glyph_id)?;
+            authored_advance(glyph.x_advance(), source_index)
+        })
+        .collect()
+}
+
 fn projection_for<'a>(
     projection_set: &'a GlyphProjectionSet,
     glyph_id: &GlyphId,
@@ -310,21 +456,24 @@ impl AuthoredComponentSourceContext<'_> {
             )]);
         };
         let weight_indices = projection_weight_indices(projection, self.weight_sets)?;
-        let mut layers = Vec::with_capacity(interpolation.sources().len());
-        for (source, weight_index) in interpolation.sources().iter().zip(weight_indices) {
-            let mut layer = interpolation.reference_layer().clone();
-            layer.apply_interpolation_values(source.values())?;
-            layers.push((*weight_index, layer));
-        }
-        Ok(layers)
+        interpolation
+            .sources()
+            .iter()
+            .zip(weight_indices)
+            .map(|(source, weight_index)| {
+                let mut layer = interpolation.reference_layer().clone();
+                layer.apply_interpolation_values(source.values())?;
+                Ok((*weight_index, layer))
+            })
+            .collect()
     }
 }
 
 fn append_component_sources(
     output: &mut Vec<VariableComponentSource>,
     parent_projection: &GlyphProjection,
-    component_id: ComponentId,
-    base_glyph_id: GlyphId,
+    component_id: &ComponentId,
+    base_glyph_id: &GlyphId,
     context: &AuthoredComponentSourceContext<'_>,
 ) -> Result<(), AuthoredSlugError> {
     for (source_index, (weight_index, layer)) in context
@@ -333,9 +482,8 @@ fn append_component_sources(
         .enumerate()
     {
         let component = layer
-            .components_iter()
-            .find(|component| component.id() == component_id)
-            .filter(|component| component.base_glyph_id() == base_glyph_id)
+            .component(component_id)
+            .filter(|component| component.base_glyph_id() == *base_glyph_id)
             .ok_or_else(|| shift_font::CoreError::InvalidComponentId(component_id.to_string()))?;
         let transform = component.transform();
         let values = [
@@ -351,7 +499,7 @@ fn append_component_sources(
         ];
         if values
             .iter()
-            .any(|value| !value.is_finite() || !(*value as f32).is_finite())
+            .any(|value| !value.is_finite() || !lossy_f32(*value).is_finite())
         {
             return Err(AuthoredSlugError::NonFiniteComponentValue {
                 component_index: context.component_index,
@@ -361,15 +509,15 @@ fn append_component_sources(
         }
         output.push(VariableComponentSource {
             weight_index,
-            translate_x: values[0] as f32,
-            translate_y: values[1] as f32,
-            rotation: values[2] as f32,
-            scale_x: values[3] as f32,
-            scale_y: values[4] as f32,
-            skew_x: values[5] as f32,
-            skew_y: values[6] as f32,
-            center_x: values[7] as f32,
-            center_y: values[8] as f32,
+            translate_x: lossy_f32(values[0]),
+            translate_y: lossy_f32(values[1]),
+            rotation: lossy_f32(values[2]),
+            scale_x: lossy_f32(values[3]),
+            scale_y: lossy_f32(values[4]),
+            skew_x: lossy_f32(values[5]),
+            skew_y: lossy_f32(values[6]),
+            center_x: lossy_f32(values[7]),
+            center_y: lossy_f32(values[8]),
         });
     }
     Ok(())
@@ -388,7 +536,7 @@ fn component_index_for_path(
 fn append_part(
     builder: &VariableAtlasBuilder,
     parts: &mut Vec<VariableComponentPart>,
-    glyph_index: u32,
+    glyph_index: GlyphIndex,
     component_index: u32,
     output_curve_start: &mut u32,
 ) -> Result<(), AuthoredSlugError> {
@@ -419,19 +567,7 @@ fn fallback_bounds(
         &projection.fallback().source_id(),
     )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
-    let mut curves = curves.into_iter();
-    let Some(first) = curves.next() else {
-        return Ok(Bounds::default());
-    };
-    let mut bounds = first.bounds();
-    for curve in curves {
-        let curve_bounds = curve.bounds();
-        bounds.min_x = bounds.min_x.min(curve_bounds.min_x);
-        bounds.min_y = bounds.min_y.min(curve_bounds.min_y);
-        bounds.max_x = bounds.max_x.max(curve_bounds.max_x);
-        bounds.max_y = bounds.max_y.max(curve_bounds.max_y);
-    }
-    Ok(bounds)
+    Ok(Bounds::of_curves(&curves))
 }
 
 fn exact_source_ids(

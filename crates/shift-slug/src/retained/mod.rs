@@ -1,5 +1,9 @@
 use crate::length::OrOverflow;
-use crate::{Curve, Point, SlugError, SlugPreviewExtents, VariableAtlas, VariableAtlasBuilder};
+use crate::numeric::lossy_f32;
+use crate::{
+    Curve, CurveShape, GlyphIndex, Point, QuadraticOutline, SlugError, SlugPreviewExtents,
+    VariableAtlas, VariableAtlasBuilder,
+};
 
 mod weights;
 
@@ -76,8 +80,8 @@ pub struct RetainedAtlasPage {
 impl RetainedAtlasPage {
     pub fn from_parts(
         atlas: VariableAtlas,
-        glyphs: Vec<(u32, u32)>,
-        exact_glyphs: Vec<(u32, u32, u32)>,
+        glyphs: Vec<(u32, GlyphIndex)>,
+        exact_glyphs: Vec<(u32, u32, GlyphIndex)>,
         axes: Vec<AtlasAxis>,
         regions: Vec<AtlasRegion>,
         complements: Vec<Box<[u32]>>,
@@ -98,18 +102,30 @@ impl RetainedAtlasPage {
         &self.atlas
     }
 
-    pub fn glyphs(&self) -> &[(u32, u32)] {
+    pub fn glyphs(&self) -> &[(u32, GlyphIndex)] {
         self.descriptor.glyphs()
     }
 
-    pub fn exact_glyphs(&self) -> &[(u32, u32, u32)] {
+    pub fn exact_glyphs(&self) -> &[(u32, u32, GlyphIndex)] {
         self.descriptor.exact_glyphs()
     }
 
+    /// Returns every weight slot's value at a user-space `location`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedLocationAxisCountMismatch`] when `location` does not have one
+    /// value per axis, and [`SlugError::NonFiniteRetainedCoordinate`] when a value is not finite.
     pub fn weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         self.descriptor.weights(location)
     }
 
+    /// Returns the page's shared preview overflow across every glyph and variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when a page glyph is missing from the atlas, and
+    /// [`SlugError::LengthOverflow`] when its source range is out of bounds.
     pub fn preview_extents(&self) -> Result<SlugPreviewExtents, SlugError> {
         self.descriptor.preview_extents(&self.atlas)
     }
@@ -121,22 +137,28 @@ impl RetainedAtlasPage {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RetainedAtlasDescriptor {
-    glyphs: Box<[(u32, u32)]>,
-    exact_glyphs: Box<[(u32, u32, u32)]>,
+    glyphs: Box<[(u32, GlyphIndex)]>,
+    exact_glyphs: Box<[(u32, u32, GlyphIndex)]>,
     axes: Box<[AtlasAxis]>,
     regions: Box<[AtlasRegion]>,
     complements: Box<[Box<[u32]>]>,
 }
 
 impl RetainedAtlasDescriptor {
-    pub fn glyphs(&self) -> &[(u32, u32)] {
+    pub fn glyphs(&self) -> &[(u32, GlyphIndex)] {
         &self.glyphs
     }
 
-    pub fn exact_glyphs(&self) -> &[(u32, u32, u32)] {
+    pub fn exact_glyphs(&self) -> &[(u32, u32, GlyphIndex)] {
         &self.exact_glyphs
     }
 
+    /// Returns the shared preview overflow of this page's glyphs in `atlas`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when a page glyph is missing from `atlas`, and
+    /// [`SlugError::LengthOverflow`] when its source range is out of bounds.
     pub fn preview_extents(&self, atlas: &VariableAtlas) -> Result<SlugPreviewExtents, SlugError> {
         let glyphs = self
             .glyphs
@@ -147,10 +169,22 @@ impl RetainedAtlasDescriptor {
         atlas.preview_extents(&glyphs)
     }
 
+    /// Returns every weight slot's value at a user-space `location`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedLocationAxisCountMismatch`] when `location` does not have one
+    /// value per axis, and [`SlugError::NonFiniteRetainedCoordinate`] when a value is not finite.
     pub fn weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         weights::weights(&self.axes, &self.regions, &self.complements, location)
     }
 
+    /// Returns every weight slot's value at a design-space `location`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::RetainedLocationAxisCountMismatch`] when `location` does not have one
+    /// value per axis, and [`SlugError::NonFiniteRetainedCoordinate`] when a value is not finite.
     pub fn design_weights(&self, location: &[f64]) -> Result<Vec<f32>, SlugError> {
         weights::design_weights(&self.axes, &self.regions, &self.complements, location)
     }
@@ -158,14 +192,20 @@ impl RetainedAtlasDescriptor {
 
 pub struct PageCompiler {
     builder: VariableAtlasBuilder,
-    glyphs: Vec<(u32, u32)>,
-    exact_glyphs: Vec<(u32, u32, u32)>,
+    glyphs: Vec<(u32, GlyphIndex)>,
+    exact_glyphs: Vec<(u32, u32, GlyphIndex)>,
     axes: Vec<AtlasAxis>,
     regions: Vec<AtlasRegion>,
     complements: ComplementRegistry,
 }
 
 impl PageCompiler {
+    /// Starts a page compiler for `axes` and `regions`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::InvalidBandCount`] when `band_count` is out of range, and
+    /// [`SlugError::LengthOverflow`] when the region count overflows `u32`.
     pub fn new(
         band_count: u32,
         axes: Vec<AtlasAxis>,
@@ -181,14 +221,20 @@ impl PageCompiler {
         })
     }
 
+    /// Adds a root glyph's default outline and weighted source curves; returns its atlas index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::VariableTopologyMismatch`] when the source curves do not match the
+    /// default, [`SlugError::NonFiniteVariableAdvance`] when an advance is not finite, and
+    /// [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_glyph(
         &mut self,
         root: u32,
-        base_curves: Vec<Curve>,
-        line_flags: Vec<bool>,
+        base: QuadraticOutline,
         base_advance: f32,
         sources: Vec<(u32, Vec<Curve>, f32)>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let source_weights = sources
             .iter()
             .map(|(weight, _, _)| *weight)
@@ -202,12 +248,9 @@ impl PageCompiler {
             .into_iter()
             .map(|(weight, curves, _)| (weight, curves))
             .collect::<Vec<_>>();
-        let atlas_glyph = self.builder.add_curve_glyph_with_sources_and_lines(
-            base_curves,
-            line_flags,
-            base_weight,
-            source_curves,
-        )?;
+        let atlas_glyph = self
+            .builder
+            .add_outline_glyph(base, base_weight, source_curves)?;
         self.builder.set_glyph_source_advances(
             atlas_glyph,
             std::iter::once(base_advance).chain(source_advances),
@@ -216,20 +259,22 @@ impl PageCompiler {
         Ok(atlas_glyph)
     }
 
+    /// Adds a root glyph's exact-source variant; returns its atlas index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::NonFiniteVariableAdvance`] when `advance` is not finite, and
+    /// [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
     pub fn add_exact_variant(
         &mut self,
         root: u32,
         source_index: u32,
-        curves: Vec<Curve>,
-        line_flags: Vec<bool>,
+        outline: QuadraticOutline,
         advance: f32,
-    ) -> Result<u32, SlugError> {
-        let atlas_glyph = self.builder.add_curve_glyph_with_sources_and_lines(
-            curves,
-            line_flags,
-            0,
-            std::iter::empty(),
-        )?;
+    ) -> Result<GlyphIndex, SlugError> {
+        let atlas_glyph = self
+            .builder
+            .add_outline_glyph(outline, 0, std::iter::empty())?;
         self.builder
             .set_glyph_source_advances(atlas_glyph, std::iter::once(advance))?;
         self.exact_glyphs.push((root, source_index, atlas_glyph));
@@ -248,6 +293,14 @@ impl PageCompiler {
     }
 }
 
+/// Compiles a retained page's glyphs and their variants into one atlas page.
+///
+/// # Errors
+///
+/// Returns [`SlugError::RetainedShapeValueCountMismatch`] when a sample does not fit its glyph's
+/// shape, [`SlugError::VariableTopologyMismatch`] when samples disagree in structure,
+/// [`SlugError::InvalidBandCount`] when `band_count` is out of range, and
+/// [`SlugError::LengthOverflow`] when the atlas outgrows `u32` indices.
 pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasPage, SlugError> {
     let mut compiler = PageCompiler::new(band_count, input.axes.clone(), input.regions.clone())?;
 
@@ -271,7 +324,7 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
             .zip(&samples)
             .map(|((weight, curves), (_, outline))| (weight, curves, outline.advance))
             .collect();
-        compiler.add_glyph(*root, curves.base, curves.line_flags, base.advance, sources)?;
+        compiler.add_glyph(*root, curves.base, base.advance, sources)?;
 
         for exact in &glyph.exact_variants {
             let outline = outline(
@@ -280,12 +333,10 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
                 &exact.shape,
                 &exact.values,
             )?;
-            let (curves, line_flags) = outline_curves(&outline)?;
             compiler.add_exact_variant(
                 *root,
                 exact.source_index,
-                curves,
-                line_flags,
+                exact_outline(&outline),
                 outline.advance,
             )?;
         }
@@ -314,8 +365,7 @@ struct ProjectedOutline {
 }
 
 struct CompatibleCurves {
-    base: Vec<Curve>,
-    line_flags: Vec<bool>,
+    base: QuadraticOutline,
     sources: Vec<(u32, Vec<Curve>)>,
 }
 
@@ -332,7 +382,7 @@ fn outline(
             actual: values.len(),
         });
     }
-    let advance = values[0] as f32;
+    let advance = lossy_f32(values[0]);
     if !values[0].is_finite() || !advance.is_finite() {
         return Err(SlugError::NonFiniteVariableAdvance {
             glyph_index,
@@ -351,8 +401,8 @@ fn outline(
             cursor += 2;
             if !point.x.is_finite()
                 || !point.y.is_finite()
-                || !(point.x as f32).is_finite()
-                || !(point.y as f32).is_finite()
+                || !lossy_f32(point.x).is_finite()
+                || !lossy_f32(point.y).is_finite()
             {
                 return Err(SlugError::NonFiniteCoordinate {
                     command_index: segment_index,
@@ -401,66 +451,59 @@ fn compatible_curves(
                 .unwrap_or(1)
         })
         .collect::<Vec<_>>();
-    let (base_curves, line_flags) = segments_to_curves(&base.segments, &subdivisions);
+    let base_outline = segments_to_outline(&base.segments, &subdivisions);
     let source_curves = sources
         .iter()
         .map(|(weight, source)| {
             (
                 *weight,
-                segments_to_curves(&source.segments, &subdivisions).0,
+                segments_to_outline(&source.segments, &subdivisions).into_curves(),
             )
         })
         .collect();
     Ok(CompatibleCurves {
-        base: base_curves,
-        line_flags,
+        base: base_outline,
         sources: source_curves,
     })
 }
 
-fn outline_curves(outline: &ProjectedOutline) -> Result<(Vec<Curve>, Vec<bool>), SlugError> {
+fn exact_outline(outline: &ProjectedOutline) -> QuadraticOutline {
     let subdivisions = outline
         .segments
         .iter()
         .map(cubic_subdivision_count)
         .collect::<Vec<_>>();
-    Ok(segments_to_curves(&outline.segments, &subdivisions))
+    segments_to_outline(&outline.segments, &subdivisions)
 }
 
-fn segments_to_curves(
-    segments: &[ProjectedSegment],
-    subdivisions: &[usize],
-) -> (Vec<Curve>, Vec<bool>) {
-    let mut curves = Vec::new();
-    let mut line_flags = Vec::new();
+fn segments_to_outline(segments: &[ProjectedSegment], subdivisions: &[usize]) -> QuadraticOutline {
+    let mut outline = QuadraticOutline::default();
     for (segment, subdivision_count) in segments.iter().zip(subdivisions) {
         match segment {
-            ProjectedSegment::Line(points) => {
-                curves.push(Curve::from_line(point(points[0]), point(points[1])));
-                line_flags.push(true);
-            }
-            ProjectedSegment::Quadratic(points) => {
-                curves.push(Curve {
+            ProjectedSegment::Line(points) => outline.push(
+                Curve::from_line(point(points[0]), point(points[1])),
+                CurveShape::Line,
+            ),
+            ProjectedSegment::Quadratic(points) => outline.push(
+                Curve {
                     p0: point(points[0]),
                     p1: point(points[1]),
                     p2: point(points[2]),
-                });
-                line_flags.push(false);
-            }
+                },
+                CurveShape::Quadratic,
+            ),
             ProjectedSegment::Cubic(points) => {
-                let approximated = Curve::from_cubic_with_subdivisions(
+                outline.extend_quadratics(Curve::from_cubic_with_subdivisions(
                     point(points[0]),
                     point(points[1]),
                     point(points[2]),
                     point(points[3]),
                     *subdivision_count,
-                );
-                line_flags.extend(std::iter::repeat_n(false, approximated.len()));
-                curves.extend(approximated);
+                ));
             }
         }
     }
-    (curves, line_flags)
+    outline
 }
 
 fn same_segment_kind(left: &ProjectedSegment, right: &ProjectedSegment) -> bool {
@@ -484,12 +527,19 @@ fn cubic_subdivision_count(segment: &ProjectedSegment) -> usize {
 }
 
 fn point(value: ProjectedPoint) -> Point {
-    Point::new(value.x as f32, value.y as f32)
+    Point::new(lossy_f32(value.x), lossy_f32(value.y))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn line_outline(end: Point) -> QuadraticOutline {
+        QuadraticOutline::from_iter([(
+            Curve::from_line(Point::new(0.0, 0.0), end),
+            CurveShape::Line,
+        )])
+    }
 
     #[test]
     fn page_weights_keep_glyph_region_complements_independent() {
@@ -577,20 +627,13 @@ mod tests {
         };
 
         let page = compile_page(&input, crate::DEFAULT_BAND_COUNT).unwrap();
-        let mut compiler = PageCompiler::new(
-            crate::DEFAULT_BAND_COUNT,
-            input.axes.clone(),
-            input.regions.clone(),
-        )
-        .unwrap();
+        let mut compiler =
+            PageCompiler::new(crate::DEFAULT_BAND_COUNT, input.axes.clone(), input.regions)
+                .unwrap();
         compiler
             .add_glyph(
                 7,
-                vec![Curve::from_line(
-                    Point::new(0.0, 0.0),
-                    Point::new(100.0, 0.0),
-                )],
-                vec![true],
+                line_outline(Point::new(100.0, 0.0)),
                 500.0,
                 vec![(
                     1,
@@ -603,16 +646,7 @@ mod tests {
             )
             .unwrap();
         compiler
-            .add_exact_variant(
-                7,
-                2,
-                vec![Curve::from_line(
-                    Point::new(0.0, 0.0),
-                    Point::new(300.0, 0.0),
-                )],
-                vec![true],
-                700.0,
-            )
+            .add_exact_variant(7, 2, line_outline(Point::new(300.0, 0.0)), 700.0)
             .unwrap();
         let streamed_page = compiler.finish();
 

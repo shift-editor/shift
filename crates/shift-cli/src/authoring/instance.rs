@@ -1,9 +1,8 @@
 //! Product presets use complete external locations and never create master sources.
 
 use miette::{Result, bail, miette};
-use shift_font::{
-    AxisKind, AxisRole, ExternalLocation, Font, FontIntent, FontIntentSet, NamedInstance,
-};
+use shift_font::{AxisRole, ExternalLocation, Font, FontIntent, FontIntentSet, NamedInstance};
+use shift_font::{CreateNamedInstance, DeleteNamedInstance, UpdateNamedInstance};
 
 use crate::cli::{AddInstanceArgs, RemoveInstanceArgs, SetInstanceArgs};
 
@@ -32,7 +31,7 @@ const STANDARD_WEIGHTS: [(f64, &str); 9] = [
 ///
 /// Returns an error for invalid location syntax, missing external `wght` for
 /// presets, invalid product authoring, or document/persistence failure.
-pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = if args.standard_weights {
         standard_weights(&font)?
@@ -44,11 +43,14 @@ pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
         for (axis_id, value) in parse_location(&font, &args.location)? {
             location.set(axis_id, value);
         }
-        vec![FontIntent::CreateNamedInstance {
-            instance: NamedInstance::new(name, location, args.postscript_name),
-        }]
+        vec![
+            CreateNamedInstance {
+                instance: NamedInstance::new(name, location, args.postscript_name),
+            }
+            .into(),
+        ]
     };
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Edits supplied product fields while preserving identity, order, and omissions.
@@ -60,7 +62,7 @@ pub fn add_instance(args: AddInstanceArgs) -> Result<AuthoringReport> {
 ///
 /// Returns an error for an unknown/ambiguous selector, empty edit, invalid
 /// location or product authoring, or document/persistence failure.
-pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let current = resolve_instance(&font, &args.instance)?;
     if args.name.is_none()
@@ -85,9 +87,7 @@ pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
-            intents: vec![FontIntent::UpdateNamedInstance { instance }],
-        },
+        &FontIntentSet::from(UpdateNamedInstance { instance }),
     )
 }
 
@@ -96,30 +96,24 @@ pub fn set_instance(args: SetInstanceArgs) -> Result<AuthoringReport> {
 /// # Errors
 ///
 /// Returns an error for an unknown/ambiguous selector or document/persistence failure.
-pub fn remove_instance(args: RemoveInstanceArgs) -> Result<AuthoringReport> {
+pub(crate) fn remove_instance(args: &RemoveInstanceArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let instance = resolve_instance(&font, &args.instance)?;
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
-            intents: vec![FontIntent::DeleteNamedInstance {
-                instance_id: instance.id(),
-            }],
-        },
+        &FontIntentSet::from(DeleteNamedInstance {
+            instance_id: instance.id(),
+        }),
     )
 }
 
 fn default_location(font: &Font) -> ExternalLocation {
-    let mut location = ExternalLocation::new();
-    for axis in font
+    let external = font
         .axes()
         .iter()
-        .filter(|axis| axis.role() == AxisRole::External)
-    {
-        location.set(axis.id(), axis.default());
-    }
-    location
+        .filter(|axis| axis.role() == AxisRole::External);
+    ExternalLocation::at_defaults(external)
 }
 
 fn resolve_instance<'a>(font: &'a Font, selector: &str) -> Result<&'a NamedInstance> {
@@ -151,13 +145,7 @@ fn standard_weights(font: &Font) -> Result<Vec<FontIntent>> {
         .ok_or_else(|| miette!("--standard-weights requires an external wght axis"))?;
     let mut intents = Vec::new();
     for (value, name) in STANDARD_WEIGHTS {
-        let in_range = match axis.kind() {
-            AxisKind::Continuous {
-                minimum, maximum, ..
-            } => value >= *minimum && value <= *maximum,
-            AxisKind::Discrete { values, .. } => values.contains(&value),
-        };
-        if !in_range {
+        if !axis.accepts(value) {
             continue;
         }
         let mut location = default_location(font);
@@ -169,9 +157,12 @@ fn standard_weights(font: &Font) -> Result<Vec<FontIntent>> {
         {
             continue;
         }
-        intents.push(FontIntent::CreateNamedInstance {
-            instance: NamedInstance::new(name.to_string(), location, None),
-        });
+        intents.push(
+            CreateNamedInstance {
+                instance: NamedInstance::new(name.to_string(), location, None),
+            }
+            .into(),
+        );
     }
     Ok(intents)
 }

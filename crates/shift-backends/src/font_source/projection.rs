@@ -1,10 +1,10 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::{RoundingBehaviour, VariationModel};
-use shift_font::{AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource, SourceRole};
+use shift_font::{AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource};
 
 use super::geometry::SourceGeometry;
 use super::interpolation::InterpolationAxis;
@@ -48,7 +48,7 @@ impl FontDirectory {
             .into_iter()
             .enumerate()
             .map(|(index, (name, unicodes))| DirectoryGlyph {
-                index: GlyphIndex::new(index as u32),
+                index: GlyphIndex::at(index),
                 name,
                 unicodes,
             })
@@ -58,7 +58,7 @@ impl FontDirectory {
             .iter()
             .enumerate()
             .map(|(index, axis)| VariationAxis {
-                index: AxisIndex::new(index as u32),
+                index: AxisIndex::at(index),
                 tag: axis.tag().to_string(),
                 name: axis.name().to_string(),
                 hidden: axis.is_hidden(),
@@ -79,7 +79,7 @@ impl FontDirectory {
                 },
             })
             .collect::<Vec<_>>();
-        let mut directory = FontDirectory::new(
+        let mut directory = Self::new(
             format,
             font.metadata().family_name.clone(),
             font.metadata().style_name.clone(),
@@ -87,11 +87,7 @@ impl FontDirectory {
             glyphs,
             axes,
         )?;
-        let font_sources = font
-            .sources()
-            .iter()
-            .filter(|source| source.role() == SourceRole::Master)
-            .collect::<Vec<_>>();
+        let font_sources = font.masters().collect::<Vec<_>>();
         let default_source_id = font.default_source_id();
         let default_source = font_sources
             .iter()
@@ -102,19 +98,19 @@ impl FontDirectory {
                 .iter()
                 .enumerate()
                 .map(|(index, source)| DirectorySource {
-                    index: SourceIndex::new(index as u32),
+                    index: SourceIndex::at(index),
                     name: source.name().to_string(),
                     location: font
                         .axes()
                         .iter()
-                        .map(|axis| source.location().get(&axis.id()).unwrap_or(axis.default()))
+                        .map(|axis| source.location().value_on(axis))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                     filename: source.filename().map(str::to_string),
                     metrics: directory_metrics(font, source),
                 })
                 .collect(),
-            SourceIndex::new(default_source as u32),
+            SourceIndex::at(default_source),
         )?;
         directory.set_mappings(directory_mappings(font)?);
         directory.set_instances(
@@ -125,12 +121,7 @@ impl FontDirectory {
                     location: font
                         .axes()
                         .iter()
-                        .map(|axis| {
-                            instance
-                                .location()
-                                .get(&axis.id())
-                                .unwrap_or(axis.default())
-                        })
+                        .map(|axis| instance.location().value_on(axis))
                         .collect::<Vec<_>>()
                         .into_boxed_slice(),
                     postscript_name: instance.postscript_name().map(str::to_string),
@@ -151,7 +142,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
         .axes()
         .iter()
         .enumerate()
-        .map(|(index, axis)| (axis.id(), AxisIndex::new(index as u32)))
+        .map(|(index, axis)| (axis.id(), AxisIndex::at(index)))
         .collect::<HashMap<_, _>>();
     let axis_index = |axis_id: &AxisId| {
         axis_indices
@@ -161,7 +152,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
     };
     let coordinate = |location: &Location, axis_id: &AxisId| {
         font.axis(axis_id)
-            .map(|axis| location.get(axis_id).unwrap_or(axis.default()))
+            .map(|axis| location.value_on(axis))
             .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
     };
 
@@ -184,8 +175,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
                             point
                                 .output
                                 .get(axis_id)
-                                .map(Ok)
-                                .unwrap_or_else(|| coordinate(&point.input, axis_id))
+                                .map_or_else(|| coordinate(&point.input, axis_id), Ok)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     Ok(DirectoryMappingPoint {
@@ -219,9 +209,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
 
 fn directory_metrics(font: &Font, source: &FontSource) -> FontMetrics {
     let metric = |kind| {
-        font.metric_definitions()
-            .iter()
-            .find(|definition| definition.kind() == kind)
+        font.metric_definition_for_kind(kind)
             .and_then(|definition| source.metric_value(&definition.id()))
             .map(|value| value.position)
     };
@@ -248,7 +236,7 @@ pub(crate) fn resolve_projection_closure(
     if directory.glyphs.get(root.to_usize()).is_none() {
         return Err(FontReadError::GlyphOutOfRange {
             glyph: root,
-            glyph_count: directory.glyphs.len() as u32,
+            glyph_count: directory.glyph_count(),
         });
     }
 
@@ -300,7 +288,7 @@ where
                     .iter()
                     .map(|component| component.glyph)
             }))
-            .collect::<HashSet<_>>();
+            .collect::<BTreeSet<_>>();
         for dependency in dependencies {
             self.resolve(dependency)?;
         }
@@ -443,7 +431,7 @@ fn variation_from_layers(
                 .filter_map(|(tag, support)| {
                     let axis = tags.iter().position(|candidate| candidate == tag)?;
                     Some(VariationSupport {
-                        axis: super::AxisIndex::new(axis as u32),
+                        axis: AxisIndex::at(axis),
                         lower: support.min.into_inner().into_inner(),
                         peak: support.peak.into_inner().into_inner(),
                         upper: support.max.into_inner().into_inner(),
@@ -652,8 +640,8 @@ mod tests {
         GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance, SourceIndex, VariationLocation,
     };
     use shift_font::{
-        Axis, AxisId, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, Location,
-        MetricKind, MetricValue, NamedInstance, Source,
+        Axis, AxisId, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, MetricKind,
+        MetricValue, NamedInstance, Source,
     };
 
     #[test]
@@ -677,9 +665,8 @@ mod tests {
         let italic_id = italic.id();
         font.add_axis(italic).unwrap();
 
-        let mut regular_location = DesignLocation::new();
-        regular_location.set(weight_id.clone(), 400.0);
-        regular_location.set(italic_id.clone(), 0.0);
+        let regular_location =
+            DesignLocation::from([(weight_id.clone(), 400.0), (italic_id.clone(), 0.0)]);
         let mut regular = Source::with_filename(
             "Regular".to_string(),
             regular_location,
@@ -692,9 +679,8 @@ mod tests {
         regular.set_underline_thickness(Some(60.0));
         let regular_id = font.add_source(regular);
 
-        let mut bold_location = DesignLocation::new();
-        bold_location.set(weight_id.clone(), 800.0);
-        bold_location.set(italic_id.clone(), 1.0);
+        let bold_location =
+            DesignLocation::from([(weight_id.clone(), 800.0), (italic_id.clone(), 1.0)]);
         let mut bold =
             Source::with_filename("Bold".to_string(), bold_location, "Bold.ufo".to_string());
         set_metrics(&font, &mut bold, [1600.0, -550.0, 1450.0, 1050.0]);
@@ -727,9 +713,7 @@ mod tests {
         cross.set_description(Some("Reduce italic weight".to_string()));
         font.set_axis_mappings(vec![independent, cross]).unwrap();
 
-        let mut instance_location = ExternalLocation::new();
-        instance_location.set(weight_id, 900.0);
-        instance_location.set(italic_id, 1.0);
+        let instance_location = ExternalLocation::from([(weight_id, 900.0), (italic_id, 1.0)]);
         font.set_named_instances(vec![NamedInstance::new(
             "Black Italic".to_string(),
             instance_location,
@@ -950,7 +934,7 @@ mod tests {
             SourceIndex::new(0),
         );
 
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     fn set_metrics(font: &Font, source: &mut Source, values: [f64; 4]) {
@@ -963,11 +947,7 @@ mod tests {
         .into_iter()
         .zip(values)
         {
-            let definition = font
-                .metric_definitions()
-                .iter()
-                .find(|definition| definition.kind() == kind)
-                .unwrap();
+            let definition = font.metric_definition_for_kind(kind).unwrap();
             source.set_metric_value(definition.id(), MetricValue::new(position, 0.0));
         }
     }
@@ -975,8 +955,8 @@ mod tests {
     fn mapping_point(input: &[(AxisId, f64)], output: &[(AxisId, f64)]) -> AxisMappingPoint {
         AxisMappingPoint {
             description: None,
-            input: Location::from_map(input.iter().cloned().collect()),
-            output: Location::from_map(output.iter().cloned().collect()),
+            input: input.iter().cloned().collect(),
+            output: output.iter().cloned().collect(),
         }
     }
 

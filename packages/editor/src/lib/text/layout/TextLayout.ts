@@ -5,7 +5,7 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import type { GlyphId } from "@shift/types";
+import type { GlyphId, ShapedRun } from "@shift/types";
 import { Caret } from "./Caret";
 import type {
   CaretPosition,
@@ -21,7 +21,6 @@ import type {
 } from "./types";
 import { literalRun, shapedRuns, splitParagraphs } from "./paragraphs";
 import { Positioner } from "./Positioner";
-import type { ShapedRun } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
 import type { Font } from "../../model/Font";
 import type { Signal } from "../../signals/signal";
@@ -35,9 +34,10 @@ export interface TextLayoutParams {
   externalLocation: Signal<ExternalAxisLocation>;
   /**
    * Each paragraph's shaped runs, from shaping these same items and indexed
-   * like {@link splitParagraphs}; null lays every paragraph out literally.
+   * like {@link splitParagraphs}; null lays every paragraph out literally,
+   * and a null paragraph lays out literally on its own.
    */
-  shaped?: readonly (readonly ShapedRun[])[] | null;
+  shaped?: readonly (readonly ShapedRun[] | null)[] | null;
 }
 
 /** One positioned glyph with its layout-local placement resolved. */

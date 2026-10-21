@@ -1,10 +1,11 @@
 use crate::atomic::sync_parent;
 use crate::errors::{FormatBackendError, FormatBackendResult};
-use crate::metrics::metric_position;
+use crate::numeric::{rounded_i32, saturating_u32};
 use crate::traits::{FontView, FontWriter};
 use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
 use shift_font::{
-    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, MetricKind, Point, PointType,
+    Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, Point, PointType,
+    StandardMetrics,
 };
 use std::path::{Path, PathBuf};
 
@@ -17,7 +18,7 @@ pub(super) fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Na
     })
 }
 
-fn io_error(action: &str, path: &Path, error: std::io::Error) -> FormatBackendError {
+fn io_error(action: &str, path: &Path, error: &std::io::Error) -> FormatBackendError {
     FormatBackendError::Ufo(format!("failed to {action} '{}': {error}", path.display()))
 }
 
@@ -45,11 +46,17 @@ fn sync_tree(_root: &Path) -> std::io::Result<()> {
 /// Atomically exchanges `staged` and `target` in one filesystem operation,
 /// so there is never an instant without a UFO at `target`.
 #[cfg(target_os = "macos")]
+#[allow(
+    unsafe_code,
+    reason = "the atomic swap is only available as a libc call"
+)]
 fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     let staged = std::ffi::CString::new(staged.as_os_str().as_bytes())?;
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
+    // SAFETY: both pointers come from `CString`s that live until the call
+    // returns and are NUL-terminated; `renamex_np` only reads them.
     let result = unsafe { libc::renamex_np(staged.as_ptr(), target.as_ptr(), libc::RENAME_SWAP) };
 
     if result == 0 {
@@ -60,6 +67,10 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(
+    unsafe_code,
+    reason = "the atomic exchange is only available as a raw syscall"
+)]
 fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -67,6 +78,9 @@ fn exchange(staged: &Path, target: &Path) -> std::io::Result<()> {
     let target = std::ffi::CString::new(target.as_os_str().as_bytes())?;
     // The raw syscall keeps the binary off glibc 2.28's `renameat2` wrapper, so
     // Linux builds linked against an older glibc still resolve every symbol.
+    // SAFETY: both pointers come from `CString`s that live until the syscall
+    // returns and are NUL-terminated; `renameat2` only reads them, and every
+    // other argument is a plain integer constant.
     let result = unsafe {
         libc::syscall(
             libc::SYS_renameat2,
@@ -94,7 +108,7 @@ fn exchange_unsupported(error: &std::io::Error) -> bool {
     #[cfg(unix)]
     if matches!(
         error.raw_os_error(),
-        Some(libc::ENOTSUP) | Some(libc::EINVAL) | Some(libc::ENOSYS)
+        Some(libc::ENOTSUP | libc::EINVAL | libc::ENOSYS)
     ) {
         return true;
     }
@@ -223,22 +237,21 @@ impl UfoWriter {
             }
             LibValue::Dict(dict) => {
                 let mut plist_dict = plist::Dictionary::new();
-                for (k, v) in dict.iter() {
+                for (k, v) in dict {
                     plist_dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));
                 }
                 plist::Value::Dictionary(plist_dict)
             }
             LibValue::Data(d) => plist::Value::Data(d.clone()),
             LibValue::Date(d) => plist::Date::from_xml_format(d)
-                .map(plist::Value::Date)
-                .unwrap_or_else(|_| plist::Value::String(d.clone())),
+                .map_or_else(|_| plist::Value::String(d.clone()), plist::Value::Date),
             LibValue::Uid(u) => plist::Value::Uid(plist::Uid::new(*u)),
         }
     }
 
     fn convert_lib(lib: &LibData) -> plist::Dictionary {
         let mut dict = plist::Dictionary::new();
-        for (k, v) in lib.iter() {
+        for (k, v) in lib {
             dict.insert(k.clone(), Self::convert_lib_value_to_plist(v));
         }
         dict
@@ -318,6 +331,16 @@ impl UfoWriter {
         Ok(())
     }
 
+    /// Writes any font view to a UFO at `path`, replacing it atomically.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`] when the view cannot be represented as a UFO or the files
+    /// cannot be written.
+    #[allow(
+        clippy::unused_self,
+        reason = "a writer method beside the FontWriter trait methods"
+    )]
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
         let norad_font = Self::build_norad_font(font)?;
         Self::write_atomic(&norad_font, Path::new(path))
@@ -339,7 +362,10 @@ impl UfoWriter {
         font_info.family_name = font.metadata().family_name.clone();
         font_info.style_name = font.metadata().style_name.clone();
         font_info.version_major = font.metadata().version_major;
-        font_info.version_minor = font.metadata().version_minor.map(|v| v as u32);
+        font_info.version_minor = font
+            .metadata()
+            .version_minor
+            .and_then(|v| u32::try_from(v).ok());
         font_info.copyright = font.metadata().copyright.clone();
         font_info.trademark = font.metadata().trademark.clone();
         font_info.open_type_name_designer = font.metadata().designer.clone();
@@ -351,42 +377,18 @@ impl UfoWriter {
         font_info.open_type_name_description = font.metadata().description.clone();
         font_info.note = font.metadata().note.clone();
 
-        font_info.units_per_em = Some((font.metrics().units_per_em as u32).into());
-        let default_source_id = font
-            .default_source_id()
-            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
+        font_info.units_per_em = Some(saturating_u32(font.metrics().units_per_em).into());
         let default_source = font
-            .sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
-            .ok_or_else(|| {
-                FormatBackendError::Ufo("the default source does not exist".to_string())
-            })?;
-        font_info.ascender = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::Ascender,
-        );
-        font_info.descender = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::Descender,
-        );
-        font_info.cap_height = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::CapHeight,
-        );
-        font_info.x_height = metric_position(
-            font.metric_definitions(),
-            default_source,
-            MetricKind::XHeight,
-        );
+            .default_source()
+            .ok_or_else(|| FormatBackendError::Ufo("the font has no default source".to_string()))?;
+        let metrics = StandardMetrics::of(default_source, font.metric_definitions());
+        font_info.ascender = metrics.ascender;
+        font_info.descender = metrics.descender;
+        font_info.cap_height = metrics.cap_height;
+        font_info.x_height = metrics.x_height;
         font_info.italic_angle = default_source.italic_angle();
-        font_info.open_type_hhea_line_gap =
-            default_source.line_gap().map(|value| value.round() as i32);
-        font_info.open_type_os2_typo_line_gap =
-            default_source.line_gap().map(|value| value.round() as i32);
+        font_info.open_type_hhea_line_gap = default_source.line_gap().map(rounded_i32);
+        font_info.open_type_os2_typo_line_gap = default_source.line_gap().map(rounded_i32);
         font_info.postscript_underline_position = default_source.underline_position();
         font_info.postscript_underline_thickness = default_source.underline_thickness();
         font_info.guidelines = None;
@@ -398,9 +400,8 @@ impl UfoWriter {
         let mut norad_font = NoradFont::new();
         norad_font.font_info = Self::build_font_info(font)?;
 
-        let glyphs = font.glyphs();
-        let glyph_names = glyphs
-            .iter()
+        let glyph_names = font
+            .glyphs()
             .map(|glyph| (glyph.id(), glyph.name()))
             .collect();
         let default_source_id = font.default_source_id();
@@ -417,24 +418,13 @@ impl UfoWriter {
             norad_font.lib = Self::convert_lib(font.lib());
         }
 
-        let default_source_id = font.default_source_id();
         let default_layer = norad_font.layers.default_layer_mut();
-
-        for glyph in font.glyphs() {
-            let Some(ref source_id) = default_source_id else {
-                continue;
-            };
-            if let Some(layer_data) = glyph.layer_for_source(source_id.clone()) {
-                let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
-                default_layer.insert_glyph(norad_glyph);
+        if let Some(default_source) = font.default_source() {
+            for glyph in font.glyphs() {
+                if let Some(layer_data) = glyph.layer_for_source(&default_source.id()) {
+                    default_layer.insert_glyph(Self::convert_glyph(glyph, layer_data)?);
+                }
             }
-        }
-
-        if let Some(default_source) = font
-            .sources()
-            .iter()
-            .find(|source| Some(source.id()) == default_source_id)
-        {
             Self::apply_layer_metadata(default_source, default_layer)?;
         }
 
@@ -453,7 +443,7 @@ impl UfoWriter {
             Self::apply_layer_metadata(source, norad_layer)?;
 
             for glyph in font.glyphs() {
-                if let Some(layer_data) = glyph.layer_for_source(source.id()) {
+                if let Some(layer_data) = glyph.layer_for_source(&source.id()) {
                     let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }
@@ -464,7 +454,7 @@ impl UfoWriter {
             norad_font.features = fea_source.to_string();
         }
 
-        for (data_path, bytes) in font.data_files().iter() {
+        for (data_path, bytes) in font.data_files() {
             norad_font
                 .data
                 .insert(PathBuf::from(data_path), bytes.clone())
@@ -498,27 +488,27 @@ impl UfoWriter {
             _ => Path::new("."),
         };
         std::fs::create_dir_all(parent)
-            .map_err(|e| io_error("create parent directory for", target, e))?;
+            .map_err(|e| io_error("create parent directory for", target, &e))?;
 
         // Staged in the target's parent so the swap is a same-filesystem rename.
         let staging = tempfile::Builder::new()
             .prefix(".shift-ufo-staging-")
             .tempdir_in(parent)
-            .map_err(|e| io_error("create staging directory for", target, e))?;
+            .map_err(|e| io_error("create staging directory for", target, &e))?;
         let staged_ufo = staging.path().join(file_name);
         norad_font
             .save(&staged_ufo)
             .map_err(|e| FormatBackendError::Ufo(e.to_string()))?;
-        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, e))?;
+        sync_tree(&staged_ufo).map_err(|e| io_error("sync staged UFO at", &staged_ufo, &e))?;
 
         if target.exists() {
             Self::exchange_or_swap(target, &staged_ufo, staging)?;
         } else {
             std::fs::rename(&staged_ufo, target)
-                .map_err(|e| io_error("move new UFO into place at", target, e))?;
+                .map_err(|e| io_error("move new UFO into place at", target, &e))?;
         }
 
-        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, e))?;
+        sync_parent(target).map_err(|e| io_error("sync parent directory of", target, &e))?;
         Ok(())
     }
 
@@ -534,7 +524,7 @@ impl UfoWriter {
             Err(error) if exchange_unsupported(&error) => {
                 Self::swap_with_backup(target, staged, staging)
             }
-            Err(error) => Err(io_error("swap new UFO into place at", target, error)),
+            Err(error) => Err(io_error("swap new UFO into place at", target, &error)),
         }
     }
 
@@ -545,7 +535,7 @@ impl UfoWriter {
     ) -> FormatBackendResult<()> {
         let backup = staging.path().join("previous");
         std::fs::rename(target, &backup)
-            .map_err(|e| io_error("move aside existing UFO at", target, e))?;
+            .map_err(|e| io_error("move aside existing UFO at", target, &e))?;
 
         if let Err(error) = std::fs::rename(staged, target) {
             if std::fs::rename(&backup, target).is_err() {
@@ -557,7 +547,7 @@ impl UfoWriter {
                     staging_path.join("previous").display(),
                 )));
             }
-            return Err(io_error("move new UFO into place at", target, error));
+            return Err(io_error("move new UFO into place at", target, &error));
         }
 
         Ok(())

@@ -38,14 +38,16 @@ pub enum BridgeError {
   Shape(#[from] ShapeError),
 }
 
-pub fn to_napi_error(error: BridgeError) -> Error {
+pub(crate) fn to_napi_error(error: BridgeError) -> Error {
   let status = match &error {
     BridgeError::InvalidInput { .. }
-    | BridgeError::Backend(BackendError::MissingExtension { .. })
-    | BridgeError::Backend(BackendError::InvalidPathUtf8 { .. })
-    | BridgeError::Backend(BackendError::InvalidExtensionUtf8 { .. })
-    | BridgeError::Backend(BackendError::UnsupportedFormat { .. })
-    | BridgeError::Backend(BackendError::UnsupportedWriteFormat { .. })
+    | BridgeError::Backend(
+      BackendError::MissingExtension { .. }
+      | BackendError::InvalidPathUtf8 { .. }
+      | BackendError::InvalidExtensionUtf8 { .. }
+      | BackendError::UnsupportedFormat { .. }
+      | BackendError::UnsupportedWriteFormat { .. },
+    )
     | BridgeError::Shape(
       ShapeError::TooManyUnits
       | ShapeError::TooManyInsertedGlyphs
@@ -75,10 +77,10 @@ impl From<BridgeError> for Error {
 
 impl From<BridgeError> for JsError {
   fn from(error: BridgeError) -> Self {
-    JsError::from(to_napi_error(error))
+    Self::from(to_napi_error(error))
   }
 }
 
-pub type Result<T> = std::result::Result<T, BridgeError>;
+pub(crate) type Result<T> = std::result::Result<T, BridgeError>;
 
-pub type BridgeResult<T> = Result<T>;
+pub(crate) type BridgeResult<T> = Result<T>;

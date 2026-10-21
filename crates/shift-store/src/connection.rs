@@ -3,6 +3,12 @@ use std::path::Path;
 use crate::{ShiftStore, StoreError, schema, store::StoreKind};
 
 impl ShiftStore {
+    /// Opens or creates a working store at `path`, upgrading its schema when needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the database cannot be opened or configured, and
+    /// [`StoreError::UnsupportedSchemaVersion`] when its schema is newer than this build.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         let conn = rusqlite::Connection::open(path)?;
@@ -20,6 +26,12 @@ impl ShiftStore {
     /// Opens a disposable import destination with rollback-capable in-memory
     /// journaling. The source remains authoritative until
     /// [`Self::finish_import`] makes the completed store durable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the database cannot be opened or configured,
+    /// [`StoreError::UnsupportedSchemaVersion`] when its schema is newer than this build, and
+    /// [`StoreError::ImportDestinationNotEmpty`] when it already holds a workspace.
     pub fn open_for_import(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
         let conn = rusqlite::Connection::open(path)?;
@@ -44,6 +56,11 @@ impl ShiftStore {
 
     /// Flushes a completed staged import and restores the normal edit-time
     /// WAL posture before the workspace publishes the closed database.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] when the store file cannot be synced, and [`StoreError::Sqlite`]
+    /// when the journal settings cannot be restored.
     pub fn finish_import(&self) -> Result<(), StoreError> {
         self.sync_store_file()?;
 
@@ -67,6 +84,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Opens an empty working store in memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the database cannot be created or configured.
     pub fn open_memory_for_test() -> Result<Self, StoreError> {
         let conn = rusqlite::Connection::open_in_memory()?;
         configure_common(&conn)?;

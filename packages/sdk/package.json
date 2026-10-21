@@ -35,7 +35,9 @@
     "typecheck": "tsgo --noEmit",
     "generate:inter-a-fixture": "node scripts/generate-inter-a-fixture.mjs",
     "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs",
-    "api:update": "node scripts/build.mjs --update-api"
+    "api:update": "node scripts/build.mjs --update-api",
+    "lint": "oxlint --fix src/",
+    "lint:check": "oxlint --deny-warnings src/"
   },
   "peerDependencies": {
     "@base-ui/react": "^1.8.0",

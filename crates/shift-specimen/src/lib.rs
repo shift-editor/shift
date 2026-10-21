@@ -15,13 +15,17 @@
 //! Outlines are returned in font units with the y axis pointing down, ready to
 //! use as SVG path data.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use shift_proof::{Coordinates, ProofFont, Segment, ShapingOptions};
 use skrifa::outline::OutlinePen;
-use skrifa::raw::types::Tag;
 use skrifa::raw::TableProvider;
+use skrifa::raw::types::Tag;
 use skrifa::{FontRef, MetadataProvider};
 use unicode_script::{Script, UnicodeScript};
 
@@ -131,18 +135,18 @@ fn specimen_from(font: &SpecimenFont, coverage: &Coverage) -> Option<Specimen> {
     if coverage.is_symbol_font() {
         return font.glyph_order_specimen();
     }
-    if let Some(script) = font.declared_script() {
-        if let Some(specimen) = font.script_specimen(script, coverage) {
-            return Some(specimen);
-        }
+    if let Some(script) = font.declared_script()
+        && let Some(specimen) = font.script_specimen(script, coverage)
+    {
+        return Some(specimen);
     }
     if let Some(specimen) = font.shaped_specimen("Ag") {
         return Some(specimen);
     }
-    if let Some(script) = coverage.main_script() {
-        if let Some(specimen) = font.script_specimen(script, coverage) {
-            return Some(specimen);
-        }
+    if let Some(script) = coverage.main_script()
+        && let Some(specimen) = font.script_specimen(script, coverage)
+    {
+        return Some(specimen);
     }
 
     ["AG", "ag"]
@@ -171,7 +175,7 @@ enum SpecimenScript {
 
 impl SpecimenScript {
     /// Checked in this order; the first script the font covers wins.
-    const ALL: [SpecimenScript; 9] = [
+    const ALL: [Self; 9] = [
         Self::Arabic,
         Self::Hebrew,
         Self::Devanagari,
@@ -285,7 +289,7 @@ struct Coverage {
 
 impl Coverage {
     fn from_characters(characters: impl IntoIterator<Item = char>) -> Self {
-        let mut coverage = Coverage {
+        let mut coverage = Self {
             characters: 0,
             symbols: 0,
             letters_by_script: HashMap::new(),
@@ -312,6 +316,10 @@ impl Coverage {
                 .push(character);
         }
 
+        #[allow(
+            clippy::iter_over_hash_type,
+            reason = "sorts each script's letters in place; scripts are independent"
+        )]
         for letters in coverage.letters_by_script.values_mut() {
             letters.sort_unstable();
         }
@@ -563,7 +571,7 @@ impl Bounds {
         }
     }
 
-    fn union(self, other: Bounds) -> Self {
+    fn union(self, other: Self) -> Self {
         Self {
             min_x: self.min_x.min(other.min_x),
             min_y: self.min_y.min(other.min_y),

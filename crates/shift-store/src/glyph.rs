@@ -12,7 +12,12 @@ pub struct GlyphRecord {
 }
 
 impl ShiftStore {
-    pub fn create_glyph(&mut self, glyph: NewGlyph) -> Result<(), StoreError> {
+    /// Inserts a glyph record without layers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the insert fails, for example because the id is taken.
+    pub fn create_glyph(&mut self, glyph: &NewGlyph) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO glyphs (id, name)
@@ -24,6 +29,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the glyph record with `id`, or `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_glyph(&self, id: &GlyphId) -> Result<Option<GlyphRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -40,6 +50,11 @@ impl ShiftStore {
         }
     }
 
+    /// Returns a glyph's code points in stored order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn list_glyph_unicodes(&self, id: &GlyphId) -> Result<Vec<u32>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -50,9 +65,7 @@ impl ShiftStore {
             ",
         )?;
 
-        let rows = stmt.query_map([id.as_str()], |row| {
-            row.get::<_, i64>(0).map(|unicode| unicode as u32)
-        })?;
+        let rows = stmt.query_map([id.as_str()], |row| row.get::<_, u32>(0))?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
     }

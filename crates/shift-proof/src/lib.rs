@@ -25,6 +25,7 @@ mod grid;
 mod label;
 mod layout;
 mod location;
+mod numeric;
 mod options;
 mod palette;
 mod proof;

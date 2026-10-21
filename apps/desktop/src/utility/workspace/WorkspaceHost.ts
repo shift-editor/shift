@@ -220,6 +220,9 @@ export class WorkspaceHost {
       // Not serialized: a synchronous bridge read, so it never waits behind a save or import.
       "workspace.shapeParagraphs": ({ paragraphs }) =>
         paragraphs.map((paragraph) => this.#bridge.shapeParagraph(paragraph)),
+      // Not serialized, like shaping: a synchronous bridge read.
+      "workspace.shaperFont": ({ knownRevision }) =>
+        this.#bridge.shaperFont(knownRevision ?? undefined) ?? null,
     });
   }
 

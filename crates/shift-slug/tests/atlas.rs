@@ -1,11 +1,12 @@
+use shift_slug::GlyphIndex;
 use shift_slug::OutlineCommand;
 #[cfg(feature = "wgpu-benchmark")]
 use shift_slug::SLUG_WGSL;
 use shift_slug::{
-    pack_render_instances, pack_render_params, pack_variable_params, AtlasBuilder, Curve,
-    CurveIndexEncoding, Point, RenderInstance, RenderParams, Section, SlugError,
-    VariableAtlasBuilder, VariableLayout, VariableParams, CUBIC_APPROXIMATION_ACCURACY,
-    LINE_EPSILON, RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, VARIABLE_PARAMS_BYTES,
+    AtlasBuilder, CUBIC_APPROXIMATION_ACCURACY, Curve, CurveIndexEncoding, LINE_EPSILON, Point,
+    RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, RenderInstance, RenderParams, Section, SlugError,
+    VARIABLE_PARAMS_BYTES, VariableAtlasBuilder, VariableLayout, VariableParams,
+    pack_render_instances, pack_render_params, pack_variable_params,
 };
 
 #[test]
@@ -223,9 +224,11 @@ fn compact_indexes_are_glyph_local_and_pair_packed() {
         ..compact_layout.curve_indices.offset + compact_layout.curve_indices.length]
         .chunks_exact(4)
         .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
-    assert!(compact_words
-        .flat_map(|word| [word & 0xffff, word >> 16])
-        .all(|index| index < 2));
+    assert!(
+        compact_words
+            .flat_map(|word| [word & 0xffff, word >> 16])
+            .all(|index| index < 2)
+    );
 }
 
 #[test]
@@ -254,7 +257,7 @@ fn variable_atlas_resolves_source_deltas_and_union_bounds() {
     builder.add_glyph(base, source).unwrap();
     let atlas = builder.finish();
     let glyph = atlas.glyphs()[0];
-    let midpoint = atlas.resolve_glyph(0, 0.5).unwrap();
+    let midpoint = atlas.resolve_glyph(GlyphIndex::new(0), 0.5).unwrap();
 
     assert_eq!(atlas.statistics().glyph_count, 1);
     assert_eq!(midpoint[0].p0, Point::new(10.0, -5.0));
@@ -307,11 +310,11 @@ fn variable_cubics_share_the_largest_source_subdivision_count() {
         expected_subdivisions + 1
     );
     assert_eq!(
-        atlas.resolve_glyph(0, 0.0).unwrap().len(),
+        atlas.resolve_glyph(GlyphIndex::new(0), 0.0).unwrap().len(),
         expected_subdivisions + 1
     );
     assert_eq!(
-        atlas.resolve_glyph(0, 1.0).unwrap().len(),
+        atlas.resolve_glyph(GlyphIndex::new(0), 1.0).unwrap().len(),
         expected_subdivisions + 1
     );
 }
@@ -369,7 +372,9 @@ fn variable_atlas_resolves_multiple_deduplicated_weights() {
     weights[2] = 0.2;
     weights[5] = 0.3;
     weights[7] = 0.5;
-    let resolved = atlas.resolve_glyph_with_weights(0, &weights).unwrap();
+    let resolved = atlas
+        .resolve_glyph_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
 
     assert_eq!(resolved[0].p0, Point::new(13.0, 14.0));
     assert_eq!(atlas.glyphs()[0].source_count, 3);
@@ -415,7 +420,7 @@ fn variable_sources_use_sparse_deltas_only_when_they_reduce_bytes() {
         .set_glyph_source_advances(glyph_index, [500.0, 700.0])
         .unwrap();
     let atlas = builder.finish();
-    let resolved = atlas.resolve_glyph(0, 1.0).unwrap();
+    let resolved = atlas.resolve_glyph(GlyphIndex::new(0), 1.0).unwrap();
 
     assert_eq!(atlas.curve_deltas().len(), 1);
     assert_eq!(atlas.sparse_deltas(), &[0, 1, 1]);
@@ -666,4 +671,32 @@ fn shared_shader_validates_and_has_the_host_side_strides() {
             "unexpected variable WGSL span for {name}"
         );
     }
+}
+
+#[test]
+fn line_bits_mark_only_curves_authored_as_lines() {
+    let commands = |shift: f32| {
+        [
+            OutlineCommand::Move { x: 0.0, y: 0.0 },
+            OutlineCommand::Line {
+                x: 10.0 + shift,
+                y: 0.0,
+            },
+            OutlineCommand::Quad {
+                cx: 15.0 + shift,
+                cy: 5.0,
+                x: 10.0 + shift,
+                y: 10.0,
+            },
+            OutlineCommand::Line { x: 0.0, y: 10.0 },
+            OutlineCommand::Close,
+        ]
+    };
+    let mut builder = VariableAtlasBuilder::default();
+
+    builder.add_glyph(commands(0.0), commands(4.0)).unwrap();
+    let atlas = builder.finish();
+
+    // Line, quadratic, line, and the closing line back to the start.
+    assert_eq!(atlas.line_bits(), &[0b1101]);
 }

@@ -9,10 +9,10 @@ mod variable;
 pub use inputs::build_binary_atlas_page;
 pub use source::OpenTypeFont;
 
+use crate::ImportReport;
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::font_loader::FontAdaptor;
 use crate::import::PreparedImport;
-use crate::ImportReport;
 use shift_font::Font;
 use skrifa::string::StringId;
 use skrifa::{FontRef, MetadataProvider};

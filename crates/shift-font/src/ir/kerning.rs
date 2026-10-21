@@ -246,7 +246,7 @@ impl Kerning {
     /// order.
     pub fn changed_groups<'a>(
         &'a self,
-        after: &'a Kerning,
+        after: &'a Self,
     ) -> impl Iterator<
         Item = (
             &'a KerningGroupId,
@@ -450,7 +450,7 @@ mod tests {
             KerningSide::Group(group_id("A")),
             KerningSide::Glyph(glyph("V")),
         );
-        kerning.set_value(source_id.clone(), second_exception.clone(), -30.0);
+        kerning.set_value(source_id.clone(), second_exception, -30.0);
         kerning.set_value(source_id.clone(), first_exception, -20.0);
         kerning.set_value(
             source_id.clone(),
@@ -591,8 +591,8 @@ mod tests {
             })
         ));
         assert!(kerning.group(&group_id("other")).is_none());
-        assert!(duplicate_rename.is_ok());
-        assert!(other_position.is_ok());
+        duplicate_rename.unwrap();
+        other_position.unwrap();
         assert!(matches!(missing, Err(CoreError::KerningGroupNotFound(_))));
     }
 

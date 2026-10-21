@@ -1,16 +1,18 @@
 //! Batch planning over directory facts; geometry is acquired by the workspace only when needed.
 
+use shift_font::{CreateGlyph, CreateGlyphLayer, UpdateGlyph};
 use std::collections::{HashMap, HashSet};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use shift_font::{FontIntent, FontIntentSet, GlyphId, GlyphName, LayerId};
+use shift_font::{FontIntentSet, GlyphId, GlyphName, LayerId};
 
 use crate::cli::SetGlyphsArgs;
 
-use super::glyph::{load_font, parse_unicodes, resolve_glyph_id, resolve_source_id};
+use super::glyph::{load_font, parse_unicodes};
 use super::input::{GlyphBatchInput, GlyphEntryInput};
 use super::layer_payload::read_json_input;
 use super::{AuthoringReport, apply_mutation};
+use crate::selector::FontSelectors;
 
 /// The glyph batch format `glyph export` writes and `glyph set` reads.
 pub(crate) const GLYPH_BATCH_FORMAT: u32 = 1;
@@ -25,7 +27,7 @@ pub(crate) const GLYPH_BATCH_FORMAT: u32 = 1;
 ///
 /// Rejects invalid payloads, selectors, repeated glyph/source pairs, and conflicting
 /// Unicode assignments without writing. Also reports document and persistence failures.
-pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let batch = read_json_input::<GlyphBatchInput>(&args.input, "glyph batch")?;
     if batch.glyphs.is_empty() {
@@ -58,7 +60,7 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
             .into_diagnostic()
             .wrap_err_with(context)?;
         let source_id = match entry.source.as_deref() {
-            Some(selector) => resolve_source_id(&font, selector).wrap_err_with(context)?,
+            Some(selector) => font.source_id_for(selector).wrap_err_with(context)?,
             None => font
                 .default_source_id()
                 .ok_or_else(|| miette!("{}: the font has no default source", context()))?,
@@ -91,11 +93,14 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
                 None => {
                     let glyph_id = GlyphId::new();
                     let values = requested_unicodes.clone().unwrap_or_default();
-                    intents.push(FontIntent::CreateGlyph {
-                        glyph_id: Some(glyph_id.clone()),
-                        name: name.clone(),
-                        unicodes: values.clone(),
-                    });
+                    intents.push(
+                        CreateGlyph {
+                            glyph_id: Some(glyph_id.clone()),
+                            name: name.clone(),
+                            unicodes: values.clone(),
+                        }
+                        .into(),
+                    );
                     (glyph_id, values)
                 }
             };
@@ -105,11 +110,14 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
         if let Some(values) = requested_unicodes
             && *current_unicodes != values
         {
-            intents.push(FontIntent::UpdateGlyph {
-                glyph_id: glyph_id.clone(),
-                new_name: glyph_name,
-                new_unicodes: values.clone(),
-            });
+            intents.push(
+                UpdateGlyph {
+                    glyph_id: glyph_id.clone(),
+                    new_name: glyph_name,
+                    new_unicodes: values.clone(),
+                }
+                .into(),
+            );
             *current_unicodes = values;
         }
 
@@ -122,17 +130,20 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
     // that appears later in the batch.
     let base_glyph = |name: &str| match glyphs.get(name) {
         Some((glyph_id, _)) => Ok(glyph_id.clone()),
-        None => resolve_glyph_id(&font, name),
+        None => font.glyph_id_for(name),
     };
     for (glyph_id, source_id, input, context) in layers {
         let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
         let layer_id = existing.clone().unwrap_or_else(LayerId::new);
         if existing.is_none() {
-            intents.push(FontIntent::CreateGlyphLayer {
-                layer_id: layer_id.clone(),
-                glyph_id,
-                source_id,
-            });
+            intents.push(
+                CreateGlyphLayer {
+                    layer_id: layer_id.clone(),
+                    glyph_id,
+                    source_id,
+                }
+                .into(),
+            );
         }
         intents.push(
             input
@@ -141,5 +152,5 @@ pub fn set_glyphs(args: SetGlyphsArgs) -> Result<AuthoringReport> {
         );
     }
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }

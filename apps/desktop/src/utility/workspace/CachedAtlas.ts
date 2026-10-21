@@ -396,7 +396,12 @@ export async function publishCachedAtlas(
     await output.close();
     await fs.promises.rename(temporaryPath, targetPath);
     await touchCachedAtlas(targetPath);
-    await removeFiles([...publication.stagedPages.values()].map((page) => page.filePath));
+    await removeFiles(
+      publication.stagedPages
+        .values()
+        .map((page) => page.filePath)
+        .toArray(),
+    );
     return (await fs.promises.stat(targetPath)).size;
   } catch (error) {
     await output.close().catch(() => {});

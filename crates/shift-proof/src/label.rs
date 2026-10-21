@@ -6,6 +6,8 @@
 //! letters, digits, and the punctuation glyph names and locations use;
 //! anything else draws as `?`.
 
+use crate::numeric::whole_count;
+
 /// Bitmap cells per character, horizontally including the gap.
 const CELLS_ACROSS: f32 = 6.0;
 /// Bitmap cells per character, vertically.
@@ -30,7 +32,7 @@ pub(crate) fn label_height(pixel: f32) -> f32 {
 /// Longest prefix of `text` that fits `width` pixels at `pixel` pixels per
 /// cell.
 pub(crate) fn fit_label(text: &str, pixel: f32, width: f32) -> String {
-    let fits = (width / (CELLS_ACROSS * pixel)).floor().max(0.0) as usize;
+    let fits = whole_count(width / (CELLS_ACROSS * pixel));
     text.chars().take(fits).collect()
 }
 

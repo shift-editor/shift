@@ -58,7 +58,7 @@ impl ShiftIrSource {
                     .try_get(&WorkId::Anchor(glyph.name().into()));
                 let sources = masters
                     .iter()
-                    .filter(|(source, _)| glyph.layer_for_source(source.id()).is_some())
+                    .filter(|(source, _)| glyph.layer_for_source(&source.id()).is_some())
                     .map(|(source, location)| PropagatedSourceAnchors {
                         source_id: source.id(),
                         anchors: anchors

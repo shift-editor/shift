@@ -9,15 +9,17 @@ import TextIcon from "@/assets/toolbar/text.svg";
 
 import type { Editor } from "@shift/editor";
 import { signal } from "@shift/editor/signals";
-import type { ToolManifest } from "@shift/editor/tools";
-
-import { Hand } from "@shift/editor/tools";
-import { Pen } from "@shift/editor/tools";
-import { Select } from "@shift/editor/tools";
-import { ShapeTool, type ShapeKind } from "@shift/editor/tools";
-import { TextTool } from "@shift/editor/tools";
-import { SpacingTool } from "@shift/editor/tools";
-import { KerningTool } from "@shift/editor/tools";
+import {
+  Hand,
+  KerningTool,
+  Pen,
+  Select,
+  ShapeTool,
+  SpacingTool,
+  TextTool,
+  type ShapeKind,
+  type ToolManifest,
+} from "@shift/editor/tools";
 
 function builtInToolManifests(): readonly ToolManifest[] {
   const shapeKindCell = signal<ShapeKind>("rectangle", { name: "tool.Shape.kind" });

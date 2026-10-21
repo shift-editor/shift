@@ -1,7 +1,7 @@
 use crate::entity::{AxisId, AxisLabelId, AxisMappingId};
 use crate::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -143,7 +143,35 @@ pub struct Axis {
     hidden: bool,
 }
 
+/// Looks up axes by id in a list of axes.
+pub trait AxisList {
+    /// Returns the axis with `axis_id`.
+    fn axis(&self, axis_id: &AxisId) -> Option<&Axis>;
+
+    /// Returns whether the list has an axis with `axis_id`.
+    fn contains_axis(&self, axis_id: &AxisId) -> bool {
+        self.axis(axis_id).is_some()
+    }
+}
+
+impl AxisList for [Axis] {
+    fn axis(&self, axis_id: &AxisId) -> Option<&Axis> {
+        self.iter().find(|axis| axis.id() == *axis_id)
+    }
+}
+
 impl Axis {
+    /// Returns whether `value` is a position this axis allows: finite and
+    /// inside its range, or one of its discrete values.
+    pub fn accepts(&self, value: f64) -> bool {
+        match self.kind() {
+            AxisKind::Continuous {
+                minimum, maximum, ..
+            } => value.is_finite() && value >= *minimum && value <= *maximum,
+            AxisKind::Discrete { values, .. } => values.contains(&value),
+        }
+    }
+
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
         Self::with_id(AxisId::new(), tag, name, minimum, default, maximum)
     }
@@ -284,6 +312,14 @@ impl Axis {
         self.hidden = hidden;
     }
 
+    /// Checks the axis's name, tag, range or values, role, and labels.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxis`] when the name is blank, the tag is not four ASCII
+    /// characters, the range or values are not finite and ordered around the default, or an
+    /// internal axis owns labels; [`CoreError::DuplicateAxisLabelId`] or
+    /// [`CoreError::InvalidAxisLabel`] when a label repeats an id or is itself invalid.
     pub fn validate(&self) -> CoreResult<()> {
         if self.name.trim().is_empty() {
             return Err(self.invalid("name must not be blank"));
@@ -358,12 +394,12 @@ impl Axis {
                 if value < self.minimum() || value > self.maximum() {
                     return Err(label.invalid("values must be inside the axis range"));
                 }
-                if let AxisKind::Discrete { values, .. } = &self.kind {
-                    if !values.contains(&value) {
-                        return Err(
-                            label.invalid("discrete-axis values must be authored discrete values")
-                        );
-                    }
+                if let AxisKind::Discrete { values, .. } = &self.kind
+                    && !values.contains(&value)
+                {
+                    return Err(
+                        label.invalid("discrete-axis values must be authored discrete values")
+                    );
                 }
             }
             if self.labels[..index]
@@ -499,6 +535,13 @@ impl AxisMapping {
         self.description = description;
     }
 
+    /// Checks the mapping against `axes`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxisMapping`] when the name is blank, an input, output or point
+    /// list is empty or repeats an axis, it references an unknown axis or an input of the wrong
+    /// role, or its points do not fit its axes.
     pub fn validate(&self, axes: &[Axis]) -> CoreResult<()> {
         if self.name.trim().is_empty() {
             return Err(self.invalid("name must not be blank"));
@@ -517,14 +560,13 @@ impl AxisMapping {
         }
 
         for axis_id in self.inputs.iter().chain(&self.outputs) {
-            if !axes.iter().any(|axis| axis.id() == *axis_id) {
+            if !axes.contains_axis(axis_id) {
                 return Err(self.invalid(format!("references unknown axis {axis_id}")));
             }
         }
         for input_id in &self.inputs {
             let axis = axes
-                .iter()
-                .find(|axis| axis.id() == *input_id)
+                .axis(input_id)
                 .expect("mapping axes were checked above");
             if self.is_independent() && axis.role() != AxisRole::External {
                 return Err(self.invalid(format!("input axis {input_id} is not external")));
@@ -584,7 +626,8 @@ fn has_duplicates(ids: &[AxisId]) -> bool {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Location {
-    values: HashMap<AxisId, f64>,
+    /// Sorted by axis id, so a location serializes to the same bytes every time.
+    values: BTreeMap<AxisId, f64>,
 }
 
 impl Location {
@@ -592,12 +635,25 @@ impl Location {
         Self::default()
     }
 
-    pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
-        Self { values }
+    pub fn from_map(values: impl IntoIterator<Item = (AxisId, f64)>) -> Self {
+        values.into_iter().collect()
+    }
+
+    /// Places every axis in `axes` at its default value.
+    pub fn at_defaults<'a>(axes: impl IntoIterator<Item = &'a Axis>) -> Self {
+        axes.into_iter()
+            .map(|axis| (axis.id(), axis.default()))
+            .collect()
     }
 
     pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
         self.values.get(axis_id).copied()
+    }
+
+    /// Returns this location's value on `axis`, or the axis default when the
+    /// location has none.
+    pub fn value_on(&self, axis: &Axis) -> f64 {
+        self.get(&axis.id()).unwrap_or_else(|| axis.default())
     }
 
     pub fn set(&mut self, axis_id: AxisId, value: f64) {
@@ -616,21 +672,13 @@ impl Location {
         self.values.iter()
     }
 
-    pub fn normalize(&self, axes: &[Axis]) -> Location {
-        let mut normalized = HashMap::new();
-        for axis in axes {
-            if let Some(&value) = self.values.get(&axis.id()) {
-                normalized.insert(axis.id(), axis.normalize(value));
-            }
-        }
-        Location::from_map(normalized)
-    }
-
-    pub fn is_default_axis(&self, axes: &[Axis]) -> bool {
-        axes.iter().all(|axis| {
-            let value = self.get(&axis.id()).unwrap_or(axis.default());
-            (value - axis.default()).abs() < f64::EPSILON
-        })
+    pub fn normalize(&self, axes: &[Axis]) -> Self {
+        axes.iter()
+            .filter_map(|axis| {
+                let value = self.values.get(&axis.id())?;
+                Some((axis.id(), axis.normalize(*value)))
+            })
+            .collect()
     }
 
     /// Returns whether two locations address the same position on `axes`.
@@ -640,10 +688,39 @@ impl Location {
     /// [`PartialEq`] when exact stored-coordinate equality is required.
     pub fn is_equivalent_to(&self, other: &Self, axes: &[Axis]) -> bool {
         axes.iter().all(|axis| {
-            let left = self.get(&axis.id()).unwrap_or(axis.default());
-            let right = other.get(&axis.id()).unwrap_or(axis.default());
+            let left = self.value_on(axis);
+            let right = other.value_on(axis);
             (left - right).abs() <= 1e-6
         })
+    }
+}
+
+impl FromIterator<(AxisId, f64)> for Location {
+    fn from_iter<I: IntoIterator<Item = (AxisId, f64)>>(values: I) -> Self {
+        Self {
+            values: values.into_iter().collect(),
+        }
+    }
+}
+
+impl Extend<(AxisId, f64)> for Location {
+    fn extend<I: IntoIterator<Item = (AxisId, f64)>>(&mut self, values: I) {
+        self.values.extend(values);
+    }
+}
+
+impl<const N: usize> From<[(AxisId, f64); N]> for Location {
+    fn from(values: [(AxisId, f64); N]) -> Self {
+        values.into_iter().collect()
+    }
+}
+
+impl<'a> IntoIterator for &'a Location {
+    type Item = (&'a AxisId, &'a f64);
+    type IntoIter = std::collections::btree_map::Iter<'a, AxisId, f64>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.values.iter()
     }
 }
 
@@ -658,8 +735,13 @@ macro_rules! typed_location {
                 Self::default()
             }
 
-            pub fn from_map(values: HashMap<AxisId, f64>) -> Self {
+            pub fn from_map(values: impl IntoIterator<Item = (AxisId, f64)>) -> Self {
                 Self(Location::from_map(values))
+            }
+
+            /// Places every axis in `axes` at its default value.
+            pub fn at_defaults<'a>(axes: impl IntoIterator<Item = &'a Axis>) -> Self {
+                Self(Location::at_defaults(axes))
             }
 
             pub fn from_untyped(location: Location) -> Self {
@@ -678,6 +760,12 @@ macro_rules! typed_location {
                 self.0.get(axis_id)
             }
 
+            /// Returns this location's value on `axis`, or the axis default
+            /// when the location has none.
+            pub fn value_on(&self, axis: &Axis) -> f64 {
+                self.0.value_on(axis)
+            }
+
             pub fn set(&mut self, axis_id: AxisId, value: f64) {
                 self.0.set(axis_id, value);
             }
@@ -692,6 +780,33 @@ macro_rules! typed_location {
 
             pub fn iter(&self) -> impl Iterator<Item = (&AxisId, &f64)> {
                 self.0.iter()
+            }
+        }
+
+        impl FromIterator<(AxisId, f64)> for $name {
+            fn from_iter<I: IntoIterator<Item = (AxisId, f64)>>(values: I) -> Self {
+                Self(values.into_iter().collect())
+            }
+        }
+
+        impl Extend<(AxisId, f64)> for $name {
+            fn extend<I: IntoIterator<Item = (AxisId, f64)>>(&mut self, values: I) {
+                self.0.extend(values);
+            }
+        }
+
+        impl<const N: usize> From<[(AxisId, f64); N]> for $name {
+            fn from(values: [(AxisId, f64); N]) -> Self {
+                values.into_iter().collect()
+            }
+        }
+
+        impl<'a> IntoIterator for &'a $name {
+            type Item = (&'a AxisId, &'a f64);
+            type IntoIter = std::collections::btree_map::Iter<'a, AxisId, f64>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.0.values.iter()
             }
         }
     };
@@ -710,6 +825,31 @@ impl DesignLocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn locations_build_from_pairs_and_axis_defaults() {
+        let weight = Axis::weight();
+        let width = Axis::width();
+
+        let defaults = DesignLocation::at_defaults([&weight, &width]);
+        let bold = DesignLocation::from([(weight.id(), 700.0)]);
+
+        assert_eq!(defaults.get(&weight.id()), Some(weight.default()));
+        assert_eq!(defaults.get(&width.id()), Some(width.default()));
+        assert_eq!(bold.get(&weight.id()), Some(700.0));
+        assert_eq!(bold.get(&width.id()), None);
+    }
+
+    #[test]
+    fn extending_a_location_replaces_an_axis_value() {
+        let weight = Axis::weight();
+        let mut location = Location::at_defaults([&weight]);
+
+        location.extend([(weight.id(), 300.0)]);
+
+        let entries: Vec<_> = (&location).into_iter().collect();
+        assert_eq!(entries, vec![(&weight.id(), &300.0)]);
+    }
 
     #[test]
     fn axis_normalize() {
@@ -760,7 +900,7 @@ mod tests {
         axis.set_labels(vec![label.clone()]);
 
         assert_eq!(axis.labels()[0].id(), label_id);
-        assert!(axis.validate().is_ok());
+        axis.validate().unwrap();
 
         axis.set_labels(vec![label.clone(), label]);
         assert!(matches!(
@@ -833,7 +973,7 @@ mod tests {
             true,
         )]);
 
-        assert!(axis.validate().is_ok());
+        axis.validate().unwrap();
     }
 
     #[test]
@@ -860,9 +1000,7 @@ mod tests {
         let weight = AxisId::from_raw("wght");
         let width = AxisId::from_raw("wdth");
         let slant = AxisId::from_raw("slnt");
-        let mut loc = Location::new();
-        loc.set(weight.clone(), 700.0);
-        loc.set(width.clone(), 100.0);
+        let loc = Location::from([(weight.clone(), 700.0), (width.clone(), 100.0)]);
 
         assert_eq!(loc.get(&weight), Some(700.0));
         assert_eq!(loc.get(&width), Some(100.0));
@@ -873,16 +1011,52 @@ mod tests {
     fn location_equivalence_uses_axis_defaults_and_tolerance() {
         let axis = Axis::weight();
         let implicit_default = Location::new();
-        let mut explicit_default = Location::new();
-        explicit_default.set(axis.id(), axis.default());
-        let mut near_default = Location::new();
-        near_default.set(axis.id(), axis.default() + 0.0000005);
-        let mut distinct = Location::new();
-        distinct.set(axis.id(), axis.default() + 0.001);
+        let explicit_default = Location::from([(axis.id(), axis.default())]);
+        let near_default = Location::from([(axis.id(), axis.default() + 0.0000005)]);
+        let distinct = Location::from([(axis.id(), axis.default() + 0.001)]);
 
         assert_ne!(implicit_default, explicit_default);
         assert!(implicit_default.is_equivalent_to(&explicit_default, std::slice::from_ref(&axis)));
         assert!(implicit_default.is_equivalent_to(&near_default, std::slice::from_ref(&axis)));
         assert!(!implicit_default.is_equivalent_to(&distinct, std::slice::from_ref(&axis)));
+    }
+
+    #[test]
+    fn value_on_falls_back_to_the_axis_default() {
+        let weight = Axis::weight();
+        let width = Axis::width();
+        let location = Location::from([(weight.id(), 700.0)]);
+
+        assert_eq!(location.value_on(&weight), 700.0);
+        assert_eq!(location.value_on(&width), width.default());
+    }
+
+    #[test]
+    fn axis_list_finds_axes_by_id() {
+        let weight = Axis::weight();
+        let axes = [weight.clone()];
+
+        assert_eq!(axes.axis(&weight.id()), Some(&weight));
+        assert!(axes.contains_axis(&weight.id()));
+        assert!(!axes.contains_axis(&Axis::width().id()));
+    }
+
+    #[test]
+    fn accepts_values_inside_the_range_or_among_discrete_values() {
+        let weight = Axis::weight();
+        let italic = Axis::discrete_with_id(
+            AxisId::from_raw("ital"),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+
+        assert!(weight.accepts(weight.minimum()));
+        assert!(weight.accepts(weight.maximum()));
+        assert!(!weight.accepts(weight.maximum() + 1.0));
+        assert!(!weight.accepts(f64::NAN));
+        assert!(italic.accepts(1.0));
+        assert!(!italic.accepts(0.5));
     }
 }

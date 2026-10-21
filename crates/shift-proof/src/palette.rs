@@ -22,10 +22,10 @@ impl Serialize for Rgb {
 }
 
 /// Page background.
-pub const BACKGROUND: Rgb = Rgb([255, 255, 255]);
+pub(crate) const BACKGROUND: Rgb = Rgb([255, 255, 255]);
 /// Glyph ink.
-pub const INK: Rgb = Rgb([0, 0, 0]);
+pub(crate) const INK: Rgb = Rgb([0, 0, 0]);
 /// Fill for `.notdef` glyphs and placeholders.
-pub const MISSING: Rgb = Rgb([220, 38, 38]);
+pub(crate) const MISSING: Rgb = Rgb([220, 38, 38]);
 /// Sizes, locations, and glyph names.
-pub const LABEL: Rgb = Rgb([140, 140, 140]);
+pub(crate) const LABEL: Rgb = Rgb([140, 140, 140]);

@@ -1,13 +1,13 @@
-use crate::test_support::sample_variable_font;
+use crate::test_support::{closed_contour, sample_variable_font};
 use crate::{
     Contour, DesignLocation, Font, GlyphLayer, KerningGroup, KerningGroupId, KerningPair,
     KerningPosition, KerningSide, PointType, SourceId,
 };
 
-use super::{check_font, check_font_with, check_glyph, Charset, Check, CheckOptions};
+use super::{Charset, Check, CheckOptions, MonospaceCell};
 
 fn checks(font: &Font) -> Vec<Check> {
-    check_font(font)
+    font.check()
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -27,7 +27,7 @@ fn edit_layer(font: &mut Font, source: &str, edit: impl FnOnce(&mut GlyphLayer))
     let source_id = source_named(font, source);
     let glyph_id = font.glyph_id_by_name("A").unwrap();
     let mut glyph = font.pop_glyph(glyph_id).unwrap();
-    edit(glyph.layer_for_source_mut(source_id).unwrap());
+    edit(glyph.layer_for_source_mut(&source_id).unwrap());
     font.insert_glyph(glyph).unwrap();
 }
 
@@ -41,7 +41,7 @@ fn glyph_a_checks(font: &Font) -> Vec<Check> {
 
 fn glyph_a_findings(font: &Font) -> Vec<Check> {
     let glyph_id = font.glyph_id_by_name("A").unwrap();
-    check_glyph(font, &glyph_id)
+    font.check_glyph(&glyph_id)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -53,12 +53,7 @@ fn first_contour(layer: &mut GlyphLayer) -> &mut Contour {
 }
 
 fn square(x: f64, y: f64, size: f64) -> Contour {
-    let mut contour = Contour::new();
-    for (dx, dy) in [(0.0, 0.0), (0.0, size), (size, size), (size, 0.0)] {
-        contour.add_point(x + dx, y + dy, PointType::OnCurve, false);
-    }
-    contour.close();
-    contour
+    closed_contour(&[(x, y), (x, y + size), (x + size, y + size), (x + size, y)])
 }
 
 #[test]
@@ -118,7 +113,7 @@ fn reports_masters_at_the_same_location() {
         .location()
         .clone();
     let medium = source_named(&font, "Medium");
-    font.source_mut(medium).unwrap().set_location(bold);
+    font.source_mut(&medium).unwrap().set_location(bold);
 
     assert!(checks(&font).contains(&Check::DuplicateMasterLocation));
 }
@@ -127,10 +122,9 @@ fn reports_masters_at_the_same_location() {
 fn reports_a_master_outside_its_axis() {
     let mut font = sample_variable_font();
     let axis = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis, 2000.0);
+    let location = DesignLocation::from([(axis, 2000.0)]);
     let bold = source_named(&font, "Bold");
-    font.source_mut(bold).unwrap().set_location(location);
+    font.source_mut(&bold).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::MasterOutsideAxis));
 }
@@ -139,10 +133,9 @@ fn reports_a_master_outside_its_axis() {
 fn reports_a_font_without_a_master_at_the_default() {
     let mut font = sample_variable_font();
     let axis = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis, 500.0);
+    let location = DesignLocation::from([(axis, 500.0)]);
     let regular = font.default_source_id().unwrap();
-    font.source_mut(regular).unwrap().set_location(location);
+    font.source_mut(&regular).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::NoDefaultMaster));
 }
@@ -226,7 +219,7 @@ fn reports_a_negative_advance() {
 #[test]
 fn reports_an_encoded_glyph_that_draws_nothing() {
     let mut font = sample_variable_font();
-    edit_layer(&mut font, "Regular", |layer| layer.clear_contours());
+    edit_layer(&mut font, "Regular", GlyphLayer::clear_contours);
 
     assert!(glyph_a_findings(&font).contains(&Check::EmptyOutline));
 }
@@ -239,11 +232,12 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
         ..CheckOptions::default()
     };
 
-    let with = check_font_with(&font, &options).unwrap();
-    assert!(with
-        .iter()
-        .any(|finding| finding.check == Check::CharsetMissingGlyph
-            && finding.message.contains("U+0042")));
+    let with = font.check_with(&options).unwrap();
+    assert!(
+        with.iter()
+            .any(|finding| finding.check == Check::CharsetMissingGlyph
+                && finding.message.contains("U+0042"))
+    );
     assert!(!checks(&font).contains(&Check::CharsetMissingGlyph));
 }
 
@@ -251,14 +245,16 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
 fn a_glyph_off_the_monospace_cell_is_reported() {
     let font = sample_variable_font();
     let options = CheckOptions {
-        monospace: Some(Some(500.0)),
+        monospace: Some(MonospaceCell::Width(500.0)),
         ..CheckOptions::default()
     };
 
-    let found = check_font_with(&font, &options).unwrap();
-    assert!(found
-        .iter()
-        .any(|finding| finding.check == Check::MonoWidthMismatch));
+    let found = font.check_with(&options).unwrap();
+    assert!(
+        found
+            .iter()
+            .any(|finding| finding.check == Check::MonoWidthMismatch)
+    );
 }
 
 #[test]
@@ -269,7 +265,7 @@ fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     let mut b = crate::Glyph::new("B");
     for source in ["Regular", "Bold"] {
         let source_id = source_named(&font, source);
-        let a_layer = a_glyph.layer_for_source(source_id.clone()).unwrap();
+        let a_layer = a_glyph.layer_for_source(&source_id).unwrap();
         let mut layer = GlyphLayer::with_width(crate::LayerId::new(), source_id, a_layer.width());
         if source == "Regular" {
             layer.add_component(crate::Component::new(a.clone(), "A"));
@@ -287,7 +283,8 @@ fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     }
     let b = font.insert_glyph(b).unwrap();
 
-    let found = check_glyph(&font, &b)
+    let found = font
+        .check_glyph(&b)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -305,8 +302,8 @@ fn a_round_contour_starting_elsewhere_is_not_reported_when_it_keeps_its_shape() 
         for step in 0..8 {
             let angle = std::f64::consts::TAU * ((step + offset) % 8) as f64 / 8.0;
             contour.add_point(
-                300.0 + 200.0 * angle.cos(),
-                300.0 + 200.0 * angle.sin(),
+                300.0 + 200.0 * libm::cos(angle),
+                300.0 + 200.0 * libm::sin(angle),
                 PointType::OnCurve,
                 false,
             );

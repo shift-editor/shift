@@ -2,10 +2,10 @@
 
 use std::collections::BTreeMap;
 
+use fea_rs::GlyphMap;
 use fea_rs::compile::Compilation;
 use fea_rs::parse::ParseTree;
 use fea_rs::typed::{AstNode, Feature};
-use fea_rs::GlyphMap;
 use fontdrasil::types::Axis as IrAxis;
 use write_fonts::tables::fvar::{AxisInstanceArrays, Fvar, VariationAxisRecord};
 use write_fonts::tables::gdef::GlyphClassDef;

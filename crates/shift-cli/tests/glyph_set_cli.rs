@@ -13,7 +13,7 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
     let layer_id = before
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(before.default_source_id().unwrap())
+        .layer_for_source(&before.default_source_id().unwrap())
         .unwrap()
         .id();
     before
@@ -68,11 +68,8 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
         .unwrap()
         .id();
     assert_eq!(
-        after
-            .glyph_by_name("A")
-            .unwrap()
-            .layer_for_source(bold.clone()),
-        before.glyph_by_name("A").unwrap().layer_for_source(bold)
+        after.glyph_by_name("A").unwrap().layer_for_source(&bold),
+        before.glyph_by_name("A").unwrap().layer_for_source(&bold)
     );
 }
 
@@ -133,7 +130,7 @@ fn svg_relative_shorthand_quadratic_and_post_close_commands_preserve_geometry() 
     let layer = font
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(font.default_source_id().unwrap())
+        .layer_for_source(&font.default_source_id().unwrap())
         .unwrap();
     let contours = layer.contours_iter().collect::<Vec<_>>();
     let points = contours[0].points();
@@ -221,7 +218,7 @@ fn glyph_batch_creates_updates_and_authors_distinct_sources_from_one_file() {
     assert_eq!(glyph.layers().len(), 2);
     assert_eq!(
         glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap()
             .width(),
         500.0
@@ -272,7 +269,7 @@ fn glyph_batch_components_name_their_bases_even_ones_later_in_the_batch() {
     let layer = font
         .glyph_by_name("Aring")
         .unwrap()
-        .layer_for_source(font.default_source_id().unwrap())
+        .layer_for_source(&font.default_source_id().unwrap())
         .unwrap();
     let components: Vec<_> = layer
         .components()

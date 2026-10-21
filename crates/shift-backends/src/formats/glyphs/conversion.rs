@@ -2,25 +2,23 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 use glyphs_reader::{
-    Anchor as GlyphsAnchor, Component as GlyphsComponent, FeatureSnippet, Font as GlyphsFont,
-    FontMaster, Glyph as GlyphsGlyph, InstanceType, Layer as GlyphsLayer, NodeType, Shape,
+    Anchor as GlyphsAnchor, FeatureSnippet, Font as GlyphsFont, FontMaster, Glyph as GlyphsGlyph,
+    InstanceType, Layer as GlyphsLayer, NodeType, Shape,
 };
 use ordered_float::OrderedFloat;
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
     ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Kerning, KerningPosition,
-    LayerId, LibValue, Location, MetricKind, NamedInstance, Source, SourceId, Transform,
+    LayerId, LibValue, Location, NamedInstance, Source, SourceId, StandardMetrics, Transform,
 };
 
 use super::families::InstanceFamilies;
 use crate::{
-    distinct_named_instances,
+    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport, distinct_named_instances,
     feature_includes::inline_feature_includes,
     font_source::piecewise_map,
     glyph_category::{GlyphCategories, ResolvedCategory},
     kerning_import::{KerningImport, NamedKerningSide},
-    metrics::set_metric_position,
-    FormatBackendError, FormatBackendResult, ImportLoss, ImportReport,
 };
 
 const GLYPHS_SIDE1_PREFIX: &str = "@MMK_L_";
@@ -33,23 +31,6 @@ const GLYPHS_SIDE2_PREFIX: &str = "@MMK_R_";
 /// collide with a static instance there.
 fn is_named_instance(active: bool, instance_type: &InstanceType) -> bool {
     active && *instance_type == InstanceType::Single
-}
-
-pub(crate) fn master_design_values(font: &GlyphsFont, axis_index: usize) -> Vec<f64> {
-    font.masters
-        .iter()
-        .filter_map(|master| master.axes_values.get(axis_index))
-        .map(|value| value.into_inner())
-        .collect()
-}
-
-pub(crate) fn default_design_value(font: &GlyphsFont, axis_index: usize, values: &[f64]) -> f64 {
-    font.masters
-        .get(font.default_master_idx)
-        .and_then(|master| master.axes_values.get(axis_index))
-        .map(|value| value.into_inner())
-        .or_else(|| values.first().copied())
-        .unwrap_or(0.0)
 }
 
 #[derive(Clone)]
@@ -99,64 +80,106 @@ impl GlyphsAxisMapping {
     }
 }
 
-pub(crate) fn glyphs_axis_mapping(
-    font: &GlyphsFont,
-    axis_index: usize,
-    design_values: &[f64],
-    design_default: f64,
-) -> GlyphsAxisMapping {
-    let axis = &font.axes[axis_index];
-    let mut mapping = font
-        .axis_mappings
-        .get(&axis.name)
-        .map(|mapping| {
-            mapping
-                .iter()
-                .map(|(user, design)| (user.into_inner(), design.into_inner()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| {
-            design_values
-                .iter()
-                .copied()
-                .map(|value| (value, value))
-                .collect()
-        });
-    if mapping.is_empty() {
-        mapping.push((design_default, design_default));
+/// Axis questions about a Glyphs source that glyphs-reader leaves to callers.
+pub(crate) trait GlyphsFontExt {
+    /// Returns each master's design value on the axis at `axis_index`.
+    fn master_design_values(&self, axis_index: usize) -> Vec<f64>;
+
+    /// Returns the default master's design value on the axis, falling back to
+    /// the first of `values`.
+    fn default_design_value(&self, axis_index: usize, values: &[f64]) -> f64;
+
+    /// Returns the axis's user-to-design mapping, or an identity mapping
+    /// through the masters' design values when the source authors none.
+    fn axis_mapping(
+        &self,
+        axis_index: usize,
+        design_values: &[f64],
+        design_default: f64,
+    ) -> GlyphsAxisMapping;
+}
+
+impl GlyphsFontExt for GlyphsFont {
+    fn master_design_values(&self, axis_index: usize) -> Vec<f64> {
+        self.masters
+            .iter()
+            .filter_map(|master| master.axes_values.get(axis_index))
+            .map(|value| value.into_inner())
+            .collect()
     }
-    mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
-    mapping.dedup_by(|left, right| left.0 == right.0);
-    GlyphsAxisMapping {
-        user_to_design: mapping.into_boxed_slice(),
+
+    fn default_design_value(&self, axis_index: usize, values: &[f64]) -> f64 {
+        self.masters
+            .get(self.default_master_idx)
+            .and_then(|master| master.axes_values.get(axis_index))
+            .map(|value| value.into_inner())
+            .or_else(|| values.first().copied())
+            .unwrap_or(0.0)
+    }
+
+    fn axis_mapping(
+        &self,
+        axis_index: usize,
+        design_values: &[f64],
+        design_default: f64,
+    ) -> GlyphsAxisMapping {
+        let axis = &self.axes[axis_index];
+        let mut mapping = self.axis_mappings.get(&axis.name).map_or_else(
+            || {
+                design_values
+                    .iter()
+                    .copied()
+                    .map(|value| (value, value))
+                    .collect()
+            },
+            |mapping| {
+                mapping
+                    .iter()
+                    .map(|(user, design)| (user.into_inner(), design.into_inner()))
+                    .collect::<Vec<_>>()
+            },
+        );
+        if mapping.is_empty() {
+            mapping.push((design_default, design_default));
+        }
+        mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
+        mapping.dedup_by(|left, right| left.0 == right.0);
+        GlyphsAxisMapping {
+            user_to_design: mapping.into_boxed_slice(),
+        }
     }
 }
 
-pub(crate) fn master_location_values(master: &FontMaster, axis_count: usize) -> Vec<Option<f64>> {
-    (0..axis_count)
-        .map(|index| {
-            master
-                .axes_values
-                .get(index)
-                .map(|value| value.into_inner())
-        })
-        .collect()
+/// Reads a Glyphs master's location.
+pub(crate) trait GlyphsMasterExt {
+    /// Returns the master's value on each of the first `axis_count` axes.
+    fn location_values(&self, axis_count: usize) -> impl Iterator<Item = Option<f64>>;
 }
 
-pub(crate) fn component_transform(component: &GlyphsComponent) -> [f64; 6] {
-    component.transform.as_coeffs()
+impl GlyphsMasterExt for FontMaster {
+    fn location_values(&self, axis_count: usize) -> impl Iterator<Item = Option<f64>> {
+        (0..axis_count).map(|index| self.axes_values.get(index).map(|value| value.into_inner()))
+    }
+}
+
+/// Reads a Glyphs anchor as Shift stores one.
+pub(crate) trait GlyphsAnchorExt {
+    /// Returns the anchor's name, `None` when it is blank, and its position.
+    fn name_and_position(&self) -> (Option<String>, f64, f64);
+}
+
+impl GlyphsAnchorExt for GlyphsAnchor {
+    fn name_and_position(&self) -> (Option<String>, f64, f64) {
+        (
+            (!self.name.is_empty()).then(|| self.name.to_string()),
+            self.pos.x,
+            self.pos.y,
+        )
+    }
 }
 
 pub(crate) fn missing_component_details(name: &str) -> String {
     format!("component base glyph {name:?} does not exist")
-}
-
-pub(crate) fn anchor_parts(anchor: &GlyphsAnchor) -> (Option<String>, f64, f64) {
-    (
-        (!anchor.name.is_empty()).then(|| anchor.name.to_string()),
-        anchor.pos.x,
-        anchor.pos.y,
-    )
 }
 
 pub(crate) fn font_header(
@@ -174,7 +197,7 @@ pub(crate) fn font_header(
         font.metadata_mut().style_name = Some(default_master.name.clone());
     }
     font.metadata_mut().version_major = Some(glyphs_font.version_major);
-    font.metadata_mut().version_minor = Some(glyphs_font.version_minor as i32);
+    font.metadata_mut().version_minor = i32::try_from(glyphs_font.version_minor).ok();
     font.metrics_mut().units_per_em = glyphs_font.units_per_em as f64;
     let skipped = glyphs_font
         .glyph_order
@@ -197,13 +220,13 @@ pub(crate) fn font_header(
     let mut axis_ids_by_index = Vec::new();
     let mut axis_mappings = Vec::new();
     for (index, glyphs_axis) in glyphs_font.axes.iter().enumerate() {
-        let design_values = master_design_values(glyphs_font, index);
+        let design_values = glyphs_font.master_design_values(index);
         if design_values.is_empty() {
             continue;
         }
 
-        let design_default = default_design_value(glyphs_font, index, &design_values);
-        let mapping = glyphs_axis_mapping(glyphs_font, index, &design_values, design_default);
+        let design_default = glyphs_font.default_design_value(index, &design_values);
+        let mapping = glyphs_font.axis_mapping(index, &design_values, design_default);
         let user_default = mapping.unmap(design_default);
         let instance_values = glyphs_font
             .instances
@@ -248,8 +271,8 @@ pub(crate) fn font_header(
                         .iter()
                         .map(|(user, design)| AxisMappingPoint {
                             description: None,
-                            input: Location::from_map(HashMap::from([(axis_id.clone(), *user)])),
-                            output: Location::from_map(HashMap::from([(axis_id.clone(), *design)])),
+                            input: Location::from([(axis_id.clone(), *user)]),
+                            output: Location::from([(axis_id.clone(), *design)]),
                         })
                         .collect(),
                 )
@@ -262,41 +285,26 @@ pub(crate) fn font_header(
         let mut location = DesignLocation::new();
         for (axis_id, value) in axis_ids_by_index
             .iter()
-            .zip(master_location_values(master, axis_ids_by_index.len()))
+            .zip(master.location_values(axis_ids_by_index.len()))
         {
             if let Some(value) = value {
                 location.set(axis_id.clone(), value);
             }
         }
         let source_id = font.add_source(Source::new(master.name.clone(), location));
-        let metric_definitions = font.metric_definitions().to_vec();
+        font.set_standard_metrics(
+            &source_id,
+            StandardMetrics {
+                ascender: master.ascender(),
+                descender: master.descender(),
+                cap_height: master.cap_height(),
+                x_height: master.x_height(),
+                baseline: None,
+            },
+        )?;
         let source = font
-            .source_mut(source_id.clone())
+            .source_mut(&source_id)
             .expect("a newly added source should exist");
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::Ascender,
-            master.ascender(),
-        );
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::Descender,
-            master.descender(),
-        );
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::CapHeight,
-            master.cap_height(),
-        );
-        set_metric_position(
-            &metric_definitions,
-            source,
-            MetricKind::XHeight,
-            master.x_height(),
-        );
         source.set_italic_angle(master.italic_angle());
         source_ids_by_master_id.insert(master.id.clone(), source_id.clone());
         if master_index == glyphs_font.default_master_idx {
@@ -321,14 +329,12 @@ pub(crate) fn font_header(
                             .zip(&axis_mappings)
                             .enumerate()
                             .map(|(index, (axis_id, mapping))| {
-                                let value = instance
-                                    .axes_values
-                                    .get(index)
-                                    .map(|value| mapping.unmap(value.into_inner()))
-                                    .unwrap_or_else(|| font.axes()[index].default());
+                                let value = instance.axes_values.get(index).map_or_else(
+                                    || font.axes()[index].default(),
+                                    |value| mapping.unmap(value.into_inner()),
+                                );
                                 (axis_id.clone(), value)
-                            })
-                            .collect(),
+                            }),
                     ),
                     None,
                 )
@@ -397,10 +403,12 @@ pub(super) fn add_intermediate_sources(
     let metrics = font.source_metric_interpolation();
     let mut intermediates = HashMap::new();
     for coordinates in locations {
-        let mut location = DesignLocation::new();
-        for (axis, value) in font.axes().iter().zip(&coordinates) {
-            location.set(axis.id(), value.into_inner());
-        }
+        let location: DesignLocation = font
+            .axes()
+            .iter()
+            .zip(&coordinates)
+            .map(|(axis, value)| (axis.id(), value.into_inner()))
+            .collect();
         let name = coordinates
             .iter()
             .map(ToString::to_string)
@@ -490,25 +498,17 @@ pub(super) fn convert_glyph(
                                 component.name.as_str(),
                             ))
                         })?;
-                    let coeffs = component_transform(component);
                     result_layer.add_component(Component::with_matrix(
                         base_glyph_id.clone(),
                         component.name.to_string(),
-                        &Transform {
-                            xx: coeffs[0],
-                            xy: coeffs[1],
-                            yx: coeffs[2],
-                            yy: coeffs[3],
-                            dx: coeffs[4],
-                            dy: coeffs[5],
-                        },
+                        &Transform::from_values(component.transform.as_coeffs()),
                     ));
                 }
             }
         }
 
         for anchor in &layer.anchors {
-            let (name, x, y) = anchor_parts(anchor);
+            let (name, x, y) = anchor.name_and_position();
             result_layer.add_anchor(Anchor::new(name, x, y));
         }
 
@@ -520,11 +520,9 @@ pub(super) fn convert_glyph(
 
 fn convert_node_type(node_type: NodeType) -> (shift_font::PointType, bool) {
     match node_type {
-        NodeType::Line => (shift_font::PointType::OnCurve, false),
-        NodeType::LineSmooth => (shift_font::PointType::OnCurve, true),
+        NodeType::Line | NodeType::Curve => (shift_font::PointType::OnCurve, false),
+        NodeType::LineSmooth | NodeType::CurveSmooth => (shift_font::PointType::OnCurve, true),
         NodeType::OffCurve => (shift_font::PointType::OffCurve, false),
-        NodeType::Curve => (shift_font::PointType::OnCurve, false),
-        NodeType::CurveSmooth => (shift_font::PointType::OnCurve, true),
         NodeType::QCurve => (shift_font::PointType::QCurve, false),
         NodeType::QCurveSmooth => (shift_font::PointType::QCurve, true),
     }
@@ -665,8 +663,8 @@ mod tests {
         assert_eq!(imported_layer_count(&glyphs_font.glyphs["a"], &sources), 2);
         for glyph in [&a, &b] {
             assert_eq!(glyph.layers().len(), 2);
-            assert!(glyph.layer_for_source(master_source_id.clone()).is_some());
-            assert!(glyph.layer_for_source(brace.id()).is_some());
+            assert!(glyph.layer_for_source(&master_source_id).is_some());
+            assert!(glyph.layer_for_source(&brace.id()).is_some());
         }
     }
 

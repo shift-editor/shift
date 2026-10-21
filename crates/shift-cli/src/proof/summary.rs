@@ -5,7 +5,7 @@ use shift_proof::{ImageFormat, ProofMode, ProofReport};
 
 /// A written proof: where the image went plus everything it shows.
 #[derive(Debug, Serialize)]
-pub struct ProofSummary {
+pub(crate) struct ProofSummary {
     pub output: String,
     #[serde(flatten)]
     pub report: ProofReport,
@@ -13,7 +13,7 @@ pub struct ProofSummary {
 
 impl ProofSummary {
     /// Formats the report as short plain-text lines for terminals.
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let report = &self.report;
         let format = match report.format {
             ImageFormat::Png => "png",

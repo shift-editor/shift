@@ -9,7 +9,7 @@ use skrifa::instance::{Location, Size};
 use skrifa::outline::OutlineGlyphCollection;
 use skrifa::raw::TableProvider;
 use skrifa::raw::tables::os2::SelectionFlags;
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use crate::location::resolve;
 use crate::{AxisValue, Coordinates, ProofError};
@@ -150,10 +150,7 @@ impl<'a> ProofFont<'a> {
 
     /// Glyph mapped to `character` by `cmap`.
     pub fn glyph_for_char(&self, character: char) -> Option<u32> {
-        self.font
-            .charmap()
-            .map(character)
-            .map(|glyph_id| glyph_id.to_u32())
+        self.font.charmap().map(character).map(GlyphId::to_u32)
     }
 
     /// Glyph named `name` in `post`, when the font stores names.

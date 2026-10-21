@@ -6,9 +6,6 @@
 //! nonspacing mark is a mark and a letter carrying an `_` anchor is not.
 //! Names match the strings `.glyphs` files and `GlyphData.xml` use.
 
-use std::fmt;
-use std::str::FromStr;
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 macro_rules! named_enum {
@@ -16,38 +13,13 @@ macro_rules! named_enum {
         $(#[$meta:meta])*
         $name:ident { $($variant:ident => $text:literal),+ $(,)? }
     ) => {
-        $(#[$meta])*
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        pub enum $name {
-            $($variant),+
-        }
-
-        impl $name {
-            pub const ALL: &'static [$name] = &[$(Self::$variant),+];
-
-            /// The name `.glyphs` files and glyph data use.
-            pub fn as_str(self) -> &'static str {
-                match self {
-                    $(Self::$variant => $text),+
-                }
+        crate::string_enum! {
+            $(#[$meta])*
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+            pub enum $name {
+                $($variant => $text,)+
             }
-        }
-
-        impl FromStr for $name {
-            type Err = UnknownGlyphCategory;
-
-            fn from_str(text: &str) -> Result<Self, Self::Err> {
-                match text {
-                    $($text => Ok(Self::$variant),)+
-                    _ => Err(UnknownGlyphCategory(text.to_string())),
-                }
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str(self.as_str())
-            }
+            parse_error: UnknownGlyphCategory = |text| UnknownGlyphCategory(text.to_string());
         }
 
         impl Serialize for $name {
@@ -143,6 +115,6 @@ mod tests {
             "Spacing Combining".parse(),
             Ok(GlyphSubcategory::SpacingCombining)
         );
-        assert!("Vowel".parse::<GlyphCategory>().is_err());
+        "Vowel".parse::<GlyphCategory>().unwrap_err();
     }
 }

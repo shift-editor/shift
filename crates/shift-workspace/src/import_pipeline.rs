@@ -34,6 +34,11 @@ struct PackedImportBatch {
 /// channels keep one batch active per stage without retaining queued batches.
 /// The observer runs after each batch is staged in the open transaction; it
 /// must remain lightweight so it does not throttle the writer.
+///
+/// # Errors
+///
+/// Returns the first failure from parsing a batch ([`WorkspaceError::Backend`]), encoding it
+/// ([`WorkspaceError::Store`]), or writing it to the store.
 pub fn stream_into(
     mut import: FontImport,
     writer: &mut FontImportWriter<'_>,
@@ -99,7 +104,7 @@ pub fn stream_into(
             let batch = result?;
             let pack_elapsed = batch.glyphs.pack_elapsed();
             let compression_elapsed = batch.glyphs.compression_elapsed();
-            let sqlite_elapsed = writer.write_packed_glyph_batch(batch.glyphs)?;
+            let sqlite_elapsed = writer.write_packed_glyph_batch(&batch.glyphs)?;
             observe(ImportBatchProgress {
                 glyph_count: batch.glyph_count,
                 layer_count: batch.layer_count,

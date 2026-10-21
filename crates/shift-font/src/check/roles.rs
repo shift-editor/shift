@@ -7,8 +7,8 @@
 //! whatever its code point, since fonts encode mark variants in private use.
 
 use crate::Glyph;
-use icu_properties::props::GeneralCategory;
 use icu_properties::CodePointMapData;
+use icu_properties::props::GeneralCategory;
 
 /// Advance and outline expectations for one glyph.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

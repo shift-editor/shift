@@ -9,10 +9,10 @@ use norad::{DataRequest, Font as NoradFont};
 use shift_font::{Font, GlyphId, LayerId, Source, SourceId};
 
 use crate::{
+    ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
     import::{GlifGlyph, GlifGlyphStream, GlifLayer},
     kerning_import::KerningImport,
-    ImportReport,
 };
 
 use super::{UfoKerning, UfoReader};
@@ -34,19 +34,19 @@ pub(crate) fn stream_font(
 ) -> FormatBackendResult<(Font, GlifGlyphStream, ImportReport)> {
     let ufo_path = Path::new(path);
     let layers = Arc::from(read_ufo_layer_directories(ufo_path)?);
-    stream_retained(ufo_path, layers)
+    stream_retained(ufo_path, &layers)
 }
 
 pub(crate) fn stream_retained(
     ufo_path: &Path,
-    retained: Arc<[UfoLayerDirectory]>,
+    retained: &Arc<[UfoLayerDirectory]>,
 ) -> FormatBackendResult<(Font, GlifGlyphStream, ImportReport)> {
     let (mut header, kerning) = load_header(ufo_path)?;
     let default_source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Ufo("UFO header is missing its default source".into())
     })?;
-    let layers = load_layer_directories(&retained, &mut header, default_source_id.clone())?;
-    let (glyph_ids, glyphs) = build_glyph_directory(&SourceGlyphIds::for_path(ufo_path), layers);
+    let layers = load_layer_directories(retained, &mut header, &default_source_id)?;
+    let (glyph_ids, glyphs) = build_glyph_directory(&SourceGlyphIds::for_path(ufo_path), &layers);
 
     let mut report = ImportReport::default();
     let mut import = KerningImport::new(&glyph_ids);
@@ -84,7 +84,7 @@ pub(crate) fn read_ufo_layer_directories(
 fn load_layer_directories(
     retained: &[UfoLayerDirectory],
     header: &mut Font,
-    default_source_id: SourceId,
+    default_source_id: &SourceId,
 ) -> FormatBackendResult<Vec<LayerDirectory>> {
     let mut layers = Vec::with_capacity(retained.len());
     for (index, retained) in retained.iter().enumerate() {
@@ -94,7 +94,7 @@ fn load_layer_directories(
         } else {
             header.add_source(Source::layer(retained.name.clone()))
         };
-        let source = header.source_mut(source_id.clone()).ok_or_else(|| {
+        let source = header.source_mut(&source_id).ok_or_else(|| {
             FormatBackendError::Ufo("newly registered UFO source is missing".into())
         })?;
         source.set_color(color);
@@ -202,11 +202,11 @@ fn read_layer_info(layer_path: &Path) -> FormatBackendResult<(Option<String>, pl
 
 fn build_glyph_directory(
     source_glyph_ids: &SourceGlyphIds,
-    layers: Vec<LayerDirectory>,
+    layers: &[LayerDirectory],
 ) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
     let mut ordered_names = Vec::new();
     let mut seen = HashSet::new();
-    for layer in &layers {
+    for layer in layers {
         for name in layer.glyphs.keys() {
             if seen.insert(name.clone()) {
                 ordered_names.push(name.clone());

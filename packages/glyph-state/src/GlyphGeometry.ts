@@ -9,15 +9,14 @@ import {
   type GlyphState,
   type GlyphStructure,
   type PointId,
+  type SegmentId,
 } from "@shift/types";
 import { Anchor } from "./Anchor";
 import type { AnchorHit } from "./Anchor";
 import { Component } from "./Component";
 import { Contour } from "./Contour";
 import { IdIndex } from "./IdIndex";
-import type { SegmentId } from "@shift/types";
-import { Segment } from "./Segment";
-import type { SegmentHit } from "./Segment";
+import type { Segment, SegmentHit } from "./Segment";
 import { Point } from "./Point";
 import type { PointHit } from "./Point";
 

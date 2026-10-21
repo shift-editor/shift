@@ -10,17 +10,17 @@ use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider};
 
 use crate::font_source::atlas::{
-    validate_roots, AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError,
-    SourceAtlasPage,
+    AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError, SourceAtlasPage,
+    validate_roots,
 };
 use crate::font_source::{
-    inferred_smooth_point_indices, malformed, FontReadError, FontSource, GlyphComponent,
-    GlyphDelta as ProjectedDelta, GlyphIndex, GlyphPointKind, GlyphProjection, GlyphShape,
-    GlyphShapeContour, GlyphShapePoint, GlyphVariation, PointProvenance, ProjectedGlyph,
-    VariationAxisKind, VariationRegion, VariationSupport,
+    FontReadError, FontSource, GlyphComponent, GlyphDelta as ProjectedDelta, GlyphIndex,
+    GlyphPointKind, GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint,
+    GlyphVariation, PointProvenance, ProjectedGlyph, VariationAxisKind, VariationRegion,
+    VariationSupport, inferred_smooth_point_indices, malformed,
 };
 
-use super::{geometry, metrics, tables, OpenTypeFont};
+use super::{OpenTypeFont, geometry, metrics, tables};
 
 /// Compiles one selected glyph and its component closure directly from glyf/gvar semantics.
 pub(super) fn project_binary_glyph(
@@ -48,9 +48,9 @@ pub(super) fn project_binary_glyph(
     let advances = metrics::advance_contributions(
         &source.path,
         &font,
-        loca.clone(),
-        glyf.clone(),
-        gvar.clone(),
+        &loca,
+        &glyf,
+        gvar.as_ref(),
         &mut registry,
         &glyph_indices,
     )
@@ -362,7 +362,7 @@ fn variable_glyph_projection(
             .enumerate()
             .filter(|(_, axis)| axis.peak != 0)
             .map(|(axis, support)| VariationSupport {
-                axis: crate::font_source::AxisIndex::new(axis as u32),
+                axis: crate::font_source::AxisIndex::at(axis),
                 lower: f64::from(support.start) / 16384.0,
                 peak: f64::from(support.peak) / 16384.0,
                 upper: f64::from(support.end) / 16384.0,
@@ -400,14 +400,19 @@ fn source_atlas_read_error(error: SourceAtlasError) -> FontReadError {
 }
 
 /// Compiles one deterministic root batch directly from retained glyf/gvar semantics.
+///
+/// # Errors
+///
+/// Returns [`SourceAtlasError::Read`] when a root is out of range or a table cannot be read,
+/// [`SourceAtlasError::UnsupportedBinary`] when a glyph uses variation features the atlas does not
+/// model, and [`SourceAtlasError::Slug`] when the page outgrows the atlas limits.
 pub fn build_binary_atlas_page(
     source: &OpenTypeFont,
     roots: &[GlyphIndex],
     band_count: u32,
 ) -> Result<SourceAtlasPage, SourceAtlasError> {
     validate_roots(source.directory(), roots)?;
-    let (font, variable_tables) =
-        tables::variable_tables(source).map_err(SourceAtlasError::from)?;
+    let (font, variable_tables) = tables::variable_tables(source)?;
     let Some((loca, glyf, gvar)) = variable_tables else {
         return build_static_cff_atlas_page(source, &font, roots, band_count);
     };
@@ -429,9 +434,9 @@ pub fn build_binary_atlas_page(
     let advances = metrics::advance_contributions(
         &source.path,
         &font,
-        loca,
-        glyf,
-        gvar,
+        &loca,
+        &glyf,
+        gvar.as_ref(),
         &mut registry,
         roots,
     )?;
@@ -451,19 +456,13 @@ pub fn build_binary_atlas_page(
                 let source_curves = curves
                     .sources
                     .remove(&weight)
-                    .unwrap_or_else(|| curves.base.clone());
+                    .unwrap_or_else(|| curves.base.curves().to_vec());
                 let source_advance =
                     advance.base + advance.deltas.get(&weight).copied().unwrap_or(0.0);
                 (weight, source_curves, source_advance)
             })
             .collect();
-        compiler.add_glyph(
-            root.to_u32(),
-            curves.base,
-            curves.line_flags,
-            advance.base,
-            sources,
-        )?;
+        compiler.add_glyph(root.to_u32(), curves.base, advance.base, sources)?;
     }
     Ok(compiler.finish())
 }
@@ -474,19 +473,13 @@ fn build_static_cff_atlas_page(
     roots: &[GlyphIndex],
     band_count: u32,
 ) -> Result<SourceAtlasPage, SourceAtlasError> {
-    validate_static_cff(source, font).map_err(SourceAtlasError::from)?;
+    validate_static_cff(source, font)?;
 
     let mut compiler = PageCompiler::new(band_count, Vec::new(), Vec::new())?;
     for root in roots {
         let (pen, advance) = draw_static_cff_glyph(source, font, *root)?;
         let curves = pen.curves()?;
-        compiler.add_glyph(
-            root.to_u32(),
-            curves.base,
-            curves.line_flags,
-            advance,
-            Vec::new(),
-        )?;
+        compiler.add_glyph(root.to_u32(), curves.base, advance, Vec::new())?;
     }
     Ok(compiler.finish())
 }
@@ -558,7 +551,7 @@ fn normalize_user_coordinate(value: f64, minimum: f64, default: f64, maximum: f6
     } else {
         (value - default) / (maximum - default)
     };
-    F2Dot14::from_f32(normalized as f32).to_bits()
+    F2Dot14::from_f32(crate::numeric::lossy_f32(normalized)).to_bits()
 }
 
 pub(super) fn tuple_region(tuple: &TupleVariation<'_, GlyphDelta>) -> AtlasRegion {
@@ -595,15 +588,15 @@ pub(super) fn tuple_region(tuple: &TupleVariation<'_, GlyphDelta>) -> AtlasRegio
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use shift_font::test_support::fixtures;
 
-    use shift_slug::{AtlasBuilder, Curve, OutlineCommand, DEFAULT_BAND_COUNT};
+    use shift_slug::{AtlasBuilder, Curve, DEFAULT_BAND_COUNT, OutlineCommand};
     use skrifa::outline::pen::PathStyle;
     use skrifa::outline::{DrawSettings, OutlinePen};
     use skrifa::prelude::{LocationRef, Size};
     use skrifa::{FontRef, GlyphId, MetadataProvider};
 
-    use super::{build_binary_atlas_page, OpenTypeFont};
+    use super::{OpenTypeFont, build_binary_atlas_page};
     use crate::font_source::{FontSource, GlyphIndex, VariationAxisKind, VariationCoordinate};
 
     #[derive(Default)]
@@ -642,22 +635,7 @@ mod tests {
         "apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf";
 
     fn host_grotesk() -> OpenTypeFont {
-        OpenTypeFont::open(&repository_root().join(HOST_GROTESK_VARIABLE)).unwrap()
-    }
-
-    fn repository_root() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .to_path_buf()
-    }
-
-    fn fixture(name: &str) -> PathBuf {
-        repository_root()
-            .join("fixtures/fonts/mutatorsans")
-            .join(name)
+        OpenTypeFont::open(&fixtures::repository_root().join(HOST_GROTESK_VARIABLE)).unwrap()
     }
 
     #[test]
@@ -674,15 +652,12 @@ mod tests {
         });
         let composite = source.glyph(roots[1]).unwrap();
         assert!(!composite.root.fallback.components.is_empty());
-        assert!(composite
-            .root
-            .fallback
-            .components
-            .iter()
-            .all(|component| composite
+        assert!(composite.root.fallback.components.iter().all(|component| {
+            composite
                 .components
                 .iter()
-                .any(|projection| projection.glyph == component.glyph)));
+                .any(|projection| projection.glyph == component.glyph)
+        }));
         let page = build_binary_atlas_page(&source, &roots, DEFAULT_BAND_COUNT).unwrap();
         let axis = &source.directory().axes[0];
         let (default, maximum) = match axis.kind {
@@ -739,7 +714,9 @@ mod tests {
 
     #[test]
     fn rotated_skewed_composite_matches_skrifa() {
-        let source = OpenTypeFont::open(&fixture("RotatedSkewedComposite.ttf")).unwrap();
+        let source =
+            OpenTypeFont::open(&fixtures::font("mutatorsans").join("RotatedSkewedComposite.ttf"))
+                .unwrap();
         let root = source.directory().glyphs[34].index;
         let page = build_binary_atlas_page(&source, &[root], DEFAULT_BAND_COUNT).unwrap();
         let preview_extents = page.preview_extents().unwrap();
@@ -765,11 +742,13 @@ mod tests {
             source.directory().mappings.len(),
             source.directory().axes.len()
         );
-        assert!(source
-            .directory()
-            .mappings
-            .iter()
-            .all(|mapping| !mapping.points.is_empty()));
+        assert!(
+            source
+                .directory()
+                .mappings
+                .iter()
+                .all(|mapping| !mapping.points.is_empty())
+        );
 
         let space = source
             .directory()
@@ -853,7 +832,8 @@ mod tests {
 
     #[test]
     fn static_cff_projection_and_page_match_skrifa() {
-        let source = OpenTypeFont::open(&fixture("MutatorSans.otf")).unwrap();
+        let source =
+            OpenTypeFont::open(&fixtures::font("mutatorsans").join("MutatorSans.otf")).unwrap();
         let root = source.directory().glyphs[0].index;
         let projected = source.glyph(root).unwrap();
         assert_eq!(projected.root.glyph, root);
@@ -875,16 +855,13 @@ mod tests {
 
     fn skrifa_curves(
         source: &OpenTypeFont,
-        glyph: crate::font_source::GlyphIndex,
+        glyph: GlyphIndex,
         location: &crate::font_source::VariationLocation,
     ) -> Vec<Curve> {
         let font = FontRef::new(source.bytes().as_ref()).unwrap();
         let location = skrifa_location(&font, source, location);
         let mut pen = CommandPen::default();
-        if let Some(outline) = font
-            .outline_glyphs()
-            .get(skrifa::GlyphId::new(glyph.to_u32()))
-        {
+        if let Some(outline) = font.outline_glyphs().get(GlyphId::new(glyph.to_u32())) {
             outline
                 .draw(
                     DrawSettings::unhinted(Size::unscaled(), LocationRef::from(&location))
@@ -909,7 +886,7 @@ mod tests {
                 .axes
                 .iter()
                 .zip(location.coordinates())
-                .map(|(axis, value)| (axis.tag.as_str(), *value as f32)),
+                .map(|(axis, value)| (axis.tag.as_str(), crate::numeric::lossy_f32(*value))),
         )
     }
 

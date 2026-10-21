@@ -34,6 +34,10 @@ fn intern(table: &mut Names, name: &str) -> u32 {
     if let Some(&id) = table.ids.get(name) {
         return id;
     }
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "usize is 32 bits on wasm32, the only target that interns names"
+    )]
     let id = table.names.len() as u32;
     table.names.push(name.to_string());
     table.ids.insert(name.to_string(), id);

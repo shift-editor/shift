@@ -1,4 +1,4 @@
-import type { GlyphId } from "@shift/types";
+import { asGlyphId } from "@shift/types";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import type {
   GlyphAtlasPage,
@@ -31,7 +31,7 @@ export class ImportedGlyphAtlasSource implements GlyphAtlasSource {
       layout: descriptor.layout,
       previewExtents: descriptor.previewExtents,
       glyphs: descriptor.glyphs.map((glyph) => ({
-        glyphId: glyph.glyphId as GlyphId,
+        glyphId: asGlyphId(glyph.glyphId),
         defaultGlyph: glyph.defaultGlyph,
         exactSources: glyph.exactSources,
       })),

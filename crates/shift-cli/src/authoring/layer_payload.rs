@@ -1,5 +1,6 @@
 //! Layer payload parsing and lowering to semantic replacement intents.
 
+use shift_font::ReplaceGlyphLayerContent;
 use std::io::{self, Read};
 use std::path::Path;
 
@@ -69,12 +70,15 @@ impl LayerInput {
                 result
             }
         };
-        let mut anchors = Vec::with_capacity(self.anchors.len());
-        for anchor in self.anchors {
-            require_finite(anchor.x, "anchor x")?;
-            require_finite(anchor.y, "anchor y")?;
-            anchors.push(Anchor::new(anchor.name, anchor.x, anchor.y));
-        }
+        let anchors = self
+            .anchors
+            .into_iter()
+            .map(|anchor| {
+                require_finite(anchor.x, "anchor x")?;
+                require_finite(anchor.y, "anchor y")?;
+                Ok(Anchor::new(anchor.name, anchor.x, anchor.y))
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         let mut components = Vec::with_capacity(self.components.len());
         for input in self.components {
@@ -104,13 +108,14 @@ impl LayerInput {
             ));
         }
 
-        Ok(FontIntent::ReplaceGlyphLayerContent {
+        Ok(ReplaceGlyphLayerContent {
             layer_id,
             width: self.advance,
             contours,
             anchors,
             components,
-        })
+        }
+        .into())
     }
 }
 

@@ -3,6 +3,10 @@
 //! These types split stable glyph structure from mutable numeric values. The
 //! values layout is canonical and must stay in lockstep with every consumer.
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
@@ -45,7 +49,7 @@ pub type GlyphValue = f64;
 
 pub type GlyphValues = Vec<GlyphValue>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetadata {
     pub family_name: Option<String>,
@@ -91,6 +95,15 @@ pub struct FontMetrics {
     pub units_per_em: f64,
 }
 
+impl Default for FontMetrics {
+    /// A new font's em.
+    fn default() -> Self {
+        Self {
+            units_per_em: shift_font::FontMetrics::default().units_per_em,
+        }
+    }
+}
+
 impl From<&IrFontMetrics> for FontMetrics {
     fn from(metrics: &IrFontMetrics) -> Self {
         Self {
@@ -118,19 +131,24 @@ pub enum MetricKind {
     Custom,
 }
 
+impl From<IrMetricKind> for MetricKind {
+    fn from(kind: IrMetricKind) -> Self {
+        match kind {
+            IrMetricKind::Ascender => Self::Ascender,
+            IrMetricKind::CapHeight => Self::CapHeight,
+            IrMetricKind::XHeight => Self::XHeight,
+            IrMetricKind::Baseline => Self::Baseline,
+            IrMetricKind::Descender => Self::Descender,
+            IrMetricKind::Custom => Self::Custom,
+        }
+    }
+}
+
 impl From<&IrMetricDefinition> for MetricDefinition {
     fn from(definition: &IrMetricDefinition) -> Self {
-        let kind = match definition.kind() {
-            IrMetricKind::Ascender => MetricKind::Ascender,
-            IrMetricKind::CapHeight => MetricKind::CapHeight,
-            IrMetricKind::XHeight => MetricKind::XHeight,
-            IrMetricKind::Baseline => MetricKind::Baseline,
-            IrMetricKind::Descender => MetricKind::Descender,
-            IrMetricKind::Custom => MetricKind::Custom,
-        };
         Self {
             id: definition.id(),
-            kind,
+            kind: definition.kind().into(),
             name: definition.name().to_string(),
         }
     }
@@ -358,7 +376,7 @@ impl From<&IrGlyph> for GlyphRecord {
             .layers()
             .values()
             .flat_map(|layer| layer.components_iter())
-            .map(|component| component.base_glyph_id())
+            .map(shift_font::Component::base_glyph_id)
             .collect();
         component_base_glyph_ids.sort();
         component_base_glyph_ids.dedup();
@@ -581,7 +599,7 @@ impl LayerMatch {
             .collect();
         let points = reference
             .contours_iter()
-            .flat_map(|contour| contour.points())
+            .flat_map(shift_font::Contour::points)
             .filter_map(|point| {
                 layer_match
                     .point_for(&point.id())
@@ -754,7 +772,10 @@ pub struct GlyphEntry {
 }
 
 /// Source-neutral font state required to construct the renderer model.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// The default is an empty font with a new font's em, which a preview fills
+/// from its source's directory and leaves without a lib or kerning.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontSnapshot {
     pub metadata: FontMetadata,
@@ -1006,6 +1027,9 @@ pub struct GlyphProjection {
     pub glyph_id: GlyphId,
     pub fallback: GlyphLayerShape,
     pub interpolation: Option<GlyphInterpolation>,
+    /// Basis over the glyph's and its components' masters, present when
+    /// compiled fonts interpolate the glyph decomposed.
+    pub decomposition: Option<InterpolationBasis>,
     pub variation: Option<GlyphVariation>,
     pub exact_source_shapes: Vec<GlyphSourceShape>,
     pub components: GlyphComponents,
@@ -1019,6 +1043,7 @@ impl From<&IrGlyphProjection> for GlyphProjection {
             glyph_id: projection.glyph_id(),
             fallback: GlyphLayerShape::from(projection.fallback()),
             interpolation: projection.interpolation().map(Into::into),
+            decomposition: projection.decomposition().map(Into::into),
             variation: None,
             exact_source_shapes: projection
                 .exact_source_shapes()
@@ -1095,6 +1120,10 @@ impl From<&IrPoint> for PointData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "the font-format names for point types"
+)]
 pub enum PointType {
     OnCurve,
     OffCurve,
@@ -1114,9 +1143,9 @@ impl From<IrPointType> for PointType {
 impl From<PointType> for IrPointType {
     fn from(point_type: PointType) -> Self {
         match point_type {
-            PointType::OnCurve => IrPointType::OnCurve,
-            PointType::OffCurve => IrPointType::OffCurve,
-            PointType::QCurve => IrPointType::QCurve,
+            PointType::OnCurve => Self::OnCurve,
+            PointType::OffCurve => Self::OffCurve,
+            PointType::QCurve => Self::QCurve,
         }
     }
 }

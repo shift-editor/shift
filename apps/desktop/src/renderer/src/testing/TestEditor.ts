@@ -171,7 +171,7 @@ export class TestEditor extends Editor {
 
   /** The canvas's text run; the editor route creates it on the first open. */
   get textRun(): TextRunNode | null {
-    return this.scene.nodesOfKind("textRun")[0] ?? null;
+    return this.scene.first("textRun");
   }
 
   /** The glyph edited in place in {@link textRun}. */
@@ -217,9 +217,13 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  /** Awaits every queued and in-flight apply; geometry reads confirmed truth after. */
+  /**
+   * Awaits every queued and in-flight apply, then text shaping and the glyph
+   * loads it asks for; geometry and text reads see confirmed truth after.
+   */
   async settle(): Promise<this> {
     await this.font.editCoordinator.settled();
+    await this.text.settled();
     return this;
   }
 
@@ -277,7 +281,7 @@ export class TestEditor extends Editor {
   }
 
   get glyphNode(): GlyphNode | null {
-    return this.scene.nodesOfKind("glyph")[0] ?? null;
+    return this.scene.first("glyph");
   }
 
   get sceneGlyphRenderModel(): GlyphRenderModel | null {

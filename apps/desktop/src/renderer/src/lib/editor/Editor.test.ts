@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId } from "@shift/types";
+import type { GlyphNode } from "@shift/editor/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { effect } from "@shift/editor/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
@@ -90,6 +91,25 @@ describe("Editor scene bootstrap", () => {
     editor.scene.updateNode({ id: node!.id, position: { x: 40, y: 0 } });
     expect(editor.scene.cell.peek()).not.toBe(scene);
     expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
+  });
+
+  it("names the one glyph node only while the scene shows exactly one", () => {
+    const [firstRun, firstChild] = editor.scene.nodes();
+
+    expect(editor.scene.only("glyph")).toBe(firstChild);
+    expect(editor.scene.first("textRun")).toBe(firstRun);
+
+    const record = editor.font.recordForName("A")!;
+    editor.scene.createNode<GlyphNode>({
+      kind: "glyph",
+      glyphId: record.id,
+      sourceId: editor.font.defaultSource.id,
+      position: { x: 700, y: 0 },
+    });
+
+    expect(editor.scene.nodesOfKind("glyph")).toHaveLength(2);
+    expect(editor.scene.only("glyph")).toBeNull();
+    expect(editor.scene.first("glyph")).toBe(firstChild);
   });
 
   it("can place the same glyph id twice with distinct node ids", () => {

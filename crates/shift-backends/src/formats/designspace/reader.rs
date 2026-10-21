@@ -1,11 +1,11 @@
+use super::DesignspaceAxisExt;
 use super::error::{DesignspaceError, DesignspaceResult};
 use crate::errors::FormatBackendResult;
-use crate::font_source::{piecewise_map, VariationAxisKind};
 use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::designspace::DesignSpaceDocument;
 use quick_xml::events::{BytesStart, Event};
-use quick_xml::Reader;
+use quick_xml::{Reader, XmlVersion};
 use shift_font::{
     Axis, AxisId, AxisMapping, AxisMappingId, AxisMappingPoint, DesignLocation, ExternalLocation,
     Font, Location, NamedInstance,
@@ -29,12 +29,12 @@ impl Default for DesignspaceReader {
 
 impl FontReader for DesignspaceReader {
     fn load(&self, path: &str) -> FormatBackendResult<Font> {
-        self.load_designspace(path)
+        Self::load_designspace(path)
     }
 }
 
 impl DesignspaceReader {
-    fn load_designspace(&self, path: &str) -> FormatBackendResult<Font> {
+    fn load_designspace(path: &str) -> FormatBackendResult<Font> {
         let (header, mut stream, _report) = super::stream_font(path)?;
         collect_streamed_font(header, &mut stream)
     }
@@ -43,7 +43,7 @@ impl DesignspaceReader {
 pub(super) fn named_instances_from_designspace(
     doc: &DesignSpaceDocument,
     axes: &[Axis],
-) -> DesignspaceResult<Vec<NamedInstance>> {
+) -> Vec<NamedInstance> {
     let mut imported = Vec::new();
     for (index, instance) in doc.instances.iter().enumerate() {
         // Legacy Designspace instances can also describe anisotropic or
@@ -62,7 +62,7 @@ pub(super) fn named_instances_from_designspace(
             .clone()
             .or_else(|| instance.name.clone())
             .unwrap_or_else(|| format!("Instance {}", index + 1));
-        let location = external_location_from_dimensions(&instance.location, doc, axes)?;
+        let location = external_location_from_dimensions(&instance.location, doc, axes);
         let postscript_name = instance.postscriptfontname.clone().filter(|name| {
             !imported
                 .iter()
@@ -70,24 +70,22 @@ pub(super) fn named_instances_from_designspace(
         });
         let candidate = NamedInstance::new(name, location, postscript_name);
 
-        if candidate.validate(axes).is_err()
-            || imported
-                .iter()
-                .any(|existing: &NamedInstance| existing.location() == candidate.location())
-        {
+        // Two instances at one location are kept here, so the import can
+        // report the later one when it leaves it out.
+        if candidate.validate(axes).is_err() {
             continue;
         }
         imported.push(candidate);
     }
 
-    Ok(imported)
+    imported
 }
 
 fn external_location_from_dimensions(
     dimensions: &[norad::designspace::Dimension],
     doc: &DesignSpaceDocument,
     axes: &[Axis],
-) -> DesignspaceResult<ExternalLocation> {
+) -> ExternalLocation {
     let mut location = ExternalLocation::new();
     for ds_axis in &doc.axes {
         let Some(axis) = axes.iter().find(|axis| axis.tag() == ds_axis.tag) else {
@@ -98,7 +96,7 @@ fn external_location_from_dimensions(
             .find(|dimension| dimension.name == ds_axis.name)
         {
             Some(dimension) => match (dimension.xvalue, dimension.uservalue) {
-                (Some(value), _) => unmap_axis_value(ds_axis, value as f64),
+                (Some(value), _) => ds_axis.map_backward(value as f64),
                 (None, Some(value)) => value as f64,
                 (None, None) => axis.default(),
             },
@@ -107,56 +105,7 @@ fn external_location_from_dimensions(
         location.set(axis.id(), value);
     }
 
-    Ok(location)
-}
-
-// Matches designspaceLib's continuous and discrete `map_backward` behavior.
-// Continuous flat segments choose the first user value; discrete maps only
-// replace exact authored values.
-// https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.AxisDescriptor.map_backward
-fn unmap_axis_value(axis: &norad::designspace::Axis, value: f64) -> f64 {
-    let Some(map) = axis.map.as_ref().filter(|map| !map.is_empty()) else {
-        return value;
-    };
-
-    if axis.values.is_some() {
-        return map
-            .iter()
-            .find(|point| point.output as f64 == value)
-            .map(|point| point.input as f64)
-            .unwrap_or(value);
-    }
-
-    let mut points = map
-        .iter()
-        .map(|point| (point.output as f64, point.input as f64))
-        .collect::<Vec<_>>();
-    points.sort_by(|left, right| {
-        left.0
-            .total_cmp(&right.0)
-            .then_with(|| left.1.total_cmp(&right.1))
-    });
-
-    let (first_design, first_user) = points[0];
-    if value <= first_design {
-        return value + first_user - first_design;
-    }
-    for pair in points.windows(2) {
-        let (lower_design, lower_user) = pair[0];
-        let (upper_design, upper_user) = pair[1];
-        if lower_design <= value && value <= upper_design {
-            if lower_design == upper_design {
-                return lower_user;
-            }
-
-            return lower_user
-                + (upper_user - lower_user) * (value - lower_design)
-                    / (upper_design - lower_design);
-        }
-    }
-
-    let (last_design, last_user) = points[points.len() - 1];
-    value + last_user - last_design
+    location
 }
 
 pub(crate) fn axis_mappings_from_designspace(
@@ -245,9 +194,7 @@ fn mapping_location_from_dimensions(
 }
 
 fn singleton_location(axis_id: AxisId, value: f64) -> Location {
-    let mut location = Location::new();
-    location.set(axis_id, value);
-    location
+    Location::from([(axis_id, value)])
 }
 
 fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {
@@ -292,20 +239,20 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
 
     loop {
         match reader.read_event() {
-            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match event.name().as_ref() {
-                b"axis" => {
+            Ok(Event::Start(event) | Event::Empty(event)) => match event.name().as_ref() {
+                "axis" => {
                     return Err(DesignspaceError::AxislessNotApplicable {
                         reason: "axes are present".to_string(),
-                    })
+                    });
                 }
-                b"source" => {
-                    if let Some(filename) = xml_attr(&reader, &event, b"filename")? {
+                "source" => {
+                    if let Some(filename) = xml_attr(&event, "filename")? {
                         sources.push(AxislessSource {
                             filename,
-                            familyname: xml_attr(&reader, &event, b"familyname")?,
-                            stylename: xml_attr(&reader, &event, b"stylename")?,
-                            name: xml_attr(&reader, &event, b"name")?,
-                            layer: xml_attr(&reader, &event, b"layer")?,
+                            familyname: xml_attr(&event, "familyname")?,
+                            stylename: xml_attr(&event, "stylename")?,
+                            name: xml_attr(&event, "name")?,
+                            layer: xml_attr(&event, "layer")?,
                         });
                     }
                 }
@@ -315,7 +262,7 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
             Err(error) => {
                 return Err(DesignspaceError::ParseAxislessXml {
                     details: error.to_string(),
-                })
+                });
             }
             _ => {}
         }
@@ -324,18 +271,14 @@ pub(super) fn parse_axisless_sources(xml: &str) -> DesignspaceResult<Vec<Axisles
     Ok(sources)
 }
 
-fn xml_attr(
-    reader: &Reader<&[u8]>,
-    event: &BytesStart,
-    name: &[u8],
-) -> DesignspaceResult<Option<String>> {
+fn xml_attr(event: &BytesStart, name: &str) -> DesignspaceResult<Option<String>> {
     for attribute in event.attributes() {
         let attribute = attribute.map_err(|error| DesignspaceError::ParseAxislessXml {
             details: error.to_string(),
         })?;
         if attribute.key.as_ref() == name {
             return attribute
-                .decode_and_unescape_value(reader.decoder())
+                .normalized_value(XmlVersion::Implicit1_0)
                 .map(|value| Some(value.into_owned()))
                 .map_err(|error| DesignspaceError::ParseAxislessXml {
                     details: error.to_string(),
@@ -418,127 +361,14 @@ pub(super) fn location_from_dimensions(
             continue;
         };
 
-        location.set(axis.id(), source_axis_design_value(dimensions, ds_axis));
+        location.set(axis.id(), ds_axis.design_value_in(dimensions));
     }
     location
 }
 
-// Designspace source locations are partial design-space locations. Missing
-// dimensions resolve to the axis default after mapping from user space.
-// https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.SourceDescriptor.getFullDesignLocation
-pub(crate) fn source_axis_design_value(
-    dimensions: &[norad::designspace::Dimension],
-    axis: &norad::designspace::Axis,
-) -> f64 {
-    let dimension = dimensions
-        .iter()
-        .find(|dimension| dimension.name == axis.name);
-
-    match dimension {
-        Some(dimension) => match (dimension.xvalue, dimension.uservalue) {
-            (Some(value), _) => value as f64,
-            (None, Some(value)) => map_axis_value(axis, value as f64),
-            (None, None) => map_axis_value(axis, axis.default as f64),
-        },
-        None => map_axis_value(axis, axis.default as f64),
-    }
-}
-
-pub(crate) fn map_axis_value(axis: &norad::designspace::Axis, user_value: f64) -> f64 {
-    let Some(mapping) = axis.map.as_ref().filter(|mapping| !mapping.is_empty()) else {
-        return user_value;
-    };
-
-    if axis.values.is_some() {
-        return mapping
-            .iter()
-            .find(|point| point.input as f64 == user_value)
-            .map(|point| point.output as f64)
-            .unwrap_or(user_value);
-    }
-
-    let mut points = mapping
-        .iter()
-        .map(|point| (point.input as f64, point.output as f64))
-        .collect::<Vec<_>>();
-    points.sort_by(|left, right| left.0.total_cmp(&right.0));
-
-    piecewise_map(user_value, &points)
-}
-
-// This mirrors designspaceLib's findDefault semantics: compare complete
-// design-space locations to the mapped user-space defaults. Layer-backed
-// sources remain eligible because `layer` describes storage, not source role.
-// https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault
-pub(crate) fn find_default_source_index(doc: &DesignSpaceDocument) -> Option<usize> {
-    doc.sources.iter().position(|source| {
-        doc.axes.iter().all(|axis| {
-            let source_value = source_axis_design_value(&source.location, axis);
-            let default_value = map_axis_value(axis, axis.default as f64);
-            design_values_equal(source_value, default_value)
-        })
-    })
-}
-
-fn design_values_equal(left: f64, right: f64) -> bool {
-    let scale = left.abs().max(right.abs()).max(1.0);
-    (left - right).abs() <= f64::from(f32::EPSILON) * scale * 4.0
-}
-
-pub(crate) fn variation_axis_kind(axis: &norad::designspace::Axis) -> VariationAxisKind {
-    if let Some(values) = &axis.values {
-        let mut values = values
-            .iter()
-            .map(|value| f64::from(*value))
-            .collect::<Vec<_>>();
-        values.sort_by(f64::total_cmp);
-        values.dedup();
-        return VariationAxisKind::Discrete {
-            values: values.into_boxed_slice(),
-            default: f64::from(axis.default),
-        };
-    }
-
-    let (minimum, maximum) = derive_axis_range(axis);
-    VariationAxisKind::Continuous {
-        minimum,
-        default: f64::from(axis.default),
-        maximum,
-    }
-}
-
-/// Derive (minimum, maximum) for an axis from norad's parsed designspace.
-///
-/// Designspace axis edge cases handled:
-/// - **Continuous** (both min/max present): use as-is.
-/// - **Discrete** (`values="0 1"` with no min/max attrs): min/max are the
-///   smallest/largest values in the list. e.g. `ital`, our `SLAB`.
-/// - **One-sided** (only min OR max specified): the missing side falls back
-///   to `default`. Common with slant axes (`min=-15, default=0, max=0`).
-/// - **Degenerate** (no min/max/values): all three collapse to default.
-pub(crate) fn derive_axis_range(ds_axis: &norad::designspace::Axis) -> (f64, f64) {
-    let values_range = || {
-        ds_axis
-            .values
-            .as_ref()
-            .filter(|v| !v.is_empty())
-            .map(|values| {
-                let min = values.iter().cloned().fold(f32::INFINITY, f32::min) as f64;
-                let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max) as f64;
-                (min, max)
-            })
-    };
-
-    match (ds_axis.minimum, ds_axis.maximum) {
-        (Some(min), Some(max)) => (min as f64, max as f64),
-        (None, None) => values_range().unwrap_or((ds_axis.default as f64, ds_axis.default as f64)),
-        (Some(min), None) => (min as f64, ds_axis.default as f64),
-        (None, Some(max)) => (ds_axis.default as f64, max as f64),
-    }
-}
-
 #[cfg(test)]
 mod axis_range_tests {
+    use super::super::DesignspaceDocumentExt;
     use super::*;
     use norad::designspace::{Axis as DsAxis, AxisMapping as DsAxisMapping, Source as DsSource};
 
@@ -558,7 +388,7 @@ mod axis_range_tests {
     #[test]
     fn continuous_uses_explicit_min_max() {
         let a = axis(Some(100.0), Some(900.0), 400.0, None);
-        assert_eq!(derive_axis_range(&a), (100.0, 900.0));
+        assert_eq!(a.user_range(), (100.0, 900.0));
     }
 
     #[test]
@@ -584,8 +414,8 @@ mod axis_range_tests {
             },
         ]);
 
-        assert_eq!(unmap_axis_value(&axis, 260.0), 300.0);
-        assert_eq!(unmap_axis_value(&axis, 420.0), 400.0);
+        assert_eq!(axis.map_backward(260.0), 300.0);
+        assert_eq!(axis.map_backward(420.0), 400.0);
     }
 
     #[test]
@@ -602,60 +432,60 @@ mod axis_range_tests {
             },
         ]);
 
-        assert_eq!(map_axis_value(&axis, 1.0), -11.0);
-        assert_eq!(unmap_axis_value(&axis, -11.0), 1.0);
-        assert_eq!(map_axis_value(&axis, 0.5), 0.5);
-        assert_eq!(unmap_axis_value(&axis, -5.5), -5.5);
+        assert_eq!(axis.map_forward(1.0), -11.0);
+        assert_eq!(axis.map_backward(-11.0), 1.0);
+        assert_eq!(axis.map_forward(0.5), 0.5);
+        assert_eq!(axis.map_backward(-5.5), -5.5);
     }
 
     #[test]
     fn discrete_two_values_derives_range() {
         // SLAB axis pattern: <axis values="0 1" default="0"/>
         let a = axis(None, None, 0.0, Some(vec![0.0, 1.0]));
-        assert_eq!(derive_axis_range(&a), (0.0, 1.0));
+        assert_eq!(a.user_range(), (0.0, 1.0));
     }
 
     #[test]
     fn discrete_three_values_derives_range_from_extremes() {
         let a = axis(None, None, 1.0, Some(vec![0.5, 1.0, 1.5]));
-        assert_eq!(derive_axis_range(&a), (0.5, 1.5));
+        assert_eq!(a.user_range(), (0.5, 1.5));
     }
 
     #[test]
     fn discrete_unsorted_values_still_finds_extremes() {
         let a = axis(None, None, 1.0, Some(vec![1.5, 0.5, 1.0]));
-        assert_eq!(derive_axis_range(&a), (0.5, 1.5));
+        assert_eq!(a.user_range(), (0.5, 1.5));
     }
 
     #[test]
     fn explicit_min_max_takes_precedence_over_values() {
         let a = axis(Some(0.0), Some(2.0), 1.0, Some(vec![0.5, 1.5]));
-        assert_eq!(derive_axis_range(&a), (0.0, 2.0));
+        assert_eq!(a.user_range(), (0.0, 2.0));
     }
 
     #[test]
     fn one_sided_min_only_falls_back_to_default_for_max() {
         // slant-like, half-spec'd: min=-15, default=0, no max attr
         let a = axis(Some(-15.0), None, 0.0, None);
-        assert_eq!(derive_axis_range(&a), (-15.0, 0.0));
+        assert_eq!(a.user_range(), (-15.0, 0.0));
     }
 
     #[test]
     fn one_sided_max_only_falls_back_to_default_for_min() {
         let a = axis(None, Some(900.0), 400.0, None);
-        assert_eq!(derive_axis_range(&a), (400.0, 900.0));
+        assert_eq!(a.user_range(), (400.0, 900.0));
     }
 
     #[test]
     fn no_min_max_no_values_collapses_to_default() {
         let a = axis(None, None, 400.0, None);
-        assert_eq!(derive_axis_range(&a), (400.0, 400.0));
+        assert_eq!(a.user_range(), (400.0, 400.0));
     }
 
     #[test]
     fn empty_values_list_collapses_to_default() {
         let a = axis(None, None, 0.0, Some(vec![]));
-        assert_eq!(derive_axis_range(&a), (0.0, 0.0));
+        assert_eq!(a.user_range(), (0.0, 0.0));
     }
 
     #[test]
@@ -677,14 +507,14 @@ mod axis_range_tests {
             ..Default::default()
         };
 
-        assert_eq!(find_default_source_index(&document), None);
+        assert_eq!(document.default_source_index(), None);
     }
 
     #[test]
     fn asymmetric_default_at_minimum() {
         // Older fonts where the Light is the default
         let a = axis(Some(400.0), Some(900.0), 400.0, None);
-        assert_eq!(derive_axis_range(&a), (400.0, 900.0));
+        assert_eq!(a.user_range(), (400.0, 900.0));
         // The Axis itself should still normalise sensibly:
         let axis = Axis::new("wght".into(), "Weight".into(), 400.0, 400.0, 900.0);
         assert_eq!(axis.normalize(400.0), 0.0);

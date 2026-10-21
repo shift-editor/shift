@@ -25,8 +25,9 @@ pub enum SlugError {
     VariableTopologyMismatch {
         glyph_index: u32,
     },
-    VariableLineFlagMismatch {
-        glyph_index: u32,
+    CurveShapeCountMismatch {
+        curves: usize,
+        shapes: usize,
     },
     VariableAdvanceCountMismatch {
         glyph_index: u32,
@@ -99,9 +100,9 @@ impl fmt::Display for SlugError {
                 formatter,
                 "glyph {glyph_index} has incompatible command topology between variable sources"
             ),
-            Self::VariableLineFlagMismatch { glyph_index } => write!(
+            Self::CurveShapeCountMismatch { curves, shapes } => write!(
                 formatter,
-                "glyph {glyph_index} has line flags that do not match its curve topology"
+                "an outline has {curves} curves but {shapes} curve shapes"
             ),
             Self::VariableAdvanceCountMismatch {
                 glyph_index,

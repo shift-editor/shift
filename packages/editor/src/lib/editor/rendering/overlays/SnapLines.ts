@@ -80,14 +80,17 @@ function metricSpans(guides: readonly PositionGuide[]): MetricSpan[] {
     else byLine.set(guide.y, [guide]);
   }
 
-  return [...byLine.entries()].map(([y, line]) => {
-    const xs = line.map((guide) => guide.x);
-    return {
-      from: { x: Math.min(...xs), y },
-      to: { x: Math.max(...xs), y },
-      points: xs.map((x) => ({ x, y })),
-    };
-  });
+  return byLine
+    .entries()
+    .map(([y, line]) => {
+      const xs = line.map((guide) => guide.x);
+      return {
+        from: { x: Math.min(...xs), y },
+        to: { x: Math.max(...xs), y },
+        points: xs.map((x) => ({ x, y })),
+      };
+    })
+    .toArray();
 }
 
 /** Font-unit tolerance for a crossing to count as on a guide line. */

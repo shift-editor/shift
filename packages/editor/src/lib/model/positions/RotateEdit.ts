@@ -8,7 +8,7 @@ import type {
   PositionSelectionLayer,
   PositionTargets,
 } from "../../../types/positionEdit";
-import { AngleSnap } from "./AngleSnap";
+import type { AngleSnap } from "./AngleSnap";
 
 /** Preview-backed rotation configured with rotation-specific modifiers. */
 export class RotateEdit implements PositionEdit {

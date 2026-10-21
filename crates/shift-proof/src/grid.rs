@@ -3,6 +3,7 @@
 
 use crate::label::{fit_label, label_height, label_width};
 use crate::layout::{Label, LocatedFont, MARGIN, Page, ROW_LABEL_PIXEL, Row};
+use crate::numeric::{ceil_pixels, whole_count};
 use crate::shape::{RunGlyph, ShapedGlyph};
 use crate::text::{Piece, pieces};
 use crate::{ProofFont, TextDirection};
@@ -80,7 +81,7 @@ pub fn layout_grid(fonts: &[LocatedFont], options: &GridLayout) -> Page {
         let ink_height = (metrics.ascender - metrics.descender) * scale;
         let cell_height = (ink_height + NAME_GAP + name_height() + CELL_PADDING * 2.0).ceil();
         let usable = (options.width as f32 - MARGIN * 2.0).max(cell_width);
-        let columns = ((usable / cell_width).floor() as usize).max(1);
+        let columns = whole_count(usable / cell_width).max(1);
 
         for (index, cell) in cells.into_iter().enumerate() {
             let left = MARGIN + (index % columns) as f32 * cell_width;
@@ -132,7 +133,7 @@ pub fn layout_grid(fonts: &[LocatedFont], options: &GridLayout) -> Page {
 
     Page {
         width: options.width,
-        height: (cursor + MARGIN).ceil() as u32,
+        height: ceil_pixels(cursor + MARGIN),
         rows,
         guides: Vec::new(),
         labels,

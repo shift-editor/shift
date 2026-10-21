@@ -10,6 +10,7 @@ use shift_font::{
 use crate::{ImportLoss, ImportLossKind, ImportReport};
 
 /// One side of a source-format kerning pair, still named by glyph name.
+#[derive(Clone, Copy)]
 pub(crate) enum NamedKerningSide<'a> {
     Glyph(&'a str),
     Group(&'a str),

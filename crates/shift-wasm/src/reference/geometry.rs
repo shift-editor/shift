@@ -1,8 +1,7 @@
 //! Component matrices, contour segments and bounds, and whole-layer transforms.
 
-use serde::{de::IgnoredAny, Deserialize, Serialize};
-use shift_font::composite::{layer_bbox, resolved_contours_bbox, ResolvedContour};
-use shift_font::curve::segment_bounds;
+use serde::{Deserialize, Serialize, de::IgnoredAny};
+use shift_font::composite::{ResolvedContour, layer_bbox, resolved_contours_bbox};
 use shift_font::{
     Anchor, AnchorId, Component, ComponentId, Contour, ContourId, CurveSegment, CurveSegmentIter,
     DecomposedTransform, GlyphId, GlyphInterpolationValues, GlyphLayer, LayerId, Point, PointId,
@@ -153,8 +152,12 @@ pub fn transform_point(
 ) -> Result<Ts<ReferencePoint>, JsError> {
     let transform = DecomposedTransform::from(transform.to_rust()?);
     let point = point.to_rust()?;
-    let (x, y) = transform.transform_point(point.x, point.y);
-    Ok(ReferencePoint { x, y }.into_ts()?)
+    let moved = transform.transform_point(shift_font::kurbo::Point::new(point.x, point.y));
+    Ok(ReferencePoint {
+        x: moved.x,
+        y: moved.y,
+    }
+    .into_ts()?)
 }
 
 /// `DecomposedTransform::from_matrix`.
@@ -164,7 +167,7 @@ pub fn decompose_matrix(matrix: Ts<ReferenceMatrix>) -> Result<Ts<ReferenceDecom
     Ok(ReferenceDecomposed::from(DecomposedTransform::from_matrix(&matrix)).into_ts()?)
 }
 
-/// `CurveSegmentIter`'s segments with `segment_bounds` each, and the
+/// `CurveSegmentIter`'s segments with `CurveSegment::bounds` each, and the
 /// contour's `resolved_contours_bbox`.
 #[wasm_bindgen(js_name = contourGeometry)]
 pub fn contour_geometry(
@@ -203,7 +206,7 @@ pub fn contour_geometry(
             ReferenceSegment {
                 kind,
                 points: members.into_iter().map(index_of).collect(),
-                bounds: segment_bounds(&segment).into(),
+                bounds: segment.bounds().into(),
             }
         })
         .collect();

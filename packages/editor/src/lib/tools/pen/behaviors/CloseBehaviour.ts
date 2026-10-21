@@ -6,8 +6,6 @@ import { PenStroke } from "../PenStroke";
 import type { PenBehavior, PenState } from "../types";
 import type { Pen } from "../Pen";
 
-const DRAG_THRESHOLD = 3;
-
 /** Closes the active contour from a press on its first point, shaping the closing curve on drag. */
 export class CloseBehavior implements PenBehavior {
   #curve: PenCloseCurve | null = null;
@@ -21,7 +19,8 @@ export class CloseBehavior implements PenBehavior {
 
     const pointer = ctx.editor.toLocal(stroke.node, event.coords.scene);
     const { close } = state;
-    const withinThreshold = Vec2.dist(close.firstPosition, pointer) <= DRAG_THRESHOLD;
+    const withinThreshold =
+      Vec2.dist(close.firstPosition, pointer) <= ctx.editor.camera.handleDragThreshold;
     if (!close.handlePosition && withinThreshold) return true;
 
     if (!this.#curve) {

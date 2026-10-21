@@ -1,9 +1,9 @@
 import type { ParagraphRequest, RunId, ShapedRun, ShapeUnit } from "@shift/types";
-import { computed, effect, signal, track } from "../signals";
-import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
+import { computed, effect, track } from "../signals";
+import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { TextRunRecord } from "../../types/text";
-import { SerialRequest } from "../utils/SerialRequest";
+import type { RegisteredShaper } from "../wasm/shaping";
 import { locationFromExternalAxisLocation } from "../variation/location";
 import { splitParagraphs, TextLayout, type ParagraphItem, type TextItem } from "./layout";
 
@@ -11,8 +11,11 @@ import { splitParagraphs, TextLayout, type ParagraphItem, type TextItem } from "
 export interface ShapedText {
   /** The shaped content, as {@link shapingKey} gives it. */
   readonly key: string;
-  /** Each paragraph's runs in logical order, indexed like `splitParagraphs`. */
-  readonly paragraphs: readonly (readonly ShapedRun[])[];
+  /**
+   * Each paragraph's runs in logical order, indexed like `splitParagraphs`;
+   * null for a paragraph that could not be shaped, which lays out literally.
+   */
+  readonly paragraphs: readonly (readonly ShapedRun[] | null)[];
 }
 
 interface ShapingRequest {
@@ -26,6 +29,8 @@ export interface RunTextOwner {
   run(id: RunId): TextRunRecord | null;
   /** Bumped when a glyph the text shows finishes loading. */
   readonly glyphsLoadedCell: Signal<number>;
+  /** The shaper to shape with; null until it is ready, when text lays out literally. */
+  readonly shaperCell: Signal<RegisteredShaper | null>;
   /** Called with each shaping result, such as to load the glyphs it substituted in. */
   onShaped(shaped: ShapedText): void;
 }
@@ -34,18 +39,16 @@ export interface RunTextOwner {
  * Keeps one run's text shaped and laid out.
  *
  * @remarks
- * Shaping runs in the workspace process, so results arrive asynchronously,
- * one request at a time. The layout uses a result only while it matches the
- * run's current text, and lays the text out literally until then. Construct
- * outside any reactive reader: the shaping effect starts at once.
+ * Shaping runs synchronously in `@shift/wasm/shaping`, so the layout is
+ * shaped as soon as the text changes. Until the owner's shaper is ready the
+ * text lays out literally. Construct outside any reactive reader: the effect
+ * that reports shaping results starts at once.
  */
 export class RunText {
   readonly #keyCell: ComputedSignal<string | null>;
   readonly #requestCell: ComputedSignal<ShapingRequest | null>;
-  readonly #shapedCell: WritableSignal<ShapedText | null> = signal(null);
-  readonly #currentShapedCell: ComputedSignal<ShapedText["paragraphs"] | null>;
-  readonly #shaping: SerialRequest<ShapingRequest, ShapedRun[][]>;
-  readonly #requests: Effect;
+  readonly #shapedCell: ComputedSignal<ShapedText | null>;
+  readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
@@ -75,31 +78,22 @@ export class RunText {
       { name: "text.shapingRequest" },
     );
 
-    this.#currentShapedCell = computed(
-      () => {
-        const shaped = this.#shapedCell.value;
-        // A result shaped from other text would map glyphs to the wrong items.
-        return shaped && shaped.key === this.#keyCell.value ? shaped.paragraphs : null;
-      },
-      { name: "text.currentShaped" },
-    );
-
-    this.#shaping = new SerialRequest(
-      (request: ShapingRequest) => editor.font.shapeParagraphs(request.paragraphs),
-      (request, paragraphs) => {
-        const shaped = { key: request.key, paragraphs };
-        this.#shapedCell.set(shaped);
-        owner.onShaped(shaped);
-      },
-      (error) => console.error("failed to shape text", error),
-    );
-
-    this.#requests = effect(
+    this.#shapedCell = computed(
       () => {
         const request = this.#requestCell.value;
-        if (request) this.#shaping.request(request);
+        const shaper = owner.shaperCell.value;
+        if (!request || !shaper) return null;
+        return { key: request.key, paragraphs: shaper.shapeParagraphs(request.paragraphs) };
       },
-      { name: "text.runShaping" },
+      { name: "text.shaped" },
+    );
+
+    this.#reports = effect(
+      () => {
+        const shaped = this.#shapedCell.value;
+        if (shaped) owner.onShaped(shaped);
+      },
+      { name: "text.reportShaped" },
     );
 
     this.#layoutCell = computed(
@@ -116,7 +110,7 @@ export class RunText {
           origin: { x: 0, y: 0 },
           editor,
           externalLocation: editor.externalLocationCell,
-          shaped: this.#currentShapedCell.value,
+          shaped: this.#shapedCell.value?.paragraphs ?? null,
         });
       },
       { name: "text.layoutForRun" },
@@ -129,10 +123,9 @@ export class RunText {
   }
 
   dispose(): void {
-    this.#shaping.dispose();
-    this.#requests.dispose();
+    this.#reports.dispose();
     this.#layoutCell.dispose();
-    this.#currentShapedCell.dispose();
+    this.#shapedCell.dispose();
     this.#requestCell.dispose();
     this.#keyCell.dispose();
   }

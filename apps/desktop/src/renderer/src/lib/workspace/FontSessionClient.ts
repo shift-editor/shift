@@ -31,6 +31,7 @@ import type {
   Location,
   ParagraphRequest,
   ShapedRun,
+  ShaperFont,
   SlugAtlas,
 } from "@shift/types";
 import { signal } from "@shift/editor/signals";
@@ -417,6 +418,16 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.shapeParagraphs", { paragraphs: [...paragraphs] });
+  }
+
+  /**
+   * Returns the shaper font compiled from the font's feature code, or null
+   * while `knownRevision` is still current.
+   */
+  async shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.shaperFont", { knownRevision });
   }
 
   #fold(applied: AppliedChange): AppliedChange {

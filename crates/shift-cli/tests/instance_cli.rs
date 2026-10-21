@@ -107,9 +107,7 @@ fn in_range_standard_weights_are_additive_preserve_existing_names_and_are_idempo
     before.add_axis(axis.clone()).unwrap();
     let width = Axis::width();
     before.add_axis(width.clone()).unwrap();
-    let mut location = ExternalLocation::new();
-    location.set(axis.id(), 400.0);
-    location.set(width.id(), 100.0);
+    let location = ExternalLocation::from([(axis.id(), 400.0), (width.id(), 100.0)]);
     before
         .add_named_instance(NamedInstance::new(
             "Keep This Name".to_string(),
@@ -133,7 +131,7 @@ fn in_range_standard_weights_are_additive_preserve_existing_names_and_are_idempo
         after
             .named_instances()
             .iter()
-            .map(|instance| instance.name())
+            .map(NamedInstance::name)
             .collect::<Vec<_>>(),
         vec!["Keep This Name", "Light", "Medium", "SemiBold", "Bold"]
     );
@@ -250,8 +248,7 @@ fn ambiguous_names_require_ids_but_full_ids_still_edit_one_product() {
     let axis = Axis::weight();
     font.add_axis(axis.clone()).unwrap();
     for value in [300.0, 500.0] {
-        let mut location = ExternalLocation::new();
-        location.set(axis.id(), value);
+        let location = ExternalLocation::from([(axis.id(), value)]);
         font.add_named_instance(NamedInstance::new("Text".to_string(), location, None))
             .unwrap();
     }

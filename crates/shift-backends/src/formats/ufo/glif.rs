@@ -5,14 +5,14 @@ use std::sync::Arc;
 use norad::PointType;
 
 use crate::font_source::geometry::{
-    control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
-    SourceGeometry,
+    ContourPoint, SourceComponent, SourceContour, SourceGeometry, control_point_kind,
+    normalize_contour,
 };
 use crate::font_source::interpolation::InterpolationAxis;
-use crate::font_source::projection::{empty_projection_layer, project_layers, ProjectionLayer};
+use crate::font_source::projection::{ProjectionLayer, empty_projection_layer, project_layers};
 use crate::font_source::{
-    malformed, AffineTransform, DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor,
-    GlyphIndex, GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex,
+    AffineTransform, DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor, GlyphIndex,
+    GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex, malformed,
 };
 
 pub(crate) struct RetainedGlif {
@@ -47,29 +47,21 @@ pub(crate) fn project_glif_glyph(
             )
         })?;
         let layer = convert_norad_layer(path, glyphs_by_name, glyph, &parsed)?;
-        layers.push((
-            SourceIndex::new(source_index as u32),
-            location.clone(),
-            layer,
-        ));
+        layers.push((SourceIndex::at(source_index), location.clone(), layer));
     }
     if layers.is_empty() {
         layers.push((
-            SourceIndex::new(default_source as u32),
+            SourceIndex::at(default_source),
             sources[default_source].0.clone(),
             empty_projection_layer(glyph),
         ));
     }
-    project_layers(
-        layers,
-        interpolation_axes,
-        SourceIndex::new(default_source as u32),
-    )
+    project_layers(layers, interpolation_axes, SourceIndex::at(default_source))
 }
 
 pub(crate) fn retained_layer(
     directory: &FontDirectory,
-    paths: BTreeMap<String, PathBuf>,
+    paths: &BTreeMap<String, PathBuf>,
 ) -> Result<RetainedUfoLayer, FontReadError> {
     let glyphs = directory
         .glyphs
@@ -139,14 +131,7 @@ fn convert_norad_layer(
         })?;
         components.push(SourceComponent {
             glyph: base,
-            transform: AffineTransform {
-                xx: component.transform.x_scale,
-                xy: component.transform.xy_scale,
-                yx: component.transform.yx_scale,
-                yy: component.transform.y_scale,
-                dx: component.transform.x_offset,
-                dy: component.transform.y_offset,
-            },
+            transform: AffineTransform::from(&component.transform),
         });
     }
     Ok(ProjectionLayer {

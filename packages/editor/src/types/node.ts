@@ -76,11 +76,39 @@ export interface TextRunNode extends Node {
   readonly size: number;
 }
 
-/** Represents every scene node kind known to this build. */
-export type ShiftNode = GlyphNode | TextRunNode;
+/**
+ * Maps each scene node kind to its node type.
+ *
+ * @remarks
+ * An open registry: `ShiftNode`, `NodeKind` and the scene's kind queries are
+ * derived from it, so a package that adds a node kind extends this interface
+ * through declaration merging instead of editing a union:
+ *
+ * ```ts
+ * declare module "@shift/editor/types" {
+ *   interface SceneNodeKinds {
+ *     "acme.guide": GuideNode;
+ *   }
+ * }
+ * ```
+ *
+ * Code outside `lib/nodes/` asks a node's definition what the node offers
+ * (for example {@link NodeDefinition.textItems}) rather than switching on
+ * built-in kinds, so a new kind works with the existing commands.
+ */
+export interface SceneNodeKinds {
+  glyph: GlyphNode;
+  textRun: TextRunNode;
+}
 
-/** Identifies a registered scene node behavior kind. */
-export type NodeKind = ShiftNode["kind"];
+/** Identifies a registered scene node kind. */
+export type NodeKind = keyof SceneNodeKinds;
+
+/** The node type registered for one kind. */
+export type NodeOfKind<K extends NodeKind> = SceneNodeKinds[K];
+
+/** Represents every scene node kind registered in {@link SceneNodeKinds}. */
+export type ShiftNode = SceneNodeKinds[NodeKind];
 
 /**
  * Describes a scene node before the scene completes record identity.

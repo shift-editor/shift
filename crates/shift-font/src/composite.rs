@@ -13,11 +13,10 @@
 //! - Cycles are handled branch-locally: cyclic branches are skipped so
 //!   non-cyclic branches still contribute geometry.
 
-use crate::curve::segment_bounds;
 use crate::Require;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
-    GlyphLayer, Point, PointId, Transform,
+    GlyphLayer, Point, Transform,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -203,7 +202,7 @@ fn invalid_component(component: &ComponentGlyph) -> CoreError {
 pub fn anchor_aligned_offset(
     placed: &[(Transform, &GlyphLayer)],
     component_layer: &GlyphLayer,
-) -> Option<(f64, f64)> {
+) -> Option<kurbo::Vec2> {
     let placed: Vec<_> = placed
         .iter()
         .map(|(transform, layer)| (*transform, layer.anchors()))
@@ -215,10 +214,7 @@ fn transform_contour_points(contour: &Contour, transform: Transform) -> Resolved
     let points = contour
         .points()
         .iter()
-        .map(|point| {
-            let (x, y) = transform.transform_point(point.x(), point.y());
-            Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
-        })
+        .map(|point| point.copied_to(transform.transform_point(point.position())))
         .collect();
 
     ResolvedContour {
@@ -302,7 +298,7 @@ fn resolved_occurrences<'a>(
                 .get(component_glyph.parent_path())
                 .ok_or_else(|| invalid_component(component_glyph))?
         };
-        let resolved_transform = compose_transform(parent_transform, local_transform);
+        let resolved_transform = parent_transform.compose(local_transform);
         resolved_transforms.insert(component_glyph.component_path().clone(), resolved_transform);
 
         let layer = layer_for_component(
@@ -512,19 +508,13 @@ pub fn resolved_contours_from_layers(
 /// Builds a single SVG path string from root contours and resolved component
 /// contours.
 pub fn layer_to_svg_path(layer: &GlyphLayer, component_contours: &[ResolvedContour]) -> String {
-    let mut parts = Vec::new();
-    for contour in layer.contours_iter() {
-        let d = contour_to_svg_d(contour.points(), contour.is_closed());
-        if !d.is_empty() {
-            parts.push(d);
-        }
-    }
-    for contour in component_contours {
-        let d = contour_to_svg_d(&contour.points, contour.closed);
-        if !d.is_empty() {
-            parts.push(d);
-        }
-    }
+    let own = layer
+        .contours_iter()
+        .map(|contour| contour_to_svg_d(contour.points(), contour.is_closed()));
+    let components = component_contours
+        .iter()
+        .map(|contour| contour_to_svg_d(&contour.points, contour.closed));
+    let parts: Vec<_> = own.chain(components).filter(|d| !d.is_empty()).collect();
     parts.join(" ")
 }
 
@@ -553,7 +543,7 @@ fn accumulate_contour_bbox(
     any: &mut bool,
 ) {
     for segment in CurveSegmentIter::new(points, closed) {
-        let (sx, sy, ex, ey) = segment_bounds(&segment);
+        let (sx, sy, ex, ey) = segment.bounds();
         *min_x = min_x.min(sx);
         *min_y = min_y.min(sy);
         *max_x = max_x.max(ex);
@@ -680,18 +670,6 @@ fn contour_to_svg_d(points: &[Point], closed: bool) -> String {
     out.join(" ")
 }
 
-/// Composes transforms as `outer ∘ inner` (apply `inner`, then `outer`).
-fn compose_transform(outer: Transform, inner: Transform) -> Transform {
-    Transform {
-        xx: outer.xx * inner.xx + outer.yx * inner.xy,
-        xy: outer.xy * inner.xx + outer.yy * inner.xy,
-        yx: outer.xx * inner.yx + outer.yx * inner.yy,
-        yy: outer.xy * inner.yx + outer.yy * inner.yy,
-        dx: outer.xx * inner.dx + outer.yx * inner.dy + outer.dx,
-        dy: outer.xy * inner.dx + outer.yy * inner.dy + outer.dy,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -716,7 +694,7 @@ mod tests {
         font.glyphs()
             .filter_map(|glyph| {
                 glyph
-                    .layer_for_source(source_id.clone())
+                    .layer_for_source(&source_id)
                     .map(|layer| (glyph.id(), layer.clone()))
             })
             .collect()
@@ -736,7 +714,7 @@ mod tests {
 
         let mut composite = Glyph::new("comp".to_string());
         let composite_id = composite.id();
-        let mut composite_layer = test_layer(source_id.clone(), 500.0);
+        let mut composite_layer = test_layer(source_id, 500.0);
         composite_layer.add_component(Component::new(base_id, "base".to_string()));
         composite.set_layer(composite_layer);
         font.insert_glyph(composite).unwrap();
@@ -824,7 +802,7 @@ mod tests {
         font.insert_glyph(b).unwrap();
 
         let mut c = Glyph::with_id(c_id, "C".to_string());
-        let mut c_layer = test_layer(source_id.clone(), 500.0);
+        let mut c_layer = test_layer(source_id, 500.0);
         c_layer.add_contour(two_point_contour(10.0, 0.0, 30.0, 20.0));
         c.set_layer(c_layer);
         font.insert_glyph(c).unwrap();
@@ -850,10 +828,13 @@ mod tests {
             (Transform::translate(20.0, 0.0), &second),
         ];
 
-        assert_eq!(anchor_aligned_offset(&placed, &mark), Some((65.0, 290.0)));
+        assert_eq!(
+            anchor_aligned_offset(&placed, &mark),
+            Some(kurbo::Vec2::new(65.0, 290.0))
+        );
         assert_eq!(
             anchor_aligned_offset(&placed[..1], &mark),
-            Some((95.0, 190.0))
+            Some(kurbo::Vec2::new(95.0, 190.0))
         );
         assert_eq!(anchor_aligned_offset(&[], &mark), None);
     }
@@ -881,7 +862,7 @@ mod tests {
 
         let mut comp = Glyph::new("comp".to_string());
         let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        let mut comp_layer = test_layer(source_id, 500.0);
         comp_layer.add_component(Component::new(base_id, "base".to_string()));
         comp_layer.add_component(Component::with_matrix(
             mark_id,
@@ -916,7 +897,7 @@ mod tests {
 
         let mut comp = Glyph::new("comp".to_string());
         let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        let mut comp_layer = test_layer(source_id, 500.0);
         let matrix = Transform::translate(30.0, 40.0);
         comp_layer.add_component(Component::with_matrix(mark_id, "mark".to_string(), &matrix));
         comp.set_layer(comp_layer);
@@ -955,7 +936,7 @@ mod tests {
 
         let mut comp = Glyph::new("comp".to_string());
         let comp_id = comp.id();
-        let mut comp_layer = test_layer(source_id.clone(), 500.0);
+        let mut comp_layer = test_layer(source_id, 500.0);
         comp_layer.add_anchor(Anchor::new(Some("parent_top".to_string()), 0.0, 0.0));
         comp_layer.add_component(Component::new(base_id, "base".to_string()));
         comp_layer.add_component(Component::new(mark_id, "mark".to_string()));
@@ -983,12 +964,15 @@ mod tests {
         mark.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 20.0));
 
         let first = anchor_aligned_offset(&[(Transform::identity(), &base)], &mark).unwrap();
-        assert_eq!(first, (95.0, 200.0));
+        assert_eq!(first, kurbo::Vec2::new(95.0, 200.0));
 
         let placed = [
             (Transform::identity(), &base),
-            (Transform::translate(first.0, first.1), &mark),
+            (Transform::translate(first.x, first.y), &mark),
         ];
-        assert_eq!(anchor_aligned_offset(&placed, &mark), Some((95.0, 220.0)));
+        assert_eq!(
+            anchor_aligned_offset(&placed, &mark),
+            Some(kurbo::Vec2::new(95.0, 220.0))
+        );
     }
 }

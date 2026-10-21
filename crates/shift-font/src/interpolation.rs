@@ -1,7 +1,7 @@
 //! Native glyph interpolation over Shift sources and internal locations.
 
 use crate::Require;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -12,8 +12,8 @@ use fontdrasil::variations::{
 };
 
 use crate::{
-    Axis, AxisId, CoreResult, DesignLocation, DesignNormalization, Font, GlyphId, GlyphLayer,
-    Location, SourceId,
+    Axis, AxisId, AxisList, CoreResult, DesignLocation, DesignNormalization, Font, GlyphId,
+    GlyphLayer, Location, SourceId,
 };
 
 mod kerning;
@@ -23,13 +23,13 @@ mod values;
 
 pub use layer_match::{LayerDifference, LayerMatch};
 pub use metrics::{
-    ResolvedSourceMetrics, SourceMetricField, SourceMetricInterpolation, SourceMetricValues,
-    SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
-    SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
+    ResolvedSourceMetrics, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,
+    SOURCE_METRIC_VALUE_COUNT, SOURCE_TECHNICAL_FIELD_VALUE_COUNT, SourceMetricField,
+    SourceMetricInterpolation, SourceMetricValues,
 };
 pub use values::{
-    GlyphInterpolationValues, GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET,
-    GLYPH_ANCHOR_VALUE_COUNT, GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS,
+    GLYPH_ADVANCE_VALUE_COUNT, GLYPH_ADVANCE_VALUE_OFFSET, GLYPH_ANCHOR_VALUE_COUNT,
+    GLYPH_POINT_VALUE_COUNT, GLYPH_POSITION_VALUE_FIELDS, GlyphInterpolationValues,
 };
 
 /// Normalized support for one authoring axis within an interpolation region.
@@ -87,6 +87,63 @@ impl InterpolationRegion {
     /// Returns the axis supports whose scalars are multiplied for this region.
     pub fn supports(&self) -> &[AxisSupport] {
         &self.supports
+    }
+
+    /// Returns how much this region contributes at `location`: the product of
+    /// each valid support's scalar, after normalizing the location with
+    /// `design_normalization` when given, or with `axes` otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] when a support names an axis that
+    /// `axes` or `design_normalization` does not have.
+    pub fn scalar_at(
+        &self,
+        location: &Location,
+        axes: &[Axis],
+        design_normalization: Option<&[DesignNormalization]>,
+    ) -> CoreResult<f64> {
+        let mut scalar = 1.0;
+
+        for support in self.supports() {
+            if support.minimum > support.peak
+                || support.peak > support.maximum
+                || (support.minimum < 0.0 && support.maximum > 0.0)
+            {
+                continue;
+            }
+
+            let axis = axes.axis(&support.axis_id).require(&support.axis_id)?;
+            let normalized = if let Some(design_normalization) = design_normalization {
+                let normalization = design_normalization
+                    .iter()
+                    .find(|normalization| normalization.axis_id == axis.id())
+                    .require(&support.axis_id)?;
+                normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
+            } else {
+                axis.normalize(location.value_on(axis))
+            }
+            .clamp(-1.0, 1.0);
+
+            if normalized == support.peak
+                || (support.minimum == 0.0 && support.peak == 0.0 && support.maximum == 0.0)
+            {
+                continue;
+            }
+
+            if normalized <= support.minimum || support.maximum <= normalized {
+                return Ok(0.0);
+            }
+
+            let edge = if normalized < support.peak {
+                support.minimum
+            } else {
+                support.maximum
+            };
+            scalar *= (normalized - edge) / (support.peak - edge);
+        }
+
+        Ok(scalar)
     }
 }
 
@@ -177,15 +234,13 @@ impl VariationBasis {
         axes: &[Axis],
         design_normalization: Option<&[DesignNormalization]>,
     ) -> CoreResult<Vec<f64>> {
-        let value_count = self
-            .deltas
-            .first()
-            .map(|delta| delta.values.len())
-            .unwrap_or(0);
+        let value_count = self.deltas.first().map_or(0, |delta| delta.values.len());
         let mut values = vec![0.0; value_count];
 
         for delta in &self.deltas {
-            let scalar = region_scalar(&delta.region, location, axes, design_normalization)?;
+            let scalar = delta
+                .region
+                .scalar_at(location, axes, design_normalization)?;
             if scalar == 0.0 {
                 continue;
             }
@@ -399,16 +454,13 @@ impl Font {
             return Ok(None);
         }
 
-        let Some(reference_layer) = interpolation_reference_layer(self, glyph) else {
+        let Some(reference_layer) = self.fallback_layer(glyph).cloned() else {
             return Ok(None);
         };
 
         let mut compatible_sources = Vec::new();
 
-        for source in self.masters() {
-            let Some(layer) = glyph.layer_for_source(source.id()) else {
-                continue;
-            };
+        for (source, layer) in self.masters_with_layers(glyph) {
             if !reference_layer.match_with(layer).is_complete() {
                 continue;
             }
@@ -429,7 +481,7 @@ impl Font {
             .map(|(source_id, _)| source_id.clone())
             .collect::<Vec<_>>();
         let basis = if let Some(basis) = bases.get(&basis_key) {
-            basis.clone()
+            Arc::clone(basis)
         } else {
             let Some(basis) = InterpolationBasis::from_source_locations(
                 &source_locations,
@@ -439,7 +491,7 @@ impl Font {
                 return Ok(None);
             };
             let basis = Arc::new(basis);
-            bases.insert(basis_key, basis.clone());
+            bases.insert(basis_key, Arc::clone(&basis));
             basis
         };
         let sources = compatible_sources
@@ -453,37 +505,6 @@ impl Font {
             sources,
         }))
     }
-}
-
-fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
-    if let Some(default_source_id) = font.default_source_id() {
-        let default_is_master = font
-            .source(&default_source_id)
-            .is_some_and(crate::Source::is_master);
-        if default_is_master {
-            if let Some(layer) = glyph
-                .layers()
-                .values()
-                .find(|layer| layer.source_id() == default_source_id)
-            {
-                return Some(layer.clone());
-            }
-        }
-    }
-
-    font.master_layers(glyph)
-        .cloned()
-        .reduce(|preferred, candidate| {
-            if layer_complexity(&candidate) > layer_complexity(&preferred) {
-                candidate
-            } else {
-                preferred
-            }
-        })
-}
-
-fn layer_complexity(layer: &GlyphLayer) -> usize {
-    layer.contours().len() + layer.components().len()
 }
 
 fn interpolation_basis(
@@ -606,58 +627,6 @@ fn normalized_location(
         .collect()
 }
 
-fn region_scalar(
-    region: &InterpolationRegion,
-    location: &Location,
-    axes: &[Axis],
-    design_normalization: Option<&[DesignNormalization]>,
-) -> CoreResult<f64> {
-    let mut scalar = 1.0;
-
-    for support in region.supports() {
-        if support.minimum > support.peak
-            || support.peak > support.maximum
-            || (support.minimum < 0.0 && support.maximum > 0.0)
-        {
-            continue;
-        }
-
-        let axis = axes
-            .iter()
-            .find(|axis| axis.id() == support.axis_id)
-            .require(&support.axis_id)?;
-        let normalized = if let Some(design_normalization) = design_normalization {
-            let normalization = design_normalization
-                .iter()
-                .find(|normalization| normalization.axis_id == axis.id())
-                .require(&support.axis_id)?;
-            normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
-        } else {
-            axis.normalize(location.get(&axis.id()).unwrap_or(axis.default()))
-        }
-        .clamp(-1.0, 1.0);
-
-        if normalized == support.peak
-            || (support.minimum == 0.0 && support.peak == 0.0 && support.maximum == 0.0)
-        {
-            continue;
-        }
-
-        if normalized <= support.minimum || support.maximum <= normalized {
-            return Ok(0.0);
-        }
-
-        let edge = if normalized < support.peak {
-            support.minimum
-        } else {
-            support.maximum
-        };
-        scalar *= (normalized - edge) / (support.peak - edge);
-    }
-
-    Ok(scalar)
-}
-
 #[cfg(test)]
 mod tests {
     use crate::test_support::sample_variable_font;
@@ -668,7 +637,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let layer = glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -685,7 +654,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -703,7 +672,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
         let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
@@ -725,7 +694,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let reference_layer = glyph
-            .layer_for_source(font.default_source_id().unwrap())
+            .layer_for_source(&font.default_source_id().unwrap())
             .unwrap();
         let mut candidate = reference_layer.clone();
         let point = candidate
@@ -745,8 +714,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let axis_id = font.axes()[0].id();
-        let mut location = DesignLocation::new();
-        location.set(axis_id, 600.0);
+        let location = DesignLocation::from([(axis_id, 600.0)]);
 
         let layer = font
             .glyph_interpolation(&glyph.id())

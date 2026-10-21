@@ -12,6 +12,7 @@ import type {
   Location,
   ParagraphRequest,
   ShapedRun,
+  ShaperFont,
   SlugAtlas,
 } from "@shift/types";
 import type {
@@ -308,6 +309,14 @@ export class WorkspaceEditCoordinator {
    */
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
     return this.#withFlush(() => this.#session.shapeParagraphs(paragraphs));
+  }
+
+  /**
+   * Returns the shaper font behind pending edits, so new glyphs and feature
+   * code are compiled in; null while `knownRevision` is still current.
+   */
+  shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
+    return this.#withFlush(() => this.#session.shaperFont(knownRevision));
   }
 
   /** Replays the latest redo entry after pending pushes flush. */

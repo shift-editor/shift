@@ -30,6 +30,7 @@ import type {
   Location,
   ParagraphRequest,
   ShapedRun,
+  ShaperFont,
   PointId,
   SegmentId,
   NamedInstance,
@@ -1315,6 +1316,15 @@ export class Font {
    */
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
     return this.editCoordinator.shapeParagraphs(paragraphs);
+  }
+
+  /**
+   * Returns the shaper font compiled from the font's feature code, after
+   * pending edits settle, or null while `knownRevision` is still current.
+   * The editor shapes with it itself, in `@shift/wasm/shaping`.
+   */
+  shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
+    return this.editCoordinator.shaperFont(knownRevision);
   }
 
   /** @knipclassignore — used by VariationPanel component */

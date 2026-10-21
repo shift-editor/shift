@@ -1,7 +1,8 @@
+use shift_font::{CreateKerningGroup, RenameKerningGroup, SetKerningGroupMember, SetKerningValues};
 use std::sync::Arc;
 
 use shift_font::test_support::sample_font;
-use shift_store::ShiftStore;
+use shift_store::{SaveState, ShiftStore};
 
 fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
     shift_font::SourceCollection {
@@ -50,7 +51,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     info.sample_text = Some("Store sample".to_string());
     info.vendor_id = Some("SHFT".to_string());
     working
-        .set_font_info(info)
+        .set_font_info(&info)
         .expect("write store-only sentinels");
     drop(working);
     let conn = rusqlite::Connection::open(&working_path).expect("open raw working store");
@@ -69,7 +70,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     let mut post = original.clone();
     post.metadata_mut().family_name = Some("Recovered Sans".to_string());
     let source_id = shift_font::SourceId::from_raw("regular");
-    post.source_mut(source_id.clone())
+    post.source_mut(&source_id)
         .expect("regular source")
         .set_line_gap(Some(99.0));
     let change = shift_font::FontChangeSet::new(vec![
@@ -85,7 +86,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&change, &post, true)
+        .apply_change_set_with_font(&change, &post, SaveState::Unsaved)
         .unwrap();
     let merged_source = document
         .get_source(&shift_store::SourceId::new("source_regular"))
@@ -130,7 +131,7 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     post.replace_axis(weight.clone())
         .expect("replace weight axis");
     let regular_source_id = shift_font::SourceId::from_raw("regular");
-    post.source_mut(regular_source_id.clone())
+    post.source_mut(&regular_source_id)
         .expect("regular source")
         .set_line_gap(Some(99.0));
     post.set_axis_mappings(Vec::new()).expect("clear mappings");
@@ -170,7 +171,7 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("write semantic recovery changes");
     drop(document);
 
@@ -208,7 +209,7 @@ fn metric_definition_replacement_preserves_untouched_source_values() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("write metric recovery change");
     document.save_document().expect("save recovered document");
     drop(document);
@@ -256,7 +257,7 @@ fn recovery_persists_collection_reordering_without_entity_updates() {
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("persist reordered collections");
     drop(document);
 
@@ -282,11 +283,11 @@ fn recovery_save_replaces_reordered_component_collections() {
         .expect("open with recovery");
     let mut layer = document.load_glyph_layer(&layer_id).unwrap().unwrap();
     let first_id = layer.components_iter().next().unwrap().id();
-    let first = layer.remove_component(first_id).unwrap();
+    let first = layer.remove_component(&first_id).unwrap();
     layer.add_component(first);
     let reordered = layer
         .components_iter()
-        .map(|component| component.id())
+        .map(shift_font::Component::id)
         .collect::<Vec<_>>();
     document.replace_glyph_layer(&layer).unwrap();
     document.save_document().unwrap();
@@ -297,7 +298,7 @@ fn recovery_save_replaces_reordered_component_collections() {
     assert_eq!(
         saved_layer
             .components_iter()
-            .map(|component| component.id())
+            .map(shift_font::Component::id)
             .collect::<Vec<_>>(),
         reordered
     );
@@ -334,7 +335,7 @@ fn recovered_directory_open_remains_payload_lazy() {
             .glyph_count(),
         sample_font().glyph_count()
     );
-    assert!(recovered.load_glyph_layer(&layer_id).is_err());
+    recovered.load_glyph_layer(&layer_id).unwrap_err();
 }
 
 #[test]
@@ -354,7 +355,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
         shift_font::SourceId::from_raw("regular"),
         620.0,
     );
-    glyph.set_layer(layer.clone());
+    glyph.set_layer(layer);
     let mut post = original.clone();
     post.insert_glyph(glyph.clone()).expect("insert glyph");
     let changes = shift_font::FontChangeSet::from(glyph_created(&glyph));
@@ -368,18 +369,19 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     let mut invalid_post = original.clone();
     invalid_post.pop_glyph(tail_id).expect("pop tail glyph");
     let error = document
-        .apply_change_set_with_font(&glyph_deleted(non_tail).into(), &invalid_post, true)
+        .apply_change_set_with_font(
+            &glyph_deleted(non_tail).into(),
+            &invalid_post,
+            SaveState::Unsaved,
+        )
         .unwrap_err();
     assert!(matches!(
         error,
-        shift_store::StoreError::Font(shift_font::CoreError::InvalidEntityOrder {
-            kind: "glyph",
-            ..
-        })
+        shift_store::StoreError::PoppedGlyphNotAtTail(_)
     ));
 
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
     let directory = document.load_font_directory().unwrap();
     assert_eq!(directory.glyph_count(), post.glyph_count());
@@ -422,9 +424,9 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     drop(recovery);
 
     let mut reverted = post.clone();
-    reverted.pop_glyph(glyph_id.clone()).expect("pop glyph");
+    reverted.pop_glyph(glyph_id).expect("pop glyph");
     document
-        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, true)
+        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, SaveState::Unsaved)
         .unwrap();
     assert_eq!(
         document.load_font_directory().unwrap().glyph_count(),
@@ -451,12 +453,12 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     drop(recovery);
 
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
     document.save_document().expect("save additions");
 
     document
-        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, true)
+        .apply_change_set_with_font(&glyph_deleted(&glyph).into(), &reverted, SaveState::Unsaved)
         .expect("pop the saved tail glyph");
     assert_eq!(document.load_font_state().unwrap(), reverted);
     let recovery = rusqlite::Connection::open(&recovery_path).expect("inspect saved pop");
@@ -480,7 +482,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     drop(recovery);
 
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .expect("redo the saved append");
     document.save_document().expect("save redone addition");
     drop(document);
@@ -507,10 +509,9 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
 
     let mut post = original.clone();
     let removed_layer = post
-        .remove_glyph_layer(layer_id.clone())
+        .remove_glyph_layer(&layer_id)
         .expect("remove glyph layer");
-    post.remove_source(source_id.clone())
-        .expect("remove source");
+    post.remove_source(source_id).expect("remove source");
     let changes = shift_font::FontChangeSet::new(vec![
         layer_deleted(glyph_id, &removed_layer),
         shift_font::FontChange::Sources(shift_font::Replacement::new(
@@ -519,7 +520,7 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
         )),
     ]);
     document
-        .apply_change_set_with_font(&changes, &post, true)
+        .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
     assert!(document.load_glyph_layer(&layer_id).unwrap().is_none());
 
@@ -535,18 +536,16 @@ fn kerning_edit(
     source_id: &str,
     value: Option<f64>,
 ) -> shift_font::FontChangeSet {
-    font.apply_intents(shift_font::FontIntentSet {
-        intents: vec![shift_font::FontIntent::SetKerningValues {
-            edits: vec![shift_font::KerningValueEdit {
-                source_id: shift_font::SourceId::from_raw(source_id),
-                pair: shift_font::KerningPair::groups(
-                    shift_font::KerningGroupId::from_raw("first_A"),
-                    shift_font::KerningGroupId::from_raw("second_A"),
-                ),
-                value,
-            }],
+    font.apply_intents(&shift_font::FontIntentSet::from(SetKerningValues {
+        edits: vec![shift_font::KerningValueEdit {
+            source_id: shift_font::SourceId::from_raw(source_id),
+            pair: shift_font::KerningPair::groups(
+                shift_font::KerningGroupId::from_raw("first_A"),
+                shift_font::KerningGroupId::from_raw("second_A"),
+            ),
+            value,
         }],
-    })
+    }))
     .expect("kerning edit applies")
     .changes
 }
@@ -570,10 +569,12 @@ fn kerning_edits_persist_in_a_working_store() {
     store.replace_font_state(&font).expect("write font");
 
     let set = kerning_edit(&mut font, "regular", Some(-40.0));
-    store.apply_change_set_with_font(&set, &font, true).unwrap();
+    store
+        .apply_change_set_with_font(&set, &font, SaveState::Unsaved)
+        .unwrap();
     let removed = kerning_edit(&mut font, "bold", None);
     store
-        .apply_change_set_with_font(&removed, &font, true)
+        .apply_change_set_with_font(&removed, &font, SaveState::Unsaved)
         .unwrap();
     drop(store);
 
@@ -595,7 +596,7 @@ fn recovery_overlay_keeps_unsaved_kerning_until_saved() {
         .expect("open with recovery");
     let changes = kerning_edit(&mut font, "regular", Some(-40.0));
     document
-        .apply_change_set_with_font(&changes, &font, true)
+        .apply_change_set_with_font(&changes, &font, SaveState::Unsaved)
         .unwrap();
     drop(document);
 
@@ -621,22 +622,25 @@ fn edit_groups(font: &mut shift_font::Font) -> shift_font::FontChangeSet {
     // Sorts before `first_A`, so its insert comes first unless the store
     // deletes every changed group before inserting any.
     let round = shift_font::KerningGroupId::from_raw("a_round");
-    font.apply_intents(shift_font::FontIntentSet {
+    font.apply_intents(&shift_font::FontIntentSet {
         intents: vec![
-            shift_font::FontIntent::CreateKerningGroup {
+            CreateKerningGroup {
                 group_id: round.clone(),
                 position: shift_font::KerningPosition::First,
                 name: "Round".to_string(),
-            },
-            shift_font::FontIntent::SetKerningGroupMember {
+            }
+            .into(),
+            SetKerningGroupMember {
                 position: shift_font::KerningPosition::First,
                 glyph_id: shift_font::GlyphId::from_raw("A"),
                 group_id: Some(round),
-            },
-            shift_font::FontIntent::RenameKerningGroup {
+            }
+            .into(),
+            RenameKerningGroup {
                 group_id: shift_font::KerningGroupId::from_raw("second_A"),
                 name: "Apex".to_string(),
-            },
+            }
+            .into(),
         ],
     })
     .expect("group edits apply")
@@ -653,7 +657,7 @@ fn kerning_group_edits_persist_in_a_working_store_and_a_recovery_overlay() {
     let mut renamed = font.clone();
     let changes = edit_groups(&mut renamed);
     working
-        .apply_change_set_with_font(&changes, &renamed, true)
+        .apply_change_set_with_font(&changes, &renamed, SaveState::Unsaved)
         .unwrap();
     drop(working);
     assert_eq!(
@@ -671,7 +675,7 @@ fn kerning_group_edits_persist_in_a_working_store_and_a_recovery_overlay() {
         .expect("open with recovery");
     let changes = edit_groups(&mut font);
     document
-        .apply_change_set_with_font(&changes, &font, true)
+        .apply_change_set_with_font(&changes, &font, SaveState::Unsaved)
         .unwrap();
     drop(document);
 

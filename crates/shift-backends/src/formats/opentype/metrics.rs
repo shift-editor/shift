@@ -10,8 +10,8 @@ use skrifa::raw::types::GlyphId;
 use skrifa::raw::{ReadError, TableProvider};
 use skrifa::{FontRef, MetadataProvider};
 
-use crate::font_source::atlas::{AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError};
 use crate::font_source::GlyphIndex;
+use crate::font_source::atlas::{AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError};
 
 use crate::font_source::malformed;
 
@@ -25,9 +25,9 @@ pub(super) struct AdvanceContributions {
 pub(super) fn advance_contributions(
     path: &Path,
     font: &FontRef<'_>,
-    loca: Loca<'_>,
-    glyf: Glyf<'_>,
-    gvar: Option<Gvar<'_>>,
+    loca: &Loca<'_>,
+    glyf: &Glyf<'_>,
+    gvar: Option<&Gvar<'_>>,
     registry: &mut RegionRegistry,
     glyphs: &[GlyphIndex],
 ) -> Result<Vec<AdvanceContributions>, SourceAtlasError> {
@@ -53,14 +53,7 @@ pub(super) fn advance_contributions(
                     malformed(path, format!("missing advance width for glyph {raw_glyph}"))
                 })?;
                 let contributions = match &gvar {
-                    Some(gvar) => gvar_contributions(
-                        path,
-                        loca.clone(),
-                        glyf.clone(),
-                        gvar,
-                        registry,
-                        raw_glyph,
-                    )?,
+                    Some(gvar) => gvar_contributions(path, loca, glyf, gvar, registry, raw_glyph)?,
                     None => BTreeMap::new(),
                 };
                 advances.push(AdvanceContributions {
@@ -70,7 +63,7 @@ pub(super) fn advance_contributions(
             }
         }
         Err(error) => {
-            return Err(malformed(path, format!("failed to read HVAR table: {error}")).into())
+            return Err(malformed(path, format!("failed to read HVAR table: {error}")).into());
         }
     }
     Ok(advances)
@@ -99,7 +92,12 @@ fn hvar_contributions(
             })?,
         None => DeltaSetIndex {
             outer: 0,
-            inner: glyph.to_u32() as u16,
+            inner: u16::try_from(glyph.to_u32()).map_err(|_| {
+                malformed(
+                    path,
+                    format!("glyph {glyph} is past HVAR's implicit advance mapping"),
+                )
+            })?,
         },
     };
     let store = hvar.item_variation_store().map_err(|error| {
@@ -157,8 +155,8 @@ fn hvar_contributions(
 
 fn gvar_contributions(
     path: &Path,
-    loca: Loca<'_>,
-    glyf: Glyf<'_>,
+    loca: &Loca<'_>,
+    glyf: &Glyf<'_>,
     gvar: &Gvar<'_>,
     registry: &mut RegionRegistry,
     glyph: GlyphId,
@@ -201,8 +199,8 @@ fn gvar_contributions(
 
 fn metrics_glyph(
     path: &Path,
-    loca: Loca<'_>,
-    glyf: Glyf<'_>,
+    loca: &Loca<'_>,
+    glyf: &Glyf<'_>,
     glyph: GlyphId,
     ancestry: &mut HashSet<GlyphId>,
 ) -> Result<(GlyphId, usize), SourceAtlasError> {
@@ -214,7 +212,7 @@ fn metrics_glyph(
         .into());
     }
     let raw = loca
-        .get_glyf(glyph, &glyf)
+        .get_glyf(glyph, glyf)
         .map_err(|error| malformed(path, format!("failed to read glyph {glyph}: {error}")))?;
     let result = match raw {
         None => (glyph, 0),
@@ -229,8 +227,8 @@ fn metrics_glyph(
                 {
                     metrics = Some(metrics_glyph(
                         path,
-                        loca.clone(),
-                        glyf.clone(),
+                        loca,
+                        glyf,
                         component.glyph.into(),
                         ancestry,
                     )?);

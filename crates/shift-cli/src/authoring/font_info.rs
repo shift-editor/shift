@@ -1,15 +1,19 @@
 //! Metadata and master-metric authoring through existing semantic intents.
 
-use miette::{IntoDiagnostic, Result, bail, miette};
+use miette::{Result, bail, miette};
 use shift_font::{
     Font, FontIntent, FontIntentSet, MetricDefinition, MetricKind, MetricValue, SourceId,
 };
+use shift_font::{SetMetricDefinitions, UpdateFontMetadata, UpdateSource};
 
 use crate::cli::{FontInfoArgs, SetFontArgs};
 
-use super::glyph::{load_font, resolve_source_id};
+use super::glyph::load_font;
 use super::{AuthoringReport, apply_mutation, require_finite};
-use report::{FontInfoReport, SourceMetrics, format_version};
+use crate::selector::FontSelectors;
+use report::{FontInfoReport, SourceMetrics};
+
+use crate::format::FontVersion;
 
 pub(super) mod report;
 
@@ -21,7 +25,7 @@ pub(super) mod report;
 /// # Errors
 ///
 /// Reports unreadable documents or unresolved source selectors.
-pub fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
+pub(crate) fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let source = font
@@ -31,7 +35,8 @@ pub fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
 
     Ok(FontInfoReport {
         document: args.path,
-        version: format_version(metadata.version_major, metadata.version_minor),
+        version: FontVersion::from_metadata(metadata.version_major, metadata.version_minor)
+            .map(|version| version.to_string()),
         metadata,
         units_per_em: font.metrics().units_per_em,
         source: SourceMetrics::from_source(&font, source),
@@ -48,7 +53,7 @@ pub fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
 ///
 /// Rejects empty requests, blank metadata, ambiguous versions, non-finite metrics,
 /// unresolved selectors, or metric edits on layer-only sources. Reports persistence failures.
-pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_font(args: &SetFontArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let mut metadata = font.metadata().clone();
     let mut intents = Vec::new();
@@ -84,12 +89,12 @@ pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
         *target = Some(value.clone());
     }
     if let Some(version) = &args.version {
-        let (major, minor) = parse_version(version)?;
-        metadata.version_major = Some(major);
-        metadata.version_minor = Some(minor);
+        let version = version.parse::<FontVersion>()?;
+        metadata.version_major = Some(version.major);
+        metadata.version_minor = Some(version.minor);
     }
     if has_metadata {
-        intents.push(FontIntent::UpdateFontMetadata { metadata });
+        intents.push(UpdateFontMetadata { metadata }.into());
     }
 
     let has_metrics = args.ascender.is_some()
@@ -100,7 +105,7 @@ pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
         || args.italic_angle.is_some();
     if has_metrics {
         let source_id = target_source_id(&font, args.source.as_deref())?;
-        intents.extend(source_metric_intents(&font, source_id, &args)?);
+        intents.extend(source_metric_intents(&font, source_id, args)?);
     } else if args.source.is_some() {
         bail!("--source selects where metric flags apply; pass a metric flag");
     }
@@ -108,7 +113,7 @@ pub fn set_font(args: SetFontArgs) -> Result<AuthoringReport> {
         bail!("font set needs at least one metadata or metric flag");
     }
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 fn source_metric_intents(
@@ -179,42 +184,29 @@ fn source_metric_intents(
 
     let mut intents = Vec::new();
     if definitions.len() != font.metric_definitions().len() {
-        intents.push(FontIntent::SetMetricDefinitions { definitions });
+        intents.push(SetMetricDefinitions { definitions }.into());
     }
-    intents.push(FontIntent::UpdateSource {
-        source_id,
-        name: source.name().to_string(),
-        location: source.location().clone(),
-        metric_values,
-        italic_angle: args.italic_angle.or(source.italic_angle()),
-        line_gap: args.line_gap.or(source.line_gap()),
-        underline_position: source.underline_position(),
-        underline_thickness: source.underline_thickness(),
-    });
+    intents.push(
+        UpdateSource {
+            source_id,
+            name: source.name().to_string(),
+            location: source.location().clone(),
+            metric_values,
+            italic_angle: args.italic_angle.or_else(|| source.italic_angle()),
+            line_gap: args.line_gap.or_else(|| source.line_gap()),
+            underline_position: source.underline_position(),
+            underline_thickness: source.underline_thickness(),
+        }
+        .into(),
+    );
     Ok(intents)
 }
 
 pub(super) fn target_source_id(font: &Font, selector: Option<&str>) -> Result<SourceId> {
     match selector {
-        Some(selector) => resolve_source_id(font, selector),
+        Some(selector) => font.source_id_for(selector),
         None => font
             .default_source_id()
             .ok_or_else(|| miette!("the font has no default source")),
     }
-}
-
-fn parse_version(version: &str) -> Result<(i32, i32)> {
-    let (major, minor) = version
-        .trim()
-        .split_once('.')
-        .unwrap_or((version.trim(), "000"));
-    let digits = |value: &str| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit());
-    if !digits(major) || !digits(minor) || minor.len() != 3 {
-        bail!("invalid --version {version:?}; use MAJOR or MAJOR.NNN, such as 1.000 or 2.125");
-    }
-    let major = major.parse::<i32>().into_diagnostic()?;
-    if major > i16::MAX as i32 {
-        bail!("--version major must be between 0 and 32767");
-    }
-    Ok((major, minor.parse::<i32>().into_diagnostic()?))
 }

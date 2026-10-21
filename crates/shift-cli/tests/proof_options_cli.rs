@@ -128,7 +128,7 @@ fn orders_masters_by_location_not_source_order() {
     let mut order = font
         .sources()
         .iter()
-        .map(|source| source.id())
+        .map(shift_font::Source::id)
         .collect::<Vec<_>>();
     order.reverse();
     font.set_source_order(&order).unwrap();

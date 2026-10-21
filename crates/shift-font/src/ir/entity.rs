@@ -4,6 +4,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 const SHORT_ID_ALPHABET: &[u8; 64] =
     b"useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 const SHORT_ID_SUFFIX_LENGTH: usize = 10;
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "the alphabet has 64 characters"
+)]
 const SHORT_ID_ALPHABET_MASK: u8 = (SHORT_ID_ALPHABET.len() - 1) as u8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -71,6 +75,12 @@ macro_rules! typed_id {
             }
         }
 
+        impl From<$name> for String {
+            fn from(id: $name) -> Self {
+                id.0
+            }
+        }
+
         impl std::str::FromStr for $name {
             type Err = InvalidEntityId;
 
@@ -83,6 +93,26 @@ macro_rules! typed_id {
                         value: s.to_string(),
                     })
                 }
+            }
+        }
+
+        /// Stored as its text, so `params![glyph.id()]` and `row.get("glyph_id")`
+        /// need no conversion at the call site.
+        #[cfg(feature = "rusqlite")]
+        impl rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                Ok(rusqlite::types::ToSqlOutput::from(self.as_str()))
+            }
+        }
+
+        /// Read back as [`Self::from_raw`] does, so stored ids keep reading
+        /// exactly as before.
+        #[cfg(feature = "rusqlite")]
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(
+                value: rusqlite::types::ValueRef<'_>,
+            ) -> rusqlite::types::FromSqlResult<Self> {
+                value.as_str().map(Self::from_raw)
             }
         }
 
@@ -145,6 +175,10 @@ fn derived_id_suffix(namespace: &str, name: &str) -> String {
 
     (0..SHORT_ID_SUFFIX_LENGTH)
         .map(|index| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "keeps the low byte, which the mask cuts to six bits"
+            )]
             let bits = (hash >> (index * 6)) as u8 & SHORT_ID_ALPHABET_MASK;
             SHORT_ID_ALPHABET[bits as usize] as char
         })
@@ -189,34 +223,31 @@ pub enum GlyphEntityId {
     Guideline(GuidelineId),
 }
 
-impl From<ContourId> for GlyphEntityId {
-    fn from(id: ContourId) -> Self {
-        Self::Contour(id)
-    }
+/// Converts each id, and each entity holding one, into a [`GlyphEntityId`].
+macro_rules! glyph_entities {
+    ($($variant:ident($id:ty, $entity:ty)),+ $(,)?) => {
+        $(
+            impl From<$id> for GlyphEntityId {
+                fn from(id: $id) -> Self {
+                    Self::$variant(id)
+                }
+            }
+
+            impl From<&$entity> for GlyphEntityId {
+                fn from(entity: &$entity) -> Self {
+                    Self::$variant(entity.id())
+                }
+            }
+        )+
+    };
 }
 
-impl From<PointId> for GlyphEntityId {
-    fn from(id: PointId) -> Self {
-        Self::Point(id)
-    }
-}
-
-impl From<ComponentId> for GlyphEntityId {
-    fn from(id: ComponentId) -> Self {
-        Self::Component(id)
-    }
-}
-
-impl From<AnchorId> for GlyphEntityId {
-    fn from(id: AnchorId) -> Self {
-        Self::Anchor(id)
-    }
-}
-
-impl From<GuidelineId> for GlyphEntityId {
-    fn from(id: GuidelineId) -> Self {
-        Self::Guideline(id)
-    }
+glyph_entities! {
+    Contour(ContourId, crate::Contour),
+    Point(PointId, crate::Point),
+    Component(ComponentId, crate::Component),
+    Anchor(AnchorId, crate::Anchor),
+    Guideline(GuidelineId, crate::Guideline),
 }
 
 #[cfg(test)]

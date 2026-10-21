@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-use shift_slug::{Curve, Point};
+use shift_slug::{Curve, CurveShape, Point, QuadraticOutline};
 use skrifa::raw::tables::glyf::{
     Anchor as GlyfAnchor, CompositeGlyphFlags, Glyf, Glyph as GlyfGlyph, PointFlags,
 };
@@ -11,17 +11,17 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    inferred_smooth_point_indices, AffineTransform, FontReadError, GlyphIndex, GlyphPointKind,
-    PointProvenance, TrueTypePointIndex,
+    AffineTransform, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
+    TrueTypePointIndex, inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
 use super::variable::{approximate_hypot, component_transform, infer_tuple_deltas};
 use crate::font_source::malformed;
+use crate::numeric::lossy_f32;
 
 pub(super) struct VariableCurves {
-    pub(super) base: Vec<Curve>,
-    pub(super) line_flags: Vec<bool>,
+    pub(super) base: QuadraticOutline,
     pub(super) sources: BTreeMap<u32, Vec<Curve>>,
 }
 
@@ -62,8 +62,7 @@ fn curves_from_geometry(
         .flat_map(|contour| &contour.points)
         .flat_map(|point| point.position.deltas.keys().copied())
         .collect::<BTreeSet<_>>();
-    let mut base = Vec::new();
-    let mut line_flags = Vec::new();
+    let mut base = QuadraticOutline::default();
     let mut sources = weights
         .iter()
         .map(|weight| (*weight, Vec::new()))
@@ -82,13 +81,7 @@ fn curves_from_geometry(
             let point = &points[cursor % points.len()];
             match point.kind {
                 GlyphPointKind::OnCurve => {
-                    push_line(
-                        &mut base,
-                        &mut line_flags,
-                        &mut sources,
-                        current,
-                        &point.position,
-                    );
+                    push_line(&mut base, &mut sources, current, &point.position);
                     current = &point.position;
                     cursor += 1;
                 }
@@ -106,7 +99,6 @@ fn curves_from_geometry(
                     }
                     push_quadratic(
                         &mut base,
-                        &mut line_flags,
                         &mut sources,
                         current,
                         &point.position,
@@ -137,7 +129,6 @@ fn curves_from_geometry(
                     }
                     push_cubic(
                         &mut base,
-                        &mut line_flags,
                         &mut sources,
                         current,
                         &point.position,
@@ -151,22 +142,19 @@ fn curves_from_geometry(
         }
     }
 
-    Ok(VariableCurves {
-        base,
-        line_flags,
-        sources,
-    })
+    Ok(VariableCurves { base, sources })
 }
 
 fn push_line(
-    base: &mut Vec<Curve>,
-    line_flags: &mut Vec<bool>,
+    base: &mut QuadraticOutline,
     sources: &mut BTreeMap<u32, Vec<Curve>>,
     start: &VariablePosition,
     end: &VariablePosition,
 ) {
-    base.push(Curve::from_line(start.point(None), end.point(None)));
-    line_flags.push(true);
+    base.push(
+        Curve::from_line(start.point(None), end.point(None)),
+        CurveShape::Line,
+    );
     for (weight, curves) in sources {
         curves.push(Curve::from_line(
             start.point(Some(*weight)),
@@ -176,19 +164,20 @@ fn push_line(
 }
 
 fn push_quadratic(
-    base: &mut Vec<Curve>,
-    line_flags: &mut Vec<bool>,
+    base: &mut QuadraticOutline,
     sources: &mut BTreeMap<u32, Vec<Curve>>,
     start: &VariablePosition,
     control: &VariablePosition,
     end: &VariablePosition,
 ) {
-    base.push(Curve {
-        p0: start.point(None),
-        p1: control.point(None),
-        p2: end.point(None),
-    });
-    line_flags.push(false);
+    base.push(
+        Curve {
+            p0: start.point(None),
+            p1: control.point(None),
+            p2: end.point(None),
+        },
+        CurveShape::Quadratic,
+    );
     for (weight, curves) in sources {
         curves.push(Curve {
             p0: start.point(Some(*weight)),
@@ -199,8 +188,7 @@ fn push_quadratic(
 }
 
 fn push_cubic(
-    base: &mut Vec<Curve>,
-    line_flags: &mut Vec<bool>,
+    base: &mut QuadraticOutline,
     sources: &mut BTreeMap<u32, Vec<Curve>>,
     start: &VariablePosition,
     first: &VariablePosition,
@@ -229,15 +217,13 @@ fn push_cubic(
             ))
         },
     );
-    let base_cubics = Curve::from_cubic_with_subdivisions(
+    base.extend_quadratics(Curve::from_cubic_with_subdivisions(
         base_points[0],
         base_points[1],
         base_points[2],
         base_points[3],
         subdivisions,
-    );
-    line_flags.extend(std::iter::repeat_n(false, base_cubics.len()));
-    base.extend(base_cubics);
+    ));
     for (weight, curves) in sources {
         curves.extend(Curve::from_cubic_with_subdivisions(
             start.point(Some(*weight)),
@@ -249,7 +235,7 @@ fn push_cubic(
     }
 }
 
-fn normalize_contour(points: Vec<VariablePoint>) -> Result<VariableContour, SourceAtlasError> {
+fn normalize_contour(points: &[VariablePoint]) -> Result<VariableContour, SourceAtlasError> {
     if points.is_empty() {
         return Err(invalid_geometry("binary atlas contour has no points"));
     }
@@ -333,7 +319,7 @@ impl VariablePosition {
             .and_then(|weight| self.deltas.get(&weight))
             .copied()
             .unwrap_or_default();
-        Point::new((self.x + delta.0) as f32, (self.y + delta.1) as f32)
+        Point::new(lossy_f32(self.x + delta.0), lossy_f32(self.y + delta.1))
     }
 
     fn transformed(&self, transform: AffineTransform) -> Self {
@@ -549,8 +535,8 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                                         malformed(
                                             self.path,
                                             format!(
-                                            "invalid base anchor point {base} in glyph {raw_id}"
-                                        ),
+                                                "invalid base anchor point {base} in glyph {raw_id}"
+                                            ),
                                         )
                                     })?;
                             let component = child
@@ -638,7 +624,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
         let contour_ends = simple
             .end_pts_of_contours()
             .iter()
-            .map(|end| end.get())
+            .map(skrifa::raw::types::BigEndian::get)
             .collect::<Vec<_>>();
         let mut points = raw_points
             .iter()
@@ -653,7 +639,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                 },
                 smooth: false,
                 provenance: PointProvenance::Native {
-                    ttf_point_index: Some(TrueTypePointIndex::new(index as u32)),
+                    ttf_point_index: Some(TrueTypePointIndex::at(index)),
                 },
             })
             .collect::<Vec<_>>();
@@ -704,7 +690,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
                 )
                 .into());
             }
-            contours.push(normalize_contour(points[start..=end].to_vec())?);
+            contours.push(normalize_contour(&points[start..=end])?);
             start = end + 1;
         }
 

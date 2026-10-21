@@ -1,5 +1,8 @@
 //! Shared test corpora for round-trip and persistence tests.
 
+#![allow(clippy::unwrap_used, reason = "test fixtures fail loudly on bad input")]
+
+pub mod fixtures;
 pub mod generated;
 
 use crate::{
@@ -12,6 +15,27 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
+/// A closed contour of on-curve corner points, in order.
+///
+/// The [`contour!`](crate::contour) macro writes the same shape with integer
+/// or float coordinates.
+pub fn closed_contour(points: &[(f64, f64)]) -> Contour {
+    let mut contour = Contour::new();
+    for &(x, y) in points {
+        contour.add_point(x, y, PointType::OnCurve, false);
+    }
+    contour.close();
+    contour
+}
+
+/// A closed contour of on-curve points: `contour![(0, 0), (40, 0), (40, 700)]`.
+#[macro_export]
+macro_rules! contour {
+    ($(($x:expr, $y:expr)),+ $(,)?) => {
+        $crate::test_support::closed_contour(&[$((f64::from($x), f64::from($y))),+])
+    };
+}
+
 /// Builds a kitchen-sink font corpus for semantic round-trip tests.
 ///
 /// Checklist when adding a new `FontData` field: populate it here with a
@@ -19,6 +43,10 @@ use std::collections::BTreeMap;
 /// Ordered collections need multiple entries whose identity sort order differs
 /// from their authored order so deterministic serializers cannot reorder them
 /// unnoticed.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one corpus, populated field by field"
+)]
 pub fn sample_font() -> Font {
     let mut font = Font::empty();
     font.metadata_mut().family_name = Some("Dogfood Sans".to_string());
@@ -142,8 +170,7 @@ pub fn sample_font() -> Font {
     font.add_axis(width)
         .expect("sample width axis should be valid");
 
-    let mut regular_location = ExternalLocation::new();
-    regular_location.set(weight_id.clone(), 400.0);
+    let regular_location = ExternalLocation::from([(weight_id.clone(), 400.0)]);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("regular"),
         "Regular".to_string(),
@@ -170,12 +197,9 @@ pub fn sample_font() -> Font {
 
     let regular_id = SourceId::from_raw("regular");
     let bold_id = SourceId::from_raw("bold");
-    let mut regular_location = DesignLocation::new();
-    regular_location.set(weight_id.clone(), 400.0);
-    regular_location.set(width_id.clone(), 100.0);
-    let mut bold_location = DesignLocation::new();
-    bold_location.set(weight_id, 800.0);
-    bold_location.set(width_id, 112.5);
+    let regular_location =
+        DesignLocation::from([(weight_id.clone(), 400.0), (width_id.clone(), 100.0)]);
+    let bold_location = DesignLocation::from([(weight_id, 800.0), (width_id, 112.5)]);
     font.add_source(Source::with_id(
         regular_id.clone(),
         "Regular".to_string(),
@@ -209,15 +233,8 @@ pub fn sample_font() -> Font {
         ),
         -100.0,
     );
-    set_source_metrics(
-        &mut font,
-        regular_id.clone(),
-        1500.0,
-        -500.0,
-        1456.0,
-        1012.0,
-    );
-    let regular = font.source_mut(regular_id.clone()).unwrap();
+    set_source_metrics(&mut font, &regular_id, 1500.0, -500.0, 1456.0, 1012.0);
+    let regular = font.source_mut(&regular_id).unwrap();
     regular.set_line_gap(Some(42.0));
     regular.set_italic_angle(Some(-9.5));
     regular.set_underline_position(Some(-175.0));
@@ -375,8 +392,7 @@ pub fn sample_variable_font() -> Font {
     )])
     .expect("sample axis mapping should be valid");
 
-    let mut bold_instance_location = ExternalLocation::new();
-    bold_instance_location.set(weight_id.clone(), 900.0);
+    let bold_instance_location = ExternalLocation::from([(weight_id.clone(), 900.0)]);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("bold"),
         "Bold".to_string(),
@@ -386,38 +402,21 @@ pub fn sample_variable_font() -> Font {
     .expect("sample named instance should be valid");
 
     let default_source_id = font.default_source_id().unwrap();
-    set_source_metrics(
-        &mut font,
-        default_source_id.clone(),
-        800.0,
-        -200.0,
-        700.0,
-        500.0,
-    );
-    let default_source = font.source_mut(default_source_id.clone()).unwrap();
+    set_source_metrics(&mut font, &default_source_id, 800.0, -200.0, 700.0, 500.0);
+    let default_source = font.source_mut(&default_source_id).unwrap();
     default_source.set_line_gap(Some(20.0));
     default_source.set_underline_position(Some(-100.0));
     default_source.set_underline_thickness(Some(50.0));
-    let mut default_location = DesignLocation::new();
-    default_location.set(weight_id.clone(), 400.0);
-    font.source_mut(default_source_id.clone())
+    let default_location = DesignLocation::from([(weight_id.clone(), 400.0)]);
+    font.source_mut(&default_source_id)
         .unwrap()
         .set_location(default_location);
 
-    let mut medium_location = DesignLocation::new();
-    medium_location.set(weight_id.clone(), 600.0);
+    let medium_location = DesignLocation::from([(weight_id.clone(), 600.0)]);
     font.add_source(Source::new("Medium".to_string(), medium_location));
-    let mut bold_location = DesignLocation::new();
-    bold_location.set(weight_id, 800.0);
+    let bold_location = DesignLocation::from([(weight_id, 800.0)]);
     let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
-    set_source_metrics(
-        &mut font,
-        bold_source_id.clone(),
-        820.0,
-        -220.0,
-        720.0,
-        510.0,
-    );
+    set_source_metrics(&mut font, &bold_source_id, 820.0, -220.0, 720.0, 510.0);
 
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
     glyph.set_layer(triangle_layer(default_source_id.clone(), 600.0, 300.0));
@@ -456,7 +455,7 @@ fn add_a_groups(
 
 fn set_source_metrics(
     font: &mut Font,
-    source_id: SourceId,
+    source_id: &SourceId,
     ascender: f64,
     descender: f64,
     cap_height: f64,
@@ -474,7 +473,7 @@ fn set_source_metrics(
         let overshoot = font
             .sources()
             .iter()
-            .find(|source| source.id() == source_id)
+            .find(|source| source.id() == *source_id)
             .and_then(|source| source.metric_value(&definition.id()))
             .map(|value| value.overshoot)
             .unwrap_or_default();
@@ -488,10 +487,8 @@ fn set_source_metrics(
 }
 
 fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {
-    let mut input = Location::new();
-    input.set(axis.id(), user);
-    let mut output = Location::new();
-    output.set(axis.id(), design);
+    let input = Location::from([(axis.id(), user)]);
+    let output = Location::from([(axis.id(), design)]);
     AxisMappingPoint {
         description: None,
         input,

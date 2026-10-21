@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use crate::selector::FontSelectors;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::composite::{GlyphComponents, ResolvedContour as FontResolvedContour};
-use shift_font::variation::map_location;
 use shift_font::{
-    Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphId, GlyphLayer,
-    LayerDifference, Point, PointType, Source,
+    Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphLayer,
+    LayerDifference, Point, Source,
 };
 
 use super::types::{
@@ -19,7 +19,7 @@ use super::types::{
 };
 
 impl GlyphInspection {
-    pub fn load(path: &Path, selector: &str, coordinates: &[String]) -> Result<Self> {
+    pub(crate) fn load(path: &Path, selector: &str, coordinates: &[String]) -> Result<Self> {
         let path_text = path
             .to_str()
             .ok_or_else(|| miette!("font path is not valid UTF-8"))?;
@@ -27,12 +27,13 @@ impl GlyphInspection {
             .read_font(path_text)
             .into_diagnostic()
             .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
-        let glyph_id = resolve_glyph_id(&font, selector)?;
+        let glyph_id = font.glyph_id_for(selector)?;
         let glyph = font
             .glyph(&glyph_id)
             .ok_or_else(|| miette!("glyph {selector:?} disappeared while inspecting the font"))?;
         let external = parse_location(&font, coordinates)?;
-        let design = map_location(&external, font.axes(), font.axis_mappings())
+        let design = font
+            .mapped_location(&external)
             .into_diagnostic()
             .wrap_err("failed to map the external location into design space")?;
         let projection = font
@@ -110,24 +111,8 @@ impl GlyphInspection {
     }
 }
 
-fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
-    if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(&glyph_id).is_some()
-    {
-        return Ok(glyph_id);
-    }
-    if let Some(glyph_id) = font.glyph_id_by_name(selector) {
-        return Ok(glyph_id);
-    }
-
-    bail!("glyph {selector:?} does not exist; use its name or full glyph_ id")
-}
-
 pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<ExternalLocation> {
-    let mut location = ExternalLocation::new();
-    for axis in font.axes() {
-        location.set(axis.id(), axis.default());
-    }
+    let mut location = ExternalLocation::at_defaults(font.axes());
 
     let mut seen = HashSet::new();
     for coordinate in coordinates {
@@ -139,9 +124,8 @@ pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<Exte
             bail!("axis tag {tag:?} is blank or repeated in the location");
         }
         let axis = font
-            .axes()
-            .iter()
-            .find(|axis| axis.tag() == tag)
+            .axis_id_by_tag(tag)
+            .and_then(|axis_id| font.axis(&axis_id))
             .ok_or_else(|| miette!("axis tag {tag:?} does not exist"))?;
         let value = value
             .trim()
@@ -174,8 +158,8 @@ fn exact_source<'a>(font: &'a Font, location: &DesignLocation) -> Option<&'a Sou
     font.sources().iter().find(|source| {
         source.is_master()
             && font.axes().iter().all(|axis| {
-                let expected = source.location().get(&axis.id()).unwrap_or(axis.default());
-                let actual = location.get(&axis.id()).unwrap_or(axis.default());
+                let expected = source.location().value_on(axis);
+                let actual = location.value_on(axis);
                 (expected - actual).abs() <= 1e-6
             })
     })
@@ -193,8 +177,10 @@ fn selected_components<'a>(
         .exact_source_components()
         .iter()
         .find(|candidate| candidate.source_id() == source.id())
-        .map(|candidate| candidate.components())
-        .unwrap_or_else(|| projection.components())
+        .map_or_else(
+            || projection.components(),
+            shift_font::GlyphSourceComponents::components,
+        )
 }
 
 fn inspect_structure(layer: &GlyphLayer) -> GlyphStructure {
@@ -240,8 +226,7 @@ fn inspect_components(
                 .into_diagnostic()
                 .wrap_err("failed to resolve a component parent layer")?;
             let component = parent_layer
-                .components_iter()
-                .find(|component| component.id() == occurrence.component_id())
+                .component(&occurrence.component_id())
                 .ok_or_else(|| {
                     miette!(
                         "component {} is absent from resolved parent glyph {parent_id}",
@@ -251,12 +236,11 @@ fn inspect_components(
             let base_id = occurrence.base_glyph_id();
             let parent_name = font
                 .glyph(&parent_id)
-                .map(|glyph| glyph.name().to_string())
-                .unwrap_or_else(|| parent_id.to_string());
-            let base_name = font
-                .glyph(&base_id)
-                .map(|glyph| glyph.name().to_string())
-                .unwrap_or_else(|| component.base_glyph_name().to_string());
+                .map_or_else(|| parent_id.to_string(), |glyph| glyph.name().to_string());
+            let base_name = font.glyph(&base_id).map_or_else(
+                || component.base_glyph_name().to_string(),
+                |glyph| glyph.name().to_string(),
+            );
 
             Ok(ComponentInspection {
                 order,
@@ -319,7 +303,7 @@ fn inspect_sources(
     font.sources()
         .iter()
         .map(|source| {
-            let layer = glyph.layer_for_source(source.id());
+            let layer = glyph.layer_for_source(&source.id());
             let layer_match = layer.map(|layer| reference.match_with(layer));
             SourceInspection {
                 id: source.id().to_string(),
@@ -329,7 +313,7 @@ fn inspect_sources(
                 layer: layer.map(inspect_layer),
                 compatible_with_reference: layer_match
                     .as_ref()
-                    .map(|layer_match| layer_match.is_complete()),
+                    .map(shift_font::LayerMatch::is_complete),
                 differences: layer_match
                     .map(|layer_match| {
                         layer_match
@@ -381,12 +365,10 @@ fn inspect_variation(
                     .zip(weights)
                     .map(|(source_id, weight)| SourceWeight {
                         source_id: source_id.to_string(),
-                        source_name: font
-                            .sources()
-                            .iter()
-                            .find(|source| source.id() == *source_id)
-                            .map(|source| source.name().to_string())
-                            .unwrap_or_else(|| source_id.to_string()),
+                        source_name: font.source(source_id).map_or_else(
+                            || source_id.to_string(),
+                            |source| source.name().to_string(),
+                        ),
                         weight,
                     })
                     .collect(),
@@ -396,45 +378,51 @@ fn inspect_variation(
         .unwrap_or_default();
     let regions = interpolation
         .map(|interpolation| {
-            interpolation
-                .basis()
+            let basis = interpolation.basis();
+            basis
                 .variation_basis()
                 .deltas()
                 .iter()
-                .map(|delta| VariationRegion {
-                    supports: delta
+                .map(|delta| {
+                    let scalar = delta
                         .region()
-                        .supports()
-                        .iter()
-                        .map(|support| VariationSupport {
-                            axis_tag: font
-                                .axes()
-                                .iter()
-                                .find(|axis| axis.id() == support.axis_id())
-                                .map(|axis| axis.tag().to_string())
-                                .unwrap_or_else(|| support.axis_id().to_string()),
-                            minimum: support.minimum(),
-                            peak: support.peak(),
-                            maximum: support.maximum(),
-                        })
-                        .collect(),
-                    scalar: interpolation_region_scalar(
-                        delta.region(),
-                        location,
-                        interpolation.basis().design_normalization(),
-                    ),
-                    value_count: delta.values().len(),
-                    non_zero_value_count: delta
-                        .values()
-                        .iter()
-                        .filter(|value| **value != 0.0)
-                        .count(),
-                    values: delta.values().to_vec(),
+                        .scalar_at(
+                            location.as_untyped(),
+                            font.axes(),
+                            Some(basis.design_normalization()),
+                        )
+                        .into_diagnostic()
+                        .wrap_err("failed to evaluate a variation region")?;
+                    Ok(VariationRegion {
+                        supports: delta
+                            .region()
+                            .supports()
+                            .iter()
+                            .map(|support| VariationSupport {
+                                axis_tag: font.axis(&support.axis_id()).map_or_else(
+                                    || support.axis_id().to_string(),
+                                    |axis| axis.tag().to_string(),
+                                ),
+                                minimum: support.minimum(),
+                                peak: support.peak(),
+                                maximum: support.maximum(),
+                            })
+                            .collect(),
+                        scalar,
+                        value_count: delta.values().len(),
+                        non_zero_value_count: delta
+                            .values()
+                            .iter()
+                            .filter(|value| **value != 0.0)
+                            .count(),
+                        values: delta.values().to_vec(),
+                    })
                 })
-                .collect()
+                .collect::<Result<Vec<_>>>()
         })
+        .transpose()?
         .unwrap_or_default();
-    let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(source.id()));
+    let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(&source.id()));
     let selection = if exact_layer.is_some() {
         "exactSource"
     } else if interpolation.is_some() {
@@ -463,41 +451,6 @@ fn inspect_variation(
     })
 }
 
-fn interpolation_region_scalar(
-    region: &shift_font::InterpolationRegion,
-    location: &DesignLocation,
-    design_normalization: &[shift_font::DesignNormalization],
-) -> f64 {
-    let mut scalar = 1.0;
-    for support in region.supports() {
-        let Some(normalization) = design_normalization
-            .iter()
-            .find(|normalization| normalization.axis_id == support.axis_id())
-        else {
-            return 0.0;
-        };
-        let value = location
-            .get(&normalization.axis_id)
-            .unwrap_or(normalization.default);
-        let normalized = normalization.normalize(value);
-        if normalized == support.peak()
-            || (support.minimum() == 0.0 && support.peak() == 0.0 && support.maximum() == 0.0)
-        {
-            continue;
-        }
-        if normalized <= support.minimum() || support.maximum() <= normalized {
-            return 0.0;
-        }
-        let edge = if normalized < support.peak() {
-            support.minimum()
-        } else {
-            support.maximum()
-        };
-        scalar *= (normalized - edge) / (support.peak() - edge);
-    }
-    scalar
-}
-
 fn inspect_resolved(advance: f64, contours: &[FontResolvedContour]) -> ResolvedGlyph {
     let contours = contours
         .iter()
@@ -510,7 +463,7 @@ fn inspect_resolved(advance: f64, contours: &[FontResolvedContour]) -> ResolvedG
                     id: None,
                     x: point.x(),
                     y: point.y(),
-                    point_type: point_type_name(point.point_type()).to_string(),
+                    point_type: point.point_type().as_str().to_string(),
                     smooth: point.is_smooth(),
                 })
                 .collect(),
@@ -530,16 +483,8 @@ fn inspect_point(point: &Point) -> PointInspection {
         id: Some(point.id().to_string()),
         x: point.x(),
         y: point.y(),
-        point_type: point_type_name(point.point_type()).to_string(),
+        point_type: point.point_type().as_str().to_string(),
         smooth: point.is_smooth(),
-    }
-}
-
-fn point_type_name(point_type: PointType) -> &'static str {
-    match point_type {
-        PointType::OnCurve => "onCurve",
-        PointType::OffCurve => "offCurve",
-        PointType::QCurve => "qCurve",
     }
 }
 
@@ -547,7 +492,7 @@ fn location_values(location: &shift_font::Location, axes: &[Axis]) -> Vec<Locati
     axes.iter()
         .map(|axis| LocationValue {
             axis_tag: axis.tag().to_string(),
-            value: location.get(&axis.id()).unwrap_or(axis.default()),
+            value: location.value_on(axis),
         })
         .collect()
 }
@@ -592,8 +537,8 @@ fn format_difference(difference: &LayerDifference) -> String {
             source,
         } => format!(
             "path {contour} node {point} kind: reference {}, source {}",
-            point_type_name(*reference),
-            point_type_name(*source)
+            reference.as_str(),
+            source.as_str()
         ),
         LayerDifference::AnchorCount { reference, source } => {
             format!("anchor count: reference {reference}, source {source}")

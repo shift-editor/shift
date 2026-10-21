@@ -5,7 +5,7 @@ license.workspace = true
 edition = "2024"
 
 [dependencies]
-shift-font = { workspace = true }
+shift-font = { workspace = true, features = ["rusqlite"] }
 blake3 = "1.8"
 getrandom = "0.3"
 rusqlite = { version = "0.37.0", features = ["blob", "backup", "bundled", "limits"] }
@@ -19,3 +19,6 @@ zstd = "0.13"
 
 [dev-dependencies]
 shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

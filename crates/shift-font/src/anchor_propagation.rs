@@ -115,7 +115,7 @@ pub fn propagate_anchors(glyph: &PropagationGlyph) -> PropagatedAnchors {
             all_anchors.retain(|name, _| !name.starts_with("exit"));
         }
 
-        let transform = to_affine(component.transform);
+        let transform = Affine::from(component.transform);
         let scale = get_xy_rotation(transform);
         for anchor in anchors {
             let new_has_underscore = anchor.name.starts_with('_');
@@ -168,7 +168,7 @@ pub fn propagate_anchors(glyph: &PropagationGlyph) -> PropagatedAnchors {
                 && !name.starts_with("exit")
         }) {
             // Carets count space between components, so the last caret is n_components - 1
-            let maybe_add_one = if name.starts_with("caret") { 1 } else { 0 };
+            let maybe_add_one = usize::from(name.starts_with("caret"));
             let anchor_index = suffix.parse::<usize>().unwrap_or(0) + maybe_add_one;
             component_count_from_anchors = component_count_from_anchors.max(anchor_index);
         }
@@ -194,17 +194,6 @@ pub fn propagate_anchors(glyph: &PropagationGlyph) -> PropagatedAnchors {
         anchors: all_anchors.into_values().collect(),
         base_glyph_count: number_of_base_glyphs,
     }
-}
-
-fn to_affine(transform: Transform) -> Affine {
-    Affine::new([
-        transform.xx,
-        transform.xy,
-        transform.yx,
-        transform.yy,
-        transform.dx,
-        transform.dy,
-    ])
 }
 
 /// Returns an iterator over anchors, accounting for a possible "*origin" anchor
@@ -236,7 +225,7 @@ fn get_xy_rotation(xform: Affine) -> Vec2 {
     // and careful testing.
     let [xx, xy, ..] = xform.as_coeffs();
     // first take the rotation
-    let angle = xy.atan2(xx);
+    let angle = libm::atan2(xy, xx);
     // then remove the rotation, and take the scale
     let rotated = xform.pre_rotate(-angle).as_coeffs();
     let mut scale = Vec2::new(rotated[0], rotated[3]);

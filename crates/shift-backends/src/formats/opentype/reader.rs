@@ -2,8 +2,8 @@ use std::{path::Path, sync::Arc};
 
 use crate::{
     errors::{FormatBackendError, FormatBackendResult},
-    font_source::{inferred_smooth_point_indices, FontSource, OpenTypeFont},
-    import::{collect_streamed_font, GlyphDirectoryEntry, GlyphStream, ImportBatchLimit},
+    font_source::{FontSource, OpenTypeFont, inferred_smooth_point_indices},
+    import::{GlyphDirectoryEntry, GlyphStream, ImportBatchLimit, collect_streamed_font},
 };
 use rayon::prelude::*;
 use shift_font::{
@@ -11,13 +11,13 @@ use shift_font::{
     PointId, PointType, SourceId,
 };
 use skrifa::{
+    FontRef, MetadataProvider,
     outline::{DrawSettings, OutlineGlyphCollection, OutlinePen},
     prelude::{LocationRef, Size},
-    raw::{tables::hmtx::Hmtx, types::GlyphId, TableProvider},
-    FontRef, MetadataProvider,
+    raw::{TableProvider, tables::hmtx::Hmtx, types::GlyphId},
 };
 
-pub fn read_font_file(path: &str) -> FormatBackendResult<Font> {
+pub(super) fn read_font_file(path: &str) -> FormatBackendResult<Font> {
     let (header, mut stream) = stream_font_file(path)?;
     collect_streamed_font(header, &mut stream)
 }
@@ -59,7 +59,7 @@ impl ShiftPen {
             .expect("move_to must be called before other pen methods")
     }
 
-    pub fn contours(self) -> Vec<Contour> {
+    pub(crate) fn contours(self) -> Vec<Contour> {
         self.contours
     }
 }
@@ -156,7 +156,7 @@ fn detect_smooth_points(contours: &mut [Contour]) {
             contour.points(),
             contour.is_closed(),
             |point| (point.x(), point.y()),
-            |point| point.is_on_curve(),
+            shift_font::Point::is_on_curve,
         );
         for index in smooth {
             contour
@@ -300,29 +300,18 @@ fn glyph_from_skrifa(
 mod tests {
     use super::*;
     use crate::font_source::geometry::SMOOTH_ANGLE_TOLERANCE;
-    use shift_font::{CurveSegment, MetricKind};
+    use shift_font::test_support::fixtures;
+    use shift_font::{CurveSegment, StandardMetrics};
     use skrifa::outline::pen::PathElement;
-    use std::path::PathBuf;
-
-    fn mutatorsans_ttf_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts/mutatorsans/MutatorSans.ttf")
-    }
 
     #[test]
     fn canonical_retained_directory_matches_authored_header_metadata() {
-        let retained = OpenTypeFont::open(&mutatorsans_ttf_path()).unwrap();
+        let retained = OpenTypeFont::open(&fixtures::mutatorsans_ttf()).unwrap();
         let directory = retained.directory();
         let header = retained.header.clone();
         let default_source_id = header.default_source_id().unwrap();
         let default_source = header
-            .sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
+            .source(&default_source_id)
             .expect("authored header should contain its default source");
 
         assert_eq!(header.metadata().family_name, directory.family_name);
@@ -334,21 +323,19 @@ mod tests {
         assert_eq!(header.axes().len(), directory.axes.len());
         assert_eq!(header.named_instances().len(), directory.instances.len());
         assert_eq!(default_source.line_gap(), Some(directory.metrics.line_gap));
-        for (kind, expected) in [
-            (MetricKind::Ascender, Some(directory.metrics.ascender)),
-            (MetricKind::Descender, Some(directory.metrics.descender)),
-            (MetricKind::CapHeight, directory.metrics.cap_height),
-            (MetricKind::XHeight, directory.metrics.x_height),
-        ] {
-            assert_eq!(
-                crate::metrics::metric_position(header.metric_definitions(), default_source, kind,),
-                expected,
-            );
-        }
+        let metrics = StandardMetrics::of(default_source, header.metric_definitions());
+        assert_eq!(metrics.ascender, Some(directory.metrics.ascender));
+        assert_eq!(metrics.descender, Some(directory.metrics.descender));
+        assert_eq!(metrics.cap_height, directory.metrics.cap_height);
+        assert_eq!(metrics.x_height, directory.metrics.x_height);
     }
 
     fn point_types(contour: &Contour) -> Vec<PointType> {
-        contour.points().iter().map(|p| p.point_type()).collect()
+        contour
+            .points()
+            .iter()
+            .map(shift_font::Point::point_type)
+            .collect()
     }
 
     fn deterministic_pen_contours() -> Vec<Contour> {
@@ -446,7 +433,7 @@ mod tests {
 
     #[test]
     fn imported_quadratics_match_source_segments() {
-        let path = mutatorsans_ttf_path();
+        let path = fixtures::mutatorsans_ttf();
         let bytes = std::fs::read(&path).expect("MutatorSans.ttf fixture should exist");
         let font_ref = FontRef::new(&bytes).unwrap();
 
@@ -493,7 +480,9 @@ mod tests {
         let mut quads_checked = 0;
         for element in elements {
             match element {
-                PathElement::MoveTo { x, y } | PathElement::LineTo { x, y } => {
+                PathElement::MoveTo { x, y }
+                | PathElement::LineTo { x, y }
+                | PathElement::CurveTo { x, y, .. } => {
                     current = (x as f64, y as f64);
                 }
                 PathElement::QuadTo { cx0, cy0, x, y } => {
@@ -504,9 +493,6 @@ mod tests {
                     );
                     quads_checked += 1;
                     current = expected[2];
-                }
-                PathElement::CurveTo { x, y, .. } => {
-                    current = (x as f64, y as f64);
                 }
                 PathElement::Close => {}
             }

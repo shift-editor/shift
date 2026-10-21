@@ -563,6 +563,7 @@ export class Font {
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
+    shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;

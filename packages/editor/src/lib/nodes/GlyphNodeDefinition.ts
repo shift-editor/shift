@@ -239,7 +239,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     }
   }
 
-  draw(node: GlyphNode, ctx: RenderContext, pass: RenderPass): void {
+  override draw(node: GlyphNode, ctx: RenderContext, pass: RenderPass): void {
     const editing = this.#isEditing(node);
 
     switch (pass) {

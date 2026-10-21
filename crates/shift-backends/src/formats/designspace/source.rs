@@ -7,14 +7,14 @@ use norad::designspace::DesignSpaceDocument;
 use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::resolve_projection_closure;
 use crate::font_source::{
-    malformed, FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph,
+    FontDirectory, FontImporter, FontReadError, FontSource, GlyphIndex, ProjectedGlyph, malformed,
 };
 use crate::formats::ufo::glif::{
-    glyph_directory, project_glif_glyph, retained_layer, RetainedUfoLayer,
+    RetainedUfoLayer, glyph_directory, project_glif_glyph, retained_layer,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
-use super::{derive_axis_range, find_default_source_index, map_axis_value, stream_retained};
+use super::{DesignspaceAxisExt, DesignspaceDocumentExt, stream_retained};
 
 /// Retained source locations and UFO glyph bytes for one Designspace.
 pub struct DesignspaceFont {
@@ -28,14 +28,15 @@ pub struct DesignspaceFont {
 }
 
 impl DesignspaceFont {
+    /// Opens a Designspace and its UFO sources for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::UnsupportedFormat`] when `path` is not a `.designspace`, and
+    /// [`FontReadError::MalformedSource`] when the document or a source cannot be parsed, it has no
+    /// sources, or no source sits at the default location.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
-        if !matches!(
-            path.extension()
-                .and_then(|extension| extension.to_str())
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("designspace")
-        ) {
+        if FontFormat::of_path(path) != Some(FontFormat::Designspace) {
             return Err(FontReadError::UnsupportedFormat {
                 path: path.to_path_buf(),
             });
@@ -46,7 +47,7 @@ impl DesignspaceFont {
         if document.sources.is_empty() {
             return Err(malformed(path, "Designspace has no sources".into()));
         }
-        let default_source = find_default_source_index(&document).ok_or_else(|| {
+        let default_source = document.default_source_index().ok_or_else(|| {
             malformed(
                 path,
                 "Designspace has no source at the mapped default location".into(),
@@ -65,7 +66,7 @@ impl DesignspaceFont {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let import_paths: Arc<[BTreeMap<String, PathBuf>]> = Arc::from(source_paths.clone());
-        let (header, _, _) = stream_retained(path, import_paths.clone())
+        let (header, _, _) = stream_retained(path, &import_paths)
             .map_err(|error| malformed(path, error.to_string()))?;
         let source_order = std::iter::once(default_source)
             .chain((0..document.sources.len()).filter(|index| *index != default_source))
@@ -83,12 +84,12 @@ impl DesignspaceFont {
             .axes
             .iter()
             .map(|axis| {
-                let (user_minimum, user_maximum) = derive_axis_range(axis);
-                let default = map_axis_value(axis, f64::from(axis.default));
+                let (user_minimum, user_maximum) = axis.user_range();
+                let default = axis.default_design_value();
                 let mut design_values = vec![
-                    map_axis_value(axis, user_minimum),
+                    axis.map_forward(user_minimum),
                     default,
-                    map_axis_value(axis, user_maximum),
+                    axis.map_forward(user_maximum),
                 ];
                 if let Some(mapping) = &axis.map {
                     design_values.extend(mapping.iter().map(|point| f64::from(point.output)));
@@ -105,7 +106,7 @@ impl DesignspaceFont {
             .into_iter()
             .zip(&directory.sources)
             .map(|(paths, source)| {
-                retained_layer(&directory, paths)
+                retained_layer(&directory, &paths)
                     .map(|layer| (source.location.to_vec(), vec![layer].into_boxed_slice()))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -149,8 +150,8 @@ impl FontSource for DesignspaceFont {
 
 impl FontImporter for DesignspaceFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream, report) = stream_retained(&self.path, self.import_paths.clone())
-            .map_err(|source| {
+        let (header, stream, report) =
+            stream_retained(&self.path, &self.import_paths).map_err(|source| {
                 BackendError::load(FontFormat::Designspace, self.path.clone(), source)
             })?;
         Ok(FontImport::new(
@@ -165,25 +166,16 @@ impl FontImporter for DesignspaceFont {
 
 #[cfg(test)]
 mod tests {
+    use shift_font::test_support::fixtures;
     use std::fs;
 
     use super::*;
 
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
-
     #[test]
     fn directory_sources_keep_retained_ufo_order() {
-        let path = fixture("mutatorsans-variable/MutatorSans.designspace");
+        let path = fixtures::font("mutatorsans-variable/MutatorSans.designspace");
         let document = DesignSpaceDocument::load(&path).unwrap();
-        let default_source = find_default_source_index(&document).unwrap();
+        let default_source = document.default_source_index().unwrap();
         let expected_filenames = std::iter::once(default_source)
             .chain((0..document.sources.len()).filter(|index| *index != default_source))
             .map(|index| document.sources[index].filename.as_str())
@@ -206,7 +198,7 @@ mod tests {
     fn designspace_nondefault_glyph_matches_authored_import() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("LayerOnlyDesignspace");
-        copy_directory(&fixture("mutatorsans-variable"), &copied);
+        copy_directory(&fixtures::font("mutatorsans-variable"), &copied);
         add_layer_only_glyph(
             &copied.join("MutatorSansBoldCondensed.ufo"),
             "glyphs",
@@ -221,7 +213,7 @@ mod tests {
     fn designspace_projection_retains_variation_after_source_removal() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("Removed");
-        copy_directory(&fixture("mutatorsans-variable"), &copied);
+        copy_directory(&fixtures::font("mutatorsans-variable"), &copied);
         let font = DesignspaceFont::open(&copied.join("MutatorSans.designspace")).unwrap();
         let glyph = font
             .directory()
@@ -236,11 +228,13 @@ mod tests {
             .variation
             .expect("variable designspace glyph should retain deltas");
 
-        assert!(variation
-            .deltas
-            .iter()
-            .flat_map(|delta| delta.values.iter())
-            .any(|value| *value != 0.0));
+        assert!(
+            variation
+                .deltas
+                .iter()
+                .flat_map(|delta| delta.values.iter())
+                .any(|value| *value != 0.0)
+        );
     }
 
     fn assert_projection_and_import_contain_layer_only(font: &impl FontImporter) {
@@ -250,19 +244,23 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name == "layerOnly")
             .expect("retained directory should include the layer-only glyph");
-        assert!(!font
-            .glyph(glyph.index)
-            .unwrap()
-            .root
-            .fallback
-            .contours
-            .is_empty());
+        assert!(
+            !font
+                .glyph(glyph.index)
+                .unwrap()
+                .root
+                .fallback
+                .contours
+                .is_empty()
+        );
 
         let mut import = font.begin_import().unwrap();
-        assert!(import
-            .directory()
-            .iter()
-            .any(|glyph| glyph.name.as_str() == "layerOnly"));
+        assert!(
+            import
+                .directory()
+                .iter()
+                .any(|glyph| glyph.name.as_str() == "layerOnly")
+        );
         let glyphs = import
             .next_batch(crate::ImportBatchLimit::new(1_000, 10_000))
             .unwrap();
@@ -270,10 +268,12 @@ mod tests {
             .iter()
             .find(|glyph| glyph.name() == "layerOnly")
             .expect("authored import should include the layer-only glyph");
-        assert!(glyph
-            .layers()
-            .values()
-            .any(|layer| !layer.contours().is_empty()));
+        assert!(
+            glyph
+                .layers()
+                .values()
+                .any(|layer| !layer.contours().is_empty())
+        );
     }
 
     fn add_layer_only_glyph(ufo: &Path, layer: &str, source_file: &str) {

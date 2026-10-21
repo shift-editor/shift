@@ -1,9 +1,9 @@
-use crate::length::{ensure_total, to_u32, OrOverflow};
-use crate::{Bounds, Curve, Point, SlugError};
+use crate::length::{OrOverflow, ensure_total, to_u32};
+use crate::{Bounds, Curve, GlyphIndex, Point, SlugError};
 
 use super::{
-    component_glyph_index, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
-    VariableAtlasBuilder, VariableGlyph, COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK,
+    COMPONENT_GLYPH_FLAG, GLYPH_OFFSET_MASK, PackedChunkWriter, PackedVariableChunk, VariableAtlas,
+    VariableAtlasBuilder, VariableGlyph, weight_at,
 };
 
 pub(crate) const VARIABLE_COMPONENT_GLYPH_BYTES: usize = 24;
@@ -11,7 +11,7 @@ pub(super) const VARIABLE_COMPONENT_PART_BYTES: usize = 16;
 pub(super) const VARIABLE_COMPONENT_BYTES: usize = 12;
 pub(super) const VARIABLE_COMPONENT_SOURCE_BYTES: usize = 40;
 
-pub const ROOT_COMPONENT: u32 = u32::MAX;
+pub(crate) const ROOT_COMPONENT: u32 = u32::MAX;
 
 /// Sparse descriptor for one glyph whose direct and component contours are assembled on GPU.
 #[repr(C)]
@@ -21,7 +21,7 @@ pub struct VariableComponentGlyph {
     pub part_count: u32,
     pub component_start: u32,
     pub component_count: u32,
-    pub root_glyph_index: u32,
+    pub root_glyph_index: GlyphIndex,
     pub _padding: u32,
 }
 
@@ -29,7 +29,7 @@ pub struct VariableComponentGlyph {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VariableComponentPart {
-    pub glyph_index: u32,
+    pub glyph_index: GlyphIndex,
     /// Local component occurrence, or [`ROOT_COMPONENT`] for direct root contours.
     pub component_index: u32,
     pub output_curve_start: u32,
@@ -112,17 +112,17 @@ impl VariableAtlasBuilder {
     pub(crate) fn add_component_glyph(
         &mut self,
         bounds: Bounds,
-        root_glyph_index: u32,
+        root_glyph_index: GlyphIndex,
         parts: Vec<VariableComponentPart>,
         mut components: Vec<VariableComponent>,
         component_sources: Vec<VariableComponentSource>,
-    ) -> Result<u32, SlugError> {
+    ) -> Result<GlyphIndex, SlugError> {
         let root_glyph = self.glyph(root_glyph_index)?;
-        if component_glyph_index(root_glyph).is_some() {
+        if root_glyph.component_index().is_some() {
             return Err(SlugError::LengthOverflow);
         }
 
-        let glyph_index = to_u32(self.atlas.glyphs.len())?;
+        let glyph_index = GlyphIndex::next_after(self.atlas.glyphs.len())?;
         let descriptor_index = to_u32(self.atlas.component_glyphs.len())?;
         if descriptor_index > GLYPH_OFFSET_MASK {
             return Err(SlugError::LengthOverflow);
@@ -134,7 +134,7 @@ impl VariableAtlasBuilder {
         let mut curve_count = 0_u32;
         for part in &parts {
             let direct_glyph = self.glyph(part.glyph_index)?;
-            if component_glyph_index(direct_glyph).is_some()
+            if direct_glyph.component_index().is_some()
                 || part.output_curve_start != curve_count
                 || (part.component_index != ROOT_COMPONENT
                     && part.component_index as usize >= components.len())
@@ -195,7 +195,7 @@ pub(super) fn resolve_component_glyph(
 ) -> Result<Vec<Curve>, SlugError> {
     let descriptor = atlas
         .component_glyphs
-        .get(component_glyph_index(glyph).or_overflow()?)
+        .get(glyph.component_index().or_overflow()?)
         .or_overflow()?;
     let component_start = descriptor.component_start as usize;
     let component_end = component_start
@@ -217,10 +217,7 @@ pub(super) fn resolve_component_glyph(
         .or_overflow()?;
     let mut output = vec![Curve::default(); glyph.curve_count as usize];
     for part in parts {
-        let direct_glyph = *atlas
-            .glyphs
-            .get(part.glyph_index as usize)
-            .ok_or(SlugError::GlyphIndexOutOfRange(part.glyph_index))?;
+        let direct_glyph = atlas.glyph(part.glyph_index)?;
         let transform = if part.component_index == ROOT_COMPONENT {
             Affine::identity()
         } else {
@@ -280,9 +277,7 @@ fn component_affine(
 
     let mut values = [0.0_f32; 9];
     for source in sources {
-        let weight = *weights.get(source.weight_index as usize).ok_or(
-            SlugError::VariableWeightIndexOutOfRange(source.weight_index),
-        )?;
+        let weight = weight_at(weights, source.weight_index)?;
         for (value, source_value) in values.iter_mut().zip([
             source.translate_x,
             source.translate_y,
@@ -332,7 +327,7 @@ pub(super) fn write_component_glyphs<F>(
                 value.part_count,
                 value.component_start,
                 value.component_count,
-                value.root_glyph_index,
+                value.root_glyph_index.get(),
                 value._padding,
             ],
         );
@@ -349,7 +344,7 @@ pub(super) fn write_component_parts<F>(
         write_words(
             writer,
             &[
-                value.glyph_index,
+                value.glyph_index.get(),
                 value.component_index,
                 value.output_curve_start,
                 value._padding,

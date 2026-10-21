@@ -10,7 +10,11 @@ use shift_proof::{
 };
 
 #[derive(Debug, Args)]
-pub struct ProofArgs {
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each field is an independent command-line flag"
+)]
+pub(crate) struct ProofArgs {
     /// Path to a .shift, UFO, Designspace, Glyphs, TTF, or OTF font source.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -93,7 +97,7 @@ pub struct ProofArgs {
 
 /// One `--at` value: comma-separated user-space axis settings.
 #[derive(Clone, Debug)]
-pub struct UserLocation(pub Vec<AxisValue>);
+pub(crate) struct UserLocation(pub(crate) Vec<AxisValue>);
 
 impl FromStr for UserLocation {
     type Err = ProofError;

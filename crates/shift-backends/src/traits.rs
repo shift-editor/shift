@@ -1,7 +1,7 @@
 use crate::errors::FormatBackendResult;
 use shift_font::{
     Axis, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName,
-    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
+    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId, SourceList,
 };
 
 pub trait FontView {
@@ -13,7 +13,7 @@ pub trait FontView {
     fn named_instances(&self) -> &[NamedInstance];
     fn sources(&self) -> &[Source];
     fn default_source_id(&self) -> Option<SourceId>;
-    fn glyphs(&self) -> Vec<&Glyph>;
+    fn glyphs(&self) -> impl Iterator<Item = &Glyph>;
     fn glyph(&self, name: &str) -> Option<&Glyph>;
     fn kerning(&self) -> &Kerning;
     fn features(&self) -> &FeatureData;
@@ -22,6 +22,12 @@ pub trait FontView {
     fn fontinfo_remainder(&self) -> &LibData;
     fn data_files(&self) -> &BinaryData;
     fn images(&self) -> &BinaryData;
+
+    /// The default source, when the font names one it contains.
+    fn default_source(&self) -> Option<&Source> {
+        let default_source_id = self.default_source_id()?;
+        self.sources().source(&default_source_id)
+    }
 }
 
 impl FontView for Font {
@@ -57,8 +63,8 @@ impl FontView for Font {
         self.default_source_id()
     }
 
-    fn glyphs(&self) -> Vec<&Glyph> {
-        self.glyphs().collect()
+    fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
+        self.glyphs()
     }
 
     fn glyph(&self, name: &str) -> Option<&Glyph> {
@@ -95,6 +101,12 @@ impl FontView for Font {
 }
 
 pub trait FontReader: Send + Sync {
+    /// Reads the whole font at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`](crate::FormatBackendError) when the file
+    /// cannot be read or parsed.
     fn load(&self, path: &str) -> FormatBackendResult<Font>;
 
     fn get_glyph(&self, font: &Font, name: &GlyphName) -> Option<Glyph> {
@@ -111,6 +123,12 @@ pub trait FontReader: Send + Sync {
 }
 
 pub trait FontWriter: Send + Sync {
+    /// Writes `font` to `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`](crate::FormatBackendError) when the font
+    /// cannot be represented in the format or the files cannot be written.
     fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()>;
 }
 

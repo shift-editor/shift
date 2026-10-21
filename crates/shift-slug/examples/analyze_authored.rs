@@ -1,10 +1,14 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::{env, error::Error};
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{DesignLocation, GlyphId};
 use shift_slug::{
-    authored_glyph_requirements, curves_from_resolved_contours, AuthoredAtlasBuilder,
-    AuthoredGlyph, AuthoredSlugError, AuthoredWeightSet,
+    AuthoredAtlasBuilder, AuthoredGlyph, AuthoredSlugError, AuthoredWeightSet,
+    authored_glyph_requirements, curves_from_resolved_contours,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

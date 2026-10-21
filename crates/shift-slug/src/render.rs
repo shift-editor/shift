@@ -1,5 +1,5 @@
-use crate::length::OrOverflow;
 use crate::SlugError;
+use crate::length::OrOverflow;
 
 /// Byte stride of [`RenderInstance`] in the shared WGSL storage layout.
 pub const RENDER_INSTANCE_BYTES: usize = 48;
@@ -38,6 +38,10 @@ pub struct RenderParams {
 }
 
 /// Packs visible instances into the exact little-endian shared WGSL layout.
+///
+/// # Errors
+///
+/// Returns [`SlugError::LengthOverflow`] when the packed length overflows `usize`.
 pub fn pack_render_instances(instances: &[RenderInstance]) -> Result<Vec<u8>, SlugError> {
     let byte_length = instances
         .len()

@@ -108,7 +108,7 @@ describe("ValidateClipboard", () => {
     });
 
     it("rejects missing metadata", () => {
-      const { metadata, ...rest } = validPayload();
+      const { metadata: _metadata, ...rest } = validPayload();
       expect(ValidateClipboard.isClipboardPayload(rest)).toBe(false);
     });
 

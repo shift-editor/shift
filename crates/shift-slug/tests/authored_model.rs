@@ -1,15 +1,20 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    test_support::{sample_font, sample_variable_font},
     Anchor, Component, Contour, DecomposedTransform, DesignLocation, Glyph, GlyphId, GlyphLayer,
     InterpolationBasis, LayerId, PointType, SourceId,
+    test_support::{sample_font, sample_variable_font},
 };
+use shift_slug::GlyphIndex;
 use shift_slug::{
-    add_authored_component_projection_glyph, add_authored_glyph,
+    AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError, AuthoredWeightSet, Curve,
+    VariableAtlasBuilder, add_authored_component_projection_glyph, add_authored_glyph,
     add_authored_glyph_with_weight_sets, add_authored_projection_glyph,
     authored_glyph_requirements, build_authored_atlas, build_authored_atlas_page,
-    curves_from_resolved_contours, AuthoredAtlasBuilder, AuthoredCurveTopology, AuthoredSlugError,
-    AuthoredWeightSet, Curve, VariableAtlasBuilder,
+    curves_from_resolved_contours,
 };
 
 #[test]
@@ -60,8 +65,7 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     let atlas = builder.finish();
 
     let axis_id = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis_id, 600.0);
+    let location = DesignLocation::from([(axis_id, 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -70,7 +74,9 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     for (weight_index, source_weight) in weight_indices.iter().zip(source_weights) {
         weights[*weight_index as usize] = source_weight as f32;
     }
-    let actual = atlas.resolve_glyph_with_weights(0, &weights).unwrap();
+    let actual = atlas
+        .resolve_glyph_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
 
     let expected_layer = interpolation.resolve(&location, font.axes()).unwrap();
     let source_layers = interpolation
@@ -89,7 +95,9 @@ fn authored_projection_uses_reference_topology_for_all_sources() {
     .unwrap();
     let expected = topology.curves_from_layer(&expected_layer).unwrap();
     assert_curves_close(&actual, &expected, 0.001);
-    let actual_advance = atlas.resolve_advance_with_weights(0, &weights).unwrap();
+    let actual_advance = atlas
+        .resolve_advance_with_weights(GlyphIndex::new(0), &weights)
+        .unwrap();
     assert!((actual_advance - expected_layer.width() as f32).abs() <= 0.001);
     assert_eq!(atlas.sources()[0].weight_index, 2);
     assert_eq!(atlas.sources()[1].weight_index, 5);
@@ -101,10 +109,12 @@ fn authored_atlas_keeps_layerless_glyphs_as_resident_blanks() {
     let glyph = builder.add_empty_glyph(0).unwrap();
     let atlas = builder.finish();
 
-    assert!(atlas
-        .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
-        .unwrap()
-        .is_empty());
+    assert!(
+        atlas
+            .resolve_glyph_with_weights(glyph.default_glyph, &[1.0])
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         atlas.resolve_advance_with_weights(glyph.default_glyph, &[1.0]),
         Ok(0.0)
@@ -162,7 +172,7 @@ fn authored_atlas_page_compiles_only_ordered_unique_roots_and_component_closures
 
     let component_root = font
         .glyphs()
-        .map(|glyph| glyph.id())
+        .map(Glyph::id)
         .find(|glyph_id| {
             font.glyph_projection(glyph_id)
                 .unwrap()
@@ -215,7 +225,12 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
             .add_glyph(&font, &projection, &[weight_set], 0)
             .unwrap()
             .default_glyph;
-        records.push((glyph.id(), atlas_index, weight_indices, component_glyph));
+        records.push((
+            glyph.id(),
+            atlas_index.get(),
+            weight_indices,
+            component_glyph,
+        ));
     }
     let atlas = builder.finish();
     let shared = build_authored_atlas(&font, 8).unwrap();
@@ -283,7 +298,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
                 weights[*weight_index as usize] = weight as f32;
             }
             let actual = atlas
-                .resolve_glyph_with_weights(atlas_index, &weights)
+                .resolve_glyph_with_weights(GlyphIndex::new(atlas_index), &weights)
                 .unwrap();
             let expected_advance = if component_glyph {
                 // Component curve order is validated by the dedicated component CPU/GPU tests.
@@ -298,7 +313,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
                 expected_layer.width() as f32
             };
             let actual_advance = atlas
-                .resolve_advance_with_weights(atlas_index, &weights)
+                .resolve_advance_with_weights(GlyphIndex::new(atlas_index), &weights)
                 .unwrap();
             maximum_advance_error =
                 maximum_advance_error.max((actual_advance - expected_advance).abs());
@@ -312,6 +327,73 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
         maximum_advance_error <= 0.001,
         "maximum authored advance error was {maximum_advance_error}"
     );
+}
+
+#[test]
+fn components_scaled_per_master_resolve_like_the_compiled_font() {
+    let path = format!(
+        "{}/../../fixtures/fonts/ScaledComponent.glyphs",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let font = FontLoader::new().read_font(&path).unwrap();
+    let page = build_authored_atlas(&font, 8).unwrap();
+    let axis = font.axes()[0].id();
+
+    for name in ["bullet", "bar", "ringbig", "wedgeflip"] {
+        let glyph_id = font.glyph_by_name(name).unwrap().id();
+        let atlas_index = page
+            .glyphs()
+            .iter()
+            .find(|glyph| glyph.glyph_id == glyph_id)
+            .unwrap()
+            .authored
+            .default_glyph;
+        for weight in [100.0, 200.0, 250.0, 400.0, 700.0] {
+            let location = DesignLocation::from([(axis.clone(), weight)]);
+            let mut weights = vec![0.0_f32; page.weight_count() as usize];
+            weights[0] = 1.0;
+            for set in page.weight_sets() {
+                let values = set.basis().weights_at(&location, font.axes()).unwrap();
+                for (index, value) in set.source_weight_indices().iter().zip(values) {
+                    weights[*index as usize] = value as f32;
+                }
+            }
+            let actual = page
+                .atlas()
+                .resolve_glyph_with_weights(atlas_index, &weights)
+                .unwrap();
+            let expected = font
+                .projection(&location)
+                .glyph(&glyph_id)
+                .unwrap()
+                .unwrap();
+            let expected = curves_from_resolved_contours(expected.contours()).unwrap();
+
+            let error = maximum_curve_bounds_error(&actual, &expected);
+            assert!(error <= 0.001, "{name} at wght {weight}: error {error}");
+        }
+    }
+}
+
+/// Largest difference between the two curve sets' bounds. Point order may
+/// differ at a master, where a mirrored decomposed contour runs reversed.
+fn maximum_curve_bounds_error(actual: &[Curve], expected: &[Curve]) -> f32 {
+    let bounds = |curves: &[Curve]| {
+        curves.iter().fold(
+            [f32::MAX, f32::MAX, f32::MIN, f32::MIN],
+            |[x0, y0, x1, y1], curve| {
+                let b = curve.bounds();
+                [
+                    x0.min(b.min_x),
+                    y0.min(b.min_y),
+                    x1.max(b.max_x),
+                    y1.max(b.max_y),
+                ]
+            },
+        )
+    };
+    let (a, b) = (bounds(actual), bounds(expected));
+    (0..4).map(|i| (a[i] - b[i]).abs()).fold(0.0, f32::max)
 }
 
 #[test]
@@ -385,8 +467,7 @@ fn component_model_resolves_varying_decomposed_transform() {
             .unwrap();
     let atlas = builder.finish();
     let axis_id = font.axes()[0].id();
-    let mut location = DesignLocation::new();
-    location.set(axis_id, 600.0);
+    let location = DesignLocation::from([(axis_id, 600.0)]);
     let source_weights = projection
         .interpolation()
         .unwrap()
@@ -473,8 +554,7 @@ fn component_model_ignores_mark_anchors_when_placing_components() {
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 600.0);
+    let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
     let source_weights = interpolation
         .basis()
         .weights_at(&location, font.axes())
@@ -497,6 +577,81 @@ fn component_model_ignores_mark_anchors_when_placing_components() {
 
 #[test]
 fn component_model_accepts_a_component_specific_interpolation_basis() {
+    // Offsets alone vary, so the root keeps its component and needs the
+    // child's own weight set.
+    let (font, root_id, child_id) =
+        font_with_differently_based_child(|source_index| DecomposedTransform {
+            translate_x: source_index as f64 * 40.0,
+            ..DecomposedTransform::identity()
+        });
+
+    let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+    let child_projection = font.glyph_projection(&child_id).unwrap().unwrap();
+    assert_ne!(
+        projection.interpolation().unwrap().basis(),
+        child_projection.interpolation().unwrap().basis()
+    );
+    let root_only = AuthoredWeightSet::new(
+        projection.interpolation().unwrap().basis().clone(),
+        (1..=projection.interpolation().unwrap().sources().len() as u32).collect(),
+    )
+    .unwrap();
+    let mut invalid_builder = AuthoredAtlasBuilder::default();
+    assert!(matches!(
+        invalid_builder.add_glyph(&font, &projection, &[root_only], 0),
+        Err(AuthoredSlugError::MissingWeightBasis(glyph_id)) if glyph_id == child_id
+    ));
+    let invalid_atlas = invalid_builder.finish();
+    assert!(invalid_atlas.glyphs().is_empty());
+    assert!(invalid_atlas.base_curves().is_empty());
+
+    let mut next_weight_index = 1_u32;
+    let weight_sets = [
+        projection.interpolation().unwrap().basis(),
+        child_projection.interpolation().unwrap().basis(),
+    ]
+    .into_iter()
+    .map(|basis| {
+        let end = next_weight_index + basis.source_ids().len() as u32;
+        let indexes = (next_weight_index..end).collect::<Vec<_>>();
+        next_weight_index = end;
+        AuthoredWeightSet::new(basis.clone(), indexes).unwrap()
+    })
+    .collect::<Vec<_>>();
+    let mut builder = VariableAtlasBuilder::default();
+    let authored =
+        add_authored_glyph_with_weight_sets(&mut builder, &font, &projection, &weight_sets, 0)
+            .unwrap();
+    let atlas = builder.finish();
+
+    let location = DesignLocation::from([(font.axes()[0].id(), 650.0)]);
+    let mut weights = vec![0.0_f32; next_weight_index as usize];
+    weights[0] = 1.0;
+    for set in &weight_sets {
+        for (weight_index, weight) in set
+            .source_weight_indices()
+            .iter()
+            .zip(set.basis().weights_at(&location, font.axes()).unwrap())
+        {
+            weights[*weight_index as usize] = weight as f32;
+        }
+    }
+    let actual = atlas
+        .resolve_glyph_with_weights(authored.default_glyph, &weights)
+        .unwrap();
+    let mut font_projection = font.projection(&location);
+    let expected =
+        curves_from_resolved_contours(font_projection.glyph(&root_id).unwrap().unwrap().contours())
+            .unwrap();
+
+    assert_curves_close(&actual, &expected, 0.001);
+}
+
+/// A variable font whose `A` places a child with an extra Medium master, its
+/// transform per root master given by `transform`.
+fn font_with_differently_based_child(
+    transform: impl Fn(usize) -> DecomposedTransform,
+) -> (shift_font::Font, GlyphId, GlyphId) {
     let mut font = sample_variable_font();
     let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let root_source_ids = font
@@ -543,73 +698,63 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
             .add_component(Component::with_transform(
                 child_id.clone(),
                 "different-basis-child",
-                DecomposedTransform {
-                    rotation: source_index as f64 * 20.0,
-                    scale_x: 1.0 + source_index as f64 * 0.5,
-                    ..DecomposedTransform::identity()
-                },
+                transform(source_index),
             ));
     }
 
-    let projection = font.glyph_projection(&root_id).unwrap().unwrap();
-    let child_projection = font.glyph_projection(&child_id).unwrap().unwrap();
-    assert_ne!(
-        projection.interpolation().unwrap().basis(),
-        child_projection.interpolation().unwrap().basis()
-    );
-    let root_only = AuthoredWeightSet::new(
-        projection.interpolation().unwrap().basis().clone(),
-        (1..=projection.interpolation().unwrap().sources().len() as u32).collect(),
-    )
-    .unwrap();
-    let mut invalid_builder = AuthoredAtlasBuilder::default();
-    assert!(matches!(
-        invalid_builder.add_glyph(&font, &projection, &[root_only], 0),
-        Err(AuthoredSlugError::MissingWeightBasis(glyph_id)) if glyph_id == child_id
-    ));
-    let invalid_atlas = invalid_builder.finish();
-    assert!(invalid_atlas.glyphs().is_empty());
-    assert!(invalid_atlas.base_curves().is_empty());
+    (font, root_id, child_id)
+}
 
-    let mut next_weight_index = 1_u32;
-    let weight_sets = [
-        projection.interpolation().unwrap().basis(),
-        child_projection.interpolation().unwrap().basis(),
-    ]
-    .into_iter()
-    .map(|basis| {
-        let end = next_weight_index + basis.source_ids().len() as u32;
-        let indexes = (next_weight_index..end).collect::<Vec<_>>();
-        next_weight_index = end;
-        AuthoredWeightSet::new(basis.clone(), indexes).unwrap()
-    })
-    .collect::<Vec<_>>();
+#[test]
+fn decomposed_root_keeps_its_components_extra_master() {
+    // Rotation and scale vary, so compilers decompose the root, sampling it
+    // at its own masters and at the child's extra Medium master too.
+    let (font, root_id, _) =
+        font_with_differently_based_child(|source_index| DecomposedTransform {
+            rotation: source_index as f64 * 20.0,
+            scale_x: 1.0 + source_index as f64 * 0.5,
+            ..DecomposedTransform::identity()
+        });
+    let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+    let basis = projection.decomposition().unwrap().clone();
+    assert_eq!(
+        basis.source_ids().len(),
+        projection
+            .interpolation()
+            .unwrap()
+            .basis()
+            .source_ids()
+            .len()
+            + 1
+    );
+    let weight_indices = (1..=basis.source_ids().len() as u32).collect::<Vec<_>>();
+    let weight_set = AuthoredWeightSet::new(basis.clone(), weight_indices.clone()).unwrap();
     let mut builder = VariableAtlasBuilder::default();
     let authored =
-        add_authored_glyph_with_weight_sets(&mut builder, &font, &projection, &weight_sets, 0)
+        add_authored_glyph_with_weight_sets(&mut builder, &font, &projection, &[weight_set], 0)
             .unwrap();
     let atlas = builder.finish();
 
-    let mut location = DesignLocation::new();
-    location.set(font.axes()[0].id(), 650.0);
-    let mut weights = vec![0.0_f32; next_weight_index as usize];
+    let location = DesignLocation::from([(font.axes()[0].id(), 650.0)]);
+    let mut weights = vec![0.0_f32; weight_indices.len() + 1];
     weights[0] = 1.0;
-    for set in &weight_sets {
-        for (weight_index, weight) in set
-            .source_weight_indices()
-            .iter()
-            .zip(set.basis().weights_at(&location, font.axes()).unwrap())
-        {
-            weights[*weight_index as usize] = weight as f32;
-        }
+    for (weight_index, weight) in weight_indices
+        .iter()
+        .zip(basis.weights_at(&location, font.axes()).unwrap())
+    {
+        weights[*weight_index as usize] = weight as f32;
     }
     let actual = atlas
         .resolve_glyph_with_weights(authored.default_glyph, &weights)
         .unwrap();
-    let mut font_projection = font.projection(&location);
-    let expected =
-        curves_from_resolved_contours(font_projection.glyph(&root_id).unwrap().unwrap().contours())
-            .unwrap();
+    let expected = curves_from_resolved_contours(
+        font.projection(&location)
+            .glyph(&root_id)
+            .unwrap()
+            .unwrap()
+            .contours(),
+    )
+    .unwrap();
 
     assert_curves_close(&actual, &expected, 0.001);
 }
@@ -622,7 +767,7 @@ fn authored_glyph_keeps_exact_source_topology_resident() {
     let interpolation = projection.interpolation().unwrap();
     let weight_indices = (1..=interpolation.sources().len() as u32).collect::<Vec<_>>();
     let mut invalid_builder = VariableAtlasBuilder::default();
-    assert!(add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).is_err());
+    add_authored_glyph(&mut invalid_builder, &font, &projection, &[], 0).unwrap_err();
     assert!(invalid_builder.finish().glyphs().is_empty());
 
     let mut builder = VariableAtlasBuilder::default();
@@ -724,11 +869,7 @@ fn triangle_layer_for_source(source_id: SourceId) -> GlyphLayer {
 
 fn triangle_layer_for_source_shifted(source_id: SourceId, shift: f64) -> GlyphLayer {
     let mut layer = GlyphLayer::new(LayerId::new(), source_id);
-    let mut contour = Contour::new();
-    contour.add_point(shift, 0.0, PointType::OnCurve, false);
-    contour.add_point(50.0 + shift, 100.0, PointType::OnCurve, false);
-    contour.add_point(100.0 + shift, 0.0, PointType::OnCurve, false);
-    contour.close();
+    let contour = shift_font::contour![(shift, 0.0), (50.0 + shift, 100.0), (100.0 + shift, 0.0)];
     layer.add_contour(contour);
     layer
 }

@@ -4,8 +4,7 @@ import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
 import { Editor } from "@shift/editor";
-import { Font } from "@shift/editor/model";
-import { FontStore } from "@shift/editor/model";
+import { Font, FontStore } from "@shift/editor/model";
 import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { locationFromDesignAxisLocation } from "@shift/editor/variation";

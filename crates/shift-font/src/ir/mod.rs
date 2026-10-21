@@ -23,11 +23,11 @@ pub mod variation;
 
 pub use anchor::Anchor;
 pub use axis::{
-    Axis, AxisKind, AxisLabel, AxisLabelRange, AxisMapping, AxisMappingPoint, AxisRole,
+    Axis, AxisKind, AxisLabel, AxisLabelRange, AxisList, AxisMapping, AxisMappingPoint, AxisRole,
     DesignLocation, ExternalLocation, Location,
 };
 pub use binary_data::BinaryData;
-pub use boolean::{boolean, BooleanOp};
+pub use boolean::{BooleanOp, boolean};
 pub use component::{Component, ComponentAlignment, DecomposedTransform, Transform};
 pub use contour::{Contour, Contours};
 pub use entity::{
@@ -45,9 +45,11 @@ pub use kerning::{
     SourceKerning,
 };
 pub use lib_data::{LibData, LibValue};
-pub use metrics::{FontMetrics, MetricDefinition, MetricKind, MetricValue};
+pub use metrics::{
+    FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
+};
 pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter};
-pub use source::{Source, SourceRole};
+pub use source::{Source, SourceList, SourceRole};
 pub use variation::{AxisMappingBasis, DesignNormalization};

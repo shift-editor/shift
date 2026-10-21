@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::font_source::{AxisIndex, GlyphIndex};
 use crate::FontFormat;
+use crate::font_source::{AxisIndex, GlyphIndex};
 
 pub(crate) fn malformed(path: &Path, details: String) -> FontReadError {
     let format = match path
@@ -15,7 +15,7 @@ pub(crate) fn malformed(path: &Path, details: String) -> FontReadError {
         Some("designspace") => FontFormat::Designspace,
         Some("shift") => FontFormat::Shift,
         Some("otf") => FontFormat::Otf,
-        Some("ttf") | None | Some(_) => FontFormat::Ttf,
+        Some("ttf" | _) | None => FontFormat::Ttf,
     };
     FontReadError::MalformedSource {
         format,
@@ -77,4 +77,7 @@ pub enum FontReadError {
 
     #[error("invalid glyph projection: {details}")]
     InvalidProjection { details: String },
+
+    #[error("index out of range: {0}")]
+    IndexOutOfRange(#[from] std::num::TryFromIntError),
 }

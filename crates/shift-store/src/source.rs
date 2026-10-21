@@ -40,34 +40,22 @@ pub struct SourceRecord {
     pub kind: SourceKind,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SourceKind {
-    Master,
-    Layer,
+shift_font::string_enum! {
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum SourceKind {
+        Master => "master",
+        Layer => "layer",
+    }
+    parse_error: StoreError = |value| StoreError::UnknownSourceKind(value.to_string());
 }
 
-impl SourceKind {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            SourceKind::Master => "master",
-            SourceKind::Layer => "layer",
-        }
-    }
-
-    pub(crate) fn parse(value: String) -> Result<Self, StoreError> {
-        match value.as_str() {
-            "master" => Ok(SourceKind::Master),
-            "layer" => Ok(SourceKind::Layer),
-            _ => Err(StoreError::UnknownSourceKind(value)),
-        }
-    }
-}
+crate::sql_text::sql_text!(SourceKind);
 
 impl From<shift_font::SourceRole> for SourceKind {
     fn from(role: shift_font::SourceRole) -> Self {
         match role {
-            shift_font::SourceRole::Master => SourceKind::Master,
-            shift_font::SourceRole::Layer => SourceKind::Layer,
+            shift_font::SourceRole::Master => Self::Master,
+            shift_font::SourceRole::Layer => Self::Layer,
         }
     }
 }
@@ -75,8 +63,8 @@ impl From<shift_font::SourceRole> for SourceKind {
 impl From<SourceKind> for shift_font::SourceRole {
     fn from(kind: SourceKind) -> Self {
         match kind {
-            SourceKind::Master => shift_font::SourceRole::Master,
-            SourceKind::Layer => shift_font::SourceRole::Layer,
+            SourceKind::Master => Self::Master,
+            SourceKind::Layer => Self::Layer,
         }
     }
 }
@@ -89,7 +77,12 @@ pub struct SourceAxisLocation {
 }
 
 impl ShiftStore {
-    pub fn create_axis(&mut self, axis: NewAxis) -> Result<(), StoreError> {
+    /// Inserts an external axis record.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the insert fails, for example because the id is taken.
+    pub fn create_axis(&mut self, axis: &NewAxis) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO axes (
@@ -119,6 +112,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the axis record with `id`, or `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_axis(&self, id: &AxisId) -> Result<Option<AxisRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -142,7 +140,12 @@ impl ShiftStore {
         }
     }
 
-    pub fn create_source(&mut self, source: NewSource) -> Result<(), StoreError> {
+    /// Inserts a source record.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the insert fails, for example because the id is taken.
+    pub fn create_source(&mut self, source: &NewSource) -> Result<(), StoreError> {
         self.conn.execute(
             "
             INSERT INTO sources (
@@ -168,6 +171,12 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns the source record with `id`, or `None` when there is none.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails, including when the stored source kind is
+    /// unknown.
     pub fn get_source(&self, id: &SourceId) -> Result<Option<SourceRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -190,6 +199,12 @@ impl ShiftStore {
         }
     }
 
+    /// Lists every source record in source order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails, including when a stored source kind is
+    /// unknown.
     pub fn list_sources(&self) -> Result<Vec<SourceRecord>, StoreError> {
         let mut stmt = self.conn.prepare(
             "
@@ -210,6 +225,11 @@ impl ShiftStore {
             .map_err(StoreError::from)
     }
 
+    /// Sets a source's value on one axis, replacing any stored before.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the write fails.
     pub fn set_source_location(
         &mut self,
         source_id: &SourceId,
@@ -229,6 +249,11 @@ impl ShiftStore {
         Ok(())
     }
 
+    /// Returns a source's stored axis values, ordered by axis id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_source_locations(
         &self,
         source_id: &SourceId,
@@ -261,9 +286,7 @@ fn map_axis_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AxisRecord> {
 }
 
 fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRecord> {
-    let kind = SourceKind::parse(row.get(5)?).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(err))
-    })?;
+    let kind: SourceKind = row.get(5)?;
 
     Ok(SourceRecord {
         id: SourceId::new(row.get::<_, String>(0)?),

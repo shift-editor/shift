@@ -188,7 +188,7 @@ export class Translate implements SelectBehavior {
     const movingIds = new Set(moving);
     const neighbours =
       candidates.length > 1 ? edgeNeighbours(layer, movingIds) : new Set<PointId>();
-    const excluding = new Set([...movingIds, ...neighbours]);
+    const excluding = movingIds.union(neighbours);
     drag.move.snappedBy(
       editor.snapping.forLayer(layer, editor.selectionNode(), {
         excluding,

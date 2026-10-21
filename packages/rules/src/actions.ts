@@ -2,7 +2,7 @@
  * Rule Actions - Apply matched rules to compute point positions
  */
 
-import { Vec2, type Point2D } from "@shift/geo";
+import { Vec2, wrapIndex, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type {
   ConstrainDragGlyph,
@@ -44,8 +44,7 @@ function getPointAtContourOffset(
   if (contour.closed) {
     const total = contour.points.length;
     if (total === 0) return undefined;
-    const wrapped = ((nextIndex % total) + total) % total;
-    return contour.points[wrapped];
+    return contour.points[wrapIndex(nextIndex, total)];
   }
   return contour.points[nextIndex];
 }

@@ -1,11 +1,10 @@
-use crate::error::OrMissing;
+use crate::error::{OrMissing, StoreEntity};
+use crate::numeric::sql_int;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shift_font as font;
 
 use super::{
-    GLYPH_LAYER_FORMAT, MAX_LAYER_PAYLOAD_BYTES,
-    format::encode_layer,
-    payload::{StoredLayerPayload, compress_layer},
+    GLYPH_LAYER_FORMAT, MAX_LAYER_PAYLOAD_BYTES, format::encode_layer, payload::StoredLayerPayload,
 };
 use crate::{
     ShiftStore, StoreError, workspace_state::mark_workspace_dirty_in_tx, write_mode::WriteMode,
@@ -15,8 +14,15 @@ impl ShiftStore {
     /// Replaces one independently-addressed layer and its earned reference
     /// rows in one transaction. The workspace revision advances only after
     /// encoding and index derivation have succeeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::MissingEntity`] when no glyph owns the layer,
+    /// [`StoreError::DocumentRequiresRecoveryOverlay`] in a document opened without one, and
+    /// [`StoreError::Sqlite`] or a layer-encoding error when the write fails.
     pub fn replace_glyph_layer(&mut self, layer: &font::GlyphLayer) -> Result<(), StoreError> {
-        let owner = layer_owner(&self.conn, &layer.id())?.or_missing("glyph layer", &layer.id())?;
+        let owner = layer_owner(&self.conn, &layer.id())?
+            .or_missing(StoreEntity::GlyphLayer, &layer.id())?;
         if let Some(recovery) = self.recovery.as_mut() {
             return recovery.replace_layer(&owner, layer);
         }
@@ -41,7 +47,7 @@ pub(crate) fn write_layer_in_tx(
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
     let encoded = encode_layer(layer)?;
-    let stored = compress_layer(&encoded)?;
+    let stored = StoredLayerPayload::compress(&encoded)?;
     store_stored_layer_in_tx(tx, glyph_id, layer, &stored, WriteMode::Upsert)
 }
 
@@ -71,8 +77,8 @@ pub(crate) fn store_stored_layer_in_tx(
         }
     };
     tx.prepare_cached(layer_sql)?.execute(params![
-        layer.id().to_string(),
-        glyph_id.to_string(),
+        layer.id(),
+        glyph_id,
         layer.source_id().to_string(),
         layer.width(),
         layer.height(),
@@ -102,7 +108,7 @@ pub(crate) fn store_stored_layer_in_tx(
         }
     };
     tx.prepare_cached(payload_sql)?.execute(params![
-        layer.id().to_string(),
+        layer.id(),
         GLYPH_LAYER_FORMAT,
         stored.compression.as_str(),
         stored.bytes.as_slice(),
@@ -125,7 +131,7 @@ pub(crate) fn rewrite_layer_in_tx(
     tx: &Transaction<'_>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
-    let owner = layer_owner(tx, &layer.id())?.or_missing("glyph layer", &layer.id())?;
+    let owner = layer_owner(tx, &layer.id())?.or_missing(StoreEntity::GlyphLayer, &layer.id())?;
     write_layer_in_tx(tx, &owner, layer)
 }
 
@@ -136,7 +142,7 @@ fn write_component_index(
 ) -> Result<(), StoreError> {
     if mode == WriteMode::Upsert {
         tx.prepare_cached("DELETE FROM glyph_components WHERE layer_id = ?1")?
-            .execute([layer.id().to_string()])?;
+            .execute([layer.id()])?;
     }
     for (order_index, component) in layer.components_iter().enumerate() {
         tx.prepare_cached(
@@ -147,10 +153,10 @@ fn write_component_index(
             ",
         )?
         .execute(params![
-            component.id().to_string(),
-            layer.id().to_string(),
+            component.id(),
+            layer.id(),
             component.base_glyph_id().to_string(),
-            order_index as i64,
+            sql_int(order_index),
         ])?;
     }
     Ok(())
@@ -162,8 +168,8 @@ fn layer_owner(
 ) -> Result<Option<font::GlyphId>, StoreError> {
     conn.query_row(
         "SELECT glyph_id FROM glyph_layers WHERE id = ?1",
-        [layer_id.to_string()],
-        |row| Ok(font::GlyphId::from_raw(row.get::<_, String>(0)?)),
+        [&layer_id],
+        |row| row.get::<_, font::GlyphId>(0),
     )
     .optional()
     .map_err(Into::into)

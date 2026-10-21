@@ -11,7 +11,7 @@ use shift_font::{
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
-use crate::variation::{axis, VariationAxes};
+use crate::variation::{VariationAxes, axis};
 
 /// Authored axis mappings; the editor's `AxisMapping[]` satisfies this.
 #[derive(Deserialize, Tsify)]
@@ -158,10 +158,10 @@ fn mapping(data: ReferenceAxisMapping) -> AxisMapping {
 }
 
 fn location_from(values: HashMap<String, f64>) -> Location {
-    let mut location = Location::new();
-    for (axis_id, value) in values {
-        location.set(AxisId::from_raw(axis_id), value);
-    }
+    let location: Location = values
+        .into_iter()
+        .map(|(axis_id, value)| (AxisId::from_raw(axis_id), value))
+        .collect();
     location
 }
 

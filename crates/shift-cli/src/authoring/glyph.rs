@@ -5,11 +5,13 @@
 //! Every payload is lowered to a single [`FontIntentSet`], preserving the same
 //! validation and all-or-nothing behavior as interactive authoring.
 
+use shift_font::{CloneGlyphLayer, CreateGlyph, CreateGlyphLayer};
 use std::collections::HashSet;
 use std::path::Path;
 
+use crate::selector::FontSelectors;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use shift_font::{Font, FontIntent, FontIntentSet, GlyphId, LayerId, SourceId};
+use shift_font::{Font, FontIntentSet, LayerId};
 use shift_store::ShiftStore;
 
 use crate::cli::{AddGlyphArgs, CopyLayerArgs, LayerPayloadArgs};
@@ -27,17 +29,15 @@ use super::{AuthoringReport, apply_mutation};
 ///
 /// Returns an error when a Unicode value is malformed, the glyph conflicts
 /// with existing identity, the package cannot be loaded, or saving fails.
-pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
     let unicodes = parse_unicodes(&args.unicode)?;
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CreateGlyph {
-            glyph_id: None,
-            name: args.name,
-            unicodes,
-        }],
-    };
+    let set = FontIntentSet::from(CreateGlyph {
+        glyph_id: None,
+        name: args.name,
+        unicodes,
+    });
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Adds one sparse authored layer from a semantic JSON payload.
@@ -51,24 +51,25 @@ pub fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
 /// Returns an error for unreadable or invalid JSON, unsupported payload
 /// fields, non-finite values, unresolved selectors, invalid authoring, or
 /// persistence failures.
-pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
-    let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
-    let source_id = resolve_source_id(&font, &args.source)?;
+    let glyph_id = font.glyph_id_for(&args.glyph)?;
+    let source_id = font.source_id_for(&args.source)?;
     let layer_id = LayerId::new();
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
     let set = FontIntentSet {
         intents: vec![
-            FontIntent::CreateGlyphLayer {
+            CreateGlyphLayer {
                 layer_id: layer_id.clone(),
                 glyph_id,
                 source_id,
-            },
-            input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?,
+            }
+            .into(),
+            input.into_intent(layer_id, &|name| font.glyph_id_for(name))?,
         ],
     };
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Creates or replaces one layer's drawing, preserving an existing layer's identity.
@@ -79,24 +80,27 @@ pub fn add_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
 /// # Errors
 ///
 /// Rejects invalid payloads or selectors without writing; persistence failures are reported.
-pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
-    let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
-    let source_id = resolve_source_id(&font, &args.source)?;
+    let glyph_id = font.glyph_id_for(&args.glyph)?;
+    let source_id = font.source_id_for(&args.source)?;
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
     let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
     let layer_id = existing.clone().unwrap_or_default();
     let mut intents = Vec::new();
     if existing.is_none() {
-        intents.push(FontIntent::CreateGlyphLayer {
-            layer_id: layer_id.clone(),
-            glyph_id,
-            source_id,
-        });
+        intents.push(
+            CreateGlyphLayer {
+                layer_id: layer_id.clone(),
+                glyph_id,
+                source_id,
+            }
+            .into(),
+        );
     }
-    intents.push(input.into_intent(layer_id, &|name| resolve_glyph_id(&font, name))?);
+    intents.push(input.into_intent(layer_id, &|name| font.glyph_id_for(name))?);
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Copies one glyph layer to another source with fresh internal identities.
@@ -109,13 +113,13 @@ pub fn set_layer(args: LayerPayloadArgs) -> Result<AuthoringReport> {
 ///
 /// Returns an error when selectors cannot be resolved, the origin layer is
 /// absent, the destination already owns a layer for the glyph, or saving fails.
-pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
+pub(crate) fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
-    let glyph_id = resolve_glyph_id(&font, &args.glyph)?;
-    let from_source_id = resolve_source_id(&font, &args.from_source)?;
-    let source_id = resolve_source_id(&font, &args.source)?;
+    let glyph_id = font.glyph_id_for(&args.glyph)?;
+    let from_source_id = font.source_id_for(&args.from_source)?;
+    let source_id = font.source_id_for(&args.source)?;
     let from_layer_id = font
-        .layer_id_for_glyph_source(glyph_id.clone(), from_source_id.clone())
+        .layer_id_for_glyph_source(glyph_id.clone(), from_source_id)
         .ok_or_else(|| {
             miette!(
                 "glyph {:?} has no authored layer at source {:?}",
@@ -124,16 +128,14 @@ pub fn copy_layer(args: CopyLayerArgs) -> Result<AuthoringReport> {
             )
         })?;
     let layer_id = LayerId::new();
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CloneGlyphLayer {
-            layer_id,
-            glyph_id,
-            source_id,
-            from_layer_id,
-        }],
-    };
+    let set = FontIntentSet::from(CloneGlyphLayer {
+        layer_id,
+        glyph_id,
+        source_id,
+        from_layer_id,
+    });
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 pub(crate) fn load_font(path: &Path) -> Result<Font> {
@@ -169,38 +171,4 @@ pub(super) fn parse_unicodes(values: &[String]) -> Result<Vec<u32>> {
     }
 
     Ok(unicodes)
-}
-
-pub(crate) fn resolve_glyph_id(font: &Font, selector: &str) -> Result<GlyphId> {
-    if let Ok(glyph_id) = selector.parse::<GlyphId>()
-        && font.glyph(&glyph_id).is_some()
-    {
-        return Ok(glyph_id);
-    }
-    if let Some(glyph_id) = font.glyph_id_by_name(selector) {
-        return Ok(glyph_id);
-    }
-
-    Err(miette!(
-        "glyph {selector:?} does not exist; use its name or full glyph_ id"
-    ))
-}
-
-pub(crate) fn resolve_source_id(font: &Font, selector: &str) -> Result<SourceId> {
-    if let Ok(source_id) = selector.parse::<SourceId>()
-        && font.source(&source_id).is_some()
-    {
-        return Ok(source_id);
-    }
-    if let Some(source) = font
-        .sources()
-        .iter()
-        .find(|source| source.name() == selector)
-    {
-        return Ok(source.id());
-    }
-
-    Err(miette!(
-        "source {selector:?} does not exist; use its name or full source_ id"
-    ))
 }

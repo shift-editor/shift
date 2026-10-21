@@ -10,7 +10,9 @@
 //! again from the new anchors, in component order, so a mark stacked on a
 //! moved mark follows it too.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
+
+use kurbo::{Point, Vec2};
 
 use crate::ir::{
     Anchor, Component, ComponentAlignment, DecomposedTransform, Font, GlyphLayer, LayerId,
@@ -31,7 +33,7 @@ pub(crate) fn realign_attached_components<'a>(
     after: &mut Font,
     touched: impl IntoIterator<Item = &'a LayerId>,
 ) -> Vec<(LayerId, bool)> {
-    let touched: HashSet<&LayerId> = touched.into_iter().collect();
+    let touched: BTreeSet<&LayerId> = touched.into_iter().collect();
     let mut anchor_glyphs = HashSet::new();
     for &layer_id in &touched {
         let (Some(old), Some(new)) = (before.layer(layer_id), after.layer(layer_id)) else {
@@ -114,14 +116,14 @@ fn base_anchors<'font>(
     layer: &GlyphLayer,
 ) -> &'font [Anchor] {
     font.glyph(&component.base_glyph_id())
-        .and_then(|glyph| glyph.layer_for_source(layer.source_id()))
+        .and_then(|glyph| glyph.layer_for_source(&layer.source_id()))
         .map_or(&[], GlyphLayer::anchors)
 }
 
 /// An anchor as alignment reads it: a name and a position in its glyph.
 pub trait AnchorLike {
     fn anchor_name(&self) -> Option<&str>;
-    fn position(&self) -> (f64, f64);
+    fn position(&self) -> Point;
 }
 
 impl AnchorLike for Anchor {
@@ -129,8 +131,8 @@ impl AnchorLike for Anchor {
         self.name()
     }
 
-    fn position(&self) -> (f64, f64) {
-        Anchor::position(self)
+    fn position(&self) -> Point {
+        Self::position(self)
     }
 }
 
@@ -141,10 +143,7 @@ impl AnchorLike for Anchor {
 /// their glyphs' own anchors. The component's first `_name` anchor that finds a
 /// match wins, and within one placed glyph the last anchor with the name does.
 /// Returns `None` when no anchor pair matches.
-pub fn aligned_offset<A: AnchorLike>(
-    placed: &[(Transform, &[A])],
-    anchors: &[A],
-) -> Option<(f64, f64)> {
+pub fn aligned_offset<A: AnchorLike>(placed: &[(Transform, &[A])], anchors: &[A]) -> Option<Vec2> {
     for anchor in anchors {
         let Some(target_name) = anchor.anchor_name().and_then(|name| name.strip_prefix('_')) else {
             continue;
@@ -158,14 +157,10 @@ pub fn aligned_offset<A: AnchorLike>(
                 .iter()
                 .rev()
                 .find(|placed| placed.anchor_name() == Some(target_name))
-                .map(|placed| {
-                    let (x, y) = placed.position();
-                    transform.transform_point(x, y)
-                })
+                .map(|placed| transform.transform_point(placed.position()))
         });
-        if let Some((target_x, target_y)) = target {
-            let (x, y) = anchor.position();
-            return Some((target_x - x, target_y - y));
+        if let Some(target) = target {
+            return Some(target - anchor.position());
         }
     }
 
@@ -219,11 +214,10 @@ pub fn follow_anchors<A: AnchorLike>(components: &[FollowingComponent<'_, A>]) -
         };
 
         let mut transform = component.transform;
-        if alignment == ComponentAlignment::Anchored {
-            if let Some((dx, dy)) = aligned_offset(&placed_now, component.anchors) {
-                transform.translate_x = dx;
-                transform.translate_y = dy;
-            }
+        if alignment == ComponentAlignment::Anchored
+            && let Some(offset) = aligned_offset(&placed_now, component.anchors)
+        {
+            transform.set_offset(offset);
         }
         following.push(Following {
             transform,
@@ -241,18 +235,9 @@ fn sits_on_anchors<A: AnchorLike>(
     placed: &[(Transform, &[A])],
     anchors: &[A],
 ) -> bool {
-    is_translation(transform)
-        && aligned_offset(placed, anchors).is_some_and(|(dx, dy)| {
-            (transform.translate_x - dx).abs() < EPSILON
-                && (transform.translate_y - dy).abs() < EPSILON
+    transform.is_translation()
+        && aligned_offset(placed, anchors).is_some_and(|offset| {
+            let gap = transform.offset() - offset;
+            gap.x.abs() < EPSILON && gap.y.abs() < EPSILON
         })
-}
-
-/// Whether the placement only moves the component, as anchor alignment places it.
-fn is_translation(transform: &DecomposedTransform) -> bool {
-    transform.rotation == 0.0
-        && transform.scale_x == 1.0
-        && transform.scale_y == 1.0
-        && transform.skew_x == 0.0
-        && transform.skew_y == 0.0
 }

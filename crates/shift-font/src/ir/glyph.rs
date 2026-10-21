@@ -3,7 +3,7 @@ use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::{
-    AnchorId, ComponentId, ContourId, GlyphId, GuidelineId, LayerId, PointId, SourceId,
+    AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, SourceId,
 };
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
@@ -11,7 +11,7 @@ use crate::lib_data::LibData;
 use crate::point::Point;
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -24,7 +24,8 @@ pub struct Glyph {
     category: Option<GlyphCategory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sub_category: Option<GlyphSubcategory>,
-    layers: HashMap<LayerId, Arc<GlyphLayer>>,
+    /// Sorted by layer id, so a glyph serializes to the same bytes every time.
+    layers: BTreeMap<LayerId, Arc<GlyphLayer>>,
     lib: LibData,
 }
 
@@ -32,7 +33,7 @@ impl Identified for Glyph {
     type Id = GlyphId;
 
     fn id(&self) -> Self::Id {
-        Glyph::id(self)
+        Self::id(self)
     }
 }
 
@@ -50,6 +51,27 @@ pub struct GlyphLayer {
 }
 
 impl GlyphLayer {
+    /// Returns the id of every contour, point, component, anchor, and guideline
+    /// in the layer.
+    pub(crate) fn entity_ids(&self) -> impl Iterator<Item = GlyphEntityId> + '_ {
+        let contours = self.contours_iter().map(GlyphEntityId::from);
+        let points = self.points().map(GlyphEntityId::from);
+        let components = self.components_iter().map(GlyphEntityId::from);
+        let anchors = self.anchors_iter().map(GlyphEntityId::from);
+        let guidelines = self.guidelines().iter().map(GlyphEntityId::from);
+        contours
+            .chain(points)
+            .chain(components)
+            .chain(anchors)
+            .chain(guidelines)
+    }
+
+    /// Returns every point of every contour, in contour order.
+    pub fn points(&self) -> impl Iterator<Item = &Point> {
+        self.contours_iter()
+            .flat_map(|contour| contour.points().iter())
+    }
+
     pub fn new(id: LayerId, source_id: SourceId) -> Self {
         Self {
             id,
@@ -98,13 +120,7 @@ impl GlyphLayer {
             }
 
             for point in contour.points() {
-                cloned_contour.push_point(Point::new(
-                    PointId::new(),
-                    point.x(),
-                    point.y(),
-                    point.point_type(),
-                    point.is_smooth(),
-                ));
+                cloned_contour.push_point(point.with_fresh_id());
             }
 
             layer.add_contour(cloned_contour);
@@ -256,8 +272,8 @@ impl GlyphLayer {
         id
     }
 
-    pub fn remove_contour(&mut self, id: ContourId) -> Option<Contour> {
-        self.contours.shift_remove(&id)
+    pub fn remove_contour(&mut self, id: &ContourId) -> Option<Contour> {
+        self.contours.shift_remove(id)
     }
 
     pub fn clear_contours(&mut self) {
@@ -270,6 +286,11 @@ impl GlyphLayer {
 
     pub fn components_iter(&self) -> impl Iterator<Item = &Component> {
         self.components.values()
+    }
+
+    /// Returns the glyph each component draws, in component order.
+    pub fn component_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.components_iter().map(Component::base_glyph_id)
     }
 
     pub fn components_iter_mut(&mut self) -> impl Iterator<Item = &mut Component> {
@@ -286,8 +307,8 @@ impl GlyphLayer {
         id
     }
 
-    pub fn remove_component(&mut self, id: ComponentId) -> Option<Component> {
-        self.components.shift_remove(&id)
+    pub fn remove_component(&mut self, id: &ComponentId) -> Option<Component> {
+        self.components.shift_remove(id)
     }
 
     pub fn clear_components(&mut self) {
@@ -302,6 +323,11 @@ impl GlyphLayer {
         self.anchors.iter()
     }
 
+    /// Returns each anchor's name, in anchor order; `None` for an unnamed anchor.
+    pub fn anchor_names(&self) -> impl Iterator<Item = Option<&str>> {
+        self.anchors.iter().map(Anchor::name)
+    }
+
     pub fn anchors_iter_mut(&mut self) -> impl Iterator<Item = &mut Anchor> {
         self.anchors.iter_mut()
     }
@@ -314,8 +340,8 @@ impl GlyphLayer {
         self.anchors.iter_mut().find(|anchor| anchor.id() == *id)
     }
 
-    pub fn anchor_index(&self, id: AnchorId) -> Option<usize> {
-        self.anchors.iter().position(|anchor| anchor.id() == id)
+    pub fn anchor_index(&self, id: &AnchorId) -> Option<usize> {
+        self.anchors.iter().position(|anchor| anchor.id() == *id)
     }
 
     pub fn add_anchor(&mut self, anchor: Anchor) -> AnchorId {
@@ -324,7 +350,7 @@ impl GlyphLayer {
         id
     }
 
-    pub fn remove_anchor(&mut self, id: AnchorId) -> Option<Anchor> {
+    pub fn remove_anchor(&mut self, id: &AnchorId) -> Option<Anchor> {
         self.anchor_index(id)
             .map(|index| self.anchors.remove(index))
     }
@@ -333,8 +359,8 @@ impl GlyphLayer {
         self.anchors.clear();
     }
 
-    pub fn set_anchor_position(&mut self, id: AnchorId, x: f64, y: f64) -> bool {
-        let Some(anchor) = self.anchor_mut(&id) else {
+    pub fn set_anchor_position(&mut self, id: &AnchorId, x: f64, y: f64) -> bool {
+        let Some(anchor) = self.anchor_mut(id) else {
             return false;
         };
         anchor.set_position(x, y);
@@ -387,7 +413,7 @@ impl Glyph {
             unicodes: Vec::new(),
             category: None,
             sub_category: None,
-            layers: HashMap::new(),
+            layers: BTreeMap::new(),
             lib: LibData::new(),
         }
     }
@@ -399,7 +425,7 @@ impl Glyph {
             unicodes: vec![unicode],
             category: None,
             sub_category: None,
-            layers: HashMap::new(),
+            layers: BTreeMap::new(),
             lib: LibData::new(),
         }
     }
@@ -462,8 +488,35 @@ impl Glyph {
         self.sub_category = sub_category;
     }
 
-    pub fn layers(&self) -> &HashMap<LayerId, Arc<GlyphLayer>> {
+    pub fn layers(&self) -> &BTreeMap<LayerId, Arc<GlyphLayer>> {
         &self.layers
+    }
+
+    /// Whether any layer draws something: a contour or a component.
+    pub fn has_outline(&self) -> bool {
+        self.layers
+            .values()
+            .any(|layer| !layer.contours().is_empty() || !layer.components().is_empty())
+    }
+
+    /// Whether any layer has an anchor that marks attach to.
+    pub fn has_attaching_anchor(&self) -> bool {
+        self.layers
+            .values()
+            .flat_map(|layer| layer.anchors())
+            .any(Anchor::attaches_marks)
+    }
+
+    /// Returns the ids of the glyph's layers.
+    pub fn layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {
+        self.layers.keys().cloned()
+    }
+
+    /// Returns the glyph each component draws, across all of the glyph's layers.
+    pub fn component_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.layers
+            .values()
+            .flat_map(|layer| layer.component_glyph_ids())
     }
 
     pub fn layer(&self, id: &LayerId) -> Option<&GlyphLayer> {
@@ -479,7 +532,7 @@ impl Glyph {
             .layers
             .values()
             .find(|layer| layer.source_id() == source_id)
-            .map(|layer| layer.id())
+            .map(Identified::id)
         {
             return self.layer_mut(&layer_id).expect("layer id came from glyph");
         }
@@ -498,22 +551,26 @@ impl Glyph {
         self.layers.insert(layer.id(), layer);
     }
 
-    pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {
-        self.layers
-            .values()
-            .find(|layer| layer.source_id() == source_id)
-            .map(Arc::as_ref)
+    pub fn layer_for_source(&self, source_id: &SourceId) -> Option<&GlyphLayer> {
+        self.shared_layer_for_source(source_id).map(Arc::as_ref)
     }
 
-    pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
+    /// Returns the glyph's layer on `source_id` as the shared handle the glyph holds.
+    pub fn shared_layer_for_source(&self, source_id: &SourceId) -> Option<&Arc<GlyphLayer>> {
+        self.layers
+            .values()
+            .find(|layer| layer.source_id() == *source_id)
+    }
+
+    pub fn layer_for_source_mut(&mut self, source_id: &SourceId) -> Option<&mut GlyphLayer> {
         self.layers
             .values_mut()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.source_id() == *source_id)
             .map(Arc::make_mut)
     }
 
-    pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
-        self.layers.remove(&id).map(Arc::unwrap_or_clone)
+    pub fn remove_layer(&mut self, id: &LayerId) -> Option<GlyphLayer> {
+        self.layers.remove(id).map(Arc::unwrap_or_clone)
     }
 
     pub fn lib(&self) -> &LibData {
@@ -532,6 +589,32 @@ mod tests {
     use std::sync::Arc;
 
     #[test]
+    fn a_glyph_has_an_outline_when_a_layer_draws_a_contour() {
+        let mut glyph = Glyph::new("A".to_string());
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_anchor(Anchor::new(Some("top".to_string()), 0.0, 0.0));
+        assert!(!glyph.has_outline());
+
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_empty_contour();
+
+        assert!(glyph.has_outline());
+    }
+
+    #[test]
+    fn only_anchors_without_a_leading_underscore_attach_marks() {
+        let mut glyph = Glyph::new("acutecomb".to_string());
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_anchor(Anchor::new(Some("_top".to_string()), 0.0, 0.0));
+        assert!(!glyph.has_attaching_anchor());
+
+        let layer = glyph.ensure_layer_for_source(SourceId::new());
+        layer.add_anchor(Anchor::new(None, 0.0, 0.0));
+
+        assert!(glyph.has_attaching_anchor());
+    }
+
+    #[test]
     fn glyph_creation() {
         let g = Glyph::with_unicode("A".to_string(), 65);
         assert_eq!(g.name(), "A");
@@ -548,10 +631,7 @@ mod tests {
         layer.set_width(600.0);
 
         assert_eq!(g.layer(&layer_id).unwrap().width(), 600.0);
-        assert_eq!(
-            g.layer_for_source(source_id.clone()).unwrap().id(),
-            layer_id.clone()
-        );
+        assert_eq!(g.layer_for_source(&source_id).unwrap().id(), layer_id);
     }
 
     #[test]
@@ -563,12 +643,12 @@ mod tests {
         let second_layer_id = LayerId::new();
         glyph.set_layer(GlyphLayer::with_width(
             first_layer_id.clone(),
-            first_source_id.clone(),
+            first_source_id,
             500.0,
         ));
         glyph.set_layer(GlyphLayer::with_width(
             second_layer_id.clone(),
-            second_source_id.clone(),
+            second_source_id,
             600.0,
         ));
         let snapshot = glyph.clone();
@@ -608,7 +688,7 @@ mod tests {
         let a1 = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 20.0));
         let a2 = layer.add_anchor(Anchor::new(Some("bottom".to_string()), 30.0, 40.0));
 
-        let ids: Vec<_> = layer.anchors_iter().map(|a| a.id()).collect();
+        let ids: Vec<_> = layer.anchors_iter().map(crate::Anchor::id).collect();
         assert_eq!(ids, vec![a1, a2]);
     }
 }

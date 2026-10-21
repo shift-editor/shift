@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use crate::{Font, Glyph, Source};
 
+use super::MonospaceCell;
 use super::health::extent;
 use super::roles::GlyphRole;
 use super::{Check, Finding};
@@ -93,7 +94,8 @@ fn range(line: &str) -> Option<std::ops::RangeInclusive<u32>> {
 
 /// Reports characters of `charset` the font doesn't map, or maps to a glyph a
 /// master doesn't draw.
-pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
+pub(super) fn charset(font: &Font, charset: &Charset) -> Vec<Finding> {
+    let mut findings = Vec::new();
     let mut missing = Vec::new();
     for &codepoint in charset.codepoints() {
         let Some(glyph) = font.glyphs_by_unicode(codepoint).next() else {
@@ -101,8 +103,8 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
             continue;
         };
         for source in font.masters() {
-            if glyph.layer_for_source(source.id()).is_none() {
-                out.push(
+            if glyph.layer_for_source(&source.id()).is_none() {
+                findings.push(
                     Finding::glyph(
                         Check::CharsetMissingLayer,
                         glyph.id(),
@@ -118,7 +120,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
         }
     }
     if missing.is_empty() {
-        return;
+        return findings;
     }
 
     let shown = missing
@@ -131,7 +133,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
         .collect::<Vec<_>>()
         .join(", ");
     let more = missing.len().saturating_sub(20);
-    out.push(Finding::font(
+    findings.push(Finding::font(
         Check::CharsetMissingGlyph,
         format!(
             "the font doesn't map {} required character{}: {shown}{}",
@@ -144,6 +146,7 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
             }
         ),
     ));
+    findings
 }
 
 /// Reports, in each master, glyphs whose advance differs from the cell width
@@ -151,30 +154,32 @@ pub(super) fn charset(font: &Font, charset: &Charset, out: &mut Vec<Finding>) {
 ///
 /// The cell width is `width` when given, otherwise the most common advance
 /// in that master. Marks and zero-width glyphs are skipped.
-pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>) {
+pub(super) fn monospace(font: &Font, cell: MonospaceCell) -> Vec<Finding> {
+    let mut findings = Vec::new();
     for source in font.masters() {
         let samples = font
             .glyphs()
             .filter(|glyph| !GlyphRole::of(glyph).mark)
             .filter_map(|glyph| {
-                let layer = glyph.layer_for_source(source.id())?;
+                let layer = glyph.layer_for_source(&source.id())?;
                 let advance = layer.width();
                 (advance.is_finite() && advance > 0.0).then_some((glyph, layer, advance))
             })
             .collect::<Vec<_>>();
-        let Some(cell) =
-            width.or_else(|| most_common(samples.iter().map(|(_, _, advance)| *advance)))
+        let Some(cell) = cell
+            .width()
+            .or_else(|| most_common(samples.iter().map(|(_, _, advance)| *advance)))
         else {
             continue;
         };
 
         for (glyph, layer, advance) in &samples {
             if (advance - cell).abs() > SAME_WIDTH {
-                out.push(at(
+                findings.push(at(
                     Check::MonoWidthMismatch,
                     glyph,
                     source,
-                    format!("is {advance} wide instead of the cell width {cell}"),
+                    &format!("is {advance} wide instead of the cell width {cell}"),
                 ));
             }
             let ink = extent(
@@ -185,19 +190,20 @@ pub(super) fn monospace(font: &Font, width: Option<f64>, out: &mut Vec<Finding>)
             if let Some(ink) = ink {
                 let ink_width = ink.max_x - ink.min_x;
                 if ink_width > advance + SAME_WIDTH {
-                    out.push(at(
+                    findings.push(at(
                         Check::MonoInkOverflow,
                         glyph,
                         source,
-                        format!("has ink {} wide in a {advance} cell", ink_width.round()),
+                        &format!("has ink {} wide in a {advance} cell", ink_width.round()),
                     ));
                 }
             }
         }
     }
+    findings
 }
 
-fn at(check: Check, glyph: &Glyph, source: &Source, message: String) -> Finding {
+fn at(check: Check, glyph: &Glyph, source: &Source, message: &str) -> Finding {
     Finding::glyph(
         check,
         glyph.id(),
@@ -209,6 +215,10 @@ fn at(check: Check, glyph: &Glyph, source: &Source, message: String) -> Finding 
 fn most_common(advances: impl Iterator<Item = f64>) -> Option<f64> {
     let mut counts: BTreeMap<i64, (f64, usize)> = BTreeMap::new();
     for advance in advances {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a bucket key; advances are far below 2^63 font units"
+        )]
         let key = (advance / SAME_WIDTH).round() as i64;
         counts.entry(key).or_insert((advance, 0)).1 += 1;
     }

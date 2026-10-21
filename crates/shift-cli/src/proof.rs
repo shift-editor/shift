@@ -19,8 +19,8 @@ use shift_proof::{
     ShapingOptions,
 };
 
-pub use args::ProofArgs;
-pub use summary::ProofSummary;
+pub(crate) use args::ProofArgs;
+pub(crate) use summary::ProofSummary;
 
 /// Compiles the font at `args.path`, renders the proof, and writes it to
 /// `args.output`, replacing any existing file.
@@ -33,7 +33,7 @@ pub use summary::ProofSummary;
 /// are asked of a compiled binary, the font has no named instances to set,
 /// the proof is invalid (see [`ProofError`]), or the image cannot be
 /// written.
-pub fn proof(args: &ProofArgs) -> Result<ProofSummary> {
+pub(crate) fn proof(args: &ProofArgs) -> Result<ProofSummary> {
     let (binary, source) = compile_font(&args.path)?;
     let mut locations: Vec<ProofLocation> = args
         .at
@@ -146,9 +146,14 @@ fn master_locations(font: &Font) -> Result<Vec<ProofLocation>> {
                         .location()
                         .get(&axis.id())
                         .unwrap_or(axis_normalization.default);
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "a normalized coordinate lies in -1..=1, where f32 is exact enough"
+                    )]
+                    let value = axis_normalization.normalize(design) as f32;
                     AxisValue {
                         tag: axis.tag().to_string(),
-                        value: axis_normalization.normalize(design) as f32,
+                        value,
                     }
                 })
                 .collect();

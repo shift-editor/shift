@@ -1,4 +1,9 @@
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly engine. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
 mod change_set;
+mod columns;
 mod connection;
 mod document;
 mod error;
@@ -7,16 +12,18 @@ mod font_state;
 mod glyph;
 mod import_writer;
 mod layer;
+mod numeric;
 mod recovery;
 mod schema;
 mod source;
+mod sql_text;
 mod store;
 mod types;
 mod workspace_state;
 mod write_mode;
 
 pub use document::DocumentMetadata;
-pub use error::StoreError;
+pub use error::{StoreEntity, StoreError};
 pub use font::FontInfo;
 pub use glyph::{GlyphRecord, NewGlyph};
 pub use import_writer::{FontImportWriter, encode_glyph_batch};
@@ -31,4 +38,4 @@ pub use store::ShiftStore;
 pub use types::{
     AxisId, CommitId, DocumentId, GlyphId, GlyphWriteBatch, LayerBatchTiming, RevisionId, SourceId,
 };
-pub use workspace_state::{WorkspaceSourceKind, WorkspaceState};
+pub use workspace_state::{SaveState, WorkspaceSourceKind, WorkspaceState};

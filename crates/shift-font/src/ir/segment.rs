@@ -60,16 +60,17 @@ impl<'a> Iterator for CurveSegmentIter<'a> {
             }
 
             // Quad or cubic: on-curve → off-curve → ...
-            if p1.is_on_curve() && !p2.is_on_curve() {
-                if let Some(p3) = self.get(self.pos + 2) {
-                    if p3.is_on_curve() {
-                        self.pos += 2;
-                        return Some(CurveSegment::Quad(p1, p2, p3));
-                    }
-                    if let Some(p4) = self.get(self.pos + 3) {
-                        self.pos += 3;
-                        return Some(CurveSegment::Cubic(p1, p2, p3, p4));
-                    }
+            if p1.is_on_curve()
+                && !p2.is_on_curve()
+                && let Some(p3) = self.get(self.pos + 2)
+            {
+                if p3.is_on_curve() {
+                    self.pos += 2;
+                    return Some(CurveSegment::Quad(p1, p2, p3));
+                }
+                if let Some(p4) = self.get(self.pos + 3) {
+                    self.pos += 3;
+                    return Some(CurveSegment::Cubic(p1, p2, p3, p4));
                 }
             }
 
@@ -94,15 +95,13 @@ mod tests {
     #[test]
     fn empty_points_yields_nothing() {
         let points: Vec<Point> = vec![];
-        let segs: Vec<_> = CurveSegmentIter::new(&points, false).collect();
-        assert!(segs.is_empty());
+        assert!(CurveSegmentIter::new(&points, false).next().is_none());
     }
 
     #[test]
     fn single_point_yields_nothing() {
         let points = vec![on(0.0, 0.0)];
-        let segs: Vec<_> = CurveSegmentIter::new(&points, false).collect();
-        assert!(segs.is_empty());
+        assert!(CurveSegmentIter::new(&points, false).next().is_none());
     }
 
     #[test]

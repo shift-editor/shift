@@ -21,8 +21,8 @@ pub enum LibValue {
     UnsignedInteger(u64),
     Float(f64),
     Boolean(bool),
-    Array(Vec<LibValue>),
-    Dict(BTreeMap<String, LibValue>),
+    Array(Vec<Self>),
+    Dict(BTreeMap<String, Self>),
     Data(Vec<u8>),
     /// A plist date, carried as the RFC 3339 / ISO 8601 string used by XML
     /// plists (`plist::Date::to_xml_format`), e.g. `2024-02-02T02:02:02Z`.
@@ -95,6 +95,21 @@ impl LibData {
 impl From<BTreeMap<String, LibValue>> for LibData {
     fn from(data: BTreeMap<String, LibValue>) -> Self {
         Self { data }
+    }
+}
+
+impl FromIterator<(String, LibValue)> for LibData {
+    fn from_iter<I: IntoIterator<Item = (String, LibValue)>>(data: I) -> Self {
+        Self::from_map(data)
+    }
+}
+
+impl<'a> IntoIterator for &'a LibData {
+    type Item = (&'a String, &'a LibValue);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, LibValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.iter()
     }
 }
 

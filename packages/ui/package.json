@@ -18,7 +18,9 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "oxlint --fix src/",
+    "lint:check": "oxlint --deny-warnings src/"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -14,7 +19,7 @@ fn populated_store() -> (ShiftStore, font::Font) {
     let font = font::test_support::sample_font();
     store.replace_font_state(&font).unwrap();
     store
-        .set_workspace_state(WorkspaceState::untitled(None))
+        .set_workspace_state(&WorkspaceState::untitled(None))
         .unwrap();
     (store, font)
 }
@@ -44,7 +49,7 @@ fn sqlite_payload_preserves_canonical_bytes() {
         .conn
         .execute(
             "INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?2, 0)",
-            params![glyph_id.to_string(), glyph_name.as_str()],
+            params![glyph_id, glyph_name.as_str()],
         )
         .unwrap();
 
@@ -58,7 +63,7 @@ fn sqlite_payload_preserves_canonical_bytes() {
             "SELECT compression, payload, stored_byte_length,
                         decoded_byte_length, decoded_blake3
                  FROM glyph_layer_payloads WHERE layer_id = ?1",
-            [layer.id().to_string()],
+            [layer.id()],
             |row| {
                 Ok(StoredLayerPayload {
                     compression: match row.get::<_, String>(0)?.as_str() {
@@ -75,10 +80,7 @@ fn sqlite_payload_preserves_canonical_bytes() {
         .unwrap();
     assert_eq!(stored.compression, LayerPayloadCompression::ZstandardV1);
     assert!(stored.stored_byte_length < stored.decoded_byte_length);
-    assert_eq!(
-        decompress_layer(layer.id().as_str(), stored).unwrap(),
-        encoded
-    );
+    assert_eq!(stored.decode(layer.id().as_str()).unwrap(), encoded);
     let decoded = store.load_glyph_layer(&layer.id()).unwrap().unwrap();
     assert_eq!(encode_layer(&decoded).unwrap(), encoded);
 }
@@ -136,12 +138,12 @@ fn native_component_closure_batches_root_queries() {
     let roots = (0..=MAX_LAYER_READ_BATCH_COUNT)
         .map(|index| font::GlyphId::from_raw(format!("root_{index:04}")))
         .collect::<Vec<_>>();
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
 
     let closure = store.referenced_glyph_closure(roots.clone()).unwrap();
 
     assert_eq!(closure, roots);
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 2));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 2));
 }
 
 #[test]
@@ -163,14 +165,14 @@ fn component_closure_is_cycle_safe_and_queries_each_frontier() {
             .conn
             .execute(
                 "INSERT INTO glyphs (id, name, order_index) VALUES (?1, ?1, ?2)",
-                params![glyph_id.to_string(), index as i64],
+                params![glyph_id, index as i64],
             )
             .unwrap();
         store
             .conn
             .execute(
                 "INSERT INTO glyph_layers (id, glyph_id, source_id, width) VALUES (?1, ?2, 'source', 1000)",
-                params![format!("{glyph_id}-layer"), glyph_id.to_string()],
+                params![format!("{glyph_id}-layer"), glyph_id],
             )
             .unwrap();
     }
@@ -192,7 +194,7 @@ fn component_closure_is_cycle_safe_and_queries_each_frontier() {
             )
             .unwrap();
     }
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(0));
 
     let closure = store
         .referenced_glyph_closure([font::GlyphId::from_raw("a")])
@@ -202,7 +204,7 @@ fn component_closure_is_cycle_safe_and_queries_each_frontier() {
         closure,
         ["a", "b", "c"].map(font::GlyphId::from_raw).to_vec()
     );
-    super::references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 3));
+    references::COMPONENT_CLOSURE_QUERY_COUNT.with(|count| assert_eq!(count.get(), 3));
 }
 
 #[test]
@@ -231,7 +233,7 @@ fn dependent_lookup_preserves_results_across_component_query_batches() {
         .keys()
         .next()
         .unwrap();
-    let mut layer_ids = (0..super::references::MAX_COMPONENT_QUERY_BATCH_COUNT)
+    let mut layer_ids = (0..references::MAX_COMPONENT_QUERY_BATCH_COUNT)
         .map(|index| font::LayerId::from_raw(format!("missing_{index:04}")))
         .collect::<Vec<_>>();
     layer_ids.push(target.clone());
@@ -270,7 +272,7 @@ fn batch_bounds_declared_decoded_bytes_before_fetching_payloads() {
                 "UPDATE glyph_layer_payloads
                      SET decoded_byte_length = ?1
                      WHERE layer_id = ?2",
-                params![decoded_byte_length as i64, layer_id.to_string()],
+                params![decoded_byte_length as i64, layer_id],
             )
             .unwrap();
     }
@@ -341,7 +343,7 @@ fn declared_stored_length_mismatch_is_rejected_before_decode() {
             "UPDATE glyph_layer_payloads
                  SET stored_byte_length = stored_byte_length + 1
                  WHERE layer_id = ?1",
-            [layer_id.to_string()],
+            [&layer_id],
         )
         .unwrap();
     store
@@ -401,7 +403,7 @@ fn layer_rewrite_transitions_from_uncompressed_to_zstd_consistently() {
             .conn
             .query_row(
                 "SELECT compression FROM glyph_layer_payloads WHERE layer_id = ?1",
-                [layer.id().to_string()],
+                [layer.id()],
                 |row| row.get::<_, String>(0),
             )
             .unwrap(),
@@ -416,7 +418,7 @@ fn layer_rewrite_transitions_from_uncompressed_to_zstd_consistently() {
             "SELECT compression, stored_byte_length, decoded_byte_length,
                         length(decoded_blake3), length(payload)
                  FROM glyph_layer_payloads WHERE layer_id = ?1",
-            [layer.id().to_string()],
+            [layer.id()],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -455,7 +457,7 @@ fn false_decoded_length_and_hash_are_rejected() {
             "UPDATE glyph_layer_payloads
                  SET decoded_byte_length = decoded_byte_length + 1
                  WHERE layer_id = ?1",
-            [layer_id.to_string()],
+            [&layer_id],
         )
         .unwrap();
     assert!(matches!(
@@ -471,7 +473,7 @@ fn false_decoded_length_and_hash_are_rejected() {
             "UPDATE glyph_layer_payloads
                  SET decoded_byte_length = ?1, decoded_blake3 = zeroblob(32)
                  WHERE layer_id = ?2",
-            params![encoded.len() as i64, layer_id.to_string()],
+            params![encoded.len() as i64, layer_id],
         )
         .unwrap();
     assert!(matches!(
@@ -498,14 +500,14 @@ fn directory_open_never_reads_malformed_payloads() {
             "UPDATE glyph_layer_payloads
                  SET payload = X'00', stored_byte_length = 1
                  WHERE layer_id = ?1",
-            [layer_id.to_string()],
+            [&layer_id],
         )
         .unwrap();
 
     let directory = store.load_font_directory().unwrap();
     assert_eq!(directory.glyph_count(), font.glyph_count());
     assert!(directory.layer(layer_id).unwrap().is_empty());
-    assert!(store.load_glyph_layer(layer_id).is_err());
+    store.load_glyph_layer(layer_id).unwrap_err();
     assert!(
         store
             .load_glyph_layers(std::slice::from_ref(layer_id))
@@ -528,14 +530,14 @@ fn directory_retains_layer_when_payload_row_is_missing() {
         .conn
         .execute(
             "DELETE FROM glyph_layer_payloads WHERE layer_id = ?1",
-            [layer_id.to_string()],
+            [&layer_id],
         )
         .unwrap();
 
     let directory = store.load_font_directory().unwrap();
 
     assert!(directory.layer(layer_id).is_some());
-    assert!(store.load_font_state().is_err());
+    store.load_font_state().unwrap_err();
 }
 
 #[test]
@@ -550,7 +552,7 @@ fn stale_reference_index_is_rejected() {
         .conn
         .execute(
             "DELETE FROM glyph_components WHERE layer_id = ?1",
-            [layer.id().to_string()],
+            [layer.id()],
         )
         .unwrap();
 
@@ -591,19 +593,19 @@ fn index_constraint_failure_rolls_back_payload_directory_and_revision() {
         .conn
         .query_row(
             "SELECT payload FROM glyph_layer_payloads WHERE layer_id = ?1",
-            [target.id().to_string()],
+            [target.id()],
             |row| row.get(0),
         )
         .unwrap();
     let before_revision = store.workspace_state().unwrap().unwrap().revision;
 
-    assert!(store.replace_glyph_layer(&target).is_err());
+    store.replace_glyph_layer(&target).unwrap_err();
 
     let after_payload: Vec<u8> = store
         .conn
         .query_row(
             "SELECT payload FROM glyph_layer_payloads WHERE layer_id = ?1",
-            [target.id().to_string()],
+            [target.id()],
             |row| row.get(0),
         )
         .unwrap();
@@ -670,7 +672,7 @@ fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
             "UPDATE glyph_layer_payloads
                  SET payload = X'00', stored_byte_length = 1
                  WHERE layer_id = ?1",
-            [layer.id().to_string()],
+            [layer.id()],
         )
         .unwrap();
     let changes = font::FontChangeSet::new(vec![font::FontChange::Layer {
@@ -680,7 +682,7 @@ fn post_font_change_set_rewrites_touched_layer_without_decoding_old_payload() {
     }]);
 
     store
-        .apply_change_set_with_font(&changes, &post_font, true)
+        .apply_change_set_with_font(&changes, &post_font, crate::SaveState::Unsaved)
         .unwrap();
 
     assert_eq!(store.load_glyph_layer(&layer.id()).unwrap(), Some(layer));

@@ -56,7 +56,7 @@ export declare class Bridge {
   getGlyphs(): Array<NapiGlyphRecord>
   /**
    * Applies one intent set as a single atomic workspace apply: every kind
-   * — editing and create alike — decodes through `map_intent` into one
+   * — editing and create alike — decodes into one
    * `FontWorkspace::apply` call. One call = one SQLite transaction = one
    * undo step, however many intents the set batches.
    */
@@ -203,6 +203,13 @@ export declare class Bridge {
    * call altered the glyph order, glyph categories, feature code, or axes.
    */
   shapeParagraph(request: NapiParagraphRequest): Array<NapiShapedRun>
+  /**
+   * Returns the compiled shaping tables, for the editor to shape with
+   * itself, or `null` when they are still at `known_revision`. Compiles
+   * them first if the font changed in a way they depend on: glyph order,
+   * glyph categories, feature code, or axes.
+   */
+  shaperFont(knownRevision?: number | undefined | null): NapiShaperFont | null
   mapLocation(location: NapiLocation): NapiLocation
   getSources(): Array<NapiSource>
 }
@@ -336,6 +343,39 @@ export interface NapiShapedRun {
   direction: "ltr" | "rtl"
   /** Glyphs in visual order; clusters index the paragraph's units. */
   glyphs: Array<NapiShapedGlyph>
+}
+
+/**
+ * How one axis's user coordinates normalize: linear between mapping
+ * points, clamped outside them.
+ */
+export interface NapiShaperAxis {
+  axisId: AxisId
+  /** User coordinate at each mapping point, increasing. */
+  user: Array<number>
+  /** Normalized coordinate at each mapping point. */
+  normalized: Array<number>
+}
+
+/**
+ * The compiled shaping tables and what the editor needs to shape with them
+ * itself: shaper glyph order and axis normalization.
+ */
+export interface NapiShaperFont {
+  /** Changes exactly when the tables do. */
+  revision: number
+  /**
+   * The shaper font: `GSUB`, `GPOS`, `GDEF`, `head`, and `fvar`, with no
+   * outlines, `cmap`, or `hmtx`.
+   */
+  bytes: Uint8Array
+  /**
+   * The Shift glyph at each shaper glyph id; null for a `.notdef` the font
+   * does not have.
+   */
+  glyphIds: Array<GlyphId | null>
+  /** Each `fvar` axis, in order, with how its user coordinates normalize. */
+  axes: Array<NapiShaperAxis>
 }
 
 /**
@@ -910,6 +950,7 @@ export interface NapiGlyphProjection {
   glyphId: GlyphId
   fallback: NapiGlyphLayerShape
   interpolation?: NapiGlyphInterpolation
+  decomposition?: NapiInterpolationBasis
   variation?: NapiGlyphVariation
   exactSourceShapes: Array<NapiGlyphSourceShape>
   components: NapiGlyphComponents

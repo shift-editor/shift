@@ -6,9 +6,10 @@
 //! on its baseline, a vertical row's is the top centre of its column.
 
 use crate::label::{label_height, label_width};
+use crate::numeric::ceil_pixels;
 use crate::palette::Rgb;
 use crate::shape::ShapedRun;
-use crate::{ProofFont, ProofMetrics, ShapingOptions};
+use crate::{ProofFont, ProofMetrics, ShapingOptions, TextDirection};
 
 /// Space around the content, in pixels.
 pub(crate) const MARGIN: f32 = 24.0;
@@ -77,7 +78,7 @@ pub enum Guide {
 
 impl Guide {
     /// Top to bottom.
-    pub const ALL: [Guide; 5] = [
+    pub const ALL: [Self; 5] = [
         Self::Ascender,
         Self::CapHeight,
         Self::XHeight,
@@ -159,7 +160,7 @@ pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Page {
     if options
         .shaping
         .direction
-        .is_some_and(|direction| direction.is_vertical())
+        .is_some_and(TextDirection::is_vertical)
     {
         return layout_columns(fonts, options);
     }
@@ -227,11 +228,10 @@ pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Page {
     }
 
     let content_right = rows.iter().map(Row::right).fold(0.0_f32, f32::max);
-    let page_width = options
-        .width
-        .map_or((content_right + MARGIN).max(MIN_WIDTH).ceil(), |width| {
-            width as f32
-        });
+    let page_width = options.width.map_or_else(
+        || (content_right + MARGIN).max(MIN_WIDTH).ceil(),
+        |width| width as f32,
+    );
     let right = page_width - MARGIN;
     for row in rows
         .iter_mut()
@@ -255,8 +255,8 @@ pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Page {
         .collect();
     let last_gap = ROW_GAP_EM * options.sizes.last().copied().unwrap_or(0.0);
     Page {
-        width: page_width as u32,
-        height: (cursor - last_gap + MARGIN).ceil() as u32,
+        width: ceil_pixels(page_width),
+        height: ceil_pixels(cursor - last_gap + MARGIN),
         rows,
         guides,
         labels,
@@ -299,8 +299,8 @@ fn layout_columns(fonts: &[LocatedFont], options: &TextLayout) -> Page {
         }
     }
     Page {
-        width: (cursor + MARGIN).max(MIN_WIDTH).ceil() as u32,
-        height: (bottom + MARGIN).ceil() as u32,
+        width: ceil_pixels((cursor + MARGIN).max(MIN_WIDTH)),
+        height: ceil_pixels(bottom + MARGIN),
         rows,
         guides: Vec::new(),
         labels,

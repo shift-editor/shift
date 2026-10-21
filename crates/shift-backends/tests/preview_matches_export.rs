@@ -6,21 +6,15 @@
 //! within two units; compiling converts curves to quadratics and rounds
 //! coordinates, so points are not compared one by one.
 
-use std::path::{Path, PathBuf};
+use shift_font::test_support::fixtures;
 
 use kurbo::{BezPath, Shape};
-use shift_backends::font_loader::FontLoader;
 use shift_backends::FontExporter;
+use shift_backends::font_loader::FontLoader;
 use shift_font::{Contour, ExternalLocation, Font};
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, MetadataProvider};
-
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/fonts")
-        .join(name)
-}
 
 #[derive(Default)]
 struct PathPen(BezPath);
@@ -98,10 +92,10 @@ fn disagreements(source: &str) -> Vec<String> {
         let location = compiled
             .axes()
             .location(user.iter().map(|(t, v)| (t.as_str(), *v)));
-        let mut external = ExternalLocation::new();
-        for (tag, value) in &user {
-            external.set(font.axis_id_by_tag(tag).unwrap(), *value as f64);
-        }
+        let external: ExternalLocation = user
+            .iter()
+            .map(|(tag, value)| (font.axis_id_by_tag(tag).unwrap(), *value as f64))
+            .collect();
         let design = font.mapped_location(&external).unwrap();
         let mut projection = font.projection(&design);
         let metrics = compiled.glyph_metrics(Size::unscaled(), &location);
@@ -156,7 +150,7 @@ fn disagreements(source: &str) -> Vec<String> {
 
 #[test]
 fn designspace_preview_matches_export() {
-    let path = fixture("mutatorsans-variable/MutatorSans.designspace");
+    let path = fixtures::font("mutatorsans-variable/MutatorSans.designspace");
     assert_eq!(disagreements(path.to_str().unwrap()), Vec::<String>::new());
 }
 
@@ -167,8 +161,9 @@ fn glyphs_preview_matches_export() {
         "MappedWeight.glyphs",
         "MultiFamily.glyphs",
         "LightDefault.glyphs",
+        "ScaledComponent.glyphs",
     ] {
-        let path = fixture(name);
+        let path = fixtures::font(name);
         assert_eq!(
             disagreements(path.to_str().unwrap()),
             Vec::<String>::new(),

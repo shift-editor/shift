@@ -43,7 +43,7 @@ struct Metrics {
 
 #[test]
 fn shift_source_produces_expected_fontir() {
-    let actual = compile_ir(ShiftIrSource::from_font_view(&sample_variable_font()).unwrap());
+    let actual = compile_ir(&ShiftIrSource::from_font_view(&sample_variable_font()).unwrap());
 
     assert_eq!(actual, expected_ir());
 }
@@ -77,12 +77,12 @@ fn kerning_pairs_with_missing_sides_are_skipped() {
         -10.0,
     );
 
-    let actual = compile_ir(ShiftIrSource::from_font_view(&font).unwrap());
+    let actual = compile_ir(&ShiftIrSource::from_font_view(&font).unwrap());
 
     assert_eq!(actual.kerning, expected_ir().kerning);
 }
 
-fn compile_ir(source: ShiftIrSource) -> Compilation {
+fn compile_ir(source: &ShiftIrSource) -> Compilation {
     let context = Context::new_root(Flags::empty());
     run(&context, source.create_static_metadata_work().unwrap());
     run(&context, source.create_global_metric_work().unwrap());
@@ -137,6 +137,7 @@ fn compile_ir(source: ShiftIrSource) -> Compilation {
     }
 }
 
+#[allow(clippy::needless_pass_by_value, reason = "each unit of work runs once")]
 fn run(context: &Context, work: Box<IrWork>) {
     let context = context.copy_for_work(work.read_access(), work.write_access());
     work.exec(&context).unwrap();

@@ -31,7 +31,7 @@ export const Alignment = {
   distributePoints<T extends Coordinate>(points: readonly T[], type: DistributeType): T[] {
     if (points.length < 3) return [...points];
 
-    const sorted = [...points].sort((a, b) => (type === "horizontal" ? a.x - b.x : a.y - b.y));
+    const sorted = points.toSorted((a, b) => (type === "horizontal" ? a.x - b.x : a.y - b.y));
 
     const first = sorted[0];
     const last = sorted[sorted.length - 1];

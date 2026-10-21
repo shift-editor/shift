@@ -54,6 +54,23 @@ impl BinaryData {
     }
 }
 
+impl FromIterator<(String, Vec<u8>)> for BinaryData {
+    fn from_iter<I: IntoIterator<Item = (String, Vec<u8>)>>(files: I) -> Self {
+        Self {
+            files: files.into_iter().collect(),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a BinaryData {
+    type Item = (&'a String, &'a Vec<u8>);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, Vec<u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.files.iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

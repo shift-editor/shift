@@ -5,7 +5,7 @@ use fontdrasil::coords::{
 };
 use fontdrasil::types::{Axes, Axis as IrAxis, Tag};
 use fontir::error::Error;
-use shift_font::{Axis, AxisMapping, CoreError, NamedInstance, Source};
+use shift_font::{Axis, AxisList, AxisMapping, CoreError, NamedInstance, Source};
 use write_fonts::types::InvalidTag;
 
 /// Describes Shift axes, mappings, or named instances that cannot define
@@ -93,8 +93,7 @@ pub(super) fn to_ir_named_instances(
                 .iter()
                 .map(|(axis_id, value)| {
                     let axis = axes
-                        .iter()
-                        .find(|axis| axis.id() == *axis_id)
+                        .axis(axis_id)
                         .expect("named instances were validated against these axes");
                     Ok((axis_tag(axis)?, UserCoord::new(*value)))
                 })
@@ -251,7 +250,7 @@ pub(super) fn normalized_source_location(
     if let Some((unknown, _)) = source
         .location()
         .iter()
-        .find(|(axis_id, _)| !shift_axes.iter().any(|axis| axis.id() == **axis_id))
+        .find(|(axis_id, _)| !shift_axes.contains_axis(axis_id))
     {
         return Err(Error::InvalidEntry(
             "Shift source location",
@@ -290,10 +289,8 @@ mod tests {
         let points = points
             .iter()
             .map(|&(user, design)| {
-                let mut input = Location::new();
-                input.set(axis.id(), user);
-                let mut output = Location::new();
-                output.set(axis.id(), design);
+                let input = Location::from([(axis.id(), user)]);
+                let output = Location::from([(axis.id(), design)]);
                 AxisMappingPoint {
                     description: None,
                     input,
@@ -358,7 +355,7 @@ mod tests {
             ],
         );
 
-        assert!(to_ir_axes(std::slice::from_ref(&axis), &[repeated]).is_ok());
+        to_ir_axes(std::slice::from_ref(&axis), &[repeated]).unwrap();
         assert!(matches!(
             to_ir_axes(std::slice::from_ref(&axis), &[conflicting]).unwrap_err(),
             AxisConversionError::NonIncreasingMapping {

@@ -7,8 +7,6 @@ import type { PenCurve, PenState, PenBehavior } from "../types";
 import type { Pen } from "../Pen";
 import { PenStroke } from "../PenStroke";
 
-const DRAG_THRESHOLD = 3;
-
 export class HandleBehavior implements PenBehavior {
   #move: MoveEdit | null = null;
   #done: (() => void) | null = null;
@@ -95,7 +93,9 @@ export class HandleBehavior implements PenBehavior {
     if (!stroke || !start) return null;
 
     const handlePosition = pen.editor.toLocal(stroke.node, event.coords.scene);
-    if (Vec2.dist(state.anchorPosition, handlePosition) <= DRAG_THRESHOLD) return null;
+    if (Vec2.dist(state.anchorPosition, handlePosition) <= pen.editor.camera.handleDragThreshold) {
+      return null;
+    }
 
     const curve = {
       start,

@@ -5,7 +5,7 @@ use shift_font::{Font, KerningPosition, KerningSide};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KerningSummary {
+pub(crate) struct KerningSummary {
     pub first_group_count: usize,
     pub second_group_count: usize,
     /// Groups with no members, which no pair can apply through.
@@ -16,7 +16,7 @@ pub struct KerningSummary {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceKerningSummary {
+pub(crate) struct SourceKerningSummary {
     pub source_id: String,
     pub name: String,
     pub pair_count: usize,

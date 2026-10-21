@@ -87,7 +87,7 @@ export class SourceMetricsInterpolation {
     );
     if (valuesBySource.size !== snapshot.sources.length) return null;
     if (snapshot.basis.sourceIds.some((sourceId) => !valuesBySource.has(sourceId))) return null;
-    if ([...valuesBySource.values()].some((values) => values.length !== valueCount)) return null;
+    if (valuesBySource.values().some((values) => values.length !== valueCount)) return null;
 
     return new SourceMetricsInterpolation(
       snapshot,

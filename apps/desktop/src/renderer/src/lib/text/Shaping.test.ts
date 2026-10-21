@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
-import type { GlyphName, RunId } from "@shift/types";
+import type { GlyphName, RunId, ShapeUnit } from "@shift/types";
+import type { TextItem } from "@shift/editor/text";
 import { TestEditor } from "@/testing/TestEditor";
 
 const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
@@ -49,6 +50,55 @@ describe("proof text is shaped with the font's feature code", () => {
       [350, 300],
     ]);
     expect(editor.text.layoutCell(runId).peek()!.totalAdvance).toBe(500);
+  });
+});
+
+/** The unit the workspace shapes for an item; none for a line break. */
+function shapeUnit(item: TextItem): ShapeUnit[] {
+  if (item.kind === "character") return [{ codepoint: item.codepoint }];
+  if (item.kind === "glyph") return [{ glyphId: item.glyphId }];
+
+  return [];
+}
+
+describe("proof text shapes in the editor, as the workspace shapes it", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(SHAPING_TEST, "f");
+  });
+
+  const run = (text: string) => editor.text.createRun(editor.text.itemsFromText(text)).id;
+  const placed = (runId: RunId) => editor.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+  const glyphIds = (runId: RunId) => placed(runId).map((glyph) => glyph.glyph.glyphId);
+
+  /** The workspace's shaping of the same run, as glyph ids in the order a single-direction line shows them. */
+  const workspaceGlyphIds = async (runId: RunId) => {
+    const units = editor.text.run(runId)!.items.flatMap(shapeUnit);
+    const [runs] = await editor.font.shapeParagraphs([{ units, location: { values: {} } }]);
+    return runs!.flatMap((shaped) => shaped.glyphs.map((glyph) => glyph.glyphId ?? null));
+  };
+
+  it.each([
+    ["a ligature", "fi"],
+    ["ligatures among spaces", "fi fifi f"],
+    ["Arabic joining forms", "ببب بب"],
+    ["marks on a base", "بَّ"],
+  ])("shapes %s to the glyphs the workspace's shaper gives", async (_case, text) => {
+    const runId = run(text);
+    const expected = await workspaceGlyphIds(runId);
+
+    await expect.poll(() => glyphIds(runId)).toEqual(expected);
+  });
+
+  it("shapes new text in the same tick once the shaper is ready", async () => {
+    const ready = run("fi");
+    await expect.poll(() => placed(ready).map((glyph) => glyph.glyph.glyphName)).toEqual(["f_i"]);
+
+    const runId = run("fifi");
+
+    expect(placed(runId).map((glyph) => glyph.glyph.glyphName)).toEqual(["f_i", "f_i"]);
   });
 });
 

@@ -3,6 +3,10 @@
 //! Selectors name glyphs and groups; Shift mints every new group id. A batch
 //! lowers to one intent set, so it saves completely or not at all.
 
+use shift_font::{
+    CreateKerningGroup, DeleteKerningGroup, RenameKerningGroup, SetKerningGroupMember,
+    SetKerningValues,
+};
 use std::collections::{HashMap, HashSet};
 
 use miette::{Result, WrapErr, bail, miette};
@@ -19,9 +23,10 @@ use crate::cli::{
 use crate::kerning::selector::{GROUP_PREFIX, position_label, resolve_group_id, resolve_side};
 
 use super::font_info::target_source_id;
-use super::glyph::{load_font, resolve_glyph_id};
+use super::glyph::load_font;
 use super::layer_payload::read_json_input;
 use super::{AuthoringReport, apply_mutation, require_finite};
+use crate::selector::FontSelectors;
 
 /// Sets one pair's value at one master, or applies a JSON batch.
 ///
@@ -32,7 +37,7 @@ use super::{AuthoringReport, apply_mutation, require_finite};
 ///
 /// Rejects non-finite values, unresolved selectors, invalid batches, and
 /// invalid kerning edits without writing. Reports persistence failures.
-pub fn set_kerning(args: SetKerningArgs) -> Result<AuthoringReport> {
+pub(crate) fn set_kerning(args: &SetKerningArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = match &args.input {
         Some(input) => {
@@ -50,11 +55,11 @@ pub fn set_kerning(args: SetKerningArgs) -> Result<AuthoringReport> {
                 pair: resolve_pair(&font, first, second)?,
                 value: Some(value),
             };
-            vec![FontIntent::SetKerningValues { edits: vec![edit] }]
+            vec![SetKerningValues { edits: vec![edit] }.into()]
         }
     };
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Removes one pair's value at one master.
@@ -63,7 +68,7 @@ pub fn set_kerning(args: SetKerningArgs) -> Result<AuthoringReport> {
 ///
 /// Rejects unresolved selectors and a pair with no value at that master.
 /// Reports persistence failures.
-pub fn remove_kerning(args: RemoveKerningArgs) -> Result<AuthoringReport> {
+pub(crate) fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let pair = resolve_pair(&font, &args.first, &args.second)?;
@@ -84,9 +89,7 @@ pub fn remove_kerning(args: RemoveKerningArgs) -> Result<AuthoringReport> {
     apply_mutation(
         &args.path,
         &args.mutation,
-        FontIntentSet {
-            intents: vec![FontIntent::SetKerningValues { edits }],
-        },
+        &FontIntentSet::from(SetKerningValues { edits }),
     )
 }
 
@@ -96,15 +99,15 @@ pub fn remove_kerning(args: RemoveKerningArgs) -> Result<AuthoringReport> {
 ///
 /// Rejects blank or duplicate names and unresolved glyphs. Reports
 /// persistence failures.
-pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = KerningGroupId::new();
-    let mut intents = vec![FontIntent::CreateKerningGroup {
+    let mut intents = vec![FontIntent::from(CreateKerningGroup {
         group_id: group_id.clone(),
         position,
         name: args.name,
-    }];
+    })];
     intents.extend(member_intents(
         &font,
         position,
@@ -112,7 +115,7 @@ pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringRep
         Some(&group_id),
     )?);
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Renames a group; pairs reference it by id, so its kerning is unchanged.
@@ -121,17 +124,15 @@ pub fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<AuthoringRep
 ///
 /// Rejects an unresolved group and a blank or duplicate name. Reports
 /// persistence failures.
-pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
-    let set = FontIntentSet {
-        intents: vec![FontIntent::RenameKerningGroup {
-            group_id,
-            name: args.name,
-        }],
-    };
+    let set = FontIntentSet::from(RenameKerningGroup {
+        group_id,
+        name: args.name,
+    });
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Deletes a group. Pairs that reference it are kept but no longer apply.
@@ -139,14 +140,12 @@ pub fn rename_kerning_group(args: RenameKerningGroupArgs) -> Result<AuthoringRep
 /// # Errors
 ///
 /// Rejects an unresolved group. Reports persistence failures.
-pub fn delete_kerning_group(args: DeleteKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn delete_kerning_group(args: &DeleteKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let group_id = resolve_group_id(&font, args.position.into(), &args.group)?;
-    let set = FontIntentSet {
-        intents: vec![FontIntent::DeleteKerningGroup { group_id }],
-    };
+    let set = FontIntentSet::from(DeleteKerningGroup { group_id });
 
-    apply_mutation(&args.path, &args.mutation, set)
+    apply_mutation(&args.path, &args.mutation, &set)
 }
 
 /// Moves glyphs into a group, out of any other group at its position.
@@ -155,13 +154,13 @@ pub fn delete_kerning_group(args: DeleteKerningGroupArgs) -> Result<AuthoringRep
 ///
 /// Rejects an unresolved group or glyph, and a repeated glyph. Reports
 /// persistence failures.
-pub fn assign_kerning_group(args: AssignKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn assign_kerning_group(args: &AssignKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let position = KerningPosition::from(args.position);
     let group_id = resolve_group_id(&font, position, &args.group)?;
     let intents = member_intents(&font, position, &args.members, Some(&group_id))?;
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// Takes glyphs out of their group at one position.
@@ -169,11 +168,11 @@ pub fn assign_kerning_group(args: AssignKerningGroupArgs) -> Result<AuthoringRep
 /// # Errors
 ///
 /// Rejects an unresolved or repeated glyph. Reports persistence failures.
-pub fn unassign_kerning_group(args: UnassignKerningGroupArgs) -> Result<AuthoringReport> {
+pub(crate) fn unassign_kerning_group(args: &UnassignKerningGroupArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let intents = member_intents(&font, args.position.into(), &args.members, None)?;
 
-    apply_mutation(&args.path, &args.mutation, FontIntentSet { intents })
+    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
 }
 
 /// A JSON batch of kerning edits, applied atomically.
@@ -242,11 +241,14 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             Some(group_id) => group_id,
             None => {
                 let group_id = KerningGroupId::new();
-                intents.push(FontIntent::CreateKerningGroup {
-                    group_id: group_id.clone(),
-                    position,
-                    name: group.name.clone(),
-                });
+                intents.push(
+                    CreateKerningGroup {
+                        group_id: group_id.clone(),
+                        position,
+                        name: group.name.clone(),
+                    }
+                    .into(),
+                );
                 group_id
             }
         };
@@ -274,21 +276,23 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             current
                 .into_iter()
                 .filter(|glyph_id| !member_ids.contains(glyph_id))
-                .map(|glyph_id| FontIntent::SetKerningGroupMember {
-                    position,
-                    glyph_id,
-                    group_id: None,
+                .map(|glyph_id| {
+                    SetKerningGroupMember {
+                        position,
+                        glyph_id,
+                        group_id: None,
+                    }
+                    .into()
                 }),
         );
-        intents.extend(
-            member_ids
-                .into_iter()
-                .map(|glyph_id| FontIntent::SetKerningGroupMember {
-                    position,
-                    glyph_id,
-                    group_id: Some(group_id.clone()),
-                }),
-        );
+        intents.extend(member_ids.into_iter().map(|glyph_id| {
+            SetKerningGroupMember {
+                position,
+                glyph_id,
+                group_id: Some(group_id.clone()),
+            }
+            .into()
+        }));
     }
 
     let mut edits = Vec::new();
@@ -329,7 +333,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
         });
     }
     if !edits.is_empty() {
-        intents.push(FontIntent::SetKerningValues { edits });
+        intents.push(SetKerningValues { edits }.into());
     }
 
     Ok(intents)
@@ -347,7 +351,7 @@ fn resolve_members(font: &Font, selectors: &[String]) -> Result<Vec<GlyphId>> {
     selectors
         .iter()
         .map(|selector| {
-            let glyph_id = resolve_glyph_id(font, selector)?;
+            let glyph_id = font.glyph_id_for(selector)?;
             if !seen.insert(glyph_id.clone()) {
                 return Err(miette!("glyph {selector:?} is repeated"));
             }
@@ -364,10 +368,13 @@ fn member_intents(
 ) -> Result<Vec<FontIntent>> {
     Ok(resolve_members(font, selectors)?
         .into_iter()
-        .map(|glyph_id| FontIntent::SetKerningGroupMember {
-            position,
-            glyph_id,
-            group_id: group_id.cloned(),
+        .map(|glyph_id| {
+            SetKerningGroupMember {
+                position,
+                glyph_id,
+                group_id: group_id.cloned(),
+            }
+            .into()
         })
         .collect())
 }

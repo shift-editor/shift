@@ -1,7 +1,7 @@
 [package]
 name = "rumil"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 description = "Lay out MathML Core formulas from OpenType MATH data, recording why each glyph is placed"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -10,3 +10,6 @@ keywords = ["math", "mathml", "opentype", "layout", "fonts"]
 categories = ["text-processing", "graphics"]
 
 [dependencies]
+
+[lints]
+workspace = true

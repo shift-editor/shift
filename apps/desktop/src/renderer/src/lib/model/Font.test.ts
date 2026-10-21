@@ -16,8 +16,7 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
-import { Font } from "@shift/editor/model";
-import { FontStore } from "@shift/editor/model";
+import { Font, FontStore } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 import { signal } from "@shift/editor/signals";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";

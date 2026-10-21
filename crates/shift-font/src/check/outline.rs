@@ -5,13 +5,14 @@
 //! badly, because a contour starts at a different point, runs the other way,
 //! or sits in a different position in the list.
 
-use kurbo::{BezPath, PathEl, Shape};
+use kurbo::{BezPath, Shape};
 
 use crate::{
     Contour, CoreResult, Font, Glyph, GlyphId, GlyphLayer, LayerDifference, PointType, Source,
 };
 
-use super::{designspace::number, Check, Finding};
+use super::polygon::Polygon;
+use super::{Check, Finding, designspace::number};
 
 /// Tolerances for the geometric checks.
 #[derive(Clone, Debug, PartialEq)]
@@ -41,15 +42,12 @@ pub(super) fn check(
         return Ok(findings);
     }
 
-    let layers = master_layers(font, glyph);
+    let layers = font.masters_with_layers(glyph).collect::<Vec<_>>();
     if layers.is_empty() {
         return Ok(findings);
     }
 
-    let default = font
-        .default_source()
-        .filter(|source| source.is_master())
-        .map(Source::id);
+    let default = font.default_master().map(Source::id);
     let reference = match &default {
         Some(default) => layers.iter().find(|(source, _)| source.id() == *default),
         None => None,
@@ -120,7 +118,7 @@ pub(super) fn check(
             layer,
             thresholds,
         };
-        pair.check(&mut findings);
+        findings.extend(pair.findings());
     }
 
     if compatible > 0 && font.glyph_interpolation(glyph_id)?.is_none() {
@@ -154,7 +152,7 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
                         let kinds = contour
                             .points
                             .iter()
-                            .map(|p| p.point_type())
+                            .map(crate::Point::point_type)
                             .collect::<Vec<_>>();
                         (contour.closed, kinds)
                     })
@@ -162,13 +160,6 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
             })
     };
     matches!((outline(a), outline(b)), (Some(a), Some(b)) if !a.is_empty() && a == b)
-}
-
-/// Returns one layer per master that draws `glyph`, in source order.
-fn master_layers<'a>(font: &'a Font, glyph: &'a Glyph) -> Vec<(&'a Source, &'a GlyphLayer)> {
-    font.masters()
-        .filter_map(|source| Some((source, glyph.layer_for_source(source.id())?)))
-        .collect()
 }
 
 fn describe(difference: &LayerDifference) -> String {
@@ -219,57 +210,76 @@ struct Pair<'a> {
 }
 
 impl Pair<'_> {
-    fn check(&self, out: &mut Vec<Finding>) {
+    fn findings(&self) -> Vec<Finding> {
         let reference = self.reference.contours_iter().collect::<Vec<_>>();
         let target = self.layer.contours_iter().collect::<Vec<_>>();
 
-        let swapped = self.contour_order(&reference, &target, out);
-        for (index, (a, b)) in reference.iter().zip(&target).enumerate() {
-            if swapped.contains(&index) || !a.is_closed() {
-                continue;
-            }
-
-            let (area_a, area_b) = (signed_area(a), signed_area(b));
-            let collapsed = area_a.abs().min(area_b.abs()) < area_a.abs().max(area_b.abs()) * 0.01;
-            if collapsed {
-                continue;
-            }
-            if area_a * area_b < 0.0 {
-                out.push(self.finding(
-                    Check::WrongContourDirection,
-                    index,
-                    format!("runs the other way in '{}'", self.source.name()),
-                ));
-                continue;
-            }
-            if let Some(shift) = self.start_point(a, b) {
-                out.push(self.finding(
-                    Check::WrongStartPoint,
-                    index,
-                    format!(
-                        "starts {shift} point{} later in '{}' than in '{}'",
-                        if shift == 1 { "" } else { "s" },
-                        self.source.name(),
-                        self.reference_source.name()
-                    ),
-                ));
-                continue;
-            }
-            if let Some(t) = inside_out(a, b, area_a) {
-                out.push(self.finding(
-                    Check::ContourInsideOut,
-                    index,
-                    format!(
-                        "turns inside out {}% of the way to '{}'",
-                        number(t * 100.0),
-                        self.source.name()
-                    ),
-                ));
-            }
-        }
+        let swaps = self.swapped_contours(&reference, &target);
+        let swapped = swaps
+            .iter()
+            .copied()
+            .flat_map(<[usize; 2]>::from)
+            .collect::<Vec<_>>();
+        let order = swaps.iter().map(|&(i, j)| {
+            self.finding(
+                Check::WrongContourOrder,
+                i,
+                &format!(
+                    "and contour {} are in each other's place in '{}'",
+                    j + 1,
+                    self.source.name()
+                ),
+            )
+        });
+        let contours = reference
+            .iter()
+            .zip(&target)
+            .enumerate()
+            .filter(|(index, (a, _))| !swapped.contains(index) && a.is_closed())
+            .filter_map(|(index, (a, b))| self.contour_finding(index, a, b));
+        order.chain(contours).collect()
     }
 
-    fn finding(&self, check: Check, contour: usize, what: String) -> Finding {
+    /// The first problem with one contour pair that keeps its place: a
+    /// reversed direction, a moved start point, or turning inside out.
+    fn contour_finding(&self, index: usize, a: &Contour, b: &Contour) -> Option<Finding> {
+        let (area_a, area_b) = (signed_area(a), signed_area(b));
+        let collapsed = area_a.abs().min(area_b.abs()) < area_a.abs().max(area_b.abs()) * 0.01;
+        if collapsed {
+            return None;
+        }
+        if area_a * area_b < 0.0 {
+            return Some(self.finding(
+                Check::WrongContourDirection,
+                index,
+                &format!("runs the other way in '{}'", self.source.name()),
+            ));
+        }
+        if let Some(shift) = self.start_point(a, b) {
+            return Some(self.finding(
+                Check::WrongStartPoint,
+                index,
+                &format!(
+                    "starts {shift} point{} later in '{}' than in '{}'",
+                    if shift == 1 { "" } else { "s" },
+                    self.source.name(),
+                    self.reference_source.name()
+                ),
+            ));
+        }
+        let t = inside_out(a, b, area_a)?;
+        Some(self.finding(
+            Check::ContourInsideOut,
+            index,
+            &format!(
+                "turns inside out {}% of the way to '{}'",
+                number(t * 100.0),
+                self.source.name()
+            ),
+        ))
+    }
+
+    fn finding(&self, check: Check, contour: usize, what: &str) -> Finding {
         Finding::glyph(
             check,
             self.glyph.id(),
@@ -279,17 +289,12 @@ impl Pair<'_> {
         .in_contour(contour)
     }
 
-    /// Reports pairs of contours that sit in each other's place, and returns
-    /// their indices.
-    fn contour_order(
-        &self,
-        reference: &[&Contour],
-        target: &[&Contour],
-        out: &mut Vec<Finding>,
-    ) -> Vec<usize> {
+    /// Pairs of contours that sit in each other's place.
+    fn swapped_contours(&self, reference: &[&Contour], target: &[&Contour]) -> Vec<(usize, usize)> {
+        let mut swaps = Vec::new();
         let mut swapped = Vec::new();
         if reference.len() < 2 {
-            return swapped;
+            return swaps;
         }
 
         let a = descriptors(reference);
@@ -311,18 +316,10 @@ impl Pair<'_> {
                 }
 
                 swapped.extend([i, j]);
-                out.push(self.finding(
-                    Check::WrongContourOrder,
-                    i,
-                    format!(
-                        "and contour {} are in each other's place in '{}'",
-                        j + 1,
-                        self.source.name()
-                    ),
-                ));
+                swaps.push((i, j));
             }
         }
-        swapped
+        swaps
     }
 
     /// Returns how many points later `b` starts than `a`, when starting
@@ -339,7 +336,7 @@ impl Pair<'_> {
         let types = b
             .points()
             .iter()
-            .map(|p| p.point_type())
+            .map(crate::Point::point_type)
             .collect::<Vec<_>>();
         let a_types = a.iter().map(|p| p.2).collect::<Vec<_>>();
         let cost = |shift: usize| {
@@ -382,30 +379,8 @@ fn broken_between(a: &Contour, b: &Contour) -> bool {
 
 /// Whether a closed path's flattened outline crosses itself.
 fn crosses_itself(path: &BezPath) -> bool {
-    let mut polygon = Vec::new();
-    kurbo::flatten(path, 1.0, |element| match element {
-        PathEl::MoveTo(point) | PathEl::LineTo(point) => polygon.push((point.x, point.y)),
-        _ => {}
-    });
-    let count = polygon.len();
-    if !(4..=4000).contains(&count) {
-        return false;
-    }
-    let edge = |i: usize| (polygon[i], polygon[(i + 1) % count]);
-    (0..count).any(|i| {
-        ((i + 2)..count).filter(|j| (j + 1) % count != i).any(|j| {
-            let ((p, q), (r, t)) = (edge(i), edge(j));
-            segments_cross(p, q, r, t)
-        })
-    })
-}
-
-/// Whether two segments properly cross; touching at an end doesn't count.
-fn segments_cross(p: (f64, f64), q: (f64, f64), r: (f64, f64), s: (f64, f64)) -> bool {
-    let side = |a: (f64, f64), b: (f64, f64), c: (f64, f64)| {
-        (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
-    };
-    side(r, s, p) * side(r, s, q) < 0.0 && side(p, q, r) * side(p, q, s) < 0.0
+    let polygon = Polygon::flatten(path, 1.0);
+    (4..=4000).contains(&polygon.len()) && polygon.crosses_itself()
 }
 
 /// Returns the first sample position at which the contour's area has the

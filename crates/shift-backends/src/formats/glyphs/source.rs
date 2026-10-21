@@ -5,21 +5,21 @@ use std::sync::Arc;
 use glyphs_reader::{Font as ParsedGlyphsFont, Glyph as ParsedGlyph, Layer, Node, NodeType, Shape};
 
 use super::{
-    anchor_parts, component_transform, default_design_value, font_header, master_design_values,
-    master_location_values, missing_component_details, InstanceFamilies,
+    GlyphsAnchorExt, GlyphsFontExt, GlyphsMasterExt, InstanceFamilies, font_header,
+    missing_component_details,
 };
 use crate::font_source::geometry::{
-    control_point_kind, normalize_contour, ContourPoint, SourceComponent, SourceContour,
-    SourceGeometry,
+    ContourPoint, SourceComponent, SourceContour, SourceGeometry, control_point_kind,
+    normalize_contour,
 };
 use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::{
-    empty_projection_layer, project_layers, resolve_projection_closure, ProjectionLayer,
+    ProjectionLayer, empty_projection_layer, project_layers, resolve_projection_closure,
 };
 use crate::font_source::{
-    malformed, AffineTransform, FontDirectory, FontImporter, FontReadError, FontSource,
-    GlyphAnchor, GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph,
-    SourceIndex,
+    AffineTransform, FontDirectory, FontImporter, FontReadError, FontSource, GlyphAnchor,
+    GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex,
+    malformed,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
@@ -34,6 +34,12 @@ pub struct GlyphsFont {
 }
 
 impl GlyphsFont {
+    /// Opens a Glyphs source for random access.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontReadError::MalformedSource`] when the file cannot be parsed or its masters do
+    /// not form a valid directory.
     pub fn open(path: &Path) -> Result<Self, FontReadError> {
         let source = Arc::new(
             ParsedGlyphsFont::load(path)
@@ -44,8 +50,8 @@ impl GlyphsFont {
             .iter()
             .enumerate()
             .map(|(index, axis)| {
-                let design_values = master_design_values(&source, index);
-                let design_default = default_design_value(&source, index, &design_values);
+                let design_values = source.master_design_values(index);
+                let design_default = source.default_design_value(index, &design_values);
                 InterpolationAxis {
                     tag: axis.tag.clone(),
                     minimum: design_values.iter().copied().fold(design_default, f64::min),
@@ -82,8 +88,8 @@ impl GlyphsFont {
             .masters
             .iter()
             .map(|master| {
-                master_location_values(master, source.axes.len())
-                    .into_iter()
+                master
+                    .location_values(source.axes.len())
                     .enumerate()
                     .map(|(index, value)| value.unwrap_or(interpolation_axes[index].default))
                     .collect::<Vec<_>>()
@@ -100,14 +106,12 @@ impl GlyphsFont {
     }
 
     fn parsed_glyph(&self, glyph: GlyphIndex) -> Result<&ParsedGlyph, FontReadError> {
-        let entry =
-            self.directory
-                .glyphs
-                .get(glyph.to_usize())
-                .ok_or(FontReadError::GlyphOutOfRange {
-                    glyph,
-                    glyph_count: self.directory.glyphs.len() as u32,
-                })?;
+        let entry = self.directory.glyphs.get(glyph.to_usize()).ok_or_else(|| {
+            FontReadError::GlyphOutOfRange {
+                glyph,
+                glyph_count: self.directory.glyph_count(),
+            }
+        })?;
         self.source.glyphs.get(entry.name.as_str()).ok_or_else(|| {
             FontReadError::InvalidProjection {
                 details: format!("Glyphs directory lost glyph {:?}", entry.name),
@@ -160,14 +164,14 @@ fn project_glyphs_glyph(
         };
         let converted = convert_glyphs_layer(font, glyph, layer)?;
         layers.push((
-            SourceIndex::new(master_index as u32),
+            SourceIndex::at(master_index),
             font.master_locations[master_index].clone(),
             converted,
         ));
     }
     if layers.is_empty() {
         layers.push((
-            SourceIndex::new(font.source.default_master_idx as u32),
+            SourceIndex::at(font.source.default_master_idx),
             font.master_locations
                 .get(font.source.default_master_idx)
                 .cloned()
@@ -178,13 +182,13 @@ fn project_glyphs_glyph(
     project_layers(
         layers,
         &font.interpolation_axes,
-        SourceIndex::new(font.source.default_master_idx as u32),
+        SourceIndex::at(font.source.default_master_idx),
     )
 }
 
 impl FontImporter for GlyphsFont {
     fn begin_import(&self) -> BackendResult<FontImport> {
-        let (header, stream, report) = super::stream_retained(&self.path, self.source.clone())
+        let (header, stream, report) = super::stream_retained(&self.path, Arc::clone(&self.source))
             .map_err(|source| BackendError::load(FontFormat::Glyphs, self.path.clone(), source))?;
         Ok(FontImport::new(
             header,
@@ -226,17 +230,9 @@ fn convert_glyphs_layer(
                             missing_component_details(component.name.as_str()),
                         )
                     })?;
-                let coefficients = component_transform(component);
                 components.push(SourceComponent {
                     glyph: base,
-                    transform: AffineTransform {
-                        xx: coefficients[0],
-                        xy: coefficients[1],
-                        yx: coefficients[2],
-                        yy: coefficients[3],
-                        dx: coefficients[4],
-                        dy: coefficients[5],
-                    },
+                    transform: AffineTransform::from_values(component.transform.as_coeffs()),
                 });
             }
         }
@@ -250,14 +246,16 @@ fn convert_glyphs_layer(
                 .anchors
                 .iter()
                 .map(|anchor| {
-                    let (name, x, y) = anchor_parts(anchor);
+                    let (name, x, y) = anchor.name_and_position();
                     GlyphAnchor { name, x, y }
                 })
                 .collect(),
         },
         metrics: GlyphMetrics {
             x_advance: layer.width.into_inner(),
-            y_advance: layer.vert_width.map(|value| value.into_inner()),
+            y_advance: layer
+                .vert_width
+                .map(ordered_float::OrderedFloat::into_inner),
         },
     })
 }
@@ -310,19 +308,10 @@ fn glyphs_point_kind(
 
 #[cfg(test)]
 mod tests {
+    use shift_font::test_support::fixtures;
     use std::fs;
 
     use super::*;
-
-    fn fixture(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(name)
-    }
 
     const MAPPED_INSTANCE_GLYPHS: &str = r#"{
 .appVersion = "3414";
@@ -384,7 +373,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn directory_sources_keep_retained_master_order() {
-        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("MutatorSansVariable.glyphs")).unwrap();
         let expected_names = font
             .source
             .masters
@@ -406,7 +395,7 @@ unitsPerEm = 1000;
             .zip(&font.master_locations)
             .enumerate()
         {
-            assert_eq!(source.index, SourceIndex::new(index as u32));
+            assert_eq!(source.index, SourceIndex::at(index));
             assert_eq!(source.location.as_ref(), location);
         }
     }
@@ -450,7 +439,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn glyphs_projection_resolves_component_closure_without_shift_identity() {
-        let font = GlyphsFont::open(&fixture("Homenaje.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("Homenaje.glyphs")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -468,7 +457,7 @@ unitsPerEm = 1000;
     fn glyphs_projection_uses_retained_source_after_removal() {
         let temporary = tempfile::tempdir().unwrap();
         let copied = temporary.path().join("Removed.glyphs");
-        fs::copy(fixture("Homenaje.glyphs"), &copied).unwrap();
+        fs::copy(fixtures::font("Homenaje.glyphs"), &copied).unwrap();
         let font = GlyphsFont::open(&copied).unwrap();
         let glyph = font.directory().glyphs[0].index;
         let expected = font.glyph(glyph).unwrap();
@@ -479,7 +468,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn glyphs_projection_retains_non_default_variation() {
-        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("MutatorSansVariable.glyphs")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -491,10 +480,12 @@ unitsPerEm = 1000;
             .variation
             .expect("variable Glyphs source should retain deltas");
 
-        assert!(variation
-            .deltas
-            .iter()
-            .flat_map(|delta| delta.values.iter())
-            .any(|value| *value != 0.0));
+        assert!(
+            variation
+                .deltas
+                .iter()
+                .flat_map(|delta| delta.values.iter())
+                .any(|value| *value != 0.0)
+        );
     }
 }
