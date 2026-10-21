@@ -7,7 +7,6 @@ import { SLOT_FRAME, ToolbarBar } from "./ToolbarBar";
 import { BAR_THICKNESS } from "./toolbarGeometry";
 import { toolbarBarOrigin, toolbarLift, toolbarToolOpacity } from "./toolbarDrag";
 import { TOOLBAR_DOCKS, fitDockToFrame, poseForDock } from "./toolbarPose";
-import { readToolbarDock, writeToolbarDock } from "./toolbarStorage";
 import { ToolbarZonesOverlay } from "./ToolbarZonesOverlay";
 import { useToolbarDrag } from "./useToolbarDrag";
 import { useToolbarMetrics } from "./useToolbarMetrics";
@@ -41,6 +40,13 @@ function followStyleOf(drag: ToolbarDragState | null, slot: ToolbarDock | null):
 
 export interface FloatingToolbarProps {
   editor: Editor;
+  /**
+   * Edge the bar is docked to. Leave unset to let the bar keep its own dock,
+   * starting on the bottom edge.
+   */
+  dock?: ToolbarDock;
+  /** Called when the user drops the bar on an edge, so the host can remember it. */
+  onDockChange?: (dock: ToolbarDock) => void;
 }
 
 /**
@@ -50,17 +56,22 @@ export interface FloatingToolbarProps {
  * @remarks
  * Place it inside the canvas container, which must be positioned: the bar
  * fills that container as an overlay and docks against its edges, so it
- * follows the canvas as surrounding panels resize. The dock is remembered in
- * `localStorage` when storage is available. A canvas too short to hold the bar
- * standing shows it on the bottom edge without forgetting the remembered dock.
+ * follows the canvas as surrounding panels resize. Pass `dock` and
+ * `onDockChange` to keep the dock across sessions; the bar stores nothing
+ * itself. A canvas too short to hold the bar standing shows it on the bottom
+ * edge without changing `dock`.
  */
-export function FloatingToolbar({ editor }: FloatingToolbarProps) {
+export function FloatingToolbar({ editor, dock: hostDock, onDockChange }: FloatingToolbarProps) {
   const layerRef = useRef<HTMLDivElement>(null);
-  const [dock, setDock] = useState<ToolbarDock>(readToolbarDock);
-  const commitDock = useCallback((next: ToolbarDock) => {
-    setDock(next);
-    writeToolbarDock(next);
-  }, []);
+  const [ownDock, setOwnDock] = useState<ToolbarDock>("bottom");
+  const dock = hostDock ?? ownDock;
+  const commitDock = useCallback(
+    (next: ToolbarDock) => {
+      setOwnDock(next);
+      if (onDockChange) onDockChange(next);
+    },
+    [onDockChange],
+  );
   const metrics = useToolbarMetrics(layerRef);
   const showZones = useSignalState(editor.debugOverlaysCell).toolbarZones;
   const shownDock = metrics ? fitDockToFrame(dock, metrics.frame, metrics.barLength) : dock;

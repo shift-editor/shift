@@ -28,12 +28,6 @@ export interface ToolbarMetrics {
   barLength: number;
 }
 
-/** Storage the toolbar remembers its dock in. */
-export interface ToolbarStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
 /** What the user is holding while the bar is dragged by its handle. */
 export interface ToolbarDragState {
   /** Pointer position in canvas panel coordinates. */

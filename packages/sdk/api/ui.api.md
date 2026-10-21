@@ -45,8 +45,10 @@ export function FloatingToolbar(input: FloatingToolbarProps): JSX.Element;
 
 // @public (undocumented)
 export interface FloatingToolbarProps {
+    dock?: ToolbarDock;
     // (undocumented)
     editor: Editor;
+    onDockChange?: (dock: ToolbarDock) => void;
 }
 
 // @public
@@ -95,6 +97,9 @@ export interface ShiftEditorRootProps {
     // (undocumented)
     className?: string;
 }
+
+// @public
+export type ToolbarDock = "bottom" | "top" | "left" | "right";
 
 // @public
 export function VariationSidebar(input: VariationSidebarProps): JSX.Element;

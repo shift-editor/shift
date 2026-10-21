@@ -10,7 +10,7 @@ The tools bar that floats over the canvas, docked to an edge the user picks by d
 
 > **Architecture Invariant:** Whichever reaches a new zone first, the pointer or the carried bar's reach point (`TRAILING_REACH` of the way in from the end away from the handle), picks the target edge, and some edge is always the target. The zones: the top and bottom quarters of the frame dock to their edge, and the outer thirds of the band between dock to their side (a short frame splits into top and bottom halves). The centre third of the band belongs to no zone and keeps whatever the target already is, so wobbling across the middle never flips the bar between sides. A point only claims a new zone once it is `ZONE_MARGIN` clear of the current target's zone. The handle sits at one end of the bar, so the pointer leads in some directions and trails in others. Steering by the pointer alone makes the trailing directions late, because the whole bar has crossed before the pointer does. Steering by a point on the bar alone makes the leading directions late, and can leave a zone out of reach: the handle is clamped inside the frame, so on a short canvas a standing bar's far end cannot get into the bottom quarter. Taking whichever arrives first switches every direction once at most `TRAILING_REACH` of the bar is in. The reach point is a fixed offset from the handle because the carried bar keeps its pose.
 
-> **Architecture Invariant:** The remembered dock is the user's intent; the displayed dock is derived. `fitDockToFrame` shows a side dock on the bottom edge when the canvas is too short to hold the bar standing, and nothing overwrites the stored dock until the user drops the bar somewhere. Writing the fitted dock back would forget the user's side choice every time a panel is resized.
+> **Architecture Invariant:** The dock (the `dock` prop, or the bar's own state when unset) is the user's intent; the displayed dock is derived. `fitDockToFrame` shows a side dock on the bottom edge when the canvas is too short to hold the bar standing, and `onDockChange` fires only when the user drops the bar somewhere. The bar stores nothing; the desktop app remembers the dock (`useToolbarDock`). Writing the fitted dock back would forget the user's side choice every time a panel is resized.
 
 > **Architecture Invariant:** The tools' opacity dip during a turn is keyed to the turn's progress, not to the clock. `springEasing(...).timeAtProgress` converts "20% to 50% of the way round" into animation offsets. A spring covers most of its distance early, so a dip centred on half the duration lands on the final stretch of the turn.
 
@@ -30,7 +30,6 @@ ui/
 ├── toolbarPose.ts        — dock to pose, which docks fit, the shown dock
 ├── toolbarGeometry.ts    — dock zones and handle clamping
 ├── toolbarPresence.ts    — tools opacity constants and the turn's dip keyframes
-├── toolbarStorage.ts     — remembered dock
 └── springEasing.ts       — a spring baked into a CSS `linear()` easing
 ```
 
