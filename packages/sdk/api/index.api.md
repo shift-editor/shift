@@ -284,11 +284,14 @@ export class Editor {
     // (undocumented)
     nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
     // (undocumented)
+    nodeDefinition(kind: "page"): PageNodeDefinition;
+    // (undocumented)
     nodeDefinition(kind: NodeKind): NodeDefinition;
     notifyPreviewMutationAttempt(): void;
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
     on: EventEmitter["on"];
+    readonly pages: Pages;
     // (undocumented)
     get pan(): Point2D;
     paste(): Promise<boolean>;
