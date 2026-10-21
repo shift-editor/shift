@@ -26,6 +26,7 @@ export type {
   SourceId,
 } from "./ids";
 export { EntityMap, EntityNotFoundError, type ReadonlyEntityMap } from "./EntityMap";
+export { RecentList, type RecentListRules } from "./RecentList";
 export {
   alphabetical,
   ascending,
