@@ -266,6 +266,7 @@ export class Editor {
     readonly history: EditorHistory;
     // (undocumented)
     get hitRadius(): number;
+    hitRadiusIn(node: ShiftNode): number;
     // (undocumented)
     readonly hover: Hover;
     // (undocumented)
