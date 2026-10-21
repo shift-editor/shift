@@ -1,0 +1,17 @@
+[package]
+name = "shift-layout"
+version = "0.1.0"
+edition = "2024"
+description = "Lays out pages of frames and text runs: Shift's auto layout vocabulary over Taffy's flexbox"
+license.workspace = true
+publish = false
+
+[dependencies]
+kurbo = "0.13.0"
+# Only the flexbox algorithm and its caching; Shift's own tree drives it, so
+# no `taffy_tree`, grid, block, or float layout is compiled in.
+taffy = { version = "0.15.0", default-features = false, features = ["std", "flexbox"] }
+thiserror = "2.0.18"
+
+[lints]
+workspace = true

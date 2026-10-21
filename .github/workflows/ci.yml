@@ -523,7 +523,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-font -p shift-slug -p shift-wasm -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-font -p shift-layout -p shift-slug -p shift-wasm -p shift-wire
 
       # The workspace clippy run leaves features off, so the test-only
       # reference exports are linted here, for the target they build for.
