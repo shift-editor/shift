@@ -129,6 +129,8 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import { PageNodeDefinition } from "../nodes/PageNodeDefinition";
 import { Pages } from "../pages/Pages";
+import { FrameNodeDefinition } from "../nodes/FrameNodeDefinition";
+import { Frames } from "../frames/Frames";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
 
@@ -196,6 +198,8 @@ export class Editor {
   readonly textEditing: TextEditing;
   /** The document's pages and the page the canvas shows. */
   readonly pages: Pages;
+  /** Auto layout frames and the active page's layout. */
+  readonly frames: Frames;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -295,10 +299,12 @@ export class Editor {
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
     const PageDefinition = options.nodeDefinitions?.page ?? PageNodeDefinition;
+    const FrameDefinition = options.nodeDefinitions?.frame ?? FrameNodeDefinition;
     this.#nodeDefinitions = {
       glyph: new GlyphDefinition(this),
       textRun: new TextRunDefinition(this),
       page: new PageDefinition(this),
+      frame: new FrameDefinition(this),
     };
 
     this.#view = new EditorViewState();
@@ -321,6 +327,7 @@ export class Editor {
     this.pages = new Pages(this);
     // A session starts with one page; setup, not an edit.
     this.pages.ensure();
+    this.frames = new Frames(this);
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
@@ -1157,6 +1164,7 @@ export class Editor {
   nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
   nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
   nodeDefinition(kind: "page"): PageNodeDefinition;
+  nodeDefinition(kind: "frame"): FrameNodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition {
     return this.#nodeDefinitions[kind];
@@ -2095,6 +2103,16 @@ export class Editor {
   }
 
   public async deleteSelection(mode: DeleteMode = "fit"): Promise<boolean> {
+    const frameIds = this.selection.ids.filter(
+      (id): id is NodeId => isNodeId(id) && this.scene.nodeOfKind(id, "frame") !== null,
+    );
+    if (frameIds.length > 0) {
+      this.history.captureOrJoin("Delete frames", () => {
+        for (const id of frameIds) this.frames.delete(id);
+      });
+      return true;
+    }
+
     const componentsRemoved = await this.#editSelectedComponents(
       "Delete Components",
       (layer, ids) => layer.removeComponents(ids),
@@ -2358,6 +2376,7 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.frames.dispose();
     this.text.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());

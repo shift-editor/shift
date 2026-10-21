@@ -37,6 +37,16 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   abstract readonly kind: N["kind"];
 
   /**
+   * Whether clicking the node itself (a `node` pointer target) selects it by its id.
+   *
+   * @remarks
+   * Off by default: most kinds are selected through what they contain (text
+   * items, points). A selectable node answers `transformTarget` for its own
+   * id to be moved or resized.
+   */
+  readonly selectable: boolean = false;
+
+  /**
    * Returns the step from this kind's drawing units to a Y-down frame at the node's origin.
    *
    * @remarks

@@ -15,6 +15,7 @@ import {
   SelectHover,
   SegmentDoubleClick,
   NodeDoubleClick,
+  FitToContent,
 } from "./behaviors";
 import type { CursorType } from "../../../types/editor";
 import { objectIsKindOf, type ShiftObject } from "../../../types/object";
@@ -37,6 +38,7 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
     new SegmentDoubleClick(),
+    new FitToContent(),
     new NodeDoubleClick(),
     new UpgradeSegment(),
     new Selection(),

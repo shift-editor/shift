@@ -1,5 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
+import type { FrameLayout, Sizing } from "./frame";
 
 /**
  * Describes a placed object in the editor scene.
@@ -93,6 +94,26 @@ export interface PageNode extends Node {
 }
 
 /**
+ * An auto layout frame: stacks its children in a row or column.
+ *
+ * @remarks
+ * A frame sits on a page or inside another frame, and holds text runs and
+ * frames. The page layout (`Frames.layoutCell`) sizes it and places its
+ * children, so a child's own `position` is ignored; a frame on a page keeps
+ * its `position`. Frames neither clip nor scale their content.
+ */
+export interface FrameNode extends Node {
+  readonly kind: "frame";
+
+  /** Shown in the inspector. */
+  readonly name: string;
+
+  readonly layout: FrameLayout;
+  readonly width: Sizing;
+  readonly height: Sizing;
+}
+
+/**
  * Maps each scene node kind to its node type.
  *
  * @remarks
@@ -116,6 +137,7 @@ export interface SceneNodeKinds {
   glyph: GlyphNode;
   textRun: TextRunNode;
   page: PageNode;
+  frame: FrameNode;
 }
 
 /** Identifies a registered scene node kind. */

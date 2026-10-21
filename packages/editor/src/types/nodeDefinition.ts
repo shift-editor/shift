@@ -1,3 +1,4 @@
+import type { FrameNodeDefinition } from "../lib/nodes/FrameNodeDefinition";
 import type { GlyphNodeDefinition } from "../lib/nodes/GlyphNodeDefinition";
 import type { NodeDefinitionConstructor } from "../lib/nodes/NodeDefinition";
 import type { PageNodeDefinition } from "../lib/nodes/PageNodeDefinition";
@@ -8,6 +9,7 @@ export interface NodeDefinitionByKind {
   readonly glyph: GlyphNodeDefinition;
   readonly textRun: TextRunNodeDefinition;
   readonly page: PageNodeDefinition;
+  readonly frame: FrameNodeDefinition;
 }
 
 /** Optional built-in definition replacements that preserve each kind's public contract. */

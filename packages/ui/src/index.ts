@@ -206,7 +206,9 @@ export {
 } from "./components/portal";
 export { cn } from "./lib/utils";
 export {
+  ArrowDown,
   ArrowRight,
+  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,

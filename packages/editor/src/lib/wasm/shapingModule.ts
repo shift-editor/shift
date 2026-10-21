@@ -15,6 +15,9 @@ import {
   type ShapedRunOutput,
 } from "./generated/shapingLayouts";
 
+/** Lays out one page of frames and leaves; see `crates/shift-layout`. */
+export { layoutPage } from "./generated/shapingLayouts";
+
 const released = new FinalizationRegistry<number>(releaseShaper);
 
 /**

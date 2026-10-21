@@ -52,6 +52,7 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
     for (const node of this.#editor.scene.nodesOfKind("textRun")) {
       track(this.#editor.text.layoutCell(node.runId));
     }
+    track(this.#editor.frames.layoutCell);
 
     return { nodes: this.#editor.scene.nodes() };
   }
@@ -123,6 +124,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     for (const node of this.#editor.scene.nodesOfKind("textRun")) {
       track(this.#editor.text.layoutCell(node.runId));
     }
+    track(this.#editor.frames.layoutCell);
     this.#editor.debugOverlaysCell.value;
 
     return {

@@ -26,6 +26,20 @@ export type { RenderGlyph } from "./types/glyphRender";
 export type { CanvasRef } from "./types/graphics";
 export type { CubicHandle } from "./types/handle";
 export type {
+  FrameAlign,
+  FrameAxis,
+  FrameJustify,
+  FrameLayout,
+  FrameMode,
+  FrameOptions,
+  Insets,
+  LaidOutNode,
+  LayoutBox,
+  PageLayout,
+  Sizing,
+} from "./types/frame";
+export type {
+  FrameNode,
   GlyphNode,
   NodeKind,
   NodeOfKind,

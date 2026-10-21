@@ -33,8 +33,12 @@ export class Selection implements SelectBehavior {
         break;
       }
 
+      case "node": {
+        if (editor.nodeDefinition(target.node.kind).selectable) ids = [target.node.id];
+        break;
+      }
+
       case "canvas":
-      case "node":
         break;
     }
 
