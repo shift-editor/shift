@@ -14,7 +14,7 @@ use crate::formats::ufo::glif::{
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
-use super::{derive_axis_range, find_default_source_index, map_axis_value, stream_retained};
+use super::{DesignspaceAxisExt, DesignspaceDocumentExt, stream_retained};
 
 /// Retained source locations and UFO glyph bytes for one Designspace.
 pub struct DesignspaceFont {
@@ -40,7 +40,7 @@ impl DesignspaceFont {
         if document.sources.is_empty() {
             return Err(malformed(path, "Designspace has no sources".into()));
         }
-        let default_source = find_default_source_index(&document).ok_or_else(|| {
+        let default_source = document.default_source_index().ok_or_else(|| {
             malformed(
                 path,
                 "Designspace has no source at the mapped default location".into(),
@@ -77,12 +77,12 @@ impl DesignspaceFont {
             .axes
             .iter()
             .map(|axis| {
-                let (user_minimum, user_maximum) = derive_axis_range(axis);
-                let default = map_axis_value(axis, f64::from(axis.default));
+                let (user_minimum, user_maximum) = axis.user_range();
+                let default = axis.default_design_value();
                 let mut design_values = vec![
-                    map_axis_value(axis, user_minimum),
+                    axis.map_forward(user_minimum),
                     default,
-                    map_axis_value(axis, user_maximum),
+                    axis.map_forward(user_maximum),
                 ];
                 if let Some(mapping) = &axis.map {
                     design_values.extend(mapping.iter().map(|point| f64::from(point.output)));
@@ -168,7 +168,7 @@ mod tests {
     fn directory_sources_keep_retained_ufo_order() {
         let path = fixtures::font("mutatorsans-variable/MutatorSans.designspace");
         let document = DesignSpaceDocument::load(&path).unwrap();
-        let default_source = find_default_source_index(&document).unwrap();
+        let default_source = document.default_source_index().unwrap();
         let expected_filenames = std::iter::once(default_source)
             .chain((0..document.sources.len()).filter(|index| *index != default_source))
             .map(|index| document.sources[index].filename.as_str())

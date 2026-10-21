@@ -261,6 +261,25 @@ impl Source {
     }
 }
 
+/// Looks up sources by id in a list of sources.
+pub trait SourceList {
+    /// Returns the source with `source_id`.
+    fn source(&self, source_id: &SourceId) -> Option<&Source>;
+
+    /// Returns the source with `source_id`, for editing.
+    fn source_mut(&mut self, source_id: &SourceId) -> Option<&mut Source>;
+}
+
+impl SourceList for [Source] {
+    fn source(&self, source_id: &SourceId) -> Option<&Source> {
+        self.iter().find(|source| source.id() == *source_id)
+    }
+
+    fn source_mut(&mut self, source_id: &SourceId) -> Option<&mut Source> {
+        self.iter_mut().find(|source| source.id() == *source_id)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +294,22 @@ mod tests {
         let source = Source::new("Regular".to_string(), location);
         assert_eq!(source.name(), "Regular");
         assert_eq!(source.location().get(&axis_id), Some(400.0));
+    }
+
+    #[test]
+    fn source_list_finds_sources_by_id() {
+        let mut sources = [
+            Source::new("Regular".to_string(), DesignLocation::new()),
+            Source::new("Bold".to_string(), DesignLocation::new()),
+        ];
+        let bold_id = sources[1].id();
+
+        assert_eq!(sources.source(&bold_id).map(Source::name), Some("Bold"));
+        sources
+            .source_mut(&bold_id)
+            .unwrap()
+            .set_name("Black".to_string());
+        assert_eq!(sources[1].name(), "Black");
+        assert!(sources.source(&SourceId::new()).is_none());
     }
 }

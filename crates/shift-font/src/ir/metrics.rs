@@ -186,6 +186,37 @@ mod tests {
             .unwrap();
         assert_eq!(x_height.overshoot, 12.0);
     }
+
+    #[test]
+    fn definition_list_finds_definitions_by_id_and_kind() {
+        let font = crate::Font::new();
+        let definitions = font.metric_definitions();
+        let ascender = definitions
+            .definition_for_kind(MetricKind::Ascender)
+            .expect("a new font defines an ascender");
+
+        assert_eq!(definitions.definition(&ascender.id()), Some(ascender));
+        assert!(definitions.definition(&MetricId::new()).is_none());
+    }
+}
+
+/// Looks up metric definitions in a list of definitions.
+pub trait MetricDefinitionList {
+    /// Returns the definition with `metric_id`.
+    fn definition(&self, metric_id: &MetricId) -> Option<&MetricDefinition>;
+
+    /// Returns the definition for a standard role, or the first custom one.
+    fn definition_for_kind(&self, kind: MetricKind) -> Option<&MetricDefinition>;
+}
+
+impl MetricDefinitionList for [MetricDefinition] {
+    fn definition(&self, metric_id: &MetricId) -> Option<&MetricDefinition> {
+        self.iter().find(|definition| definition.id() == *metric_id)
+    }
+
+    fn definition_for_kind(&self, kind: MetricKind) -> Option<&MetricDefinition> {
+        self.iter().find(|definition| definition.kind() == kind)
+    }
 }
 
 /// The positions of a source's standard metrics, each `None` when the source
@@ -203,9 +234,7 @@ impl StandardMetrics {
     /// Reads `source`'s positions for the roles `definitions` define.
     pub fn of(source: &Source, definitions: &[MetricDefinition]) -> Self {
         let position = |kind| {
-            let definition = definitions
-                .iter()
-                .find(|definition| definition.kind() == kind)?;
+            let definition = definitions.definition_for_kind(kind)?;
             source
                 .metric_value(&definition.id())
                 .map(|value| value.position)
@@ -226,10 +255,7 @@ impl StandardMetrics {
             let Some(position) = position else {
                 continue;
             };
-            let Some(definition) = definitions
-                .iter()
-                .find(|definition| definition.kind() == kind)
-            else {
+            let Some(definition) = definitions.definition_for_kind(kind) else {
                 continue;
             };
             let overshoot = source

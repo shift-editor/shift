@@ -267,7 +267,7 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use crate::test_support::generated::{TypeScriptModule, assert_generated_file};
-    use crate::{DesignLocation, Font, MetricKind, MetricValue, Source};
+    use crate::{DesignLocation, Font, MetricDefinitionList, MetricKind, MetricValue, Source};
 
     use super::{
         SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET, SOURCE_METRIC_VALUE_COUNT,
@@ -309,8 +309,7 @@ mod tests {
 
         let ascender_id = font
             .metric_definitions()
-            .iter()
-            .find(|definition| definition.kind() == MetricKind::Ascender)
+            .definition_for_kind(MetricKind::Ascender)
             .unwrap()
             .id();
         let default_id = font.default_source_id().unwrap();

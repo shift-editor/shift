@@ -311,9 +311,7 @@ mod tests {
         let header = retained.header.clone();
         let default_source_id = header.default_source_id().unwrap();
         let default_source = header
-            .sources()
-            .iter()
-            .find(|source| source.id() == default_source_id)
+            .source(&default_source_id)
             .expect("authored header should contain its default source");
 
         assert_eq!(header.metadata().family_name, directory.family_name);

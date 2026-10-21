@@ -25,12 +25,11 @@ use crate::{
 use shift_font::StandardMetrics;
 
 use super::{
-    axis_labels,
+    DesignspaceAxisExt, DesignspaceDocumentExt, axis_labels,
     error::{DesignspaceError, DesignspaceResult},
     reader::{
-        axis_mappings_from_designspace, axisless_source_name, find_default_source_index,
-        location_from_dimensions, named_instances_from_designspace, parse_axisless_sources,
-        source_name, variation_axis_kind,
+        axis_mappings_from_designspace, axisless_source_name, location_from_dimensions,
+        named_instances_from_designspace, parse_axisless_sources, source_name,
     },
 };
 
@@ -98,8 +97,9 @@ fn stream_designspace(
             details: "retained source path count does not match Designspace sources".into(),
         });
     }
-    let default_index =
-        find_default_source_index(&document).ok_or(DesignspaceError::MissingDefaultSource)?;
+    let default_index = document
+        .default_source_index()
+        .ok_or(DesignspaceError::MissingDefaultSource)?;
     let default_descriptor = &document.sources[default_index];
     let default_path = designspace_dir.join(&default_descriptor.filename);
     let (mut header, default_kerning) =
@@ -366,7 +366,7 @@ fn add_axes(
     labels: &mut HashMap<String, Vec<shift_font::AxisLabel>>,
 ) -> DesignspaceResult<()> {
     for axis in &document.axes {
-        let mut imported = match variation_axis_kind(axis) {
+        let mut imported = match axis.variation_kind() {
             VariationAxisKind::Discrete { values, default } => Axis::discrete_with_id(
                 AxisId::new(),
                 axis.tag.clone(),

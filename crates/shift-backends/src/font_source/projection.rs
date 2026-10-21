@@ -210,9 +210,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
 
 fn directory_metrics(font: &Font, source: &FontSource) -> FontMetrics {
     let metric = |kind| {
-        font.metric_definitions()
-            .iter()
-            .find(|definition| definition.kind() == kind)
+        font.metric_definition_for_kind(kind)
             .and_then(|definition| source.metric_value(&definition.id()))
             .map(|value| value.position)
     };
@@ -950,11 +948,7 @@ mod tests {
         .into_iter()
         .zip(values)
         {
-            let definition = font
-                .metric_definitions()
-                .iter()
-                .find(|definition| definition.kind() == kind)
-                .unwrap();
+            let definition = font.metric_definition_for_kind(kind).unwrap();
             source.set_metric_value(definition.id(), MetricValue::new(position, 0.0));
         }
     }

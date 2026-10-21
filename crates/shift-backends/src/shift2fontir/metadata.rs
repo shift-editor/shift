@@ -10,7 +10,7 @@ use fontir::ir::{
     PreliminaryGdefCategories, StaticMetadata,
 };
 use fontir::orchestration::{Context, WorkId};
-use shift_font::{Source, StandardMetrics};
+use shift_font::{Source, SourceList, StandardMetrics};
 use write_fonts::types::NameId;
 
 use super::axes::{normalized_source_location, to_ir_named_instances};
@@ -121,8 +121,7 @@ impl StaticMetadataWork {
     fn default_source(&self) -> Result<&Source, Error> {
         self.snapshot
             .sources
-            .iter()
-            .find(|source| source.id() == self.snapshot.default_source_id)
+            .source(&self.snapshot.default_source_id)
             .ok_or_else(|| {
                 Error::InvalidEntry(
                     "Shift default source",
