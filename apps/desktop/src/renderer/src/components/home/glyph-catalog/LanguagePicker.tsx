@@ -19,6 +19,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
 import { ScriptIcon } from "./ScriptIcon";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 export interface LanguagePickerProps {
   scripts: readonly LanguageScript[];
@@ -44,10 +45,8 @@ export const LanguagePicker = ({
   const searchRef = useRef<HTMLInputElement>(null);
 
   const visibleScripts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return normalizedQuery === ""
-      ? scripts
-      : scripts.filter(({ script }) => script.toLowerCase().includes(normalizedQuery));
+    const search = NameQuery.from(query);
+    return search.isEmpty ? scripts : search.filterBy(scripts, ({ script }) => [script]);
   }, [query, scripts]);
 
   const { onMouseDown, itemsToChange, resetRange } = useCheckboxRange(visibleScripts);
