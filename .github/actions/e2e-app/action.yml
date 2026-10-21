@@ -1,0 +1,64 @@
+name: E2E app
+description: >-
+  Builds the native module and, outside pushes to main, the desktop app the E2E
+  projects run against. Run from the repository root after checkout. Pushes to
+  main build only the native module, so its Rust cache is saved where pull
+  requests and merge-queue runs can restore it.
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/wasm-toolchain
+
+    - uses: pnpm/action-setup@v6
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Cache node_modules
+      uses: actions/cache@v6
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          crates/*/node_modules
+        key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile --prefer-offline
+
+    - name: Cache native module binary
+      id: native-cache
+      uses: actions/cache@v6
+      with:
+        path: |
+          crates/shift-bridge/*.node
+          packages/wasm/src/generated
+          packages/wasm/src/generated-reference
+          packages/wasm/src/generated-shaping
+        key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
+
+    # A cache saved on a pull request or merge-queue ref can be restored only by
+    # that ref, and each is about 400 MB: saving them evicted main's caches, so
+    # every run compiled the whole workspace. Only main saves.
+    - uses: Swatinem/rust-cache@v2
+      if: steps.native-cache.outputs.cache-hit != 'true'
+      with:
+        shared-key: shift-rust-${{ runner.os }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+
+    - name: Build native module
+      if: steps.native-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm build:native:e2e
+
+    - name: Generate glyph info
+      if: github.event_name != 'push'
+      shell: bash
+      run: pnpm generate:glyph-info
+
+    - name: Build E2E app
+      if: github.event_name != 'push'
+      shell: bash
+      run: pnpm --filter @shift/desktop build:e2e

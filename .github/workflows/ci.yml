@@ -41,6 +41,7 @@ jobs:
       e2e: ${{ steps.e2e-filter.outputs.e2e }}
       e2e-builds: ${{ steps.e2e-plan.outputs.builds }}
       e2e-runs: ${{ steps.e2e-plan.outputs.runs }}
+      e2e-windows: ${{ steps.e2e-plan.outputs.windows }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -120,32 +121,44 @@ jobs:
               - '!crates/shift-cli/**'
 
       # Pull requests run macOS visual and the full platform suite on Linux. The merge
-      # queue and manual runs add Windows, limited to @os tests whose behaviour differs by
-      # OS, and the hardware GPU project.
+      # queue and manual runs add Windows (the e2e-windows job), limited to @os tests
+      # whose behaviour differs by OS, and the hardware GPU project.
+      #
+      # The merge queue skips visual: the pull request already compared these
+      # screenshots, and the account runs only five macOS jobs at once, which several
+      # queue entries building together would otherwise share. Its macOS shard runs the
+      # @os platform tests the visual shards run after their screenshots.
       - name: Plan E2E
         id: e2e-plan
         env:
           EVENT: ${{ github.event_name }}
         run: |
           full=false
+          queue=false
           if [[ "$EVENT" == "merge_group" || "$EVENT" == "workflow_dispatch" || "$EVENT" == "push" ]]; then
             full=true
           fi
-          jq -nc --argjson full "$full" '
+          if [[ "$EVENT" == "merge_group" ]]; then
+            queue=true
+          fi
+          jq -nc '
             [{name: "macOS", runner: "macos-latest"}, {name: "Linux", runner: "ubuntu-latest"}]
-            + (if $full then [{name: "Windows", runner: "windows-latest"}] else [] end)
             | {include: .}' > builds.json
-          jq -nc --argjson full "$full" '
+          jq -nc --argjson full "$full" --argjson queue "$queue" '
             def shards($n; $job): [range(1; $n + 1) | $job + {shard: ., "shard-total": $n}];
-            shards(3; {target: "visual", name: "Visual", project: "visual", runner: "macos-latest", workers: 2})
+            (if $queue then
+                shards(1; {target: "platform-macos", name: "Platform macOS", project: "platform", runner: "macos-latest", grep: "@os"})
+              else
+                shards(3; {target: "visual", name: "Visual", project: "visual", runner: "macos-latest", workers: 2})
+              end)
             + shards(2; {target: "platform-linux", name: "Platform Linux", project: "platform", runner: "ubuntu-latest"})
-            + (if $full then
-                shards(1; {target: "platform-windows", name: "Platform Windows", project: "platform", runner: "windows-latest", grep: "@os"})
-                + shards(1; {target: "gpu", name: "GPU", project: "gpu", runner: "macos-latest"})
-              else [] end)
+            + (if $full then shards(1; {target: "gpu", name: "GPU", project: "gpu", runner: "macos-latest"}) else [] end)
             | {include: .}' > runs.json
-          echo "builds=$(cat builds.json)" >> "$GITHUB_OUTPUT"
-          echo "runs=$(cat runs.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "builds=$(cat builds.json)"
+            echo "runs=$(cat runs.json)"
+            echo "windows=$full"
+          } >> "$GITHUB_OUTPUT"
           cat builds.json runs.json
 
   agent-skills:
@@ -362,6 +375,7 @@ jobs:
         if: steps.native-turbo-cache.outputs.cache-hit != 'true'
         with:
           shared-key: shift-rust
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run unit tests
         run: pnpm test:unit
@@ -606,57 +620,7 @@ jobs:
           fetch-depth: 1
           submodules: true
 
-      - uses: ./.github/actions/wasm-toolchain
-
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Install toolchain
-        run: rustup show
-
-      - name: Cache node_modules
-        uses: actions/cache@v6
-        with:
-          path: |
-            node_modules
-            apps/*/node_modules
-            packages/*/node_modules
-            crates/*/node_modules
-          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        timeout-minutes: 10
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - name: Cache native module binary
-        id: native-cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            crates/shift-bridge/*.node
-            packages/wasm/src/generated
-            packages/wasm/src/generated-reference
-            packages/wasm/src/generated-shaping
-          key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
-
-      - uses: Swatinem/rust-cache@v2
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        with:
-          shared-key: shift-rust-${{ runner.os }}
-
-      - name: Build native module
-        if: steps.native-cache.outputs.cache-hit != 'true'
-        run: pnpm build:native:e2e
-
-      - name: Generate glyph info
-        if: github.event_name != 'push'
-        run: pnpm generate:glyph-info
-
-      - name: Build E2E app
-        if: github.event_name != 'push'
-        run: pnpm --filter @shift/desktop build:e2e
+      - uses: ./.github/actions/e2e-app
 
       - name: Check E2E project membership
         if: github.event_name != 'push' && runner.os == 'Linux'
@@ -865,11 +829,72 @@ jobs:
           path: apps/desktop/e2e/test-results/
           retention-days: 7
 
+  # Windows builds and tests in one job. Its native build is the slowest of the
+  # three, and as a leg of e2e-build it held every Linux and macOS shard until it
+  # finished. Pushes to main only build, to save the Rust cache for the queue.
+  e2e-windows:
+    name: E2E Platform Windows
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.e2e-windows == 'true' && (
+        (github.event_name == 'merge_group' && needs.detect-changes.outputs.e2e == 'true') ||
+        (github.event_name == 'push' && needs.detect-changes.outputs.rust == 'true') ||
+        github.event_name == 'workflow_dispatch')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - uses: ./.github/actions/e2e-app
+
+      - name: Load Electron
+        if: github.event_name != 'push'
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: pnpm --dir apps/desktop exec electron -e "0"
+
+      - name: Run E2E tests
+        if: github.event_name != 'push'
+        env:
+          E2E_WORKERS: 1
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/apps/desktop/blob-report
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-platform-windows-1.zip
+        run: >-
+          pnpm --dir apps/desktop exec playwright test
+          --project=platform
+          --fully-parallel
+          --grep=@os
+
+      - name: Upload blob report
+        if: always() && github.event_name != 'push'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-platform-windows-1
+          path: apps/desktop/blob-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload platform evidence
+        if: always() && github.event_name != 'push'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-platform-windows-1-of-1-results
+          path: apps/desktop/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   # Merges shard blob reports into one HTML report and summarizes failed, flaky
   # (passed only on retry), and slow tests. Informational: not part of ci-passed.
   e2e-report:
     name: E2E Report
-    needs: e2e
+    needs: [e2e, e2e-windows]
     if: always() && needs.e2e.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -947,6 +972,7 @@ jobs:
       - integration
       - e2e-build
       - e2e
+      - e2e-windows
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions: {}
