@@ -1,6 +1,8 @@
+use std::ops::Range;
+
 use crate::length::{OrOverflow, ensure_total, to_u32, within};
 use crate::{
-    Bounds, Curve, LINE_EPSILON, OutlineCommand, Point, Section, SlugError,
+    Bounds, Curve, LINE_EPSILON, OutlineCommand, Section, SlugError,
     curve::{
         cubic_subdivision_counts_from_commands,
         curves_and_line_flags_from_commands_with_subdivisions,
@@ -78,6 +80,69 @@ pub struct VariableSource {
     pub delta_start: u32,
     /// Index in the small per-frame deduplicated weight buffer.
     pub weight_index: u32,
+}
+
+impl VariableGlyph {
+    /// Returns the range of this glyph's curves in the atlas's base curves.
+    pub(crate) fn curve_range(&self) -> Result<Range<usize>, SlugError> {
+        let start = self.curve_start as usize;
+        Ok(start..start.checked_add(self.curve_count as usize).or_overflow()?)
+    }
+
+    /// Returns the range of this glyph's sources and their advances.
+    ///
+    /// Only an outline glyph has sources; check [`Self::component_index`] first.
+    pub(crate) fn source_range(&self) -> Result<Range<usize>, SlugError> {
+        let start = self.source_start as usize;
+        Ok(start
+            ..start
+                .checked_add(self.source_count as usize)
+                .or_overflow()?)
+    }
+
+    /// Returns this glyph's entry in the component-glyph table when it is
+    /// drawn from components rather than its own outline.
+    pub(crate) fn component_index(&self) -> Option<usize> {
+        (self.source_start & COMPONENT_GLYPH_FLAG != 0)
+            .then_some((self.source_start & GLYPH_OFFSET_MASK) as usize)
+    }
+}
+
+impl VariableSource {
+    /// Returns whether this is the base source, which carries no deltas.
+    pub(crate) fn is_base(self) -> bool {
+        self.delta_start == BASE_SOURCE_DELTA
+    }
+
+    /// Returns whether this source's deltas cover every curve of its glyph.
+    pub(crate) fn is_dense(self) -> bool {
+        !self.is_base() && self.delta_start & SPARSE_SOURCE_FLAG == 0
+    }
+
+    /// Returns where this source's sparse-delta descriptor starts, when its
+    /// deltas cover only some curves.
+    pub(crate) fn sparse_descriptor_start(self) -> Option<usize> {
+        (!self.is_base() && self.delta_start & SPARSE_SOURCE_FLAG != 0)
+            .then_some((self.delta_start & SOURCE_OFFSET_MASK) as usize)
+    }
+
+    /// Returns this source's weight in the per-frame weight buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::VariableWeightIndexOutOfRange`] when the buffer has
+    /// no weight at this source's index.
+    pub(crate) fn weight(self, weights: &[f32]) -> Result<f32, SlugError> {
+        weight_at(weights, self.weight_index)
+    }
+}
+
+/// Returns the weight at `index` in a per-frame weight buffer.
+pub(crate) fn weight_at(weights: &[f32], index: u32) -> Result<f32, SlugError> {
+    weights
+        .get(index as usize)
+        .copied()
+        .ok_or(SlugError::VariableWeightIndexOutOfRange(index))
 }
 
 /// Byte ranges for one packed resident variable atlas.
@@ -220,7 +285,7 @@ impl VariableAtlas {
             delta_index_count: self
                 .sources
                 .iter()
-                .filter_map(|source| sparse_descriptor_start(*source))
+                .filter_map(|source| source.sparse_descriptor_start())
                 .filter_map(|start| self.sparse_deltas.get(start + 1))
                 .map(|count| *count as usize)
                 .sum(),
@@ -228,15 +293,12 @@ impl VariableAtlas {
             dense_delta_source_count: self
                 .sources
                 .iter()
-                .filter(|source| {
-                    source.delta_start != BASE_SOURCE_DELTA
-                        && source.delta_start & SPARSE_SOURCE_FLAG == 0
-                })
+                .filter(|source| source.is_dense())
                 .count(),
             sparse_delta_source_count: self
                 .sources
                 .iter()
-                .filter(|source| sparse_descriptor_start(**source).is_some())
+                .filter(|source| source.sparse_descriptor_start().is_some())
                 .count(),
             line_curve_count: self
                 .line_bits
@@ -257,6 +319,31 @@ impl VariableAtlas {
         }
     }
 
+    /// Returns the glyph record at `glyph_index`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::GlyphIndexOutOfRange`] when the atlas has no such glyph.
+    pub(crate) fn glyph(&self, glyph_index: u32) -> Result<VariableGlyph, SlugError> {
+        self.glyphs
+            .get(glyph_index as usize)
+            .copied()
+            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))
+    }
+
+    /// Returns the glyph whose sources carry `glyph`'s advance: its root glyph
+    /// when it is drawn from components, and the glyph itself otherwise.
+    fn advance_glyph(&self, glyph: VariableGlyph) -> Result<VariableGlyph, SlugError> {
+        let Some(component_index) = glyph.component_index() else {
+            return Ok(glyph);
+        };
+        let component = self.component_glyphs.get(component_index).or_overflow()?;
+        self.glyphs
+            .get(component.root_glyph_index as usize)
+            .copied()
+            .or_overflow()
+    }
+
     /// Derives shared preview overflow without changing the existing pixels-per-em scale.
     pub fn preview_extents(&self, glyph_indices: &[u32]) -> Result<SlugPreviewExtents, SlugError> {
         let mut horizontal = 0.0_f32;
@@ -264,27 +351,11 @@ impl VariableAtlas {
         let mut maximum_y = f32::NEG_INFINITY;
 
         for glyph_index in glyph_indices {
-            let glyph = *self
-                .glyphs
-                .get(*glyph_index as usize)
-                .ok_or(SlugError::GlyphIndexOutOfRange(*glyph_index))?;
-            let advance_glyph = match component_glyph_index(glyph) {
-                Some(component_index) => {
-                    let component = self.component_glyphs.get(component_index).or_overflow()?;
-                    *self
-                        .glyphs
-                        .get(component.root_glyph_index as usize)
-                        .or_overflow()?
-                }
-                None => glyph,
-            };
-            let advance_start = advance_glyph.source_start as usize;
-            let advance_end = advance_start
-                .checked_add(advance_glyph.source_count as usize)
-                .or_overflow()?;
+            let glyph = self.glyph(*glyph_index)?;
+            let advance_glyph = self.advance_glyph(glyph)?;
             let minimum_advance = self
                 .source_advances
-                .get(advance_start..advance_end)
+                .get(advance_glyph.source_range()?)
                 .or_overflow()?
                 .iter()
                 .copied()
@@ -335,39 +406,28 @@ impl VariableAtlas {
         if weights.iter().any(|weight| !weight.is_finite()) {
             return Err(SlugError::NonFiniteVariableWeight);
         }
-        let glyph = self
-            .glyphs
-            .get(glyph_index as usize)
-            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
-        if component_glyph_index(*glyph).is_some() {
-            return component::resolve_component_glyph(self, *glyph, weights);
+        let glyph = self.glyph(glyph_index)?;
+        if glyph.component_index().is_some() {
+            return component::resolve_component_glyph(self, glyph, weights);
         }
-        let curve_start = glyph.curve_start as usize;
-        let curve_end = curve_start
-            .checked_add(glyph.curve_count as usize)
-            .or_overflow()?;
-        let source_start = glyph.source_start as usize;
-        let source_end = source_start
-            .checked_add(glyph.source_count as usize)
-            .or_overflow()?;
-        let sources = self.sources.get(source_start..source_end).or_overflow()?;
+        let curve_range = glyph.curve_range()?;
+        let curve_start = curve_range.start;
+        let sources = self.sources.get(glyph.source_range()?).or_overflow()?;
         let mut weight_sum = 0.0_f32;
         for source in sources {
-            weight_sum += *weights.get(source.weight_index as usize).ok_or(
-                SlugError::VariableWeightIndexOutOfRange(source.weight_index),
-            )?;
+            weight_sum += source.weight(weights)?;
         }
 
-        let mut curves = self.base_curves[curve_start..curve_end]
+        let mut curves = self.base_curves[curve_range]
             .iter()
-            .map(|curve| scale_curve(*curve, weight_sum))
+            .map(|curve| *curve * weight_sum)
             .collect::<Vec<_>>();
         for source in sources {
-            if source.delta_start == BASE_SOURCE_DELTA {
+            if source.is_base() {
                 continue;
             }
-            let weight = weights[source.weight_index as usize];
-            let Some(descriptor_start) = sparse_descriptor_start(*source) else {
+            let weight = source.weight(weights)?;
+            let Some(descriptor_start) = source.sparse_descriptor_start() else {
                 let delta_start = source.delta_start as usize;
                 let delta_end = delta_start
                     .checked_add(glyph.curve_count as usize)
@@ -377,7 +437,7 @@ impl VariableAtlas {
                         .get(delta_start..delta_end)
                         .or_overflow()?,
                 ) {
-                    *curve = add_scaled_curve(*curve, *delta, weight);
+                    *curve = *curve + *delta * weight;
                 }
                 continue;
             };
@@ -397,7 +457,7 @@ impl VariableAtlas {
                 .or_overflow()?;
             for (local_index, delta) in indices.iter().zip(deltas) {
                 let curve = curves.get_mut(*local_index as usize).or_overflow()?;
-                *curve = add_scaled_curve(*curve, *delta, weight);
+                *curve = *curve + *delta * weight;
             }
         }
         for (local_index, curve) in curves.iter_mut().enumerate() {
@@ -417,34 +477,19 @@ impl VariableAtlas {
         if weights.iter().any(|weight| !weight.is_finite()) {
             return Err(SlugError::NonFiniteVariableWeight);
         }
-        let glyph = self
-            .glyphs
-            .get(glyph_index as usize)
-            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
-        if let Some(component_glyph_index) = component_glyph_index(*glyph) {
-            let component_glyph = self
-                .component_glyphs
-                .get(component_glyph_index)
-                .or_overflow()?;
+        let glyph = self.glyph(glyph_index)?;
+        if let Some(component_index) = glyph.component_index() {
+            let component_glyph = self.component_glyphs.get(component_index).or_overflow()?;
             return self.resolve_advance_with_weights(component_glyph.root_glyph_index, weights);
         }
-        let source_start = glyph.source_start as usize;
-        let source_end = source_start
-            .checked_add(glyph.source_count as usize)
-            .or_overflow()?;
-        let sources = self.sources.get(source_start..source_end).or_overflow()?;
-        let advances = self
-            .source_advances
-            .get(source_start..source_end)
-            .or_overflow()?;
+        let source_range = glyph.source_range()?;
+        let sources = self.sources.get(source_range.clone()).or_overflow()?;
+        let advances = self.source_advances.get(source_range).or_overflow()?;
         sources
             .iter()
             .zip(advances)
             .try_fold(0.0_f32, |advance, (source, source_advance)| {
-                let weight = weights.get(source.weight_index as usize).ok_or(
-                    SlugError::VariableWeightIndexOutOfRange(source.weight_index),
-                )?;
-                Ok(advance + source_advance * weight)
+                Ok(advance + source_advance * source.weight(weights)?)
             })
     }
 
@@ -773,7 +818,7 @@ impl VariableAtlasBuilder {
         let curve_count = to_u32(base_curves.len())?;
         let source_start = direct_source_offset(self.atlas.sources.len())?;
         let source_count = to_u32(source_curves.len().checked_add(1).or_overflow()?)?;
-        let mut bounds = variable_bounds(
+        let mut bounds = Bounds::of_curves(
             base_curves
                 .iter()
                 .chain(source_curves.iter().flat_map(|(_, curves)| curves)),
@@ -795,13 +840,13 @@ impl VariableAtlasBuilder {
             let deltas = base_curves
                 .iter()
                 .zip(curves)
-                .map(|(base, source)| subtract_curve(*source, *base))
+                .map(|(base, source)| *source - *base)
                 .collect::<Vec<_>>();
             let changed = deltas
                 .iter()
                 .copied()
                 .enumerate()
-                .filter(|(_, delta)| !curve_is_zero(*delta))
+                .filter(|(_, delta)| !delta.is_zero())
                 .collect::<Vec<_>>();
             let dense_bytes = byte_length(deltas.len(), CURVE_BYTES)?;
             let sparse_values_bytes = byte_length(changed.len(), CURVE_BYTES + size_of::<u32>())?;
@@ -886,11 +931,7 @@ impl VariableAtlasBuilder {
         advances: impl IntoIterator<Item = f32>,
     ) -> Result<(), SlugError> {
         let advances = advances.into_iter().collect::<Vec<_>>();
-        let glyph = self
-            .atlas
-            .glyphs
-            .get(glyph_index as usize)
-            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))?;
+        let glyph = self.atlas.glyph(glyph_index)?;
         let expected = glyph.source_count as usize;
         if advances.len() != expected {
             return Err(SlugError::VariableAdvanceCountMismatch {
@@ -905,11 +946,9 @@ impl VariableAtlasBuilder {
                 source_index,
             });
         }
-        let start = glyph.source_start as usize;
-        let end = start.checked_add(expected).or_overflow()?;
         self.atlas
             .source_advances
-            .get_mut(start..end)
+            .get_mut(glyph.source_range()?)
             .or_overflow()?
             .copy_from_slice(&advances);
         Ok(())
@@ -960,11 +999,7 @@ impl VariableAtlasBuilder {
     }
 
     pub(crate) fn glyph(&self, glyph_index: u32) -> Result<VariableGlyph, SlugError> {
-        self.atlas
-            .glyphs
-            .get(glyph_index as usize)
-            .copied()
-            .ok_or(SlugError::GlyphIndexOutOfRange(glyph_index))
+        self.atlas.glyph(glyph_index)
     }
 
     pub fn finish(self) -> VariableAtlas {
@@ -1165,62 +1200,6 @@ fn append_line_flags(words: &mut Vec<u32>, curve_start: usize, line_flags: &[boo
     }
 }
 
-fn variable_bounds<'a>(curves: impl IntoIterator<Item = &'a Curve>) -> Bounds {
-    let mut curves = curves.into_iter().copied();
-    let Some(first) = curves.next() else {
-        return Bounds::default();
-    };
-    let mut bounds = first.bounds();
-    for curve in curves {
-        let curve_bounds = curve.bounds();
-        bounds.min_x = bounds.min_x.min(curve_bounds.min_x);
-        bounds.min_y = bounds.min_y.min(curve_bounds.min_y);
-        bounds.max_x = bounds.max_x.max(curve_bounds.max_x);
-        bounds.max_y = bounds.max_y.max(curve_bounds.max_y);
-    }
-    bounds
-}
-
-fn curve_is_zero(curve: Curve) -> bool {
-    [
-        curve.p0.x, curve.p0.y, curve.p1.x, curve.p1.y, curve.p2.x, curve.p2.y,
-    ]
-    .into_iter()
-    .all(|value| value == 0.0)
-}
-
-fn subtract_curve(source: Curve, base: Curve) -> Curve {
-    Curve {
-        p0: subtract_point(source.p0, base.p0),
-        p1: subtract_point(source.p1, base.p1),
-        p2: subtract_point(source.p2, base.p2),
-    }
-}
-
-fn subtract_point(source: Point, base: Point) -> Point {
-    Point::new(source.x - base.x, source.y - base.y)
-}
-
-fn scale_curve(curve: Curve, scale: f32) -> Curve {
-    Curve {
-        p0: Point::new(curve.p0.x * scale, curve.p0.y * scale),
-        p1: Point::new(curve.p1.x * scale, curve.p1.y * scale),
-        p2: Point::new(curve.p2.x * scale, curve.p2.y * scale),
-    }
-}
-
-fn add_scaled_curve(base: Curve, delta: Curve, weight: f32) -> Curve {
-    Curve {
-        p0: add_scaled_point(base.p0, delta.p0, weight),
-        p1: add_scaled_point(base.p1, delta.p1, weight),
-        p2: add_scaled_point(base.p2, delta.p2, weight),
-    }
-}
-
-fn add_scaled_point(base: Point, delta: Point, weight: f32) -> Point {
-    Point::new(base.x + delta.x * weight, base.y + delta.y * weight)
-}
-
 fn next_section(
     previous: Section,
     count: usize,
@@ -1253,14 +1232,4 @@ fn dense_delta_offset(offset: u32) -> Result<u32, SlugError> {
 
 fn tagged_sparse_offset(offset: usize) -> Result<u32, SlugError> {
     Ok(SPARSE_SOURCE_FLAG | within(to_u32(offset)?, SOURCE_OFFSET_MASK)?)
-}
-
-fn sparse_descriptor_start(source: VariableSource) -> Option<usize> {
-    (source.delta_start != BASE_SOURCE_DELTA && source.delta_start & SPARSE_SOURCE_FLAG != 0)
-        .then_some((source.delta_start & SOURCE_OFFSET_MASK) as usize)
-}
-
-fn component_glyph_index(glyph: VariableGlyph) -> Option<usize> {
-    (glyph.source_start & COMPONENT_GLYPH_FLAG != 0)
-        .then_some((glyph.source_start & GLYPH_OFFSET_MASK) as usize)
 }
