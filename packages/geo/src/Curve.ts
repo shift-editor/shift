@@ -31,9 +31,7 @@ import { Vec2 } from "./Vec2";
 import { fitCubic } from "./fitCubic";
 import { fitQuadratic } from "./fitQuadratic";
 
-// ============================================
 // Types
-// ============================================
 
 /**
  * A straight line between two points.
@@ -82,9 +80,7 @@ export interface ClosestPoint {
   distance: number;
 }
 
-// ============================================
 // Constants
-// ============================================
 
 const CURVE_SUBDIVISIONS = 32;
 const NEWTON_TOLERANCE = 1e-6;
@@ -92,17 +88,13 @@ const NEWTON_MAX_ITERATIONS = 8;
 const RECT_INTERSECTION_TOLERANCE = 1e-3;
 const RECT_INTERSECTION_MAX_DEPTH = 32;
 
-// ============================================
 // Curve Namespace
-// ============================================
 
 export const Curve = {
   fitCubic,
   fitQuadratic,
 
-  // ============================================
   // Construction
-  // ============================================
 
   line(p0: Point2D, p1: Point2D): LineCurve {
     return { type: "line", p0, p1 };
@@ -116,9 +108,7 @@ export const Curve = {
     return { type: "cubic", p0, c0, c1, p1 };
   },
 
-  // ============================================
   // Evaluation
-  // ============================================
 
   /**
    * Get point on curve at parameter t (0 to 1).

@@ -1,4 +1,9 @@
-import type { CursorType, ToolRegistryItem } from "../../types/editor";
+import type {
+  CursorType,
+  ToolRegistryItem,
+  TemporaryToolOptions,
+  ToolStateScope,
+} from "../../types/editor";
 import {
   isAnchorId,
   isContourId,
@@ -85,7 +90,6 @@ import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSur
 import type { EditorRenderTheme } from "./rendering/Theme";
 import type { CameraTransform } from "./managers";
 import type { DebugOverlays } from "../../types/uiState";
-import type { TemporaryToolOptions } from "../../types/editor";
 import { Editing } from "./Editing";
 import { Selection } from "./Selection";
 import { EditorHistory } from "./history/EditorHistory";
@@ -99,7 +103,6 @@ import { Text } from "../text/Text";
 import { TextEditing } from "../text/TextEditing";
 
 import type { ToolManifest, ToolShortcutEntry } from "../../types/tools";
-import type { ToolStateScope } from "../../types/editor";
 import { EventEmitter } from "./lifecycle";
 
 import { ShiftStore } from "../store/ShiftStore";

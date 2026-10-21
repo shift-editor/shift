@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computed, type Signal } from "@shift/editor/signals";
-import { keyedCache } from "@shift/editor/signals";
+import { computed, type Signal, keyedCache } from "@shift/editor/signals";
 
 interface Input {
   readonly id: string;

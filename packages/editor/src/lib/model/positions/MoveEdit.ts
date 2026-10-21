@@ -12,11 +12,11 @@ import type {
   PositionSnapProvider,
   PositionTargets,
 } from "../../../types/positionEdit";
-import { DirectionSnap } from "./DirectionSnap";
+import type { DirectionSnap } from "./DirectionSnap";
 import type { MovementAxis } from "./MovementAxis";
 import { PointRuleConstraint } from "./PointRuleConstraint";
 import { PositionEditGroup } from "./PositionEditGroup";
-import { PositionReference } from "./PositionReference";
+import type { PositionReference } from "./PositionReference";
 import { nearerAxisSnap, settleSnap } from "./SnapSet";
 
 /** Preview-backed movement configured with operation-specific fluent modifiers. */

@@ -3,13 +3,15 @@ import { Vec2 } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { AngleSnap } from "@shift/editor/model";
-import { DirectionSnap } from "@shift/editor/model";
-import { MetricSnap } from "@shift/editor/model";
-import { PointAlignmentSnap } from "@shift/editor/model";
-import { SnapSet } from "@shift/editor/model";
-import { PointRuleConstraint } from "@shift/editor/model";
-import { PositionReference } from "@shift/editor/model";
+import {
+  AngleSnap,
+  DirectionSnap,
+  MetricSnap,
+  PointAlignmentSnap,
+  SnapSet,
+  PointRuleConstraint,
+  PositionReference,
+} from "@shift/editor/model";
 
 // These tests exercise the model surface directly; SelectMove.test.ts covers its tool integration.
 describe("fluent position edits preserve one frozen interaction base", () => {

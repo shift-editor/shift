@@ -4,8 +4,11 @@
  * Enforces architecture rules that can't be expressed with built-in oxlint
  * rules or no-restricted-syntax selectors.
  *
- * Registered via jsPlugins in apps/desktop/.oxlintrc.json.
+ * Registered via jsPlugins in the root .oxlintrc.json, which every package extends.
  */
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 /** Files where raw .pointType checks are expected (validation implementation). */
 const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/", "packages/rules/"];
@@ -49,6 +52,20 @@ const GLYPH_SNAPSHOT_ALLOWED = [
   "renderer/src/workspace/runtime.ts",
   "testing/",
 ];
+
+let brandHelperNames = null;
+
+/** Branded id types that `@shift/types` mints with an `as<Brand>` helper. */
+function brandsWithHelpers() {
+  if (brandHelperNames) return brandHelperNames;
+
+  const idsPath = fileURLToPath(new URL("../../packages/types/src/ids.ts", import.meta.url));
+  const source = readFileSync(idsPath, "utf8");
+  brandHelperNames = new Set(
+    Array.from(source.matchAll(/export function as([A-Z]\w*Id)\b/g), (match) => match[1]),
+  );
+  return brandHelperNames;
+}
 
 function isAllowedFile(filename, allowList) {
   // oxlint may pass relative or absolute paths
@@ -506,87 +523,6 @@ export default {
     },
 
     /**
-     * Prefer instance methods on the Glyph / Contour domain classes over the
-     * static namespaces from @shift/glyph-state when the receiver is a class instance.
-     *
-     * Swaps:
-     *   Glyphs.findPoint(glyph, id)     → glyph.point(id)
-     *   Glyphs.findPoints(glyph, ids)   → glyph.points(ids)
-     *   Glyphs.findContour(glyph, id)   → glyph.contour(id)
-     *   Glyphs.getAllPoints(glyph)      → glyph.allPoints
-     *   Glyphs.points(glyph)            → iterate glyph.allPoints (or glyph.segments())
-     *   Contours.withNeighbors(contour) → contour.withNeighbors()
-     *   Contours.canClose(c, pos, r)    → c.canClose(pos, r)
-     *
-     * Static calls are still correct when operating on plain snapshots (e.g.
-     * drag handlers reading from a GlyphSnapshot), so the allowlist covers
-     * bridge/commands/behaviors that work with snapshot data.
-     */
-    "prefer-instance-method-on-glyph": {
-      meta: {
-        type: "suggestion",
-        messages: {
-          useInstance:
-            "`{{callee}}` operates on Glyph/Contour domain instances. Call the instance method instead: {{suggestion}}.",
-        },
-        schema: [],
-      },
-      create(context) {
-        const filename = context.getFilename();
-
-        const PREFER_INSTANCE_ALLOWED = [
-          "lib/model/", // domain classes delegate to these internally
-          "packages/glyph-state/", // implementation
-          "bridge/", // operates on GlyphSnapshot, not class instances
-          "commands/", // undo/redo snapshots
-          "behaviors/", // drag handlers read base snapshots
-          "testing/",
-        ];
-
-        if (isAllowedFile(filename, PREFER_INSTANCE_ALLOWED)) return {};
-        if (filename.includes(".test.")) return {};
-
-        const SWAPS = {
-          Glyphs: {
-            findPoint: "glyph.point(id)",
-            findPoints: "glyph.points(ids)",
-            findContour: "glyph.contour(id)",
-            getAllPoints: "glyph.allPoints",
-            getPointAt: "glyph.getPointAt(pos, radius)",
-            points: "iterate glyph.allPoints / glyph.segments()",
-          },
-          Contours: {
-            withNeighbors: "contour.withNeighbors()",
-            canClose: "contour.canClose(pos, radius)",
-          },
-        };
-
-        return {
-          CallExpression(node) {
-            const callee = node.callee;
-            if (!callee || callee.type !== "MemberExpression") return;
-            const obj = callee.object;
-            const prop = callee.property;
-            if (!obj || obj.type !== "Identifier") return;
-            if (!prop || prop.type !== "Identifier") return;
-
-            const swaps = SWAPS[obj.name];
-            if (!swaps) return;
-
-            const suggestion = swaps[prop.name];
-            if (!suggestion) return;
-
-            context.report({
-              node: callee,
-              messageId: "useInstance",
-              data: { callee: `${obj.name}.${prop.name}`, suggestion },
-            });
-          },
-        };
-      },
-    },
-
-    /**
      * Ban raw segment parsing in app code.
      *
      * `Segment.parse(points, closed)` and `parseContourSegments({...})` are
@@ -749,15 +685,15 @@ export default {
     /**
      * Ban raw .pointType checks in app code.
      *
-     * Use Validate.isOnCurve(point) / Validate.isOffCurve(point) from
-     * @shift/validation instead of point.pointType === "onCurve".
+     * Use Point.isOnCurve(point) / Point.isOffCurve(point) from
+     * @shift/glyph-state instead of point.pointType === "onCurve".
      */
     "no-raw-point-type-check": {
       meta: {
         type: "suggestion",
         messages: {
           useValidate:
-            "Use Validate.isOnCurve(point) / Validate.isOffCurve(point) from @shift/validation instead of raw .pointType checks.",
+            "Use Point.isOnCurve(point) / Point.isOffCurve(point) from @shift/glyph-state instead of raw .pointType checks.",
         },
         schema: [],
       },
@@ -1357,6 +1293,83 @@ export default {
             ) {
               context.report({ node, messageId: "noStubGlobal" });
             }
+          },
+        };
+      },
+    },
+    /**
+     * Ban the hand-written `((i % n) + n) % n` wrap.
+     *
+     * Cyclic indexing has one helper, `wrapIndex(index, length)` from
+     * `@shift/geo`, so the rule reads as what it means at the call site.
+     */
+    "no-manual-index-wrap": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useWrapIndex:
+            "Use wrapIndex(index, length) from @shift/geo instead of writing the cyclic wrap by hand.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (filename.endsWith("packages/geo/src/wrapIndex.ts")) return {};
+        if (filename.includes(".test.") || filename.includes("/testing/")) return {};
+
+        const source = context.sourceCode ?? context.getSourceCode();
+        const text = (node) => source.getText(node).replace(/\s+/g, "");
+
+        return {
+          BinaryExpression(node) {
+            if (node.operator !== "%") return;
+
+            const sum = node.left;
+            if (sum.type !== "BinaryExpression" || sum.operator !== "+") return;
+
+            const remainder = sum.left;
+            if (remainder.type !== "BinaryExpression" || remainder.operator !== "%") return;
+
+            const length = text(node.right);
+            if (text(remainder.right) !== length || text(sum.right) !== length) return;
+
+            context.report({ node, messageId: "useWrapIndex" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban `as <Brand>` casts for ids that have an `as<Brand>` helper.
+     *
+     * `@shift/types` exports `asPointId`, `asGlyphId`, … next to each branded
+     * id. A bare cast skips the one place a brand is minted, so call the helper.
+     * The brand list is read from `packages/types/src/ids.ts`.
+     */
+    "brand-cast-via-helper": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useBrandHelper:
+            "Use as{{brand}}(value) from @shift/types instead of casting to {{brand}}.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (filename.endsWith("packages/types/src/ids.ts")) return {};
+        if (filename.includes(".test.") || filename.includes("/testing/")) return {};
+
+        return {
+          TSAsExpression(node) {
+            const type = node.typeAnnotation;
+            if (!type || type.type !== "TSTypeReference") return;
+            if (!type.typeName || type.typeName.type !== "Identifier") return;
+
+            const brand = type.typeName.name;
+            if (!brandsWithHelpers().has(brand)) return;
+
+            context.report({ node, messageId: "useBrandHelper", data: { brand } });
           },
         };
       },

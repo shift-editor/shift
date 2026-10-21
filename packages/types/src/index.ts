@@ -234,6 +234,10 @@ export type {
 } from "./bridge";
 
 // Numeric layouts generated from Rust; run `pnpm generate:from-rust` to refresh.
+// Their constant names follow the Rust layouts, so the barrel re-exports them whole.
+// oxlint-disable-next-line eslint-js/no-restricted-syntax -- generated layout constants
 export * from "./layout/glyphValues";
+// oxlint-disable-next-line eslint-js/no-restricted-syntax -- generated layout constants
 export * from "./layout/sourceMetrics";
+// oxlint-disable-next-line eslint-js/no-restricted-syntax -- generated layout constants
 export * from "./layout/slugAtlas";

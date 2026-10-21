@@ -6,19 +6,19 @@ type Props = { children: ReactNode };
 type State = { error: Error | null; componentStack?: string };
 
 export class DocumentErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     const componentStack = info.componentStack ?? undefined;
     reportRendererError("DocumentErrorBoundary", error, componentStack);
     this.setState({ componentStack });
   }
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <DocumentErrorScreen error={this.state.error} componentStack={this.state.componentStack} />

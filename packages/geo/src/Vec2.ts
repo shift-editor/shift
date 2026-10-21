@@ -32,9 +32,7 @@ import type { Point2D, PointAxis } from "./types";
 const EPSILON = 1e-10;
 
 export const Vec2 = {
-  // ============================================
   // Construction
-  // ============================================
 
   /**
    * Create a new vector
@@ -89,9 +87,7 @@ export const Vec2 = {
     return { x: v.x, y: v.y };
   },
 
-  // ============================================
   // Basic Operations
-  // ============================================
 
   /**
    * Returns a copy with one coordinate replaced.
@@ -147,9 +143,7 @@ export const Vec2 = {
     return { x: a.x / b.x, y: a.y / b.y };
   },
 
-  // ============================================
   // Products
-  // ============================================
 
   /**
    * Dot product: a · b
@@ -170,9 +164,7 @@ export const Vec2 = {
     return a.x * b.y - a.y * b.x;
   },
 
-  // ============================================
   // Length & Distance
-  // ============================================
 
   /**
    * Length (magnitude) of a vector
@@ -211,9 +203,7 @@ export const Vec2 = {
     return Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
   },
 
-  // ============================================
   // Normalization
-  // ============================================
 
   /**
    * Normalize a vector to unit length.
@@ -259,9 +249,7 @@ export const Vec2 = {
     return { x: v.x, y: v.y };
   },
 
-  // ============================================
   // Interpolation
-  // ============================================
 
   /**
    * Linear interpolation between two points: a + t * (b - a)
@@ -284,9 +272,7 @@ export const Vec2 = {
     };
   },
 
-  // ============================================
   // Geometric Operations
-  // ============================================
 
   /**
    * Mirror a point across an anchor point.
@@ -348,9 +334,7 @@ export const Vec2 = {
     return { x: v.y, y: -v.x };
   },
 
-  // ============================================
   // Rotation & Angles
-  // ============================================
 
   /**
    * Get the angle of a vector from the positive X axis (in radians).
@@ -401,9 +385,7 @@ export const Vec2 = {
     };
   },
 
-  // ============================================
   // Predicates & Comparisons
-  // ============================================
 
   /**
    * Check if two vectors are approximately equal.
@@ -440,9 +422,7 @@ export const Vec2 = {
     return Vec2.dist(a, b) < radius;
   },
 
-  // ============================================
   // Utility
-  // ============================================
 
   /**
    * Component-wise minimum of two vectors.

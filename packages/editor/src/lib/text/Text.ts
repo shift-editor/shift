@@ -10,9 +10,9 @@ import type { TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
-  TextLayout,
   glyphIdForItem,
   type TextItem,
+  type TextLayout,
 } from "./layout";
 import { RunText, type ShapedText } from "./RunText";
 import { TextShaper } from "./TextShaper";

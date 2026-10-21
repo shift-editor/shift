@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { Point } from "@shift/glyph-state";
-import type { PointId } from "@shift/types";
-import type { GlyphName } from "@shift/types";
+import type { PointId, GlyphName } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("GlyphLayer point movement", () => {

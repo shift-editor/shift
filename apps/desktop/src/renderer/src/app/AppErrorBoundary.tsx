@@ -9,13 +9,13 @@ type Props = { children: ReactNode };
 type State = { error: Error | null; componentStack?: string };
 
 export class AppErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     const componentStack = info.componentStack ?? undefined;
     reportRendererError("AppErrorBoundary", error, componentStack);
     this.setState({ componentStack });
@@ -29,7 +29,7 @@ export class AppErrorBoundary extends Component<Props, State> {
     }
   }
 
-  render() {
+  override render() {
     if (!this.state.error) return this.props.children;
 
     return (

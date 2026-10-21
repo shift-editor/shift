@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { BaseTool } from "@shift/editor/tools";
-import type { ToolEvent } from "@shift/editor/tools";
+import type { ToolEvent, ToolName, Behavior } from "@shift/editor/tools";
 import { makeTestCoordinates, TestEditor } from "@/testing";
-import type { ToolName } from "@shift/editor/tools";
-import type { Behavior } from "@shift/editor/tools";
 import { signal, type Signal } from "@shift/editor/signals";
 import type { CursorType } from "@shift/editor/types";
 

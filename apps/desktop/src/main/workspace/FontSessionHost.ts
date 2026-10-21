@@ -1,9 +1,9 @@
 import { BrowserWindow } from "electron";
-import { DocumentClient } from "../document/DocumentClient";
+import type { DocumentClient } from "../document/DocumentClient";
 import { DocumentSession } from "../document/DocumentSession";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { Window } from "../windows/Window";
-import { WorkspaceProcess } from "./WorkspaceProcess";
+import type { WorkspaceProcess } from "./WorkspaceProcess";
 
 /** Stable identity for one live font session. */
 export type FontSessionId = string;

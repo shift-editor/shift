@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import { Ellipse } from "@shift/editor/tools";
-import { Rectangle } from "@shift/editor/tools";
+import { Ellipse, Rectangle } from "@shift/editor/tools";
 import { Bounds, Mat, Rect } from "@shift/geo";
 import { ContourPath } from "@shift/editor/testing";
 

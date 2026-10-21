@@ -15,4 +15,5 @@ import { embeddedModule } from "./embedded";
 /** The instantiated module's exports, including its memory. */
 export const wasm: InitOutput = initSync({ module: embeddedModule(moduleBase64) });
 
+// oxlint-disable-next-line eslint-js/no-restricted-syntax -- wasm-bindgen output; its exports change with the Rust crate
 export * from "./generated/shift_wasm.js";

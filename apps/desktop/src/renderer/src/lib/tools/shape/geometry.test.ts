@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Curve, Rect } from "@shift/geo";
-import { Ellipse } from "@shift/editor/tools";
-import { Rectangle } from "@shift/editor/tools";
+import { Ellipse, Rectangle } from "@shift/editor/tools";
 import { parseContourSegments } from "@shift/glyph-state";
 
 const bounds = Rect.fromPoints({ x: 10, y: 20 }, { x: 210, y: 120 });

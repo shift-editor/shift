@@ -8,8 +8,7 @@
  */
 import { signal } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
-import { TextLayout } from "@shift/editor/testing";
-import { literalRun } from "@shift/editor/testing";
+import { TextLayout, literalRun } from "@shift/editor/testing";
 import type { ParagraphItem, SegmentedRun, TextItem } from "@shift/editor/text";
 
 const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [

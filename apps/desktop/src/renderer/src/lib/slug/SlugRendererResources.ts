@@ -9,7 +9,7 @@ import {
   SLUG_RENDER_PARAMS_BYTES,
   SLUG_VARIABLE_PARAMS_BYTES,
 } from "@shift/types";
-import { SlugAtlas } from "./SlugAtlas";
+import type { SlugAtlas } from "./SlugAtlas";
 import variableShader from "../../../../../../../crates/shift-slug/shaders/slug-variable.wgsl?raw";
 
 const BAND_BYTES = 8;

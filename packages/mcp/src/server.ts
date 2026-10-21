@@ -148,7 +148,7 @@ export class ShiftMcpServer {
     this.#lastRequestAt = now;
     const clientName = initializeClientName(body);
     if (clientName) this.#clients.set(clientName, now);
-    this.#onActivity?.(this.activity);
+    if (this.#onActivity) this.#onActivity(this.activity);
   }
 
   #createProtocolServer(): McpServer {

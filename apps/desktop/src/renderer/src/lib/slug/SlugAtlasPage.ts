@@ -1,6 +1,7 @@
 import type { GlyphId } from "@shift/types";
-import { SlugAtlas } from "./SlugAtlas";
-import { SlugRendererBuffers, SlugRendererPipelines } from "./SlugRendererResources";
+import type { SlugAtlas } from "./SlugAtlas";
+import type { SlugRendererPipelines } from "./SlugRendererResources";
+import { SlugRendererBuffers } from "./SlugRendererResources";
 
 /** One independently compiled and replaceable root-glyph batch. */
 export class SlugAtlasPage {

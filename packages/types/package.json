@@ -15,7 +15,9 @@
   },
   "scripts": {
     "generate:bridge-types": "node ../../scripts/generate-bridge-types.mjs",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "lint": "oxlint --fix src/",
+    "lint:check": "oxlint --deny-warnings src/"
   },
   "devDependencies": {
     "@shift/tsconfig": "workspace:*",

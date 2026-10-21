@@ -90,6 +90,7 @@ This project uses **pnpm** (v11) as its package manager.
 - `pnpm format:files <paths...>` - Format only the specified files with Oxfmt
 - `pnpm lint` - Lint code with Oxlint (auto-fix)
 - `pnpm lint:check` - Lint code without auto-fix
+- Every package's `.oxlintrc.json` extends the root `.oxlintrc.json`, which loads the `shift` plugin and the shared rules; a package config adds only its own rules
 - `pnpm typecheck` - Type check with tsgo
 - `cargo fmt` - Format Rust code (run after any Rust changes)
 - `cargo clippy` - Lint Rust code (run after any Rust changes)
@@ -141,7 +142,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 ### Package vs App Code
 
 - Geometry utilities (Vec2, Curve, Polygon) → import from `@shift/geo`
-- Glyph-domain geometry (contour traversal, segment parsing, tight/x bounds) → import from `@shift/font`
+- Glyph-domain geometry (contour traversal, segment parsing, tight/x bounds) → import from `@shift/glyph-state`
 - Core types (Point2D, Rect2D, PointId, ContourId) → import from `@shift/types`
 - NEVER duplicate package code in app layer
 - If you need functionality from a package, import it; don't copy it
@@ -167,10 +168,10 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ### Generated and domain types
 
-- **Generated types** (from Rust via ts-rs) live ONLY in `packages/types/src/generated/`. Run `cargo test --package shift-core` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
+- **Generated types** live ONLY in `packages/types/src/bridge/generated.ts`, generated from shift-bridge's NAPI declarations. Run `pnpm generate:bridge-types` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
 - **Generated layouts** (glyph value, source metric, and Slug atlas offsets and strides) live in `packages/types/src/layout/` and are exported from `@shift/types`. Rust tests in `shift-font` and `shift-slug` render them and fail when the checked-in copy is stale; run `pnpm generate:from-rust` after changing a Rust layout. Never hard-code these offsets in TypeScript.
 - **WebAssembly call layouts** are declared in `crates/shift-wasm` and generated into `packages/editor/src/lib/wasm/generated/layouts.ts` by the same command. Never hand-pack a `Float64Array` for a `@shift/wasm` call.
-- **Domain types** (e.g. `Point`, `Contour`, `Glyph`) live in `packages/types/src/domain.ts`. They MUST derive from generated types (e.g. `Readonly<PointSnapshot>`, `Omit` + composition). See `domain.ts`: same field names, no re-declaration of structure.
+- **Domain types** derived from generated shapes (definitions before an id is assigned, resolved metrics) live in `packages/types/src/domain.ts` and MUST derive from generated types (`Pick`, `Omit`, composition): same field names, no re-declaration of structure. The glyph model classes (`Point`, `Contour`, `Segment`, `Component`) live in `@shift/glyph-state`, and `Glyph` and `Font` in `packages/editor/src/lib/model/`.
 - **App layer**: NEVER re-declare types that exist in `@shift/types`. Import `FontMetadata`, `FontMetrics`, snapshot types, etc. from `@shift/types`. If you need a narrowed or immutable view, define it in `packages/types` (e.g. domain.ts) as a type derived from the generated type, not as a new interface in the app.
 - Bridge and native layer are typed with `@shift/types`; engine and UI use those types and the same field names (e.g. `familyName` in the UI, not `family`).
 

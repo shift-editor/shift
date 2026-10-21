@@ -68,9 +68,10 @@ import {
   type QuadraticCurve,
 } from "@shift/geo";
 import {
-  Anchor,
-  Component,
-  Contour,
+  type Anchor,
+  type Component,
+  type Contour,
+  type Segment,
   GlyphGeometry,
   IdIndex,
   decomposedTransformValues,
@@ -79,7 +80,6 @@ import {
   type GeometryPointHit,
   type GeometrySegmentHit,
   type GlyphHit,
-  Segment,
   type GlyphPosition as GlyphLayerPosition,
   type GlyphPositions as GlyphLayerPositions,
   type GlyphPositionTarget as GlyphLayerPositionTarget,
@@ -106,7 +106,7 @@ import type { Sidebearing } from "../../types/spacing";
 import { GlyphTransformEdit, type GlyphTransformOptions } from "./GlyphTransformEdit";
 import { DeletePoints } from "./DeletePoints";
 import { JoinContours, type ContourEnd } from "./JoinContours";
-import { GlyphLayerState } from "./GlyphLayerState";
+import type { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers, LayerChangeToken } from "./LayerBuffers";
 import { LayerIntents } from "../workspace/LayerIntents";
