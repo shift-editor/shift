@@ -1,11 +1,5 @@
 import type { ToolDipKeyframe } from "../types/toolbar";
 
-/** Duration of the tools' opacity transition while the pointer moves. */
-export const TOOL_FADE_MS = 120;
-
-/** Opacity the tools hold while the target slot would turn the bar on release. */
-export const TOOL_FLOOR_OPACITY = 0.4;
-
 /**
  * Opacity the tools reach at the midpoint of a turn. Low enough to quiet the
  * icons while they swing, but not hidden: the tools keep their order across a
@@ -24,16 +18,12 @@ export const TOOL_TURN_DIM = { from: 0.2, to: 0.5, restoredBy: 0.9 } as const;
 /**
  * Keyframes that dim the tools over the early part of a turn.
  *
- * @param fromOpacity - Opacity the tools had when the turn began.
  * @param timeAtProgress - Fraction of the turn's duration at which the turn has
  *   covered a given share of its distance (see `springEasing`).
  */
-export function toolDipKeyframes(
-  fromOpacity: number,
-  timeAtProgress: (progress: number) => number,
-): ToolDipKeyframe[] {
+export function toolDipKeyframes(timeAtProgress: (progress: number) => number): ToolDipKeyframe[] {
   return [
-    { opacity: fromOpacity, offset: 0 },
+    { opacity: 1, offset: 0 },
     { opacity: TOOL_TURN_OPACITY, offset: timeAtProgress(TOOL_TURN_DIM.from) },
     { opacity: TOOL_TURN_OPACITY, offset: timeAtProgress(TOOL_TURN_DIM.to) },
     { opacity: 1, offset: timeAtProgress(TOOL_TURN_DIM.restoredBy) },

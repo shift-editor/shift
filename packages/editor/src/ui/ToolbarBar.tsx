@@ -20,7 +20,7 @@ import { springEasing, type Spring, type SpringEasing } from "./springEasing";
 import { ToolsPane, type ToolsPaneSide } from "./ToolsPane";
 import { centreOf } from "./toolbarGeometry";
 import { poseAngle } from "./toolbarPose";
-import { TOOL_FADE_MS, toolDipKeyframes } from "./toolbarPresence";
+import { toolDipKeyframes } from "./toolbarPresence";
 
 /** Each slot is a strip along its edge that centres the bar with flex. */
 export const SLOT_FRAME: Record<ToolbarDock, string> = {
@@ -87,8 +87,6 @@ export interface ToolbarBarProps {
   followStyle: CSSProperties;
   dragging: boolean;
   lift: ToolbarLift;
-  /** Opacity of the tools while the bar is not turning. */
-  toolOpacity: number;
   onGripPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }
 
@@ -110,27 +108,24 @@ export function ToolbarBar({
   followStyle,
   dragging,
   lift,
-  toolOpacity,
   onGripPointerDown,
 }: ToolbarBarProps) {
   const vertical = pose === "stand";
   const barRef = useRef<HTMLDivElement>(null);
   const gripRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
-  const toolOpacityRef = useRef(toolOpacity);
   const placeRef = useRef<ToolbarBarPlace | null>(null);
   const animationsRef = useRef<Animation[]>([]);
   const placeKey = `${slot ?? "free"}:${pose}`;
   const dipRef = useRef<Animation | null>(null);
 
-  async function dipTools(fromOpacity: number, turning: SpringEasing) {
+  async function dipTools(turning: SpringEasing) {
     const tools = toolsRef.current;
     if (!tools) return;
 
     dipRef.current?.cancel();
-    tools.style.transitionProperty = "none";
     tools.inert = true;
-    const dip = tools.animate(toolDipKeyframes(fromOpacity, turning.timeAtProgress), {
+    const dip = tools.animate(toolDipKeyframes(turning.timeAtProgress), {
       duration: turning.duration,
       easing: "linear",
     });
@@ -146,15 +141,12 @@ export function ToolbarBar({
     if (dipRef.current !== dip) return;
 
     dipRef.current = null;
-    tools.style.transitionProperty = "";
     tools.inert = false;
   }
 
   useLayoutEffect(() => {
     const bar = barRef.current;
     const grip = gripRef.current;
-    const fromOpacity = toolOpacityRef.current;
-    toolOpacityRef.current = toolOpacity;
     if (!bar || !grip) return;
 
     const last = placeRef.current;
@@ -191,7 +183,7 @@ export function ToolbarBar({
         { duration: turning.duration, easing: turning.easing },
       ),
     ];
-    if (last.pose !== pose) void dipTools(fromOpacity, turning);
+    if (last.pose !== pose) void dipTools(turning);
   });
 
   const grip = (
@@ -219,11 +211,7 @@ export function ToolbarBar({
     />
   );
   const tools = (
-    <div
-      ref={toolsRef}
-      style={{ opacity: toolOpacity, transitionDuration: `${TOOL_FADE_MS}ms` }}
-      className="flex min-w-0 transition-opacity ease-out"
-    >
+    <div ref={toolsRef} className="flex min-w-0">
       <BarTools
         editor={editor}
         orientation={vertical ? "vertical" : "horizontal"}

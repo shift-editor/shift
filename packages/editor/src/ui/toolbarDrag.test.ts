@@ -3,7 +3,6 @@ import type { Point2D } from "@shift/geo";
 import type { ToolbarDock, ToolbarDragState, ToolbarFrame } from "../types/toolbar";
 import { TOOLBAR_INSET } from "./toolbarGeometry";
 import { TOOLBAR_DOCKS, poseForDock } from "./toolbarPose";
-import { TOOL_FLOOR_OPACITY } from "./toolbarPresence";
 import {
   DOUBLE_PRESS_MS,
   REGION_MARGIN,
@@ -13,7 +12,6 @@ import {
   startToolbarDrag,
   toolbarBarOrigin,
   toolbarLift,
-  toolbarToolOpacity,
 } from "./toolbarDrag";
 
 const FRAME: ToolbarFrame = { width: 1000, height: 700 };
@@ -524,39 +522,6 @@ describe("a short frame keeps the bar flat", () => {
     const wasTall: ToolbarDragState = { ...start, tether: null, target: "left" };
 
     expect(dragTo(wasTall, { x: 50, y: 200 }, frame).target).toBe("bottom");
-  });
-
-  it("never dims the tools, since nothing would turn the bar", () => {
-    expect(toolbarToolOpacity(dragTo(start, { x: 50, y: 100 }, frame))).toBe(1);
-  });
-});
-
-describe("the tools dim while the target would turn the bar", () => {
-  const start = startFrom("bottom");
-
-  it("are fully visible while the bar is docked", () => {
-    expect(toolbarToolOpacity(null)).toBe(1);
-  });
-
-  it("are fully visible when the drag begins", () => {
-    expect(toolbarToolOpacity(start)).toBe(1);
-  });
-
-  it("stay fully visible while heading for a slot that only slides the bar", () => {
-    expect(toolbarToolOpacity(dragTo(start, { x: 500, y: 50 }))).toBe(1);
-  });
-
-  it("dim while a side slot is the target, and recover when it no longer is", () => {
-    const onLeft = dragTo(start, { x: 400, y: 350 });
-
-    expect(toolbarToolOpacity(onLeft)).toBe(TOOL_FLOOR_OPACITY);
-    expect(toolbarToolOpacity(dragTo(onLeft, { x: 500, y: 650 }))).toBe(1);
-  });
-
-  it("stay fully visible moving between the two sides of a standing bar", () => {
-    const side = startFrom("left");
-
-    expect(toolbarToolOpacity(dragTo(side, { x: 900, y: 500 }))).toBe(1);
   });
 });
 

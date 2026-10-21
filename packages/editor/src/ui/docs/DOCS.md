@@ -26,10 +26,10 @@ ui/
 ├── ToolsPane.tsx         — the tool buttons and their menus, in either orientation
 ├── useToolbarDrag.ts     — pointer tracking and the guards that always end a drag
 ├── useToolbarMetrics.ts  — measured canvas and bar size
-├── toolbarDrag.ts        — drag state transitions: tether, region steering, lift, tools opacity
+├── toolbarDrag.ts        — drag state transitions: tether, region steering, lift
 ├── toolbarPose.ts        — dock to pose, which docks fit, the shown dock
 ├── toolbarGeometry.ts    — dock regions, centre square halves and handle clamping
-├── toolbarPresence.ts    — tools opacity constants and the turn's dip keyframes
+├── toolbarPresence.ts    — the turn's tools dip keyframes
 └── springEasing.ts       — a spring baked into a CSS `linear()` easing
 ```
 
@@ -40,7 +40,7 @@ ui/
 
 ## How it works
 
-A drag starts tethered: the bar stays in its slot until the pointer has moved `TEAR_DISTANCE` (half the bar's thickness), then follows the pointer with the handle clamped inside the frame. The rest of the bar may overflow, and the panel clips it. The bar lifts for the whole drag. Once it is loose, a thin accent line runs along the target edge with a dashed outline where the bar will sit, and the tools dim while that target would turn the bar.
+A drag starts tethered: the bar stays in its slot until the pointer has moved `TEAR_DISTANCE` (half the bar's thickness), then follows the pointer with the handle clamped inside the frame. The rest of the bar may overflow, and the panel clips it. The bar lifts for the whole drag. Once it is loose, a thin accent line runs along the target edge with a dashed outline where the bar will sit. The tools stay fully visible for the whole drag: dimming them as the bar neared a target added noise without telling the user anything the edge line and outline do not. They dip only through the turn itself, on release.
 
 On release `useToolbarDrag` calls `onDock(releasedDock(…))`: the drag's target, or the opposite edge (`oppositeDock`) when this is the second press within `DOUBLE_PRESS_MS` that never tore the bar loose. Presses are paired in the hook rather than with `dblclick`, because the cover laid over the window on the first press takes the second click. `ToolbarBar` sees the new slot and pose, lays itself out in the new place at once, and animates a slide and a turn from where it was drawn, with the tools dipping through the turn.
 
