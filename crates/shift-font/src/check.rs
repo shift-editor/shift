@@ -28,9 +28,27 @@ pub use outline::OutlineThresholds;
 pub struct CheckOptions {
     /// Characters every master must map and draw.
     pub charset: Option<Charset>,
-    /// Checks the font as monospaced; the cell width is the given advance, or
-    /// each master's most common advance when `Some(None)`.
-    pub monospace: Option<Option<f64>>,
+    /// Checks the font as monospaced against this cell width.
+    pub monospace: Option<MonospaceCell>,
+}
+
+/// The width a monospace check expects every advance to have.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MonospaceCell {
+    /// One width for every master.
+    Width(f64),
+    /// Each master's most common advance.
+    MostCommonAdvance,
+}
+
+impl MonospaceCell {
+    /// The fixed width, when one was given.
+    pub fn width(self) -> Option<f64> {
+        match self {
+            Self::Width(width) => Some(width),
+            Self::MostCommonAdvance => None,
+        }
+    }
 }
 
 /// How much a finding matters.
@@ -258,8 +276,8 @@ impl Font {
         if let Some(charset) = &options.charset {
             findings.extend(coverage::charset(self, charset));
         }
-        if let Some(width) = options.monospace {
-            findings.extend(coverage::monospace(self, width));
+        if let Some(cell) = options.monospace {
+            findings.extend(coverage::monospace(self, cell));
         }
         Ok(findings)
     }

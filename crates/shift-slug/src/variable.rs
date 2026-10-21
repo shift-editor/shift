@@ -1140,8 +1140,8 @@ where
     }
 
     fn pad_to(&mut self, target: usize) -> Result<(), SlugError> {
-        let padding = target.checked_sub(self.position()).or_overflow()?;
         const ZEROS: [u8; 256] = [0; 256];
+        let padding = target.checked_sub(self.position()).or_overflow()?;
         let mut remaining = padding;
         while remaining != 0 {
             let count = remaining.min(ZEROS.len());

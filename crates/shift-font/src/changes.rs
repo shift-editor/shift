@@ -252,7 +252,6 @@ impl FontChange {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
-            Self::LibValue { .. } => FontChangeImpact::empty(),
             Self::Axes(_) => {
                 FontChangeImpact::AXES
                     | FontChangeImpact::SOURCES
@@ -275,12 +274,12 @@ impl FontChange {
                     | FontChangeImpact::SOURCE_METRICS
                     | FontChangeImpact::KERNING
             }
-            Self::Glyph(_) => FontChangeImpact::GLYPHS,
-            Self::Layer {
+            Self::Glyph(_)
+            | Self::Layer {
                 structural: true, ..
             } => FontChangeImpact::GLYPHS,
-            Self::Layer { .. } => FontChangeImpact::empty(),
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
+            Self::LibValue { .. } | Self::Layer { .. } => FontChangeImpact::empty(),
         }
     }
 

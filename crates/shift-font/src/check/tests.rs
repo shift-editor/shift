@@ -4,7 +4,7 @@ use crate::{
     KerningPosition, KerningSide, PointType, SourceId,
 };
 
-use super::{Charset, Check, CheckOptions};
+use super::{Charset, Check, CheckOptions, MonospaceCell};
 
 fn checks(font: &Font) -> Vec<Check> {
     font.check()
@@ -245,7 +245,7 @@ fn a_required_character_the_font_lacks_is_reported_only_when_asked() {
 fn a_glyph_off_the_monospace_cell_is_reported() {
     let font = sample_variable_font();
     let options = CheckOptions {
-        monospace: Some(Some(500.0)),
+        monospace: Some(MonospaceCell::Width(500.0)),
         ..CheckOptions::default()
     };
 

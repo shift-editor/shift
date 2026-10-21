@@ -519,14 +519,16 @@ impl<'a> StoreWriter<'a> {
     }
 
     /// Every id stored in `table`, as the id type the caller compares against.
-    fn table_ids<Id>(&self, table: &str) -> Result<HashSet<Id>, StoreError>
+    fn table_ids<Id>(&self, table: &str) -> Result<Vec<Id>, StoreError>
     where
-        Id: rusqlite::types::FromSql + Eq + std::hash::Hash,
+        Id: rusqlite::types::FromSql,
     {
-        let mut statement = self.tx.prepare(&format!("SELECT id FROM {table}"))?;
+        let mut statement = self
+            .tx
+            .prepare(&format!("SELECT id FROM {table} ORDER BY id"))?;
         let ids = statement
             .query_map([], |row| row.get::<_, Id>(0))?
-            .collect::<Result<HashSet<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(ids)
     }
 

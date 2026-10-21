@@ -654,7 +654,7 @@ unitsPerEm = 1000;
                 .unwrap()
                 .index
         };
-        let (bar, smart) = (glyph("bar"), glyph("_smart.dash"));
+        let [bar, smart] = [glyph("bar"), glyph("_smart.dash")];
         font.glyph(smart).unwrap_err();
 
         let page = compile_page(&font, &[bar, smart]).unwrap();

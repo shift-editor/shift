@@ -1,7 +1,7 @@
 use crate::Require;
 use crate::{
-    Anchor, AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer,
-    Point, PointId, PointType, Transform, boolean,
+    AnchorId, BooleanOp, ComponentId, Contour, ContourId, DecomposedTransform, GlyphLayer, Point,
+    PointId, PointType, Transform, boolean,
     error::{CoreError, CoreResult},
 };
 use std::collections::{HashMap, HashSet};
@@ -182,10 +182,6 @@ impl GlyphLayer {
             .ok_or(CoreError::PointInContourNotFound(point_id))
     }
 
-    fn require_anchor_mut(&mut self, anchor_id: &AnchorId) -> CoreResult<&mut Anchor> {
-        self.anchor_mut(anchor_id).require(&anchor_id)
-    }
-
     fn require_point_contours(
         &self,
         point_ids: &[PointId],
@@ -223,7 +219,7 @@ impl GlyphLayer {
 
         let point_id = remaining
             .into_iter()
-            .next()
+            .min()
             .expect("unmatched point remains");
         Err(CoreError::PointInContourNotFound(point_id))
     }
@@ -232,10 +228,13 @@ impl GlyphLayer {
         &self,
         updates: &HashMap<AnchorId, NodePosition>,
     ) -> CoreResult<()> {
-        for anchor_id in updates.keys() {
-            if self.anchor(anchor_id).is_none() {
-                return Err(CoreError::AnchorNotFound(anchor_id.clone()));
-            }
+        // The smallest missing id, so the error is the same on every run.
+        let missing = updates
+            .keys()
+            .filter(|anchor_id| self.anchor(anchor_id).is_none())
+            .min();
+        if let Some(anchor_id) = missing {
+            return Err(CoreError::AnchorNotFound(anchor_id.clone()));
         }
         Ok(())
     }
@@ -260,7 +259,7 @@ impl GlyphLayer {
             }
         }
 
-        if let Some(point_id) = remaining.into_iter().next() {
+        if let Some(point_id) = remaining.into_iter().min() {
             Err(CoreError::PointNotFound(point_id))
         } else {
             Ok(())
@@ -289,22 +288,19 @@ impl GlyphLayer {
             }
         }
 
-        if let Some(point_id) = remaining.into_iter().next() {
+        if let Some(point_id) = remaining.into_iter().min() {
             Err(CoreError::PointNotFound(point_id))
         } else {
             Ok(())
         }
     }
 
-    fn set_anchor_positions_validated(
-        &mut self,
-        updates: &HashMap<AnchorId, NodePosition>,
-    ) -> CoreResult<()> {
-        for (anchor_id, position) in updates {
-            self.require_anchor_mut(anchor_id)?
-                .set_position(position.x, position.y);
+    fn set_anchor_positions_validated(&mut self, updates: &HashMap<AnchorId, NodePosition>) {
+        for anchor in self.anchors_iter_mut() {
+            if let Some(position) = updates.get(&anchor.id()) {
+                anchor.set_position(position.x, position.y);
+            }
         }
-        Ok(())
     }
 
     fn bulk_node_position_updates(
@@ -321,7 +317,8 @@ impl GlyphLayer {
         self.require_anchor_positions(&groups.anchors)?;
 
         self.set_point_positions_validated(&groups.points)?;
-        self.set_anchor_positions_validated(&groups.anchors)
+        self.set_anchor_positions_validated(&groups.anchors);
+        Ok(())
     }
 }
 
@@ -810,6 +807,28 @@ mod tests {
             Err(CoreError::PointInContourNotFound(id)) if id == missing_id
         ));
         assert_eq!(point_position(&session, &contour_id, &point_id), (0.0, 0.0));
+    }
+
+    #[test]
+    fn unknown_anchors_report_the_same_id_every_time() {
+        let mut session = create_session();
+        let anchor_id = add_anchor(&mut session, 0.0, 0.0);
+        let unknown = (0..8).map(|_| AnchorId::new()).collect::<Vec<_>>();
+        let anchor_ids = std::iter::once(anchor_id.clone())
+            .chain(unknown.iter().cloned())
+            .collect::<Vec<_>>();
+        let anchor_coords = vec![5.0; anchor_ids.len() * 2];
+
+        let result = session.apply_bulk_node_positions(BulkNodePositionUpdates {
+            point_ids: None,
+            point_coords: None,
+            anchor_ids: Some(&anchor_ids),
+            anchor_coords: Some(&anchor_coords),
+        });
+
+        let smallest = unknown.iter().min().unwrap();
+        assert!(matches!(result, Err(CoreError::AnchorNotFound(id)) if id == *smallest));
+        assert_eq!(anchor_position(&session, &anchor_id), (0.0, 0.0));
     }
 
     #[test]

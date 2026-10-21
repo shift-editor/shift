@@ -148,6 +148,10 @@ impl FontLoader {
     }
 
     /// Opens a retained random-access source without constructing an authored Font.
+    #[allow(
+        clippy::unused_self,
+        reason = "a loader method beside load; retained sources need no adaptor yet"
+    )]
     pub fn open_source(&self, path: &Path) -> Result<OpenedFont, FontReadError> {
         let format = FontFormat::of_path(path).ok_or_else(|| FontReadError::UnsupportedFormat {
             path: path.to_path_buf(),

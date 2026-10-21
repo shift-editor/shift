@@ -1,6 +1,7 @@
 use crate::error::{OrMissing, StoreEntity};
 use std::collections::{BTreeMap, HashMap};
 
+use rusqlite::OptionalExtension;
 use shift_font as font;
 
 use crate::{
@@ -117,12 +118,11 @@ fn load_default_source_id(
         ",
     )?;
 
-    match stmt.query_row([], |row| row.get::<_, Option<String>>(0)) {
-        Ok(Some(source_id)) => Ok(Some(font::SourceId::from_raw(source_id))),
-        Ok(None) => Ok(None),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(err) => Err(err.into()),
-    }
+    let source_id = stmt
+        .query_row([], |row| row.get::<_, Option<String>>(0))
+        .optional()?
+        .flatten();
+    Ok(source_id.map(font::SourceId::from_raw))
 }
 
 fn load_feature_data(conn: &rusqlite::Connection) -> Result<font::FeatureData, StoreError> {

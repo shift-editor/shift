@@ -57,9 +57,9 @@ impl UfoReader {
 
     fn convert_point_type(typ: norad::PointType) -> PointType {
         match typ {
-            norad::PointType::Move => PointType::OnCurve,
-            norad::PointType::Line => PointType::OnCurve,
-            norad::PointType::Curve => PointType::OnCurve,
+            norad::PointType::Move | norad::PointType::Line | norad::PointType::Curve => {
+                PointType::OnCurve
+            }
             norad::PointType::QCurve => PointType::QCurve,
             norad::PointType::OffCurve => PointType::OffCurve,
         }

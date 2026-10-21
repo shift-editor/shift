@@ -2154,8 +2154,8 @@ fn set_languages(workspace: &mut FontWorkspace, language_ids: &[&str]) {
         .unwrap();
 }
 
-fn language_ids(ids: &[&str]) -> Option<Vec<String>> {
-    Some(ids.iter().map(ToString::to_string).collect())
+fn language_ids(ids: &[&str]) -> Vec<String> {
+    ids.iter().map(ToString::to_string).collect()
 }
 
 #[test]
@@ -2171,18 +2171,18 @@ fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
     );
     assert_eq!(
         workspace.font().language_ids(),
-        language_ids(&["eng-latin", "cmn-chinese"])
+        Some(language_ids(&["eng-latin", "cmn-chinese"]))
     );
     drop(workspace);
 
     let mut workspace = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(
         workspace.font().language_ids(),
-        language_ids(&["eng-latin", "cmn-chinese"])
+        Some(language_ids(&["eng-latin", "cmn-chinese"]))
     );
 
     set_languages(&mut workspace, &[]);
-    assert_eq!(workspace.font().language_ids(), language_ids(&[]));
+    assert_eq!(workspace.font().language_ids(), Some(language_ids(&[])));
 
     let undone = workspace.undo().unwrap().expect("setLanguages should undo");
     assert!(undone.changes.changes.iter().any(|change| matches!(
@@ -2191,15 +2191,15 @@ fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
     )));
     assert_eq!(
         workspace.font().language_ids(),
-        language_ids(&["eng-latin", "cmn-chinese"])
+        Some(language_ids(&["eng-latin", "cmn-chinese"]))
     );
 
     workspace.redo().unwrap().expect("setLanguages should redo");
-    assert_eq!(workspace.font().language_ids(), language_ids(&[]));
+    assert_eq!(workspace.font().language_ids(), Some(language_ids(&[])));
     drop(workspace);
 
     let workspace = FontWorkspace::resume(&store_path).unwrap();
-    assert_eq!(workspace.font().language_ids(), language_ids(&[]));
+    assert_eq!(workspace.font().language_ids(), Some(language_ids(&[])));
 }
 
 #[test]
@@ -2232,7 +2232,7 @@ fn tracked_languages_survive_document_recovery_and_save() {
     assert!(recovered.is_dirty().unwrap());
     assert_eq!(
         recovered.font().language_ids(),
-        language_ids(&["eng-latin", "fra-latin"])
+        Some(language_ids(&["eng-latin", "fra-latin"]))
     );
 
     recovered.save().unwrap();
@@ -2244,7 +2244,7 @@ fn tracked_languages_survive_document_recovery_and_save() {
         .unwrap();
     assert_eq!(
         saved.language_ids(),
-        language_ids(&["eng-latin", "fra-latin"])
+        Some(language_ids(&["eng-latin", "fra-latin"]))
     );
 }
 

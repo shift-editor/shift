@@ -317,6 +317,10 @@ impl Coverage {
                 .push(character);
         }
 
+        #[allow(
+            clippy::iter_over_hash_type,
+            reason = "sorts each script's letters in place; scripts are independent"
+        )]
         for letters in coverage.letters_by_script.values_mut() {
             letters.sort_unstable();
         }

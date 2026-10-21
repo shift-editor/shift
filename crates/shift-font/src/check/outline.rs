@@ -215,7 +215,11 @@ impl Pair<'_> {
         let target = self.layer.contours_iter().collect::<Vec<_>>();
 
         let swaps = self.swapped_contours(&reference, &target);
-        let swapped = swaps.iter().flat_map(|&(i, j)| [i, j]).collect::<Vec<_>>();
+        let swapped = swaps
+            .iter()
+            .copied()
+            .flat_map(<[usize; 2]>::from)
+            .collect::<Vec<_>>();
         let order = swaps.iter().map(|&(i, j)| {
             self.finding(
                 Check::WrongContourOrder,

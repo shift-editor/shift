@@ -480,7 +480,9 @@ mod tests {
         let mut quads_checked = 0;
         for element in elements {
             match element {
-                PathElement::MoveTo { x, y } | PathElement::LineTo { x, y } => {
+                PathElement::MoveTo { x, y }
+                | PathElement::LineTo { x, y }
+                | PathElement::CurveTo { x, y, .. } => {
                     current = (x as f64, y as f64);
                 }
                 PathElement::QuadTo { cx0, cy0, x, y } => {
@@ -491,9 +493,6 @@ mod tests {
                     );
                     quads_checked += 1;
                     current = expected[2];
-                }
-                PathElement::CurveTo { x, y, .. } => {
-                    current = (x as f64, y as f64);
                 }
                 PathElement::Close => {}
             }

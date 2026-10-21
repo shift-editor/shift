@@ -192,8 +192,8 @@ fn source_metric_intents(
         name: source.name().to_string(),
         location: source.location().clone(),
         metric_values,
-        italic_angle: args.italic_angle.or(source.italic_angle()),
-        line_gap: args.line_gap.or(source.line_gap()),
+        italic_angle: args.italic_angle.or_else(|| source.italic_angle()),
+        line_gap: args.line_gap.or_else(|| source.line_gap()),
         underline_position: source.underline_position(),
         underline_thickness: source.underline_thickness(),
     }));
@@ -213,7 +213,7 @@ fn parse_version(version: &str) -> Result<(i32, i32)> {
     let (major, minor) = version
         .trim()
         .split_once('.')
-        .unwrap_or((version.trim(), "000"));
+        .unwrap_or_else(|| (version.trim(), "000"));
     let digits = |value: &str| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit());
     if !digits(major) || !digits(minor) || minor.len() != 3 {
         bail!("invalid --version {version:?}; use MAJOR or MAJOR.NNN, such as 1.000 or 2.125");

@@ -638,7 +638,7 @@ impl Location {
     /// Returns this location's value on `axis`, or the axis default when the
     /// location has none.
     pub fn value_on(&self, axis: &Axis) -> f64 {
-        self.get(&axis.id()).unwrap_or(axis.default())
+        self.get(&axis.id()).unwrap_or_else(|| axis.default())
     }
 
     pub fn set(&mut self, axis_id: AxisId, value: f64) {

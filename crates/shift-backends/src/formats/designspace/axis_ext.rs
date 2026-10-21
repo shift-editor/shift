@@ -114,8 +114,8 @@ impl DesignspaceAxisExt for Axis {
                 .as_ref()
                 .filter(|v| !v.is_empty())
                 .map(|values| {
-                    let min = values.iter().cloned().fold(f32::INFINITY, f32::min) as f64;
-                    let max = values.iter().cloned().fold(f32::NEG_INFINITY, f32::max) as f64;
+                    let min = values.iter().copied().fold(f32::INFINITY, f32::min) as f64;
+                    let max = values.iter().copied().fold(f32::NEG_INFINITY, f32::max) as f64;
                     (min, max)
                 })
         };

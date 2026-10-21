@@ -37,6 +37,23 @@ cast_possible_wrap = "warn"
 cast_sign_loss = "warn"
 too_many_lines = "warn"
 large_types_passed_by_value = "warn"
+# Iteration order must not depend on hashing: engine output is compared
+# bit for bit across runs and between native and WebAssembly.
+iter_over_hash_type = "warn"
+# Iterate once; don't collect only to iterate again.
+needless_collect = "warn"
+# A method that ignores `self` belongs on another type or nowhere.
+unused_self = "warn"
+match_same_arms = "warn"
+ref_option = "warn"
+option_option = "warn"
+cloned_instead_of_copied = "warn"
+or_fun_call = "warn"
+unnecessary_wraps = "warn"
+tuple_array_conversions = "warn"
+bool_to_int_with_if = "warn"
+items_after_statements = "warn"
+struct_excessive_bools = "warn"
 
 [workspace.package]
 license = "MIT OR Apache-2.0"

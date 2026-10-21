@@ -332,6 +332,10 @@ impl UfoWriter {
         Ok(())
     }
 
+    #[allow(
+        clippy::unused_self,
+        reason = "a writer method beside the FontWriter trait methods"
+    )]
     pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
         let norad_font = Self::build_norad_font(font)?;
         Self::write_atomic(&norad_font, Path::new(path))

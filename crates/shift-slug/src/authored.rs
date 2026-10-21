@@ -745,15 +745,15 @@ pub fn authored_glyph_requirements(projection: &GlyphProjection) -> AuthoredGlyp
     let exact_components = projection
         .exact_source_components()
         .iter()
-        .flat_map(|variant| variant.components().components())
-        .collect::<Vec<_>>();
+        .map(|variant| variant.components().components().len())
+        .sum::<usize>();
     let direct_fallback_components = projection.fallback().components().len();
 
     AuthoredGlyphRequirements {
         component_occurrences: default_components
             .len()
             .max(direct_fallback_components)
-            .saturating_add(exact_components.len()),
+            .saturating_add(exact_components),
         exact_source_shapes: projection.exact_source_shapes().len(),
         exact_component_variants: projection.exact_source_components().len(),
     }

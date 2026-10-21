@@ -31,6 +31,10 @@ pub(crate) struct ShowSkillArgs {
 }
 
 #[derive(Debug, Args)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each field is an independent command-line flag"
+)]
 pub(crate) struct InstallSkillArgs {
     /// Install into your home directory for every project, instead of the current directory.
     #[arg(short, long)]

@@ -120,7 +120,7 @@ fn stream_designspace(
     add_axes(&mut header, &document, &mut labels)?;
     header.set_axis_mappings(axis_mappings_from_designspace(&document, header.axes())?)?;
     let (instances, instance_loss) =
-        distinct_named_instances(named_instances_from_designspace(&document, header.axes())?);
+        distinct_named_instances(named_instances_from_designspace(&document, header.axes()));
     header.set_named_instances(instances)?;
 
     let source_order = std::iter::once(default_index)
