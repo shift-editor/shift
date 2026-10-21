@@ -12,8 +12,7 @@ const MAX_LIB_VALUES: usize = 1_000_000;
 
 pub(crate) fn encode_layer(layer: &font::GlyphLayer) -> Result<Vec<u8>, StoreError> {
     validate_layer(layer).map_err(StoreError::InvalidLayerPayload)?;
-    let bytes =
-        rmp_serde::to_vec(layer).map_err(|error| StoreError::LayerEncoding(error.to_string()))?;
+    let bytes = rmp_serde::to_vec(layer)?;
     check_layer_length(bytes.len() as u64)?;
     Ok(bytes)
 }
@@ -22,14 +21,10 @@ pub(crate) fn decode_layer(bytes: &[u8]) -> Result<font::GlyphLayer, StoreError>
     check_layer_length(bytes.len() as u64)?;
     let mut decoder = rmp_serde::Deserializer::new(Cursor::new(bytes));
     decoder.set_max_depth(MAX_NESTING_DEPTH);
-    let layer = font::GlyphLayer::deserialize(&mut decoder)
-        .map_err(|error| StoreError::LayerDecoding(error.to_string()))?;
-    let consumed = decoder.position() as usize;
+    let layer = font::GlyphLayer::deserialize(&mut decoder)?;
+    let consumed = usize::try_from(decoder.position())?;
     if consumed != bytes.len() {
-        return Err(StoreError::LayerDecoding(format!(
-            "payload has {} trailing bytes",
-            bytes.len() - consumed
-        )));
+        return Err(StoreError::TrailingLayerBytes(bytes.len() - consumed));
     }
     validate_layer(&layer).map_err(StoreError::InvalidLayerPayload)?;
     Ok(layer)
@@ -224,7 +219,7 @@ mod tests {
 
         let mut trailing = complete;
         trailing.push(0);
-        assert!(decode_layer(&trailing).is_err());
+        decode_layer(&trailing).unwrap_err();
     }
 
     #[test]
@@ -237,7 +232,7 @@ mod tests {
         bytes.push(0xc0);
         bytes.extend_from_slice(&[0xdd, 0xff, 0xff, 0xff, 0xff]);
 
-        assert!(decode_layer(&bytes).is_err());
+        decode_layer(&bytes).unwrap_err();
     }
 
     #[test]
@@ -258,9 +253,9 @@ mod tests {
         }
         layer.lib_mut().set("nested".into(), value);
 
-        assert!(encode_layer(&layer).is_err());
+        encode_layer(&layer).unwrap_err();
         let encoded = rmp_serde::to_vec(&layer).unwrap();
-        assert!(decode_layer(&encoded).is_err());
+        decode_layer(&encoded).unwrap_err();
     }
 
     #[test]
@@ -277,7 +272,7 @@ mod tests {
             font::LibData::new(),
         ))
         .unwrap();
-        assert!(decode_layer(&invalid_id).is_err());
+        decode_layer(&invalid_id).unwrap_err();
 
         let non_finite = rmp_serde::to_vec(&(
             "layer_test",

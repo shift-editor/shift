@@ -8,14 +8,21 @@
 // Library code returns errors instead of panicking: a panic kills the
 // WebAssembly engine. Tests may unwrap (clippy.toml).
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "GPU geometry runs natively and needs no cross-target bit equality"
+)]
 
 mod atlas;
 mod authored;
 mod curve;
 mod error;
+mod glyph_index;
 pub mod length;
+mod numeric;
 mod outline;
 mod pack;
+mod quadratic_outline;
 mod render;
 mod resident;
 pub mod retained;
@@ -33,8 +40,10 @@ pub use authored::{
 };
 pub use curve::{Bounds, CUBIC_APPROXIMATION_ACCURACY, Curve, LINE_EPSILON, Point};
 pub use error::SlugError;
+pub use glyph_index::GlyphIndex;
 pub use outline::OutlineCommand;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
+pub use quadratic_outline::{CurveShape, QuadraticOutline};
 pub use render::{
     RENDER_INSTANCE_BYTES, RENDER_PARAMS_BYTES, RenderInstance, RenderParams,
     pack_render_instances, pack_render_params,

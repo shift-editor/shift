@@ -31,6 +31,28 @@ where
     }
 }
 
+/// Implements [`Identified`] through each entity's own `id` method.
+macro_rules! identified_by_id {
+    ($($entity:ty => $id:ty,)*) => {
+        $(impl Identified for $entity {
+            type Id = $id;
+
+            fn id(&self) -> Self::Id {
+                <$entity>::id(self)
+            }
+        })*
+    };
+}
+
+identified_by_id! {
+    crate::Axis => crate::AxisId,
+    crate::AxisMapping => crate::AxisMappingId,
+    crate::MetricDefinition => crate::MetricId,
+    crate::NamedInstance => crate::NamedInstanceId,
+    crate::Source => crate::SourceId,
+    crate::GlyphLayer => crate::LayerId,
+}
+
 /// An identity-addressable sequence whose order is part of its value.
 ///
 /// Lookup uses an entity's stable ID, while iteration, equality, and

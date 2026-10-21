@@ -102,3 +102,27 @@ fn inspects_a_foreign_glyph_source_without_importing_a_shift_package_first() {
     assert_eq!(report["summary"]["directComponentCount"], 2);
     assert!(report["summary"]["resolvedContourCount"].as_u64().unwrap() > 0);
 }
+
+#[test]
+fn text_report_prints_numbers_with_at_most_four_decimals() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Variable.shift");
+    drop(ShiftStore::create_document(&path, &sample_variable_font()).unwrap());
+
+    let output = shift(&[
+        "glyph",
+        "inspect",
+        path.to_str().unwrap(),
+        "A",
+        "--location",
+        "wght=433.333333",
+        "--view",
+        "variation",
+    ]);
+
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("external    wght=433.3333\n"), "{text}");
+    assert!(text.contains("advance     611.1111\n"), "{text}");
+    assert!(text.contains(" 0.9444 "), "{text}");
+}

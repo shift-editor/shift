@@ -20,11 +20,11 @@ use std::sync::Arc;
 use crate::composite::ResolvedContour;
 use crate::{
     CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer,
-    InterpolationBasis, Point, PointId, SourceId, Transform,
+    InterpolationBasis, Point, SourceId, Transform,
 };
 
 use super::FontProjection;
-use crate::placed_blend::{ContourShape, mirrors, placed_point_index, shapes_match};
+use crate::placed_blend::{ContourShape, placed_point_index};
 
 /// A glyph's flattened outline split by where each contour comes from: the
 /// glyph's own contours first, then one part per component occurrence in
@@ -94,7 +94,7 @@ impl FontProjection<'_> {
         let own = layer
             .contours_iter()
             .map(|contour| ResolvedContour {
-                points: contour.points().iter().map(fresh_point).collect(),
+                points: contour.points().iter().map(Point::with_fresh_id).collect(),
                 closed: contour.is_closed(),
             })
             .collect::<Vec<_>>();
@@ -258,7 +258,7 @@ impl Font {
 
         let mut masters = source_ids.iter().cloned().collect::<HashSet<_>>();
         let mut visited = HashSet::from([glyph.id()]);
-        let mut pending = component_glyphs(glyph);
+        let mut pending = glyph.component_glyph_ids().collect::<Vec<_>>();
         while let Some(component_id) = pending.pop() {
             if !visited.insert(component_id.clone()) {
                 continue;
@@ -271,7 +271,7 @@ impl Font {
             {
                 masters.extend(component_interpolation.basis().source_ids().iter().cloned());
             }
-            pending.extend(component_glyphs(component));
+            pending.extend(component.component_glyph_ids());
         }
 
         let locations = self
@@ -284,7 +284,7 @@ impl Font {
             .map(|(source_id, _)| source_id.clone())
             .collect::<Vec<_>>();
         if let Some(basis) = interpolation_bases.get(&key) {
-            return Ok(Some(basis.clone()));
+            return Ok(Some(Arc::clone(basis)));
         }
         let Some(basis) = InterpolationBasis::from_source_locations(
             &locations,
@@ -294,25 +294,16 @@ impl Font {
             return Ok(None);
         };
         let basis = Arc::new(basis);
-        interpolation_bases.insert(key, basis.clone());
+        interpolation_bases.insert(key, Arc::clone(&basis));
         Ok(Some(basis))
     }
-}
-
-/// The glyphs a glyph's layers draw as components.
-fn component_glyphs(glyph: &Glyph) -> Vec<GlyphId> {
-    glyph
-        .layers()
-        .values()
-        .flat_map(|layer| layer.components_iter().map(crate::Component::base_glyph_id))
-        .collect()
 }
 
 fn same_structure(a: &OutlineParts, b: &OutlineParts) -> bool {
     a.len() == b.len()
         && a.iter()
             .zip(b)
-            .all(|(a, b)| shapes_match(&contour_shapes(a), &contour_shapes(b)))
+            .all(|(a, b)| contour_shapes(a) == contour_shapes(b))
 }
 
 fn contour_shapes(contours: &[ResolvedContour]) -> Vec<ContourShape> {
@@ -372,13 +363,7 @@ fn blend(outlines: &[OutlineParts], weights: &[f64]) -> Option<OutlineParts> {
                     let source = &outline[part][contour].points[index];
                     sum + *weight * source.position().to_vec2()
                 });
-        Point::new(
-            PointId::new(),
-            blended.x,
-            blended.y,
-            point.point_type(),
-            point.is_smooth(),
-        )
+        point.copied_to(blended.to_point())
     };
     let blended_contour = |part: usize, contour: usize, first: &ResolvedContour| ResolvedContour {
         points: first
@@ -405,16 +390,6 @@ fn blend(outlines: &[OutlineParts], weights: &[f64]) -> Option<OutlineParts> {
     )
 }
 
-fn fresh_point(point: &Point) -> Point {
-    Point::new(
-        PointId::new(),
-        point.x(),
-        point.y(),
-        point.point_type(),
-        point.is_smooth(),
-    )
-}
-
 /// How component contours are placed in a glyph's outline.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Placement {
@@ -435,17 +410,14 @@ fn placed(
         point_count: contour.points.len(),
         closed: contour.closed,
     };
-    let reversing = placement == Placement::Decomposed && mirrors(&transform);
+    let reversing = placement == Placement::Decomposed && transform.mirrors();
     let points = (0..shape.point_count)
         .filter_map(|index| {
             contour
                 .points
                 .get(placed_point_index(index, shape, reversing))
         })
-        .map(|point| {
-            let kurbo::Point { x, y } = transform.transform_point(point.position());
-            Point::new(PointId::new(), x, y, point.point_type(), point.is_smooth())
-        })
+        .map(|point| point.copied_to(transform.transform_point(point.position())))
         .collect();
     ResolvedContour {
         points,

@@ -7,9 +7,14 @@ pub struct NewWorkspace {
 
 impl Default for NewWorkspace {
     fn default() -> Self {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the default units per em is a whole number"
+        )]
+        let units_per_em = shift_font::FontMetrics::default().units_per_em as i64;
         Self {
             family_name: DEFAULT_FAMILY_NAME.to_string(),
-            units_per_em: shift_font::FontMetrics::default().units_per_em as i64,
+            units_per_em,
         }
     }
 }

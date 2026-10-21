@@ -47,6 +47,11 @@ enum ProjectionEvaluation<'a> {
 /// A root the source cannot project (for example a Glyphs smart-component
 /// glyph) compiles as an empty outline so it cannot fail the rest of the page;
 /// reading that glyph directly still reports the projection error.
+///
+/// # Errors
+///
+/// Returns [`SourceAtlasError::Read`] when a root is out of range or the font's axes cannot be
+/// read, and [`SourceAtlasError::Slug`] when the inputs outgrow the atlas limits.
 pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
     source: &S,
     roots: &[GlyphIndex],
@@ -331,9 +336,9 @@ fn atlas_region(
             return Err(invalid("source atlas region repeats an axis").into());
         }
         *axis = RegionAxis {
-            start: F2Dot14::from_f32(support.lower as f32).to_bits(),
-            peak: F2Dot14::from_f32(support.peak as f32).to_bits(),
-            end: F2Dot14::from_f32(support.upper as f32).to_bits(),
+            start: F2Dot14::from_f32(crate::numeric::lossy_f32(support.lower)).to_bits(),
+            peak: F2Dot14::from_f32(crate::numeric::lossy_f32(support.peak)).to_bits(),
+            end: F2Dot14::from_f32(crate::numeric::lossy_f32(support.upper)).to_bits(),
         };
     }
     Ok(AtlasRegion::new(axes))
@@ -405,17 +410,11 @@ fn flatten_shape(
     }
     cursor = cursor.checked_add(shape.anchors.len() * 2).or_overflow()?;
     for component in &shape.components {
-        let transform_values = values
+        let local = values
             .get(cursor..cursor + 6)
+            .and_then(|transform_values| transform_values.try_into().ok())
+            .map(AffineTransform::from_values)
             .ok_or_else(|| invalid("source atlas component transform is missing"))?;
-        let local = AffineTransform {
-            xx: transform_values[0],
-            xy: transform_values[1],
-            yx: transform_values[2],
-            yy: transform_values[3],
-            dx: transform_values[4],
-            dy: transform_values[5],
-        };
         let child = projections
             .get(&component.glyph)
             .ok_or_else(|| invalid("source atlas component projection is missing"))?;
@@ -451,8 +450,7 @@ fn selected_shape<'a>(
         .exact_shapes
         .iter()
         .find(|shape| shape.source == source)
-        .map(|shape| &shape.shape)
-        .unwrap_or(&projection.fallback)
+        .map_or(&projection.fallback, |shape| &shape.shape)
 }
 
 fn projection_values(
@@ -559,22 +557,12 @@ fn invalid(details: impl Into<String>) -> FontReadError {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use shift_font::test_support::fixtures;
 
     use super::*;
     use crate::font_source::{
         GlyphsFont, ProjectedGlyph, SourceAtlasPage, UfoFont, VariationCoordinate,
     };
-
-    fn fixture(path: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures/fonts")
-            .join(path)
-    }
 
     fn compile_page(
         font: &dyn FontSource,
@@ -589,7 +577,8 @@ mod tests {
 
     #[test]
     fn ufo_page_contains_resolvable_outline_geometry() {
-        let font = UfoFont::open(&fixture("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
+        let font =
+            UfoFont::open(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -669,8 +658,8 @@ unitsPerEm = 1000;
                 .unwrap()
                 .index
         };
-        let (bar, smart) = (glyph("bar"), glyph("_smart.dash"));
-        assert!(font.glyph(smart).is_err());
+        let [bar, smart] = [glyph("bar"), glyph("_smart.dash")];
+        font.glyph(smart).unwrap_err();
 
         let page = compile_page(&font, &[bar, smart]).unwrap();
         let weights = page
@@ -688,7 +677,7 @@ unitsPerEm = 1000;
 
     #[test]
     fn glyphs_page_flattens_component_closures() {
-        let font = GlyphsFont::open(&fixture("Homenaje.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("Homenaje.glyphs")).unwrap();
         let glyph = font
             .directory()
             .glyphs
@@ -714,13 +703,14 @@ unitsPerEm = 1000;
 
     #[test]
     fn every_drawable_glyphs_projection_has_default_atlas_curves() {
-        let font = GlyphsFont::open(&fixture("MutatorSansVariable.glyphs")).unwrap();
+        let font = GlyphsFont::open(&fixtures::font("MutatorSansVariable.glyphs")).unwrap();
         assert_default_atlas_coverage(&font);
     }
 
     #[test]
     fn every_drawable_ufo_projection_has_default_atlas_curves() {
-        let font = UfoFont::open(&fixture("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
+        let font =
+            UfoFont::open(&fixtures::font("mutatorsans/MutatorSansLightCondensed.ufo")).unwrap();
         assert_default_atlas_coverage(&font);
     }
 
@@ -775,8 +765,7 @@ unitsPerEm = 1000;
                     .find(|(root, exact_source, _)| {
                         root == glyph && *exact_source == source.index.to_u32()
                     })
-                    .map(|(_, _, glyph)| *glyph)
-                    .unwrap_or(*default_glyph);
+                    .map_or(*default_glyph, |(_, _, glyph)| *glyph);
                 let curves = page
                     .atlas()
                     .resolve_glyph_with_weights(atlas_glyph, &weights)
@@ -817,8 +806,7 @@ unitsPerEm = 1000;
                     .iter()
                     .find(|shape| shape.source == source)
             })
-            .map(|shape| &shape.shape)
-            .unwrap_or(&projection.fallback)
+            .map_or(&projection.fallback, |shape| &shape.shape)
     }
 
     fn shape_has_outline(
@@ -862,7 +850,7 @@ unitsPerEm = 1000;
             .enumerate()
             .map(|(axis_index, design_value)| {
                 let mut mapping = directory
-                    .independent_mapping(super::super::AxisIndex::new(axis_index as u32))
+                    .independent_mapping(super::super::AxisIndex::at(axis_index))
                     .map(|mapping| {
                         mapping
                             .points
@@ -875,7 +863,7 @@ unitsPerEm = 1000;
                     .unwrap_or_default();
                 mapping.sort_by(|left, right| left.0.total_cmp(&right.0));
                 VariationCoordinate {
-                    axis: super::super::AxisIndex::new(axis_index as u32),
+                    axis: super::super::AxisIndex::at(axis_index),
                     value: piecewise_map(*design_value, &mapping),
                 }
             })

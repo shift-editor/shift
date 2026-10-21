@@ -1,5 +1,6 @@
 //! Layer payload parsing and lowering to semantic replacement intents.
 
+use shift_font::ReplaceGlyphLayerContent;
 use std::io::{self, Read};
 use std::path::Path;
 
@@ -107,13 +108,14 @@ impl LayerInput {
             ));
         }
 
-        Ok(FontIntent::ReplaceGlyphLayerContent {
+        Ok(ReplaceGlyphLayerContent {
             layer_id,
             width: self.advance,
             contours,
             anchors,
             components,
-        })
+        }
+        .into())
     }
 }
 

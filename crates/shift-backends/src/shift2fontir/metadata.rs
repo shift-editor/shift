@@ -10,7 +10,7 @@ use fontir::ir::{
     PreliminaryGdefCategories, StaticMetadata,
 };
 use fontir::orchestration::{Context, WorkId};
-use shift_font::{MetricKind, Source};
+use shift_font::{Source, SourceList, StandardMetrics};
 use write_fonts::types::NameId;
 
 use super::axes::{normalized_source_location, to_ir_named_instances};
@@ -28,7 +28,7 @@ pub(super) struct StaticMetadataWork {
 }
 
 impl StaticMetadataWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }
@@ -74,7 +74,7 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
             to_ir_named_instances(&self.snapshot.named_instances, &self.snapshot.axes)
                 .map_err(|error| Error::InvalidEntry("Shift named instance", error.to_string()))?;
         let mut static_metadata = StaticMetadata::new(
-            self.snapshot.metrics.units_per_em as u16,
+            self.snapshot.units_per_em,
             names.build(DEFAULT_VENDOR_ID),
             self.snapshot.ir_axes.clone(),
             named_instances,
@@ -121,8 +121,7 @@ impl StaticMetadataWork {
     fn default_source(&self) -> Result<&Source, Error> {
         self.snapshot
             .sources
-            .iter()
-            .find(|source| source.id() == self.snapshot.default_source_id)
+            .source(&self.snapshot.default_source_id)
             .ok_or_else(|| {
                 Error::InvalidEntry(
                     "Shift default source",
@@ -191,7 +190,7 @@ pub(super) struct GlobalMetricsWork {
 }
 
 impl GlobalMetricsWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }
@@ -217,15 +216,20 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
             .filter(|source| source.is_master())
         {
             let location = normalized_source_location(source, &self.snapshot.axes, &axes)?;
-            let ascender = self.metric_position(source, MetricKind::Ascender);
-            let descender = self.metric_position(source, MetricKind::Descender);
-            let cap_height = self.metric_position(source, MetricKind::CapHeight);
-            let x_height = self.metric_position(source, MetricKind::XHeight);
+            let standard = StandardMetrics::of(source, &self.snapshot.metric_definitions);
 
-            metrics.set_if_some(GlobalMetric::Ascender, location.clone(), ascender);
-            metrics.set_if_some(GlobalMetric::Descender, location.clone(), descender);
-            metrics.set_if_some(GlobalMetric::CapHeight, location.clone(), cap_height);
-            metrics.set_if_some(GlobalMetric::XHeight, location.clone(), x_height);
+            metrics.set_if_some(GlobalMetric::Ascender, location.clone(), standard.ascender);
+            metrics.set_if_some(
+                GlobalMetric::Descender,
+                location.clone(),
+                standard.descender,
+            );
+            metrics.set_if_some(
+                GlobalMetric::CapHeight,
+                location.clone(),
+                standard.cap_height,
+            );
+            metrics.set_if_some(GlobalMetric::XHeight, location.clone(), standard.x_height);
             metrics.set_if_some(
                 GlobalMetric::HheaLineGap,
                 location.clone(),
@@ -249,28 +253,15 @@ impl Work<Context, WorkId, Error> for GlobalMetricsWork {
             metrics.populate_defaults(
                 &location,
                 metadata.units_per_em,
-                x_height,
-                ascender,
-                descender,
+                standard.x_height,
+                standard.ascender,
+                standard.descender,
                 source.italic_angle(),
             );
         }
 
         context.global_metrics.set(metrics.build(&metadata.axes)?);
         Ok(())
-    }
-}
-
-impl GlobalMetricsWork {
-    fn metric_position(&self, source: &Source, kind: MetricKind) -> Option<f64> {
-        let definition = self
-            .snapshot
-            .metric_definitions
-            .iter()
-            .find(|definition| definition.kind() == kind)?;
-        source
-            .metric_value(&definition.id())
-            .map(|value| value.position)
     }
 }
 
@@ -281,7 +272,7 @@ pub(super) struct FeatureWork {
 }
 
 impl FeatureWork {
-    pub fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
+    pub(super) fn new(snapshot: Arc<ShiftSnapshot>) -> Self {
         Self { snapshot }
     }
 }

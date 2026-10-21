@@ -1,24 +1,12 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "test and benchmark arithmetic on small known values"
+)]
+use shift_font::test_support::fixtures;
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
 use shift_font::{Anchor, Font, Glyph, GlyphLayer, LibValue, MetricKind};
-
-fn fixtures_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("fixtures")
-}
-
-fn mutatorsans_ufo_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans/MutatorSansLightCondensed.ufo")
-}
-
-fn mutatorsans_ttf_path() -> PathBuf {
-    fixtures_path().join("fonts/mutatorsans/MutatorSans.ttf")
-}
 
 fn load_font(path: &Path) -> Font {
     assert!(path.exists(), "missing font fixture at {}", path.display());
@@ -402,7 +390,7 @@ fn edited_ir_fields_win_over_preserved_fontinfo_on_save() {
 
 #[test]
 fn preserves_metadata_metrics_and_glyph_count() {
-    let original = load_font(&mutatorsans_ufo_path());
+    let original = load_font(&fixtures::mutatorsans_ufo());
     let reloaded = round_trip(&original);
 
     assert_eq!(reloaded.glyph_count(), original.glyph_count());
@@ -438,7 +426,7 @@ fn preserves_metadata_metrics_and_glyph_count() {
 
 #[test]
 fn preserves_contours_points_and_widths_for_default_geometry() {
-    let original = load_font(&mutatorsans_ufo_path());
+    let original = load_font(&fixtures::mutatorsans_ufo());
     let reloaded = round_trip(&original);
 
     for glyph_name in ["A", "O"] {
@@ -460,7 +448,7 @@ fn preserves_contours_points_and_widths_for_default_geometry() {
 
 #[test]
 fn preserves_components_anchors_layers_and_kerning() {
-    let mut original = load_font(&mutatorsans_ufo_path());
+    let mut original = load_font(&fixtures::mutatorsans_ufo());
     let e_layer_id = original
         .glyph_by_name("E")
         .expect("E glyph should exist")
@@ -527,7 +515,7 @@ fn preserves_components_anchors_layers_and_kerning() {
 
 #[test]
 fn ttf_import_saves_spec_valid_ufo_curves() {
-    let font = load_font(&mutatorsans_ttf_path());
+    let font = load_font(&fixtures::mutatorsans_ttf());
 
     let temp_dir = tempfile::tempdir().expect("tempdir should be created");
     let output_path = temp_dir.path().join("from-ttf.ufo");

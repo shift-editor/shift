@@ -2,6 +2,7 @@
 
 #![allow(clippy::unwrap_used, reason = "test fixtures fail loudly on bad input")]
 
+pub mod fixtures;
 pub mod generated;
 
 use crate::{
@@ -14,6 +15,27 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
+/// A closed contour of on-curve corner points, in order.
+///
+/// The [`contour!`](crate::contour) macro writes the same shape with integer
+/// or float coordinates.
+pub fn closed_contour(points: &[(f64, f64)]) -> Contour {
+    let mut contour = Contour::new();
+    for &(x, y) in points {
+        contour.add_point(x, y, PointType::OnCurve, false);
+    }
+    contour.close();
+    contour
+}
+
+/// A closed contour of on-curve points: `contour![(0, 0), (40, 0), (40, 700)]`.
+#[macro_export]
+macro_rules! contour {
+    ($(($x:expr, $y:expr)),+ $(,)?) => {
+        $crate::test_support::closed_contour(&[$((f64::from($x), f64::from($y))),+])
+    };
+}
+
 /// Builds a kitchen-sink font corpus for semantic round-trip tests.
 ///
 /// Checklist when adding a new `FontData` field: populate it here with a
@@ -21,6 +43,10 @@ use std::collections::BTreeMap;
 /// Ordered collections need multiple entries whose identity sort order differs
 /// from their authored order so deterministic serializers cannot reorder them
 /// unnoticed.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one corpus, populated field by field"
+)]
 pub fn sample_font() -> Font {
     let mut font = Font::empty();
     font.metadata_mut().family_name = Some("Dogfood Sans".to_string());

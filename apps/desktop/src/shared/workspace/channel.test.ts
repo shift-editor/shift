@@ -11,6 +11,7 @@ import {
 type TestCalls = {
   "math.add": { request: { a: number; b: number }; response: number };
   "math.explode": { request: void; response: number };
+  "file.missing": { request: void; response: number };
   "port.adopt": { request: void; response: number };
   "task.slow": { request: void; response: string };
 };
@@ -35,6 +36,11 @@ function createLane(): Lane {
       "math.add": ({ a, b }) => a + b,
       "math.explode": () => {
         throw new Error("workspace exploded");
+      },
+      "file.missing": () => {
+        const error = Object.assign(new Error("no such file"), { code: "ENOENT" });
+        error.name = "FileMissingError";
+        throw error;
       },
       "port.adopt": (_payload, context) => context.ports.length,
       "task.slow": () =>
@@ -67,6 +73,17 @@ describe("channel call/response over a real MessageChannel", () => {
     const { client } = createLane();
 
     await expect(client.call("math.explode", undefined)).rejects.toThrow("workspace exploded");
+  });
+
+  it("keeps the handler error's name, code and stack across the channel", async () => {
+    const { client } = createLane();
+
+    await expect(client.call("file.missing", undefined)).rejects.toMatchObject({
+      name: "FileMissingError",
+      message: "no such file",
+      code: "ENOENT",
+      stack: expect.stringContaining("no such file"),
+    });
   });
 
   it("rejects calls the server has no handler for", async () => {

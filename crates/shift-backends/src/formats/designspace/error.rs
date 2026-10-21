@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::errors::FormatBackendError;
 
-pub type DesignspaceResult<T> = Result<T, DesignspaceError>;
+pub(super) type DesignspaceResult<T> = Result<T, DesignspaceError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DesignspaceError {

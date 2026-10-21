@@ -1,3 +1,7 @@
+#![allow(
+    clippy::cast_possible_wrap,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::sync::Arc;
 
 use shift_font::{FontMetadata, test_support::sample_font};
@@ -304,13 +308,7 @@ fn glyph_edit_is_sparse() {
     let error = store
         .apply_change_set(&glyph_deleted(first).into())
         .unwrap_err();
-    assert!(matches!(
-        error,
-        shift_store::StoreError::Font(shift_font::CoreError::InvalidEntityOrder {
-            kind: "glyph",
-            ..
-        })
-    ));
+    assert!(matches!(error, shift_store::StoreError::GlyphNotAtTail(_)));
 
     let audit = rusqlite::Connection::open(&path).unwrap();
     let writes = audit
@@ -362,7 +360,7 @@ fn failed_change_set_rolls_back_all_entity_and_order_changes() {
         layer_created(shift_font::GlyphId::from_raw("missing"), &invalid_layer),
     ]));
 
-    assert!(result.is_err());
+    result.unwrap_err();
     assert_eq!(store.load_font_state().unwrap(), original);
 }
 
@@ -440,7 +438,7 @@ fn font_info_requires_positive_units_per_em() {
         ..empty_font_info()
     });
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -531,7 +529,7 @@ fn source_location_requires_existing_source_and_axis() {
         400.0,
     );
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -571,7 +569,7 @@ fn glyph_layer_requires_existing_glyph_and_source() {
         &layer,
     )]));
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -632,7 +630,7 @@ fn glyph_component_replacement_requires_existing_layer() {
 
     let result = store.replace_glyph_layer(&layer);
 
-    assert!(result.is_err());
+    result.unwrap_err();
 }
 
 #[test]
@@ -747,18 +745,17 @@ fn popping_glyph_cascades_layers() {
     let stored = store
         .get_glyph(&GlyphId::new(glyph_id.to_string()))
         .expect("glyph query should succeed");
-    let layers = store
+    let has_layers = store
         .list_glyph_layer_directory()
         .expect("layer query should succeed")
         .into_iter()
-        .filter(|entry| entry.glyph_id == glyph_id)
-        .collect::<Vec<_>>();
+        .any(|entry| entry.glyph_id == glyph_id);
     let unicodes = store
         .list_glyph_unicodes(&GlyphId::new(glyph_id.to_string()))
         .expect("unicode query should succeed");
 
     assert!(stored.is_none());
-    assert!(layers.is_empty());
+    assert!(!has_layers);
     assert!(unicodes.is_empty());
 }
 

@@ -167,7 +167,7 @@ fn invoked_command() -> Option<String> {
 /// # Errors
 ///
 /// Returns an error for an invalid `--command`.
-pub fn show_skill(args: &ShowSkillArgs) -> Result<String> {
+pub(crate) fn show_skill(args: &ShowSkillArgs) -> Result<String> {
     let identity = SkillIdentity::resolve(&args.identity)?;
     let path = match args.topic {
         SkillTopic::Overview => SKILL_FILE,
@@ -184,7 +184,7 @@ pub fn show_skill(args: &ShowSkillArgs) -> Result<String> {
 /// The state of one skill directory, compared with this command's skill.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub enum SkillState {
+pub(crate) enum SkillState {
     /// No skill directory of this name.
     Missing,
     /// Every file matches this command's skill.
@@ -201,7 +201,7 @@ pub enum SkillState {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SkillTargetReport {
+pub(crate) struct SkillTargetReport {
     pub path: PathBuf,
     pub state: SkillState,
     /// The Shift version that wrote this copy, when shift-cli installed it.
@@ -210,7 +210,7 @@ pub struct SkillTargetReport {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SkillReport {
+pub(crate) struct SkillReport {
     pub skill: String,
     pub command: String,
     pub version: String,
@@ -218,7 +218,7 @@ pub struct SkillReport {
 }
 
 impl SkillReport {
-    pub fn render(&self) -> String {
+    pub(crate) fn render(&self) -> String {
         let mut lines = vec![format!(
             "{} {} ({})",
             self.skill, self.version, self.command
@@ -250,7 +250,7 @@ impl SkillReport {
 ///
 /// Returns an error for an invalid `--command`, a missing home directory, or
 /// an unreadable skill directory.
-pub fn skill_status(args: &SkillStatusArgs) -> Result<SkillReport> {
+pub(crate) fn skill_status(args: &SkillStatusArgs) -> Result<SkillReport> {
     let identity = SkillIdentity::resolve(&args.identity)?;
     let files = identity.render();
     let targets = skill_directories(&identity, args.global, args.agent)?
@@ -270,7 +270,7 @@ pub fn skill_status(args: &SkillStatusArgs) -> Result<SkillReport> {
 ///
 /// Returns an error for an invalid `--command`, a missing home directory, a
 /// foreign skill without `--force`, or a filesystem failure.
-pub fn install_skill(args: &InstallSkillArgs) -> Result<SkillReport> {
+pub(crate) fn install_skill(args: &InstallSkillArgs) -> Result<SkillReport> {
     let identity = SkillIdentity::resolve(&args.identity)?;
     let files = identity.render();
     let targets = skill_directories(&identity, args.global, args.agent)?
