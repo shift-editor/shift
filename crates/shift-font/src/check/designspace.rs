@@ -8,22 +8,23 @@ use super::{Check, Finding};
 const SAME: f64 = 1e-6;
 
 pub(super) fn check(font: &Font) -> CoreResult<Vec<Finding>> {
-    let mut findings = Vec::new();
     if !font.is_variable() {
-        return Ok(findings);
+        return Ok(Vec::new());
     }
 
     let normalization = font.design_normalization()?;
     let masters = font.masters().collect::<Vec<_>>();
-    default_master(font, &normalization, &mut findings);
-    duplicate_locations(font, &masters, &mut findings);
-    outside_axes(font, &masters, &normalization, &mut findings);
-    beyond_masters(font, &masters, &normalization, &mut findings);
-    mappings(font, &mut findings);
+    let findings = default_master(font, &normalization)
+        .into_iter()
+        .chain(duplicate_locations(font, &masters))
+        .chain(outside_axes(font, &masters, &normalization))
+        .chain(beyond_masters(font, &masters, &normalization))
+        .chain(mappings(font))
+        .collect();
     Ok(findings)
 }
 
-fn default_master(font: &Font, normalization: &[DesignNormalization], out: &mut Vec<Finding>) {
+fn default_master(font: &Font, normalization: &[DesignNormalization]) -> Option<Finding> {
     let at_default = |source: &Source| {
         font.axes().iter().zip(normalization).all(|(axis, bounds)| {
             let value = source.location().get(&axis.id()).unwrap_or(bounds.default);
@@ -32,7 +33,7 @@ fn default_master(font: &Font, normalization: &[DesignNormalization], out: &mut 
     };
 
     if font.masters().any(at_default) {
-        return;
+        return None;
     }
 
     let defaults = font
@@ -42,23 +43,24 @@ fn default_master(font: &Font, normalization: &[DesignNormalization], out: &mut 
         .map(|(axis, bounds)| format!("{} {}", axis.tag(), number(bounds.default)))
         .collect::<Vec<_>>()
         .join(", ");
-    out.push(Finding::font(
+    Some(Finding::font(
         Check::NoDefaultMaster,
         format!("no master sits at the default location ({defaults})"),
-    ));
+    ))
 }
 
-fn duplicate_locations(font: &Font, masters: &[&Source], out: &mut Vec<Finding>) {
-    for (index, master) in masters.iter().enumerate() {
-        let Some(earlier) = masters[..index].iter().find(|earlier| {
+fn duplicate_locations<'a>(
+    font: &'a Font,
+    masters: &'a [&Source],
+) -> impl Iterator<Item = Finding> + 'a {
+    masters.iter().enumerate().filter_map(|(index, master)| {
+        let earlier = masters[..index].iter().find(|earlier| {
             earlier
                 .location()
                 .is_equivalent_to(master.location(), font.axes())
-        }) else {
-            continue;
-        };
+        })?;
 
-        out.push(
+        Some(
             Finding::font(
                 Check::DuplicateMasterLocation,
                 format!(
@@ -68,50 +70,50 @@ fn duplicate_locations(font: &Font, masters: &[&Source], out: &mut Vec<Finding>)
                 ),
             )
             .in_source(master.id()),
-        );
-    }
+        )
+    })
 }
 
-fn outside_axes(
-    font: &Font,
-    masters: &[&Source],
-    normalization: &[DesignNormalization],
-    out: &mut Vec<Finding>,
-) {
-    for master in masters {
-        for (axis, bounds) in font.axes().iter().zip(normalization) {
-            let Some(value) = master.location().get(&axis.id()) else {
-                continue;
-            };
-            if value >= bounds.minimum - SAME && value <= bounds.maximum + SAME {
-                continue;
-            }
+fn outside_axes<'a>(
+    font: &'a Font,
+    masters: &'a [&Source],
+    normalization: &'a [DesignNormalization],
+) -> impl Iterator<Item = Finding> + 'a {
+    masters.iter().flat_map(move |master| {
+        font.axes()
+            .iter()
+            .zip(normalization)
+            .filter_map(move |(axis, bounds)| {
+                let value = master.location().get(&axis.id())?;
+                if value >= bounds.minimum - SAME && value <= bounds.maximum + SAME {
+                    return None;
+                }
 
-            out.push(
-                Finding::font(
-                    Check::MasterOutsideAxis,
-                    format!(
-                        "master '{}' sits at {} {}, outside the axis ({} to {})",
-                        master.name(),
-                        axis.tag(),
-                        number(value),
-                        number(bounds.minimum),
-                        number(bounds.maximum)
-                    ),
+                Some(
+                    Finding::font(
+                        Check::MasterOutsideAxis,
+                        format!(
+                            "master '{}' sits at {} {}, outside the axis ({} to {})",
+                            master.name(),
+                            axis.tag(),
+                            number(value),
+                            number(bounds.minimum),
+                            number(bounds.maximum)
+                        ),
+                    )
+                    .in_source(master.id()),
                 )
-                .in_source(master.id()),
-            );
-        }
-    }
+            })
+    })
 }
 
-fn beyond_masters(
-    font: &Font,
-    masters: &[&Source],
-    normalization: &[DesignNormalization],
-    out: &mut Vec<Finding>,
-) {
-    for (axis, bounds) in font.axes().iter().zip(normalization) {
+fn beyond_masters<'a>(
+    font: &'a Font,
+    masters: &'a [&Source],
+    normalization: &'a [DesignNormalization],
+) -> impl Iterator<Item = Finding> + 'a {
+    let axes = font.axes().iter().zip(normalization);
+    axes.filter_map(|(axis, bounds)| {
         let values = masters
             .iter()
             .map(|master| master.location().get(&axis.id()).unwrap_or(bounds.default))
@@ -135,18 +137,18 @@ fn beyond_masters(
             ));
         }
         if ends.is_empty() {
-            continue;
+            return None;
         }
 
-        out.push(Finding::font(
+        Some(Finding::font(
             Check::AxisBeyondMasters,
             format!(
                 "no master on {} {}, so the font stops changing there",
                 axis.tag(),
                 ends.join(" or ")
             ),
-        ));
-    }
+        ))
+    })
 }
 
 /// Reports independent mappings whose output rises and falls, so two inputs
@@ -154,12 +156,12 @@ fn beyond_masters(
 ///
 /// A mapping that only ever falls is a deliberately reversed axis, not a
 /// mistake.
-fn mappings(font: &Font, out: &mut Vec<Finding>) {
-    for mapping in font.axis_mappings() {
-        if !mapping.is_independent() {
-            continue;
-        }
-
+fn mappings(font: &Font) -> impl Iterator<Item = Finding> + '_ {
+    let independent = font
+        .axis_mappings()
+        .iter()
+        .filter(|mapping| mapping.is_independent());
+    independent.filter_map(|mapping| {
         let axis_id = &mapping.inputs()[0];
         let mut points = mapping
             .points()
@@ -171,11 +173,11 @@ fn mappings(font: &Font, out: &mut Vec<Finding>) {
         let rises = points.windows(2).find(|pair| pair[1].1 > pair[0].1 + SAME);
         let falls = points.windows(2).find(|pair| pair[1].1 < pair[0].1 - SAME);
         let (Some(_), Some(fall)) = (rises, falls) else {
-            continue;
+            return None;
         };
 
         let tag = font.axis(axis_id).map_or("?", |axis| axis.tag());
-        out.push(Finding::font(
+        Some(Finding::font(
             Check::MappingNotMonotonic,
             format!(
                 "mapping '{}' turns back on {tag}: {} maps to {} but {} maps to {}",
@@ -185,8 +187,8 @@ fn mappings(font: &Font, out: &mut Vec<Finding>) {
                 number(fall[1].0),
                 number(fall[1].1)
             ),
-        ));
-    }
+        ))
+    })
 }
 
 /// Formats a coordinate without a trailing `.0`.

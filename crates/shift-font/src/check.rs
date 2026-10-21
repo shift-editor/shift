@@ -250,15 +250,15 @@ pub fn check_font_with(font: &Font, options: &CheckOptions) -> CoreResult<Vec<Fi
     let mut findings = designspace::check(font)?;
     let thresholds = OutlineThresholds::default();
     for glyph in font.glyphs() {
-        health::check(font, glyph, &mut findings);
+        findings.extend(health::check(font, glyph));
         findings.extend(outline::check(font, &glyph.id(), &thresholds)?);
     }
     findings.extend(kerning::check(font));
     if let Some(charset) = &options.charset {
-        coverage::charset(font, charset, &mut findings);
+        findings.extend(coverage::charset(font, charset));
     }
     if let Some(width) = options.monospace {
-        coverage::monospace(font, width, &mut findings);
+        findings.extend(coverage::monospace(font, width));
     }
     Ok(findings)
 }
@@ -273,8 +273,7 @@ pub fn check_font_with(font: &Font, options: &CheckOptions) -> CoreResult<Vec<Fi
 /// font, or an axis-mapping error when an authored mapping cannot compile.
 pub fn check_glyph(font: &Font, glyph_id: &GlyphId) -> CoreResult<Vec<Finding>> {
     let glyph = font.require_glyph(glyph_id)?;
-    let mut findings = Vec::new();
-    health::check(font, glyph, &mut findings);
+    let mut findings = health::check(font, glyph);
     findings.extend(outline::check(
         font,
         glyph_id,
