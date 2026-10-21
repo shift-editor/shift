@@ -135,6 +135,7 @@ export type {
   Source,
   SourceKerningPairs,
   SourceMetricValue,
+  SceneState,
   Specimen,
   Unicode,
   UpdateAxisIntent,

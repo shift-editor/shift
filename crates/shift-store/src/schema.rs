@@ -253,6 +253,12 @@ CREATE TABLE IF NOT EXISTS document_metadata (
     document_id TEXT NOT NULL,
     saved_commit_id TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS scene_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL CHECK (version >= 1),
+    payload TEXT NOT NULL
+);
 "#;
 
 const WORKSPACE_SCHEMA_V1: &str = r#"
@@ -269,7 +275,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 3;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 4;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -395,9 +401,23 @@ ALTER TABLE glyphs ADD COLUMN category TEXT;
 ALTER TABLE glyphs ADD COLUMN sub_category TEXT;
 "#;
 
+/// Version 3 to 4: documents gain the editor's canvas, an opaque versioned
+/// payload in one `scene_state` row. This SQL is frozen.
+const MIGRATE_V3_TO_V4: &str = r#"
+CREATE TABLE scene_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL CHECK (version >= 1),
+    payload TEXT NOT NULL
+);
+"#;
+
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 2] = [(2, MIGRATE_V1_TO_V2), (3, MIGRATE_V2_TO_V3)];
+const MIGRATIONS: [(i64, &str); 3] = [
+    (2, MIGRATE_V1_TO_V2),
+    (3, MIGRATE_V2_TO_V3),
+    (4, MIGRATE_V3_TO_V4),
+];
 
 /// Upgrades the authored tables of a store at `version` to
 /// [`SHIFT_DOCUMENT_SCHEMA_VERSION`] in one transaction, stamping

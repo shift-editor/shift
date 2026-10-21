@@ -11,6 +11,7 @@ import {
   type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { Signal } from "@shift/editor/signals";
+import { workspaceSceneStateStore } from "@/lib/workspace/workspaceSceneStateStore";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {
@@ -36,10 +37,6 @@ export class Workspace {
     this.#client = options.client;
     this.#store = new FontStore();
     this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
-    this.#documentBridge = new WorkspaceDocumentBridge({
-      host: options.host,
-      edits: this.#edits,
-    });
 
     this.font = new Font({
       store: this.#store,
@@ -51,6 +48,12 @@ export class Workspace {
       fontStore: this.#store,
       clipboard: options.clipboard,
       sessionMode: "workspace",
+      sceneState: { store: workspaceSceneStateStore(this.#client, this.#edits) },
+    });
+    this.#documentBridge = new WorkspaceDocumentBridge({
+      host: options.host,
+      edits: this.#edits,
+      flushScene: () => this.#flushScene(),
     });
     this.documentStateCell = this.#client.documentStateCell;
     this.applyStatusCell = this.#edits.applyStatusCell;
@@ -72,9 +75,21 @@ export class Workspace {
   }
 
   dispose(): void {
+    window.removeEventListener("blur", this.#flushSceneOnLeave);
+    window.removeEventListener("pagehide", this.#flushSceneOnLeave);
     this.font.dispose();
     this.#documentBridge.dispose();
   }
+
+  /** Writes any canvas change still waiting for its quiet period. */
+  #flushScene(): Promise<void> {
+    return this.editor.scenePersistence?.flush() ?? Promise.resolve();
+  }
+
+  // Leaving the window is a fire-and-forget boundary; flush logs its own failures.
+  readonly #flushSceneOnLeave = (): void => {
+    void this.#flushScene();
+  };
 
   async #connect(): Promise<void> {
     try {
@@ -86,6 +101,9 @@ export class Workspace {
       }
 
       this.#store.replaceWorkspace(snapshot);
+      await this.editor.scenePersistence?.restore();
+      window.addEventListener("blur", this.#flushSceneOnLeave);
+      window.addEventListener("pagehide", this.#flushSceneOnLeave);
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

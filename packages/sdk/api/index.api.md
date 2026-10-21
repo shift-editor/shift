@@ -305,6 +305,7 @@ export class Editor {
     returnFromTemporaryTool(): void;
     // (undocumented)
     readonly scene: Scene;
+    readonly scenePersistence: ScenePersistence | null;
     sceneToScreen(scene: ScenePoint): ScreenPoint;
     sceneTransform(node: ShiftNode): SpaceTransform<"local", "scene">;
     // (undocumented)

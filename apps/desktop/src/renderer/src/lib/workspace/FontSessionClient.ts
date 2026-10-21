@@ -30,6 +30,7 @@ import type {
   LayerRead,
   Location,
   ParagraphRequest,
+  SceneState,
   ShapedRun,
   ShaperFont,
   SlugAtlas,
@@ -135,6 +136,19 @@ export class FontSessionClient {
   async discardRedo(): Promise<void> {
     await this.connect();
     await this.#require().call("workspace.discardRedo", undefined);
+  }
+
+  /**
+   * Replaces the canvas stored with the document.
+   *
+   * @returns the document state, dirty when the canvas changed.
+   */
+  async setSceneState(state: SceneState): Promise<WorkspaceDocumentState> {
+    await this.connect();
+
+    const documentState = await this.#require().call("workspace.setSceneState", state);
+    this.#setDocumentState(documentState);
+    return documentState;
   }
 
   async snapshot(): Promise<WorkspaceSnapshot | null> {

@@ -11,6 +11,7 @@ import type {
   LayerRead,
   Location,
   ParagraphRequest,
+  SceneState,
   ShapedRun,
   ShaperFont,
   SlugAtlas,
@@ -334,6 +335,17 @@ export class WorkspaceEditCoordinator {
   /** Permanently removes the current redo branch after pending operations settle. */
   discardRedo(): Promise<void> {
     return this.#withFlush(() => this.#session.discardRedo());
+  }
+
+  /**
+   * Stores the editor's canvas behind every queued edit and ahead of any
+   * later save. The canvas is not a font edit: no pending edit, no authored
+   * revision, no undo entry.
+   *
+   * @returns the document state, dirty when the canvas changed.
+   */
+  setSceneState(state: SceneState): Promise<WorkspaceDocumentState> {
+    return this.#withFlush(() => this.#session.setSceneState(state));
   }
 
   /** Reads document state behind every queued and in-flight edit. */

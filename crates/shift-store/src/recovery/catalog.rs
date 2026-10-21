@@ -141,6 +141,9 @@ pub(super) const GLYPH_COMPONENTS: RecoveryTable =
     RecoveryTable::replace_collection("glyph_components", Some("layer_id"), false);
 pub(super) const DOCUMENT_METADATA: RecoveryTable =
     RecoveryTable::canonical_only("document_metadata");
+/// The renderer's canvas: one whole row, replaced by every write.
+pub(super) const SCENE_STATE: RecoveryTable =
+    RecoveryTable::overlay_rows("scene_state", None, NO_BASE_FALLBACK_COLUMNS);
 
 const RECOVERY_TABLES: &[RecoveryTable] = &[
     FONT_INFO,
@@ -167,6 +170,7 @@ const RECOVERY_TABLES: &[RecoveryTable] = &[
     GLYPH_LAYER_PAYLOADS,
     GLYPH_COMPONENTS,
     DOCUMENT_METADATA,
+    SCENE_STATE,
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]

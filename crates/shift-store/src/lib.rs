@@ -14,6 +14,7 @@ mod import_writer;
 mod layer;
 mod numeric;
 mod recovery;
+mod scene_state;
 mod schema;
 mod source;
 mod sql_text;
@@ -32,6 +33,7 @@ pub use layer::{
     MAX_LAYER_READ_BATCH_DECODED_BYTES,
 };
 pub use recovery::{RecoveryOverlay, RecoveryState};
+pub use scene_state::{SceneState, SceneStateWrite};
 pub use schema::{SHIFT_APPLICATION_ID, SHIFT_DOCUMENT_SCHEMA_VERSION};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};
 pub use store::ShiftStore;

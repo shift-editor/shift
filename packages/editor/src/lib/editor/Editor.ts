@@ -129,6 +129,8 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { ScenePersistence } from "./persistence/ScenePersistence";
+import type { ScenePersistenceOptions } from "../../types/sceneState";
 
 interface EditorOptions {
   font: Font;
@@ -136,6 +138,8 @@ interface EditorOptions {
   clipboard: SystemClipboard;
   sessionMode: FontSessionMode;
   nodeDefinitions?: Partial<NodeDefinitionConstructors>;
+  /** Where the canvas is kept between sessions; omit for a canvas that is never stored. */
+  sceneState?: ScenePersistenceOptions;
 }
 
 /**
@@ -190,6 +194,12 @@ export class Editor {
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
+  /**
+   * Keeps text runs and scene nodes with the document, or null when the
+   * session stores no canvas. Restore it once the font has loaded; flush it
+   * before saving.
+   */
+  readonly scenePersistence: ScenePersistence | null;
   readonly text: Text;
   readonly textEditing: TextEditing;
   readonly #nodeDefinitions: NodeDefinitionByKind;
@@ -312,6 +322,9 @@ export class Editor {
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
+    this.scenePersistence = options.sceneState
+      ? new ScenePersistence(this.#store, this, options.sceneState)
+      : null;
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
@@ -2341,6 +2354,7 @@ export class Editor {
 
   public destroy() {
     this.#events.emit("destroying");
+    this.scenePersistence?.dispose();
     this.#cursorEffect.dispose();
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();

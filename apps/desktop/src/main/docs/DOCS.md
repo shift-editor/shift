@@ -159,7 +159,7 @@ Windows created after an interruption (crash or render-failure reopen, recovery 
 
 ### Save, Export, And Close
 
-For workspace sessions, Save and Save As start in `DocumentSession`, which obtains destinations and confirmations through `NativeDialogs`; the actual save request goes through `DocumentClient` to the renderer document lane. The renderer flushes queued edits through the workspace sync lane before calling `workspace.save` or `workspace.saveAs`.
+For workspace sessions, Save and Save As start in `DocumentSession`, which obtains destinations and confirmations through `NativeDialogs`; the actual save request goes through `DocumentClient` to the renderer document lane. The renderer flushes queued edits through the workspace sync lane before calling `workspace.save` or `workspace.saveAs`. It also writes any pending canvas change (`workspace.setSceneState`) before answering `document.state` or `document.save`, so the close guard and Save both see the current canvas; a changed canvas makes the document dirty without a font undo step or export change.
 
 Convertible previews have no renderer document lane or pending edits. `App.savePreviewAsDocument` obtains the destination first, deduplicates the `"converting"` operation per preview session, and asks `WorkspaceManager.createDocumentFromPreview` to publish the first canonical document through the shell lane. Cancellation does no import work. Import or publication failure removes temporary workspace state, preserves an occupied destination, reports the save error, and keeps the preview attached.
 

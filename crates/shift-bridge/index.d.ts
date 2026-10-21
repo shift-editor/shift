@@ -73,6 +73,15 @@ export declare class Bridge {
   redo(): NapiAppliedChange | null
   /** Permanently removes every redo entry without changing font or dirty state. */
   discardRedo(): void
+  /** Returns the editor's stored canvas, or `null` when none was written. */
+  getSceneState(): NapiSceneState | null
+  /**
+   * Replaces the editor's stored canvas and returns the document state.
+   *
+   * A changed canvas marks the document unsaved but is not a font edit: no
+   * undo entry, no font revision, nothing exported.
+   */
+  setSceneState(version: number, payload: string): NapiDocumentState
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
   getGlyphSnapshots(requests: Array<NapiGlyphSnapshotRequest>): Array<NapiGlyphSnapshot>
   /**
@@ -311,6 +320,15 @@ export interface NapiParagraphRequest {
   language?: string
   /** Settings over the features applied by default. */
   features?: Array<NapiFeatureSetting>
+}
+
+/**
+ * The editor's canvas as stored with the document: an opaque payload in
+ * the format `version` names. The bridge never reads the payload.
+ */
+export interface NapiSceneState {
+  version: number
+  payload: string
 }
 
 /**

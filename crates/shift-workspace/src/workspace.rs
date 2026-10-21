@@ -14,7 +14,8 @@ use shift_font::{
     GlyphLayer, LayerId, error::CoreError,
 };
 use shift_store::{
-    DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
+    DocumentMetadata, RecoveryState, SaveState, SceneState, SceneStateWrite, ShiftStore,
+    WorkspaceSourceKind, WorkspaceState,
 };
 
 use crate::document_identity::{DocumentIdentity, document_identity};
@@ -75,6 +76,17 @@ pub struct FontWorkspace {
     store: ShiftStore,
     ledger: Ledger,
     residency: LayerResidency,
+    /// Whether the scene state changed since the last save. The ledger only
+    /// knows font history, so an undo back to the saved font must not mark
+    /// the document saved while this is set.
+    scene: SceneSaveState,
+}
+
+/// Whether the scene state differs from what was last saved.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SceneSaveState {
+    Saved,
+    Unsaved,
 }
 
 impl FontWorkspace {
@@ -91,6 +103,7 @@ impl FontWorkspace {
             store,
             ledger: Ledger::new(save_state),
             residency,
+            scene: SceneSaveState::Saved,
         }
     }
 
@@ -200,6 +213,7 @@ impl FontWorkspace {
             WorkspaceSource::Document { .. } => {
                 self.store.save_document()?;
                 self.ledger.mark_saved();
+                self.scene = SceneSaveState::Saved;
                 Ok(())
             }
             WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => {
@@ -227,6 +241,7 @@ impl FontWorkspace {
             path: document_path.to_path_buf(),
         };
         self.ledger = Ledger::default();
+        self.scene = SceneSaveState::Saved;
 
         Ok(metadata)
     }
@@ -243,6 +258,32 @@ impl FontWorkspace {
         self.residency = LayerResidency::with_unloaded(font.layer_ids());
         self.font = font;
         self.ledger = Ledger::default();
+        self.scene = SceneSaveState::Saved;
+        Ok(())
+    }
+
+    /// Returns the editor's stored scene state, or `None` when none was written.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the scene state cannot be read.
+    pub fn scene_state(&self) -> Result<Option<SceneState>, WorkspaceError> {
+        self.store.scene_state().map_err(WorkspaceError::from)
+    }
+
+    /// Replaces the editor's scene state.
+    ///
+    /// A changed scene state marks the document unsaved but is not a font
+    /// edit: it adds no undo entry, does not advance the font revision, and
+    /// is not exported. Writing the stored scene state again does nothing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the scene state cannot be written.
+    pub fn set_scene_state(&mut self, state: &SceneState) -> Result<(), WorkspaceError> {
+        if self.store.set_scene_state(state)? == SceneStateWrite::Written {
+            self.scene = SceneSaveState::Unsaved;
+        }
         Ok(())
     }
 
@@ -389,7 +430,7 @@ impl FontWorkspace {
             return Ok(None);
         };
 
-        let save_state = self.ledger.save_state();
+        let save_state = self.with_scene(self.ledger.save_state());
         match self.replay(&entry, ReplaySide::Pre, save_state) {
             Ok(outcome) => {
                 self.ledger.record_undone(entry);
@@ -415,7 +456,7 @@ impl FontWorkspace {
             return Ok(None);
         };
 
-        let save_state = self.ledger.save_state_after(&entry);
+        let save_state = self.with_scene(self.ledger.save_state_after(&entry));
         match self.replay(&entry, ReplaySide::Post, save_state) {
             Ok(outcome) => {
                 self.ledger.record_redone(entry);
@@ -431,6 +472,15 @@ impl FontWorkspace {
     /// Permanently removes every redo entry without changing live font state or dirty state.
     pub fn discard_redo(&mut self) {
         self.ledger.discard_redo();
+    }
+
+    /// Keeps a font undo or redo that returns to the saved font unsaved while
+    /// the scene state has unsaved changes.
+    fn with_scene(&self, font: SaveState) -> SaveState {
+        match self.scene {
+            SceneSaveState::Saved => font,
+            SceneSaveState::Unsaved => SaveState::Unsaved,
+        }
     }
 
     fn replay(

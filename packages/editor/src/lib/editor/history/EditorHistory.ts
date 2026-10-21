@@ -1,5 +1,6 @@
 import { batch } from "../../signals";
 import type { ShiftStore } from "../../store/ShiftStore";
+import { isSessionRecord } from "../../store/recordScope";
 import type { Editor } from "../Editor";
 import type { PendingEditId } from "../../../types/editing";
 import type { WorkspaceEditCoordinator } from "../../../types/font";
@@ -677,9 +678,4 @@ function replaceRecordEffect(
   }
 
   return effects.length > 0 ? { ...entry, effects } : null;
-}
-
-/** Whether a record is session state rather than document content. */
-function isSessionRecord(record: ShiftEditorRecord | null): boolean {
-  return record !== null && "scope" in record && record.scope === "session";
 }

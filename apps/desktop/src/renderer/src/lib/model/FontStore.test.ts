@@ -330,6 +330,7 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
     namedInstances: [],
     languageIds: null,
     kerning: { groups: [], sources: [] },
+    sceneState: null,
   };
 }
 
