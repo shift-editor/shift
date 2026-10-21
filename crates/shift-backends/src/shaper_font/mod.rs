@@ -314,7 +314,7 @@ fn parse_feature_source(
         Some(glyph_map),
         Box::new(move |path: &Path| {
             if path == Path::new(FEATURE_SOURCE_PATH) {
-                return Ok(root.clone());
+                return Ok(Arc::clone(&root));
             }
 
             Err(SourceLoadError::new(

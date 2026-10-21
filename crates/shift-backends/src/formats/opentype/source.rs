@@ -87,8 +87,7 @@ fn binary_directory(
             Ok((
                 names
                     .get(raw_id)
-                    .map(|name| name.to_string())
-                    .unwrap_or_else(|| format!("gid{index}")),
+                    .map_or_else(|| format!("gid{index}"), |name| name.to_string()),
                 unicodes.into_boxed_slice(),
             ))
         })

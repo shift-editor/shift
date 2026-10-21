@@ -246,7 +246,7 @@ impl Kerning {
     /// order.
     pub fn changed_groups<'a>(
         &'a self,
-        after: &'a Kerning,
+        after: &'a Self,
     ) -> impl Iterator<
         Item = (
             &'a KerningGroupId,

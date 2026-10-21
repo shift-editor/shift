@@ -244,8 +244,7 @@ impl UfoWriter {
             }
             LibValue::Data(d) => plist::Value::Data(d.clone()),
             LibValue::Date(d) => plist::Date::from_xml_format(d)
-                .map(plist::Value::Date)
-                .unwrap_or_else(|_| plist::Value::String(d.clone())),
+                .map_or_else(|_| plist::Value::String(d.clone()), plist::Value::Date),
             LibValue::Uid(u) => plist::Value::Uid(plist::Uid::new(*u)),
         }
     }

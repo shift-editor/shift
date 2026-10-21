@@ -133,8 +133,8 @@ pub(crate) enum Kind {
     Flag,
     Count,
     Name,
-    List(Box<Kind>),
-    Optional(Box<Kind>),
+    List(Box<Self>),
+    Optional(Box<Self>),
     Struct(StructKind),
     Enum(EnumKind),
 }
@@ -232,7 +232,7 @@ impl<T: Layout> Layout for Vec<T> {
         let count = read.count();
         // A corrupt count must not reserve unbounded memory; items past the
         // end of the input read as zeros.
-        let mut items = Vec::with_capacity(count.min(read.values.len()));
+        let mut items = Self::with_capacity(count.min(read.values.len()));
         for _ in 0..count {
             items.push(T::read(read));
         }

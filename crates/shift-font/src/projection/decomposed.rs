@@ -284,7 +284,7 @@ impl Font {
             .map(|(source_id, _)| source_id.clone())
             .collect::<Vec<_>>();
         if let Some(basis) = interpolation_bases.get(&key) {
-            return Ok(Some(basis.clone()));
+            return Ok(Some(Arc::clone(basis)));
         }
         let Some(basis) = InterpolationBasis::from_source_locations(
             &locations,
@@ -294,7 +294,7 @@ impl Font {
             return Ok(None);
         };
         let basis = Arc::new(basis);
-        interpolation_bases.insert(key, basis.clone());
+        interpolation_bases.insert(key, Arc::clone(&basis));
         Ok(Some(basis))
     }
 }

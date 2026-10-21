@@ -79,7 +79,7 @@ impl FontDirectory {
                 },
             })
             .collect::<Vec<_>>();
-        let mut directory = FontDirectory::new(
+        let mut directory = Self::new(
             format,
             font.metadata().family_name.clone(),
             font.metadata().style_name.clone(),
@@ -175,8 +175,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
                             point
                                 .output
                                 .get(axis_id)
-                                .map(Ok)
-                                .unwrap_or_else(|| coordinate(&point.input, axis_id))
+                                .map_or_else(|| coordinate(&point.input, axis_id), Ok)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     Ok(DirectoryMappingPoint {

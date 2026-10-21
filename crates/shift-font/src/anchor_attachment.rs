@@ -132,7 +132,7 @@ impl AnchorLike for Anchor {
     }
 
     fn position(&self) -> Point {
-        Anchor::position(self)
+        Self::position(self)
     }
 }
 

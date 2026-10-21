@@ -37,8 +37,7 @@ impl DesignspaceAxisExt for Axis {
             return mapping
                 .iter()
                 .find(|point| point.input as f64 == user_value)
-                .map(|point| point.output as f64)
-                .unwrap_or(user_value);
+                .map_or(user_value, |point| point.output as f64);
         }
 
         let mut points = mapping
@@ -63,8 +62,7 @@ impl DesignspaceAxisExt for Axis {
             return map
                 .iter()
                 .find(|point| point.output as f64 == value)
-                .map(|point| point.input as f64)
-                .unwrap_or(value);
+                .map_or(value, |point| point.input as f64);
         }
 
         let mut points = map

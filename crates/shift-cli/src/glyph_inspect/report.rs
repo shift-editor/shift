@@ -177,8 +177,10 @@ fn selected_components<'a>(
         .exact_source_components()
         .iter()
         .find(|candidate| candidate.source_id() == source.id())
-        .map(shift_font::GlyphSourceComponents::components)
-        .unwrap_or_else(|| projection.components())
+        .map_or_else(
+            || projection.components(),
+            shift_font::GlyphSourceComponents::components,
+        )
 }
 
 fn inspect_structure(layer: &GlyphLayer) -> GlyphStructure {
@@ -234,12 +236,11 @@ fn inspect_components(
             let base_id = occurrence.base_glyph_id();
             let parent_name = font
                 .glyph(&parent_id)
-                .map(|glyph| glyph.name().to_string())
-                .unwrap_or_else(|| parent_id.to_string());
-            let base_name = font
-                .glyph(&base_id)
-                .map(|glyph| glyph.name().to_string())
-                .unwrap_or_else(|| component.base_glyph_name().to_string());
+                .map_or_else(|| parent_id.to_string(), |glyph| glyph.name().to_string());
+            let base_name = font.glyph(&base_id).map_or_else(
+                || component.base_glyph_name().to_string(),
+                |glyph| glyph.name().to_string(),
+            );
 
             Ok(ComponentInspection {
                 order,
@@ -364,10 +365,10 @@ fn inspect_variation(
                     .zip(weights)
                     .map(|(source_id, weight)| SourceWeight {
                         source_id: source_id.to_string(),
-                        source_name: font
-                            .source(source_id)
-                            .map(|source| source.name().to_string())
-                            .unwrap_or_else(|| source_id.to_string()),
+                        source_name: font.source(source_id).map_or_else(
+                            || source_id.to_string(),
+                            |source| source.name().to_string(),
+                        ),
                         weight,
                     })
                     .collect(),
@@ -398,10 +399,10 @@ fn inspect_variation(
                             .supports()
                             .iter()
                             .map(|support| VariationSupport {
-                                axis_tag: font
-                                    .axis(&support.axis_id())
-                                    .map(|axis| axis.tag().to_string())
-                                    .unwrap_or_else(|| support.axis_id().to_string()),
+                                axis_tag: font.axis(&support.axis_id()).map_or_else(
+                                    || support.axis_id().to_string(),
+                                    |axis| axis.tag().to_string(),
+                                ),
                                 minimum: support.minimum(),
                                 peak: support.peak(),
                                 maximum: support.maximum(),

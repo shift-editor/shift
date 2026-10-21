@@ -254,7 +254,7 @@ impl Font {
         let exact_source_shapes = self
             .masters()
             .filter_map(|source| {
-                let layer = glyph.shared_layer_for_source(&source.id())?.clone();
+                let layer = Arc::clone(glyph.shared_layer_for_source(&source.id())?);
                 if layer.id() == fallback.id() {
                     return None;
                 }
@@ -730,8 +730,7 @@ fn structural_layer<'a>(
         .exact_source_shapes
         .iter()
         .find(|shape| shape.source_id == *source_id)
-        .map(|shape| &shape.layer)
-        .unwrap_or(&projection.fallback)
+        .map_or(&projection.fallback, |shape| &shape.layer)
 }
 
 /// Component base ids across the fallback and every exact-source shape.
@@ -750,7 +749,7 @@ fn component_base_glyph_ids(
 
 fn fallback_layer(font: &Font, glyph: &Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(layer) = font.default_master_layer(glyph) {
-        return Some(layer.clone());
+        return Some(Arc::clone(layer));
     }
 
     glyph

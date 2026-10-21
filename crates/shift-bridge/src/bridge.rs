@@ -2157,7 +2157,7 @@ impl Bridge {
     &mut self,
     known_revision: Option<u32>,
   ) -> errors::Result<Option<crate::shaping::NapiShaperFont>> {
-    let font = self.live_shaper()?.font().clone();
+    let font = Arc::clone(self.live_shaper()?.font());
     let revision = self.shaper_fonts.revision();
     if known_revision.is_some_and(|known| u64::from(known) == revision) {
       return Ok(None);
@@ -2373,8 +2373,8 @@ impl IntoDomain for NapiKerningPosition {
 
   fn into_domain(self) -> BridgeResult<KerningPosition> {
     Ok(match self {
-      NapiKerningPosition::First => KerningPosition::First,
-      NapiKerningPosition::Second => KerningPosition::Second,
+      Self::First => KerningPosition::First,
+      Self::Second => KerningPosition::Second,
     })
   }
 }
@@ -3928,8 +3928,7 @@ mod tests {
       .structure
       .contours
       .first()
-      .map(|contour| contour.points.len())
-      .unwrap_or(0)
+      .map_or(0, |contour| contour.points.len())
   }
 
   #[test]

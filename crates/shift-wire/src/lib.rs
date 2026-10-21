@@ -1126,9 +1126,9 @@ impl From<IrPointType> for PointType {
 impl From<PointType> for IrPointType {
     fn from(point_type: PointType) -> Self {
         match point_type {
-            PointType::OnCurve => IrPointType::OnCurve,
-            PointType::OffCurve => IrPointType::OffCurve,
-            PointType::QCurve => IrPointType::QCurve,
+            PointType::OnCurve => Self::OnCurve,
+            PointType::OffCurve => Self::OffCurve,
+            PointType::QCurve => Self::QCurve,
         }
     }
 }

@@ -287,8 +287,7 @@ impl UfoReader {
         font.metrics_mut().units_per_em = norad_font
             .font_info
             .units_per_em
-            .map(|value| *value)
-            .unwrap_or(1000.0);
+            .map_or(1000.0, |value| *value);
         font.set_standard_metrics(
             &default_source_id,
             StandardMetrics {

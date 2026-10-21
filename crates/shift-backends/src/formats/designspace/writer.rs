@@ -160,8 +160,7 @@ impl DesignspaceWriter {
         let default_filename = font
             .default_source()
             .and_then(|source| source.filename())
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("{stem}.ufo"));
+            .map_or_else(|| format!("{stem}.ufo"), str::to_string);
 
         let mut used: HashSet<String> = font
             .sources()

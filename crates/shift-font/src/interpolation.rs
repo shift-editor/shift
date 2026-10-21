@@ -234,11 +234,7 @@ impl VariationBasis {
         axes: &[Axis],
         design_normalization: Option<&[DesignNormalization]>,
     ) -> CoreResult<Vec<f64>> {
-        let value_count = self
-            .deltas
-            .first()
-            .map(|delta| delta.values.len())
-            .unwrap_or(0);
+        let value_count = self.deltas.first().map_or(0, |delta| delta.values.len());
         let mut values = vec![0.0; value_count];
 
         for delta in &self.deltas {
@@ -485,7 +481,7 @@ impl Font {
             .map(|(source_id, _)| source_id.clone())
             .collect::<Vec<_>>();
         let basis = if let Some(basis) = bases.get(&basis_key) {
-            basis.clone()
+            Arc::clone(basis)
         } else {
             let Some(basis) = InterpolationBasis::from_source_locations(
                 &source_locations,
@@ -495,7 +491,7 @@ impl Font {
                 return Ok(None);
             };
             let basis = Arc::new(basis);
-            bases.insert(basis_key, basis.clone());
+            bases.insert(basis_key, Arc::clone(&basis));
             basis
         };
         let sources = compatible_sources
@@ -513,7 +509,7 @@ impl Font {
 
 fn interpolation_reference_layer(font: &Font, glyph: &crate::Glyph) -> Option<Arc<GlyphLayer>> {
     if let Some(layer) = font.default_master_layer(glyph) {
-        return Some(layer.clone());
+        return Some(Arc::clone(layer));
     }
 
     font.master_layers(glyph)

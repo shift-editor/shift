@@ -54,6 +54,11 @@ tuple_array_conversions = "warn"
 bool_to_int_with_if = "warn"
 items_after_statements = "warn"
 struct_excessive_bools = "warn"
+# Name the type once: `Self` inside its own impl.
+use_self = "warn"
+map_unwrap_or = "warn"
+# `Arc::clone(&x)` shows a reference-count bump, not a deep copy.
+clone_on_ref_ptr = "warn"
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
