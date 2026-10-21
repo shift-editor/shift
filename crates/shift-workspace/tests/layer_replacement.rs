@@ -185,17 +185,13 @@ fn component_replacement_acquires_the_dependency_closure_before_cycle_validation
     assert!(
         workspace
             .apply(
-                &FontIntentSet {
-                    intents: vec![FontIntent::ReplaceGlyphLayerContent(
-                        ReplaceGlyphLayerContent {
-                            layer_id,
-                            width: 200.0,
-                            contours: Vec::new(),
-                            anchors: Vec::new(),
-                            components: vec![Component::new(glyph_id, "A")],
-                        }
-                    )],
-                },
+                &FontIntentSet::from(ReplaceGlyphLayerContent {
+                    layer_id,
+                    width: 200.0,
+                    contours: Vec::new(),
+                    anchors: Vec::new(),
+                    components: vec![Component::new(glyph_id, "A")],
+                }),
                 None
             )
             .is_err()

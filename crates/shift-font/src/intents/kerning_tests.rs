@@ -33,9 +33,7 @@ fn exception() -> KerningPair {
 }
 
 fn set(edits: Vec<KerningValueEdit>) -> FontIntentSet {
-    FontIntentSet {
-        intents: vec![FontIntent::SetKerningValues(SetKerningValues { edits })],
-    }
+    FontIntentSet::from(SetKerningValues { edits })
 }
 
 #[test]
@@ -181,9 +179,7 @@ fn a_group_on_the_wrong_side_of_a_pair_is_rejected() {
 }
 
 fn one(intent: FontIntent) -> FontIntentSet {
-    FontIntentSet {
-        intents: vec![intent],
-    }
+    FontIntentSet::from(intent)
 }
 
 fn create(group_id: &KerningGroupId, position: KerningPosition, name: &str) -> FontIntent {

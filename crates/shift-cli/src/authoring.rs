@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::{
-    Axis, AxisId, BinaryData, DesignLocation, FeatureData, Font, FontIntent, FontIntentSet,
-    Kerning, LibData, SourceId,
+    Axis, AxisId, BinaryData, DesignLocation, FeatureData, Font, FontIntentSet, Kerning, LibData,
+    SourceId,
 };
 use shift_store::ShiftStore;
 use shift_workspace::FontWorkspace;
@@ -121,9 +121,7 @@ pub(crate) fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
         args.default,
         args.maximum,
     );
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CreateAxis(CreateAxis { axis })],
-    };
+    let set = FontIntentSet::from(CreateAxis { axis });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }
@@ -144,13 +142,11 @@ pub(crate) fn add_source(args: AddSourceArgs) -> Result<AuthoringReport> {
         location.set(axis_id, value);
     }
     let source_id = SourceId::new();
-    let set = FontIntentSet {
-        intents: vec![FontIntent::CreateSource(CreateSource {
-            source_id,
-            name: args.name,
-            location,
-        })],
-    };
+    let set = FontIntentSet::from(CreateSource {
+        source_id,
+        name: args.name,
+        location,
+    });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }

@@ -348,9 +348,7 @@ mod tests {
         let axis_id = original.axes()[0].id();
         let mut font = original.clone();
         let outcome = font
-            .apply_intents(&FontIntentSet {
-                intents: vec![FontIntent::DeleteAxis(DeleteAxis { axis_id })],
-            })
+            .apply_intents(&FontIntentSet::from(DeleteAxis { axis_id }))
             .unwrap();
         let edited = font.clone();
 
@@ -368,11 +366,7 @@ mod tests {
         let mut metadata = edited.metadata().clone();
         metadata.family_name = Some("Edited".to_string());
         let changes = edited
-            .apply_intents(&FontIntentSet {
-                intents: vec![FontIntent::UpdateFontMetadata(UpdateFontMetadata {
-                    metadata,
-                })],
-            })
+            .apply_intents(&FontIntentSet::from(UpdateFontMetadata { metadata }))
             .unwrap()
             .changes;
 
