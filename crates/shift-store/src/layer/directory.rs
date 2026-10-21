@@ -1,12 +1,10 @@
 use shift_font as font;
 
 use super::{
-    GLYPH_LAYER_FORMAT, MAX_LAYER_PAYLOAD_BYTES,
+    GLYPH_LAYER_FORMAT, MAX_LAYER_PAYLOAD_BYTES, MAX_LAYER_PAYLOAD_BYTES_SQL,
     payload::{LayerPayloadCompression, StoredLayerPayload},
 };
 use crate::{ShiftStore, StoreError};
-
-const MAX_LAYER_PAYLOAD_BYTES_SQL: i64 = MAX_LAYER_PAYLOAD_BYTES as i64;
 
 /// Relational facts needed to locate a layer without reading its payload.
 #[derive(Clone, Debug, PartialEq)]
@@ -94,7 +92,7 @@ impl DirectoryFacts {
                 ),
             });
         }
-        Ok(self.decoded_byte_length as u64)
+        Ok(u64::try_from(self.decoded_byte_length)?)
     }
 
     pub(super) fn stored_layer(&self, payload: Vec<u8>) -> Result<StoredLayerPayload, StoreError> {
@@ -106,8 +104,8 @@ impl DirectoryFacts {
         })?;
         Ok(StoredLayerPayload {
             compression: self.compression.parse()?,
-            stored_byte_length: self.stored_byte_length as u64,
-            decoded_byte_length: self.decoded_byte_length as u64,
+            stored_byte_length: u64::try_from(self.stored_byte_length)?,
+            decoded_byte_length: u64::try_from(self.decoded_byte_length)?,
             decoded_blake3,
             bytes: payload,
         })

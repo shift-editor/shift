@@ -1030,7 +1030,7 @@ impl SourceIdentity {
       .iter()
       .cloned()
       .enumerate()
-      .map(|(index, glyph_id)| (glyph_id, GlyphIndex::new(index as u32)))
+      .map(|(index, glyph_id)| (glyph_id, GlyphIndex::at(index)))
       .collect();
     let mut identity = Self {
       glyph_ids,

@@ -213,6 +213,10 @@ fn at(check: Check, glyph: &Glyph, source: &Source, message: &str) -> Finding {
 fn most_common(advances: impl Iterator<Item = f64>) -> Option<f64> {
     let mut counts: BTreeMap<i64, (f64, usize)> = BTreeMap::new();
     for advance in advances {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a bucket key; advances are far below 2^63 font units"
+        )]
         let key = (advance / SAME_WIDTH).round() as i64;
         counts.entry(key).or_insert((advance, 0)).1 += 1;
     }

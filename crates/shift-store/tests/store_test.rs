@@ -1,3 +1,7 @@
+#![allow(
+    clippy::cast_possible_wrap,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::sync::Arc;
 
 use shift_font::{FontMetadata, test_support::sample_font};

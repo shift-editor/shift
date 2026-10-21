@@ -1,4 +1,5 @@
 use crate::error::{OrMissing, StoreEntity};
+use crate::numeric::sql_int;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shift_font as font;
 
@@ -151,7 +152,7 @@ fn write_component_index(
             component.id(),
             layer.id(),
             component.base_glyph_id().to_string(),
-            order_index as i64,
+            sql_int(order_index),
         ])?;
     }
     Ok(())

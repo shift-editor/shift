@@ -275,7 +275,10 @@ impl UfoReader {
             font.metadata_mut().style_name = Some(style.clone());
         }
         font.metadata_mut().version_major = norad_font.font_info.version_major;
-        font.metadata_mut().version_minor = norad_font.font_info.version_minor.map(|v| v as i32);
+        font.metadata_mut().version_minor = norad_font
+            .font_info
+            .version_minor
+            .and_then(|v| i32::try_from(v).ok());
         font.metadata_mut().copyright = norad_font.font_info.copyright.clone();
         font.metadata_mut().trademark = norad_font.font_info.trademark.clone();
         font.metadata_mut().designer = norad_font.font_info.open_type_name_designer.clone();

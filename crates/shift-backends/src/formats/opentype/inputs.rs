@@ -362,7 +362,7 @@ fn variable_glyph_projection(
             .enumerate()
             .filter(|(_, axis)| axis.peak != 0)
             .map(|(axis, support)| VariationSupport {
-                axis: crate::font_source::AxisIndex::new(axis as u32),
+                axis: crate::font_source::AxisIndex::at(axis),
                 lower: f64::from(support.start) / 16384.0,
                 peak: f64::from(support.peak) / 16384.0,
                 upper: f64::from(support.end) / 16384.0,
@@ -557,7 +557,7 @@ fn normalize_user_coordinate(value: f64, minimum: f64, default: f64, maximum: f6
     } else {
         (value - default) / (maximum - default)
     };
-    F2Dot14::from_f32(normalized as f32).to_bits()
+    F2Dot14::from_f32(crate::numeric::lossy_f32(normalized)).to_bits()
 }
 
 pub(super) fn tuple_region(tuple: &TupleVariation<'_, GlyphDelta>) -> AtlasRegion {
@@ -904,7 +904,7 @@ mod tests {
                 .axes
                 .iter()
                 .zip(location.coordinates())
-                .map(|(axis, value)| (axis.tag.as_str(), *value as f32)),
+                .map(|(axis, value)| (axis.tag.as_str(), crate::numeric::lossy_f32(*value))),
         )
     }
 

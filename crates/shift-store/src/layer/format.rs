@@ -22,7 +22,7 @@ pub(crate) fn decode_layer(bytes: &[u8]) -> Result<font::GlyphLayer, StoreError>
     let mut decoder = rmp_serde::Deserializer::new(Cursor::new(bytes));
     decoder.set_max_depth(MAX_NESTING_DEPTH);
     let layer = font::GlyphLayer::deserialize(&mut decoder)?;
-    let consumed = decoder.position() as usize;
+    let consumed = usize::try_from(decoder.position())?;
     if consumed != bytes.len() {
         return Err(StoreError::TrailingLayerBytes(bytes.len() - consumed));
     }

@@ -1785,7 +1785,8 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         for glyph_index in 0..mark.glyphs {
-            let mut glyph = Glyph::with_unicode(format!("g{glyph_index:05}"), glyph_index as u32);
+            let unicode = u32::try_from(glyph_index).unwrap();
+            let mut glyph = Glyph::with_unicode(format!("g{glyph_index:05}"), unicode);
             let mut layer = GlyphLayer::with_width(
                 LayerId::new(),
                 source_id.clone(),

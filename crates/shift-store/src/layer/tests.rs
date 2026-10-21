@@ -1,3 +1,8 @@
+#![allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "test and benchmark arithmetic on small known values"
+)]
 use std::{
     sync::Arc,
     time::{Duration, Instant},

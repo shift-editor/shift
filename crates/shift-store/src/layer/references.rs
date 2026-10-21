@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite::Connection;
 use shift_font as font;
 
+use crate::numeric::sql_int;
 use crate::{ShiftStore, StoreError};
 
 pub(super) const MAX_COMPONENT_QUERY_BATCH_COUNT: usize = 512;
@@ -199,7 +200,7 @@ pub(super) fn validate_component_rows(
             (
                 component.id().to_string(),
                 component.base_glyph_id().to_string(),
-                order_index as i64,
+                sql_int(order_index),
             )
         })
         .collect();

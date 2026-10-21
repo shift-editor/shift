@@ -293,6 +293,11 @@ fn band_span(
         return (0, 0);
     }
 
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to 0..band_count above"
+    )]
     let band = |value: f32| {
         (((value - glyph_minimum) / glyph_span) * band_count as f32)
             .floor()

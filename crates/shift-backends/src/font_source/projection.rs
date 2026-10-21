@@ -48,7 +48,7 @@ impl FontDirectory {
             .into_iter()
             .enumerate()
             .map(|(index, (name, unicodes))| DirectoryGlyph {
-                index: GlyphIndex::new(index as u32),
+                index: GlyphIndex::at(index),
                 name,
                 unicodes,
             })
@@ -58,7 +58,7 @@ impl FontDirectory {
             .iter()
             .enumerate()
             .map(|(index, axis)| VariationAxis {
-                index: AxisIndex::new(index as u32),
+                index: AxisIndex::at(index),
                 tag: axis.tag().to_string(),
                 name: axis.name().to_string(),
                 hidden: axis.is_hidden(),
@@ -102,7 +102,7 @@ impl FontDirectory {
                 .iter()
                 .enumerate()
                 .map(|(index, source)| DirectorySource {
-                    index: SourceIndex::new(index as u32),
+                    index: SourceIndex::at(index),
                     name: source.name().to_string(),
                     location: font
                         .axes()
@@ -114,7 +114,7 @@ impl FontDirectory {
                     metrics: directory_metrics(font, source),
                 })
                 .collect(),
-            SourceIndex::new(default_source as u32),
+            SourceIndex::at(default_source),
         )?;
         directory.set_mappings(directory_mappings(font)?);
         directory.set_instances(
@@ -151,7 +151,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
         .axes()
         .iter()
         .enumerate()
-        .map(|(index, axis)| (axis.id(), AxisIndex::new(index as u32)))
+        .map(|(index, axis)| (axis.id(), AxisIndex::at(index)))
         .collect::<HashMap<_, _>>();
     let axis_index = |axis_id: &AxisId| {
         axis_indices
@@ -248,7 +248,7 @@ pub(crate) fn resolve_projection_closure(
     if directory.glyphs.get(root.to_usize()).is_none() {
         return Err(FontReadError::GlyphOutOfRange {
             glyph: root,
-            glyph_count: directory.glyphs.len() as u32,
+            glyph_count: directory.glyph_count(),
         });
     }
 
@@ -443,7 +443,7 @@ fn variation_from_layers(
                 .filter_map(|(tag, support)| {
                     let axis = tags.iter().position(|candidate| candidate == tag)?;
                     Some(VariationSupport {
-                        axis: AxisIndex::new(axis as u32),
+                        axis: AxisIndex::at(axis),
                         lower: support.min.into_inner().into_inner(),
                         peak: support.peak.into_inner().into_inner(),
                         upper: support.max.into_inner().into_inner(),

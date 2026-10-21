@@ -47,24 +47,16 @@ pub(crate) fn project_glif_glyph(
             )
         })?;
         let layer = convert_norad_layer(path, glyphs_by_name, glyph, &parsed)?;
-        layers.push((
-            SourceIndex::new(source_index as u32),
-            location.clone(),
-            layer,
-        ));
+        layers.push((SourceIndex::at(source_index), location.clone(), layer));
     }
     if layers.is_empty() {
         layers.push((
-            SourceIndex::new(default_source as u32),
+            SourceIndex::at(default_source),
             sources[default_source].0.clone(),
             empty_projection_layer(glyph),
         ));
     }
-    project_layers(
-        layers,
-        interpolation_axes,
-        SourceIndex::new(default_source as u32),
-    )
+    project_layers(layers, interpolation_axes, SourceIndex::at(default_source))
 }
 
 pub(crate) fn retained_layer(

@@ -132,7 +132,12 @@ impl<T> Registry<T> {
             return handle;
         }
         self.entries.push(Some(value));
-        (self.entries.len() - 1) as u32
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "usize is 32 bits on wasm32, the only target that hands out handles"
+        )]
+        let handle = (self.entries.len() - 1) as u32;
+        handle
     }
 
     fn get(&self, handle: u32) -> Option<&T> {

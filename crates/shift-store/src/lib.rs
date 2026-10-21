@@ -11,6 +11,7 @@ mod font_state;
 mod glyph;
 mod import_writer;
 mod layer;
+mod numeric;
 mod recovery;
 mod schema;
 mod source;

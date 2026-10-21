@@ -101,7 +101,13 @@ impl Curve {
         let error_squared = delta_x * delta_x + delta_y * delta_y;
         let maximum_squared = 432.0 * CUBIC_APPROXIMATION_ACCURACY * CUBIC_APPROXIMATION_ACCURACY;
 
-        ((error_squared / maximum_squared).powf(1.0 / 6.0).ceil() as usize).max(1)
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a small non-negative subdivision count; `as` saturates"
+        )]
+        let count = (error_squared / maximum_squared).powf(1.0 / 6.0).ceil() as usize;
+        count.max(1)
     }
 
     /// Deterministically approximates one cubic within [`CUBIC_APPROXIMATION_ACCURACY`].

@@ -26,6 +26,10 @@ pub(crate) use write::{store_stored_layer_in_tx, write_layer_in_tx};
 
 pub(crate) const MAX_LAYER_PAYLOAD_BYTES: usize = 256 * 1024 * 1024;
 
+/// [`MAX_LAYER_PAYLOAD_BYTES`] as a SQLite integer.
+#[expect(clippy::cast_possible_wrap, reason = "256 MiB fits in i64")]
+const MAX_LAYER_PAYLOAD_BYTES_SQL: i64 = MAX_LAYER_PAYLOAD_BYTES as i64;
+
 fn check_layer_length(bytes: u64) -> Result<(), crate::StoreError> {
     let limit = MAX_LAYER_PAYLOAD_BYTES as u64;
     if bytes > limit {

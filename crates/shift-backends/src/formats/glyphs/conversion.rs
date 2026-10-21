@@ -173,7 +173,7 @@ pub(crate) fn font_header(
         font.metadata_mut().style_name = Some(default_master.name.clone());
     }
     font.metadata_mut().version_major = Some(glyphs_font.version_major);
-    font.metadata_mut().version_minor = Some(glyphs_font.version_minor as i32);
+    font.metadata_mut().version_minor = i32::try_from(glyphs_font.version_minor).ok();
     font.metrics_mut().units_per_em = glyphs_font.units_per_em as f64;
     let skipped = glyphs_font
         .glyph_order

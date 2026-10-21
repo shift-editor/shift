@@ -84,16 +84,16 @@ fn binary_directory(
         .into_iter()
         .enumerate()
         .map(|(index, unicodes)| {
-            let raw_id = GlyphId::new(index as u32);
-            (
+            let raw_id = GlyphId::new(u32::try_from(index)?);
+            Ok((
                 names
                     .get(raw_id)
                     .map(|name| name.to_string())
                     .unwrap_or_else(|| format!("gid{index}")),
                 unicodes.into_boxed_slice(),
-            )
+            ))
         })
-        .collect();
+        .collect::<Result<Vec<_>, FontReadError>>()?;
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
     let family_name = localized_string(font, StringId::FAMILY_NAME);
     let style_name = localized_string(font, StringId::SUBFAMILY_NAME);
