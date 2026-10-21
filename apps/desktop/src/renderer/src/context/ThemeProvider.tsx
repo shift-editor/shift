@@ -12,12 +12,10 @@ import type { AppConfigState } from "@shared/config/config";
 import { getShiftHost } from "@/host/shiftHost";
 import {
   applyResolvedTheme,
-  bundledColorThemes,
   colorThemes,
   defaultThemePreference,
   readThemeSetting,
   resolveTheme,
-  themeById,
   userColorThemes,
   writeThemeSetting,
   type ColorTheme,
@@ -26,6 +24,7 @@ import {
   type ThemePreference,
 } from "@/lib/themes";
 import { ThemeContext } from "./ThemeContext";
+import { ThemeCatalog } from "@/lib/themes/ThemeCatalog";
 
 /**
  * This window's copy of the last applied preference, with the user themes its
@@ -53,15 +52,15 @@ function readThemeCache(): ThemeCache | null {
     const cached: unknown = JSON.parse(localStorage.getItem(THEME_CACHE_KEY) ?? "null");
     if (typeof cached !== "object" || cached === null) return null;
     const { preference, userThemes } = cached as Partial<ThemeCache>;
-    const themes = [...colorThemes, ...(Array.isArray(userThemes) ? userThemes : [])];
-    const isKnown = (id: unknown) => themes.some((theme) => theme.id === id);
+    const catalog = ThemeCatalog.BUILT_IN.withUser(Array.isArray(userThemes) ? userThemes : []);
+    const isKnown = (id: unknown) => typeof id === "string" && catalog.has(id);
     if (
       preference &&
       THEME_MODES.includes(preference.mode) &&
       isKnown(preference.light) &&
       isKnown(preference.dark)
     ) {
-      return { preference, userThemes: themes.slice(colorThemes.length) };
+      return { preference, userThemes: [...catalog.user] };
     }
   } catch {
     // An unreadable cache only costs the first paint.
@@ -75,17 +74,6 @@ function writeThemeCache(cache: ThemeCache): void {
   } catch {
     // The cache only speeds up the first paint; config.toml stays authoritative.
   }
-}
-
-/** The themes Shift ships: built into the app, then bundled as files. */
-function shippedThemes(state: AppConfigState): ColorTheme[] {
-  return [...colorThemes, ...bundledColorThemes(state.bundledThemes)];
-}
-
-/** Every theme `state` offers: Shift's, then the valid files in `themes/`. */
-function availableThemes(state: AppConfigState): ColorTheme[] {
-  const shipped = shippedThemes(state);
-  return [...shipped, ...userColorThemes(state.themes, shipped).themes];
 }
 
 /**
@@ -111,26 +99,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [systemAppearance, setSystemAppearance] = useState<ThemeAppearance>(getSystemAppearance);
   const [previewId, previewTheme] = useState<string | null>(null);
 
-  const shipped = useMemo(() => (config ? shippedThemes(config) : colorThemes), [config]);
+  const shipped = useMemo(() => (config ? ThemeCatalog.shipped(config) : colorThemes), [config]);
   const {
     themes: userThemes,
     shadowing: shadowingThemeFiles,
     unknownColors: unknownThemeColors,
   } = useMemo(() => userColorThemes(config?.themes ?? [], shipped), [config, shipped]);
-  const themes = useMemo(
+  const catalog = useMemo(
     // Until main answers, the cached file themes stand in for their files.
     () =>
-      config ? [...shipped, ...userThemes] : [...colorThemes, ...(initialCache?.userThemes ?? [])],
+      config
+        ? new ThemeCatalog(shipped, userThemes)
+        : ThemeCatalog.BUILT_IN.withUser(initialCache?.userThemes ?? []),
     [config, initialCache, shipped, userThemes],
   );
+  const themes = catalog.all;
   const resolvedTheme = useMemo(
     () =>
-      previewId ? themeById(previewId, themes) : resolveTheme(preference, systemAppearance, themes),
-    [preference, previewId, systemAppearance, themes],
+      previewId ? catalog.byId(previewId) : resolveTheme(preference, systemAppearance, catalog.all),
+    [catalog, preference, previewId, systemAppearance],
   );
 
   const applyConfig = useCallback((state: AppConfigState) => {
-    const read = readThemeSetting(state.theme, availableThemes(state));
+    const read = readThemeSetting(state.theme, ThemeCatalog.of(state).all);
     configRef.current = state;
     setConfig(state);
     setPreferenceState(read.preference);
@@ -144,7 +135,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setSaveError(null);
       try {
         const current = configRef.current;
-        const themes = current ? availableThemes(current) : colorThemes;
+        const themes = (current ? ThemeCatalog.of(current) : ThemeCatalog.BUILT_IN).all;
         const setting = writeThemeSetting(next, current?.theme ?? null, themes);
         applyConfig(await getShiftHost().config.setTheme(setting));
       } catch (error) {

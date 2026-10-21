@@ -1,15 +1,37 @@
-import { asAxisId, type Axis, type AxisMappingBasis, type Location } from "@shift/types";
+import {
+  asAxisId,
+  type Axis,
+  type AxisId,
+  type AxisMappingBasis,
+  type Location,
+} from "@shift/types";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { mapAxisMappings, unmapAxisMappings } from "./mapping";
 
 type AnyAxisLocation = ExternalAxisLocation | DesignAxisLocation;
 
+/**
+ * Marks axis values as a user-space location.
+ *
+ * @remarks
+ * The one place a plain map becomes an `ExternalAxisLocation`, like
+ * `asPointId` for ids; the brand only records which space the values are in.
+ */
+export function asExternalAxisLocation(values: ReadonlyMap<AxisId, number>): ExternalAxisLocation {
+  return values as ExternalAxisLocation;
+}
+
+/** Marks axis values as a design-space location; see {@link asExternalAxisLocation}. */
+export function asDesignAxisLocation(values: ReadonlyMap<AxisId, number>): DesignAxisLocation {
+  return values as DesignAxisLocation;
+}
+
 export function emptyExternalAxisLocation(): ExternalAxisLocation {
-  return new Map() as unknown as ExternalAxisLocation;
+  return asExternalAxisLocation(new Map());
 }
 
 export function cloneExternalAxisLocation(location: ExternalAxisLocation): ExternalAxisLocation {
-  return new Map(location) as unknown as ExternalAxisLocation;
+  return asExternalAxisLocation(new Map(location));
 }
 
 /**
@@ -21,9 +43,9 @@ export function cloneExternalAxisLocation(location: ExternalAxisLocation): Exter
 export function externalAxisLocationFromRecord(
   values: Readonly<Record<string, number>>,
 ): ExternalAxisLocation {
-  return new Map(
-    Object.entries(values).map(([axisId, value]) => [asAxisId(axisId), value]),
-  ) as unknown as ExternalAxisLocation;
+  return asExternalAxisLocation(
+    new Map(Object.entries(values).map(([axisId, value]) => [asAxisId(axisId), value])),
+  );
 }
 
 export function externalAxisLocationFromLocation(location: Location): ExternalAxisLocation {
@@ -31,9 +53,9 @@ export function externalAxisLocationFromLocation(location: Location): ExternalAx
 }
 
 export function designAxisLocationFromLocation(location: Location): DesignAxisLocation {
-  return new Map(
-    Object.entries(location.values).map(([axisId, value]) => [asAxisId(axisId), value]),
-  ) as unknown as DesignAxisLocation;
+  return asDesignAxisLocation(
+    new Map(Object.entries(location.values).map(([axisId, value]) => [asAxisId(axisId), value])),
+  );
 }
 
 export function locationFromExternalAxisLocation(location: ExternalAxisLocation): Location {
@@ -45,7 +67,7 @@ export function locationFromDesignAxisLocation(location: DesignAxisLocation): Lo
 }
 
 export function defaultExternalAxisLocation(axes: readonly Axis[]): ExternalAxisLocation {
-  return new Map(axes.map((axis) => [axis.id, axis.default])) as unknown as ExternalAxisLocation;
+  return asExternalAxisLocation(new Map(axes.map((axis) => [axis.id, axis.default])));
 }
 
 export function axisValue(location: AnyAxisLocation, axis: Axis): number {
@@ -59,7 +81,7 @@ export function withExternalAxisValue(
 ): ExternalAxisLocation {
   const next = new Map(location);
   next.set(axis.id, value);
-  return next as unknown as ExternalAxisLocation;
+  return asExternalAxisLocation(next);
 }
 
 /** Maps external coordinates exactly once into internal design-space coordinates. */

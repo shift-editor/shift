@@ -156,8 +156,8 @@ function GroupList({ position, glyphId, glyphName, current, onDone }: GroupListP
 
   const typed = query.replace(/^@/, "").trim();
   // "No group" only while not searching, so Enter on a search with no match names a new group.
-  const choices = useMemo<GroupChoice[]>(() => {
-    const groups: GroupChoice[] = kerning.groups.atPosition(position);
+  const choices = useMemo<readonly GroupChoice[]>(() => {
+    const groups: readonly GroupChoice[] = kerning.groups.atPosition(position);
     if (!typed) return [...groups, NO_GROUP];
     const lower = typed.toLowerCase();
     return groups.filter((group) => group.name.toLowerCase().includes(lower));

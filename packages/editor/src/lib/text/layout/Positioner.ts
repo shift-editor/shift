@@ -201,9 +201,7 @@ export class Positioner {
 
   #literalMarkOffset(glyph: RunGlyph, source: Source | null): Point2D {
     const layer =
-      glyph.glyphId && source
-        ? (this.#editor.glyphForId(glyph.glyphId)?.layerForSource(source.id) ?? null)
-        : null;
+      glyph.glyphId && source ? this.#editor.layerForGlyph(glyph.glyphId, source.id) : null;
     if (!layer) return { x: 0, y: 0 };
 
     const metrics = this.#editor.font.defaultSourceMetrics;
