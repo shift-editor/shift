@@ -1,4 +1,4 @@
-import { Bounds } from "@shift/geo";
+import { Bounds, byAxis } from "@shift/geo";
 import type { AlignmentType, DistributeType } from "./types";
 
 type Coordinate = { readonly x: number; readonly y: number };
@@ -31,23 +31,20 @@ export const Alignment = {
   distributePoints<T extends Coordinate>(points: readonly T[], type: DistributeType): T[] {
     if (points.length < 3) return [...points];
 
-    const sorted = points.toSorted((a, b) => (type === "horizontal" ? a.x - b.x : a.y - b.y));
+    const axis = type === "horizontal" ? "x" : "y";
+    const sorted = points.toSorted(byAxis(axis));
 
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
     if (!first || !last) {
       return sorted;
     }
-    const totalSpan = type === "horizontal" ? last.x - first.x : last.y - first.y;
-    const spacing = totalSpan / (sorted.length - 1);
+    const spacing = (last[axis] - first[axis]) / (sorted.length - 1);
 
     return sorted.map((p, i) => {
       if (i === 0 || i === sorted.length - 1) return p;
-      if (type === "horizontal") {
-        return { ...p, x: first.x + spacing * i };
-      } else {
-        return { ...p, y: first.y + spacing * i };
-      }
+
+      return { ...p, [axis]: first[axis] + spacing * i };
     });
   },
 } as const;

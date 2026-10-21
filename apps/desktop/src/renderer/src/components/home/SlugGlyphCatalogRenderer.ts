@@ -1,4 +1,4 @@
-import { EntityMap } from "@shift/types";
+import { ascending, EntityMap } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 import type { GlyphId } from "@shift/types";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
@@ -390,21 +390,22 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   }
 
   #pageRequests(): GlyphAtlasPageRequest[] {
-    return [...this.#replacementPageIndices]
-      .sort((left, right) => left - right)
-      .map((pageIndex) => this.#pageRequest(pageIndex));
+    const replacementPageIndices = this.#replacementPageIndices.values().toArray().sort(ascending);
+    return replacementPageIndices.map((pageIndex) =>
+      this.#pageRequest(pageIndex, replacementPageIndices),
+    );
   }
 
-  #pageRequest(pageIndex: number): GlyphAtlasPageRequest {
+  #pageRequest(
+    pageIndex: number,
+    replacementPageIndices: readonly number[],
+  ): GlyphAtlasPageRequest {
     const start = pageIndex * ATLAS_PAGE_ROOT_COUNT;
     return {
       glyphIds: this.#fontGlyphIds.slice(start, start + ATLAS_PAGE_ROOT_COUNT),
       pageIndex,
       pageCount: this.#pageCount(),
-      replacementPageIndices: this.#replacementPageIndices
-        .values()
-        .toArray()
-        .sort((left, right) => left - right),
+      replacementPageIndices,
       coordinates: this.#targetFrame?.location ?? [],
     };
   }

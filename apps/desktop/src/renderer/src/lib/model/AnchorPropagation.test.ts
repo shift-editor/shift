@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { GlyphName } from "@shift/types";
+import { byName, type GlyphName } from "@shift/types";
 import { anchorKind } from "@shift/editor/model";
 import { signal } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
@@ -22,9 +22,7 @@ describe("composites show their components' anchors", () => {
     const model = editor
       .glyphForId(record.id)!
       .renderModelAt(signal(editor.font.externalLocationForSource(source.id)!), signal(source.id));
-    return [...model.anchorsWithComponents]
-      .map(({ name, x, y }) => ({ name, x, y }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return [...model.anchorsWithComponents].map(({ name, x, y }) => ({ name, x, y })).sort(byName);
   }
 
   it("stacks marks and takes the base's other anchors", () => {

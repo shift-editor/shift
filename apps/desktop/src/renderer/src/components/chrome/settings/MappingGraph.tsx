@@ -3,6 +3,7 @@ import { drag, type D3DragEvent } from "d3-drag";
 import { scaleLinear } from "d3-scale";
 import { select } from "d3-selection";
 import type { Axis, AxisMappingPoint } from "@shift/types";
+import { byInput } from "./mappingOrder";
 
 interface MappingGraphProps {
   axis: Axis;
@@ -36,8 +37,8 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
   const bottom = size - 26;
   const xScale = scaleLinear().domain([minimum, maximum]).range([left, right]).clamp(true);
   const yScale = scaleLinear().domain([minimum, maximum]).range([bottom, top]).clamp(true);
-  const path = [...coordinates]
-    .sort((leftPoint, rightPoint) => leftPoint.input - rightPoint.input)
+  const path = coordinates
+    .toSorted(byInput)
     .map((point) => `${xScale(point.input)},${yScale(point.output)}`)
     .join(" ");
   const ticks = xScale.ticks(5);

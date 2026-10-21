@@ -10,6 +10,7 @@ import {
   type KerningSnapshot,
   type KerningValueEdit,
   type SourceId,
+  byName,
   EntityMap,
   type ReadonlyEntityMap,
 } from "@shift/types";
@@ -57,6 +58,8 @@ export function kerningValueEdit(
   return amount === undefined ? edit : { ...edit, amount };
 }
 
+const NO_GROUPS: readonly KerningGroup[] = [];
+
 /** Each glyph's group at one pair position. */
 type GroupMembership = ReadonlyMap<GlyphId, KerningGroupId>;
 
@@ -72,7 +75,7 @@ export class KerningGroups {
 
   readonly #byId: ReadonlyEntityMap<KerningGroupId, KerningGroup>;
   readonly #membership: MembershipByPosition;
-  readonly #byPosition: Readonly<Record<KerningPairPosition, readonly KerningGroup[]>>;
+  readonly #byPosition: ReadonlyMap<KerningPairPosition, readonly KerningGroup[]>;
 
   private constructor(
     byId: ReadonlyMap<KerningGroupId, KerningGroup>,
@@ -80,14 +83,7 @@ export class KerningGroups {
   ) {
     this.#byId = new EntityMap("kerning group", byId);
     this.#membership = membership;
-    const sorted = byId
-      .values()
-      .toArray()
-      .sort((a, b) => a.name.localeCompare(b.name));
-    this.#byPosition = {
-      first: sorted.filter((group) => group.position === "first"),
-      second: sorted.filter((group) => group.position === "second"),
-    };
+    this.#byPosition = Map.groupBy(byId.values().toArray().sort(byName), (group) => group.position);
   }
 
   static from(groups: readonly KerningGroup[]): KerningGroups {
@@ -114,15 +110,12 @@ export class KerningGroups {
   }
   /** The groups at a pair position, in name order; sorted once, when the groups change. */
   atPosition(position: KerningPairPosition): readonly KerningGroup[] {
-    return this.#byPosition[position];
+    return this.#byPosition.get(position) ?? NO_GROUPS;
   }
 
   /** The group named `name` at a pair position; names are unique per position. */
   named(position: KerningPairPosition, name: string): KerningGroup | null {
-    for (const group of this.#byId.values()) {
-      if (group.position === position && group.name === name) return group;
-    }
-    return null;
+    return this.atPosition(position).find((group) => group.name === name) ?? null;
   }
 }
 

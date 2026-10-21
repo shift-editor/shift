@@ -1539,6 +1539,49 @@ export default {
     },
 
     /**
+     * Ban comparators written inline in `sort` and `toSorted`.
+     *
+     * `(a, b) => a - b` says how to order but not what the order is, and the
+     * same comparator gets written again at the next call site. Pass a named
+     * order instead: `ascending`, `byName`, `comparing(key, order)` and
+     * `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a
+     * comparator named next to the type it orders. When the order is part of
+     * the domain, let the owning collection keep it so callers do not sort.
+     */
+    "no-inline-comparator": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          nameComparator:
+            "Name this order instead of writing the comparator inline: pass `ascending`, `byName`, `comparing(key, order)` or `orderBy(...)` from @shift/types, `byAxis` from @shift/geo, or a comparator named next to the type it orders.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const SORTS = new Set(["sort", "toSorted"]);
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee || callee.type !== "MemberExpression" || callee.computed) return;
+            if (!SORTS.has(callee.property?.name)) return;
+
+            const comparator = node.arguments[0];
+            if (!comparator) return;
+            if (
+              comparator.type !== "ArrowFunctionExpression" &&
+              comparator.type !== "FunctionExpression"
+            ) {
+              return;
+            }
+
+            context.report({ node: comparator, messageId: "nameComparator" });
+          },
+        };
+      },
+    },
+
+    /**
      * Ban `this.#map.get(key) ?? null` on a class's own collections.
      *
      * Shift's lookups return `null` for a missing entity, while `Map.get`

@@ -1,4 +1,4 @@
-import type { ThemeAppearance } from "@shift/types";
+import { descending, type ThemeAppearance } from "@shift/types";
 import type { ThemeFile, ThemeFileState, ThemeSetting } from "@shared/config/config";
 
 export type { ThemeAppearance };
@@ -637,9 +637,7 @@ const MINIMUM_SECONDARY_CONTRAST = 3;
 
 /** WCAG contrast ratio between two `#rrggbb` colors. */
 function contrastRatio(first: string, second: string): number {
-  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort(
-    (a, b) => b - a,
-  );
+  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort(descending);
   return (lighter + 0.05) / (darker + 0.05);
 }
 

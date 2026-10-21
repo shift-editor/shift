@@ -50,5 +50,8 @@ export type { LineCurve, QuadraticCurve, CubicCurve, CurveType, ClosestPoint } f
 // Cyclic indexing
 export { wrapIndex } from "./wrapIndex";
 
+// Orders
+export { byAxis } from "./order";
+
 // Matrix transformations
 export { Mat, type DecomposedTransform, type MatModel } from "./Mat";

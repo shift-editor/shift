@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
+import { byAxis } from "@shift/geo";
 import type { GlyphName, RunId, ShapeUnit } from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
 import { TestEditor } from "@/testing/TestEditor";
@@ -41,13 +42,13 @@ describe("proof text is shaped with the font's feature code", () => {
       const base = placed(runId).find((glyph) => glyph.glyph.glyphName === "beh-ar");
       const marks = placed(runId).filter((glyph) => glyph !== base);
       return marks
-        .map((mark) => [mark.origin.x - (base?.origin.x ?? 0), mark.origin.y])
-        .sort((a, b) => a[1]! - b[1]!);
+        .map((mark) => ({ x: mark.origin.x - (base?.origin.x ?? 0), y: mark.origin.y }))
+        .sort(byAxis("y"));
     };
 
     await expect.poll(raised).toEqual([
-      [350, 100],
-      [350, 300],
+      { x: 350, y: 100 },
+      { x: 350, y: 300 },
     ]);
     expect(editor.text.layoutCell(runId).peek()!.totalAdvance).toBe(500);
   });

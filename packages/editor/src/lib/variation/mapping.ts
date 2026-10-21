@@ -1,4 +1,4 @@
-import type { Axis, AxisId, AxisMappingBasis } from "@shift/types";
+import { ascending, type Axis, type AxisId, type AxisMappingBasis } from "@shift/types";
 import { denormalizeAxis, evaluateAxisMapping } from "../wasm/variation";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { asExternalAxisLocation } from "./location";
@@ -67,7 +67,7 @@ function unmapIndependentAxis(target: number, axis: Axis, mapping: IndependentMa
 
 function inverseCandidates(target: number, axis: Axis, mapping: IndependentMapping): number[] {
   const authoredValues = axis.axisType === "discrete" ? (axis.values ?? [axis.default]) : [];
-  if (authoredValues.length > 0) return authoredValues.toSorted((left, right) => left - right);
+  if (authoredValues.length > 0) return authoredValues.toSorted(ascending);
 
   const minimum = axis.minimum ?? axis.default;
   const maximum = axis.maximum ?? axis.default;
@@ -83,7 +83,7 @@ function inverseCandidates(target: number, axis: Axis, mapping: IndependentMappi
     );
   }
 
-  const breakpoints = [...new Set(values)].sort((left, right) => left - right);
+  const breakpoints = [...new Set(values)].sort(ascending);
   const candidates = [...breakpoints];
   for (let index = 1; index < breakpoints.length; index++) {
     const left = breakpoints[index - 1]!;
@@ -97,7 +97,7 @@ function inverseCandidates(target: number, axis: Axis, mapping: IndependentMappi
     if (ratio > 0 && ratio < 1) candidates.push(left + ratio * (right - left));
   }
 
-  return candidates.sort((left, right) => left - right);
+  return candidates.sort(ascending);
 }
 
 function evaluateIndependentAxis(value: number, axis: Axis, mapping: IndependentMapping): number {

@@ -54,7 +54,8 @@
     "shift/prefer-iterator-helpers": "error",
     "shift/prefer-scene-only": "error",
     "shift/no-optional-collection-field": "error",
-    "shift/no-map-get-to-null": "error"
+    "shift/no-map-get-to-null": "error",
+    "shift/no-inline-comparator": "error"
   },
   "overrides": [
     {

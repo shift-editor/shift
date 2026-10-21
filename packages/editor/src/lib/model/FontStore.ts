@@ -1,4 +1,4 @@
-import { EntityMap } from "@shift/types";
+import { ascending, EntityMap } from "@shift/types";
 import type {
   KerningValueEdit,
   AppliedChange,
@@ -710,10 +710,7 @@ function recordIndex(
   return {
     entries: [...entries],
     records: knownRecords,
-    unicodes: nameByUnicode
-      .keys()
-      .toArray()
-      .sort((a, b) => a - b),
+    unicodes: nameByUnicode.keys().toArray().sort(ascending),
     glyphById,
     recordsById,
     entryByName,

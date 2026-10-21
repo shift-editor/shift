@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { alphabetical, ascending } from "@shift/types";
 import { GlyphInfo } from "./GlyphInfo.js";
 import { DEFAULT_LANGUAGE_IDS, type GlyphCategory } from "./types.js";
 import { defaultResources } from "./resources.js";
@@ -413,7 +414,7 @@ describe("language coverage catalogs", () => {
 
     expect(required).toHaveLength(56);
     expect(required).toContain(0x61);
-    expect(required).toEqual(required.toSorted((left, right) => left - right));
+    expect(required).toEqual(required.toSorted(ascending));
     expect(catalog.required("unknown-language")).toEqual([]);
   });
 
@@ -442,10 +443,8 @@ describe("language coverage catalogs", () => {
     const latin = catalog.scripts.find((script) => script.script === "Latin");
     const languageNames = latin?.languages.map(({ language }) => language.name) ?? [];
 
-    expect(scripts).toEqual(scripts.toSorted((left, right) => left.localeCompare(right)));
-    expect(languageNames).toEqual(
-      languageNames.toSorted((left, right) => left.localeCompare(right)),
-    );
+    expect(scripts).toEqual(scripts.toSorted(alphabetical));
+    expect(languageNames).toEqual(languageNames.toSorted(alphabetical));
   });
 });
 
