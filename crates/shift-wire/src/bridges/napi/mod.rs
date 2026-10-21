@@ -288,7 +288,7 @@ impl From<Axis> for NapiAxis {
             default: axis.default,
             maximum: axis.maximum,
             values: axis.values,
-            labels: axis.labels.into_iter().map(Into::into).collect(),
+            labels: convert_all(axis.labels),
             hidden: axis.hidden,
         }
     }
@@ -375,7 +375,7 @@ impl From<AxisMapping> for NapiAxisMapping {
                 .into_iter()
                 .map(|id| id.to_string())
                 .collect(),
-            points: mapping.points.into_iter().map(Into::into).collect(),
+            points: convert_all(mapping.points),
         }
     }
 }
@@ -484,7 +484,7 @@ impl From<Source> for NapiSource {
             name: source.name,
             location: source.location.into(),
             filename: source.filename,
-            metric_values: source.metric_values.into_iter().map(Into::into).collect(),
+            metric_values: convert_all(source.metric_values),
             italic_angle: source.italic_angle,
             line_gap: source.line_gap,
             underline_position: source.underline_position,
@@ -526,7 +526,7 @@ impl From<GlyphRecord> for NapiGlyphRecord {
                 .into_iter()
                 .map(|id| id.to_string())
                 .collect(),
-            layers: record.layers.into_iter().map(Into::into).collect(),
+            layers: convert_all(record.layers),
             mark: record.mark.then_some(true),
             nonspacing_mark: record.nonspacing_mark.then_some(true),
             ligature: record.ligature,
@@ -707,10 +707,10 @@ impl From<LayerMatch> for NapiLayerMatch {
             reference_layer_id: layer_match.reference_layer_id.to_string(),
             target_layer_id: layer_match.target_layer_id.to_string(),
             complete: layer_match.complete,
-            contours: layer_match.contours.into_iter().map(Into::into).collect(),
-            points: layer_match.points.into_iter().map(Into::into).collect(),
-            anchors: layer_match.anchors.into_iter().map(Into::into).collect(),
-            components: layer_match.components.into_iter().map(Into::into).collect(),
+            contours: convert_all(layer_match.contours),
+            points: convert_all(layer_match.points),
+            anchors: convert_all(layer_match.anchors),
+            components: convert_all(layer_match.components),
             differences: layer_match
                 .differences
                 .into_iter()
@@ -785,7 +785,7 @@ impl From<GlyphSnapshot> for NapiGlyphSnapshot {
         Self {
             glyph_id: snapshot.glyph_id.to_string(),
             projection: snapshot.projection.map(Into::into),
-            layers: snapshot.layers.into_iter().map(Into::into).collect(),
+            layers: convert_all(snapshot.layers),
         }
     }
 }
@@ -836,10 +836,10 @@ impl From<FontSnapshot> for NapiFontSnapshot {
                 .map(Into::into)
                 .collect(),
             source_metrics_interpolation: snapshot.source_metrics_interpolation.map(Into::into),
-            glyphs: snapshot.glyphs.into_iter().map(Into::into).collect(),
-            sources: snapshot.sources.into_iter().map(Into::into).collect(),
-            axes: snapshot.axes.into_iter().map(Into::into).collect(),
-            axis_mappings: snapshot.axis_mappings.into_iter().map(Into::into).collect(),
+            glyphs: convert_all(snapshot.glyphs),
+            sources: convert_all(snapshot.sources),
+            axes: convert_all(snapshot.axes),
+            axis_mappings: convert_all(snapshot.axis_mappings),
             axis_mapping_bases: snapshot
                 .axis_mapping_bases
                 .into_iter()
@@ -911,7 +911,7 @@ pub struct NapiVariationDelta {
 impl From<VariationDelta> for NapiVariationDelta {
     fn from(delta: VariationDelta) -> Self {
         Self {
-            region: delta.region.into_iter().map(Into::into).collect(),
+            region: convert_all(delta.region),
             values: delta.values.into(),
         }
     }
@@ -925,7 +925,7 @@ pub struct NapiVariationBasis {
 impl From<VariationBasis> for NapiVariationBasis {
     fn from(basis: VariationBasis) -> Self {
         Self {
-            deltas: basis.deltas.into_iter().map(Into::into).collect(),
+            deltas: convert_all(basis.deltas),
         }
     }
 }
@@ -1002,7 +1002,7 @@ impl From<GlyphInterpolation> for NapiGlyphInterpolation {
     fn from(interpolation: GlyphInterpolation) -> Self {
         Self {
             basis: interpolation.basis.into(),
-            sources: interpolation.sources.into_iter().map(Into::into).collect(),
+            sources: convert_all(interpolation.sources),
         }
     }
 }
@@ -1075,7 +1075,7 @@ impl From<GlyphComponents> for NapiGlyphComponents {
     fn from(components: GlyphComponents) -> Self {
         Self {
             root_glyph_id: components.root_glyph_id.to_string(),
-            components: components.components.into_iter().map(Into::into).collect(),
+            components: convert_all(components.components),
         }
     }
 }
@@ -1158,9 +1158,9 @@ pub struct NapiGlyphStructure {
 impl From<GlyphStructure> for NapiGlyphStructure {
     fn from(structure: GlyphStructure) -> Self {
         Self {
-            contours: structure.contours.into_iter().map(Into::into).collect(),
-            anchors: structure.anchors.into_iter().map(Into::into).collect(),
-            components: structure.components.into_iter().map(Into::into).collect(),
+            contours: convert_all(structure.contours),
+            anchors: convert_all(structure.anchors),
+            components: convert_all(structure.components),
         }
     }
 }
@@ -1168,9 +1168,9 @@ impl From<GlyphStructure> for NapiGlyphStructure {
 impl From<NapiGlyphStructure> for GlyphStructure {
     fn from(structure: NapiGlyphStructure) -> Self {
         Self {
-            contours: structure.contours.into_iter().map(Into::into).collect(),
-            anchors: structure.anchors.into_iter().map(Into::into).collect(),
-            components: structure.components.into_iter().map(Into::into).collect(),
+            contours: convert_all(structure.contours),
+            anchors: convert_all(structure.anchors),
+            components: convert_all(structure.components),
         }
     }
 }
@@ -1187,7 +1187,7 @@ impl From<ContourData> for NapiContourData {
     fn from(contour: ContourData) -> Self {
         Self {
             id: contour.id,
-            points: contour.points.into_iter().map(Into::into).collect(),
+            points: convert_all(contour.points),
             closed: contour.closed,
         }
     }
@@ -1197,7 +1197,7 @@ impl From<NapiContourData> for ContourData {
     fn from(contour: NapiContourData) -> Self {
         Self {
             id: contour.id,
-            points: contour.points.into_iter().map(Into::into).collect(),
+            points: convert_all(contour.points),
             closed: contour.closed,
         }
     }
@@ -1282,6 +1282,11 @@ impl From<ComponentData> for NapiComponentData {
 }
 
 /// The wire name of a component alignment.
+/// Converts every value, as [`From`] converts one.
+pub fn convert_all<T, U: From<T>>(values: impl IntoIterator<Item = T>) -> Vec<U> {
+    values.into_iter().map(U::from).collect()
+}
+
 pub fn alignment_name(alignment: ComponentAlignment) -> &'static str {
     match alignment {
         ComponentAlignment::Unset => "unset",
@@ -1547,7 +1552,7 @@ impl From<SourceMetricsInterpolationSnapshot> for NapiSourceMetricsInterpolation
                 .map(Into::into)
                 .collect(),
             basis: snapshot.basis.into(),
-            sources: snapshot.sources.into_iter().map(Into::into).collect(),
+            sources: convert_all(snapshot.sources),
         }
     }
 }
@@ -2221,8 +2226,8 @@ pub struct NapiKerningSnapshot {
 impl From<KerningSnapshot> for NapiKerningSnapshot {
     fn from(kerning: KerningSnapshot) -> Self {
         Self {
-            groups: kerning.groups.into_iter().map(Into::into).collect(),
-            sources: kerning.sources.into_iter().map(Into::into).collect(),
+            groups: convert_all(kerning.groups),
+            sources: convert_all(kerning.sources),
             basis: kerning.basis.map(Into::into),
         }
     }
