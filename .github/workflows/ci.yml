@@ -456,6 +456,33 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
+  rust-deps:
+    name: Rust Dependencies
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install toolchain
+        run: rustup show
+
+      # The same versions as the Nix dev shell.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2,cargo-machete@0.9.2
+
+      - name: Check licenses, advisories and sources
+        run: cargo deny check
+
+      - name: Check for unused dependencies
+        run: cargo machete
+
   rust-check:
     name: Rust Clippy & Tests
     needs: detect-changes
@@ -915,6 +942,7 @@ jobs:
       - deadcode
       - release-config
       - rust-fmt
+      - rust-deps
       - rust-check
       - integration
       - e2e-build
