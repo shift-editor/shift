@@ -5,6 +5,7 @@
 use shift_font::{
     CurveSegment, CurveSegmentIter, DesignLocation, GlyphId, test_support::sample_variable_font,
 };
+use shift_slug::GlyphIndex;
 use shift_slug::{AtlasBuilder, OutlineCommand, VariableAtlasBuilder};
 
 #[test]
@@ -24,7 +25,7 @@ fn resident_two_source_model_matches_shift_projection_at_midpoint() {
         .add_glyph(base_commands, source_commands)
         .unwrap();
     let variable = variable_builder.finish();
-    let resolved = variable.resolve_glyph(0, 0.5).unwrap();
+    let resolved = variable.resolve_glyph(GlyphIndex::new(0), 0.5).unwrap();
 
     let mut expected_builder = AtlasBuilder::default();
     expected_builder.add_glyph(midpoint_commands).unwrap();

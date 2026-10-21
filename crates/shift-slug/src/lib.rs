@@ -17,6 +17,7 @@ mod atlas;
 mod authored;
 mod curve;
 mod error;
+mod glyph_index;
 pub mod length;
 mod numeric;
 mod outline;
@@ -39,6 +40,7 @@ pub use authored::{
 };
 pub use curve::{Bounds, CUBIC_APPROXIMATION_ACCURACY, Curve, LINE_EPSILON, Point};
 pub use error::SlugError;
+pub use glyph_index::GlyphIndex;
 pub use outline::OutlineCommand;
 pub use pack::{CurveIndexEncoding, Layout, PackedAtlas, Section};
 pub use quadratic_outline::{CurveShape, QuadraticOutline};

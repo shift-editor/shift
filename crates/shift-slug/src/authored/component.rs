@@ -11,8 +11,8 @@ use shift_font::{
 
 use crate::variable::ROOT_COMPONENT;
 use crate::{
-    AuthoredAtlasProfile, Bounds, VariableAtlasBuilder, VariableComponent, VariableComponentPart,
-    VariableComponentSource,
+    AuthoredAtlasProfile, Bounds, GlyphIndex, VariableAtlasBuilder, VariableComponent,
+    VariableComponentPart, VariableComponentSource,
 };
 
 use super::{
@@ -175,7 +175,7 @@ pub(super) fn add_default_component_projection_glyph(
     compilation: &mut AuthoredGlyphCompilation<'_, '_>,
     projection: &GlyphProjection,
     resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
-) -> Result<u32, AuthoredSlugError> {
+) -> Result<GlyphIndex, AuthoredSlugError> {
     let component_started = Instant::now();
     if let Some(glyph_index) =
         add_decomposed_component_glyph(builder, compilation, projection, resolved_sources)?
@@ -183,7 +183,7 @@ pub(super) fn add_default_component_projection_glyph(
         compilation.profile.component_preparation += component_started.elapsed();
         return Ok(glyph_index);
     }
-    let mut direct_glyphs = HashMap::<GlyphId, u32>::new();
+    let mut direct_glyphs = HashMap::<GlyphId, GlyphIndex>::new();
     for glyph_id in std::iter::once(projection.glyph_id()).chain(
         projection
             .components()
@@ -298,7 +298,7 @@ fn add_decomposed_component_glyph(
     compilation: &mut AuthoredGlyphCompilation<'_, '_>,
     projection: &GlyphProjection,
     resolved_sources: &mut HashMap<SourceId, ResolvedGlyph>,
-) -> Result<Option<u32>, AuthoredSlugError> {
+) -> Result<Option<GlyphIndex>, AuthoredSlugError> {
     let glyph_id = projection.glyph_id();
     if projection.decomposition().is_none() {
         return Ok(None);
@@ -536,7 +536,7 @@ fn component_index_for_path(
 fn append_part(
     builder: &VariableAtlasBuilder,
     parts: &mut Vec<VariableComponentPart>,
-    glyph_index: u32,
+    glyph_index: GlyphIndex,
     component_index: u32,
     output_curve_start: &mut u32,
 ) -> Result<(), AuthoredSlugError> {

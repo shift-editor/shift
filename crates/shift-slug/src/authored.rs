@@ -16,7 +16,7 @@ use shift_font::{
 };
 
 use crate::{
-    AuthoredAtlasProfile, Curve, CurveShape, Point, QuadraticOutline, SlugError,
+    AuthoredAtlasProfile, Curve, CurveShape, GlyphIndex, Point, QuadraticOutline, SlugError,
     VariableAtlasBuilder,
 };
 
@@ -24,7 +24,7 @@ mod component;
 pub use component::{AuthoredWeightSet, add_authored_glyph_with_weight_sets};
 
 pub(crate) type AuthoredDefaultKey = (shift_font::GlyphId, Vec<u32>, u32);
-pub(crate) type AuthoredDefaultGlyphs = HashMap<AuthoredDefaultKey, u32>;
+pub(crate) type AuthoredDefaultGlyphs = HashMap<AuthoredDefaultKey, GlyphIndex>;
 
 /// Borrowed inputs for compiling one authored root glyph.
 ///
@@ -55,13 +55,13 @@ impl AuthoredGlyphRequirements {
 /// Resident atlas glyphs selected by one authored glyph projection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredGlyph {
-    pub default_glyph: u32,
+    pub default_glyph: GlyphIndex,
     pub exact_sources: Vec<AuthoredSourceGlyph>,
 }
 
 impl AuthoredGlyph {
     /// Selects an exact-source topology or the compatible default glyph.
-    pub fn glyph_for_source(&self, source_id: Option<&SourceId>) -> u32 {
+    pub fn glyph_for_source(&self, source_id: Option<&SourceId>) -> GlyphIndex {
         source_id
             .and_then(|source_id| {
                 self.exact_sources
@@ -76,7 +76,7 @@ impl AuthoredGlyph {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredSourceGlyph {
     pub source_id: SourceId,
-    pub glyph_index: u32,
+    pub glyph_index: GlyphIndex,
 }
 
 /// One location-independent authored atlas generation.
@@ -775,7 +775,7 @@ impl AuthoredCurveTopology {
 pub(crate) fn add_resolved_sources_glyph(
     builder: &mut VariableAtlasBuilder,
     sources: &[(u32, &[ResolvedContour])],
-) -> Result<u32, AuthoredSlugError> {
+) -> Result<GlyphIndex, AuthoredSlugError> {
     let ((base_weight_index, base), rest) = sources
         .split_first()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
@@ -840,7 +840,7 @@ pub fn add_authored_projection_glyph(
     projection: &GlyphProjection,
     source_weight_indices: &[u32],
     constant_weight_index: u32,
-) -> Result<u32, AuthoredSlugError> {
+) -> Result<GlyphIndex, AuthoredSlugError> {
     let requirements = authored_glyph_requirements(projection);
     if !requirements.is_supported() {
         return Err(AuthoredSlugError::UnsupportedGlyph(requirements));
@@ -862,7 +862,7 @@ fn add_default_projection_glyph(
     projection: &GlyphProjection,
     source_weight_indices: &[u32],
     constant_weight_index: u32,
-) -> Result<u32, AuthoredSlugError> {
+) -> Result<GlyphIndex, AuthoredSlugError> {
     let key = (
         projection.glyph_id(),
         source_weight_indices.to_vec(),
@@ -953,7 +953,7 @@ pub fn add_authored_component_projection_glyph(
     font: &Font,
     projection: &GlyphProjection,
     source_weight_indices: &[u32],
-) -> Result<u32, AuthoredSlugError> {
+) -> Result<GlyphIndex, AuthoredSlugError> {
     let requirements = authored_glyph_requirements(projection);
     if requirements.component_occurrences == 0 {
         return add_authored_projection_glyph(builder, projection, source_weight_indices, 0);
