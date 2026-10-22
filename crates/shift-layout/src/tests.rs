@@ -678,40 +678,62 @@ fn waterfall(sections: u32) -> Page {
     page
 }
 
-/// Times a layout of about 1,000 leaves. Run with
-/// `cargo test --release -p shift-layout -- --ignored --nocapture`.
+/// Lays out pages of 1,000, 5,000, and 10,000 leaves from scratch and fails
+/// when the 10,000-leaf p95 is over one 60 Hz frame, in optimised builds only.
+///
+/// 10,000 leaves is the largest page the editor promises to keep smooth. A
+/// whole layout of it took about 6 ms natively on an M-series Mac, too much
+/// to repeat every frame of a drag, so interactions must lay out only what
+/// they change; the budget only catches the engine itself getting slower.
+/// Run it by hand with
+/// `cargo test --release -p shift-layout -- perf_mark --ignored --nocapture`.
 #[test]
-#[ignore = "timing; run in release"]
+#[ignore = "timing; run in release by hand"]
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     reason = "a quantile's index into the samples"
 )]
-fn time_a_thousand_leaves() {
-    let page = waterfall(50);
-    let leaves = page
-        .tree
-        .nodes
-        .iter()
-        .filter(|node| matches!(node.kind, NodeKind::Text(_) | NodeKind::Fixed(_)))
-        .count();
+fn perf_mark_page_layout_scales_to_ten_thousand_leaves() {
+    const BUDGET_MS: f64 = 16.0;
 
-    let mut samples = (0..200)
-        .map(|_| {
-            let started = Instant::now();
-            let layout = page.layout();
-            let elapsed = started.elapsed();
-            assert_eq!(layout.boxes.len(), page.tree.nodes.len());
-            elapsed.as_secs_f64() * 1000.0
-        })
-        .collect::<Vec<_>>();
-    samples.sort_by(f64::total_cmp);
-    let at = |quantile: f64| samples[((samples.len() - 1) as f64 * quantile).round() as usize];
+    let mut ten_thousand_p95 = 0.0;
+    for sections in [50, 250, 500] {
+        let page = waterfall(sections);
+        let leaves = page
+            .tree
+            .nodes
+            .iter()
+            .filter(|node| matches!(node.kind, NodeKind::Text(_) | NodeKind::Fixed(_)))
+            .count();
 
-    println!(
-        "{leaves} leaves, {} nodes: p50 {:.3} ms, p95 {:.3} ms",
-        page.tree.nodes.len(),
-        at(0.5),
-        at(0.95)
-    );
+        let mut samples = (0..50)
+            .map(|_| {
+                let started = Instant::now();
+                let layout = page.layout();
+                let elapsed = started.elapsed();
+                assert_eq!(layout.boxes.len(), page.tree.nodes.len());
+                elapsed.as_secs_f64() * 1000.0
+            })
+            .collect::<Vec<_>>();
+        samples.sort_by(f64::total_cmp);
+        let at = |quantile: f64| samples[((samples.len() - 1) as f64 * quantile).round() as usize];
+
+        eprintln!(
+            "perf_mark page layout: {leaves} leaves, {} nodes: p50 {:.3} ms, p95 {:.3} ms",
+            page.tree.nodes.len(),
+            at(0.5),
+            at(0.95)
+        );
+        if leaves == 10_000 {
+            ten_thousand_p95 = at(0.95);
+        }
+    }
+
+    if cfg!(not(debug_assertions)) {
+        assert!(
+            ten_thousand_p95 < BUDGET_MS,
+            "10,000 leaves took {ten_thousand_p95:.3} ms at p95, over {BUDGET_MS} ms"
+        );
+    }
 }

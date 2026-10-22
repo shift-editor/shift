@@ -23,7 +23,7 @@ crates/shift-layout/src/
   text.rs     BreakSegments, LineRange, greedy line breaking
   page.rs     PageLayout, LayoutBox, TextLines, LayoutError, LayoutTree::layout
   engine.rs   the Taffy adapter: styles, the measure function, free and absolute placement
-  tests.rs    page layout through the public API, and the 1k-leaf timing
+  tests.rs    page layout through the public API, and the 1k/5k/10k-leaf perf mark
 ```
 
 ## Key Types
@@ -59,7 +59,7 @@ Line breaking is greedy: a line takes segments while they fit, counting the spac
 
 ```bash
 nix develop --command cargo test -p shift-layout
-nix develop --command cargo test --release -p shift-layout -- --ignored --nocapture  # 1k-leaf timing
+nix develop --command cargo test --release -p shift-layout -- perf_mark --ignored --nocapture  # 1k/5k/10k-leaf timing and budget
 nix develop --command cargo clippy -p shift-layout --all-targets -- -D warnings
 nix develop --command cargo check -p shift-layout --target wasm32-unknown-unknown
 ```
