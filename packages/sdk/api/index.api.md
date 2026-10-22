@@ -290,6 +290,7 @@ export class Editor {
     nodeDefinition(kind: "frame"): FrameNodeDefinition;
     // (undocumented)
     nodeDefinition(kind: NodeKind): NodeDefinition;
+    nodeExtent(nodeId: NodeId): SceneBounds | null;
     notifyPreviewMutationAttempt(): void;
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
