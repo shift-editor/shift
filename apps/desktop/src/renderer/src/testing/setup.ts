@@ -6,6 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll } from "vitest";
+import { signalDebug } from "@shift/editor/signals";
+
+// Lists every signal, so `signalDebug.dumpByName` can find hidden readers while debugging a test.
+signalDebug.registerNodes();
 
 // Tests write workspaces, documents, and exports under `os.tmpdir()`, and the
 // native bridge does the same through TMPDIR. Point both at one root per test

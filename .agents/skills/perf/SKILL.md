@@ -40,7 +40,7 @@ Read the "Renders started by" list top-down:
 
 When a CPU profile shows a computed recomputing on every write but not who asked for it (an effect refreshes its dependencies before it runs, so the reader is missing from the stack), ask the signal graph:
 
-- `signalDebug.dumpByName(/^editor\.scene\.structure$/, { direction: "subscribers", depth: 8 })` lists every computed and effect downstream of a cell by name. Run it in a `TestEditor` test (throw the string, since Vitest hides console output) or in the app's devtools console.
+- `signalDebug.dumpByName(/^editor\.scene\.structure$/, { direction: "subscribers", depth: 8 })` lists every computed and effect downstream of a cell by name. Run it in a `TestEditor` test (throw the string, since Vitest hides console output) or in a dev build's devtools console. Packaged and `profile:build` builds do not list signals, for speed; there, it finds nothing unless `signalDebug.registerNodes()` ran before the signals were created.
 - `traceReactiveRun()` inside a suspect computed or effect logs which tracked cell changed on each run; `signalDebug.traceWrites()` logs every signal write.
 
 Patterns that caused real regressions (rules in `/signals`):
