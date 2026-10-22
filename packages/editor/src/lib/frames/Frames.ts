@@ -22,12 +22,15 @@ import type {
   LaidOutNode,
   LayoutPageFunction,
   PageLayout,
+  PagePlacement,
   Sizing,
 } from "../../types/frame";
 
 /** A node's cached layout cells; disposed when the node leaves the scene. */
 interface NodeCells {
   readonly shape: ComputedSignal<LayoutShape>;
+  /** Independent of the active page, so a page switch leaves it valid. */
+  readonly placement: ComputedSignal<PagePlacement>;
   readonly laidOut: ComputedSignal<LaidOutNode | null>;
   /** Present for a top-level frame: the layout of it and everything in it. */
   layout: ComputedSignal<PageLayout> | null;
@@ -318,11 +321,19 @@ export class Frames {
       name: "editor.frames.shape",
       equals: sameShape,
     });
-    const laidOut = computed(() => this.#placement(nodeId), {
-      name: "editor.frames.laidOut",
-      equals: sameLaidOut,
+    const placement = computed(() => this.#placement(nodeId), {
+      name: "editor.frames.placement",
+      equals: samePlacement,
     });
-    cells = { shape, laidOut, layout: null };
+    // Switching pages reruns this for every node, so it only compares page ids.
+    const laidOut = computed(
+      () => {
+        const { pageId, laidOut } = placement.value;
+        return pageId && pageId === this.#editor.scene.activePageIdCell.value ? laidOut : null;
+      },
+      { name: "editor.frames.laidOut", equals: sameLaidOut },
+    );
+    cells = { shape, placement, laidOut, layout: null };
     this.#cells.set(nodeId, cells);
     return cells;
   }
@@ -340,11 +351,10 @@ export class Frames {
     }
   }
 
-  /** Where the layout of the node's top-level frame put it. */
-  #placement(nodeId: NodeId): LaidOutNode | null {
+  /** Where the layout of the node's top-level frame put it, on whichever page. */
+  #placement(nodeId: NodeId): PagePlacement {
     const scene = this.#editor.scene;
     track(scene.structureCell);
-    track(scene.activePageIdCell);
     const structure = scene.structureCell.peek();
     let rootId = nodeId;
     let pageId = structure.parent(nodeId);
@@ -355,11 +365,11 @@ export class Frames {
       }
       rootId = ancestorId;
     }
-    if (!pageId || pageId !== scene.activePageIdCell.peek()) return null;
+    if (!pageId) return NO_PLACEMENT;
 
     const layout = this.#rootLayout(rootId);
     track(layout);
-    return layout.peek().get(nodeId) ?? null;
+    return { pageId, laidOut: layout.peek().get(nodeId) ?? null };
   }
 
   #rootLayout(rootId: NodeId): ComputedSignal<PageLayout> {
@@ -468,7 +478,14 @@ function isFrameChild(node: ShiftNode): node is TextRunNode | FrameNode {
 function disposeCells(cells: NodeCells): void {
   cells.shape.dispose();
   cells.laidOut.dispose();
+  cells.placement.dispose();
   cells.layout?.dispose();
+}
+
+const NO_PLACEMENT: PagePlacement = { pageId: null, laidOut: null };
+
+function samePlacement(a: PagePlacement, b: PagePlacement): boolean {
+  return a.pageId === b.pageId && sameLaidOut(a.laidOut, b.laidOut);
 }
 
 function sameLaidOut(a: LaidOutNode | null, b: LaidOutNode | null): boolean {

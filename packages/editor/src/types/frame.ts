@@ -58,6 +58,14 @@ export interface LaidOutNode {
   readonly origin: Point2D;
 }
 
+/** Where its top-level frame's layout put a node, and the page that frame is on. */
+export interface PagePlacement {
+  /** Null for a node on no page. */
+  readonly pageId: NodeId | null;
+  /** Null for a node outside frames. */
+  readonly laidOut: LaidOutNode | null;
+}
+
 /** A laid-out box: its top-left corner in the parent's frame and its size, in scene units. */
 export interface LayoutBox {
   readonly x: number;
