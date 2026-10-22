@@ -10,6 +10,9 @@
 //!
 //! Nothing in Taffy's types leaves this module.
 
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::iter::Copied;
 use std::slice::Iter;
 
@@ -31,6 +34,13 @@ use crate::tree::{
 /// One page's nodes, in input order, as Taffy lays them out.
 pub(crate) struct Engine<'a> {
     slots: Vec<Slot<'a>>,
+    /// Each distinct style, indexed by [`Slot::style`]. Leaves under the same
+    /// rules share one, so a page of thousands of runs holds a handful.
+    styles: Vec<Style>,
+    /// Taffy's layout cache for each row, column, free frame, and the page,
+    /// indexed by [`Slot::cache`]. Leaves are cheap enough to recompute, and
+    /// a cache each would make the page too big to stay in the CPU's cache.
+    caches: Vec<Cache>,
 }
 
 /// How a node lays out its content.
@@ -46,7 +56,8 @@ enum Content<'a> {
 
 struct Slot<'a> {
     content: Content<'a>,
-    style: Style,
+    /// The node's entry in [`Engine::styles`].
+    style: usize,
     /// Sizing as it lays out: `Fill` only under a row or column, and `Hug`
     /// for a text run's height and both of the page's axes.
     width: Sizing,
@@ -56,9 +67,79 @@ struct Slot<'a> {
     flow: Vec<NodeId>,
     /// Children that keep their positions.
     placed: Vec<usize>,
-    cache: Cache,
+    /// The node's entry in [`Engine::caches`]; `None` for a leaf.
+    cache: Option<usize>,
+    /// A text run's lines at the widths it was last broken for.
+    breaks: Cell<Breaks>,
     location: Point<f32>,
     size: Size<f32>,
+}
+
+/// What a leaf's style is made from, as a key that leaves with the same
+/// style share.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct LeafStyle {
+    width: SizingKey,
+    height: SizingKey,
+    flow: Option<LayoutMode>,
+}
+
+/// A [`Sizing`] compared by the bits of its value.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum SizingKey {
+    Fixed(u64),
+    Hug,
+    Fill,
+}
+
+impl LeafStyle {
+    fn new(width: Sizing, height: Sizing, flow: Option<LayoutMode>) -> Self {
+        Self {
+            width: SizingKey::from(width),
+            height: SizingKey::from(height),
+            flow,
+        }
+    }
+}
+
+impl From<Sizing> for SizingKey {
+    fn from(sizing: Sizing) -> Self {
+        match sizing {
+            Sizing::Fixed(value) => Self::Fixed(value.to_bits()),
+            Sizing::Hug => Self::Hug,
+            Sizing::Fill => Self::Fill,
+        }
+    }
+}
+
+/// The line count and widest line of a text run at the last two widths it
+/// was broken for, newest first.
+///
+/// Taffy asks for a run's size under several inputs that differ only in how
+/// the width reached it, and its cache keys on the inputs, so without this a
+/// run is broken about five times per layout for two distinct widths.
+#[derive(Clone, Copy, Default)]
+struct Breaks([Option<Broken>; 2]);
+
+#[derive(Clone, Copy)]
+struct Broken {
+    /// The width offered, in scene units.
+    limit: f64,
+    count: u32,
+    widest: f64,
+}
+
+impl Breaks {
+    fn get(&self, limit: f64) -> Option<Broken> {
+        self.0
+            .into_iter()
+            .flatten()
+            .find(|broken| broken.limit.to_bits() == limit.to_bits())
+    }
+
+    fn insert(&mut self, broken: Broken) {
+        self.0 = [Some(broken), self.0[0]];
+    }
 }
 
 impl<'a> Engine<'a> {
@@ -71,11 +152,34 @@ impl<'a> Engine<'a> {
         }
 
         let mut slots: Vec<Slot<'a>> = Vec::with_capacity(nodes.len());
+        let mut styles = Vec::new();
+        let mut leaf_styles = HashMap::new();
+        let mut caches = Vec::new();
         for (index, node) in nodes.iter().enumerate() {
             let parent_mode = parent_mode(nodes, index, node)?;
             let flow =
                 parent_mode.filter(|mode| mode.is_stack() && node.placement == Placement::Auto);
-            slots.push(Slot::new(node, flow));
+            let (mut slot, style) = Slot::new(node, flow);
+            let container = matches!(slot.content, Content::Free | Content::Stack);
+            slot.style = if container {
+                styles.push(style);
+                styles.len() - 1
+            } else {
+                // A leaf's style follows from its sizing and its parent's
+                // mode alone.
+                match leaf_styles.entry(LeafStyle::new(slot.width, slot.height, flow)) {
+                    Entry::Occupied(entry) => *entry.get(),
+                    Entry::Vacant(entry) => {
+                        styles.push(style);
+                        *entry.insert(styles.len() - 1)
+                    }
+                }
+            };
+            if container {
+                slot.cache = Some(caches.len());
+                caches.push(Cache::new());
+            }
+            slots.push(slot);
             let Some(parent) = node.parent.and_then(|parent| slots.get_mut(parent)) else {
                 continue;
             };
@@ -85,7 +189,11 @@ impl<'a> Engine<'a> {
                 parent.placed.push(index);
             }
         }
-        Ok(Self { slots })
+        Ok(Self {
+            slots,
+            styles,
+            caches,
+        })
     }
 
     /// Lays out the page and reads every box and text run's lines.
@@ -110,8 +218,17 @@ impl<'a> Engine<'a> {
         &self.slots[usize::from(id)]
     }
 
+    fn style(&self, id: NodeId) -> &Style {
+        &self.styles[self.slot(id).style]
+    }
+
     fn slot_mut(&mut self, id: NodeId) -> &mut Slot<'a> {
         &mut self.slots[usize::from(id)]
+    }
+
+    fn cache_mut(&mut self, id: NodeId) -> Option<&mut Cache> {
+        let index = self.slot(id).cache?;
+        self.caches.get_mut(index)
     }
 
     fn compute_uncached(&mut self, id: NodeId, inputs: LayoutInput) -> LayoutOutput {
@@ -128,14 +245,16 @@ impl<'a> Engine<'a> {
                 let slot = self.slot(id);
                 compute_leaf_layout(
                     inputs,
-                    &slot.style,
+                    self.style(id),
                     |_, _| 0.0,
-                    |known, available| measure_text(segments, slot.width, known, available),
+                    |known, available| {
+                        measure_text(segments, &slot.breaks, slot.width, known, available)
+                    },
                 )
             }
             Content::Fixed(size) => compute_leaf_layout(
                 inputs,
-                &self.slot(id).style,
+                self.style(id),
                 |_, _| 0.0,
                 |known, _| known.unwrap_or(size),
             ),
@@ -222,9 +341,9 @@ fn parent_mode(
 }
 
 impl<'a> Slot<'a> {
-    /// Translates `node`; `flow` is the parent's mode when the node follows a
-    /// row or column.
-    fn new(node: &'a LayoutNode, flow: Option<LayoutMode>) -> Self {
+    /// Translates `node` into a slot and its style, which the engine stores;
+    /// `flow` is the parent's mode when the node follows a row or column.
+    fn new(node: &'a LayoutNode, flow: Option<LayoutMode>) -> (Self, Style) {
         let laid_out = |sizing: Sizing| match (sizing, flow) {
             (Sizing::Fill, None) => Sizing::Hug,
             _ => sizing,
@@ -261,9 +380,9 @@ impl<'a> Slot<'a> {
             }),
         };
 
-        Self {
+        let slot = Self {
             content,
-            style,
+            style: 0,
             width,
             height,
             position: Point {
@@ -272,10 +391,12 @@ impl<'a> Slot<'a> {
             },
             flow: Vec::new(),
             placed: Vec::new(),
-            cache: Cache::new(),
+            cache: None,
+            breaks: Cell::default(),
             location: Point::ZERO,
             size: Size::ZERO,
-        }
+        };
+        (slot, style)
     }
 
     fn layout_box(&self) -> LayoutBox {
@@ -384,6 +505,7 @@ fn fixed(sizing: Sizing) -> Option<f32> {
 /// little room its parent has.
 fn measure_text(
     segments: &BreakSegments,
+    breaks: &Cell<Breaks>,
     width: Sizing,
     known: Size<Option<f32>>,
     available: Size<AvailableSpace>,
@@ -401,11 +523,7 @@ fn measure_text(
         (_, Some(width), _) | (_, None, AvailableSpace::Definite(width)) => f64::from(width),
         (_, None, AvailableSpace::MinContent) => 0.0,
     };
-    let (count, widest) = segments
-        .lines(limit / segments.scale)
-        .fold((0_u32, 0.0_f64), |(count, widest), line| {
-            (count.saturating_add(1), widest.max(line.width))
-        });
+    let Broken { count, widest, .. } = break_text(segments, breaks, limit);
     Size {
         width: known
             .width
@@ -414,6 +532,29 @@ fn measure_text(
             .height
             .unwrap_or_else(|| to_f32(f64::from(count) * segments.line_height * segments.scale)),
     }
+}
+
+/// The line count and widest line of a run broken at `limit`, in scene
+/// units, reusing the last two widths it was broken for.
+fn break_text(segments: &BreakSegments, breaks: &Cell<Breaks>, limit: f64) -> Broken {
+    let mut memo = breaks.get();
+    if let Some(broken) = memo.get(limit) {
+        return broken;
+    }
+
+    let (count, widest) = segments
+        .lines(limit / segments.scale)
+        .fold((0_u32, 0.0_f64), |(count, widest), line| {
+            (count.saturating_add(1), widest.max(line.width))
+        });
+    let broken = Broken {
+        limit,
+        count,
+        widest,
+    };
+    memo.insert(broken);
+    breaks.set(memo);
+    broken
 }
 
 /// Layout input for a node sized as if alone: no size imposed, unlimited room.
@@ -470,7 +611,7 @@ impl LayoutPartialTree for Engine<'_> {
     type CustomIdent = String;
 
     fn get_core_container_style(&self, id: NodeId) -> Self::CoreContainerStyle<'_> {
-        &self.slot(id).style
+        self.style(id)
     }
 
     fn set_unrounded_layout(&mut self, id: NodeId, layout: &taffy::Layout) {
@@ -495,15 +636,19 @@ impl LayoutPartialTree for Engine<'_> {
 
 impl CacheTree for Engine<'_> {
     fn cache_get(&mut self, id: NodeId, inputs: &LayoutInput) -> Option<LayoutOutput> {
-        self.slot_mut(id).cache.get(inputs)
+        self.cache_mut(id)?.get(inputs)
     }
 
     fn cache_store(&mut self, id: NodeId, inputs: &LayoutInput, output: LayoutOutput) {
-        self.slot_mut(id).cache.store(inputs, output);
+        if let Some(cache) = self.cache_mut(id) {
+            cache.store(inputs, output);
+        }
     }
 
     fn cache_clear(&mut self, id: NodeId) {
-        self.slot_mut(id).cache.clear();
+        if let Some(cache) = self.cache_mut(id) {
+            cache.clear();
+        }
     }
 }
 
@@ -519,10 +664,10 @@ impl LayoutFlexboxContainer for Engine<'_> {
         Self: 'b;
 
     fn get_flexbox_container_style(&self, id: NodeId) -> Self::FlexboxContainerStyle<'_> {
-        &self.slot(id).style
+        self.style(id)
     }
 
     fn get_flexbox_child_style(&self, child: NodeId) -> Self::FlexboxItemStyle<'_> {
-        &self.slot(child).style
+        self.style(child)
     }
 }

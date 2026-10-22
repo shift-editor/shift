@@ -104,7 +104,7 @@ impl FrameLayout {
 }
 
 /// A frame's layout mode.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum LayoutMode {
     /// Children keep their positions; a hugging frame covers them.
     #[default]
