@@ -96,6 +96,19 @@ describe("typing a glyph not yet loaded this session", () => {
 
     expect(layout.peek()?.totalAdvance).toBe(before + 600);
   });
+
+  it("waits for a new run's glyphs before its first layout", async () => {
+    const editor = await reopenedWithUnloadedB();
+    editor.exitNodes();
+    const frame = editor.frames.create(null, {})!;
+    const node = editor.frames.addText(frame.id, "B", { size: 1000 })!;
+    const layout = editor.text.layoutCell(node.runId);
+    expect(layout.peek()).toBeNull();
+
+    await editor.text.settled();
+
+    expect(layout.peek()?.totalAdvance).toBe(600);
+  });
 });
 
 describe("Select over the page run", () => {
