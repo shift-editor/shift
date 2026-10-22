@@ -44,6 +44,7 @@ const SCENARIOS = {
   undo: { run: undoRedo, editor: true },
   frames: { run: dragFrame, editor: true },
   "frames-pan": { run: panFrames, editor: true },
+  "frames-switch": { run: switchPages, editor: true },
   open: { run: openFont, editor: false },
 };
 /** Wide enough at a frame's zoom to press inside it without hitting a child or a handle. */
@@ -310,6 +311,44 @@ async function dragFrame(page) {
     setup.columnId,
   );
   console.log(`column frame now at ${JSON.stringify(moved)} (started at {"x":0,"y":0})`);
+  return report;
+}
+
+/**
+ * Switches between a filled page and an empty one three times each way, timing
+ * each switch to its next painted frame.
+ */
+async function switchPages(page) {
+  await fillFramePage(page);
+  const pages = await page.evaluate(() => {
+    const editor = window.shift.editor;
+    const filled = editor.pages.activeCell.peek();
+    const empty = editor.history.withoutRecording(() => editor.pages.create("Empty").id);
+    return { filled, empty };
+  });
+  await page.waitForTimeout(1000);
+  const switches = [];
+  const report = await measure(page, async () => {
+    for (let round = 0; round < 3; round++) {
+      for (const [label, id] of [
+        ["to empty", pages.empty],
+        ["to filled", pages.filled],
+      ]) {
+        const ms = await page.evaluate(async (id) => {
+          const started = performance.now();
+          window.shift.editor.pages.activate(id);
+          // The second callback runs after the frame that drew the page.
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+          return performance.now() - started;
+        }, id);
+        switches.push(`${label} ${ms.toFixed(0)}ms`);
+        await page.waitForTimeout(500);
+      }
+    }
+  });
+  console.log(`switches to their next frame: ${switches.join(", ")}`);
   return report;
 }
 
@@ -583,7 +622,7 @@ function readdirSafe(directory) {
 function usage(problem) {
   console.error(`${problem}
 
-Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|frames|frames-pan] [--axis Weight]
+Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|frames|frames-pan|frames-switch] [--axis Weight]
                             [--seconds 8] [--runs 1000] [--throttle 1] [--cpu out.cpuprofile] [--setup-cpu setup.cpuprofile]
                             [--app <executable>] [--keep-open]`);
   process.exit(1);
