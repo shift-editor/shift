@@ -3,11 +3,12 @@ import type { SelectableId } from "@shift/types";
 import { NodeDefinition } from "./NodeDefinition";
 import { FrameTransform } from "../frames/FrameTransform";
 import { localBounds } from "../editor/spaces";
-import type { LocalBounds, LocalPoint } from "../../types/coordinates";
+import type { LocalBounds, LocalPoint, SpaceTransform } from "../../types/coordinates";
 import type { FrameNode, ShiftNode } from "../../types/node";
 import type { LaidOutNode } from "../../types/frame";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
+import type { RectPaint } from "../editor/rendering/Canvas";
 import type { TransformTarget } from "../../types/transformTarget";
 
 /**
@@ -61,6 +62,19 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
     return new FrameTransform(this.editor, node, Bounds.toRect(bounds));
   }
 
+  /** A frame paints its box behind its children, and its selection outline above them. */
+  override drawsIn(node: FrameNode, pass: RenderPass): boolean {
+    switch (pass) {
+      case "background":
+        return true;
+      case "controls":
+        return this.editor.selection.has(node.id);
+      case "content":
+      case "overlay":
+        return false;
+    }
+  }
+
   override draw(node: FrameNode, ctx: RenderContext, pass: RenderPass): void {
     const bounds = this.bounds(node);
     if (!bounds) return;
@@ -81,6 +95,30 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
       case "overlay":
         return;
     }
+  }
+
+  /** Paints the frame's box as {@link draw} does, straight in scene units, unless it is rotated or skewed. */
+  override paintBackground(
+    node: FrameNode,
+    transform: SpaceTransform<"local", "scene">,
+    ctx: RenderContext,
+    paint: RectPaint,
+  ): boolean {
+    if (transform.b !== 0 || transform.c !== 0) return false;
+
+    const bounds = this.bounds(node);
+    if (!bounds) return true;
+
+    const { frame } = ctx.canvas.theme;
+    const { a, d, e, f } = transform;
+    const width = a * Bounds.width(bounds);
+    const height = d * Bounds.height(bounds);
+    // A flipped axis gives a negative size; start from the box's lesser corner instead.
+    const x = e + Math.min(width, 0);
+    const y = f + Math.min(height, 0);
+    paint.fill(frame.fill, x, y, Math.abs(width), Math.abs(height));
+    paint.stroke(frame.stroke, frame.widthPx, x, y, Math.abs(width), Math.abs(height));
+    return true;
   }
 
   #laidOut(node: ShiftNode): LaidOutNode | null {

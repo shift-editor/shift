@@ -2,7 +2,7 @@ import { NodeDefinition } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
-import type { LocalBounds, LocalPoint } from "../../types/coordinates";
+import type { LocalBounds, LocalPoint, SpaceTransform } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
 import type { TextItem } from "../text/layout/types";
@@ -11,6 +11,7 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import { spacingGapCenter, type SpacingGap, type SpacingSide } from "../../types/spacing";
 import type { GlyphRenderModel } from "../model/Glyph";
+import type { RectFill } from "../editor/rendering/Canvas";
 import { Bounds, Mat, type Point2D } from "@shift/geo";
 import {
   isTextItemId,
@@ -42,6 +43,8 @@ const GREEKED_BAR_HEIGHT = 0.5;
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly kind: TextRunNode["kind"] = "textRun";
   readonly #outline = new OutlineRenderer();
+  // non-reactive: memo keyed by layout identity; a layout never changes, a new one is a new key
+  readonly #greekedBars = new WeakMap<TextLayout, Float64Array>();
 
   unitsTransform(node: TextRunNode): Mat {
     const scale = this.#scale(node);
@@ -462,8 +465,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         this.#drawSelection(node, ctx);
         return;
       case "content":
-        track(this.editor.zoomCell);
-        if (node.size * this.editor.zoomCell.peek() < GREEKED_EM_PX) {
+        if (this.#greeked(node)) {
           this.#drawGreeked(ctx, layout);
           return;
         }
@@ -475,6 +477,77 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       case "overlay":
         return;
     }
+  }
+
+  /** Only the run being typed in draws a selection or a caret; every run draws its text. */
+  override drawsIn(node: TextRunNode, pass: RenderPass): boolean {
+    switch (pass) {
+      case "content":
+        return true;
+      case "background":
+      case "controls":
+        return this.editor.textEditing.stateCell.peek()?.nodeId === node.id;
+      case "overlay":
+        return false;
+    }
+  }
+
+  /**
+   * Adds a greeked run's bars to the shared fill, in scene units.
+   *
+   * @remarks
+   * A run large enough to read draws its glyphs with {@link draw} instead, as
+   * does one rotated or skewed, whose bars are not axis-aligned in the scene.
+   */
+  override fillContent(
+    node: TextRunNode,
+    transform: SpaceTransform<"local", "scene">,
+    ctx: RenderContext,
+    fill: RectFill,
+  ): boolean {
+    if (!this.#greeked(node) || transform.b !== 0 || transform.c !== 0) return false;
+
+    const layout = this.editor.text.layoutCell(node.runId).peek();
+    if (!layout) return true;
+
+    const color = ctx.canvas.theme.glyph.fill;
+    const { a, d, e, f } = transform;
+    const bars = this.#barsFor(layout);
+    for (let index = 0; index < bars.length; index += 4) {
+      const width = a * bars[index + 2]!;
+      const height = d * bars[index + 3]!;
+      // A flipped axis gives a negative size; keep every rectangle wound the same way.
+      const x = a * bars[index]! + e + Math.min(width, 0);
+      const y = d * bars[index + 1]! + f + Math.min(height, 0);
+      fill.rect(color, x, y, Math.abs(width), Math.abs(height));
+    }
+    return true;
+  }
+
+  /** Whether a run is too small on screen to read, so it draws a bar per line. */
+  #greeked(node: TextRunNode): boolean {
+    track(this.editor.zoomCell);
+    return node.size * this.editor.zoomCell.peek() < GREEKED_EM_PX;
+  }
+
+  /** Each line's bar as `x, y, width, height` in the run's units, at its x-height. */
+  #barsFor(layout: TextLayout): Float64Array {
+    const cached = this.#greekedBars.get(layout);
+    if (cached) return cached;
+
+    const height = layout.metrics.ascender * GREEKED_BAR_HEIGHT;
+    const lines = this.#lines(layout);
+    const bars = new Float64Array(lines.length * 4);
+    lines.forEach((line, index) => {
+      const first = line[0]!;
+      const last = line[line.length - 1]!;
+      bars.set(
+        [first.left, first.baseline, last.left + last.glyph.xAdvance - first.left, height],
+        index * 4,
+      );
+    });
+    this.#greekedBars.set(layout, bars);
+    return bars;
   }
 
   #drawSelection(node: TextRunNode, ctx: RenderContext): void {
@@ -530,12 +603,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    */
   #drawGreeked(ctx: RenderContext, layout: TextLayout): void {
     const fill = ctx.canvas.theme.glyph.fill;
-    const height = layout.metrics.ascender * GREEKED_BAR_HEIGHT;
-    for (const line of this.#lines(layout)) {
-      const first = line[0]!;
-      const last = line[line.length - 1]!;
-      const right = last.left + last.glyph.xAdvance;
-      ctx.canvas.fillRect(first.left, first.baseline, right - first.left, height, fill);
+    const bars = this.#barsFor(layout);
+    for (let index = 0; index < bars.length; index += 4) {
+      ctx.canvas.fillRect(bars[index]!, bars[index + 1]!, bars[index + 2]!, bars[index + 3]!, fill);
     }
   }
 

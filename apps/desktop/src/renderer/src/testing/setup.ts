@@ -48,6 +48,7 @@ if (typeof globalThis.Path2D === "undefined") {
           y: number;
         }
       | { type: "closePath" }
+      | { type: "rect"; x: number; y: number; width: number; height: number }
       | { type: "addPath"; path: Path2D }
     > = [];
 
@@ -78,6 +79,10 @@ if (typeof globalThis.Path2D === "undefined") {
 
     closePath(): void {
       this.commands.push({ type: "closePath" });
+    }
+
+    rect(x: number, y: number, width: number, height: number): void {
+      this.commands.push({ type: "rect", x, y, width, height });
     }
 
     addPath(path: Path2D): void {

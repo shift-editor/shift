@@ -1,6 +1,6 @@
 import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
-import type { LocalBounds, LocalPoint } from "../../types/coordinates";
+import type { LocalBounds, LocalPoint, SpaceTransform } from "../../types/coordinates";
 import type { ShiftNode } from "../../types/node";
 import type { NodeReference } from "../../types/records";
 import type { PointerTarget } from "../../types/target";
@@ -8,6 +8,7 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { SelectableId } from "@shift/types";
 import type { TransformTarget } from "../../types/transformTarget";
 import type { TextItem } from "../text/layout/types";
+import type { RectFill, RectPaint } from "../editor/rendering/Canvas";
 
 /**
  * Defines behavior shared by every scene node of one kind.
@@ -167,6 +168,69 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * @param _pass - phase requested by the render layer.
    */
   draw(_node: N, _ctx: RenderContext, _pass: RenderPass): void {}
+
+  /**
+   * Returns whether {@link draw} paints anything for a node in one pass.
+   *
+   * @remarks
+   * The render layers skip the node's canvas state for a pass that answers
+   * false, which on a page of thousands of nodes is most of a frame. Read
+   * state with `peek()`; the layers already track selection, hover, and
+   * editing. Defaults to true.
+   *
+   * @param _node - scene node handled by this definition.
+   * @param _pass - phase requested by the render layer.
+   */
+  drawsIn(_node: N, _pass: RenderPass): boolean {
+    return true;
+  }
+
+  /**
+   * Adds a node's content-pass painting to a shared rectangle fill, when rectangles are all it paints.
+   *
+   * @remarks
+   * Lets a zoomed-out page fill thousands of nodes at once instead of saving,
+   * transforming, and restoring the canvas for each. Rectangles are in scene
+   * units. The scene layer keeps what a node adds and replays it until the
+   * node's record, transform, or text layout, the zoom, or the theme changes,
+   * so the answer must depend on nothing else. Defaults to false.
+   *
+   * @param _node - scene node handled by this definition.
+   * @param _transform - from the node's units to the scene.
+   * @param _ctx - renderer-owned resources for the current frame.
+   * @param _fill - the content pass's shared fill.
+   * @returns true when it added the node's painting; false to draw it with {@link draw}.
+   */
+  fillContent(
+    _node: N,
+    _transform: SpaceTransform<"local", "scene">,
+    _ctx: RenderContext,
+    _fill: RectFill,
+  ): boolean {
+    return false;
+  }
+
+  /**
+   * Paints a node's background pass in scene units through a shared paint, when rectangles are all it paints.
+   *
+   * @remarks
+   * Paints exactly what {@link draw} would, in the same order, without a
+   * canvas state of its own. Defaults to false.
+   *
+   * @param _node - scene node handled by this definition.
+   * @param _transform - from the node's units to the scene.
+   * @param _ctx - renderer-owned resources for the current frame.
+   * @param _paint - the background pass's shared paint.
+   * @returns true when it painted the node; false to draw it with {@link draw}.
+   */
+  paintBackground(
+    _node: N,
+    _transform: SpaceTransform<"local", "scene">,
+    _ctx: RenderContext,
+    _paint: RectPaint,
+  ): boolean {
+    return false;
+  }
 }
 
 /** Constructs a node definition bound to one editor runtime. */
