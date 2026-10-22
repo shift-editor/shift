@@ -129,13 +129,13 @@ describe("frames lay out their children in rows and columns", () => {
     const column = await addFrame(editor, null);
     const run = addRun(editor, column.id, "AA");
     await editor.settle();
-    const layout = editor.frames.layoutCell.peek();
+    const laidOut = editor.frames.laidOutCell(run.id).peek();
 
     editor.history.capture("Select", () => editor.selection.select([column.id]));
     editor.hover.set(column.id);
     editor.textEditing.resume(run.id, null);
 
-    expect(editor.frames.layoutCell.peek()).toBe(layout);
+    expect(editor.frames.laidOutCell(run.id).peek()).toBe(laidOut);
   });
 });
 

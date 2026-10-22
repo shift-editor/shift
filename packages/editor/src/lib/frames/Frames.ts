@@ -3,9 +3,16 @@ import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import { compareIndex } from "../editor/Scene";
 import { computed, effect, signal, track } from "../signals";
-import type { Effect, Signal, WritableSignal } from "../signals";
+import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
 import { loadShaping } from "../wasm/shaping";
-import { EMPTY_PAGE_LAYOUT, layOutPage } from "./pageLayout";
+import {
+  EMPTY_PAGE_LAYOUT,
+  layOutFrame,
+  sameShape,
+  sameSizing,
+  type LayoutShape,
+  type RunMeasure,
+} from "./pageLayout";
 import type { FrameNode, ShiftNode, TextRunNode } from "../../types/node";
 import type {
   FrameAxis,
@@ -17,6 +24,14 @@ import type {
   PageLayout,
   Sizing,
 } from "../../types/frame";
+
+/** A node's cached layout cells; disposed when the node leaves the scene. */
+interface NodeCells {
+  readonly shape: ComputedSignal<LayoutShape>;
+  readonly laidOut: ComputedSignal<LaidOutNode | null>;
+  /** Present for a top-level frame: the layout of it and everything in it. */
+  layout: ComputedSignal<PageLayout> | null;
+}
 
 /** A new frame's layout: a column with room around and between its children. */
 export const DEFAULT_FRAME_LAYOUT: FrameLayout = {
@@ -41,9 +56,13 @@ const DEFAULT_TEXT_SIZE = 72;
  * @remarks
  * Frames are scene nodes (`FrameNode`), so this is a view over `Scene` plus
  * the page layout. Each edit is one undo step (joining an open capture, such
- * as a tool gesture's). The layout ({@link layoutCell}) is derived from node
- * records and text layouts only, so selection, hover, and caret changes never
- * lay the page out again.
+ * as a tool gesture's).
+ *
+ * Layout is fine-grained: each top-level frame is laid out on its own, from
+ * cells that hold what layout reads from each node (everything but its
+ * position) and each run's measured size. Moving a frame on the page lays
+ * nothing out, and editing inside one frame lays out that frame only.
+ * Selection, hover, and caret changes never lay anything out.
  */
 export class Frames {
   readonly #editor: Editor;
@@ -51,8 +70,10 @@ export class Frames {
     name: "editor.frames.engine",
   });
   #loading: Promise<void> | null = null;
-  readonly #layoutCell: Signal<PageLayout>;
+  // non-reactive: cache of per-node cells, pruned by #pruner when nodes leave the scene
+  readonly #cells = new Map<NodeId, NodeCells>();
   readonly #loader: Effect;
+  readonly #pruner: Effect;
 
   /**
    * @param editor - editor whose scene holds the frames.
@@ -60,42 +81,45 @@ export class Frames {
   constructor(editor: Editor) {
     this.#editor = editor;
     const scene = editor.scene;
-    this.#layoutCell = computed(
-      () => {
-        const pageId = scene.activePageIdCell.value;
-        const { tree } = scene.cell.value;
-        const engine = this.#engineCell.value;
-        if (!pageId || !engine) return EMPTY_PAGE_LAYOUT;
-
-        return layOutPage(editor, tree, pageId, engine);
-      },
-      { name: "editor.frames.layout" },
-    );
     // The engine ships in the shaping module; load it once a page has a frame to lay out.
     this.#loader = effect(
       () => {
-        track(scene.cell);
+        track(scene.structureCell);
         if (scene.nodesOfKind("frame").length > 0) void this.#loadEngine();
       },
       { name: "editor.frames.loadEngine" },
     );
+    this.#pruner = effect(
+      () => {
+        const structure = scene.structureCell.value;
+        for (const [id, cells] of this.#cells) {
+          if (structure.get(id) !== null) continue;
+          disposeCells(cells);
+          this.#cells.delete(id);
+        }
+      },
+      { name: "editor.frames.prune" },
+    );
   }
 
   /**
-   * The active page's layout: every frame's box and every placed child's origin.
+   * Returns where the page layout put a node, or null for a node outside
+   * frames or on another page.
    *
    * @remarks
-   * Empty until the layout engine has loaded (see {@link settled}); readers
-   * rerun when it arrives. Reruns on node edits, page switches, and text
-   * layout changes of runs inside frames.
+   * Reactive: inside a computed or effect, the reader reruns only when this
+   * node's place changes. Null until the layout engine has loaded (see
+   * {@link settled}).
    */
-  get layoutCell(): Signal<PageLayout> {
-    return this.#layoutCell;
+  laidOut(nodeId: NodeId): LaidOutNode | null {
+    const cell = this.laidOutCell(nodeId);
+    track(cell);
+    return cell.peek();
   }
 
-  /** Returns where the page layout put a node, or null for a node outside frames or on another page. */
-  laidOut(nodeId: NodeId): LaidOutNode | null {
-    return this.#layoutCell.peek().get(nodeId) ?? null;
+  /** The cell behind {@link laidOut}, for readers that subscribe to it directly. */
+  laidOutCell(nodeId: NodeId): Signal<LaidOutNode | null> {
+    return this.#cellsFor(nodeId).laidOut;
   }
 
   /** Resolves once the layout engine has loaded, when a page needed it. */
@@ -287,6 +311,100 @@ export class Frames {
 
   dispose(): void {
     this.#loader.dispose();
+    this.#pruner.dispose();
+    for (const cells of this.#cells.values()) disposeCells(cells);
+    this.#cells.clear();
+  }
+
+  #cellsFor(nodeId: NodeId): NodeCells {
+    let cells = this.#cells.get(nodeId);
+    if (cells) return cells;
+
+    const shape = computed(() => this.#shape(nodeId), {
+      name: "editor.frames.shape",
+      equals: sameShape,
+    });
+    const laidOut = computed(() => this.#placement(nodeId), {
+      name: "editor.frames.laidOut",
+      equals: sameLaidOut,
+    });
+    cells = { shape, laidOut, layout: null };
+    this.#cells.set(nodeId, cells);
+    return cells;
+  }
+
+  /** What layout reads from a node: a frame's layout and sizing, or a run's measured size. */
+  #shape(nodeId: NodeId): LayoutShape {
+    const node = this.#editor.scene.record(nodeId);
+    switch (node?.kind) {
+      case "frame":
+        return { kind: "frame", layout: node.layout, width: node.width, height: node.height };
+      case "textRun":
+        return this.#measureRun(node);
+      default:
+        return null;
+    }
+  }
+
+  /** Where the layout of the node's top-level frame put it. */
+  #placement(nodeId: NodeId): LaidOutNode | null {
+    const scene = this.#editor.scene;
+    track(scene.structureCell);
+    track(scene.activePageIdCell);
+    const structure = scene.structureCell.peek();
+    let rootId = nodeId;
+    let pageId = structure.parent(nodeId);
+    for (const ancestorId of structure.ancestors(nodeId)) {
+      if (structure.parent(ancestorId) === null) {
+        pageId = ancestorId;
+        break;
+      }
+      rootId = ancestorId;
+    }
+    if (!pageId || pageId !== scene.activePageIdCell.peek()) return null;
+
+    const layout = this.#rootLayout(rootId);
+    track(layout);
+    return layout.peek().get(nodeId) ?? null;
+  }
+
+  #rootLayout(rootId: NodeId): ComputedSignal<PageLayout> {
+    const cells = this.#cellsFor(rootId);
+    cells.layout ??= computed(
+      () => {
+        const engine = this.#engineCell.value;
+        if (!engine) return EMPTY_PAGE_LAYOUT;
+
+        const structure = this.#editor.scene.structureCell.value;
+        return layOutFrame(structure, rootId, (id) => this.#cellsFor(id).shape.value, engine);
+      },
+      { name: "editor.frames.layout" },
+    );
+    return cells.layout;
+  }
+
+  /**
+   * Measures a text run as a fixed leaf: its drawn box in scene units, and its
+   * origin (the first baseline's start) from the box's top-left corner.
+   */
+  #measureRun(run: TextRunNode): RunMeasure {
+    const editor = this.#editor;
+    track(editor.text.layoutCell(run.runId));
+    track(editor.font.metricsCell);
+    const unitsPerEm = editor.font.metricsCell.peek().unitsPerEm;
+    const bounds = editor.nodeDefinition("textRun").bounds(run);
+    if (!bounds) return { kind: "textRun", size: { width: 0, height: 0 }, offset: { x: 0, y: 0 } };
+
+    const scale = run.size / unitsPerEm;
+    return {
+      kind: "textRun",
+      size: {
+        width: (bounds.max.x - bounds.min.x) * scale,
+        height: (bounds.max.y - bounds.min.y) * scale,
+      },
+      // The run draws Y-up from its baseline, so its box top is `max.y` above the origin.
+      offset: { x: -bounds.min.x * scale, y: bounds.max.y * scale },
+    };
   }
 
   #loadEngine(): Promise<void> {
@@ -347,9 +465,24 @@ function isFrameChild(node: ShiftNode): node is TextRunNode | FrameNode {
   return node.kind === "textRun" || node.kind === "frame";
 }
 
-function sameSizing(a: Sizing, b: Sizing): boolean {
-  if (a.kind !== b.kind) return false;
-  return a.kind !== "fixed" || (b.kind === "fixed" && a.size === b.size);
+function disposeCells(cells: NodeCells): void {
+  cells.shape.dispose();
+  cells.laidOut.dispose();
+  cells.layout?.dispose();
+}
+
+function sameLaidOut(a: LaidOutNode | null, b: LaidOutNode | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+
+  return (
+    a.box.x === b.box.x &&
+    a.box.y === b.box.y &&
+    a.box.width === b.box.width &&
+    a.box.height === b.box.height &&
+    a.origin.x === b.origin.x &&
+    a.origin.y === b.origin.y
+  );
 }
 
 function sameLayout(a: FrameLayout, b: FrameLayout): boolean {

@@ -1,6 +1,13 @@
 import { mintNodeId, type NodeId } from "@shift/types";
 import { Tree } from "../utils/Tree";
-import { computed, signal, type Signal, type WritableSignal } from "../signals/index";
+import {
+  computed,
+  signal,
+  track,
+  untracked,
+  type Signal,
+  type WritableSignal,
+} from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
@@ -19,15 +26,16 @@ export const DEFAULT_PAGE_NAME = "Page 1";
 export interface SceneValue {
   /** The nodes on the active page, parents before children, siblings by `index`; the page itself is not included. */
   readonly nodes: readonly ShiftNode[];
-  /** Every node on every page. */
-  readonly tree: Tree<NodeId, ShiftNode>;
 }
 
-interface DocumentValue {
-  /** Every node, parents before children, siblings by `index`. */
-  readonly nodes: readonly ShiftNode[];
-  readonly tree: Tree<NodeId, ShiftNode>;
-}
+/**
+ * Every node's id, parent, and sibling order, on every page.
+ *
+ * @remarks
+ * Holds ids only: a node's other fields are read from its record, so moving
+ * or restyling a node never changes the structure.
+ */
+export type SceneStructure = Tree<NodeId, NodeId>;
 
 /**
  * Exposes the editor's placed node graph.
@@ -44,14 +52,15 @@ interface DocumentValue {
  */
 export class Scene {
   readonly #store: ShiftStore<ShiftEditorRecord>;
-  readonly #documentCell: Signal<DocumentValue>;
+  readonly #structureVersion: WritableSignal<number>;
+  readonly #structureCell: Signal<SceneStructure>;
   readonly #pagesCell: Signal<readonly PageNode[]>;
   readonly #requestedPageId: WritableSignal<NodeId | null>;
   readonly #activePageIdCell: Signal<NodeId | null>;
   readonly #cell: Signal<SceneValue>;
-  readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
-  readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
+  readonly #idsByKind: Signal<ReadonlyMap<NodeKind, readonly NodeId[]>>;
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
+  readonly #unsubscribe: () => void;
 
   /**
    * @param store - editor store holding node records.
@@ -63,22 +72,36 @@ export class Scene {
   ) {
     this.#store = store;
     this.#byReference = store.index("node", references);
-    this.#documentCell = computed(
+    this.#structureVersion = signal(0, { name: "editor.scene.structureVersion" });
+    // Moves and edits leave the structure alone; only adding, removing, reparenting, or
+    // reordering a node rebuilds it.
+    this.#unsubscribe = store.onChange((change) => {
+      if (changesStructure(change.before, change.after)) {
+        this.#structureVersion.set(this.#structureVersion.peek() + 1);
+      }
+    });
+    this.#structureCell = computed(
       () => {
-        const nodes = this.#store.recordsOfType("node");
-        const tree = Tree.from<NodeId, ShiftNode>(nodes, {
-          id: (node) => node.id,
-          parentId: (node) => node.parentId,
-          order: (a, b) => compareIndex(a.index, b.index),
-        });
-        return { nodes: tree.walk(), tree };
+        this.#structureVersion.value;
+        const nodes = untracked(() => this.#store.recordsOfType("node"));
+        const byId = new Map<NodeId, ShiftNodeRecord>(nodes.map((node) => [node.id, node]));
+        return Tree.from<NodeId, NodeId>(
+          nodes.map((node) => node.id),
+          {
+            id: (id) => id,
+            parentId: (id) => byId.get(id)?.parentId ?? null,
+            order: (a, b) => compareIndex(byId.get(a)!.index, byId.get(b)!.index),
+          },
+        );
       },
-      // Reads only node records, so selection, editing, and run writes to the shared store
-      // never rebuild the scene.
-      { name: "editor.scene.document" },
+      { name: "editor.scene.structure" },
     );
     this.#pagesCell = computed(
-      () => this.#documentCell.value.tree.roots().filter((node) => node.kind === "page"),
+      () =>
+        this.#structureCell.value
+          .roots()
+          .map((id) => this.record(id))
+          .filter((node): node is PageNode => node?.kind === "page"),
       // Most node writes touch no page; keep the list's identity so a pages list does not rerender.
       { name: "editor.scene.pages", equals: sameNodes },
     );
@@ -94,38 +117,62 @@ export class Scene {
     );
     this.#cell = computed(
       () => {
-        const { tree } = this.#documentCell.value;
+        const tree = this.#structureCell.value;
         const pageId = this.#activePageIdCell.value;
-        const nodes = pageId ? [...tree.descendants(pageId)] : [];
-        return { nodes, tree };
+        // Reruns on every node write, so readers of `cell` see moves and edits.
+        this.#store.recordsOfType("node");
+        const nodes = pageId ? this.#nodesFor([...tree.descendants(pageId)]) : [];
+        return { nodes };
       },
       { name: "editor.scene" },
     );
-    this.#nodesById = computed(
+    this.#idsByKind = computed(
       () => {
-        const nodes = new Map<NodeId, ShiftNode>();
-        for (const node of this.#documentCell.value.nodes) {
-          nodes.set(node.id, node);
+        const tree = this.#structureCell.value;
+        const pageId = this.#activePageIdCell.value;
+        const ids = new Map<NodeKind, NodeId[]>();
+        if (!pageId) return ids;
+
+        for (const id of tree.descendants(pageId)) {
+          const kind = untracked(() => this.node(id))?.kind;
+          if (!kind) continue;
+          const list = ids.get(kind);
+          if (list) list.push(id);
+          else ids.set(kind, [id]);
         }
-        return nodes;
+        return ids;
       },
-      { name: "editor.scene.nodesById" },
+      { name: "editor.scene.idsByKind" },
     );
-    this.#nodesByKind = computed(
-      () => {
-        const nodes = new Map<NodeKind, ShiftNode[]>();
-        for (const node of this.#cell.value.nodes) {
-          const list = nodes.get(node.kind);
-          if (list) {
-            list.push(node);
-          } else {
-            nodes.set(node.kind, [node]);
-          }
-        }
-        return nodes;
-      },
-      { name: "editor.scene.nodesByKind" },
-    );
+  }
+
+  /**
+   * Every node's id, parent, and sibling order.
+   *
+   * @remarks
+   * Reactive: readers rerun only when a node is added, removed, reparented,
+   * or reordered, never when one moves or changes otherwise. Read node fields
+   * with {@link record} to follow one node's edits.
+   */
+  get structureCell(): Signal<SceneStructure> {
+    return this.#structureCell;
+  }
+
+  /**
+   * Returns one node, subscribing only to that node's record.
+   *
+   * @remarks
+   * Reactive: inside a computed or effect, the reader reruns when this node is
+   * written or deleted, and not when any other node changes.
+   */
+  record(nodeId: NodeId): ShiftNode | null {
+    const record = this.#store.record(nodeId);
+    return record?.type === "node" ? (record as ShiftNode) : null;
+  }
+
+  /** Stops following the store. */
+  dispose(): void {
+    this.#unsubscribe();
   }
 
   /** The active page's nodes; reading it inside a reactive boundary reruns on page switches and node writes. */
@@ -156,7 +203,7 @@ export class Scene {
    * whose parent is missing is treated as a root.
    */
   allNodes(): readonly ShiftNode[] {
-    return this.#documentCell.peek().nodes;
+    return this.#nodesFor(this.#structureCell.peek().walk());
   }
 
   /** Pages in list order; the list keeps its identity until a page record changes. */
@@ -214,13 +261,35 @@ export class Scene {
         name: DEFAULT_PAGE_NAME,
         position: { x: 0, y: 0 },
       });
-    for (const root of this.#documentCell.peek().tree.roots()) {
+    for (const root of this.#nodesFor(this.#structureCell.peek().roots())) {
       if (root.kind === "page") continue;
 
       this.#store.put(copyNode({ ...root, parentId: page.id }) as ShiftNodeRecord);
     }
 
     return page;
+  }
+
+  /**
+   * Returns the top-level node a node sits under: the node itself when it is
+   * directly on a page, null for a page or a node on no page.
+   *
+   * @remarks
+   * Reactive through {@link structureCell}: the reader reruns when the
+   * structure changes.
+   */
+  topLevelOf(nodeId: NodeId): NodeId | null {
+    track(this.#structureCell);
+    const structure = this.#structureCell.peek();
+    let topLevel: NodeId | null = null;
+    let current: NodeId | null = nodeId;
+    while (current !== null) {
+      const parentId = structure.parent(current);
+      if (parentId === null) return topLevel;
+      topLevel = current;
+      current = parentId;
+    }
+    return null;
   }
 
   /** Returns the page a node is on (the page itself for a page), or null for a node on no page. */
@@ -237,7 +306,8 @@ export class Scene {
   node(nodeId: NodeId | null): ShiftNode | null {
     if (!nodeId) return null;
 
-    return this.#nodesById.peek().get(nodeId) ?? null;
+    const record = this.#store.get(nodeId);
+    return record?.type === "node" ? (record as ShiftNode) : null;
   }
 
   /**
@@ -255,22 +325,25 @@ export class Scene {
 
   /** Returns a node's children, ordered by `index`. */
   children(nodeId: NodeId): readonly ShiftNode[] {
-    return this.#documentCell.peek().tree.children(nodeId);
+    return this.#nodesFor(this.#structureCell.peek().children(nodeId));
   }
 
   /** Returns a node's descendants on any page, parents before children. */
   descendants(nodeId: NodeId): readonly ShiftNode[] {
-    return [...this.#documentCell.peek().tree.descendants(nodeId)];
+    return this.#nodesFor([...this.#structureCell.peek().descendants(nodeId)]);
   }
 
   /** Yields a node's ancestors, nearest first. */
-  ancestors(nodeId: NodeId): Iterable<ShiftNode> {
-    return this.#documentCell.peek().tree.ancestors(nodeId);
+  *ancestors(nodeId: NodeId): Iterable<ShiftNode> {
+    for (const id of this.#structureCell.peek().ancestors(nodeId)) {
+      const node = this.node(id);
+      if (node) yield node;
+    }
   }
 
   /** Returns a node's parent, or null for root nodes. */
   parent(nodeId: NodeId): ShiftNode | null {
-    return this.#documentCell.peek().tree.parent(nodeId);
+    return this.node(this.#structureCell.peek().parent(nodeId));
   }
 
   /** Returns the node with `nodeId` when it is of `kind`, else null. */
@@ -283,7 +356,8 @@ export class Scene {
 
   /** Returns every node of `kind` on the active page, parents before children. */
   nodesOfKind<K extends NodeKind>(kind: K): readonly NodeOfKind<K>[] {
-    return (this.#nodesByKind.peek().get(kind) ?? []) as readonly NodeOfKind<K>[];
+    const ids = this.#idsByKind.peek().get(kind) ?? [];
+    return this.#nodesFor(ids) as unknown as readonly NodeOfKind<K>[];
   }
 
   /**
@@ -373,10 +447,21 @@ export class Scene {
   }
 
   #nextIndex(parentId: NodeId | null): string {
-    const { tree } = this.#documentCell.peek();
+    const tree = this.#structureCell.peek();
     const siblings = parentId ? tree.children(parentId) : tree.roots();
+    const last = siblings.at(-1);
 
-    return indexAfter(siblings.at(-1)?.index ?? null);
+    return indexAfter(last ? (this.node(last)?.index ?? null) : null);
+  }
+
+  /** The current records of `ids`, skipping any that are gone. */
+  #nodesFor(ids: Iterable<NodeId>): ShiftNode[] {
+    const nodes: ShiftNode[] = [];
+    for (const id of ids) {
+      const node = this.node(id);
+      if (node) nodes.push(node);
+    }
+    return nodes;
   }
 }
 
@@ -399,6 +484,19 @@ export function indexAfter(last: string | null): string {
   const match = /^a(\d+)$/.exec(last);
   if (match?.[1]) return `a${Number(match[1]) + 1}`;
   return `${last}1`;
+}
+
+/** Whether a node record change adds, removes, reparents, or reorders a node. */
+function changesStructure(
+  before: ShiftEditorRecord | null,
+  after: ShiftEditorRecord | null,
+): boolean {
+  const wasNode = before?.type === "node";
+  const isNode = after?.type === "node";
+  if (!wasNode && !isNode) return false;
+  if (!wasNode || !isNode) return true;
+
+  return before.parentId !== after.parentId || before.index !== after.index;
 }
 
 function sameNodes(a: readonly ShiftNode[], b: readonly ShiftNode[]): boolean {

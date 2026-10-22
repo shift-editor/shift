@@ -207,7 +207,9 @@ export class MultiSourceEditing {
   #prepareMatches(): void {
     track(this.#activeSourceIdCell);
     track(this.#editingSourceIdsCell);
-    track(this.#scene.cell);
+    // Glyph nodes only: moving a frame or editing a run must not match layers again.
+    track(this.#scene.structureCell);
+    for (const node of this.#scene.nodesOfKind("glyph")) this.#scene.record(node.id);
     const activeSourceId = this.#activeSourceIdCell.peek();
     const editingSourceIds = this.#editingSourceIdsCell.peek();
 

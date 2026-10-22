@@ -57,11 +57,11 @@ const SIZING_LABELS: Record<Sizing["kind"], string> = {
 export const LayoutSection = ({ frameId }: { readonly frameId: NodeId }) => {
   const editor = useEditor();
   useSignalState(editor.scene.cell);
-  const layout = useSignalState(editor.frames.layoutCell);
+  const laidOut = useSignalState(editor.frames.laidOutCell(frameId));
   const frame = editor.scene.nodeOfKind(frameId, "frame");
   if (!frame) return null;
 
-  const box = layout.get(frame.id)?.box ?? null;
+  const box = laidOut?.box ?? null;
   const children = editor.scene.children(frame.id);
   const setLayout = (patch: Partial<FrameNode["layout"]>) =>
     editor.frames.setLayout(frame.id, patch);

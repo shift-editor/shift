@@ -1,16 +1,37 @@
 import type { Point2D } from "@shift/geo";
 import type { NodeId } from "@shift/types";
-import type { Editor } from "../editor/Editor";
-import type { Tree } from "../utils/Tree";
-import { track } from "../signals";
 import type { LayoutNodeInput, LayoutSizing } from "../wasm/generated/shapingLayouts";
-import type { FrameNode, ShiftNode, TextRunNode } from "../../types/node";
-import type { LaidOutNode, LayoutPageFunction, PageLayout, Sizing } from "../../types/frame";
+import type { SceneStructure } from "../editor/Scene";
+import type {
+  FrameLayout,
+  LaidOutNode,
+  LayoutPageFunction,
+  PageLayout,
+  Sizing,
+} from "../../types/frame";
 
-/** A page with nothing laid out. */
+/** A frame with nothing laid out. */
 export const EMPTY_PAGE_LAYOUT: PageLayout = new Map();
 
 const HUG: LayoutSizing = { mode: "hug", size: 0 };
+
+/** What layout reads from a frame: everything but its position. */
+export interface FrameShape {
+  readonly kind: "frame";
+  readonly layout: FrameLayout;
+  readonly width: Sizing;
+  readonly height: Sizing;
+}
+
+/** A text run measured as a fixed leaf: its drawn size, and its origin from the box's top-left corner. */
+export interface RunMeasure {
+  readonly kind: "textRun";
+  readonly size: { readonly width: number; readonly height: number };
+  readonly offset: Point2D;
+}
+
+/** What layout reads from one node; null for a node layout skips. */
+export type LayoutShape = FrameShape | RunMeasure | null;
 
 /** One layout input node and how to find its origin from its box. */
 interface Entry {
@@ -20,68 +41,59 @@ interface Entry {
 }
 
 /**
- * Lays out the frames on one page in one call to the layout engine.
+ * Lays out one top-level frame and everything in it, in one call to the layout engine.
  *
  * @remarks
- * Walks the page's frames and their subtrees: frames become layout frames
- * and text runs become fixed-size leaves measured from their current text
- * layout (so a run never wraps here). Glyph nodes inside runs, and nodes
- * outside frames, are not laid out. Reactive: called from a computed, it
- * tracks every run layout it measures and the font's units per em.
+ * The frame is laid out at its own origin: where it sits on the page is a
+ * transform, not layout, so moving it never lays it out again. Frames become
+ * layout frames and text runs fixed-size leaves (a run never wraps here);
+ * other nodes are skipped. Reactive through `shape`: called from a computed,
+ * it reruns only when the structure under the frame or a shape it read changes.
  *
- * @param tree - the scene's node tree.
- * @param pageId - the page to lay out.
+ * @param structure - the scene's structure.
+ * @param rootId - the top-level frame.
+ * @param shape - what layout reads from a node, from its cached cell.
  * @param layoutPage - the engine, from the shaping module.
- * @returns each laid-out node's box and origin; empty when the page has no frame.
+ * @returns each laid-out node's box and origin, relative to its parent; empty when `rootId` is not a frame.
  */
-export function layOutPage(
-  editor: Editor,
-  tree: Tree<NodeId, ShiftNode>,
-  pageId: NodeId,
+export function layOutFrame(
+  structure: SceneStructure,
+  rootId: NodeId,
+  shape: (nodeId: NodeId) => LayoutShape,
   layoutPage: LayoutPageFunction,
 ): PageLayout {
+  const root = shape(rootId);
+  if (root?.kind !== "frame") return EMPTY_PAGE_LAYOUT;
+
   const nodes: LayoutNodeInput[] = [layoutNode("page", null)];
   const entries: Entry[] = [];
-  track(editor.font.metricsCell);
-  const unitsPerEm = editor.font.metricsCell.peek().unitsPerEm;
 
-  const addRun = (run: TextRunNode, parent: number): void => {
-    const { size, offset } = measureRun(editor, run, unitsPerEm);
-    nodes.push({ ...layoutNode("fixed", parent), intrinsic: size });
-    entries.push({ id: run.id, offset });
-  };
-
-  const addFrame = (frame: FrameNode, parent: number): void => {
+  const addFrame = (id: NodeId, frame: FrameShape, parent: number): void => {
     const index = nodes.length;
     nodes.push({
       ...layoutNode("frame", parent),
       width: sizingInput(frame.width),
       height: sizingInput(frame.height),
-      x: frame.position.x,
-      y: frame.position.y,
       frame: { ...frame.layout, wrap: false },
     });
-    entries.push({ id: frame.id, offset: { x: 0, y: 0 } });
+    entries.push({ id, offset: { x: 0, y: 0 } });
 
-    for (const child of tree.children(frame.id)) {
-      switch (child.kind) {
+    for (const childId of structure.children(id)) {
+      const child = shape(childId);
+      switch (child?.kind) {
         case "frame":
-          addFrame(child, index);
+          addFrame(childId, child, index);
           break;
         case "textRun":
-          addRun(child, index);
+          nodes.push({ ...layoutNode("fixed", index), intrinsic: child.size });
+          entries.push({ id: childId, offset: child.offset });
           break;
-        case "glyph":
-        case "page":
+        case undefined:
           break;
       }
     }
   };
-
-  for (const child of tree.children(pageId)) {
-    if (child.kind === "frame") addFrame(child, 0);
-  }
-  if (entries.length === 0) return EMPTY_PAGE_LAYOUT;
+  addFrame(rootId, root, 0);
 
   const output = layoutPage({ nodes });
   if (!output) return EMPTY_PAGE_LAYOUT;
@@ -114,26 +126,31 @@ function sizingInput(sizing: Sizing): LayoutSizing {
   }
 }
 
-/**
- * Measures a text run as a fixed leaf: its drawn box in scene units, and its
- * origin (the first baseline's start) from the box's top-left corner.
- */
-function measureRun(
-  editor: Editor,
-  run: TextRunNode,
-  unitsPerEm: number,
-): { size: { width: number; height: number }; offset: Point2D } {
-  track(editor.text.layoutCell(run.runId));
-  const bounds = editor.nodeDefinition("textRun").bounds(run);
-  if (!bounds) return { size: { width: 0, height: 0 }, offset: { x: 0, y: 0 } };
+/** Whether two shapes lay out the same. */
+export function sameShape(a: LayoutShape, b: LayoutShape): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
 
-  const scale = run.size / unitsPerEm;
-  return {
-    size: {
-      width: (bounds.max.x - bounds.min.x) * scale,
-      height: (bounds.max.y - bounds.min.y) * scale,
-    },
-    // The run draws Y-up from its baseline, so its box top is `max.y` above the origin.
-    offset: { x: -bounds.min.x * scale, y: bounds.max.y * scale },
-  };
+  switch (a.kind) {
+    case "frame":
+      return (
+        b.kind === "frame" &&
+        a.layout === b.layout &&
+        sameSizing(a.width, b.width) &&
+        sameSizing(a.height, b.height)
+      );
+    case "textRun":
+      return (
+        b.kind === "textRun" &&
+        a.size.width === b.size.width &&
+        a.size.height === b.size.height &&
+        a.offset.x === b.offset.x &&
+        a.offset.y === b.offset.y
+      );
+  }
+}
+
+export function sameSizing(a: Sizing, b: Sizing): boolean {
+  if (a.kind !== b.kind) return false;
+  return a.kind !== "fixed" || (b.kind === "fixed" && a.size === b.size);
 }

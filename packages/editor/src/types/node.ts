@@ -98,7 +98,7 @@ export interface PageNode extends Node {
  *
  * @remarks
  * A frame sits on a page or inside another frame, and holds text runs and
- * frames. The page layout (`Frames.layoutCell`) sizes it and places its
+ * frames. The page layout (`Frames.laidOut`) sizes it and places its
  * children, so a child's own `position` is ignored; a frame on a page keeps
  * its `position`. Frames neither clip nor scale their content.
  */

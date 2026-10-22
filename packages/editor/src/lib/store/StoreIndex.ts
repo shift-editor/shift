@@ -9,14 +9,17 @@ import type { StoreChange, StoreIndexSource } from "../../types/store";
  * Created by {@link ShiftStore.index}. The index applies each store change to
  * the keys that change touched rather than rebuilding, and readers subscribe
  * per key: a reader of one key reruns only when the records under that key
- * change. Records under a key keep the order they were first filed in.
+ * change. Records under a key keep the order they were first filed in. A
+ * change costs the keys it touches; a key's list is built when it is next read.
  */
 export class StoreIndex<K, V extends ShiftRecord> {
   readonly #accepts: (record: ShiftRecord) => record is V;
   readonly #keys: (record: V) => Iterable<K>;
-  // non-reactive: backing table updated from store changes; readers only see the per-key #cells
+  // non-reactive: backing table updated from store changes; readers subscribe through the per-key #versions
   readonly #byKey = new Map<K, Map<V["id"], V>>();
-  readonly #cells = new Map<K, WritableSignal<readonly V[]>>();
+  // non-reactive: each read key's list, dropped when the key changes and rebuilt on read
+  readonly #lists = new Map<K, readonly V[]>();
+  readonly #versions = new Map<K, WritableSignal<number>>();
   readonly #unsubscribe: () => void;
 
   constructor(
@@ -41,9 +44,13 @@ export class StoreIndex<K, V extends ShiftRecord> {
    * filed under or removed from `key`, or a record under it is replaced.
    */
   get(key: K): readonly V[] {
-    const cell = this.#cell(key);
-    track(cell);
-    return cell.peek();
+    track(this.#version(key));
+    let list = this.#lists.get(key);
+    if (!list) {
+      list = [...(this.#byKey.get(key)?.values() ?? [])];
+      this.#lists.set(key, list);
+    }
+    return list;
   }
 
   /** Stops following the store. Readers keep the last records they saw. */
@@ -66,7 +73,9 @@ export class StoreIndex<K, V extends ShiftRecord> {
     }
 
     for (const key of oldKeys.union(newKeys)) {
-      this.#cells.get(key)?.set(this.#snapshot(key));
+      this.#lists.delete(key);
+      const version = this.#versions.get(key);
+      version?.set(version.peek() + 1);
     }
   }
 
@@ -87,16 +96,12 @@ export class StoreIndex<K, V extends ShiftRecord> {
     if (records.size === 0) this.#byKey.delete(key);
   }
 
-  #cell(key: K): WritableSignal<readonly V[]> {
-    let cell = this.#cells.get(key);
-    if (!cell) {
-      cell = signal(this.#snapshot(key), { name: "editor.store.index" });
-      this.#cells.set(key, cell);
+  #version(key: K): WritableSignal<number> {
+    let version = this.#versions.get(key);
+    if (!version) {
+      version = signal(0, { name: "editor.store.index" });
+      this.#versions.set(key, version);
     }
-    return cell;
-  }
-
-  #snapshot(key: K): readonly V[] {
-    return [...(this.#byKey.get(key)?.values() ?? [])];
+    return version;
   }
 }

@@ -4,8 +4,8 @@ import { asAnchorId, type GlyphName, type TextItemId } from "@shift/types";
 import { PositionEdits } from "@shift/editor/model";
 import type { LocalPoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing/TestEditor";
-import { createStubCanvas } from "@/testing/stubCanvas";
 import { proofText } from "@/testing/proofText";
+import { flushFrames, stubSurfaces } from "./benchHarness";
 
 /**
  * Redraw cost of a long proof run, per frame.
@@ -30,56 +30,6 @@ const SCALES = (process.env.SHIFT_BENCH_TEXT_RUN_SCALES ?? "1000,10000")
   .split(",")
   .map((scale) => Number(scale.trim()));
 const OPTIONS = { time: 0, iterations: 60, warmupTime: 0, warmupIterations: 5 };
-
-// Hand-run animation frames: render effects schedule here and run in `flushFrames`.
-let frameQueue: Array<() => void> = [];
-let nextFrameId = 0;
-globalThis.requestAnimationFrame = ((callback: () => void) => {
-  frameQueue.push(callback);
-  return ++nextFrameId;
-}) as typeof requestAnimationFrame;
-globalThis.cancelAnimationFrame = () => {};
-
-/** Runs queued frames, and frames they queue, like the browser would before painting. */
-function flushFrames(): number {
-  let ran = 0;
-  for (let guard = 0; frameQueue.length > 0 && guard < 10; guard++) {
-    const queue = frameQueue;
-    frameQueue = [];
-    for (const callback of queue) {
-      ran++;
-      callback();
-    }
-  }
-  return ran;
-}
-
-function stubSurfaces() {
-  const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
-  const element = () =>
-    ({
-      width: 1000,
-      height: 800,
-      getBoundingClientRect: () => rect,
-      getContext: () => null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }) as unknown as HTMLCanvasElement;
-  const surface = () => ({
-    canvas: element(),
-    rect,
-    dpr: 1,
-    ctx: createStubCanvas().ctx,
-    width: 1000,
-    height: 800,
-  });
-  return {
-    background: surface(),
-    scene: surface(),
-    overlay: surface(),
-    markers: { canvas: element(), rect, dpr: 1, width: 1000, height: 800 },
-  };
-}
 
 interface Proof {
   editor: TestEditor;

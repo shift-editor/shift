@@ -3,7 +3,6 @@ import type { SelectableId } from "@shift/types";
 import { NodeDefinition } from "./NodeDefinition";
 import { FrameTransform } from "../frames/FrameTransform";
 import { localBounds } from "../editor/spaces";
-import { track } from "../signals";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import type { FrameNode, ShiftNode } from "../../types/node";
 import type { LaidOutNode } from "../../types/frame";
@@ -16,7 +15,7 @@ import type { TransformTarget } from "../../types/transformTarget";
  *
  * @remarks
  * A frame draws in Y-down scene units from its top-left corner. Its size and
- * its children's places come from the page layout (`Frames.layoutCell`), so
+ * its children's places come from the page layout (`Frames.laidOut`), so
  * the queries here track that layout. A frame is selectable: it is hit
  * anywhere in its box where no child is hit, and the transform box moves and
  * resizes it (see {@link FrameTransform}).
@@ -85,8 +84,6 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
   }
 
   #laidOut(node: ShiftNode): LaidOutNode | null {
-    const layoutCell = this.editor.frames.layoutCell;
-    track(layoutCell);
-    return layoutCell.peek().get(node.id) ?? null;
+    return this.editor.frames.laidOut(node.id);
   }
 }

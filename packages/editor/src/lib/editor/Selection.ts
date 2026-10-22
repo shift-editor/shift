@@ -30,7 +30,7 @@ export class Selection {
     this.#store = store;
     this.stateCell = computed(
       () => {
-        const record = this.#store.cell.value.get(currentSelectionId);
+        const record = this.#store.record(currentSelectionId);
         if (record?.type !== "selection") return emptySelectionState();
 
         return { ids: record.ids };

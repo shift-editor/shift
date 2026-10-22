@@ -23,6 +23,12 @@ import { track } from "../signals";
 import type { TransformTarget } from "../../types/transformTarget";
 import { GlyphsTransform, type GlyphsTransformPart } from "./GlyphsTransform";
 
+/** Below this many screen pixels per em a run draws a bar per line: no glyph reads at that size. */
+const GREEKED_EM_PX = 6;
+
+/** A greeked line's bar height, as a share of the ascender: about the x-height. */
+const GREEKED_BAR_HEIGHT = 0.5;
+
 /**
  * Projects one shared proof run through a placed, scaled scene node.
  *
@@ -456,6 +462,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         this.#drawSelection(node, ctx);
         return;
       case "content":
+        track(this.editor.zoomCell);
+        if (node.size * this.editor.zoomCell.peek() < GREEKED_EM_PX) {
+          this.#drawGreeked(ctx, layout);
+          return;
+        }
         this.#drawGlyphs(node, ctx, layout);
         return;
       case "controls":
@@ -510,10 +521,29 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     });
   }
 
+  /**
+   * Draws each line as a bar at its x-height, for a run too small on screen to read.
+   *
+   * @remarks
+   * A zoomed-out page of thousands of runs costs one rectangle per line
+   * instead of one path per glyph, and reads the same at that size.
+   */
+  #drawGreeked(ctx: RenderContext, layout: TextLayout): void {
+    const fill = ctx.canvas.theme.glyph.fill;
+    const height = layout.metrics.ascender * GREEKED_BAR_HEIGHT;
+    for (const line of this.#lines(layout)) {
+      const first = line[0]!;
+      const last = line[line.length - 1]!;
+      const right = last.left + last.glyph.xAdvance;
+      ctx.canvas.fillRect(first.left, first.baseline, right - first.left, height, fill);
+    }
+  }
+
   #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
     const editing = this.editor.textEditing.stateCell.peek();
+    if (editing?.nodeId !== node.id) return;
     const run = this.editor.text.run(node.runId);
-    if (editing?.nodeId !== node.id || !run) return;
+    if (!run) return;
 
     const caret = Caret.atCluster(
       layout,
