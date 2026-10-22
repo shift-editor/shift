@@ -61,6 +61,21 @@ export interface GlyphNode extends Node {
 }
 
 /**
+ * Which glyph a glyph node shows, without the rest of its record.
+ *
+ * @remarks
+ * For readers that follow "the glyph on the page" and must not rerun when that
+ * node, or any other node, moves.
+ */
+export interface SceneGlyph {
+  /** The glyph node. */
+  readonly nodeId: NodeId;
+
+  /** The glyph it shows. */
+  readonly glyphId: GlyphId;
+}
+
+/**
  * Places a text run in the editor scene.
  *
  * @remarks

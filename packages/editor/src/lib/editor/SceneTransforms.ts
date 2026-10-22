@@ -1,8 +1,8 @@
 import type { NodeId } from "@shift/types";
 import { Bounds, Mat, type MatModel } from "@shift/geo";
 import type { Editor } from "./Editor";
-import { computed, effect, track } from "../signals";
-import type { ComputedSignal, Effect } from "../signals";
+import { computed, track } from "../signals";
+import type { ComputedSignal } from "../signals";
 
 /** A node's cached placement cells; disposed when the node leaves the scene. */
 interface PlacementCells {
@@ -22,23 +22,19 @@ interface PlacementCells {
  */
 export class SceneTransforms {
   readonly #editor: Editor;
-  // non-reactive: cache of per-node cells, pruned by #pruner when nodes leave the scene
+  // non-reactive: cache of per-node cells, pruned when nodes are deleted
   readonly #cells = new Map<NodeId, PlacementCells>();
-  readonly #pruner: Effect;
+  readonly #stopPruning: () => void;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#pruner = effect(
-      () => {
-        const structure = editor.scene.structureCell.value;
-        for (const [id, cells] of this.#cells) {
-          if (structure.get(id) !== null) continue;
-          cells.frame.dispose();
-          cells.extent?.dispose();
-          this.#cells.delete(id);
-        }
+    this.#stopPruning = editor.scene.pruneDeleted(
+      this.#cells,
+      (cells) => {
+        cells.frame.dispose();
+        cells.extent?.dispose();
       },
-      { name: "editor.sceneTransforms.prune" },
+      "editor.sceneTransforms.prune",
     );
   }
 
@@ -74,7 +70,7 @@ export class SceneTransforms {
   }
 
   dispose(): void {
-    this.#pruner.dispose();
+    this.#stopPruning();
     for (const cells of this.#cells.values()) {
       cells.frame.dispose();
       cells.extent?.dispose();

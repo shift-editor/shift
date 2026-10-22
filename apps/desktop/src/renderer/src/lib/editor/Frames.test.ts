@@ -3,6 +3,7 @@ import { Bounds, type Point2D } from "@shift/geo";
 import type { NodeId } from "@shift/types";
 import type { FrameNode, ShiftNode, TextRunNode } from "@shift/editor/types";
 import { scenePoint } from "@shift/editor/spaces";
+import { batch, effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 
 const ORIGIN = { x: 2000, y: 0 };
@@ -136,6 +137,26 @@ describe("frames lay out their children in rows and columns", () => {
     editor.textEditing.resume(run.id, null);
 
     expect(editor.frames.laidOutCell(run.id).peek()).toBe(laidOut);
+  });
+
+  it("keeps laying out a run for its readers when every node is put back in one step", async () => {
+    const column = await addFrame(editor, null);
+    const run = addRun(editor, column.id, "A");
+    await editor.settle();
+    const widths: number[] = [];
+    const cell = editor.frames.laidOutCell(run.id);
+    const reader = effect(() => {
+      widths.push(cell.value?.box.width ?? 0);
+    });
+
+    batch(() => editor.scene.setNodes(editor.scene.allNodes()));
+    editor.history.capture("Type", () =>
+      editor.text.setItems(run.runId, editor.text.itemsFromText("AAA")),
+    );
+    reader.dispose();
+
+    expect(widths.at(-1)).toBeCloseTo(sceneRect(editor, run).width);
+    expect(widths.at(-1)).toBeGreaterThan(widths[0]!);
   });
 });
 

@@ -1,4 +1,5 @@
-import { useSignalState } from "@shift/editor/signals";
+import { useMemo } from "react";
+import { computed, useSignalState, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
 import type {
   FrameAlign,
@@ -6,6 +7,7 @@ import type {
   FrameJustify,
   FrameMode,
   FrameNode,
+  LayoutBox,
   ShiftNode,
   Sizing,
 } from "@shift/editor/types";
@@ -33,6 +35,7 @@ import { IconButton } from "./IconButton";
 import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection, SidebarSubsection } from "./SidebarSection";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import type { FrameChildRow } from "@/types/frameLayout";
 
 const ALIGN_LABELS: Record<FrameAlign, string> = {
   start: "Start",
@@ -56,13 +59,15 @@ const SIZING_LABELS: Record<Sizing["kind"], string> = {
 /** The selected frame's auto layout: direction, spacing, alignment, sizing, and child order. */
 export const LayoutSection = ({ frameId }: { readonly frameId: NodeId }) => {
   const editor = useEditor();
-  useSignalState(editor.scene.cell);
-  const laidOut = useSignalState(editor.frames.laidOutCell(frameId));
-  const frame = editor.scene.nodeOfKind(frameId, "frame");
+  // Dragging a frame writes its position on every pointer move; none of these follow that.
+  const settingsCell = useMemo(() => frameSettingsCell(editor, frameId), [editor, frameId]);
+  const sizeCell = useMemo(() => laidOutSizeCell(editor, frameId), [editor, frameId]);
+  const childrenCell = useMemo(() => childRowsCell(editor, frameId), [editor, frameId]);
+  const frame = useSignalState(settingsCell);
+  const box = useSignalState(sizeCell);
+  const children = useSignalState(childrenCell);
   if (!frame) return null;
 
-  const box = laidOut?.box ?? null;
-  const children = editor.scene.children(frame.id);
   const setLayout = (patch: Partial<FrameNode["layout"]>) =>
     editor.frames.setLayout(frame.id, patch);
 
@@ -125,9 +130,7 @@ export const LayoutSection = ({ frameId }: { readonly frameId: NodeId }) => {
           <ul className="flex flex-col gap-1">
             {children.map((child, index) => (
               <li key={child.id} className="flex h-6 items-center gap-1">
-                <span className="min-w-0 flex-1 truncate text-ui text-primary">
-                  {childLabel(editor, child)}
-                </span>
+                <span className="min-w-0 flex-1 truncate text-ui text-primary">{child.label}</span>
                 <IconButton
                   ariaLabel="Move up"
                   icon={ArrowUp}
@@ -269,6 +272,55 @@ function isFrameMode(value: string): value is FrameMode {
 function sharedPadding(frame: FrameNode): number | null {
   const { top, right, bottom, left } = frame.layout.padding;
   return top === right && right === bottom && bottom === left ? top : null;
+}
+
+/** The frame's record; quiet while only its position changes. */
+function frameSettingsCell(editor: Editor, frameId: NodeId): Signal<FrameNode | null> {
+  return computed(
+    () => {
+      const node = editor.scene.record(frameId);
+      return node?.kind === "frame" ? node : null;
+    },
+    { name: "LayoutSection.frame", equals: sameFrameSettings },
+  );
+}
+
+/** The frame's laid-out box; quiet while only its position changes. */
+function laidOutSizeCell(editor: Editor, frameId: NodeId): Signal<LayoutBox | null> {
+  return computed(() => editor.frames.laidOutCell(frameId).value?.box ?? null, {
+    name: "LayoutSection.size",
+    equals: (a, b) => a === b || (a?.width === b?.width && a?.height === b?.height),
+  });
+}
+
+/** The frame's children in order, as labelled rows; quiet while a child only moves. */
+function childRowsCell(editor: Editor, frameId: NodeId): Signal<readonly FrameChildRow[]> {
+  return computed(
+    () => {
+      const rows: FrameChildRow[] = [];
+      for (const id of editor.scene.structureCell.value.children(frameId)) {
+        const child = editor.scene.record(id);
+        if (child) rows.push({ id, label: childLabel(editor, child) });
+      }
+      return rows;
+    },
+    { name: "LayoutSection.children", equals: sameChildRows },
+  );
+}
+
+/** Whether two frame records differ only in what the section does not show. */
+function sameFrameSettings(a: FrameNode | null, b: FrameNode | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+
+  return a.id === b.id && a.layout === b.layout && a.width === b.width && a.height === b.height;
+}
+
+function sameChildRows(a: readonly FrameChildRow[], b: readonly FrameChildRow[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((row, index) => row.id === b[index]?.id && row.label === b[index]?.label)
+  );
 }
 
 /** A child's row label: a frame's name, or a run's size and length. */

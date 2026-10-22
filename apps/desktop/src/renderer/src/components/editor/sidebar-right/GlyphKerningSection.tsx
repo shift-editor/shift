@@ -21,12 +21,10 @@ interface GlyphKerningSectionProps {
 
 export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => {
   const editor = useEditor();
-  const scene = useSignalState(editor.scene.cell);
-  const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-  const node = glyphNodes.length === 1 ? glyphNodes[0] : undefined;
-  if (node?.kind !== "glyph") return null;
+  const sceneGlyph = useSignalState(editor.scene.onlyGlyphCell);
+  if (!sceneGlyph) return null;
 
-  const glyphId = node.glyphId;
+  const glyphId = sceneGlyph.glyphId;
   const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
   const disabled = editor.sessionMode !== "workspace";
 

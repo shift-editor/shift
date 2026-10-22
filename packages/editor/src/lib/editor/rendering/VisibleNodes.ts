@@ -1,7 +1,7 @@
 import { Bounds } from "@shift/geo";
 import type { NodeId } from "@shift/types";
-import { computed, effect, track } from "../../signals";
-import type { ComputedSignal, Effect, Signal } from "../../signals";
+import { computed, track } from "../../signals";
+import type { ComputedSignal, Signal } from "../../signals";
 import type { SpaceTransform } from "../../../types/coordinates";
 import type { ShiftNode } from "../../../types/node";
 import type { Editor } from "../Editor";
@@ -24,24 +24,18 @@ export interface VisibleNode {
  */
 export class VisibleNodes {
   readonly #editor: Editor;
-  // non-reactive: cache of per-subtree cells, pruned by #pruner when nodes leave the scene
+  // non-reactive: cache of per-subtree cells, pruned when nodes are deleted
   readonly #subtrees = new Map<NodeId, ComputedSignal<readonly VisibleNode[]>>();
   readonly #cell: ComputedSignal<readonly VisibleNode[]>;
-  readonly #pruner: Effect;
+  readonly #stopPruning: () => void;
 
   constructor(editor: Editor) {
     this.#editor = editor;
     this.#cell = computed(() => this.#visible(), { name: "renderer.visibleNodes" });
-    this.#pruner = effect(
-      () => {
-        const structure = editor.scene.structureCell.value;
-        for (const [id, subtree] of this.#subtrees) {
-          if (structure.get(id) !== null) continue;
-          subtree.dispose();
-          this.#subtrees.delete(id);
-        }
-      },
-      { name: "renderer.visibleNodes.prune" },
+    this.#stopPruning = editor.scene.pruneDeleted(
+      this.#subtrees,
+      (subtree) => subtree.dispose(),
+      "renderer.visibleNodes.prune",
     );
   }
 
@@ -51,7 +45,7 @@ export class VisibleNodes {
   }
 
   dispose(): void {
-    this.#pruner.dispose();
+    this.#stopPruning();
     this.#cell.dispose();
     for (const subtree of this.#subtrees.values()) subtree.dispose();
     this.#subtrees.clear();

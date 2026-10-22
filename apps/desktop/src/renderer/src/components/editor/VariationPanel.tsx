@@ -11,8 +11,8 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 
 export const VariationPanel = () => {
   const editor = useEditor();
-  const scene = useSignalState(editor.scene.cell);
-  const glyphNodeId = scene.nodes.find((node) => node.kind === "glyph")?.id ?? null;
+  const sceneGlyph = useSignalState(editor.scene.firstGlyphCell);
+  const glyphNodeId = sceneGlyph?.nodeId ?? null;
   const activeSourceId = useActiveSourceId();
   const editingSourceIds = useEditingSourceIds();
   const outlines = useVariationOutlineControls(activeSourceId, editingSourceIds);

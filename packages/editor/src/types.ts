@@ -44,6 +44,7 @@ export type {
   NodeKind,
   NodeOfKind,
   PageNode,
+  SceneGlyph,
   SceneNodeKinds,
   ShiftNode,
   TextRunNode,

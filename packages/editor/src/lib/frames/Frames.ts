@@ -2,7 +2,7 @@ import type { NodeId } from "@shift/types";
 import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import { compareIndex } from "../editor/Scene";
-import { computed, effect, signal, track } from "../signals";
+import { computed, effect, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
 import { loadShaping } from "../wasm/shaping";
 import {
@@ -73,7 +73,7 @@ export class Frames {
   // non-reactive: cache of per-node cells, pruned by #pruner when nodes leave the scene
   readonly #cells = new Map<NodeId, NodeCells>();
   readonly #loader: Effect;
-  readonly #pruner: Effect;
+  readonly #stopPruning: () => void;
 
   /**
    * @param editor - editor whose scene holds the frames.
@@ -81,25 +81,19 @@ export class Frames {
   constructor(editor: Editor) {
     this.#editor = editor;
     const scene = editor.scene;
-    // The engine ships in the shaping module; load it once a page has a frame to lay out.
+    // The engine ships in the shaping module; load it once the active page has a frame to lay
+    // out. Once it has loaded the effect reads only the engine, so frame writes stop rerunning it.
     this.#loader = effect(
       () => {
-        track(scene.structureCell);
-        if (scene.nodesOfKind("frame").length > 0) void this.#loadEngine();
+        if (this.#engineCell.value) return;
+
+        const pageId = scene.activePageIdCell.value;
+        const frames = scene.allNodesOfKind("frame");
+        if (frames.some((frame) => scene.pageOf(frame.id)?.id === pageId)) void this.#loadEngine();
       },
       { name: "editor.frames.loadEngine" },
     );
-    this.#pruner = effect(
-      () => {
-        const structure = scene.structureCell.value;
-        for (const [id, cells] of this.#cells) {
-          if (structure.get(id) !== null) continue;
-          disposeCells(cells);
-          this.#cells.delete(id);
-        }
-      },
-      { name: "editor.frames.prune" },
-    );
+    this.#stopPruning = scene.pruneDeleted(this.#cells, disposeCells, "editor.frames.prune");
   }
 
   /**
@@ -311,7 +305,7 @@ export class Frames {
 
   dispose(): void {
     this.#loader.dispose();
-    this.#pruner.dispose();
+    this.#stopPruning();
     for (const cells of this.#cells.values()) disposeCells(cells);
     this.#cells.clear();
   }
@@ -452,7 +446,13 @@ export class Frames {
   }
 
   #nextName(): string {
-    const names = new Set(this.#editor.scene.nodesOfKind("frame").map((frame) => frame.name));
+    const scene = this.#editor.scene;
+    const pageId = scene.activePageIdCell.peek();
+    const names = new Set(
+      untracked(() => scene.allNodesOfKind("frame"))
+        .filter((frame) => scene.pageOf(frame.id)?.id === pageId)
+        .map((frame) => frame.name),
+    );
     let number = names.size + 1;
     while (names.has(`Frame ${number}`)) number += 1;
 
