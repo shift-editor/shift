@@ -168,8 +168,9 @@ export class Rotate implements SelectBehavior {
       : editor.positionSelection(editor.selection.ids);
     if (!transformTarget && !positionSelection) return null;
 
+    // A selection spanning several boxes has no node: it turns in scene units.
     const node = editor.selectionNode();
-    if (!node) return null;
+    if (!node && !transformTarget) return null;
     this.#editor = editor;
     this.#node = node;
 
