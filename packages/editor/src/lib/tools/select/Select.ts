@@ -229,8 +229,13 @@ export class Select extends BaseTool<SelectState, Select> {
 
     const ids = this.editor.selection.ids;
     const selection = this.editor.positionSelection(ids);
+    // Boxes moving as a whole snap in scene units: draw their guides as they are.
+    if (!selection) {
+      this.#snapLines.draw(canvas, state.translate.guides);
+      return;
+    }
     const node = this.editor.selectionNode(ids);
-    if (!selection || !node) return;
+    if (!node) return;
 
     const guides = state.translate.guides;
     const crossings = this.editor.snapping.crossings(selection.layer, [
