@@ -24,12 +24,12 @@ const MOVES = 60;
 
 /**
  * Mean component renders per commit allowed during each interaction, about 15%
- * over what they measured when set (61 and 117). Kept tight on purpose: on this
- * small font, writing a new-but-equal editing-sources set on every scrub step
- * only raised the scrub to 81. Raise a budget deliberately when an interaction
- * should show more.
+ * over what they measured when set (61, 117, and 47). Kept tight on purpose: on
+ * this small font, writing a new-but-equal editing-sources set on every scrub
+ * step only raised the scrub to 81. Raise a budget deliberately when an
+ * interaction should show more.
  */
-const BUDGET = { scrub: 70, marquee: 135 };
+const BUDGET = { scrub: 70, marquee: 135, boxDrag: 54 };
 
 test.describe("render budget", () => {
   test.beforeEach(async ({ page, editor }) => {
@@ -59,6 +59,58 @@ test.describe("render budget", () => {
     await page.mouse.up();
 
     expectWithinBudget(await stopRenderCount(page), BUDGET.scrub);
+  });
+
+  test("dragging a text box re-renders only what shows the box", async ({ page, editor }) => {
+    await editor.selectTool("select");
+    // A box away from the page run, selected so the sidebar shows its Text section.
+    const run = await page.evaluate(() => {
+      const editor = window.shift!.editor;
+      editor.exitNodes();
+      const node = editor.scene.createNode({
+        kind: "textRun",
+        runId: editor.text.createRun(editor.text.itemsFromText("AAA")).id,
+        size: 400,
+        width: { kind: "hug" },
+        height: { kind: "hug" },
+        rotation: 0,
+        verticalAlign: "top",
+        position: { x: 2000, y: 0 },
+      });
+      editor.selection.select([node.id]);
+      return { id: node.id, x: node.position.x };
+    });
+    await page.evaluate(async () => {
+      const editor = window.shift!.editor;
+      // The box has no bounds to zoom to until its glyphs have loaded and it has laid out.
+      await editor.text.settled();
+      editor.zoomToSelection();
+    });
+    await editor.waitForCanvasRender();
+    const press = await page.evaluate((id) => {
+      const editor = window.shift!.editor;
+      const bounds = editor.nodeBounds(editor.scene.nodeOfKind(id, "textRun")!)!;
+      return { x: (bounds.min.x + bounds.max.x) / 2, y: (bounds.min.y + bounds.max.y) / 2 };
+    }, run.id);
+    const start = await editor.projectSceneToPage(press);
+
+    await startRenderCount(page);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let move = 1; move <= MOVES; move++) {
+      await page.mouse.move(start.x + 8 + move * 2, start.y);
+    }
+    await page.mouse.up();
+    await editor.flushPointerMoves();
+    await editor.waitForIdle();
+    const count = await stopRenderCount(page);
+
+    const moved = await page.evaluate(
+      (id) => window.shift!.editor.scene.nodeOfKind(id, "textRun")!.position.x,
+      run.id,
+    );
+    expect(moved, "the drag should move the box").toBeGreaterThan(run.x);
+    expectWithinBudget(count, BUDGET.boxDrag);
   });
 
   test("a marquee re-renders only what shows the selection", async ({ page }) => {
