@@ -8,6 +8,7 @@ import { TestEditor } from "@/testing/TestEditor";
 import { Point } from "@shift/glyph-state";
 import { characterTextItem } from "@shift/editor/text";
 import type { Select } from "@shift/editor/tools";
+import type { TextRunNode } from "@shift/editor/types";
 
 describe("Text tool edits the page run", () => {
   let editor: TestEditor;
@@ -95,6 +96,23 @@ describe("typing a glyph not yet loaded this session", () => {
     await editor.font.loadGlyph(bId);
 
     expect(layout.peek()?.totalAdvance).toBe(before + 600);
+  });
+
+  it("waits for a new run's glyphs before its first layout", async () => {
+    const editor = await reopenedWithUnloadedB();
+    editor.exitNodes();
+    const node = editor.scene.createNode<TextRunNode>({
+      kind: "textRun",
+      runId: editor.text.createRun(editor.text.itemsFromText("B")).id,
+      size: 1000,
+      position: { x: 0, y: 0 },
+    });
+    const layout = editor.text.layoutCell(node.runId);
+    expect(layout.peek()).toBeNull();
+
+    await editor.text.settled();
+
+    expect(layout.peek()?.totalAdvance).toBe(600);
   });
 });
 

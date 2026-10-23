@@ -25,7 +25,8 @@ export class Text {
   readonly #glyphsLoadedCell = signal(0);
   /** Made with the first run's layout, so shaping loads only once text exists. */
   #shaper: TextShaper | null = null;
-  // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
+  // non-reactive: in-flight glyph loads, deduped; a new run's layout checks it, and
+  // `#glyphsLoadedCell` bumps when a load ends
   readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
   readonly #unsubscribeStore: () => void;
@@ -47,6 +48,7 @@ export class Text {
           new RunText(this.#editor, runIdCell, {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
+            isLoading: (glyphId) => this.#loading.has(glyphId),
             shaperCell: this.#textShaper().shaperCell,
             onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
           }),
@@ -248,11 +250,12 @@ export class Text {
   async #loadGlyphOnce(id: GlyphId): Promise<void> {
     try {
       await this.#editor.font.loadGlyph(id);
-      this.#glyphsLoadedCell.update((version) => version + 1);
     } catch (error) {
       console.error("failed to load text glyph", error);
     } finally {
+      // After the delete, so a run waiting on this glyph sees the load over, loaded or not.
       this.#loading.delete(id);
+      this.#glyphsLoadedCell.update((version) => version + 1);
     }
   }
 }
