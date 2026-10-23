@@ -383,6 +383,38 @@ describe("the Select tool and a text box", () => {
       editor.zoomToFit();
     });
 
+    it("guides every edge two equal boxes share once one snaps, but not their centres", async () => {
+      editor.history.withoutRecording(() =>
+        editor.text.setItems(second.runId, editor.text.items(node)),
+      );
+      await editor.settle();
+      editor.history.capture("Select", () => editor.selection.select([second.id]));
+      const a = rect();
+      const b = sceneRect(editor, second.id);
+      const grab = { x: b.x + 10, y: b.y + b.height / 2 };
+      const drop = { x: grab.x + editor.hitRadius / 2, y: grab.y };
+      const toScreen = (point: Point2D) => editor.sceneToScreen(scenePoint(point.x, point.y));
+
+      const down = toScreen(grab);
+      editor.pointerDown(down.x, down.y);
+      editor.pointerMove(down.x + 6, down.y);
+      const moved = toScreen(drop);
+      editor.pointerMove(moved.x, moved.y);
+
+      const state = (editor.toolManager.activeTool as Select).getState();
+      const verticals = new Set(
+        state.type === "translating"
+          ? state.translate.guides.flatMap((guide) =>
+              guide.kind === "alignment" && guide.target.x === guide.point.x
+                ? [guide.target.x]
+                : [],
+            )
+          : [],
+      );
+      expect(verticals).toEqual(new Set([a.x, a.right]));
+      editor.pointerUp(moved.x, moved.y);
+    });
+
     it("selects both boxes, not their glyphs, with a marquee", async () => {
       const a = rect();
       const b = sceneRect(editor, second.id);

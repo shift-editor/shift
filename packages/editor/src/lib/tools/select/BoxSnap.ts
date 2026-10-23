@@ -14,6 +14,12 @@ interface BoxLines {
   readonly bounds: Bounds;
 }
 
+/** Index of the centre line in a box's xs and ys; the others are edges or baselines. */
+const CENTER = 1;
+
+/** How close two lines must be, in scene units, to count as shared after a snap. */
+const SHARED_EPSILON = 1e-6;
+
 /** A snapped move: the corrected scene delta and the guides that show why. */
 export interface BoxSnapResult {
   readonly delta: { readonly x: number; readonly y: number };
@@ -84,25 +90,54 @@ export class BoxSnap {
     );
 
     const guides: AlignmentPositionGuide[] = [];
-    if (x) {
-      const top = Math.min(moved.min.y, x.target.bounds.min.y);
-      const bottom = Math.max(moved.max.y, x.target.bounds.max.y);
-      guides.push({
-        kind: "alignment",
-        target: { x: x.line, y: top },
-        point: { x: x.line, y: bottom },
-      });
-    }
-    if (y) {
-      const left = Math.min(moved.min.x, y.target.bounds.min.x);
-      const right = Math.max(moved.max.x, y.target.bounds.max.x);
-      guides.push({
-        kind: "alignment",
-        target: { x: left, y: y.line },
-        point: { x: right, y: y.line },
-      });
-    }
+    if (x) guides.push(...this.#guides("x", snapped.x, moved));
+    if (y) guides.push(...this.#guides("y", snapped.y, moved));
     return { delta: snapped, guides };
+  }
+
+  /**
+   * Guides for every line the moved box now shares with a target on one axis.
+   *
+   * @remarks
+   * Not only the line that snapped: equal-width boxes share both edges once
+   * one snaps, and each shared line gets a guide. A centre line shows only
+   * when no edge or baseline lines up on that axis. Each guide spans every
+   * box on its line, and each box adds its own stretch of it, so a cross
+   * marks every corner on the line.
+   */
+  #guides(axis: "x" | "y", offset: number, moved: Bounds): AlignmentPositionGuide[] {
+    const own = (axis === "x" ? this.#moving.xs : this.#moving.ys).map((line) => line + offset);
+    const shared = new Map<number, { edge: boolean; boxes: Bounds[] }>();
+    for (const target of this.#targets) {
+      const lines = axis === "x" ? target.xs : target.ys;
+      for (const [i, from] of own.entries()) {
+        for (const [j, line] of lines.entries()) {
+          if (Math.abs(line - from) > SHARED_EPSILON) continue;
+          const entry = shared.get(from) ?? { edge: false, boxes: [moved] };
+          entry.edge ||= i !== CENTER && j !== CENTER;
+          if (!entry.boxes.includes(target.bounds)) entry.boxes.push(target.bounds);
+          shared.set(from, entry);
+        }
+      }
+    }
+
+    const anyEdge = shared.values().some((entry) => entry.edge);
+    const guides: AlignmentPositionGuide[] = [];
+    for (const [line, entry] of shared) {
+      if (anyEdge && !entry.edge) continue;
+      const spans = entry.boxes.map((box) =>
+        axis === "x" ? [box.min.y, box.max.y] : [box.min.x, box.max.x],
+      );
+      const across = (from: number, to: number): AlignmentPositionGuide =>
+        axis === "x"
+          ? { kind: "alignment", target: { x: line, y: from }, point: { x: line, y: to } }
+          : { kind: "alignment", target: { x: from, y: line }, point: { x: to, y: line } };
+      guides.push(
+        across(Math.min(...spans.map(([from]) => from!)), Math.max(...spans.map(([, to]) => to!))),
+      );
+      for (const [from, to] of spans) guides.push(across(from!, to!));
+    }
+    return guides;
   }
 
   #nearest(
