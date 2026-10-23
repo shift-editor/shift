@@ -285,6 +285,43 @@ describe("the Select tool and a text box", () => {
     expect(lineTop()).toBeCloseTo(top + height);
   });
 
+  it("snaps its left edge onto another box's while moving", async () => {
+    const other = editor.history.withoutRecording(() => {
+      const run = editor.text.createRun(editor.text.itemsFromText("AA"));
+      return editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: run.id,
+        size: node.size,
+        width: { kind: "hug" },
+        height: { kind: "hug" },
+        rotation: 0,
+        verticalAlign: "top",
+        position: { x: 0, y: rect().height * 3 },
+      });
+    });
+    await editor.settle();
+    editor.history.capture("Select", () => editor.selection.select([other.id]));
+    const start = sceneRect(editor, other.id);
+    const nudge = editor.hitRadius / 2;
+    const grab = { x: start.x + 10, y: start.y + start.height / 2 };
+
+    await editor.dragScene({
+      down: grab,
+      start: { x: grab.x + 4, y: grab.y },
+      end: { x: grab.x + 200 + nudge, y: grab.y },
+    });
+    // Its left edge left the other box's left edge behind, and found nothing within reach.
+    expect(sceneRect(editor, other.id).x).toBeCloseTo(start.x + 200 + nudge);
+
+    const moved = sceneRect(editor, other.id);
+    await editor.dragScene({
+      down: { x: moved.x + 10, y: grab.y },
+      start: { x: moved.x + 6, y: grab.y },
+      end: { x: moved.x + 10 - moved.x - nudge, y: grab.y },
+    });
+    expect(sceneRect(editor, other.id).x).toBeCloseTo(rect().x);
+  });
+
   it("copies, cuts, and pastes as boxes with their text and size", async () => {
     editor.history.capture("Select", () => editor.selection.select([node.id]));
     expect(await editor.copy()).toBe(true);

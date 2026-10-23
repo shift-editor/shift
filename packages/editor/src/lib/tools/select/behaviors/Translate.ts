@@ -7,7 +7,7 @@ import type { Editor } from "../../../editor/Editor";
 import type { GlyphLayer, GlyphLayerPositionTarget } from "../../../model/Glyph";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import { DirectionSnap, PositionReference } from "../../../model/positions";
-import { scenePoint, vectorBetween } from "../../../editor/spaces";
+import { scenePoint, sceneVector, vectorBetween } from "../../../editor/spaces";
 import { objectIsKindOf, type ShiftObjectOf } from "../../../../types/object";
 import type { PointerTarget } from "../../../../types/target";
 import type { PositionCondition } from "../../../../types/positionEdit";
@@ -17,12 +17,14 @@ import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
 import { pointSlide } from "../PointSlide";
 import { EndpointDrop } from "../EndpointDrop";
+import { BoxSnap } from "../BoxSnap";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
 export class Translate implements SelectBehavior {
   #drag: TranslateInteraction | null = null;
   #transformEdit: TransformEdit | null = null;
+  #boxSnap: BoxSnap | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -38,6 +40,9 @@ export class Translate implements SelectBehavior {
 
     this.#drag = drag;
     this.#transformEdit = transformEdit;
+    this.#boxSnap = transformEdit
+      ? BoxSnap.forSelection(ctx.editor, ctx.editor.selection.ids)
+      : null;
     this.#done = ctx.onCancel(() => {
       drag?.discard();
       transformEdit?.discard();
@@ -94,16 +99,20 @@ export class Translate implements SelectBehavior {
     if (!node) return;
 
     const { startPos, lastPos } = next.translate;
-    const sceneDelta = vectorBetween(
+    const pointerDelta = vectorBetween(
       scenePoint(startPos.x, startPos.y),
       scenePoint(lastPos.x, lastPos.y),
     );
+    // Boxes snap in scene units unless the accelerator is held.
+    const snapped =
+      this.#boxSnap && !next.translate.accelKey ? this.#boxSnap.snap(pointerDelta) : null;
+    const sceneDelta = snapped ? sceneVector(snapped.delta.x, snapped.delta.y) : pointerDelta;
     const delta = ctx.editor.toLocalVector(node, sceneDelta);
     if (this.#transformEdit) {
       this.#transformEdit.preview(() => Mat.Translate(delta.x, delta.y));
       ctx.setState({
         ...next,
-        translate: { ...next.translate, totalDelta: delta, guides: [] },
+        translate: { ...next.translate, totalDelta: delta, guides: snapped?.guides ?? [] },
       });
       return;
     }
@@ -253,6 +262,7 @@ export class Translate implements SelectBehavior {
   #cleanup(): void {
     this.#drag = null;
     this.#transformEdit = null;
+    this.#boxSnap = null;
     this.#done = null;
   }
 
@@ -273,7 +283,7 @@ export class Translate implements SelectBehavior {
         }
         break;
       case "node": {
-        // A box (frame or text box) under the pointer moves at once, selected first.
+        // A text box under the pointer moves at once, selected first.
         const owned = select.boundingBox.containsTranslationPoint(event.origin);
         const node = event.target.node;
         const grabs = !owned && editor.nodeDefinition(node.kind).selectable;
