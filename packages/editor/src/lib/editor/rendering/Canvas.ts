@@ -46,6 +46,21 @@ export interface PathBatch {
   stroke(path: Path2D): void;
 }
 
+/**
+ * Fills axis-aligned rectangles, given in the units current when the fill began, as few paths as possible.
+ *
+ * @remarks
+ * Only valid inside {@link Canvas.withRectFill}. Consecutive rectangles of one
+ * color become one path and one fill; nothing saves or restores canvas state
+ * per rectangle.
+ */
+export interface RectFill {
+  /** Adds a rectangle; a different color than the last one fills what came before first. */
+  rect(fill: string, x: number, y: number, width: number, height: number): void;
+  /** Fills the rectangles added so far, so drawing after this paints over them. */
+  flush(): void;
+}
+
 const NO_DASH: number[] = [];
 
 /**
@@ -247,6 +262,48 @@ export class Canvas {
       draw(batch);
     } finally {
       this.restore();
+    }
+  }
+
+  /**
+   * Runs a drawing callback that can fill rectangles without per-rectangle canvas state.
+   *
+   * @remarks
+   * Other drawing inside `draw` is fine, but call {@link RectFill.flush} before
+   * it so it paints over the rectangles added before it, as it would have
+   * without the batch. Whatever is left is filled when `draw` returns.
+   *
+   * @param draw - Adds rectangles through the fill; the fill is invalid after it returns.
+   */
+  withRectFill(draw: (fill: RectFill) => void): void {
+    const ctx = this.ctx;
+    let path: Path2D | null = null;
+    let color: string | null = null;
+    const flush = () => {
+      if (!path || color === null) return;
+
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.fill(path);
+      ctx.restore();
+      path = null;
+    };
+    const fill: RectFill = {
+      rect: (nextColor, x, y, width, height) => {
+        if (nextColor !== color) {
+          flush();
+          color = nextColor;
+        }
+        path ??= new Path2D();
+        path.rect(x, y, width, height);
+      },
+      flush,
+    };
+
+    try {
+      draw(fill);
+    } finally {
+      flush();
     }
   }
 

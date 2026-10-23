@@ -1,7 +1,7 @@
 import { CanvasItem } from "./CanvasItem";
 import { track } from "../../signals";
-import type { Canvas } from "./Canvas";
-import type { RenderContext, RenderPass } from "../../../types/rendering";
+import type { Canvas, RectFill } from "./Canvas";
+import type { RecordedFill, RenderContext, RenderPass } from "../../../types/rendering";
 import type { Editor } from "../Editor";
 import type { VisibleNode, VisibleNodes } from "./VisibleNodes";
 
@@ -87,6 +87,8 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
 export class SceneLayer extends CanvasItem<SceneLayerProps> {
   readonly #editor: Editor;
   readonly #visible: VisibleNodes;
+  // non-reactive: memo keyed by visible entry, which VisibleNodes replaces when its node, transform, or text layout changes
+  readonly #fills = new WeakMap<VisibleNode, RecordedFill>();
 
   /**
    * Creates the scene layer for one editor.
@@ -117,8 +119,17 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     if (!props) return;
 
     track(this.#visible.cell);
+    track(this.#editor.zoomCell);
     const entries = this.#visible.cell.peek();
-    for (const entry of entries) drawNode(this.#editor, ctx, entry, "content");
+    ctx.canvas.withRectFill((fill) => {
+      for (const entry of entries) {
+        if (this.#replayFill(entry, ctx, fill)) continue;
+
+        // Paints over the rectangles before it, in scene order.
+        fill.flush();
+        drawNode(this.#editor, ctx, entry, "content");
+      }
+    });
 
     for (const { node, transform } of entries) {
       if (node.kind !== "glyph") continue;
@@ -130,6 +141,51 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
 
     for (const entry of entries) drawNode(this.#editor, ctx, entry, "controls");
   }
+
+  /**
+   * Adds a node's rectangles to the fill, recording them on first use so a
+   * pan replays them without asking the node again.
+   *
+   * @returns false when the node draws itself instead.
+   */
+  #replayFill(entry: VisibleNode, ctx: RenderContext, fill: RectFill): boolean {
+    const zoom = this.#editor.zoomCell.peek();
+    const theme = ctx.canvas.theme;
+    let recorded = this.#fills.get(entry);
+    if (!recorded || recorded.zoom !== zoom || recorded.theme !== theme) {
+      recorded = recordFill(this.#editor, entry, ctx, zoom);
+      this.#fills.set(entry, recorded);
+    }
+    if (!recorded.filled) return false;
+
+    const { colors, rects } = recorded;
+    for (let index = 0; index < colors.length; index++) {
+      const at = index * 4;
+      fill.rect(colors[index]!, rects[at]!, rects[at + 1]!, rects[at + 2]!, rects[at + 3]!);
+    }
+    return true;
+  }
+}
+
+/** Asks a node's definition for its content rectangles and keeps them. */
+function recordFill(
+  editor: Editor,
+  entry: VisibleNode,
+  ctx: RenderContext,
+  zoom: number,
+): RecordedFill {
+  const colors: string[] = [];
+  const rects: number[] = [];
+  const recorder: RectFill = {
+    rect: (color, x, y, width, height) => {
+      colors.push(color);
+      rects.push(x, y, width, height);
+    },
+    flush: () => {},
+  };
+  const definition = editor.nodeDefinition(entry.node.kind);
+  const filled = definition?.fillContent(entry.node, entry.transform, ctx, recorder) ?? false;
+  return { zoom, theme: ctx.canvas.theme, filled, colors, rects };
 }
 
 /**
@@ -177,7 +233,7 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
 
 function drawNode(editor: Editor, ctx: RenderContext, entry: VisibleNode, pass: RenderPass): void {
   const definition = editor.nodeDefinition(entry.node.kind);
-  if (!definition) return;
+  if (!definition?.drawsIn(entry.node, pass)) return;
 
   ctx.canvas.withTransform(entry.transform, () => {
     definition.draw(entry.node, ctx, pass);

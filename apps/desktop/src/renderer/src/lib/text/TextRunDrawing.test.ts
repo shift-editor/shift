@@ -2,8 +2,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { GlyphName } from "@shift/types";
 import type { GlyphRenderModel } from "@shift/editor/model";
+import type { TextRunNode } from "@shift/editor/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { createStubCanvas } from "@/testing/stubCanvas";
+import { attachStubSurfaces, createStubCanvas } from "@/testing/stubCanvas";
 
 const FONT = resolve(process.cwd(), "../../fixtures/fonts/AnchorDragBench.glyphs");
 
@@ -17,40 +18,39 @@ interface SceneFrame {
  * scene fills and strokes in each frame it draws.
  */
 function recordSceneFrames(editor: TestEditor): () => SceneFrame {
-  const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
-  const element = () =>
-    ({
-      width: 1000,
-      height: 800,
-      getBoundingClientRect: () => rect,
-      getContext: () => null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }) as unknown as HTMLCanvasElement;
-  const surface = () => ({
-    canvas: element(),
-    rect,
-    dpr: 1,
-    ctx: createStubCanvas().ctx,
-    width: 1000,
-    height: 800,
-  });
-
   const frames: SceneFrame[] = [];
-  const scene = surface();
+  const scene = createStubCanvas().ctx;
   // The renderer clears a layer at the start of each frame it draws.
-  scene.ctx.clearRect = () => frames.push({ fills: [], strokes: [] });
-  scene.ctx.fill = ((path: Path2D) => frames.at(-1)?.fills.push(path)) as typeof scene.ctx.fill;
-  scene.ctx.stroke = ((path?: Path2D) => {
+  scene.clearRect = () => frames.push({ fills: [], strokes: [] });
+  scene.fill = ((path: Path2D) => frames.at(-1)?.fills.push(path)) as typeof scene.fill;
+  scene.stroke = ((path?: Path2D) => {
     if (path) frames.at(-1)?.strokes.push(path);
-  }) as typeof scene.ctx.stroke;
-  editor.attachRenderSurfaces(
-    surface() as never,
-    scene as never,
-    surface() as never,
-    { canvas: element(), rect, dpr: 1, width: 1000, height: 800 } as never,
-  );
+  }) as typeof scene.stroke;
+  attachStubSurfaces(editor, { scene });
   return () => frames.at(-1) ?? { fills: [], strokes: [] };
+}
+
+interface RectCommand {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The rectangles traced into a path, read from the test setup's Path2D stub. */
+function rectsOf(path: Path2D): RectCommand[] {
+  const { commands } = path as unknown as { commands: ({ type: string } & RectCommand)[] };
+  return commands.filter((command) => command.type === "rect");
+}
+
+/** Places a run showing `text` on the active page at `x`, 72 units tall. */
+function addRun(editor: TestEditor, text: string, x: number, y = 0): TextRunNode {
+  return editor.scene.createNode<TextRunNode>({
+    kind: "textRun",
+    runId: editor.text.createRun(editor.text.itemsFromText(text)).id,
+    size: 72,
+    position: { x, y },
+  });
 }
 
 /** Records the paths the scene fills in its latest frame. */
@@ -105,6 +105,54 @@ describe("text run drawing", () => {
     editor.text.setItems(run.runId, [edited, ...editor.text.itemsFromText("ouo")]);
 
     await expect.poll(() => fillsOf(latestFills(), renderModel("o"))).toBe(2);
+  });
+
+  it("fills every greeked run's line as a bar across the run, in one path for all runs", async () => {
+    editor = await new TestEditor().openSession(FONT, "u");
+    editor.exitNodes();
+    const runs = [addRun(editor, "uu", 3000), addRun(editor, "u u u", 3000, -200)];
+    await editor.settle();
+    const latestFills = recordSceneFills(editor);
+    // 72 units at this zoom is under two pixels per em, too small to read.
+    editor.setZoom(0.02);
+
+    const barPaths = () =>
+      latestFills()
+        .map(rectsOf)
+        .filter((rects) => rects.length > 0);
+    await expect.poll(() => barPaths().length).toBe(1);
+    const boxes = runs.map((run) => editor.nodeBounds(editor.scene.node(run.id)!)!);
+    expect(barPaths()[0]!.map((bar) => ({ left: bar.x, right: bar.x + bar.width }))).toEqual(
+      boxes.map((box) => ({ left: box.min.x, right: box.max.x })),
+    );
+    barPaths()[0]!.forEach((bar, index) => {
+      expect(bar.y).toBeGreaterThan(boxes[index]!.min.y);
+      expect(bar.y + bar.height).toBeLessThan(boxes[index]!.max.y);
+    });
+  });
+
+  it("moves a greeked run's bar with its text and its position while zoomed out", async () => {
+    editor = await new TestEditor().openSession(FONT, "u");
+    editor.exitNodes();
+    const run = addRun(editor, "uu", 3000);
+    await editor.settle();
+    const latestFills = recordSceneFills(editor);
+    editor.setZoom(0.02);
+    const bar = () => latestFills().flatMap(rectsOf)[0] ?? null;
+    const runEdges = () => {
+      const box = editor.nodeBounds(editor.scene.node(run.id)!)!;
+      return { left: box.min.x, right: box.max.x };
+    };
+    await expect.poll(bar).not.toBeNull();
+
+    editor.text.setItems(run.runId, editor.text.itemsFromText("uuuu"));
+    editor.scene.updateNode({ id: run.id, position: { x: 3500, y: 0 } });
+    await editor.settle();
+
+    await expect
+      .poll(() => ({ left: bar()?.x, right: (bar()?.x ?? 0) + (bar()?.width ?? 0) }))
+      .toEqual(runEdges());
+    expect(runEdges().left).toBe(3500);
   });
 
   it("starts stroking a run glyph's open contour when one of its contours opens", async () => {
