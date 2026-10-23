@@ -337,6 +337,30 @@ describe("the Select tool and a text box", () => {
     expect(sceneRect(editor, other.id).x).toBeCloseTo(rect().x);
   });
 
+  it("selects every box on the page with select-all, and an entered box's glyphs", async () => {
+    const second = editor.history.withoutRecording(() => {
+      const run = editor.text.createRun(editor.text.itemsFromText("AA"));
+      return editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: run.id,
+        size: node.size,
+        width: { kind: "hug" },
+        height: { kind: "hug" },
+        rotation: 0,
+        verticalAlign: "top",
+        position: { x: 0, y: rect().height * 3 },
+      });
+    });
+    await editor.settle();
+
+    editor.selectAll();
+    expect(new Set(editor.selection.ids)).toEqual(new Set([node.id, second.id]));
+
+    editor.nodeDefinition("textRun").enter(second.id);
+    editor.selectAll();
+    expect(editor.selection.ids).toEqual(editor.text.items(second).map((item) => item.id));
+  });
+
   it("copies, cuts, and pastes as boxes with their text and size", async () => {
     editor.history.capture("Select", () => editor.selection.select([node.id]));
     expect(await editor.copy()).toBe(true);
