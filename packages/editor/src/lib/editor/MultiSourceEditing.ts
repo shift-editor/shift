@@ -207,7 +207,12 @@ export class MultiSourceEditing {
   #prepareMatches(): void {
     track(this.#activeSourceIdCell);
     track(this.#editingSourceIdsCell);
-    track(this.#scene.cell);
+    // Glyph nodes only: adding, moving, or editing text runs must not match layers again.
+    track(this.#scene.glyphNodeIdsCell);
+    const glyphNodes = this.#scene.glyphNodeIdsCell
+      .peek()
+      .map((id) => this.#scene.record(id))
+      .filter((node) => node?.kind === "glyph");
     const activeSourceId = this.#activeSourceIdCell.peek();
     const editingSourceIds = this.#editingSourceIdsCell.peek();
 
@@ -215,7 +220,7 @@ export class MultiSourceEditing {
     const layerPairs = new Map<LayerId, LayerId>();
     let completeReadSet = activeSourceId !== null;
     if (activeSourceId && editingSourceIds.size > 1) {
-      for (const node of this.#scene.nodesOfKind("glyph")) {
+      for (const node of glyphNodes) {
         inputs.push(node.glyphId);
         const glyph = this.#glyphForId(node.glyphId);
         const referenceLayer = glyph?.layerForSource(activeSourceId);

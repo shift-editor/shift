@@ -20,7 +20,7 @@ export class TextEditing {
     this.#editor = editor;
     this.stateCell = computed(
       () => {
-        const record = store.cell.value.get(currentTextEditingId);
+        const record = store.record(currentTextEditingId);
         return record?.type === "textEditing" && record.active ? record : null;
       },
       { name: "editor.textEditing" },
