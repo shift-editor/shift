@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Bounds, Mat, type Point2D } from "@shift/geo";
 import type { NodeId } from "@shift/types";
 import type { TextRunNode } from "@shift/editor/types";
@@ -434,6 +434,24 @@ describe("the Text tool places text boxes", () => {
 
     const placed = boxes().find((other) => other.id === editor.textEditing.state?.nodeId);
     expect(placed?.size).toBe(24);
+  });
+
+  it("blinks the caret while typing, shown again on every change", async () => {
+    const screen = editor.sceneToScreen(scenePoint(100, 50));
+    await editor.click(screen.x, screen.y);
+    vi.useFakeTimers();
+    try {
+      const shown = editor.textEditing.caretShownCell;
+      editor.textEditing.insertText("A");
+      expect(shown.peek()).toBe(true);
+      vi.advanceTimersByTime(600);
+      expect(shown.peek()).toBe(false);
+
+      editor.textEditing.insertText("A");
+      expect(shown.peek()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("removes a placed box left empty", async () => {

@@ -2477,6 +2477,7 @@ export class Editor {
     this.frames.dispose();
     this.scene.dispose();
     this.text.dispose();
+    this.textEditing.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();

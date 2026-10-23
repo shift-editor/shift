@@ -292,7 +292,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     glyphBbox: "#FF00FB",
   },
   textRun: {
-    cursorColor: "#0C92F4",
+    cursorColor: "#000000",
     cursorWidthPx: 1.25,
     selectionFill: "rgba(12, 146, 244, 0.2)",
     hoverOutline: "#0C92F4",

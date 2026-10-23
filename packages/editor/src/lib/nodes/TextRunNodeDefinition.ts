@@ -819,6 +819,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
     const editing = this.editor.textEditing.stateCell.peek();
     if (editing?.nodeId !== node.id) return;
+    const shown = this.editor.textEditing.caretShownCell;
+    track(shown);
+    if (!shown.peek()) return;
     const run = this.editor.text.run(node.runId);
     if (!run) return;
 
