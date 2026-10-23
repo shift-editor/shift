@@ -175,6 +175,20 @@ describe("Editor scene bootstrap", () => {
     expect(sceneOrder).toEqual([second.id, placed.id]);
   });
 
+  it("widens a run's cached extent as its text grows", () => {
+    editor.exitNodes();
+    const run = editor.scene.first("textRun")!;
+    const width = () => {
+      const extent = editor.nodeExtent(run.id)!;
+      return extent.max.x - extent.min.x;
+    };
+    const before = width();
+
+    editor.text.setItems(run.runId, editor.text.itemsFromText("AAA"));
+
+    expect(width()).toBeGreaterThan(before * 2);
+  });
+
   it("has no glyph node on a page without one", () => {
     const page = editor.pages.create();
     editor.pages.activate(page.id);

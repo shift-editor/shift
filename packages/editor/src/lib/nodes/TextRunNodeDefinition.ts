@@ -170,8 +170,18 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return base.id;
   }
 
+  /**
+   * The run's box in its own units, from its current layout.
+   *
+   * @remarks
+   * Reactive: inside a computed or effect, the reader reruns when the run's
+   * layout changes.
+   */
   bounds(node: TextRunNode): LocalBounds | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    // Tracked: cached extents (culling, hit testing) must follow typing.
+    const layoutCell = this.editor.text.layoutCell(node.runId);
+    track(layoutCell);
+    const layout = layoutCell.peek();
     if (!layout) return null;
 
     const lines = layout.lines;

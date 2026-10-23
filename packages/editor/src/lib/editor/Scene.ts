@@ -1,6 +1,14 @@
 import { mintNodeId, type NodeId } from "@shift/types";
 import { Tree } from "../utils/Tree";
-import { computed, signal, untracked, type Signal, type WritableSignal } from "../signals/index";
+import {
+  computed,
+  effect,
+  signal,
+  track,
+  untracked,
+  type Signal,
+  type WritableSignal,
+} from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
@@ -276,6 +284,46 @@ export class Scene {
     return this.#nodesFor(this.#structureCell.peek().walk());
   }
 
+  /**
+   * Keeps a cache keyed by node id free of deleted nodes, disposing each deleted node's entry.
+   *
+   * @remarks
+   * Prunes once the change that deleted a node has finished, so a node deleted
+   * and put back in one batch keeps its entry and the readers holding it.
+   * Costs the deleted nodes only, never a walk of the scene.
+   *
+   * @param name - debug name for the pruning effect.
+   * @returns a function that stops pruning; call it when the cache's owner is disposed.
+   */
+  pruneDeleted<T>(cache: Map<NodeId, T>, dispose: (entry: T) => void, name: string): () => void {
+    // non-reactive: ids deleted since the last prune; `deletions` announces them
+    const deleted = new Set<NodeId>();
+    const deletions = signal(0, { name: `${name}.deletions` });
+    const unsubscribe = this.#store.onChange((change) => {
+      if (change.before?.type !== "node" || change.after) return;
+
+      deleted.add(change.before.id);
+      deletions.set(deletions.peek() + 1);
+    });
+    const pruner = effect(
+      () => {
+        track(deletions);
+        for (const id of deleted) {
+          const entry = cache.get(id);
+          if (entry === undefined || this.#store.get(id)) continue;
+          dispose(entry);
+          cache.delete(id);
+        }
+        deleted.clear();
+      },
+      { name },
+    );
+    return () => {
+      unsubscribe();
+      pruner.dispose();
+    };
+  }
+
   /** Pages in list order; the list keeps its identity until a page record changes. */
   get pagesCell(): Signal<readonly PageNode[]> {
     return this.#pagesCell;
@@ -338,6 +386,28 @@ export class Scene {
     }
 
     return page;
+  }
+
+  /**
+   * Returns the top-level node a node sits under: the node itself when it is
+   * directly on a page, null for a page or a node on no page.
+   *
+   * @remarks
+   * Reactive through {@link structureCell}: the reader reruns when the
+   * structure changes.
+   */
+  topLevelOf(nodeId: NodeId): NodeId | null {
+    track(this.#structureCell);
+    const structure = this.#structureCell.peek();
+    let topLevel: NodeId | null = null;
+    let current: NodeId | null = nodeId;
+    while (current !== null) {
+      const parentId = structure.parent(current);
+      if (parentId === null) return topLevel;
+      topLevel = current;
+      current = parentId;
+    }
+    return null;
   }
 
   /** Returns the page a node is on (the page itself for a page), or null for a node on no page. */

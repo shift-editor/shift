@@ -50,6 +50,7 @@ Patterns that caused real regressions (rules in `/signals`):
 - **Scanning for one item** — moving points scanned each contour for each id, and validating a 10K-point batch took 21 s. Look items up through a derived id → index map and validate a batch in one pass (#371, #670).
 - **Startup work for one panel** — 17 MB of glyph-info JSON was parsed in every window at startup. Loaded lazily, the renderer bundle went from 15.8 to 6.6 MB (#565).
 - **Per-item canvas state** — a 10K-character text run made 29,665 save/restore calls per frame while the GPU took ~0.5 ms; the cost was the main-thread calls. Draw repeated glyphs inside one canvas state (#668).
+- **Rebuilding a whole-scene derivation per write** — creating 10K text runs one at a time took 74 s because each new node rebuilt the scene tree: once to find its last sibling, and again in effects (three cell pruners, layer matching) that read the tree after every write. Look up a node's siblings, kind, or page through store indexes and parent records, and prune caches from deletions, not from a scan; 10K runs then took 0.76 s. Time bulk creation unbatched as well as in a `batch`, since every unbatched write flushes the effects.
 - **Costs that grow with session age** — an index rebuilt over everything loaded got slower the longer the app ran. Derive it with `computed` from what is in view.
 
 A healthy weight scrub on Inter Italic (Ryzen 5 5500U, Linux): p99 frame ≈ 16.8 ms, about 60 component renders per commit, main thread about 25% busy. Use that as a reference for "fixed".

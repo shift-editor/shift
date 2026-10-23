@@ -73,6 +73,7 @@ import {
   type Effect,
   type Signal,
   type WritableSignal,
+  untracked,
 } from "../signals/signal";
 import {
   Clipboard,
@@ -85,6 +86,7 @@ import { cursorToCSS } from "../styles/cursor";
 import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
+import { SceneTransforms } from "./SceneTransforms";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { EditorRenderTheme } from "./rendering/Theme";
@@ -196,6 +198,7 @@ export class Editor {
   readonly textEditing: TextEditing;
   /** The document's pages and the page the canvas shows. */
   readonly pages: Pages;
+  readonly #transforms: SceneTransforms;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -321,6 +324,7 @@ export class Editor {
     this.pages = new Pages(this);
     // A session starts with one page; setup, not an edit.
     this.pages.ensure();
+    this.#transforms = new SceneTransforms(this);
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
@@ -1548,9 +1552,9 @@ export class Editor {
    *
    * @remarks
    * Places the node's frame through its ancestors' frames, then applies the
-   * node's own units. Callers that need to redraw on placement changes track
-   * `scene.cell`; a parent that lays out its children (a text run) tracks its
-   * own layout when read inside a reactive boundary.
+   * node's own units. The placement is cached per node (`SceneTransforms`):
+   * read inside a reactive boundary, the reader reruns when this node's
+   * placement changes, including when a parent lays it out again.
    *
    * @param node - a node in the scene; its ancestors are resolved by `parentId`.
    */
@@ -1646,6 +1650,20 @@ export class Editor {
   }
 
   /**
+   * Returns the scene box of a node and everything under it.
+   *
+   * @remarks
+   * Cached per node, and reactive: inside a computed or effect, the reader
+   * reruns when anything under the node moves or resizes.
+   *
+   * @returns null when nothing under the node reports bounds.
+   */
+  nodeExtent(nodeId: NodeId): SceneBounds | null {
+    const extent = this.#transforms.extent(nodeId);
+    return extent ? sceneBounds(extent) : null;
+  }
+
+  /**
    * The transform from a node's frame to the scene: Y-down, origin at the node's
    * position, nested in its parent's frame.
    *
@@ -1655,6 +1673,9 @@ export class Editor {
    * supplies their positions through `NodeDefinition.childPosition`.
    */
   #frameToScene(node: ShiftNode): Mat {
+    // The scene's own record is cached per node; a copy (such as a preview) is placed afresh.
+    if (this.scene.node(node.id) === node) return this.#transforms.frameToScene(node.id);
+
     const parent = this.scene.node(node.parentId);
     if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
@@ -1717,16 +1738,34 @@ export class Editor {
   }
 
   getPointerTarget(point: ScenePoint): PointerTarget {
-    const nodes = this.scene.nodes();
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const node = nodes[i];
-      if (!node) continue;
+    const scene = this.scene;
+    const structure = scene.structureCell.peek();
+    const pageId = scene.activePageIdCell.peek();
+    if (!pageId) return { kind: "canvas", point };
 
-      const definition = this.nodeDefinition(node.kind);
-      if (!definition) continue;
+    const reach = this.hitRadius;
+    const editedRoots = new Set(
+      this.editing.nodeIds.map((id) => untracked(() => scene.topLevelOf(id))),
+    );
+    const roots = structure.children(pageId);
+    // Children before parents and later siblings first, so what draws on top is hit first.
+    for (let r = roots.length - 1; r >= 0; r--) {
+      const rootId = roots[r]!;
+      const extent = untracked(() => this.nodeExtent(rootId));
+      const nearPointer = !extent || Bounds.containsPoint(Bounds.expand(extent, reach), point);
+      if (!nearPointer && !editedRoots.has(rootId)) continue;
 
-      const target = definition.hit(node, this.toLocal(node, point));
-      if (target) return target;
+      const ids = [rootId, ...structure.descendants(rootId)];
+      for (let i = ids.length - 1; i >= 0; i--) {
+        const node = scene.node(ids[i]!);
+        if (!node) continue;
+
+        const definition = this.nodeDefinition(node.kind);
+        if (!definition) continue;
+
+        const target = definition.hit(node, this.toLocal(node, point));
+        if (target) return target;
+      }
     }
 
     return { kind: "canvas", point };
@@ -2358,6 +2397,8 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.#transforms.dispose();
+    this.scene.dispose();
     this.text.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
