@@ -13,6 +13,7 @@ import {
   type Effect,
   type WritableSignal,
 } from "../../signals/signal";
+import { VisibleNodes } from "./VisibleNodes";
 import { BackgroundLayer, OverlayLayer, SceneLayer } from "./RenderFrame";
 import type { RenderContext } from "../../../types/rendering";
 
@@ -65,14 +66,16 @@ export class Renderer {
     name: "renderer.theme",
   });
   #editor: Editor;
+  #visibleNodes: VisibleNodes;
   #backgroundLayer: BackgroundLayer;
   #sceneLayer: SceneLayer;
   #overlayLayer: OverlayLayer;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#backgroundLayer = new BackgroundLayer(editor);
-    this.#sceneLayer = new SceneLayer(editor);
+    this.#visibleNodes = new VisibleNodes(editor);
+    this.#backgroundLayer = new BackgroundLayer(editor, this.#visibleNodes);
+    this.#sceneLayer = new SceneLayer(editor, this.#visibleNodes);
     this.#overlayLayer = new OverlayLayer(editor);
 
     this.#backgroundEffect = effect(
@@ -225,6 +228,7 @@ export class Renderer {
     this.#backgroundEffect?.dispose();
     this.#sceneEffect?.dispose();
     this.#overlayEffect?.dispose();
+    this.#visibleNodes.dispose();
     this.#markerLayer.destroy();
     this.#backgroundFrame.cancelUpdate();
     this.#sceneFrame.cancelUpdate();

@@ -57,7 +57,7 @@ To change which glyph is edited, call `TextRunNodeDefinition.editItem(run, itemI
 
 ## Gotchas
 
-Empty runs have no `TextLayout.lines`, but still need a visible caret and a small caret area. Child placement tracks the run layout only when read inside a reactive boundary; imperative reads see the current layout. Linebreaks consume clusters and can be selected despite not producing a positioned glyph. `ShiftStore.cell` is whole-map reactive: do not read it in `layoutCell`, or caret changes will rebuild every run.
+Empty runs have no `TextLayout.lines`, but still need a visible caret and a small caret area. Child placement tracks the run layout only when read inside a reactive boundary; imperative reads see the current layout. Linebreaks consume clusters and can be selected despite not producing a positioned glyph. Read store records through `ShiftStore.record(id)` in `layoutCell`, so caret changes never rebuild every run.
 
 ## Legacy test migration ledger
 

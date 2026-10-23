@@ -24,12 +24,13 @@ const MOVES = 60;
 
 /**
  * Mean component renders per commit allowed during each interaction, about 15%
- * over what they measured when set (61 and 117). Kept tight on purpose: on this
- * small font, writing a new-but-equal editing-sources set on every scrub step
- * only raised the scrub to 81. Raise a budget deliberately when an interaction
+ * over what they measured when set (61, 117, and 62). Kept tight on purpose: on
+ * this small font, writing a new-but-equal editing-sources set on every scrub
+ * step only raised the scrub to 81, and sidebars following every node write
+ * raised the frame drag to 383. Raise a budget deliberately when an interaction
  * should show more.
  */
-const BUDGET = { scrub: 70, marquee: 135 };
+const BUDGET = { scrub: 70, marquee: 135, frameDrag: 72 };
 
 test.describe("render budget", () => {
   test.beforeEach(async ({ page, editor }) => {
@@ -59,6 +60,56 @@ test.describe("render budget", () => {
     await page.mouse.up();
 
     expectWithinBudget(await stopRenderCount(page), BUDGET.scrub);
+  });
+
+  test("dragging a frame re-renders only what shows the frame", async ({ page, editor }) => {
+    await editor.selectTool("select");
+    // A column of runs with a wide padding strip to press in, selected so the Layout section shows.
+    const frame = await page.evaluate((padding) => {
+      const editor = window.shift!.editor;
+      editor.exitNodes();
+      const column = editor.frames.create(null, {
+        position: { x: 2000, y: 0 },
+        layout: {
+          mode: "column",
+          padding: { top: padding, right: padding, bottom: padding, left: padding },
+        },
+      })!;
+      for (const text of ["AA", "A", "AAA"]) editor.frames.addText(column.id, text, { size: 72 });
+      editor.selection.select([column.id]);
+      return { id: column.id, padding, x: column.position.x };
+    }, 160);
+    await page.evaluate(async () => {
+      const editor = window.shift!.editor;
+      // The frame has no box to zoom to until the layout engine has placed it.
+      await editor.frames.settled();
+      editor.zoomToSelection();
+    });
+    await editor.waitForCanvasRender();
+    const press = await page.evaluate(({ id, padding }) => {
+      const editor = window.shift!.editor;
+      const bounds = editor.nodeBounds(editor.scene.nodeOfKind(id, "frame")!)!;
+      return { x: bounds.min.x + padding / 2, y: (bounds.min.y + bounds.max.y) / 2 };
+    }, frame);
+    const start = await editor.projectSceneToPage(press);
+
+    await startRenderCount(page);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let move = 1; move <= MOVES; move++) {
+      await page.mouse.move(start.x + 8 + move * 2, start.y);
+    }
+    await page.mouse.up();
+    await editor.flushPointerMoves();
+    await editor.waitForIdle();
+    const count = await stopRenderCount(page);
+
+    const moved = await page.evaluate(
+      (id) => window.shift!.editor.scene.nodeOfKind(id, "frame")!.position.x,
+      frame.id,
+    );
+    expect(moved, "the drag should move the frame").toBeGreaterThan(frame.x);
+    expectWithinBudget(count, BUDGET.frameDrag);
   });
 
   test("a marquee re-renders only what shows the selection", async ({ page }) => {

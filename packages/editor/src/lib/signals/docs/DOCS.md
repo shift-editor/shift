@@ -149,7 +149,7 @@ cd apps/desktop && pnpm test
 - `Editor` -- primary consumer; derives `toolCell` from the active tool's state cell and owns cursor/view cells
 - `Camera` -- uses `zoomCell`, pan cells, and affine transform cells
 - `Hover` -- uses `entryCell` for hovered editor state
-- `Selection` -- store-derived: `stateCell` and its id set are computeds over the `ShiftStore` cell; mutations write selection records into the store rather than setting local signals
+- `Selection` -- store-derived: `stateCell` and its id set are computeds over the selection record (`ShiftStore.record`); mutations write selection records into the store rather than setting local signals
 - `FontStore` -- owns signal-backed renderer snapshots and canonical loaded glyph models
 - `useSignalState` -- React bridge hook (in this module)
 - `useSignalEffect` -- lifecycle-aware effect hook (in `@/hooks/useSignalEffect`)

@@ -18,6 +18,9 @@ const debugNodeFinalizer = new FinalizationRegistry<number>((debugId) => {
   debugNodes.delete(debugId);
 });
 let traceSignalWrites = false;
+// Off unless a dev build or test turns it on: a WeakRef per signal cost about 100 ms
+// building a page of 10,000 text runs.
+let registeringDebugNodes = false;
 
 // A write marks downstream nodes stale without running user code; queued effects run afterwards,
 // in a flush that only executes effects whose dependencies actually changed value.
@@ -115,6 +118,7 @@ function computedDependency(dependency: SignalNode): Computation {
 }
 
 function registerDebugNode(node: DebugNode): void {
+  if (!registeringDebugNodes) return;
   debugNodes.set(node.debugId, new WeakRef(node));
   debugNodeFinalizer.register(node, node.debugId);
 }
@@ -955,6 +959,21 @@ export const signalDebug = {
     traceSignalWrites = enabled;
   },
 
+  /**
+   * Starts or stops listing signals created from now on, for the queries that
+   * search every node: {@link dump} without a node, {@link dumpByName},
+   * {@link find}, and {@link list}.
+   *
+   * @remarks
+   * Off by default, since listing costs a `WeakRef` per signal; the desktop
+   * app turns it on in dev builds and the test setups turn it on for tests.
+   * Signals created while it was off are never listed, though `dump(node)`
+   * still follows them from a node in hand.
+   */
+  registerNodes(enabled = true): void {
+    registeringDebugNodes = enabled;
+  },
+
   dump(node?: Signal<unknown> | Effect, options?: SignalDebugDumpOptions): string {
     const resolvedOptions: Required<SignalDebugDumpOptions> = {
       direction: options?.direction ?? "both",
@@ -978,7 +997,12 @@ export const signalDebug = {
     };
 
     const matches = Array.from(liveDebugNodes()).filter((node) => matchesDebugQuery(node, query));
-    if (matches.length === 0) return `No signal debug nodes matched ${String(query)}.`;
+    if (matches.length === 0) {
+      const off = registeringDebugNodes
+        ? ""
+        : " Signals are not being listed; call signalDebug.registerNodes() before creating them.";
+      return `No signal debug nodes matched ${String(query)}.${off}`;
+    }
 
     return matches
       .map((debugNode) => formatGraphNode(debugNode, resolvedOptions, new Set(), 0))

@@ -1,17 +1,15 @@
 import { CanvasItem } from "./CanvasItem";
 import { track } from "../../signals";
-import type { Canvas } from "./Canvas";
-import type { ShiftNode } from "../../../types/node";
-import type { RenderContext, RenderPass } from "../../../types/rendering";
+import type { Canvas, RectFill } from "./Canvas";
+import type { RecordedFill, RenderContext, RenderPass } from "../../../types/rendering";
 import type { Editor } from "../Editor";
+import type { VisibleNode, VisibleNodes } from "./VisibleNodes";
 
-export interface BackgroundLayerProps {
-  readonly nodes: readonly ShiftNode[];
-}
+/** The background layer draws from {@link VisibleNodes}; its props only mark when to redraw. */
+export type BackgroundLayerProps = Record<string, never>;
 
-export interface SceneLayerProps {
-  readonly nodes: readonly ShiftNode[];
-}
+/** The scene layer draws from {@link VisibleNodes}; its props only mark when to redraw. */
+export type SceneLayerProps = Record<string, never>;
 
 export interface OverlayLayerProps {
   readonly activeTool: string | null;
@@ -32,48 +30,44 @@ export interface OverlayLayerProps {
  */
 export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
   readonly #editor: Editor;
+  readonly #visible: VisibleNodes;
 
   /**
    * Creates the background layer for one editor.
    *
    * @param editor - Editor session whose camera, glyph, and active tool are rendered.
+   * @param visible - the nodes on screen, shared with the scene layer.
    */
-  constructor(editor: Editor) {
+  constructor(editor: Editor, visible: VisibleNodes) {
     super();
     this.#editor = editor;
+    this.#visible = visible;
   }
 
   protected props(): BackgroundLayerProps | null {
-    this.#editor.camera.trackViewportTransform();
     this.#editor.toolCell.value;
     this.#editor.editing.stateCell.value;
     track(this.#editor.textEditing.stateCell);
-    this.#editor.scene.cell.value;
-    for (const node of this.#editor.scene.nodesOfKind("textRun")) {
-      track(this.#editor.text.layoutCell(node.runId));
-    }
 
-    return { nodes: this.#editor.scene.nodes() };
+    return {};
   }
 
   draw(ctx: RenderContext): void {
     const props = this.propsCell.value;
     if (!props) return;
 
-    for (const node of props.nodes) {
-      ctx.canvas.withTransform(this.#editor.sceneTransform(node), () => {
-        this.#drawNode(ctx, node, "background");
-      });
-    }
+    track(this.#visible.cell);
+    const entries = this.#visible.cell.peek();
+    ctx.canvas.withRectPaint((paint) => {
+      for (const entry of entries) {
+        const definition = this.#editor.nodeDefinition(entry.node.kind);
+        if (definition?.paintBackground(entry.node, entry.transform, ctx, paint)) continue;
+
+        drawNode(this.#editor, ctx, entry, "background");
+      }
+    });
 
     this.#editor.toolManager.drawBackground(ctx.canvas);
-  }
-
-  #drawNode(ctx: RenderContext, node: ShiftNode, pass: RenderPass): void {
-    const definition = this.#editor.nodeDefinition(node.kind);
-    if (!definition) return;
-
-    definition.draw(node, ctx, pass);
   }
 }
 
@@ -99,66 +93,106 @@ export class BackgroundLayer extends CanvasItem<BackgroundLayerProps> {
  */
 export class SceneLayer extends CanvasItem<SceneLayerProps> {
   readonly #editor: Editor;
+  readonly #visible: VisibleNodes;
+  // non-reactive: memo keyed by visible entry, which VisibleNodes replaces when its node, transform, or text layout changes
+  readonly #fills = new WeakMap<VisibleNode, RecordedFill>();
 
   /**
    * Creates the scene layer for one editor.
    *
    * @param editor - Editor session whose scene glyphs, selection, and hover are rendered.
+   * @param visible - the nodes on screen, shared with the background layer.
    */
-  constructor(editor: Editor) {
+  constructor(editor: Editor, visible: VisibleNodes) {
     super();
     this.#editor = editor;
+    this.#visible = visible;
   }
 
   protected props(): SceneLayerProps {
-    this.#editor.camera.trackViewportTransform();
-
     // TODO: should be track(thing)
     this.#editor.toolCell.value;
     this.#editor.editing.stateCell.value;
     this.#editor.selection.stateCell.value;
     this.#editor.hover.entryCell.value;
     track(this.#editor.textEditing.stateCell);
-    this.#editor.scene.cell.value;
-    for (const node of this.#editor.scene.nodesOfKind("textRun")) {
-      track(this.#editor.text.layoutCell(node.runId));
-    }
     this.#editor.debugOverlaysCell.value;
 
-    return {
-      nodes: this.#editor.scene.nodes(),
-    };
+    return {};
   }
 
   draw(ctx: RenderContext): void {
     const props = this.propsCell.value;
     if (!props) return;
 
-    for (const node of props.nodes) {
-      this.#drawNode(ctx, node, "content");
-    }
+    track(this.#visible.cell);
+    track(this.#editor.zoomCell);
+    const entries = this.#visible.cell.peek();
+    ctx.canvas.withRectFill((fill) => {
+      for (const entry of entries) {
+        if (this.#replayFill(entry, ctx, fill)) continue;
 
-    for (const node of props.nodes) {
+        // Paints over the rectangles before it, in scene order.
+        fill.flush();
+        drawNode(this.#editor, ctx, entry, "content");
+      }
+    });
+
+    for (const { node, transform } of entries) {
       if (node.kind !== "glyph") continue;
 
-      ctx.canvas.withTransform(this.#editor.sceneTransform(node), () => {
+      ctx.canvas.withTransform(transform, () => {
         this.#editor.toolManager.drawScene(ctx.canvas);
       });
     }
 
-    for (const node of props.nodes) {
-      this.#drawNode(ctx, node, "controls");
+    for (const entry of entries) drawNode(this.#editor, ctx, entry, "controls");
+  }
+
+  /**
+   * Adds a node's rectangles to the fill, recording them on first use so a
+   * pan replays them without asking the node again.
+   *
+   * @returns false when the node draws itself instead.
+   */
+  #replayFill(entry: VisibleNode, ctx: RenderContext, fill: RectFill): boolean {
+    const zoom = this.#editor.zoomCell.peek();
+    const theme = ctx.canvas.theme;
+    let recorded = this.#fills.get(entry);
+    if (!recorded || recorded.zoom !== zoom || recorded.theme !== theme) {
+      recorded = recordFill(this.#editor, entry, ctx, zoom);
+      this.#fills.set(entry, recorded);
     }
-  }
+    if (!recorded.filled) return false;
 
-  #drawNode(ctx: RenderContext, node: ShiftNode, pass: RenderPass): void {
-    const definition = this.#editor.nodeDefinition(node.kind);
-    if (!definition) return;
-
-    ctx.canvas.withTransform(this.#editor.sceneTransform(node), () => {
-      definition.draw(node, ctx, pass);
-    });
+    const { colors, rects } = recorded;
+    for (let index = 0; index < colors.length; index++) {
+      const at = index * 4;
+      fill.rect(colors[index]!, rects[at]!, rects[at + 1]!, rects[at + 2]!, rects[at + 3]!);
+    }
+    return true;
   }
+}
+
+/** Asks a node's definition for its content rectangles and keeps them. */
+function recordFill(
+  editor: Editor,
+  entry: VisibleNode,
+  ctx: RenderContext,
+  zoom: number,
+): RecordedFill {
+  const colors: string[] = [];
+  const rects: number[] = [];
+  const recorder: RectFill = {
+    rect: (color, x, y, width, height) => {
+      colors.push(color);
+      rects.push(x, y, width, height);
+    },
+    flush: () => {},
+  };
+  const definition = editor.nodeDefinition(entry.node.kind);
+  const filled = definition?.fillContent(entry.node, entry.transform, ctx, recorder) ?? false;
+  return { zoom, theme: ctx.canvas.theme, filled, colors, rects };
 }
 
 /**
@@ -202,4 +236,13 @@ export class OverlayLayer extends CanvasItem<OverlayLayerProps> {
 
     this.#editor.toolManager.drawOverlay(canvas);
   }
+}
+
+function drawNode(editor: Editor, ctx: RenderContext, entry: VisibleNode, pass: RenderPass): void {
+  const definition = editor.nodeDefinition(entry.node.kind);
+  if (!definition?.drawsIn(entry.node, pass)) return;
+
+  ctx.canvas.withTransform(entry.transform, () => {
+    definition.draw(entry.node, ctx, pass);
+  });
 }

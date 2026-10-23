@@ -582,6 +582,17 @@ describe("signal debug", () => {
     fx.dispose();
   });
 
+  it("finds signals by name only when they were created while registering", () => {
+    signalDebug.registerNodes(false);
+    const unlisted = signal(1, { name: "registry.unlisted" });
+    signalDebug.registerNodes();
+    // A WeakRef keeps its target until the current job ends, so neither is collected here.
+    signal(1, { name: "registry.listed" });
+
+    expect(signalDebug.find(/^registry\./).map((node) => node.name)).toEqual(["registry.listed"]);
+    expect(signalDebug.dump(unlisted)).toContain("signal(registry.unlisted)");
+  });
+
   it("traces changed reactive ancestors for the current computation", () => {
     const messages: string[] = [];
     const source = signal(1, { name: "source" });

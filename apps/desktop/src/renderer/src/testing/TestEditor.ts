@@ -224,6 +224,7 @@ export class TestEditor extends Editor {
   async settle(): Promise<this> {
     await this.font.editCoordinator.settled();
     await this.text.settled();
+    await this.frames.settled();
     return this;
   }
 

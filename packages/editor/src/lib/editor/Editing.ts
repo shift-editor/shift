@@ -29,7 +29,7 @@ export class Editing {
     this.#store = store;
     this.stateCell = computed(
       () => {
-        const record = this.#store.cell.value.get(currentEditingId);
+        const record = this.#store.record(currentEditingId);
         if (record?.type !== "editing") return emptyEditingState();
 
         return { nodeIds: record.nodeIds };

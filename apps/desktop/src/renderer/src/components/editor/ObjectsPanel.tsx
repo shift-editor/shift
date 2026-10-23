@@ -22,12 +22,12 @@ export const ObjectsPanel = () => {
     // Reuses unchanged contours' items, so an edit rebuilds only what it touched.
     const cache = new ObjectTreeCache();
     return computed(() => {
-      const node = editor.scene.cell.value.nodes.find((candidate) => candidate.kind === "glyph");
+      const sceneGlyph = editor.scene.firstGlyphCell.value;
       const externalLocation = editor.externalLocationCell.value;
       const activeSourceId = editor.activeSourceIdCell.value;
-      if (!node) return [];
+      if (!sceneGlyph) return [];
 
-      const glyph = editor.glyphForId(node.glyphId);
+      const glyph = editor.glyphForId(sceneGlyph.glyphId);
       if (!glyph) return [];
 
       const layer = activeSourceId

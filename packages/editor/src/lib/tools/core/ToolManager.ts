@@ -15,6 +15,7 @@ import type { ToolManifest } from "./ToolManifest";
 import { ToolRegistration } from "./ToolRegistration";
 import { signal, type Signal, type WritableSignal } from "../../signals/index";
 import type { HistoryCapture } from "../../editor/history/HistoryCapture";
+import type { PointerTarget } from "../../../types/target";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ToolInstance = BaseTool<any, any, any>;
@@ -380,6 +381,7 @@ export class ToolManager implements ToolSwitchHandler {
     this.#pointerCapture = null;
   }
 
+  /** Adds the pointer target, found on first read: a drag that never asks skips hit testing. */
   private withPointerTarget(event: GestureEvent): ToolEvent {
     switch (event.type) {
       case "pointerMove":
@@ -387,15 +389,9 @@ export class ToolManager implements ToolSwitchHandler {
       case "doubleClick":
       case "drag":
       case "dragEnd":
-        return {
-          ...event,
-          target: this.editor.getPointerTarget(event.coords.scene),
-        };
+        return withLazyTarget(event, () => this.editor.getPointerTarget(event.coords.scene));
       case "dragStart":
-        return {
-          ...event,
-          target: this.editor.getPointerTarget(event.origin.scene),
-        };
+        return withLazyTarget(event, () => this.editor.getPointerTarget(event.origin.scene));
       case "dragCancel":
       case "keyDown":
       case "keyUp":
@@ -535,4 +531,16 @@ export class ToolManager implements ToolSwitchHandler {
   #putManifest(manifest: ToolManifest): void {
     this.#manifests.set(new Map(this.#manifests.peek()).set(manifest.id, manifest));
   }
+}
+
+/** Returns `event` with a `target` found by `find` on first read, then kept. */
+function withLazyTarget<E extends GestureEvent>(
+  event: E,
+  find: () => PointerTarget,
+): E & { readonly target: PointerTarget } {
+  let target: PointerTarget | null = null;
+  return Object.defineProperty({ ...event }, "target", {
+    enumerable: true,
+    get: () => (target ??= find()),
+  }) as E & { readonly target: PointerTarget };
 }

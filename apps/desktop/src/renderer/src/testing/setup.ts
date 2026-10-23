@@ -6,6 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll } from "vitest";
+import { signalDebug } from "@shift/editor/signals";
+
+// Lists every signal, so `signalDebug.dumpByName` can find hidden readers while debugging a test.
+signalDebug.registerNodes();
 
 // Tests write workspaces, documents, and exports under `os.tmpdir()`, and the
 // native bridge does the same through TMPDIR. Point both at one root per test
@@ -48,6 +52,7 @@ if (typeof globalThis.Path2D === "undefined") {
           y: number;
         }
       | { type: "closePath" }
+      | { type: "rect"; x: number; y: number; width: number; height: number }
       | { type: "addPath"; path: Path2D }
     > = [];
 
@@ -78,6 +83,10 @@ if (typeof globalThis.Path2D === "undefined") {
 
     closePath(): void {
       this.commands.push({ type: "closePath" });
+    }
+
+    rect(x: number, y: number, width: number, height: number): void {
+      this.commands.push({ type: "rect", x, y, width, height });
     }
 
     addPath(path: Path2D): void {

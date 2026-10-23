@@ -1,11 +1,17 @@
-import type { ParagraphRequest, RunId, ShapedRun, ShapeUnit } from "@shift/types";
+import type { GlyphId, ParagraphRequest, RunId, ShapedRun, ShapeUnit } from "@shift/types";
 import { computed, effect, track } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { TextRunRecord } from "../../types/text";
 import type { RegisteredShaper } from "../wasm/shaping";
 import { locationFromExternalAxisLocation } from "../variation/location";
-import { splitParagraphs, TextLayout, type ParagraphItem, type TextItem } from "./layout";
+import {
+  glyphIdForItem,
+  splitParagraphs,
+  TextLayout,
+  type ParagraphItem,
+  type TextItem,
+} from "./layout";
 
 /** A run's paragraphs as last shaped, with the content they were shaped from. */
 export interface ShapedText {
@@ -27,8 +33,10 @@ interface ShapingRequest {
 export interface RunTextOwner {
   /** Reactive like `Text.run`. */
   run(id: RunId): TextRunRecord | null;
-  /** Bumped when a glyph the text shows finishes loading. */
+  /** Bumped when a load of a glyph text needs finishes, whether or not it loaded; followed by runs waiting for their first layout. */
   readonly glyphsLoadedCell: Signal<number>;
+  /** Whether a glyph text needs is being loaded. Not reactive: {@link glyphsLoadedCell} bumps when a load ends. */
+  isLoading(glyphId: GlyphId): boolean;
   /** The shaper to shape with; null until it is ready, when text lays out literally. */
   readonly shaperCell: Signal<RegisteredShaper | null>;
   /** Called with each shaping result, such as to load the glyphs it substituted in. */
@@ -50,6 +58,8 @@ export class RunText {
   readonly #shapedCell: ComputedSignal<ShapedText | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
+  /** Whether the run has had a layout; only its first waits for its glyphs. */
+  #laidOut = false;
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
     this.#keyCell = computed(
@@ -103,8 +113,19 @@ export class RunText {
         track(editor.activeSourceIdCell);
         // Items resolve to glyphs by Unicode value and id, so remapping or deleting a glyph re-lays out.
         track(editor.font.glyphEntriesCell);
-        track(owner.glyphsLoadedCell);
         if (!record) return null;
+        // A new run waits for glyphs on their way rather than laying out
+        // without them and again when they land, which cost a page of runs
+        // a whole extra layout. Once shown, a run lays out with what has
+        // loaded, so typing a glyph not loaded yet does not blank it, and
+        // follows only its own glyphs, which the layout reads one by one:
+        // following every load would re-lay out every run on the page.
+        if (!this.#laidOut) {
+          track(owner.glyphsLoadedCell);
+          if (waitsForGlyphs(record.items, editor, owner)) return null;
+        }
+
+        this.#laidOut = true;
         return new TextLayout({
           items: record.items,
           origin: { x: 0, y: 0 },
@@ -117,7 +138,13 @@ export class RunText {
     );
   }
 
-  /** The run's layout; invalidates on content, location, source, glyph loads, and shaping results. */
+  /**
+   * The run's layout; invalidates on content, location, source, glyph loads, and shaping results.
+   *
+   * @remarks
+   * Null until the run has text and, the first time, until the glyphs its
+   * items name have finished loading.
+   */
   get layoutCell(): ComputedSignal<TextLayout | null> {
     return this.#layoutCell;
   }
@@ -145,6 +172,15 @@ function shapingKey(items: readonly TextItem[]): string {
       return item.kind === "character" ? `c${item.codepoint}` : `g${item.glyphId}`;
     })
     .join(" ");
+}
+
+/** Whether any glyph the items name is still loading. */
+function waitsForGlyphs(items: readonly TextItem[], editor: Editor, owner: RunTextOwner): boolean {
+  return items.some((item) => {
+    if (item.kind === "linebreak") return false;
+    const glyphId = glyphIdForItem(item, editor.font);
+    return glyphId !== null && owner.isLoading(glyphId);
+  });
 }
 
 function shapeUnit(item: ParagraphItem): ShapeUnit {

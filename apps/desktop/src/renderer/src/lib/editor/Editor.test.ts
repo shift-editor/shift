@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId } from "@shift/types";
-import type { GlyphNode } from "@shift/editor/types";
+import type { GlyphNode, SceneGlyph } from "@shift/editor/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { effect } from "@shift/editor/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
@@ -110,6 +110,77 @@ describe("Editor scene bootstrap", () => {
     expect(editor.scene.nodesOfKind("glyph")).toHaveLength(2);
     expect(editor.scene.only("glyph")).toBeNull();
     expect(editor.scene.first("glyph")).toBe(firstChild);
+  });
+
+  it("follows the one glyph node and the first one as glyph nodes come and go", () => {
+    const placed = editor.scene.only("glyph")!;
+    const only: (SceneGlyph | null)[] = [];
+    const first: (SceneGlyph | null)[] = [];
+    const reader = effect(() => {
+      only.push(editor.scene.onlyGlyphCell.value);
+      first.push(editor.scene.firstGlyphCell.value);
+    });
+
+    const second = editor.scene.createNode<GlyphNode>({
+      kind: "glyph",
+      glyphId: placed.glyphId,
+      sourceId: editor.font.defaultSource.id,
+      position: { x: 700, y: 0 },
+    });
+    editor.scene.deleteNode(placed.id);
+    reader.dispose();
+
+    const shown = (node: GlyphNode) => ({ nodeId: node.id, glyphId: node.glyphId });
+    expect(only).toEqual([shown(placed), null, shown(second)]);
+    expect(first.at(-1)).toEqual(shown(second));
+  });
+
+  it("follows the glyph a node shows, and stays quiet while nodes only move", async () => {
+    await editor.addGlyph("B", 66);
+    const [run, placed] = editor.scene.nodes();
+    if (placed?.kind !== "glyph") throw new Error("Expected the placed glyph");
+    const seen: (SceneGlyph | null)[] = [];
+    const reader = effect(() => {
+      seen.push(editor.scene.onlyGlyphCell.value);
+    });
+
+    editor.scene.updateNode({ id: placed.id, position: { x: 40, y: 0 } });
+    editor.scene.updateNode({ id: run!.id, position: { x: 0, y: 90 } });
+    const other = editor.font.recordForName("B")!.id;
+    editor.scene.updateNode({ id: placed.id, glyphId: other });
+    reader.dispose();
+
+    expect(seen.map((glyph) => glyph?.glyphId)).toEqual([placed.glyphId, other]);
+  });
+
+  it("lists glyph nodes in scene order as they are reordered or leave the page", () => {
+    const placed = editor.scene.only("glyph")!;
+    const second = editor.scene.createNode<GlyphNode>({
+      kind: "glyph",
+      glyphId: placed.glyphId,
+      sourceId: editor.font.defaultSource.id,
+      position: { x: 700, y: 0 },
+    });
+    const seen: (readonly string[])[] = [];
+    const reader = effect(() => {
+      seen.push(editor.scene.glyphNodeIdsCell.value);
+    });
+
+    editor.scene.updateNode({ id: second.id, index: "a" });
+    const sceneOrder = editor.scene.nodesOfKind("glyph").map((node) => node.id);
+    editor.scene.updateNode({ id: placed.id, parentId: editor.pages.create().id });
+    reader.dispose();
+
+    expect(seen).toEqual([[placed.id, second.id], sceneOrder, [second.id]]);
+    expect(sceneOrder).toEqual([second.id, placed.id]);
+  });
+
+  it("has no glyph node on a page without one", () => {
+    const page = editor.pages.create();
+    editor.pages.activate(page.id);
+
+    expect(editor.scene.onlyGlyphCell.peek()).toBeNull();
+    expect(editor.scene.firstGlyphCell.peek()).toBeNull();
   });
 
   it("can place the same glyph id twice with distinct node ids", () => {

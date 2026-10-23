@@ -38,6 +38,11 @@ Read the "Renders started by" list top-down:
 - `context {…}` — a context value changed; the keys identify which one. A context built from a high-frequency signal re-renders every consumer on every change.
 - A component starting the same number of renders as there were commits is subscribed to the thing being scrubbed or dragged. Ask whether it shows that value. If not, it's the bug.
 
+When a CPU profile shows a computed recomputing on every write but not who asked for it (an effect refreshes its dependencies before it runs, so the reader is missing from the stack), ask the signal graph:
+
+- `signalDebug.dumpByName(/^editor\.scene\.structure$/, { direction: "subscribers", depth: 8 })` lists every computed and effect downstream of a cell by name. Run it in a `TestEditor` test (throw the string, since Vitest hides console output) or in a dev build's devtools console. Packaged and `profile:build` builds do not list signals, for speed; there, it finds nothing unless `signalDebug.registerNodes()` ran before the signals were created.
+- `traceReactiveRun()` inside a suspect computed or effect logs which tracked cell changed on each run; `signalDebug.traceWrites()` logs every signal write.
+
 Patterns that caused real regressions (rules in `/signals`):
 
 - **Re-doing work on every change that a signal already tracks** — the catalog re-opened the editor's glyph on every location change although its render model follows the location signal. This re-rendered the whole editor.
@@ -50,6 +55,7 @@ Patterns that caused real regressions (rules in `/signals`):
 - **Scanning for one item** — moving points scanned each contour for each id, and validating a 10K-point batch took 21 s. Look items up through a derived id → index map and validate a batch in one pass (#371, #670).
 - **Startup work for one panel** — 17 MB of glyph-info JSON was parsed in every window at startup. Loaded lazily, the renderer bundle went from 15.8 to 6.6 MB (#565).
 - **Per-item canvas state** — a 10K-character text run made 29,665 save/restore calls per frame while the GPU took ~0.5 ms; the cost was the main-thread calls. Draw repeated glyphs inside one canvas state (#668).
+- **Rebuilding a whole-scene derivation per write** — creating 10K text runs one at a time took 74 s because each new node rebuilt the scene tree: once to find its last sibling, and again in effects (three cell pruners, frame naming, layer matching) that read the tree after every write. Look up a node's siblings, kind, or page through store indexes and parent records, and prune caches from deletions, not from a scan; 10K runs then took 0.76 s. Time bulk creation unbatched as well as in a `batch`, since every unbatched write flushes the effects.
 - **Costs that grow with session age** — an index rebuilt over everything loaded got slower the longer the app ran. Derive it with `computed` from what is in view.
 
 A healthy weight scrub on Inter Italic (Ryzen 5 5500U, Linux): p99 frame ≈ 16.8 ms, about 60 component renders per commit, main thread about 25% busy. Use that as a reference for "fixed".

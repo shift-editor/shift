@@ -1,6 +1,14 @@
 import { mintNodeId, type NodeId } from "@shift/types";
 import { Tree } from "../utils/Tree";
-import { computed, signal, type Signal, type WritableSignal } from "../signals/index";
+import {
+  computed,
+  effect,
+  signal,
+  track,
+  untracked,
+  type Signal,
+  type WritableSignal,
+} from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
@@ -9,6 +17,7 @@ import type {
   NodeKind,
   NodeOfKind,
   PageNode,
+  SceneGlyph,
   ShiftNode,
   UpdateNode,
 } from "../../types/node";
@@ -19,15 +28,16 @@ export const DEFAULT_PAGE_NAME = "Page 1";
 export interface SceneValue {
   /** The nodes on the active page, parents before children, siblings by `index`; the page itself is not included. */
   readonly nodes: readonly ShiftNode[];
-  /** Every node on every page. */
-  readonly tree: Tree<NodeId, ShiftNode>;
 }
 
-interface DocumentValue {
-  /** Every node, parents before children, siblings by `index`. */
-  readonly nodes: readonly ShiftNode[];
-  readonly tree: Tree<NodeId, ShiftNode>;
-}
+/**
+ * Every node's id, parent, and sibling order, on every page.
+ *
+ * @remarks
+ * Holds ids only: a node's other fields are read from its record, so moving
+ * or restyling a node never changes the structure.
+ */
+export type SceneStructure = Tree<NodeId, NodeId>;
 
 /**
  * Exposes the editor's placed node graph.
@@ -44,14 +54,21 @@ interface DocumentValue {
  */
 export class Scene {
   readonly #store: ShiftStore<ShiftEditorRecord>;
-  readonly #documentCell: Signal<DocumentValue>;
+  readonly #structureVersion: WritableSignal<number>;
+  readonly #structureCell: Signal<SceneStructure>;
   readonly #pagesCell: Signal<readonly PageNode[]>;
   readonly #requestedPageId: WritableSignal<NodeId | null>;
   readonly #activePageIdCell: Signal<NodeId | null>;
+  readonly #pageNodeIdsCell: Signal<readonly NodeId[]>;
   readonly #cell: Signal<SceneValue>;
-  readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
-  readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
+  readonly #idsByKind: Signal<ReadonlyMap<NodeKind, readonly NodeId[]>>;
+  readonly #glyphNodeIdsCell: Signal<readonly NodeId[]>;
+  readonly #onlyGlyphCell: Signal<SceneGlyph | null>;
+  readonly #firstGlyphCell: Signal<SceneGlyph | null>;
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
+  readonly #byParent: StoreIndex<NodeId, ShiftNodeRecord>;
+  readonly #byKind: StoreIndex<NodeKind, ShiftNodeRecord>;
+  readonly #unsubscribe: () => void;
 
   /**
    * @param store - editor store holding node records.
@@ -63,22 +80,39 @@ export class Scene {
   ) {
     this.#store = store;
     this.#byReference = store.index("node", references);
-    this.#documentCell = computed(
+    // Lets a new node find its last sibling without rebuilding the structure after each write.
+    this.#byParent = store.index("node", (node) => (node.parentId ? [node.parentId] : []));
+    this.#byKind = store.index("node", (node) => [node.kind]);
+    this.#structureVersion = signal(0, { name: "editor.scene.structureVersion" });
+    // Moves and edits leave the structure alone; only adding, removing, reparenting, or
+    // reordering a node rebuilds it.
+    this.#unsubscribe = store.onChange((change) => {
+      if (changesStructure(change.before, change.after)) {
+        this.#structureVersion.set(this.#structureVersion.peek() + 1);
+      }
+    });
+    this.#structureCell = computed(
       () => {
-        const nodes = this.#store.recordsOfType("node");
-        const tree = Tree.from<NodeId, ShiftNode>(nodes, {
-          id: (node) => node.id,
-          parentId: (node) => node.parentId,
-          order: (a, b) => compareIndex(a.index, b.index),
-        });
-        return { nodes: tree.walk(), tree };
+        this.#structureVersion.value;
+        const nodes = untracked(() => this.#store.recordsOfType("node"));
+        const byId = new Map<NodeId, ShiftNodeRecord>(nodes.map((node) => [node.id, node]));
+        return Tree.from<NodeId, NodeId>(
+          nodes.map((node) => node.id),
+          {
+            id: (id) => id,
+            parentId: (id) => byId.get(id)?.parentId ?? null,
+            order: (a, b) => compareIndex(byId.get(a)!.index, byId.get(b)!.index),
+          },
+        );
       },
-      // Reads only node records, so selection, editing, and run writes to the shared store
-      // never rebuild the scene.
-      { name: "editor.scene.document" },
+      { name: "editor.scene.structure" },
     );
+    // The root pages in sibling order, read from the page records so adding other nodes leaves it alone.
     this.#pagesCell = computed(
-      () => this.#documentCell.value.tree.roots().filter((node) => node.kind === "page"),
+      () =>
+        (this.#byKind.get("page") as unknown as readonly PageNode[])
+          .filter((page) => !page.parentId || !this.record(page.parentId))
+          .toSorted((a, b) => compareIndex(a.index, b.index)),
       // Most node writes touch no page; keep the list's identity so a pages list does not rerender.
       { name: "editor.scene.pages", equals: sameNodes },
     );
@@ -92,40 +126,131 @@ export class Scene {
       },
       { name: "editor.scene.activePage" },
     );
+    // Walks the page once per structure change, so a node write only looks records up.
+    this.#pageNodeIdsCell = computed(
+      () => {
+        const tree = this.#structureCell.value;
+        const pageId = this.#activePageIdCell.value;
+        return pageId ? [...tree.descendants(pageId)] : [];
+      },
+      { name: "editor.scene.pageNodeIds" },
+    );
     this.#cell = computed(
       () => {
-        const { tree } = this.#documentCell.value;
-        const pageId = this.#activePageIdCell.value;
-        const nodes = pageId ? [...tree.descendants(pageId)] : [];
-        return { nodes, tree };
+        const ids = this.#pageNodeIdsCell.value;
+        // Reruns on every node write, so readers of `cell` see moves and edits.
+        this.#store.recordsOfType("node");
+        return { nodes: this.#nodesFor(ids) };
       },
       { name: "editor.scene" },
     );
-    this.#nodesById = computed(
+    this.#idsByKind = computed(
       () => {
-        const nodes = new Map<NodeId, ShiftNode>();
-        for (const node of this.#documentCell.value.nodes) {
-          nodes.set(node.id, node);
+        const ids = new Map<NodeKind, NodeId[]>();
+        for (const id of this.#pageNodeIdsCell.value) {
+          const kind = untracked(() => this.node(id))?.kind;
+          if (!kind) continue;
+          const list = ids.get(kind);
+          if (list) list.push(id);
+          else ids.set(kind, [id]);
         }
-        return nodes;
+        return ids;
       },
-      { name: "editor.scene.nodesById" },
+      { name: "editor.scene.idsByKind" },
     );
-    this.#nodesByKind = computed(
+    // Follows the glyph nodes and their ancestors' records, not the structure, so adding
+    // runs or frames does not walk the page.
+    this.#glyphNodeIdsCell = computed(
       () => {
-        const nodes = new Map<NodeKind, ShiftNode[]>();
-        for (const node of this.#cell.value.nodes) {
-          const list = nodes.get(node.kind);
-          if (list) {
-            list.push(node);
-          } else {
-            nodes.set(node.kind, [node]);
-          }
+        const pageId = this.#activePageIdCell.value;
+        const placed: { id: NodeId; path: readonly string[] }[] = [];
+        for (const node of this.#byKind.get("glyph")) {
+          const place = this.#placeOf(node.id);
+          if (place && place.pageId === pageId) placed.push({ id: node.id, path: place.path });
         }
-        return nodes;
+        return placed.toSorted((a, b) => comparePaths(a.path, b.path)).map(({ id }) => id);
       },
-      { name: "editor.scene.nodesByKind" },
+      { name: "editor.scene.glyphNodeIds", equals: sameIds },
     );
+    this.#onlyGlyphCell = computed(
+      () => {
+        const ids = this.#glyphNodeIdsCell.value;
+        return ids.length === 1 ? this.#sceneGlyph(ids[0]!) : null;
+      },
+      { name: "editor.scene.onlyGlyph", equals: sameSceneGlyph },
+    );
+    this.#firstGlyphCell = computed(
+      () => {
+        const id = this.#glyphNodeIdsCell.value[0];
+        return id ? this.#sceneGlyph(id) : null;
+      },
+      { name: "editor.scene.firstGlyph", equals: sameSceneGlyph },
+    );
+  }
+
+  /**
+   * Every node's id, parent, and sibling order.
+   *
+   * @remarks
+   * Reactive: readers rerun only when a node is added, removed, reparented,
+   * or reordered, never when one moves or changes otherwise. Read node fields
+   * with {@link record} to follow one node's edits.
+   */
+  get structureCell(): Signal<SceneStructure> {
+    return this.#structureCell;
+  }
+
+  /**
+   * Returns one node, subscribing only to that node's record.
+   *
+   * @remarks
+   * Reactive: inside a computed or effect, the reader reruns when this node is
+   * written or deleted, and not when any other node changes.
+   */
+  record(nodeId: NodeId): ShiftNode | null {
+    const record = this.#store.record(nodeId);
+    return record?.type === "node" ? (record as ShiftNode) : null;
+  }
+
+  /** Stops following the store. */
+  dispose(): void {
+    this.#unsubscribe();
+    this.#byParent.dispose();
+    this.#byKind.dispose();
+  }
+
+  /**
+   * The ids of the active page's glyph nodes in scene order, as {@link nodesOfKind} lists them.
+   *
+   * @remarks
+   * Reactive: readers rerun when a glyph node is added, removed, or reordered,
+   * or the page switches. Adding, moving, or editing other nodes, and moving a
+   * glyph node, do not notify them.
+   */
+  get glyphNodeIdsCell(): Signal<readonly NodeId[]> {
+    return this.#glyphNodeIdsCell;
+  }
+
+  /**
+   * The active page's one glyph node and the glyph it shows; null with none or several.
+   *
+   * @remarks
+   * Reactive: readers rerun when a glyph node is added or removed, the page
+   * switches, or the node starts showing another glyph. Moving it, or writing
+   * any other node, does not notify them. Matches {@link only}.
+   */
+  get onlyGlyphCell(): Signal<SceneGlyph | null> {
+    return this.#onlyGlyphCell;
+  }
+
+  /**
+   * The active page's first glyph node in scene order and the glyph it shows; null with none.
+   *
+   * @remarks
+   * Reactive like {@link onlyGlyphCell}. Matches {@link first}.
+   */
+  get firstGlyphCell(): Signal<SceneGlyph | null> {
+    return this.#firstGlyphCell;
   }
 
   /** The active page's nodes; reading it inside a reactive boundary reruns on page switches and node writes. */
@@ -156,7 +281,59 @@ export class Scene {
    * whose parent is missing is treated as a root.
    */
   allNodes(): readonly ShiftNode[] {
-    return this.#documentCell.peek().nodes;
+    return this.#nodesFor(this.#structureCell.peek().walk());
+  }
+
+  /**
+   * Keeps a cache keyed by node id free of deleted nodes, disposing each deleted node's entry.
+   *
+   * @remarks
+   * Prunes once the change that deleted a node has finished, so a node deleted
+   * and put back in one batch keeps its entry and the readers holding it.
+   * Costs the deleted nodes only, never a walk of the scene.
+   *
+   * @param name - debug name for the pruning effect.
+   * @returns a function that stops pruning; call it when the cache's owner is disposed.
+   */
+  pruneDeleted<T>(cache: Map<NodeId, T>, dispose: (entry: T) => void, name: string): () => void {
+    // non-reactive: ids deleted since the last prune; `deletions` announces them
+    const deleted = new Set<NodeId>();
+    const deletions = signal(0, { name: `${name}.deletions` });
+    const unsubscribe = this.#store.onChange((change) => {
+      if (change.before?.type !== "node" || change.after) return;
+
+      deleted.add(change.before.id);
+      deletions.set(deletions.peek() + 1);
+    });
+    const pruner = effect(
+      () => {
+        track(deletions);
+        for (const id of deleted) {
+          const entry = cache.get(id);
+          if (entry === undefined || this.#store.get(id)) continue;
+          dispose(entry);
+          cache.delete(id);
+        }
+        deleted.clear();
+      },
+      { name },
+    );
+    return () => {
+      unsubscribe();
+      pruner.dispose();
+    };
+  }
+
+  /**
+   * Returns every node of `kind` on every page, pages included.
+   *
+   * @remarks
+   * In the order the nodes were first added, not scene order. Reactive:
+   * inside a computed or effect, the reader reruns when a node of `kind` is
+   * added, removed, or written, and not for other kinds.
+   */
+  allNodesOfKind<K extends NodeKind>(kind: K): readonly NodeOfKind<K>[] {
+    return this.#byKind.get(kind) as unknown as readonly NodeOfKind<K>[];
   }
 
   /** Pages in list order; the list keeps its identity until a page record changes. */
@@ -214,13 +391,35 @@ export class Scene {
         name: DEFAULT_PAGE_NAME,
         position: { x: 0, y: 0 },
       });
-    for (const root of this.#documentCell.peek().tree.roots()) {
+    for (const root of this.#nodesFor(this.#structureCell.peek().roots())) {
       if (root.kind === "page") continue;
 
       this.#store.put(copyNode({ ...root, parentId: page.id }) as ShiftNodeRecord);
     }
 
     return page;
+  }
+
+  /**
+   * Returns the top-level node a node sits under: the node itself when it is
+   * directly on a page, null for a page or a node on no page.
+   *
+   * @remarks
+   * Reactive through {@link structureCell}: the reader reruns when the
+   * structure changes.
+   */
+  topLevelOf(nodeId: NodeId): NodeId | null {
+    track(this.#structureCell);
+    const structure = this.#structureCell.peek();
+    let topLevel: NodeId | null = null;
+    let current: NodeId | null = nodeId;
+    while (current !== null) {
+      const parentId = structure.parent(current);
+      if (parentId === null) return topLevel;
+      topLevel = current;
+      current = parentId;
+    }
+    return null;
   }
 
   /** Returns the page a node is on (the page itself for a page), or null for a node on no page. */
@@ -237,7 +436,8 @@ export class Scene {
   node(nodeId: NodeId | null): ShiftNode | null {
     if (!nodeId) return null;
 
-    return this.#nodesById.peek().get(nodeId) ?? null;
+    const record = this.#store.get(nodeId);
+    return record?.type === "node" ? (record as ShiftNode) : null;
   }
 
   /**
@@ -255,22 +455,29 @@ export class Scene {
 
   /** Returns a node's children, ordered by `index`. */
   children(nodeId: NodeId): readonly ShiftNode[] {
-    return this.#documentCell.peek().tree.children(nodeId);
+    return this.#nodesFor(this.#structureCell.peek().children(nodeId));
   }
 
   /** Returns a node's descendants on any page, parents before children. */
   descendants(nodeId: NodeId): readonly ShiftNode[] {
-    return [...this.#documentCell.peek().tree.descendants(nodeId)];
+    return this.#nodesFor([...this.#structureCell.peek().descendants(nodeId)]);
   }
 
-  /** Yields a node's ancestors, nearest first. */
-  ancestors(nodeId: NodeId): Iterable<ShiftNode> {
-    return this.#documentCell.peek().tree.ancestors(nodeId);
+  /** Yields a node's ancestors, nearest first; stops at a parent cycle. */
+  *ancestors(nodeId: NodeId): Iterable<ShiftNode> {
+    // Follows the records rather than the structure, so a lookup right after a write rebuilds nothing.
+    const seen = new Set<NodeId>([nodeId]);
+    let parent = this.parent(nodeId);
+    while (parent && !seen.has(parent.id)) {
+      seen.add(parent.id);
+      yield parent;
+      parent = this.parent(parent.id);
+    }
   }
 
-  /** Returns a node's parent, or null for root nodes. */
+  /** Returns a node's parent, or null for root nodes and nodes whose parent is missing. */
   parent(nodeId: NodeId): ShiftNode | null {
-    return this.#documentCell.peek().tree.parent(nodeId);
+    return this.node(this.node(nodeId)?.parentId ?? null);
   }
 
   /** Returns the node with `nodeId` when it is of `kind`, else null. */
@@ -283,7 +490,8 @@ export class Scene {
 
   /** Returns every node of `kind` on the active page, parents before children. */
   nodesOfKind<K extends NodeKind>(kind: K): readonly NodeOfKind<K>[] {
-    return (this.#nodesByKind.peek().get(kind) ?? []) as readonly NodeOfKind<K>[];
+    const ids = this.#idsByKind.peek().get(kind) ?? [];
+    return this.#nodesFor(ids) as unknown as readonly NodeOfKind<K>[];
   }
 
   /**
@@ -373,10 +581,55 @@ export class Scene {
   }
 
   #nextIndex(parentId: NodeId | null): string {
-    const { tree } = this.#documentCell.peek();
-    const siblings = parentId ? tree.children(parentId) : tree.roots();
+    if (!parentId) {
+      const last = this.#structureCell.peek().roots().at(-1);
+      return indexAfter(last ? (this.node(last)?.index ?? null) : null);
+    }
 
-    return indexAfter(siblings.at(-1)?.index ?? null);
+    const siblings = untracked(() => this.#byParent.get(parentId));
+    let last: string | null = null;
+    for (const sibling of siblings) {
+      if (last === null || compareIndex(sibling.index, last) > 0) last = sibling.index;
+    }
+    return indexAfter(last);
+  }
+
+  /**
+   * The page a node is on and its sibling `index` at each level below the page, outermost first.
+   *
+   * @remarks
+   * Reads the node's and its ancestors' records reactively. Sorting nodes by
+   * path gives scene order. Null for a node on no page or under a parent cycle.
+   */
+  #placeOf(nodeId: NodeId): { pageId: NodeId; path: readonly string[] } | null {
+    const path: string[] = [];
+    const seen = new Set<NodeId>();
+    let node = this.record(nodeId);
+    while (node && !seen.has(node.id)) {
+      seen.add(node.id);
+      const parent = node.parentId ? this.record(node.parentId) : null;
+      if (!parent) return node.kind === "page" ? { pageId: node.id, path: path.reverse() } : null;
+
+      path.push(node.index);
+      node = parent;
+    }
+    return null;
+  }
+
+  /** The glyph a glyph node shows, following that node's record only. */
+  #sceneGlyph(nodeId: NodeId): SceneGlyph | null {
+    const node = this.record(nodeId);
+    return node?.kind === "glyph" ? { nodeId, glyphId: node.glyphId } : null;
+  }
+
+  /** The current records of `ids`, skipping any that are gone. */
+  #nodesFor(ids: Iterable<NodeId>): ShiftNode[] {
+    const nodes: ShiftNode[] = [];
+    for (const id of ids) {
+      const node = this.node(id);
+      if (node) nodes.push(node);
+    }
+    return nodes;
   }
 }
 
@@ -399,6 +652,36 @@ export function indexAfter(last: string | null): string {
   const match = /^a(\d+)$/.exec(last);
   if (match?.[1]) return `a${Number(match[1]) + 1}`;
   return `${last}1`;
+}
+
+/** Whether a node record change adds, removes, reparents, or reorders a node. */
+function changesStructure(
+  before: ShiftEditorRecord | null,
+  after: ShiftEditorRecord | null,
+): boolean {
+  const wasNode = before?.type === "node";
+  const isNode = after?.type === "node";
+  if (!wasNode && !isNode) return false;
+  if (!wasNode || !isNode) return true;
+
+  return before.parentId !== after.parentId || before.index !== after.index;
+}
+
+/** Orders sibling-index paths depth-first: a parent's path sorts before its children's. */
+function comparePaths(a: readonly string[], b: readonly string[]): number {
+  for (let at = 0; at < Math.min(a.length, b.length); at++) {
+    const order = compareIndex(a[at]!, b[at]!);
+    if (order !== 0) return order;
+  }
+  return a.length - b.length;
+}
+
+function sameIds(a: readonly NodeId[], b: readonly NodeId[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+function sameSceneGlyph(a: SceneGlyph | null, b: SceneGlyph | null): boolean {
+  return a === b || (a?.nodeId === b?.nodeId && a?.glyphId === b?.glyphId);
 }
 
 function sameNodes(a: readonly ShiftNode[], b: readonly ShiftNode[]): boolean {
