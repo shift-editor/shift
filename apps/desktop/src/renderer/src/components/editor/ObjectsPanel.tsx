@@ -5,6 +5,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import type { ObjectTree, ObjectTreeSectionId } from "@/types/objectTree";
 import { useListSelection } from "@/hooks/useListSelection";
 import { createObjectTree, ObjectTreeCache } from "./object-tree/createObjectTree";
+import { createLayerTree } from "./object-tree/createLayerTree";
 import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
 import { OBJECT_ROW_STEP, VirtualObjectRows } from "./object-tree/VirtualObjectRows";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
@@ -22,6 +23,12 @@ export const ObjectsPanel = () => {
     // Reuses unchanged contours' items, so an edit rebuilds only what it touched.
     const cache = new ObjectTreeCache();
     return computed(() => {
+      // At page scope (no glyph edited) the panel lists the page's boxes instead.
+      if (editor.editing.stateCell.value.nodeIds.length === 0) {
+        const pageId = editor.scene.activePageIdCell.value;
+        return [createLayerTree(editor, pageId, editor.scene.structureCell.value)];
+      }
+
       const sceneGlyph = editor.scene.firstGlyphCell.value;
       const externalLocation = editor.externalLocationCell.value;
       const activeSourceId = editor.activeSourceIdCell.value;

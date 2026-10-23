@@ -7,11 +7,13 @@ export type ObjectTreeIcon =
   | "contour"
   | "curve"
   | "first"
+  | "frame"
   | "handle"
-  | "line";
+  | "line"
+  | "text";
 export type ContourDirection = "clockwise" | "counterclockwise";
-export type ObjectTreeItemKind = "anchor" | "component" | "contour" | "point";
-export type ObjectTreeSectionId = "anchors" | "components" | "contours";
+export type ObjectTreeItemKind = "anchor" | "component" | "contour" | "node" | "point";
+export type ObjectTreeSectionId = "anchors" | "components" | "contours" | "layers";
 
 export interface ObjectTreeItem {
   readonly children: readonly ObjectTreeItem[];

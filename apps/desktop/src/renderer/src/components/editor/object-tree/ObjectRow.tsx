@@ -19,6 +19,8 @@ import CurvePointIcon from "@/assets/sidebar-left/curve-point.svg";
 import FirstPointIcon from "@/assets/sidebar-left/first-point.svg";
 import HandlePointIcon from "@/assets/sidebar-left/handle-point.svg";
 import LinePointIcon from "@/assets/sidebar-left/line-point.svg";
+import FrameIcon from "@/assets/sidebar-left/frame.svg";
+import TextIcon from "@/assets/sidebar-left/text.svg";
 import { ObjectContextMenu } from "./ObjectContextMenu";
 
 export const ObjectRow = ({
@@ -152,5 +154,9 @@ function itemIcon(icon: ObjectTreeIcon, iconPath?: string) {
       return <HandlePointIcon aria-hidden className={className} />;
     case "line":
       return <LinePointIcon aria-hidden className={className} />;
+    case "frame":
+      return <FrameIcon aria-hidden className={className} />;
+    case "text":
+      return <TextIcon aria-hidden className={className} />;
   }
 }
