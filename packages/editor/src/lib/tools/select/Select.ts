@@ -215,9 +215,10 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override drawOverlay(canvas: Canvas): void {
-    // TODO: perhaps there should be a way for tools to turn on/off bounding box
-    // rendering without it having to be a commit in the Select Tool
-    if (this.editor.sessionMode !== "preview" && !this.isEditing(this.state)) {
+    // The box shows at rest and while resizing (its handles are being dragged);
+    // it hides while moving, turning, or bending, so the shape shows unobstructed.
+    const resizing = this.state.type === "resizing";
+    if (this.editor.sessionMode !== "preview" && (resizing || !this.isEditing(this.state))) {
       this.boundingBox.draw(canvas);
     }
 

@@ -1,3 +1,4 @@
+import { track } from "../signals";
 import type { Mat, Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { LocalBounds, LocalPoint, SpaceTransform } from "../../types/coordinates";
@@ -87,6 +88,18 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    */
   selectableInRect(_node: N, _rect: LocalBounds): readonly SelectableId[] {
     return [];
+  }
+
+  /**
+   * Whether the active tool is moving or turning the selection, when selection
+   * chrome (outlines, the transform box) hides so the shapes show unobstructed;
+   * resizing keeps it. Reactive: a drawing caller redraws when it changes.
+   */
+  protected movingOrTurning(): boolean {
+    const tool = this.editor.toolCell;
+    track(tool);
+    const gesture = tool.peek()?.state.type;
+    return gesture === "translating" || gesture === "rotating";
   }
 
   /**
