@@ -111,7 +111,9 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
     }
   }
 
+  /** Selected or under the pointer, except while being moved or turned. */
   #outlined(node: FrameNode): boolean {
+    if (this.movingOrTurning()) return false;
     return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
   }
 

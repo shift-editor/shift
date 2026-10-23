@@ -674,10 +674,12 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
   }
 
-  /** Whether the box shows its outline: selected or under the pointer, and not mid-drag. */
+  /**
+   * Whether the box shows its outline: selected or under the pointer, except
+   * while it is being moved or turned (resizing keeps it, like the transform box).
+   */
   #outlinesBox(node: TextRunNode): boolean {
-    track(this.editor.draggingCell);
-    if (this.editor.draggingCell.peek()) return false;
+    if (this.movingOrTurning()) return false;
     return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
   }
 
