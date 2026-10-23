@@ -51,6 +51,9 @@ function isValidTextBox(v: unknown): boolean {
   if (!isFiniteNumber(v.position.x) || !isFiniteNumber(v.position.y)) return false;
   if (!isFiniteNumber(v.size) || v.size <= 0 || !isFiniteNumber(v.rotation)) return false;
   if (!isValidSizing(v.width) || !isValidSizing(v.height)) return false;
+  const align = v.verticalAlign;
+  if (align !== undefined && align !== "top" && align !== "middle" && align !== "bottom")
+    return false;
   return Array.isArray(v.items) && v.items.every((item: unknown) => isValidTextBoxItem(item));
 }
 

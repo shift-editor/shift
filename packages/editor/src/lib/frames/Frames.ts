@@ -180,6 +180,7 @@ export class Frames {
         width: options.width ?? HUG,
         height: HUG,
         rotation: 0,
+        verticalAlign: "top",
         position: options.position ?? this.#freeSpot(parent),
       });
     });

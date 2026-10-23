@@ -114,7 +114,17 @@ export interface TextRunNode extends Node {
    * turns clockwise on the Y-down canvas. Its text wraps along the box.
    */
   readonly rotation: number;
+
+  /**
+   * Where the lines sit in a box taller than its text (a fixed height): at
+   * the top, the middle, or the bottom. Text past a fixed height runs out
+   * the other side.
+   */
+  readonly verticalAlign: TextVerticalAlign;
 }
+
+/** Where a text box's lines sit in a box taller than its text. */
+export type TextVerticalAlign = "top" | "middle" | "bottom";
 
 /**
  * A top-level canvas.

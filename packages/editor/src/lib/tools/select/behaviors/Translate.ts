@@ -256,7 +256,10 @@ export class Translate implements SelectBehavior {
     this.#done = null;
   }
 
-  /** Moves a whole component or text glyph, selecting it first when the box does not own the drag. */
+  /**
+   * Moves a whole component, text glyph, or box, selecting it first when the
+   * transform box does not own the drag; with Alt, text boxes move as copies.
+   */
   #fromTransformDragStart(
     editor: Editor,
     select: Select,
@@ -269,7 +272,15 @@ export class Translate implements SelectBehavior {
           editor.selection.select([targetId(event.target)]);
         }
         break;
-      case "node":
+      case "node": {
+        // A box (frame or text box) under the pointer moves at once, selected first.
+        const owned = select.boundingBox.containsTranslationPoint(event.origin);
+        const node = event.target.node;
+        const grabs = !owned && editor.nodeDefinition(node.kind).selectable;
+        if (grabs) editor.selection.select([node.id]);
+        if (!owned && !grabs) return null;
+        break;
+      }
       case "canvas":
         if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
         break;
@@ -279,6 +290,7 @@ export class Translate implements SelectBehavior {
         return null;
     }
 
+    if (event.altKey) duplicateSelectedTextBoxes(editor);
     return editor.transformTarget()?.begin("move") ?? null;
   }
 
@@ -450,6 +462,17 @@ function translatingState(
 /** The selectable identity of an object target. */
 function targetId(target: Exclude<PointerTarget, { kind: "canvas" | "node" }>): SelectableId {
   return target.kind === "text" ? target.itemId : target.id;
+}
+
+/**
+ * Alt-dragging text boxes drags copies: places a copy of each selected box
+ * where it is and selects the copies, inside the drag's undo step.
+ */
+function duplicateSelectedTextBoxes(editor: Editor): void {
+  const boxes = editor.text.boxContent(editor.selection.ids);
+  if (boxes.length === 0) return;
+
+  editor.selection.select(editor.text.placeBoxes(boxes, { x: 0, y: 0 }));
 }
 
 function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEvent): boolean {

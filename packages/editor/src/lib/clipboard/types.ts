@@ -48,6 +48,8 @@ export type TextBoxContent = {
   width: Sizing;
   height: Sizing;
   rotation: number;
+  /** Absent in content from before vertical alignment; read as `top`. */
+  verticalAlign?: "top" | "middle" | "bottom";
 };
 
 /**

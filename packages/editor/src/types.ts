@@ -48,6 +48,7 @@ export type {
   SceneNodeKinds,
   ShiftNode,
   TextRunNode,
+  TextVerticalAlign,
 } from "./types/node";
 export { NUDGES_VALUES, nudgeMagnitude, type NudgeMagnitude } from "./types/nudge";
 export { currentSelectionId, objectIsKindOf } from "./types/object";

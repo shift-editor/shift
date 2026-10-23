@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Bounds } from "@shift/geo";
 import { computed, track, useSignalState, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
-import type { Sizing, TextRunNode } from "@shift/editor/types";
+import type { Sizing, TextRunNode, TextVerticalAlign } from "@shift/editor/types";
 import type { NodeId } from "@shift/types";
 import { LabelledSelect } from "./LabelledSelect";
 import { SidebarNumberField } from "./SidebarNumberField";
@@ -18,6 +18,12 @@ const WIDTH_LABELS: Record<Sizing["kind"], string> = {
 const HEIGHT_LABELS: Record<"hug" | "fixed", string> = {
   hug: "Auto",
   fixed: "Fixed",
+};
+
+const VERTICAL_ALIGN_LABELS: Record<TextVerticalAlign, string> = {
+  top: "Top",
+  middle: "Middle",
+  bottom: "Bottom",
 };
 
 /** What the section shows about a box: its record, its size, and whether a frame holds it. */
@@ -103,6 +109,12 @@ export const TextBoxSection = ({ nodeId }: { readonly nodeId: NodeId }) => {
           hideLabel
         />
       </div>
+      <LabelledSelect
+        label="Vertical align"
+        value={node.verticalAlign}
+        labels={VERTICAL_ALIGN_LABELS}
+        onChange={(align) => editor.text.setVerticalAlign(nodeId, align)}
+      />
     </SidebarSection>
   );
 };
@@ -140,6 +152,7 @@ function sameTextBox(a: TextBoxState | null, b: TextBoxState | null): boolean {
     a.node.size === b.node.size &&
     a.node.width === b.node.width &&
     a.node.height === b.node.height &&
+    a.node.verticalAlign === b.node.verticalAlign &&
     a.width === b.width &&
     a.height === b.height &&
     a.inFrame === b.inFrame

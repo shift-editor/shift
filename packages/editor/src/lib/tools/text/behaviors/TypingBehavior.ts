@@ -141,6 +141,7 @@ export class TypingBehavior implements TextBehavior {
         width,
         height: { kind: "hug" },
         rotation: 0,
+        verticalAlign: "top",
         position: { x: point.x, y: point.y },
       }),
     );
