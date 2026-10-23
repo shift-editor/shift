@@ -255,6 +255,7 @@ function shiftClickAddable(object: ShiftObject | null): boolean {
     case "anchor":
     case "segment":
     case "component":
+    case "node":
       return true;
     default:
       return false;

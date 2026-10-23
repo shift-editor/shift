@@ -32,6 +32,12 @@ export interface TransformTarget {
    * transform box ignores the double-click for the others.
    */
   fitToContent?(axes: readonly FrameAxis[]): void;
+
+  /**
+   * True when the selection can only move: the transform box then shows no
+   * resize or rotate handles. Absent means it can also be resized and turned.
+   */
+  readonly moveOnly?: boolean;
 }
 
 /** One reversible preview and commit cycle opened by {@link TransformTarget.begin}. */

@@ -89,6 +89,8 @@ export interface SelectBoundingBoxProps {
   readonly screenRect: Rect2D;
   /** Whether corner handles are drawn; hit zones exist either way. */
   readonly showHandles: boolean;
+  /** Whether the handles resize and turn; false for a selection that can only move. */
+  readonly transformable: boolean;
   readonly screenHandles: HandlePositions;
   readonly hitRadiusPx: number;
 }
@@ -112,13 +114,16 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
       state.type === "brushing" ? state.selection.initialSelection : this.#editor.selection.ids;
     const selection = this.#editor.positionSelection(ids);
     let transformsWhole = false;
+    let transformable = true;
     if (selection) {
       const pointCount = selection.targets.points?.length ?? 0;
       const anchorCount = selection.targets.anchors?.length ?? 0;
       if (pointCount + anchorCount <= 1) return null;
     } else {
-      if (!this.#editor.transformTarget(ids)) return null;
+      const target = this.#editor.transformTarget(ids);
+      if (!target) return null;
       transformsWhole = true;
+      transformable = !target.moveOnly;
     }
 
     const sceneBounds =
@@ -142,7 +147,8 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     return {
       sceneRect,
       screenRect,
-      showHandles: transformsWhole,
+      showHandles: transformsWhole && transformable,
+      transformable,
       screenHandles,
       hitRadiusPx: SELECT_BOUNDING_BOX_STYLE.hitRadiusPx,
     };
@@ -164,7 +170,7 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     if (this.#select.stateCell.peek().type === "brushing") return null;
 
     const props = this.propsSnapshot();
-    if (!props) return null;
+    if (!props?.transformable) return null;
 
     const pos = coords.screen;
 

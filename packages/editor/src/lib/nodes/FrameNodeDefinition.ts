@@ -56,6 +56,15 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
     return { kind: "node", node, point };
   }
 
+  /** A marquee catches a frame on a page as a whole, as select-all does. */
+  override selectableInRect(node: FrameNode, rect: LocalBounds): SelectableId[] {
+    if (this.editor.editing.hasScope() || this.editor.scene.parent(node.id)?.kind !== "page") {
+      return [];
+    }
+    const bounds = this.bounds(node);
+    return bounds && Bounds.overlaps(bounds, rect) ? [node.id] : [];
+  }
+
   /** The frame alone moves and resizes; anything else selected with it does not. */
   override transformTarget(node: FrameNode, ids: readonly SelectableId[]): TransformTarget | null {
     const bounds = this.bounds(node);

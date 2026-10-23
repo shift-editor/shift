@@ -87,6 +87,7 @@ import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
 import { SceneTransforms } from "./SceneTransforms";
+import { BoxesTransform } from "../nodes/BoxesTransform";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { EditorRenderTheme } from "./rendering/Theme";
@@ -996,7 +997,12 @@ export class Editor {
   ): TransformTarget | null {
     if (ids.length === 0) return null;
     const node = this.selectionNode(ids);
-    if (!node) return null;
+    if (!node) {
+      // Several boxes on one page move together.
+      const nodes = ids.filter(isNodeId).map((id) => this.scene.node(id));
+      if (nodes.length !== ids.length || nodes.some((candidate) => !candidate)) return null;
+      return BoxesTransform.forNodes(this, nodes as ShiftNode[]);
+    }
 
     return this.nodeDefinition(node.kind).transformTarget?.(node, ids) ?? null;
   }
