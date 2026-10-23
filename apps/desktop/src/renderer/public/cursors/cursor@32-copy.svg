@@ -1,4 +1,5 @@
 <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(0 -3)">
 <g filter="url(#filter0_d_1778_3255)">
 <path d="M10.8666 5.31635C10.5622 4.17136 11.5609 3.09125 12.7211 3.32123L12.8334 3.3476L22.6205 5.99017C24.1396 6.40032 24.222 8.52547 22.7465 9.05756L18.2241 10.6884C18.076 10.7418 17.9571 10.8621 17.9057 11.0185L16.5405 15.1816C16.0415 16.7032 13.8768 16.6377 13.4662 15.0937L10.8666 5.31635Z" stroke="white" stroke-width="1.99618" shape-rendering="crispEdges"/>
 </g>
@@ -29,4 +30,5 @@
 <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1778_3255" result="shape"/>
 </filter>
 </defs>
+</g>
 </svg>
