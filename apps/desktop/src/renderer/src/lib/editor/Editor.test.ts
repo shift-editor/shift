@@ -25,7 +25,9 @@ describe("Editor scene bootstrap", () => {
     const item = editor.text.run(run.runId)?.items[0];
 
     expect(editor.scene.nodes()).toHaveLength(2);
-    expect(run.position).toEqual({ x: 0, y: 0 });
+    // The box's top sits the ascender above the first baseline, which stays at the origin.
+    const ascender = editor.font.metricsForSource(editor.font.defaultSource.id).ascender;
+    expect(run.position).toEqual({ x: 0, y: -ascender });
     expect(child).toMatchObject({
       kind: "glyph",
       parentId: run.id,

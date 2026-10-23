@@ -1,15 +1,27 @@
-import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
-import { keyedCache, signal, untracked } from "../signals";
+import {
+  isNodeId,
+  mintRunId,
+  type GlyphId,
+  type GlyphName,
+  type NodeId,
+  type RunId,
+  type SelectableId,
+  type TextItemId,
+} from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { TextBoxContent, TextBoxItemContent } from "../clipboard/types";
+import { computed, keyedCache, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
-import type { TextRunNode } from "../../types/node";
+import type { Sizing, TextRunNode } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
+  lineBreakTextItem,
   glyphIdForItem,
   type TextItem,
   type TextLayout,
@@ -37,6 +49,11 @@ export class Text {
     },
   };
   #parser: TextParser = new GlyphNameParser();
+  // non-reactive: one wrapped layout per text box, pruned when boxes are deleted
+  readonly #boxLayouts = new Map<NodeId, ComputedSignal<TextLayout | null>>();
+  #stopBoxPruning: (() => void) | null = null;
+  /** The size the last box was set to or edited at; new boxes start from it. Session-only. */
+  #lastBoxSize: number | null = null;
   readonly #runs = keyedCache({
     name: "text.run",
     key: (runId: RunId) => runId,
@@ -175,6 +192,202 @@ export class Text {
     return this.#runs.get(id).layoutCell;
   }
 
+  /**
+   * The layout a text box shows: its run's layout wrapped to the box's width.
+   *
+   * @remarks
+   * A box that hugs shows its run's layout as is; a fixed box wraps at its
+   * width. Wrapping regroups the run's positioned glyphs into lines without shaping
+   * again, so several boxes of one run share its shaping. Reruns when the
+   * run's layout or the box's size or width changes.
+   */
+  boxLayoutCell(node: TextRunNode): ComputedSignal<TextLayout | null> {
+    let cell = this.#boxLayouts.get(node.id);
+    if (cell) return cell;
+
+    const nodeId = node.id;
+    cell = computed(
+      () => {
+        const box = this.#editor.scene.record(nodeId);
+        if (box?.kind !== "textRun") return null;
+        const runLayout = this.layoutCell(box.runId);
+        track(runLayout);
+        return runLayout.peek()?.withWrapWidth(this.#wrapWidth(box)) ?? null;
+      },
+      { name: "text.boxLayout" },
+    );
+    this.#boxLayouts.set(nodeId, cell);
+    this.#stopBoxPruning ??= this.#editor.scene.pruneDeleted(
+      this.#boxLayouts,
+      (layout) => layout.dispose(),
+      "text.boxLayouts.prune",
+    );
+    return cell;
+  }
+
+  /**
+   * Returns the text boxes among `ids` as portable clipboard content.
+   *
+   * @remarks
+   * Glyphs picked by identity travel by name, so a paste into another font
+   * finds its glyph of that name; one it lacks is left out.
+   */
+  boxContent(ids: readonly SelectableId[]): TextBoxContent[] {
+    const scene = this.#editor.scene;
+    const boxes: TextBoxContent[] = [];
+    for (const id of ids) {
+      const node = isNodeId(id) ? scene.nodeOfKind(id, "textRun") : null;
+      if (!node) continue;
+
+      const items: TextBoxItemContent[] = [];
+      for (const item of this.items(node)) {
+        const content = this.#itemContent(item);
+        if (content) items.push(content);
+      }
+      boxes.push({
+        items,
+        position: { ...node.position },
+        size: node.size,
+        width: node.width,
+        height: node.height,
+        rotation: node.rotation,
+      });
+    }
+    return boxes;
+  }
+
+  /**
+   * Places copied text boxes on the active page, `offset` scene units from
+   * where they were, each with a run of its own, and returns their ids.
+   *
+   * @remarks
+   * Writes records, so call it inside a history capture.
+   */
+  placeBoxes(boxes: readonly TextBoxContent[], offset: Point2D): NodeId[] {
+    const scene = this.#editor.scene;
+    const page = scene.ensurePage();
+    return boxes.map((box) => {
+      const items = box.items.flatMap((item) => this.#itemFromContent(item) ?? []);
+      const run = this.createRun(items);
+      return scene.createNode<TextRunNode>({
+        kind: "textRun",
+        parentId: page.id,
+        runId: run.id,
+        size: box.size,
+        width: box.width,
+        height: box.height,
+        rotation: box.rotation,
+        position: { x: box.position.x + offset.x, y: box.position.y + offset.y },
+      }).id;
+    });
+  }
+
+  #itemContent(item: TextItem): TextBoxItemContent | null {
+    switch (item.kind) {
+      case "character":
+        return { kind: "character", codepoint: item.codepoint };
+      case "linebreak":
+        return { kind: "linebreak" };
+      case "glyph": {
+        const name = this.#editor.font.entryForId(item.glyphId)?.name;
+        return name ? { kind: "glyph", name } : null;
+      }
+    }
+  }
+
+  #itemFromContent(content: TextBoxItemContent): TextItem | null {
+    switch (content.kind) {
+      case "character":
+        return characterTextItem(content.codepoint);
+      case "linebreak":
+        return lineBreakTextItem();
+      case "glyph": {
+        const entry = this.#editor.font.entryForName(content.name as GlyphName);
+        return entry ? glyphTextItem(entry.id) : null;
+      }
+    }
+  }
+
+  /**
+   * The size a new text box starts at: the size of the box last edited or
+   * resized, else the font's own size (one scene unit per font unit).
+   */
+  get newBoxSize(): number {
+    return this.#lastBoxSize ?? this.#editor.font.metricsCell.peek().unitsPerEm;
+  }
+
+  /** Notes that the user is working in a box of `size`, so the next new box matches it. */
+  rememberBoxSize(size: number): void {
+    if (size > 0) this.#lastBoxSize = size;
+  }
+
+  /**
+   * Sets a text box's size, in scene units per em.
+   *
+   * @remarks
+   * One undo step, joining an open capture; unchanged or non-positive sizes
+   * record nothing.
+   */
+  setSize(nodeId: NodeId, size: number): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    if (!node || !(size > 0) || node.size === size) return;
+
+    this.#lastBoxSize = size;
+    this.#editor.history.captureOrJoin("Resize text", () =>
+      this.#editor.scene.updateNode({ id: nodeId, size }),
+    );
+  }
+
+  /**
+   * Sets how a text box's width follows its text: `hug`, or `fixed` at a
+   * width in scene units.
+   *
+   * @remarks
+   * One undo step, joining an open capture; an unchanged width records nothing.
+   */
+  setWidth(nodeId: NodeId, width: Sizing): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    if (!node || sameSizing(node.width, width)) return;
+
+    this.#editor.history.captureOrJoin("Resize text", () =>
+      this.#editor.scene.updateNode({ id: nodeId, width }),
+    );
+  }
+
+  /**
+   * Sets a text box's height: `hug` its lines, or `fixed` at a height in
+   * scene units.
+   *
+   * @remarks
+   * One undo step, joining an open capture; an unchanged height records nothing.
+   */
+  setHeight(nodeId: NodeId, height: Sizing): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    if (!node || sameSizing(node.height, height)) return;
+
+    this.#editor.history.captureOrJoin("Resize text", () =>
+      this.#editor.scene.updateNode({ id: nodeId, height }),
+    );
+  }
+
+  /**
+   * The width a box wraps its lines at, in font units; null to keep each
+   * paragraph on one line.
+   */
+  #wrapWidth(node: TextRunNode): number | null {
+    const metrics = this.#editor.font.metricsCell;
+    track(metrics);
+    const scale = node.size / metrics.peek().unitsPerEm;
+    if (scale <= 0) return null;
+
+    switch (node.width.kind) {
+      case "hug":
+        return null;
+      case "fixed":
+        return node.width.size / scale;
+    }
+  }
+
   /** The parser for typed and pasted text; replace it to change the input syntax for every run. */
   get parser(): TextParser {
     return this.#parser;
@@ -207,6 +420,9 @@ export class Text {
   }
 
   dispose(): void {
+    if (this.#stopBoxPruning) this.#stopBoxPruning();
+    for (const layout of this.#boxLayouts.values()) layout.dispose();
+    this.#boxLayouts.clear();
     this.#unsubscribeStore();
     this.#shaper?.dispose();
     this.#runsByItem.dispose();
@@ -258,4 +474,9 @@ export class Text {
       this.#glyphsLoadedCell.update((version) => version + 1);
     }
   }
+}
+
+function sameSizing(a: Sizing, b: Sizing): boolean {
+  if (a.kind !== b.kind) return false;
+  return a.kind !== "fixed" || (b.kind === "fixed" && a.size === b.size);
 }

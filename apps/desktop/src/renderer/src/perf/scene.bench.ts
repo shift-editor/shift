@@ -57,6 +57,9 @@ async function openPage(count: number): Promise<Page> {
             kind: "textRun",
             runId: run.id,
             size: 48,
+            width: { kind: "hug" },
+            height: { kind: "hug" },
+            rotation: 0,
             position: {
               x: (index % RUNS_PER_ROW) * COLUMN_WIDTH,
               y: Math.floor(index / RUNS_PER_ROW) * ROW_HEIGHT,

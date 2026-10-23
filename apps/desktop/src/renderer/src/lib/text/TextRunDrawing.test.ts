@@ -49,6 +49,9 @@ function addRun(editor: TestEditor, text: string, x: number, y = 0): TextRunNode
     kind: "textRun",
     runId: editor.text.createRun(editor.text.itemsFromText(text)).id,
     size: 72,
+    width: { kind: "hug" },
+    height: { kind: "hug" },
+    rotation: 0,
     position: { x, y },
   });
 }

@@ -53,6 +53,13 @@ export interface EditorRenderTheme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
+  /** A text box: invisible itself, outlined under the pointer and in accent when selected. */
+  box: {
+    hoverStroke: string;
+    widthPx: number;
+    selectedStroke: string;
+    selectedWidthPx: number;
+  };
   glyph: { fill: string; editableFill: string; stroke: string; widthPx: number };
   component: {
     fill: string;
@@ -126,6 +133,12 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     fill: "rgba(59, 130, 246, 0.1)",
     stroke: "rgba(59, 130, 246, 0.5)",
     widthPx: 0.5,
+  },
+  box: {
+    hoverStroke: "#0C92F4",
+    widthPx: 1,
+    selectedStroke: "#0C92F4",
+    selectedWidthPx: 1.5,
   },
   glyph: {
     fill: "#000000",

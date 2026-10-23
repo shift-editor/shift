@@ -75,11 +75,24 @@ export interface SceneGlyph {
 }
 
 /**
- * Places a text run in the editor scene.
+ * One axis of a text box's size.
+ *
+ * @remarks
+ * `fixed` keeps `size` scene units; `hug` fits the text.
+ */
+export type Sizing = { readonly kind: "fixed"; readonly size: number } | { readonly kind: "hug" };
+
+/**
+ * Places a text run in the editor scene: a text box.
  *
  * @remarks
  * A text run node is the movable proofing container for text-domain layout. It
- * points at document-scoped run content and carries placement and size.
+ * points at document-scoped run content and carries placement and size. Its
+ * `position` is the top-left corner of its box; the first baseline sits the
+ * ascender below it. Its size follows {@link TextRunNode.width} and
+ * {@link TextRunNode.height}: hugging both is auto width, a fixed width with
+ * a hugging height is auto height, and fixing both is a fixed size, whose
+ * text can run past the box's bottom.
  */
 export interface TextRunNode extends Node {
   readonly kind: "textRun";
@@ -87,8 +100,26 @@ export interface TextRunNode extends Node {
   /** Document-scoped text content placed by this node. */
   readonly runId: RunId;
 
-  /** Proof rendering size for this placement. */
+  /** Proof rendering size for this placement: scene units per em. */
   readonly size: number;
+
+  /**
+   * The box's width: `hug` keeps each paragraph on one line, and `fixed`
+   * wraps lines at `size` scene units.
+   */
+  readonly width: Sizing;
+
+  /**
+   * The box's height: `hug` fits its lines, and `fixed` keeps `size` scene
+   * units whatever the text needs.
+   */
+  readonly height: Sizing;
+
+  /**
+   * How far the box turns about its top-left corner, in radians; positive
+   * turns clockwise on the Y-down canvas. Its text wraps along the box.
+   */
+  readonly rotation: number;
 }
 
 /**

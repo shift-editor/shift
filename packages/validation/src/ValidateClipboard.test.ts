@@ -34,6 +34,37 @@ describe("ValidateClipboard", () => {
       expect(ValidateClipboard.isShiftContent(content)).toBe(true);
     });
 
+    it("accepts text boxes beside contours, and rejects malformed ones", () => {
+      const textBox = {
+        items: [
+          { kind: "character", codepoint: 65 },
+          { kind: "glyph", name: "a.alt" },
+          { kind: "linebreak" },
+        ],
+        position: { x: 10, y: 20 },
+        size: 72,
+        width: { kind: "fixed", size: 300 },
+        height: { kind: "hug" },
+        rotation: 0,
+      };
+      expect(ValidateClipboard.isShiftContent({ contours: [], textBoxes: [textBox] })).toBe(true);
+      expect(
+        ValidateClipboard.isShiftContent({ contours: [], textBoxes: [{ ...textBox, size: 0 }] }),
+      ).toBe(false);
+      expect(
+        ValidateClipboard.isShiftContent({
+          contours: [],
+          textBoxes: [{ ...textBox, items: [{ kind: "glyph", id: "x" }] }],
+        }),
+      ).toBe(false);
+      expect(
+        ValidateClipboard.isShiftContent({
+          contours: [],
+          textBoxes: [{ ...textBox, width: { kind: "fill" } }],
+        }),
+      ).toBe(false);
+    });
+
     it("accepts empty contours array", () => {
       expect(ValidateClipboard.isShiftContent({ contours: [] })).toBe(true);
     });

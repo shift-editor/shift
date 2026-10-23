@@ -52,7 +52,8 @@ export class Clipboard {
   }
 
   async write(content: ShiftContent, metadata: ClipboardWriteMetadata = {}): Promise<boolean> {
-    if (!content || content.contours.length === 0) return false;
+    const empty = content.contours.length === 0 && (content.textBoxes?.length ?? 0) === 0;
+    if (empty) return false;
 
     const bounds = Polygon.boundingRect(content.contours.flatMap((c) => c.points)) ?? EMPTY_BOUNDS;
     this.#internalState = { content, bounds, timestamp: Date.now() };

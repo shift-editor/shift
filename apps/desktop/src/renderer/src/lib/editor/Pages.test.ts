@@ -164,7 +164,8 @@ describe("pages hold the scene, one page shown at a time", () => {
 
     editor.pages.activate(page.id);
 
-    expect(editor.getPointerTarget(point).kind).toBe("canvas");
+    // The first page's run box may answer here, but never the other page's point.
+    expect(editor.getPointerTarget(point).kind).not.toBe("point");
     expect(editor.scene.nodes().map((candidate) => candidate.id)).not.toContain(node.id);
   });
 

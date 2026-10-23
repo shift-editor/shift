@@ -1,4 +1,5 @@
 import { NodeDefinition } from "./NodeDefinition";
+import type { Editor } from "../editor/Editor";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
@@ -17,18 +18,32 @@ import {
   isTextItemId,
   type ComponentId,
   type GlyphId,
+  type NodeId,
   type SelectableId,
   type TextItemId,
 } from "@shift/types";
-import { track } from "../signals";
+import { signal, track } from "../signals";
 import type { TransformTarget } from "../../types/transformTarget";
 import { GlyphsTransform, type GlyphsTransformPart } from "./GlyphsTransform";
+import { TextBoxTransform } from "./TextBoxTransform";
 
 /** Below this many screen pixels per em a run draws a bar per line: no glyph reads at that size. */
 const GREEKED_EM_PX = 6;
 
 /** A greeked line's bar height, as a share of the ascender: about the x-height. */
 const GREEKED_BAR_HEIGHT = 0.5;
+
+/** An empty box's width, as a share of the ascender, so it stays visible and grabbable. */
+const EMPTY_BOX_WIDTH = 0.1;
+
+/**
+ * The ascender a text box's first baseline sits below its top, in font units:
+ * the default source's, so switching sources never moves text.
+ */
+export function boxAscender(editor: { readonly font: Editor["font"] }): number {
+  const font = editor.font;
+  return font.metricsForSource(font.defaultSource.id).ascender;
+}
 
 /**
  * Projects one shared proof run through a placed, scaled scene node.
@@ -42,13 +57,22 @@ const GREEKED_BAR_HEIGHT = 0.5;
  */
 export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly kind: TextRunNode["kind"] = "textRun";
+  override readonly selectable = true;
+  /** The box stepped into, whose glyphs clicks reach; session state, never an undo step. */
+  readonly #enteredCell = signal<NodeId | null>(null, { name: "textRun.entered" });
   readonly #outline = new OutlineRenderer();
   // non-reactive: memo keyed by layout identity; a layout never changes, a new one is a new key
   readonly #greekedBars = new WeakMap<TextLayout, Float64Array>();
 
+  /**
+   * Y-up font units at the node's size, with the first baseline the ascender
+   * below the box's top-left corner (the node's origin), turned about that
+   * corner by the node's rotation.
+   */
   unitsTransform(node: TextRunNode): Mat {
-    const scale = this.#scale(node);
-    return Mat.Scale(scale, -scale);
+    const scale = this.emScale(node);
+    const upright = new Mat(scale, 0, 0, -scale, 0, this.#ascender() * scale);
+    return node.rotation === 0 ? upright : Mat.Compose(Mat.Rotate(node.rotation), upright);
   }
 
   /**
@@ -60,7 +84,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    */
   override childPosition(node: TextRunNode, child: ShiftNode): Point2D | null {
     if (child.kind !== "glyph" || !child.itemId) return null;
-    const layoutCell = this.editor.text.layoutCell(node.runId);
+    const layoutCell = this.editor.text.boxLayoutCell(node);
     track(layoutCell);
     const layout = layoutCell.peek();
     const placed =
@@ -89,19 +113,30 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * Double-clicking a run glyph edits it in place; double-clicking a component
-   * of the edited glyph opens its base glyph right after it.
+   * Double-clicking a run glyph edits it in place; double-clicking the box
+   * between glyphs starts typing there; double-clicking a component of the
+   * edited glyph opens its base glyph right after it.
    */
   override onDoubleClick(node: TextRunNode, target: PointerTarget): boolean {
     const child = this.childGlyph(node);
     let itemId: TextItemId | null = null;
     let glyphId: GlyphId | null = null;
-    if (target.kind === "text" && target.node.id === node.id) {
-      itemId = target.itemId;
-      glyphId = target.glyphId;
+    // On a closed box, the glyph under the pointer: double-clicking a glyph edits it in one go.
+    const glyph =
+      target.kind === "node" && target.node.id === node.id
+        ? this.glyphAt(node, target.point as LocalPoint)
+        : target;
+    if (glyph?.kind === "text" && glyph.node.id === node.id) {
+      itemId = glyph.itemId;
+      glyphId = glyph.glyphId;
     }
     if (target.kind === "component" && child?.itemId && target.nodeId === child.id) {
       itemId = this.#insertComponentBase(node, child.itemId, target.componentId);
+    }
+    // Between glyphs, the box's text: start typing at the pointer.
+    if (!itemId && target.kind === "node" && target.node.id === node.id) {
+      this.#startTyping(node, target.point as LocalPoint);
+      return true;
     }
     if (!itemId) return false;
 
@@ -160,6 +195,15 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     });
   }
 
+  /** Switches to the Text tool editing this box, with the caret nearest `point` (the run's units). */
+  #startTyping(node: TextRunNode, point: LocalPoint): void {
+    const editor = this.editor;
+    editor.selection.select([node.id]);
+    editor.setActiveTool("text");
+    const cluster = this.caretAt(node, point);
+    if (cluster !== null) editor.textEditing.placeAtCluster(cluster);
+  }
+
   /**
    * Inserts a component's base glyph after an item.
    *
@@ -180,29 +224,44 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * The run's box in its own units, from its current layout.
+   * The text box in the run's units: from the ascender above the first
+   * baseline down one line height per line (or its fixed height), as wide as
+   * its widest line or, when the width is set, as wide as the box.
    *
    * @remarks
-   * Reactive: inside a computed or effect, the reader reruns when the run's
+   * Reactive: inside a computed or effect, the reader reruns when the box's
    * layout changes.
    */
   bounds(node: TextRunNode): LocalBounds | null {
     // Tracked: cached extents (culling, hit testing) must follow typing.
-    const layoutCell = this.editor.text.layoutCell(node.runId);
+    const layoutCell = this.editor.text.boxLayoutCell(node);
     track(layoutCell);
     const layout = layoutCell.peek();
     if (!layout) return null;
 
-    const lines = layout.lines;
-    const lastLine = lines[lines.length - 1];
-    const bottom = lastLine ? lastLine.y + lastLine.descent : layout.metrics.descender;
-    const top = layout.metrics.ascender;
-    const width = Math.max(
-      1,
-      ...lines.map((line) => line.runs.reduce((advance, run) => advance + run.advance, 0)),
-    );
+    const { descender, lineGap = 0 } = layout.metrics;
+    const lineHeight = layout.metrics.ascender - descender + lineGap;
+    const ascender = this.#ascender();
+    const height =
+      node.height.kind === "fixed"
+        ? node.height.size / this.emScale(node)
+        : lineHeight * Math.max(1, layout.lines.length);
+    const bottom = ascender - height;
+    const width = this.#boxWidth(layout);
 
-    return localBounds({ min: { x: 0, y: bottom }, max: { x: width, y: top } });
+    return localBounds({ min: { x: 0, y: bottom }, max: { x: width, y: ascender } });
+  }
+
+  /** The box's width in the run's units: its set width, or its widest line. */
+  #boxWidth(layout: TextLayout): number {
+    if (layout.wrapWidth !== null) return layout.wrapWidth;
+
+    const widest = Math.max(
+      0,
+      ...layout.lines.map((line) => line.runs.reduce((advance, run) => advance + run.advance, 0)),
+    );
+    // An empty box keeps a caret's width, so it can still be seen and grabbed.
+    return Math.max(widest, layout.metrics.ascender * EMPTY_BOX_WIDTH);
   }
 
   /**
@@ -215,7 +274,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * @returns null for line breaks, missing glyphs, and glyphs without an outline.
    */
   itemBounds(node: TextRunNode, itemId: TextItemId): LocalBounds | null {
-    const layoutCell = this.editor.text.layoutCell(node.runId);
+    const layoutCell = this.editor.text.boxLayoutCell(node);
     track(layoutCell);
     const placed = layoutCell.peek()?.placedGlyphForItem(itemId);
     const model = placed?.glyph.glyphId ? this.#model(placed.glyph.glyphId) : null;
@@ -246,8 +305,13 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     node: TextRunNode,
     ids: readonly SelectableId[],
   ): TransformTarget | null {
+    if (ids.length === 1 && ids[0] === node.id) {
+      const bounds = this.bounds(node);
+      return bounds ? new TextBoxTransform(this.editor, node, Bounds.toRect(bounds)) : null;
+    }
+
     const sourceId = this.editor.activeSourceId;
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     if (!sourceId || !layout || this.editor.sessionMode !== "workspace") return null;
 
     const parts = new Map<GlyphId, GlyphsTransformPart>();
@@ -288,18 +352,75 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * Hit-tests the run's glyph outlines: inside a fill or within hit radius of a contour.
+   * Hits the box first: a closed box answers as a whole anywhere inside it
+   * (grown by the hit radius), so a click selects it.
    *
    * @remarks
-   * While the child is edited its item is skipped, so the child answers for
-   * its own glyph; otherwise the child is plain text and the run hits it.
-   * Later glyphs win where outlines overlap. Caret placement uses {@link caretAt}.
+   * Inside an open box (see {@link isOpen}) the glyph outlines answer, inside a
+   * fill or within hit radius of a contour; between them a selected box still
+   * answers, and any other open box leaves the point to the canvas. While the child is edited
+   * its item is skipped, so the child answers for its own glyph. Later glyphs
+   * win where outlines overlap. Caret placement uses {@link caretAt}.
    */
   hit(node: TextRunNode, point: LocalPoint): PointerTarget | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    if (this.isOpen(node)) {
+      const glyph = this.glyphAt(node, point);
+      // Inside an entered box or around an edited glyph, empty space is canvas.
+      if (glyph || !this.editor.selection.has(node.id)) return glyph;
+    }
+
+    const bounds = this.bounds(node);
+    const reach = this.editor.hitRadiusIn(node);
+    if (!bounds || !Bounds.containsPoint(Bounds.expand(bounds, reach), point)) return null;
+    return { kind: "node", node, point };
+  }
+
+  /**
+   * Whether clicks inside the box reach its glyphs rather than the box.
+   *
+   * @remarks
+   * A box opens while it is entered (see {@link enter}), while it or one of
+   * its glyphs is selected, while its text is typed into, and while its child
+   * glyph is edited in place.
+   */
+  isOpen(node: TextRunNode): boolean {
+    const editor = this.editor;
+    if (this.#enteredCell.peek() === node.id) return true;
+    if (editor.textEditing.stateCell.peek()?.nodeId === node.id) return true;
+    const child = this.childGlyph(node);
+    if (child && editor.editing.has(child.id)) return true;
+    if (editor.selection.has(node.id)) return true;
+
+    const items = editor.text.items(node);
+    return editor.selection.ids.some(
+      (id) => isTextItemId(id) && items.some((item) => item.id === id),
+    );
+  }
+
+  /**
+   * Steps into a box, so clicks and drags inside it reach its glyphs, as
+   * leaving a glyph edited in place does. Leave it with {@link leave}.
+   */
+  enter(nodeId: NodeId): void {
+    this.#enteredCell.set(nodeId);
+  }
+
+  /** Steps out of the entered box; its clicks select it as a whole again. */
+  leave(): void {
+    this.#enteredCell.set(null);
+  }
+
+  /** The entered box, or null. */
+  get entered(): NodeId | null {
+    return this.#enteredCell.peek();
+  }
+
+  /** The run glyph whose outline is under a point, or null. */
+  glyphAt(node: TextRunNode, point: LocalPoint): PointerTarget | null {
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     if (!layout) return null;
 
-    const radius = this.editor.hitRadius / this.#scale(node);
+    const radius = this.editor.hitRadiusIn(node);
     let target: PointerTarget | null = null;
     this.#forEachRunGlyph(node, layout, (placed, itemId, model, glyphId) => {
       const local = {
@@ -327,10 +448,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * @param point - a point in the run's own units.
    */
   spacingGapAt(node: TextRunNode, point: LocalPoint): SpacingGap | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     if (!layout) return null;
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     let nearest: SpacingGap | null = null;
     for (const gap of this.#gaps(node, layout)) {
       if (point.y < gap.bottom - padding || point.y > gap.top + padding) continue;
@@ -361,7 +482,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     leftItemId: TextItemId | null,
     rightItemId: TextItemId | null,
   ): SpacingGap | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     if (!layout) return null;
 
     for (const gap of this.#gaps(node, layout)) {
@@ -374,7 +495,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
   /** Returns every gap of the run in reading order, measured now. */
   spacingGaps(node: TextRunNode): SpacingGap[] {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     return layout ? [...this.#gaps(node, layout)] : [];
   }
 
@@ -443,21 +564,31 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * @param point - a point in the run's own units.
    */
   caretAt(node: TextRunNode, point: LocalPoint): number | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     const run = this.editor.text.run(node.runId);
     if (!layout || !run) return null;
 
     const hit = layout.hitTest(point);
     if (hit) return hit.cluster + (hit.side === "right" ? 1 : 0);
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
+    // Anywhere across the box, a point beside a line takes that line's nearer end.
+    const right = Math.max(this.#boxWidth(layout), 0) + padding;
     for (const line of layout.lines) {
       if (point.y < line.y + line.descent - padding || point.y > line.y + line.ascent + padding)
         continue;
-      const advance = line.runs.reduce((sum, part) => sum + part.advance, 0);
-      if (point.x < -padding || point.x > advance + padding) continue;
+      if (point.x < -padding || point.x > right) continue;
       return point.x <= 0 ? line.clusterStart : line.clusterEnd - 1;
     }
+    // Below the last line, inside the box (a fixed height leaves room): the end of the text.
+    const last = layout.lines.at(-1);
+    const bounds = this.bounds(node);
+    const insideBelow =
+      last !== undefined &&
+      bounds !== null &&
+      point.y < last.y + last.descent &&
+      Bounds.containsPoint(Bounds.expand(bounds, padding), point);
+    if (insideBelow) return last.clusterEnd - 1;
     const nearEmptyOrigin =
       run.items.length === 0 &&
       Math.abs(point.x) <= padding &&
@@ -467,7 +598,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   override draw(node: TextRunNode, ctx: RenderContext, pass: RenderPass): void {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     if (!layout) return;
 
     switch (pass) {
@@ -482,6 +613,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         this.#drawGlyphs(node, ctx, layout);
         return;
       case "controls":
+        this.#drawBoxOutline(node, ctx);
         this.#drawCaret(node, ctx, layout);
         return;
       case "overlay":
@@ -489,14 +621,41 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
   }
 
-  /** Only the run being typed in draws a selection or a caret; every run draws its text. */
+  /** Outlines the box while it is selected or under the pointer. */
+  #drawBoxOutline(node: TextRunNode, ctx: RenderContext): void {
+    if (!this.#outlinesBox(node)) return;
+    const bounds = this.bounds(node);
+    if (!bounds) return;
+
+    const { box } = ctx.canvas.theme;
+    const selected = this.editor.selection.has(node.id);
+    ctx.canvas.strokeRect(
+      bounds.min.x,
+      bounds.min.y,
+      Bounds.width(bounds),
+      Bounds.height(bounds),
+      selected ? box.selectedStroke : box.hoverStroke,
+      selected ? box.selectedWidthPx : box.widthPx,
+    );
+  }
+
+  #outlinesBox(node: TextRunNode): boolean {
+    return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
+  }
+
+  /**
+   * Every run draws its text; only the run being typed in draws a selection
+   * or a caret, and only a selected or hovered box its outline.
+   */
   override drawsIn(node: TextRunNode, pass: RenderPass): boolean {
+    const typedIn = this.editor.textEditing.stateCell.peek()?.nodeId === node.id;
     switch (pass) {
       case "content":
         return true;
       case "background":
+        return typedIn;
       case "controls":
-        return this.editor.textEditing.stateCell.peek()?.nodeId === node.id;
+        return typedIn || this.#outlinesBox(node);
       case "overlay":
         return false;
     }
@@ -517,7 +676,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   ): boolean {
     if (!this.#greeked(node) || transform.b !== 0 || transform.c !== 0) return false;
 
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.boxLayoutCell(node).peek();
     if (!layout) return true;
 
     const color = ctx.canvas.theme.glyph.fill;
@@ -713,8 +872,20 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return ids;
   }
 
-  #scale(node: TextRunNode): number {
+  /**
+   * Returns how many scene units one font unit of the run spans: its size over
+   * the font's units per em, 1 when the run is set at the font's own size.
+   */
+  emScale(node: TextRunNode): number {
     return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
+  }
+
+  /**
+   * The ascender the first baseline sits below the box's top, in the run's
+   * units: the default source's, so switching sources never moves text.
+   */
+  #ascender(): number {
+    return boxAscender(this.editor);
   }
 }
 

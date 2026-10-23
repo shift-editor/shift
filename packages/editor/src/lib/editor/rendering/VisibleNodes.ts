@@ -95,7 +95,7 @@ export class VisibleNodes {
         for (const id of [rootId, ...scene.structureCell.value.descendants(rootId)]) {
           const node = scene.record(id);
           if (!node) continue;
-          if (node.kind === "textRun") track(editor.text.layoutCell(node.runId));
+          if (node.kind === "textRun") track(editor.text.boxLayoutCell(node));
           entries.push({ node, transform: editor.sceneTransform(node) });
         }
         return entries;

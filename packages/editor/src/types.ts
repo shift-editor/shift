@@ -33,6 +33,7 @@ export type {
   SceneGlyph,
   SceneNodeKinds,
   ShiftNode,
+  Sizing,
   TextRunNode,
 } from "./types/node";
 export { NUDGES_VALUES, nudgeMagnitude, type NudgeMagnitude } from "./types/nudge";
