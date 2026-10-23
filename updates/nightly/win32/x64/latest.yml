@@ -1,8 +1,8 @@
-version: 0.150.1
+version: 0.152.1
 files:
-  - url: https://releases.shift.graphics/nightly/25bce22c459843476748b03036ae21ec584d8326/Shift-Nightly-0.150.1-Windows-x64-Setup.exe
-    sha512: L2rkgZCK1QpgJwuqZqw6vGb6wBsvTNuMmjozpAPIkg9OjPIKfGMI+qehjkliyWKK0rNlVpOfpyapjqGIM82mfQ==
-    size: 127185847
-path: https://releases.shift.graphics/nightly/25bce22c459843476748b03036ae21ec584d8326/Shift-Nightly-0.150.1-Windows-x64-Setup.exe
-sha512: L2rkgZCK1QpgJwuqZqw6vGb6wBsvTNuMmjozpAPIkg9OjPIKfGMI+qehjkliyWKK0rNlVpOfpyapjqGIM82mfQ==
-releaseDate: '2026-10-21T10:23:22.656Z'
+  - url: https://releases.shift.graphics/nightly/026b5a21f59cdbbd98e6ddfd4438f747a88a4a83/Shift-Nightly-0.152.1-Windows-x64-Setup.exe
+    sha512: SLnxBaVHBtupt9r4fIosYkmAOzE1HXMWn4Wx359+hN2whI6F9NVgeSGpgD4leBg/BJw2M9Pd0Nf5vyADTcT2nQ==
+    size: 127713827
+path: https://releases.shift.graphics/nightly/026b5a21f59cdbbd98e6ddfd4438f747a88a4a83/Shift-Nightly-0.152.1-Windows-x64-Setup.exe
+sha512: SLnxBaVHBtupt9r4fIosYkmAOzE1HXMWn4Wx359+hN2whI6F9NVgeSGpgD4leBg/BJw2M9Pd0Nf5vyADTcT2nQ==
+releaseDate: '2026-10-23T07:59:51.697Z'
