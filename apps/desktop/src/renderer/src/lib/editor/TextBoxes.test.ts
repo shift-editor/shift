@@ -400,6 +400,50 @@ describe("the Select tool and a text box", () => {
       editor.pointerUp(moved.x, moved.y);
     });
 
+    it("resizes both from the group's handles, fixing widths without scaling text", async () => {
+      editor.history.capture("Select", () => editor.selection.select([node.id, second.id]));
+      const a = rect();
+      const b = sceneRect(editor, second.id);
+      const right = Math.max(a.right, b.right);
+      const middle = (a.y + b.bottom) / 2;
+
+      await editor.dragScene({
+        down: { x: right, y: middle },
+        start: { x: right - 4, y: middle },
+        end: { x: a.x + (right - a.x) / 2, y: middle },
+      });
+
+      expect(box(editor, node.id)).toMatchObject({ size: node.size, width: { kind: "fixed" } });
+      expect(rect().width).toBeCloseTo(a.width / 2);
+      expect(lines(editor, node.id)).toBeGreaterThan(1);
+      expect(rect().x).toBeCloseTo(a.x);
+    });
+
+    it("turns both about the group's centre, each box by the same angle", async () => {
+      editor.history.capture("Select", () => editor.selection.select([node.id, second.id]));
+      const target = editor.transformTarget()!;
+      const { x, y, width, height } = target.bounds;
+      const center = { x: x + width / 2, y: y + height / 2 };
+      const turn = Math.PI / 2;
+      const edit = target.begin("rotate");
+      edit.preview(() =>
+        Mat.Compose(
+          Mat.Translate(center.x, center.y),
+          Mat.Compose(Mat.Rotate(turn), Mat.Translate(-center.x, -center.y)),
+        ),
+      );
+      edit.commit();
+
+      expect(box(editor, node.id).rotation).toBeCloseTo(turn);
+      expect(box(editor, second.id).rotation).toBeCloseTo(turn);
+      const after = Bounds.unionAll([
+        editor.nodeBounds(box(editor, node.id)),
+        editor.nodeBounds(box(editor, second.id)),
+      ])!;
+      expect((after.min.x + after.max.x) / 2).toBeCloseTo(center.x);
+      expect((after.min.y + after.max.y) / 2).toBeCloseTo(center.y);
+    });
+
     it("selects both boxes, not their glyphs, with a marquee", async () => {
       const a = rect();
       const b = sceneRect(editor, second.id);
@@ -419,7 +463,7 @@ describe("the Select tool and a text box", () => {
       await clickScene({ x: b.x + 10, y: b.y + b.height / 2 }, { shiftKey: true });
       expect(new Set(editor.selection.ids)).toEqual(new Set([node.id, second.id]));
       const box = (editor.toolManager.activeTool as Select).boundingBox;
-      expect(box.propsSnapshot()?.showHandles).toBe(false);
+      expect(box.propsSnapshot()?.showHandles).toBe(true);
 
       const grab = { x: b.x + 10, y: b.y + b.height / 2 };
       await editor.dragScene({
