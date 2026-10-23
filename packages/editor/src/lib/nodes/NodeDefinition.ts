@@ -91,6 +91,19 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   }
 
   /**
+   * How a box's outline shows: `selected` when it is the only selection,
+   * `hovered` under the pointer, null otherwise and while the selection moves
+   * or turns. Several selected boxes show only the transform box around them.
+   */
+  protected outlineState(nodeId: ShiftNode["id"]): "selected" | "hovered" | null {
+    if (this.movingOrTurning()) return null;
+    const { selection, hover } = this.editor;
+    track(selection.stateCell);
+    if (selection.has(nodeId) && selection.ids.length === 1) return "selected";
+    return hover.has(nodeId) ? "hovered" : null;
+  }
+
+  /**
    * Whether the active tool is moving or turning the selection, when selection
    * chrome (outlines, the transform box) hides so the shapes show unobstructed;
    * resizing keeps it. Reactive: a drawing caller redraws when it changes.

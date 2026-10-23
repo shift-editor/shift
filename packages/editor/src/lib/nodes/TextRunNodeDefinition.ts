@@ -656,15 +656,16 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
   /**
    * Outlines the box, and marks each line's baseline across it, while the box
-   * is selected or under the pointer.
+   * is the only selection or under the pointer (see `outlineState`).
    */
   #drawBoxOutline(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
-    if (!this.#outlinesBox(node)) return;
+    const outline = this.outlineState(node.id);
+    if (!outline) return;
     const bounds = this.bounds(node);
     if (!bounds) return;
 
     const { frame } = ctx.canvas.theme;
-    const selected = this.editor.selection.has(node.id);
+    const selected = outline === "selected";
     const stroke = selected ? frame.selectedStroke : frame.hoverStroke;
     ctx.canvas.strokeRect(
       bounds.min.x,
@@ -685,15 +686,6 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * Whether the box shows its outline: selected or under the pointer, except
-   * while it is being moved or turned (resizing keeps it, like the transform box).
-   */
-  #outlinesBox(node: TextRunNode): boolean {
-    if (this.movingOrTurning()) return false;
-    return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
-  }
-
-  /**
    * Every run draws its text; only the run being typed in draws a selection
    * or a caret, and only a selected or hovered box its outline.
    */
@@ -705,7 +697,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       case "background":
         return typedIn;
       case "controls":
-        return typedIn || this.#outlinesBox(node);
+        return typedIn || this.outlineState(node.id) !== null;
       case "overlay":
         return false;
     }

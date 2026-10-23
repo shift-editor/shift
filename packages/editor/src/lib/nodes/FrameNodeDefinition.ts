@@ -82,7 +82,7 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
       case "background":
         return this.editor.scene.parent(node.id)?.kind === "page";
       case "controls":
-        return this.#outlined(node);
+        return this.outlineState(node.id) !== null;
       case "content":
       case "overlay":
         return false;
@@ -102,8 +102,9 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
         return;
       }
       case "controls": {
-        if (!this.#outlined(node)) return;
-        const selected = this.editor.selection.has(node.id);
+        const outline = this.outlineState(node.id);
+        if (!outline) return;
+        const selected = outline === "selected";
         ctx.canvas.strokeRect(
           0,
           0,
@@ -118,12 +119,6 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
       case "overlay":
         return;
     }
-  }
-
-  /** Selected or under the pointer, except while being moved or turned. */
-  #outlined(node: FrameNode): boolean {
-    if (this.movingOrTurning()) return false;
-    return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
   }
 
   #laidOut(node: ShiftNode): LaidOutNode | null {
