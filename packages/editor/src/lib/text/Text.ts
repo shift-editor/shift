@@ -16,7 +16,7 @@ import type { Editor } from "../editor/Editor";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
-import type { Sizing, TextRunNode } from "../../types/node";
+import type { Sizing, TextRunNode, TextVerticalAlign } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
@@ -251,6 +251,7 @@ export class Text {
         width: node.width,
         height: node.height,
         rotation: node.rotation,
+        verticalAlign: node.verticalAlign,
       });
     }
     return boxes;
@@ -277,6 +278,7 @@ export class Text {
         width: box.width,
         height: box.height,
         rotation: box.rotation,
+        verticalAlign: box.verticalAlign ?? "top",
         position: { x: box.position.x + offset.x, y: box.position.y + offset.y },
       }).id;
     });
@@ -351,6 +353,16 @@ export class Text {
 
     this.#editor.history.captureOrJoin("Resize text", () =>
       this.#editor.scene.updateNode({ id: nodeId, width }),
+    );
+  }
+
+  /** Sets where a text box's lines sit in a box taller than its text; one undo step. */
+  setVerticalAlign(nodeId: NodeId, verticalAlign: TextVerticalAlign): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    if (!node || node.verticalAlign === verticalAlign) return;
+
+    this.#editor.history.captureOrJoin("Align text", () =>
+      this.#editor.scene.updateNode({ id: nodeId, verticalAlign }),
     );
   }
 

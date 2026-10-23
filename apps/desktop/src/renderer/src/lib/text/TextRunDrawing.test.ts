@@ -52,6 +52,7 @@ function addRun(editor: TestEditor, text: string, x: number, y = 0): TextRunNode
     width: { kind: "hug" },
     height: { kind: "hug" },
     rotation: 0,
+    verticalAlign: "top",
     position: { x, y },
   });
 }

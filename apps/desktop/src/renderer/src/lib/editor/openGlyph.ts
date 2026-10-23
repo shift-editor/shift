@@ -28,6 +28,7 @@ export function openGlyphInRun(editor: Editor, glyphId: GlyphId): GlyphNode | nu
       width: { kind: "hug" },
       height: { kind: "hug" },
       rotation: 0,
+      verticalAlign: "top",
       // The box's top sits the ascender above the first baseline, which stays at the scene origin.
       position: { x: 0, y: -editor.font.metricsForSource(editor.font.defaultSource.id).ascender },
     });

@@ -17,6 +17,8 @@ import {
   NodeDoubleClick,
   FitToContent,
 } from "./behaviors";
+import { isNodeId, type SelectableId } from "@shift/types";
+import { track } from "../../signals/index";
 import type { CursorType } from "../../../types/editor";
 import { objectIsKindOf, type ShiftObject } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
@@ -60,11 +62,26 @@ export class Select extends BaseTool<SelectState, Select> {
     return drop.targetWithin(this.editor.hitRadius) !== null;
   }
 
+  /** Whether Alt is held with text boxes selected, so dragging moves copies. */
+  #copiesTextBoxes(): boolean {
+    const { modifiersCell } = this.editor.input;
+    const selection = this.editor.selection.stateCell;
+    track(modifiersCell);
+    track(selection);
+    if (!modifiersCell.peek().altKey) return false;
+    return selection.peek().ids.some((id) => this.#isTextBox(id));
+  }
+
+  #isTextBox(id: SelectableId): boolean {
+    return isNodeId(id) && this.editor.scene.nodeOfKind(id, "textRun") !== null;
+  }
+
   override getCursor(state: SelectState): CursorType {
     if (this.editor.sessionMode === "preview") return { type: "default" };
 
     switch (state.type) {
       case "translating":
+        if (this.#copiesTextBoxes()) return { type: "copy" };
         return this.#dropsOnOpenEnd() ? { type: "end" } : { type: "move" };
       case "resizing":
         return edgeToCursor(state.resize.edge, state.resize.flipX, state.resize.flipY);
@@ -107,6 +124,14 @@ export class Select extends BaseTool<SelectState, Select> {
     if (coords) {
       const cursor = this.boundingBox.cursor(coords);
       if (cursor) return cursor;
+    }
+
+    // Alt over a text box, or inside a selected one: a drag would move a copy.
+    if (state.type === "ready" && coords && modifiers.altKey) {
+      const overBox = hover !== null && this.#isTextBox(hover);
+      const insideSelected =
+        this.#copiesTextBoxes() && this.boundingBox.containsTranslationPoint(coords);
+      if (overBox || insideSelected) return { type: "copy" };
     }
 
     if (coords && this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };

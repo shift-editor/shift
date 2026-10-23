@@ -148,6 +148,7 @@ describe("typing a glyph not yet loaded this session", () => {
       width: { kind: "hug" },
       height: { kind: "hug" },
       rotation: 0,
+      verticalAlign: "top",
       position: { x: 0, y: 0 },
     });
     const layout = editor.text.layoutCell(node.runId);

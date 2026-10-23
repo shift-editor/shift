@@ -232,7 +232,11 @@ export class SelectBoundingBox extends CanvasItem<SelectBoundingBoxProps> {
     }
   }
 
+  /** Draws the box and its handles; nothing while moving or turning, so the selection shows unobstructed. */
   draw(canvas: Canvas): void {
+    track(this.#select.stateCell);
+    const state = this.#select.stateCell.peek().type;
+    if (state === "translating" || state === "rotating") return;
     const props = this.propsCell.value;
     if (!props) return;
 

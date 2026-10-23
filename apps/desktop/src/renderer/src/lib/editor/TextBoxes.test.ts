@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Bounds, Mat, type Point2D } from "@shift/geo";
 import type { NodeId } from "@shift/types";
 import type { TextRunNode } from "@shift/editor/types";
-import { scenePoint } from "@shift/editor/spaces";
+import { localPoint, scenePoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing/TestEditor";
 
 const TEXT = "AA AA AA";
@@ -18,6 +18,7 @@ function addBox(editor: TestEditor, width: TextRunNode["width"] = { kind: "hug" 
       width,
       height: { kind: "hug" },
       rotation: 0,
+      verticalAlign: "top",
       position: { x: 0, y: 0 },
     });
   });
@@ -225,6 +226,65 @@ describe("the Select tool and a text box", () => {
     expect(lines(editor, node.id)).toBe(2);
   });
 
+  it("drags a copy with Alt, leaving the box where it was, and shows the copy cursor", async () => {
+    editor.history.capture("Select", () => editor.selection.select([node.id]));
+    const before = rect();
+    const inside = { x: before.x + 10, y: before.y + before.height / 2 };
+    const screen = editor.sceneToScreen(scenePoint(inside.x, inside.y));
+    editor.pointerMove(screen.x, screen.y, { altKey: true });
+    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "copy" });
+
+    await editor.dragScene({
+      down: inside,
+      start: { x: inside.x + 4, y: inside.y },
+      end: { x: inside.x + 300, y: inside.y },
+      options: { altKey: true },
+    });
+
+    const boxes = editor.scene.nodesOfKind("textRun");
+    expect(boxes).toHaveLength(2);
+    expect(rect()).toMatchObject({ x: before.x, y: before.y });
+    const copy = boxes.find((other) => other.id !== node.id)!;
+    expect(sceneRect(editor, copy.id).x).toBeCloseTo(before.x + 300);
+    expect(editor.selection.ids).toEqual([copy.id]);
+
+    await editor.undo();
+    expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
+  });
+
+  it("starts typing where its empty space is double-clicked", async () => {
+    editor.history.withoutRecording(() =>
+      editor.scene.updateNode({ id: node.id, width: { kind: "fixed", size: rect().width * 2 } }),
+    );
+    await editor.settle();
+    const { right, y, height } = rect();
+    const empty = { x: right - 10, y: y + height / 2 };
+
+    await clickScene(empty);
+    await clickScene(empty);
+
+    expect(editor.toolIf("text")?.state.type).toBe("editing");
+    expect(editor.textEditing.state?.nodeId).toBe(node.id);
+    expect(editor.runGlyph).toBeNull();
+  });
+
+  it("sits its lines at the bottom of a taller fixed box when aligned to the bottom", async () => {
+    const lineTop = () => editor.toScene(box(editor, node.id), localPoint(0, 0)).y;
+    const { height } = rect();
+    editor.history.withoutRecording(() =>
+      editor.scene.updateNode({ id: node.id, height: { kind: "fixed", size: height * 3 } }),
+    );
+    const top = lineTop();
+
+    editor.text.setVerticalAlign(node.id, "bottom");
+    expect(lineTop()).toBeCloseTo(top + height * 2);
+    expect(rect()).toMatchObject({ y: 0 });
+    expect(rect().height).toBeCloseTo(height * 3);
+
+    editor.text.setVerticalAlign(node.id, "middle");
+    expect(lineTop()).toBeCloseTo(top + height);
+  });
+
   it("copies, cuts, and pastes as boxes with their text and size", async () => {
     editor.history.capture("Select", () => editor.selection.select([node.id]));
     expect(await editor.copy()).toBe(true);
@@ -306,6 +366,22 @@ describe("the Text tool places text boxes", () => {
       width: { kind: "fixed", size: 500 },
       height: { kind: "fixed", size: em * 2 },
     });
+  });
+
+  it("starts a new box at the size last used", async () => {
+    await editor.dragScene({
+      down: { x: 100, y: 50 },
+      start: { x: 110, y: 50 },
+      end: { x: 600, y: 50 },
+    });
+    editor.textEditing.insertText("A");
+    editor.text.setSize(boxes()[0]!.id, 24);
+
+    const screen = editor.sceneToScreen(scenePoint(100, 4000));
+    await editor.click(screen.x, screen.y);
+
+    const placed = boxes().find((other) => other.id === editor.textEditing.state?.nodeId);
+    expect(placed?.size).toBe(24);
   });
 
   it("removes a placed box left empty", async () => {

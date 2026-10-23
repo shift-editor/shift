@@ -71,7 +71,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    */
   unitsTransform(node: TextRunNode): Mat {
     const scale = this.emScale(node);
-    const upright = new Mat(scale, 0, 0, -scale, 0, this.#ascender() * scale);
+    const top = this.#ascender() + this.#alignOffset(node);
+    const upright = new Mat(scale, 0, 0, -scale, 0, top * scale);
     return node.rotation === 0 ? upright : Mat.Compose(Mat.Rotate(node.rotation), upright);
   }
 
@@ -239,17 +240,39 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = layoutCell.peek();
     if (!layout) return null;
 
-    const { descender, lineGap = 0 } = layout.metrics;
-    const lineHeight = layout.metrics.ascender - descender + lineGap;
-    const ascender = this.#ascender();
-    const height =
-      node.height.kind === "fixed"
-        ? node.height.size / this.emScale(node)
-        : lineHeight * Math.max(1, layout.lines.length);
-    const bottom = ascender - height;
+    const top = this.#ascender() + this.#alignOffset(node);
+    const bottom = top - this.#boxHeight(node, layout);
     const width = this.#boxWidth(layout);
 
-    return localBounds({ min: { x: 0, y: bottom }, max: { x: width, y: ascender } });
+    return localBounds({ min: { x: 0, y: bottom }, max: { x: width, y: top } });
+  }
+
+  /** The height of the box's lines, in the run's units: one line height per line. */
+  #textHeight(layout: TextLayout): number {
+    const { ascender, descender, lineGap = 0 } = layout.metrics;
+    return (ascender - descender + lineGap) * Math.max(1, layout.lines.length);
+  }
+
+  /** The box's height in the run's units: its fixed height, or its lines'. */
+  #boxHeight(node: TextRunNode, layout: TextLayout): number {
+    return node.height.kind === "fixed"
+      ? node.height.size / this.emScale(node)
+      : this.#textHeight(layout);
+  }
+
+  /**
+   * How far the box's top sits above the top of its lines, in the run's
+   * units: the room a fixed height leaves, all of it below the lines at the
+   * top, half for middle, all above for bottom; negative when the text
+   * overflows upward.
+   */
+  #alignOffset(node: TextRunNode): number {
+    if (node.height.kind !== "fixed" || node.verticalAlign === "top") return 0;
+    const layout = this.editor.text.boxLayoutCell(node).peek();
+    if (!layout) return 0;
+
+    const room = this.#boxHeight(node, layout) - this.#textHeight(layout);
+    return node.verticalAlign === "middle" ? room / 2 : room;
   }
 
   /** The box's width in the run's units: its set width, or its widest line. */
@@ -613,7 +636,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         this.#drawGlyphs(node, ctx, layout);
         return;
       case "controls":
-        this.#drawBoxOutline(node, ctx);
+        this.#drawBoxOutline(node, ctx, layout);
         this.#drawCaret(node, ctx, layout);
         return;
       case "overlay":
@@ -621,25 +644,40 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
   }
 
-  /** Outlines the box while it is selected or under the pointer. */
-  #drawBoxOutline(node: TextRunNode, ctx: RenderContext): void {
+  /**
+   * Outlines the box, and marks each line's baseline across it, while the box
+   * is selected or under the pointer.
+   */
+  #drawBoxOutline(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
     if (!this.#outlinesBox(node)) return;
     const bounds = this.bounds(node);
     if (!bounds) return;
 
     const { box } = ctx.canvas.theme;
     const selected = this.editor.selection.has(node.id);
+    const stroke = selected ? box.selectedStroke : box.hoverStroke;
     ctx.canvas.strokeRect(
       bounds.min.x,
       bounds.min.y,
       Bounds.width(bounds),
       Bounds.height(bounds),
-      selected ? box.selectedStroke : box.hoverStroke,
+      stroke,
       selected ? box.selectedWidthPx : box.widthPx,
     );
+    for (const line of layout.lines) {
+      ctx.canvas.line(
+        { x: bounds.min.x, y: line.y },
+        { x: bounds.max.x, y: line.y },
+        stroke,
+        box.widthPx,
+      );
+    }
   }
 
+  /** Whether the box shows its outline: selected or under the pointer, and not mid-drag. */
   #outlinesBox(node: TextRunNode): boolean {
+    track(this.editor.draggingCell);
+    if (this.editor.draggingCell.peek()) return false;
     return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
   }
 

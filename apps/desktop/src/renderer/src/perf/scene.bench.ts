@@ -60,6 +60,7 @@ async function openPage(count: number): Promise<Page> {
             width: { kind: "hug" },
             height: { kind: "hug" },
             rotation: 0,
+            verticalAlign: "top",
             position: {
               x: (index % RUNS_PER_ROW) * COLUMN_WIDTH,
               y: Math.floor(index / RUNS_PER_ROW) * ROW_HEIGHT,
