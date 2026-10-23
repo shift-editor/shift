@@ -362,9 +362,19 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return new GlyphsTransform(this.editor, Bounds.toRect(bounds), [...parts.values()]);
   }
 
-  /** Items whose outline box touches `rect`; none while a glyph is edited, as with clicks. */
+  /**
+   * What a marquee over the box catches: inside an entered box, the items
+   * whose outline box touches `rect`; at page scope, the box itself when it
+   * sits on the page. Nothing while a glyph is edited, as with clicks.
+   */
   override selectableInRect(node: TextRunNode, rect: LocalBounds): SelectableId[] {
     if (this.editor.editing.hasScope()) return [];
+    // At page scope a marquee catches the box itself (top-level boxes only, as select-all).
+    if (this.#enteredCell.peek() !== node.id) {
+      if (this.editor.scene.parent(node.id)?.kind !== "page") return [];
+      const bounds = this.bounds(node);
+      return bounds && Bounds.overlaps(bounds, rect) ? [node.id] : [];
+    }
 
     const ids: SelectableId[] = [];
     for (const item of this.editor.text.run(node.runId)?.items ?? []) {

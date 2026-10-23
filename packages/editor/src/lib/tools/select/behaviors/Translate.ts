@@ -95,8 +95,9 @@ export class Translate implements SelectBehavior {
     if (prev.type !== "translating") ctx.editor.hover.clear();
     if (event.type !== "drag") return;
 
+    // A selection spanning several boxes moves in scene units, through its transform edit.
     const node = ctx.editor.selectionNode();
-    if (!node) return;
+    if (!node && !this.#transformEdit) return;
 
     const { startPos, lastPos } = next.translate;
     const pointerDelta = vectorBetween(
@@ -107,7 +108,7 @@ export class Translate implements SelectBehavior {
     const snapped =
       this.#boxSnap && !next.translate.accelKey ? this.#boxSnap.snap(pointerDelta) : null;
     const sceneDelta = snapped ? sceneVector(snapped.delta.x, snapped.delta.y) : pointerDelta;
-    const delta = ctx.editor.toLocalVector(node, sceneDelta);
+    const delta = node ? ctx.editor.toLocalVector(node, sceneDelta) : sceneDelta;
     if (this.#transformEdit) {
       this.#transformEdit.preview(() => Mat.Translate(delta.x, delta.y));
       ctx.setState({

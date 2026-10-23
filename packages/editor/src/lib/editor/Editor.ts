@@ -87,6 +87,7 @@ import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
 import { SceneTransforms } from "./SceneTransforms";
+import { BoxesTransform } from "../nodes/BoxesTransform";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { EditorRenderTheme } from "./rendering/Theme";
@@ -989,7 +990,12 @@ export class Editor {
   ): TransformTarget | null {
     if (ids.length === 0) return null;
     const node = this.selectionNode(ids);
-    if (!node) return null;
+    if (!node) {
+      // Several boxes on one page move together.
+      const nodes = ids.filter(isNodeId).map((id) => this.scene.node(id));
+      if (nodes.length !== ids.length || nodes.some((candidate) => !candidate)) return null;
+      return BoxesTransform.forNodes(this, nodes as ShiftNode[]);
+    }
 
     return this.nodeDefinition(node.kind).transformTarget?.(node, ids) ?? null;
   }
@@ -1310,16 +1316,22 @@ export class Editor {
     return this.#selectionBounds;
   }
 
-  /** Selects every glyph item of every run; the run level's select-all. */
-  #selectAllGlyphItems(): void {
-    const ids = this.scene
-      .nodes()
-      .flatMap((node) => this.nodeDefinition(node.kind).textItems?.(node) ?? [])
+  /** The glyph items a box shows, line breaks left out. */
+  #glyphItemIds(node: ShiftNode): SelectableId[] {
+    return (this.nodeDefinition(node.kind).textItems?.(node) ?? [])
       .filter((item) => item.kind !== "linebreak")
       .map((item) => item.id);
-    if (ids.length === 0) return;
+  }
 
-    this.history.capture("Select all", () => this.selection.select(ids));
+  /** The selectable boxes (text boxes) directly on the active page. */
+  #pageBoxIds(): SelectableId[] {
+    const page = this.scene.activePage();
+    if (!page) return [];
+
+    return this.scene
+      .children(page.id)
+      .filter((node) => this.nodeDefinition(node.kind).selectable)
+      .map((node) => node.id);
   }
 
   /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
@@ -1328,15 +1340,20 @@ export class Editor {
   }
 
   /**
-   * Select every point in the active authored glyph layer, or every run glyph when none is edited.
+   * Selects everything at the current scope.
    *
-   * This intentionally uses the authored glyph layer rather than interpolated
-   * design-location geometry: selection mutates an authored layer, so it must
-   * refer to point IDs that layer operations can mutate.
+   * @remarks
+   * Editing a glyph: every point of its active layer. This intentionally uses
+   * the authored glyph layer rather than interpolated design-location
+   * geometry: selection mutates an authored layer, so it must refer to point
+   * IDs that layer operations can mutate. Inside an entered text box: its
+   * glyphs. Otherwise, at page scope: every box directly on the active page.
    */
   public selectAll(): void {
-    if (!this.editing.hasScope() && this.scene.nodesOfKind("textRun").length > 0) {
-      this.#selectAllGlyphItems();
+    if (!this.editing.hasScope()) {
+      const entered = this.scene.nodeOfKind(this.nodeDefinition("textRun").entered, "textRun");
+      const ids = entered ? this.#glyphItemIds(entered) : this.#pageBoxIds();
+      if (ids.length > 0) this.history.capture("Select all", () => this.selection.select(ids));
       return;
     }
 

@@ -3,6 +3,7 @@ import { Bounds, Mat, type Point2D } from "@shift/geo";
 import type { NodeId } from "@shift/types";
 import type { TextRunNode } from "@shift/editor/types";
 import { localPoint, scenePoint } from "@shift/editor/spaces";
+import type { Select } from "@shift/editor/tools";
 import { TestEditor } from "@/testing/TestEditor";
 
 const TEXT = "AA AA AA";
@@ -129,9 +130,9 @@ describe("the Select tool and a text box", () => {
   });
 
   const rect = () => sceneRect(editor, node.id);
-  const clickScene = (point: Point2D) => {
+  const clickScene = (point: Point2D, options?: { shiftKey?: boolean }) => {
     const screen = editor.sceneToScreen(scenePoint(point.x, point.y));
-    return editor.click(screen.x, screen.y);
+    return editor.click(screen.x, screen.y, options);
   };
   const dragScene = (from: Point2D, dx: number) =>
     editor.dragScene({
@@ -320,6 +321,87 @@ describe("the Select tool and a text box", () => {
       end: { x: moved.x + 10 - moved.x - nudge, y: grab.y },
     });
     expect(sceneRect(editor, other.id).x).toBeCloseTo(rect().x);
+  });
+
+  it("selects every box on the page with select-all, and an entered box's glyphs", async () => {
+    const second = editor.history.withoutRecording(() => {
+      const run = editor.text.createRun(editor.text.itemsFromText("AA"));
+      return editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: run.id,
+        size: node.size,
+        width: { kind: "hug" },
+        height: { kind: "hug" },
+        rotation: 0,
+        verticalAlign: "top",
+        position: { x: 0, y: rect().height * 3 },
+      });
+    });
+    await editor.settle();
+
+    editor.selectAll();
+    expect(new Set(editor.selection.ids)).toEqual(new Set([node.id, second.id]));
+
+    editor.nodeDefinition("textRun").enter(second.id);
+    editor.selectAll();
+    expect(editor.selection.ids).toEqual(editor.text.items(second).map((item) => item.id));
+  });
+
+  describe("with a second box", () => {
+    let second: TextRunNode;
+
+    beforeEach(async () => {
+      second = editor.history.withoutRecording(() => {
+        const run = editor.text.createRun(editor.text.itemsFromText("AA"));
+        return editor.scene.createNode<TextRunNode>({
+          kind: "textRun",
+          runId: run.id,
+          size: node.size,
+          width: { kind: "hug" },
+          height: { kind: "hug" },
+          rotation: 0,
+          verticalAlign: "top",
+          position: { x: 0, y: rect().height * 3 },
+        });
+      });
+      await editor.settle();
+      editor.zoomToFit();
+    });
+
+    it("selects both boxes, not their glyphs, with a marquee", async () => {
+      const a = rect();
+      const b = sceneRect(editor, second.id);
+      await editor.dragScene({
+        down: { x: a.x - 100, y: a.y - 100 },
+        start: { x: a.x - 90, y: a.y - 90 },
+        end: { x: a.x + 50, y: b.bottom + 50 },
+      });
+
+      expect(new Set(editor.selection.ids)).toEqual(new Set([node.id, second.id]));
+    });
+
+    it("adds a box with Shift-click and moves both together as one undo step", async () => {
+      const a = rect();
+      const b = sceneRect(editor, second.id);
+      await clickScene({ x: a.x + 10, y: a.y + a.height / 2 });
+      await clickScene({ x: b.x + 10, y: b.y + b.height / 2 }, { shiftKey: true });
+      expect(new Set(editor.selection.ids)).toEqual(new Set([node.id, second.id]));
+      const box = (editor.toolManager.activeTool as Select).boundingBox;
+      expect(box.propsSnapshot()?.showHandles).toBe(false);
+
+      const grab = { x: b.x + 10, y: b.y + b.height / 2 };
+      await editor.dragScene({
+        down: grab,
+        start: { x: grab.x + 4, y: grab.y },
+        end: { x: grab.x + 500, y: grab.y + 7 },
+      });
+
+      expect(rect()).toMatchObject({ x: a.x + 500, y: a.y + 7 });
+      expect(sceneRect(editor, second.id)).toMatchObject({ x: b.x + 500, y: b.y + 7 });
+      await editor.undo();
+      expect(rect()).toMatchObject({ x: a.x, y: a.y });
+      expect(sceneRect(editor, second.id)).toMatchObject({ x: b.x, y: b.y });
+    });
   });
 
   it("copies, cuts, and pastes as boxes with their text and size", async () => {
