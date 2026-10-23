@@ -38,6 +38,11 @@ Read the "Renders started by" list top-down:
 - `context {…}` — a context value changed; the keys identify which one. A context built from a high-frequency signal re-renders every consumer on every change.
 - A component starting the same number of renders as there were commits is subscribed to the thing being scrubbed or dragged. Ask whether it shows that value. If not, it's the bug.
 
+When a CPU profile shows a computed recomputing on every write but not who asked for it (an effect refreshes its dependencies before it runs, so the reader is missing from the stack), ask the signal graph:
+
+- `signalDebug.dumpByName(/^editor\.scene\.structure$/, { direction: "subscribers", depth: 8 })` lists every computed and effect downstream of a cell by name. Run it in a `TestEditor` test (throw the string, since Vitest hides console output) or in a dev build's devtools console. Packaged and `profile:build` builds do not list signals, for speed; there, it finds nothing unless `signalDebug.registerNodes()` ran before the signals were created.
+- `traceReactiveRun()` inside a suspect computed or effect logs which tracked cell changed on each run; `signalDebug.traceWrites()` logs every signal write.
+
 Patterns that caused real regressions (rules in `/signals`):
 
 - **Re-doing work on every change that a signal already tracks** — the catalog re-opened the editor's glyph on every location change although its render model follows the location signal. This re-rendered the whole editor.

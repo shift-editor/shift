@@ -1,3 +1,8 @@
+import { signalDebug } from "../lib/signals";
+
+// Lists every signal, so `signalDebug.dumpByName` can find hidden readers while debugging a test.
+signalDebug.registerNodes();
+
 if (typeof globalThis.window === "undefined") {
   (globalThis as unknown as { window: typeof globalThis }).window = globalThis;
 }
