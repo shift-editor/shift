@@ -390,15 +390,25 @@ type MintedIdByPrefix = {
 // shared lib config deliberately includes neither DOM nor node types.
 declare const crypto: { getRandomValues<T extends Uint8Array>(array: T): T };
 
+// Random bytes are drawn a pool at a time: one `getRandomValues` call per id
+// cost about 2.5 µs, which added up to 140 ms when a page of 10,000 text runs
+// minted an id per character.
+const RANDOM_POOL_SIZE = 4096;
+const randomPool = new Uint8Array(RANDOM_POOL_SIZE);
+let randomPoolOffset = RANDOM_POOL_SIZE;
+
 function mintShortIdSuffix(): string {
-  const bytes = new Uint8Array(SHORT_ID_SUFFIX_LENGTH);
-  crypto.getRandomValues(bytes);
+  if (randomPoolOffset + SHORT_ID_SUFFIX_LENGTH > RANDOM_POOL_SIZE) {
+    crypto.getRandomValues(randomPool);
+    randomPoolOffset = 0;
+  }
 
   let suffix = "";
-  for (let i = 0; i < bytes.length; i++) {
-    const byte = bytes[i];
+  for (let i = 0; i < SHORT_ID_SUFFIX_LENGTH; i++) {
+    const byte = randomPool[randomPoolOffset + i];
     suffix += SHORT_ID_ALPHABET[byte & SHORT_ID_ALPHABET_MASK];
   }
+  randomPoolOffset += SHORT_ID_SUFFIX_LENGTH;
   return suffix;
 }
 

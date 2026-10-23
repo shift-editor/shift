@@ -31,11 +31,10 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
   const metricsCell = useMemo(
     () =>
       computed((): GlyphMetricsState => {
-        const glyphNodes = editor.scene.cell.value.nodes.filter((node) => node.kind === "glyph");
-        const node = glyphNodes.length === 1 ? glyphNodes[0] : null;
-        if (!node) return EMPTY_METRICS;
+        const sceneGlyph = editor.scene.onlyGlyphCell.value;
+        if (!sceneGlyph) return EMPTY_METRICS;
 
-        const glyph = editor.glyphForId(node.glyphId);
+        const glyph = editor.glyphForId(sceneGlyph.glyphId);
         if (!glyph) return EMPTY_METRICS;
 
         const externalLocation = editor.externalLocationCell.value;

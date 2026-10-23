@@ -1,17 +1,17 @@
 # shift-wasm
 
-<!-- reviewed: 2026-10-18 review-every: 90d -->
+<!-- reviewed: 2026-10-21 review-every: 90d -->
 
 Runs shift-font's rules in the editor through WebAssembly, so the editor calls the same Rust the workspace and export use instead of a TypeScript copy. `crates/shift-wasm` is the Rust side; `packages/wasm` (`@shift/wasm`) builds it and ships the module to TypeScript.
 
 ## Architecture Invariants
 
-- **One implementation.** Each export calls shift-font code that native callers also use: anchor kinds from fontir's `AnchorKind::new`, `anchor_propagation::compiled_anchors`, `anchor_attachment::follow_anchors`, and the variation evaluators (`AxisMappingBasis::evaluate`, `map_location_with_bases`, `InterpolationBasis::weights_at`). This crate only converts between numbers and those types. A rule that needs logic here is a rule that belongs in shift-font.
+- **One implementation.** Each export calls shift-font code that native callers also use: anchor kinds from fontir's `AnchorKind::new`, `anchor_propagation::compiled_anchors`, `anchor_attachment::follow_anchors`, and the variation evaluators (`AxisMappingBasis::evaluate`, `map_location_with_bases`, `InterpolationBasis::weights_at`); `layoutPage` calls shift-layout's `LayoutTree::layout`. This crate only converts between numbers and those types. A rule that needs logic here is a rule that belongs in shift-font.
 - **Synchronous.** The module is embedded in `@shift/wasm` as base64 and instantiated with `initSync` at import, so computeds and render paths call it directly. Nothing awaits, fetches, or needs a bundler plugin; desktop, vitest, and the SDK import it the same way.
 - **Built, never committed.** `packages/wasm/src/generated/`, `src/generated-reference/`, and `src/generated-shaping/` are gitignored and built like the native addon: `@shift/wasm#build` is a turbo task over the Rust sources, `build:native` runs it, and typecheck, tests, and desktop builds depend on it. WHY: rustc's output depends on the build host (Cargo hashes `rustc -vV`, host line included, into symbol names, which decides data layout), so a module built on macOS never matches one built on Linux, and a committed copy could not be checked against a fresh build.
 - **Pinned toolchain.** wasm-bindgen is pinned exactly (`=0.2.121`); the build script refuses a CLI that does not match `Cargo.lock`. wasm-opt is the npm `binaryen` package, pinned exactly as a devDependency of `@shift/wasm` and run through Node from the package's own `bin`, never from PATH, with explicit features. The checkout and Cargo home paths that panic messages embed are remapped, so the module carries no machine's paths.
 - **Numbers across the boundary.** Hot calls take and return `Float64Array`s, with no per-call objects. **CRITICAL**: each layout is declared once, in Rust (`layout!`, `foreign_layout!`, `enum_layout!` in `src/layout.rs`), and the editor's side of every hot call — interfaces, encoder, the call, decoder — is generated from it into `packages/editor/src/lib/wasm/generated/layouts.ts` by the `generated_file_wasm_layouts` test. Never hand-write a packer: a field order typed out twice drifts silently, because reading past the end yields zeros rather than an error. Anchor names are interned once (`internName`/`nameOf`) and travel as ids. Axes and compiled bases are registered once, giving a handle; a location then travels as numbers in axis order, NaN for a missing coordinate. Cold, structured values (`AnchorKind`, registration inputs) are typed with tsify, so `shift_wasm.d.ts` is generated, not hand-written.
-- **Shaping is a module of its own, loaded on demand.** The `shaping` feature builds shift-shape and HarfRust into `src/generated-shaping/`, loaded by `@shift/wasm/shaping`, several times the size of the production module. The editor imports it dynamically (`lib/wasm/shaping.ts`, `loadShaping`) so bundlers split it into a chunk that loads when text is first laid out. It is a separate instance with its own memory and name table, so its layouts carry no interned names: units, locations, and tags cross as numbers. Each module's generated calls go to their own file (`generated/layouts.ts`, `generated/shapingLayouts.ts`), importing only that module.
+- **Shaping is a module of its own, loaded on demand.** The `shaping` feature builds shift-shape and HarfRust into `src/generated-shaping/`, loaded by `@shift/wasm/shaping`, several times the size of the production module. It turns on the `layout` feature too, so page layout (shift-layout over Taffy, about 60 KB) ships in the same module: a page is laid out after its text is shaped, so the module is already loaded. `layout` stays a feature of its own so the exports say what they need and layout could move to a module of its own by changing only the build script. The editor imports it dynamically (`lib/wasm/shaping.ts`, `loadShaping`) so bundlers split it into a chunk that loads when text is first laid out. It is a separate instance with its own memory and name table, so its layouts carry no interned names: units, locations, and tags cross as numbers. Each module's generated calls go to their own file (`generated/layouts.ts`, `generated/shapingLayouts.ts`), importing only that module.
 - **The reference module never ships.** The `reference` cargo feature adds test-only exports (`src/reference/`) that return shift-font's answers for the rules the editor keeps in TypeScript. It builds into a second module, `src/generated-reference/`, loaded by `@shift/wasm/reference`. The production module is built without the feature and is unchanged by it. Lint (`shift/no-reference-module-outside-tests`) rejects importing it outside `.test.ts` files and `testing/` helpers, and the SDK build fails if its bundle contains it.
 - **Handles follow their objects.** The editor registers each axes array and basis once per object identity (`lib/wasm/variation.ts`, `Handles`). A `FinalizationRegistry` releases the module's copy when the object is collected.
 
@@ -23,6 +23,7 @@ crates/shift-wasm/src/
   anchors.rs     anchorKind, propagateAnchors, followAnchors
   decomposition.rs   blendDecomposedGlyph: component outlines between masters of a decomposed glyph
   shaping.rs     registerShaper, setShaperGlyphs, shapeParagraphs (the `shaping` feature)
+  page_layout.rs layoutPage: one page's boxes and text lines from shift-layout (the `layout` feature, on with `shaping`)
   variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
   names.rs       interned anchor names
   layout.rs      Reader, Writer, the Layout trait, and the layout! macros hot calls are declared with
@@ -124,10 +125,12 @@ nix develop --command pnpm build:wasm                # build src/generated, src/
 nix develop --command pnpm check                     # typecheck and tests build both first
 nix develop --command cargo clippy -p shift-wasm --target wasm32-unknown-unknown -- -D warnings
 nix develop --command cargo clippy -p shift-wasm --features reference --target wasm32-unknown-unknown -- -D warnings
+nix develop --command cargo clippy -p shift-wasm --features shaping --target wasm32-unknown-unknown -- -D warnings
 ```
 
 ## Related
 
 - [`crates/shift-font/docs/DOCS.md`](../../shift-font/docs/DOCS.md) — the rules every export calls.
+- [`crates/shift-layout/docs/DOCS.md`](../../shift-layout/docs/DOCS.md) — the page layout `layoutPage` runs.
 - [`packages/editor/src/lib/model/docs/DOCS.md`](../../../packages/editor/src/lib/model/docs/DOCS.md) — where the editor calls them: `Kerning`, axis mapping, and interpolation.
 - [`packages/glyph-state/docs/DOCS.md`](../../../packages/glyph-state/docs/DOCS.md) — contour and segment geometry the reference tests check.

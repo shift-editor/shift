@@ -107,7 +107,7 @@
   --editor-debug-hit-radii: #2196f3;
   --editor-debug-segment-bounds: #ff9800;
   --editor-debug-glyph-bbox: #ff00fb;
-  --editor-text-cursor-color: #0c92f4;
+  --editor-text-cursor-color: #000000;
   --editor-text-selection-fill: rgba(12, 146, 244, 0.2);
   --editor-text-hover-outline: #0c92f4;
   --editor-text-composite-arm-fill: rgba(128, 128, 128, 0.22);

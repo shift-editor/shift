@@ -1,5 +1,6 @@
 import type { MarkerLayer } from "../lib/graphics/backends/MarkerLayer";
 import type { Canvas } from "../lib/editor/rendering/Canvas";
+import type { EditorRenderTheme } from "../lib/editor/rendering/Theme";
 
 /**
  * Names the editor paint phase requested from node definitions.
@@ -24,4 +25,22 @@ export interface RenderContext {
 
   /** Marker backend owned by the renderer for the current frame. */
   readonly markers: MarkerLayer;
+}
+
+/**
+ * The rectangles one node added to the content pass's shared fill, in scene units.
+ *
+ * @remarks
+ * Valid while the node's visible entry, the zoom, and the theme it was
+ * recorded at stay the same.
+ */
+export interface RecordedFill {
+  readonly zoom: number;
+  readonly theme: EditorRenderTheme;
+  /** False when the node draws itself instead of filling rectangles. */
+  readonly filled: boolean;
+  /** Each rectangle's color, in order. */
+  readonly colors: readonly string[];
+  /** Each rectangle as `x, y, width, height`, in order. */
+  readonly rects: readonly number[];
 }

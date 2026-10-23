@@ -11,3 +11,4 @@ export { BendCurve } from "./BendCurve";
 export { SegmentDoubleClick } from "./SegmentDoubleClick";
 export { NodeDoubleClick } from "./NodeDoubleClick";
 export { SelectHover } from "./SelectHover";
+export { FitToContent } from "./FitToContent";

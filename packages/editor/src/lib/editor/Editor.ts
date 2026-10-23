@@ -73,6 +73,7 @@ import {
   type Effect,
   type Signal,
   type WritableSignal,
+  untracked,
 } from "../signals/signal";
 import {
   Clipboard,
@@ -85,6 +86,8 @@ import { cursorToCSS } from "../styles/cursor";
 import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
+import { SceneTransforms } from "./SceneTransforms";
+import { BoxesTransform } from "../nodes/BoxesTransform";
 import { Scene } from "./Scene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { EditorRenderTheme } from "./rendering/Theme";
@@ -129,6 +132,8 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import { PageNodeDefinition } from "../nodes/PageNodeDefinition";
 import { Pages } from "../pages/Pages";
+import { FrameNodeDefinition } from "../nodes/FrameNodeDefinition";
+import { Frames } from "../frames/Frames";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
 
@@ -196,6 +201,9 @@ export class Editor {
   readonly textEditing: TextEditing;
   /** The document's pages and the page the canvas shows. */
   readonly pages: Pages;
+  /** Auto layout frames and the active page's layout. */
+  readonly frames: Frames;
+  readonly #transforms: SceneTransforms;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -295,10 +303,12 @@ export class Editor {
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
     const PageDefinition = options.nodeDefinitions?.page ?? PageNodeDefinition;
+    const FrameDefinition = options.nodeDefinitions?.frame ?? FrameNodeDefinition;
     this.#nodeDefinitions = {
       glyph: new GlyphDefinition(this),
       textRun: new TextRunDefinition(this),
       page: new PageDefinition(this),
+      frame: new FrameDefinition(this),
     };
 
     this.#view = new EditorViewState();
@@ -321,6 +331,8 @@ export class Editor {
     this.pages = new Pages(this);
     // A session starts with one page; setup, not an edit.
     this.pages.ensure();
+    this.frames = new Frames(this);
+    this.#transforms = new SceneTransforms(this);
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
@@ -985,7 +997,12 @@ export class Editor {
   ): TransformTarget | null {
     if (ids.length === 0) return null;
     const node = this.selectionNode(ids);
-    if (!node) return null;
+    if (!node) {
+      // Several boxes on one page move together.
+      const nodes = ids.filter(isNodeId).map((id) => this.scene.node(id));
+      if (nodes.length !== ids.length || nodes.some((candidate) => !candidate)) return null;
+      return BoxesTransform.forNodes(this, nodes as ShiftNode[]);
+    }
 
     return this.nodeDefinition(node.kind).transformTarget?.(node, ids) ?? null;
   }
@@ -1157,6 +1174,7 @@ export class Editor {
   nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
   nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
   nodeDefinition(kind: "page"): PageNodeDefinition;
+  nodeDefinition(kind: "frame"): FrameNodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition {
     return this.#nodeDefinitions[kind];
@@ -1306,16 +1324,22 @@ export class Editor {
     return this.#selectionBounds;
   }
 
-  /** Selects every glyph item of every run; the run level's select-all. */
-  #selectAllGlyphItems(): void {
-    const ids = this.scene
-      .nodes()
-      .flatMap((node) => this.nodeDefinition(node.kind).textItems?.(node) ?? [])
+  /** The glyph items a box shows, line breaks left out. */
+  #glyphItemIds(node: ShiftNode): SelectableId[] {
+    return (this.nodeDefinition(node.kind).textItems?.(node) ?? [])
       .filter((item) => item.kind !== "linebreak")
       .map((item) => item.id);
-    if (ids.length === 0) return;
+  }
 
-    this.history.capture("Select all", () => this.selection.select(ids));
+  /** The boxes (text boxes and frames) directly on the active page. */
+  #pageBoxIds(): SelectableId[] {
+    const page = this.scene.activePage();
+    if (!page) return [];
+
+    return this.scene
+      .children(page.id)
+      .filter((node) => this.nodeDefinition(node.kind).selectable)
+      .map((node) => node.id);
   }
 
   /** Reactive scene-space bounds of the current selection; see {@link selectionSceneBounds}. */
@@ -1324,15 +1348,20 @@ export class Editor {
   }
 
   /**
-   * Select every point in the active authored glyph layer, or every run glyph when none is edited.
+   * Selects everything at the current scope.
    *
-   * This intentionally uses the authored glyph layer rather than interpolated
-   * design-location geometry: selection mutates an authored layer, so it must
-   * refer to point IDs that layer operations can mutate.
+   * @remarks
+   * Editing a glyph: every point of its active layer. This intentionally uses
+   * the authored glyph layer rather than interpolated design-location
+   * geometry: selection mutates an authored layer, so it must refer to point
+   * IDs that layer operations can mutate. Inside an entered text box: its
+   * glyphs. Otherwise, at page scope: every box directly on the active page.
    */
   public selectAll(): void {
-    if (!this.editing.hasScope() && this.scene.nodesOfKind("textRun").length > 0) {
-      this.#selectAllGlyphItems();
+    if (!this.editing.hasScope()) {
+      const entered = this.scene.nodeOfKind(this.nodeDefinition("textRun").entered, "textRun");
+      const ids = entered ? this.#glyphItemIds(entered) : this.#pageBoxIds();
+      if (ids.length > 0) this.history.capture("Select all", () => this.selection.select(ids));
       return;
     }
 
@@ -1548,9 +1577,9 @@ export class Editor {
    *
    * @remarks
    * Places the node's frame through its ancestors' frames, then applies the
-   * node's own units. Callers that need to redraw on placement changes track
-   * `scene.cell`; a parent that lays out its children (a text run) tracks its
-   * own layout when read inside a reactive boundary.
+   * node's own units. The placement is cached per node (`SceneTransforms`):
+   * read inside a reactive boundary, the reader reruns when this node's
+   * placement changes, including when a parent lays it out again.
    *
    * @param node - a node in the scene; its ancestors are resolved by `parentId`.
    */
@@ -1646,6 +1675,20 @@ export class Editor {
   }
 
   /**
+   * Returns the scene box of a node and everything under it.
+   *
+   * @remarks
+   * Cached per node, and reactive: inside a computed or effect, the reader
+   * reruns when anything under the node moves or resizes.
+   *
+   * @returns null when nothing under the node reports bounds.
+   */
+  nodeExtent(nodeId: NodeId): SceneBounds | null {
+    const extent = this.#transforms.extent(nodeId);
+    return extent ? sceneBounds(extent) : null;
+  }
+
+  /**
    * The transform from a node's frame to the scene: Y-down, origin at the node's
    * position, nested in its parent's frame.
    *
@@ -1655,6 +1698,9 @@ export class Editor {
    * supplies their positions through `NodeDefinition.childPosition`.
    */
   #frameToScene(node: ShiftNode): Mat {
+    // The scene's own record is cached per node; a copy (such as a preview) is placed afresh.
+    if (this.scene.node(node.id) === node) return this.#transforms.frameToScene(node.id);
+
     const parent = this.scene.node(node.parentId);
     if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
@@ -1717,16 +1763,34 @@ export class Editor {
   }
 
   getPointerTarget(point: ScenePoint): PointerTarget {
-    const nodes = this.scene.nodes();
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const node = nodes[i];
-      if (!node) continue;
+    const scene = this.scene;
+    const structure = scene.structureCell.peek();
+    const pageId = scene.activePageIdCell.peek();
+    if (!pageId) return { kind: "canvas", point };
 
-      const definition = this.nodeDefinition(node.kind);
-      if (!definition) continue;
+    const reach = this.hitRadius;
+    const editedRoots = new Set(
+      this.editing.nodeIds.map((id) => untracked(() => scene.topLevelOf(id))),
+    );
+    const roots = structure.children(pageId);
+    // Children before parents and later siblings first, so what draws on top is hit first.
+    for (let r = roots.length - 1; r >= 0; r--) {
+      const rootId = roots[r]!;
+      const extent = untracked(() => this.nodeExtent(rootId));
+      const nearPointer = !extent || Bounds.containsPoint(Bounds.expand(extent, reach), point);
+      if (!nearPointer && !editedRoots.has(rootId)) continue;
 
-      const target = definition.hit(node, this.toLocal(node, point));
-      if (target) return target;
+      const ids = [rootId, ...structure.descendants(rootId)];
+      for (let i = ids.length - 1; i >= 0; i--) {
+        const node = scene.node(ids[i]!);
+        if (!node) continue;
+
+        const definition = this.nodeDefinition(node.kind);
+        if (!definition) continue;
+
+        const target = definition.hit(node, this.toLocal(node, point));
+        if (target) return target;
+      }
     }
 
     return { kind: "canvas", point };
@@ -1830,6 +1894,15 @@ export class Editor {
 
   public get hitRadius(): number {
     return this.#camera.hitRadius;
+  }
+
+  /**
+   * The pointer hit radius in a node's own units, so hits stay the same size
+   * on screen inside scaled text.
+   */
+  public hitRadiusIn(node: ShiftNode): number {
+    const units = this.nodeDefinition(node.kind).unitsTransform(node);
+    return this.#camera.hitRadius / Math.hypot(units.a, units.b);
   }
 
   /** @knipclassignore Indirectly consumed through Renderer. */
@@ -2063,6 +2136,9 @@ export class Editor {
   public async copy(): Promise<boolean> {
     await this.font.editCoordinator.settled();
 
+    const textBoxes = this.text.boxContent(this.selection.ids);
+    if (textBoxes.length > 0) return this.#clipboard.write({ contours: [], textBoxes });
+
     const content = this.contentFrom(this.selection.ids);
     if (!content) return false;
 
@@ -2071,6 +2147,14 @@ export class Editor {
 
   public async cut(): Promise<boolean> {
     await this.font.editCoordinator.settled();
+
+    const textBoxes = this.text.boxContent(this.selection.ids);
+    if (textBoxes.length > 0) {
+      const written = await this.#clipboard.write({ contours: [], textBoxes });
+      if (written)
+        this.history.capture("Cut", () => this.#deleteTextBoxes(this.#selectedTextBoxIds()));
+      return written;
+    }
 
     const selection = this.positionSelection(this.selection.ids);
     const pointIds = selection?.targets.points ?? [];
@@ -2095,6 +2179,22 @@ export class Editor {
   }
 
   public async deleteSelection(mode: DeleteMode = "fit"): Promise<boolean> {
+    const frameIds = this.selection.ids.filter(
+      (id): id is NodeId => isNodeId(id) && this.scene.nodeOfKind(id, "frame") !== null,
+    );
+    if (frameIds.length > 0) {
+      this.history.captureOrJoin("Delete frames", () => {
+        for (const id of frameIds) this.frames.delete(id);
+      });
+      return true;
+    }
+
+    const textBoxIds = this.#selectedTextBoxIds();
+    if (textBoxIds.length > 0) {
+      this.history.captureOrJoin("Delete text", () => this.#deleteTextBoxes(textBoxIds));
+      return true;
+    }
+
     const componentsRemoved = await this.#editSelectedComponents(
       "Delete Components",
       (layer, ids) => layer.removeComponents(ids),
@@ -2293,6 +2393,18 @@ export class Editor {
 
     switch (result.kind) {
       case "content": {
+        const textBoxes = result.content.textBoxes ?? [];
+        if (textBoxes.length > 0) {
+          const offset = this.#clipboard.nextPasteOffset();
+          this.history.capture("Paste", () => {
+            // The paste offset is Y-up for glyph content; boxes sit on the Y-down page.
+            const ids = this.text.placeBoxes(textBoxes, { x: offset.x, y: -offset.y });
+            this.setActiveTool("select");
+            this.selection.select(ids);
+          });
+          return true;
+        }
+
         const inserted = this.history.capture("Paste", () => {
           const ids = this.insertContent(result.content, {
             offset: this.#clipboard.nextPasteOffset(),
@@ -2313,6 +2425,26 @@ export class Editor {
       case "unsupported":
         return false;
     }
+  }
+
+  /** The selected text boxes' ids. */
+  #selectedTextBoxIds(): NodeId[] {
+    return this.selection.ids.filter(
+      (id): id is NodeId => isNodeId(id) && this.scene.nodeOfKind(id, "textRun") !== null,
+    );
+  }
+
+  /** Deletes text boxes, and each run no other node places. */
+  #deleteTextBoxes(ids: readonly NodeId[]): void {
+    for (const id of ids) {
+      const node = this.scene.nodeOfKind(id, "textRun");
+      if (!node) continue;
+
+      for (const child of this.scene.children(node.id)) this.scene.deleteNode(child.id);
+      this.scene.deleteNode(node.id);
+      if (this.scene.nodesReferencing(node.runId).length === 0) this.text.deleteRun(node.runId);
+    }
+    this.selection.clear();
   }
 
   /**
@@ -2358,7 +2490,11 @@ export class Editor {
     this.#multiSourceEditing.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
+    this.#transforms.dispose();
+    this.frames.dispose();
+    this.scene.dispose();
     this.text.dispose();
+    this.textEditing.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();

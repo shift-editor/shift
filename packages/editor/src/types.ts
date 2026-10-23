@@ -26,13 +26,29 @@ export type { RenderGlyph } from "./types/glyphRender";
 export type { CanvasRef } from "./types/graphics";
 export type { CubicHandle } from "./types/handle";
 export type {
+  FrameAlign,
+  FrameAxis,
+  FrameJustify,
+  FrameLayout,
+  FrameMode,
+  FrameOptions,
+  Insets,
+  LaidOutNode,
+  LayoutBox,
+  PageLayout,
+  Sizing,
+} from "./types/frame";
+export type {
+  FrameNode,
   GlyphNode,
   NodeKind,
   NodeOfKind,
   PageNode,
+  SceneGlyph,
   SceneNodeKinds,
   ShiftNode,
   TextRunNode,
+  TextVerticalAlign,
 } from "./types/node";
 export { NUDGES_VALUES, nudgeMagnitude, type NudgeMagnitude } from "./types/nudge";
 export { currentSelectionId, objectIsKindOf } from "./types/object";

@@ -36,8 +36,9 @@ export class Resize implements SelectBehavior {
       : ctx.editor.positionSelection(ctx.editor.selection.ids);
     if (!transformTarget && !positionSelection) return false;
 
+    // A selection spanning several boxes has no node: it resizes in scene units.
     const node = ctx.editor.selectionNode();
-    if (!node) return false;
+    if (!node && !transformTarget) return false;
 
     let targetBounds: LocalBounds;
     if (transformTarget) {
@@ -145,7 +146,8 @@ export class Resize implements SelectBehavior {
   #localAnchor(edge: BoundingRectEdge, bounds: LocalBounds, useCentre: boolean): Point2D {
     const editor = this.#editor;
     const node = this.#node;
-    if (!editor || !node) return Bounds.center(bounds);
+    if (!editor) return Bounds.center(bounds);
+    if (!node) return this.getAnchorPointForEdge(edge, Bounds.toRect(bounds), useCentre);
 
     const sceneRect = Bounds.toRect(editor.toSceneBounds(node, bounds));
     const anchor = this.getAnchorPointForEdge(edge, sceneRect, useCentre);

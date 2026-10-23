@@ -1,0 +1,127 @@
+import { Bounds, Mat, type Point2D } from "@shift/geo";
+import type { SelectableId } from "@shift/types";
+import { NodeDefinition } from "./NodeDefinition";
+import { FrameTransform } from "../frames/FrameTransform";
+import { localBounds } from "../editor/spaces";
+import type { LocalBounds, LocalPoint } from "../../types/coordinates";
+import type { FrameNode, ShiftNode } from "../../types/node";
+import type { LaidOutNode } from "../../types/frame";
+import type { PointerTarget } from "../../types/target";
+import type { RenderContext, RenderPass } from "../../types/rendering";
+import type { TransformTarget } from "../../types/transformTarget";
+
+/**
+ * Behavior of an auto layout frame.
+ *
+ * @remarks
+ * A frame draws in Y-down scene units from its top-left corner. Its size and
+ * its children's places come from the page layout (`Frames.laidOut`), so
+ * the queries here track that layout. A frame is selectable: it is hit
+ * anywhere in its box where no child is hit, and the transform box moves and
+ * resizes it (see {@link FrameTransform}).
+ */
+/** Where a frame's name sits from its top-left corner, in screen pixels. */
+const LABEL_OFFSET = { x: 0, y: -4 };
+
+export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
+  readonly kind: FrameNode["kind"] = "frame";
+  override readonly selectable = true;
+
+  unitsTransform(_node: FrameNode): Mat {
+    return Mat.Identity();
+  }
+
+  /** The frame's laid-out box from its origin; null until the page is laid out. */
+  bounds(node: FrameNode): LocalBounds | null {
+    const box = this.#laidOut(node)?.box;
+    if (!box) return null;
+
+    return localBounds(Bounds.fromXYWH(0, 0, box.width, box.height));
+  }
+
+  /** Places text runs and frames where the page layout put them. */
+  override childPosition(node: FrameNode, child: ShiftNode): Point2D | null {
+    if (child.parentId !== node.id) return null;
+
+    return this.#laidOut(child)?.origin ?? null;
+  }
+
+  /** Hits the frame's box, grown by the hit radius so its edges are easy to grab. */
+  hit(node: FrameNode, point: LocalPoint): PointerTarget | null {
+    const bounds = this.bounds(node);
+    if (!bounds || !Bounds.containsPoint(Bounds.expand(bounds, this.editor.hitRadius), point)) {
+      return null;
+    }
+
+    return { kind: "node", node, point };
+  }
+
+  /** A marquee catches a frame on a page as a whole, as select-all does. */
+  override selectableInRect(node: FrameNode, rect: LocalBounds): SelectableId[] {
+    if (this.editor.editing.hasScope() || this.editor.scene.parent(node.id)?.kind !== "page") {
+      return [];
+    }
+    const bounds = this.bounds(node);
+    return bounds && Bounds.overlaps(bounds, rect) ? [node.id] : [];
+  }
+
+  /** The frame alone moves and resizes; anything else selected with it does not. */
+  override transformTarget(node: FrameNode, ids: readonly SelectableId[]): TransformTarget | null {
+    const bounds = this.bounds(node);
+    if (!bounds || ids.length !== 1 || ids[0] !== node.id) return null;
+
+    return new FrameTransform(this.editor, node, Bounds.toRect(bounds));
+  }
+
+  /**
+   * A frame draws no box of its own: a frame on a page shows its name above
+   * it, and any frame its outline while selected or under the pointer.
+   */
+  override drawsIn(node: FrameNode, pass: RenderPass): boolean {
+    switch (pass) {
+      case "background":
+        return this.editor.scene.parent(node.id)?.kind === "page";
+      case "controls":
+        return this.outlineState(node.id) !== null;
+      case "content":
+      case "overlay":
+        return false;
+    }
+  }
+
+  override draw(node: FrameNode, ctx: RenderContext, pass: RenderPass): void {
+    const bounds = this.bounds(node);
+    if (!bounds) return;
+
+    const { frame } = ctx.canvas.theme;
+    switch (pass) {
+      case "background": {
+        const selected = this.editor.selection.has(node.id);
+        const color = selected ? frame.selectedStroke : frame.label;
+        ctx.canvas.label({ x: 0, y: 0 }, node.name, color, frame.labelFont, LABEL_OFFSET);
+        return;
+      }
+      case "controls": {
+        const outline = this.outlineState(node.id);
+        if (!outline) return;
+        const selected = outline === "selected";
+        ctx.canvas.strokeRect(
+          0,
+          0,
+          Bounds.width(bounds),
+          Bounds.height(bounds),
+          selected ? frame.selectedStroke : frame.hoverStroke,
+          selected ? frame.selectedWidthPx : frame.widthPx,
+        );
+        return;
+      }
+      case "content":
+      case "overlay":
+        return;
+    }
+  }
+
+  #laidOut(node: ShiftNode): LaidOutNode | null {
+    return this.editor.frames.laidOut(node.id);
+  }
+}

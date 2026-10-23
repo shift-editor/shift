@@ -20,6 +20,13 @@ import type {
   TextItemId,
 } from "./types";
 import { literalRun, shapedRuns, splitParagraphs } from "./paragraphs";
+import {
+  breakLines,
+  breakSegments,
+  breakableItems,
+  splitWideSegments,
+  type BreakSegment,
+} from "./lineBreaks";
 import { Positioner } from "./Positioner";
 import type { Editor } from "../../editor/Editor";
 import type { Font } from "../../model/Font";
@@ -38,6 +45,17 @@ export interface TextLayoutParams {
    * and a null paragraph lays out literally on its own.
    */
   shaped?: readonly (readonly ShapedRun[] | null)[] | null;
+  /**
+   * Width to wrap each paragraph's lines at, in font units; lines break after
+   * spaces, a word wider than the width keeps a line of its own. Null or
+   * absent: each paragraph is one line.
+   */
+  wrapWidth?: number | null;
+}
+
+/** One paragraph's break segments, for a layout engine that wraps text itself. */
+export interface ParagraphSegments {
+  readonly segments: readonly BreakSegment[];
 }
 
 /** One positioned glyph with its layout-local placement resolved. */
@@ -69,31 +87,51 @@ export class TextLayout {
   readonly bufferLength: number;
   /** Every positioned glyph in line, run, and glyph order. */
   readonly placedGlyphs: readonly PlacedGlyph[];
+  /** The width lines wrap at, in font units; null when each paragraph is one line. */
+  readonly wrapWidth: number | null;
   readonly #placedByItem: ReadonlyMap<TextItemId, PlacedGlyph>;
+  readonly #paragraphs: readonly PositionedParagraph[];
+  readonly #spaces: ReadonlySet<TextItemId>;
 
-  constructor(params: TextLayoutParams) {
-    const { items, origin, editor, externalLocation, shaped = null } = params;
-    const activeSourceId = editor.activeSourceId;
-    this.metrics = activeSourceId
-      ? editor.font.metricsForSource(activeSourceId)
-      : editor.font.metricsAtLocation(externalLocation.peek());
+  constructor(params: TextLayoutParams, positioned?: PositionedText) {
+    const { items, origin, editor, externalLocation, shaped = null, wrapWidth = null } = params;
     this.origin = origin;
     this.bufferLength = items.length;
+    this.wrapWidth = wrapWidth;
 
-    const positioner = new Positioner(editor, externalLocation);
-    const paragraphs: PositionedParagraph[] = [];
-    for (const [index, paragraph] of splitParagraphs(items).entries()) {
-      const runs = shaped?.[index];
-      paragraphs.push({
-        runs: runs
-          ? shapedRuns(paragraph, runs).map((run) => positioner.position(run, "anchors"))
-          : [positioner.position(literalRun(paragraph, editor.font), "literal")],
-        clusterStart: paragraph.clusterStart,
-        clusterEnd: paragraph.clusterStart + paragraph.items.length + 1,
-      });
+    if (positioned) {
+      this.metrics = positioned.metrics;
+      this.#paragraphs = positioned.paragraphs;
+      this.#spaces = positioned.spaces;
+    } else {
+      const activeSourceId = editor.activeSourceId;
+      this.metrics = activeSourceId
+        ? editor.font.metricsForSource(activeSourceId)
+        : editor.font.metricsAtLocation(externalLocation.peek());
+      const positioner = new Positioner(editor, externalLocation);
+      const paragraphs: PositionedParagraph[] = [];
+      for (const [index, paragraph] of splitParagraphs(items).entries()) {
+        const runs = shaped?.[index];
+        paragraphs.push({
+          runs: runs
+            ? shapedRuns(paragraph, runs).map((run) => positioner.position(run, "anchors"))
+            : [positioner.position(literalRun(paragraph, editor.font), "literal")],
+          clusterStart: paragraph.clusterStart,
+          clusterEnd: paragraph.clusterStart + paragraph.items.length + 1,
+        });
+      }
+      this.#paragraphs = paragraphs;
+      this.#spaces = breakableItems(items);
     }
+    this.#params = params;
 
-    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
+    const { lines, totalAdvance, bounds } = assembleLayout(
+      this.#paragraphs,
+      origin,
+      this.metrics,
+      wrapWidth,
+      this.#spaces,
+    );
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
@@ -109,6 +147,35 @@ export class TextLayout {
       }
     }
     this.#placedByItem = placedByItem;
+  }
+
+  readonly #params: TextLayoutParams;
+
+  /**
+   * Returns this text wrapped at `width` font units, or unwrapped for null.
+   *
+   * @remarks
+   * Reuses the positioned glyphs: wrapping only regroups them into lines, so
+   * it neither shapes nor reads any glyph again. Returns this layout when the
+   * width is unchanged.
+   */
+  withWrapWidth(width: number | null): TextLayout {
+    if (width === this.wrapWidth) return this;
+
+    return new TextLayout(
+      { ...this.#params, wrapWidth: width },
+      { metrics: this.metrics, paragraphs: this.#paragraphs, spaces: this.#spaces },
+    );
+  }
+
+  /**
+   * Each paragraph's break segments, for a layout engine that chooses the
+   * width and breaks lines itself (`shift-layout`'s `BreakSegments`).
+   */
+  paragraphSegments(): ParagraphSegments[] {
+    return this.#paragraphs.map((paragraph) => ({
+      segments: breakSegments(paragraphGlyphs(paragraph), this.#spaces),
+    }));
   }
 
   /**
@@ -247,26 +314,38 @@ export class TextLayout {
  * a follow-up. No current test requires it.
  */
 interface PositionedParagraph {
-  runs: PositionedRun[];
-  clusterStart: number;
-  clusterEnd: number;
+  readonly runs: PositionedRun[];
+  readonly clusterStart: number;
+  readonly clusterEnd: number;
+}
+
+/** A text's positioned paragraphs, shared by its wrapped copies. */
+interface PositionedText {
+  readonly metrics: SourceMetrics;
+  readonly paragraphs: readonly PositionedParagraph[];
+  readonly spaces: ReadonlySet<TextItemId>;
 }
 
 function assembleLayout(
-  paragraphs: PositionedParagraph[],
+  paragraphs: readonly PositionedParagraph[],
   origin: Point2D,
   metrics: SourceMetrics,
+  wrapWidth: number | null,
+  spaces: ReadonlySet<TextItemId>,
 ): AssembledLayout {
   const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 
-  const lines: Line[] = paragraphs.map((p, i) => ({
-    runs: p.runs,
-    y: origin.y - lineHeight * i,
-    ascent: metrics.ascender,
-    descent: metrics.descender,
-    clusterStart: p.clusterStart,
-    clusterEnd: p.clusterEnd,
-  }));
+  const lines: Line[] = [];
+  for (const paragraph of paragraphs) {
+    for (const line of wrapParagraph(paragraph, wrapWidth, spaces)) {
+      lines.push({
+        ...line,
+        y: origin.y - lineHeight * lines.length,
+        ascent: metrics.ascender,
+        descent: metrics.descender,
+      });
+    }
+  }
 
   let totalAdvance = 0;
   for (const line of lines) {
@@ -276,6 +355,80 @@ function assembleLayout(
   }
 
   return { lines, totalAdvance, bounds: null };
+}
+
+type WrappedLine = Pick<Line, "runs" | "clusterStart" | "clusterEnd">;
+
+/**
+ * Splits a paragraph into soft lines no wider than `width`: after spaces,
+ * and inside a word too wide for a line.
+ *
+ * @remarks
+ * A soft line owns the clusters from its first glyph up to the next line's
+ * first glyph; the last keeps the paragraph's end, which covers its line
+ * break or the caret after the text.
+ */
+function wrapParagraph(
+  paragraph: PositionedParagraph,
+  width: number | null,
+  spaces: ReadonlySet<TextItemId>,
+): WrappedLine[] {
+  const whole: WrappedLine = {
+    runs: paragraph.runs,
+    clusterStart: paragraph.clusterStart,
+    clusterEnd: paragraph.clusterEnd,
+  };
+  if (width === null) return [whole];
+
+  const glyphs = paragraphGlyphs(paragraph);
+  const segments = splitWideSegments(breakSegments(glyphs, spaces), glyphs, spaces, width);
+  const ranges = breakLines(segments, width);
+  if (ranges.length <= 1) return [whole];
+
+  const starts = ranges.map((range) => segments[range.start]!.start);
+  return ranges.map((_range, index) => {
+    const from = starts[index]!;
+    const to = index + 1 < starts.length ? starts[index + 1]! : glyphs.length;
+    const next = starts[index + 1];
+    return {
+      runs: sliceRuns(paragraph.runs, from, to),
+      clusterStart: index === 0 ? paragraph.clusterStart : glyphs[from]!.cluster,
+      clusterEnd: next === undefined ? paragraph.clusterEnd : glyphs[next]!.cluster,
+    };
+  });
+}
+
+/** A paragraph's glyphs in visual order across its runs. */
+function paragraphGlyphs(paragraph: PositionedParagraph): PositionedGlyph[] {
+  return paragraph.runs.flatMap((run) => run.glyphs);
+}
+
+/**
+ * The runs holding glyphs `from` to `to` (indexes across all runs), each
+ * re-based so its first glyph starts at zero.
+ */
+function sliceRuns(runs: readonly PositionedRun[], from: number, to: number): PositionedRun[] {
+  const sliced: PositionedRun[] = [];
+  let offset = 0;
+  for (const run of runs) {
+    const start = Math.max(from - offset, 0);
+    const end = Math.min(to - offset, run.glyphs.length);
+    offset += run.glyphs.length;
+    if (start >= end) continue;
+
+    const glyphs = run.glyphs.slice(start, end);
+    const base = glyphs[0]!.origin.x;
+    const last = glyphs[glyphs.length - 1]!;
+    sliced.push({
+      ...run,
+      glyphs: glyphs.map((glyph) => ({
+        ...glyph,
+        origin: { ...glyph.origin, x: glyph.origin.x - base },
+      })),
+      advance: last.origin.x + last.xAdvance + last.xKern - base,
+    });
+  }
+  return sliced;
 }
 
 function placeGlyphs(lines: readonly Line[], origin: Point2D): PlacedGlyph[] {

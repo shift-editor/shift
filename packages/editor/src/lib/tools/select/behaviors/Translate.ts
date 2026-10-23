@@ -7,7 +7,7 @@ import type { Editor } from "../../../editor/Editor";
 import type { GlyphLayer, GlyphLayerPositionTarget } from "../../../model/Glyph";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
 import { DirectionSnap, PositionReference } from "../../../model/positions";
-import { scenePoint, vectorBetween } from "../../../editor/spaces";
+import { scenePoint, sceneVector, vectorBetween } from "../../../editor/spaces";
 import { objectIsKindOf, type ShiftObjectOf } from "../../../../types/object";
 import type { PointerTarget } from "../../../../types/target";
 import type { PositionCondition } from "../../../../types/positionEdit";
@@ -17,12 +17,14 @@ import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
 import { pointSlide } from "../PointSlide";
 import { EndpointDrop } from "../EndpointDrop";
+import { BoxSnap } from "../BoxSnap";
 
 type TranslatingState = Extract<SelectState, { type: "translating" }>;
 
 export class Translate implements SelectBehavior {
   #drag: TranslateInteraction | null = null;
   #transformEdit: TransformEdit | null = null;
+  #boxSnap: BoxSnap | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -38,6 +40,9 @@ export class Translate implements SelectBehavior {
 
     this.#drag = drag;
     this.#transformEdit = transformEdit;
+    this.#boxSnap = transformEdit
+      ? BoxSnap.forSelection(ctx.editor, ctx.editor.selection.ids)
+      : null;
     this.#done = ctx.onCancel(() => {
       drag?.discard();
       transformEdit?.discard();
@@ -90,20 +95,25 @@ export class Translate implements SelectBehavior {
     if (prev.type !== "translating") ctx.editor.hover.clear();
     if (event.type !== "drag") return;
 
+    // A selection spanning several boxes moves in scene units, through its transform edit.
     const node = ctx.editor.selectionNode();
-    if (!node) return;
+    if (!node && !this.#transformEdit) return;
 
     const { startPos, lastPos } = next.translate;
-    const sceneDelta = vectorBetween(
+    const pointerDelta = vectorBetween(
       scenePoint(startPos.x, startPos.y),
       scenePoint(lastPos.x, lastPos.y),
     );
-    const delta = ctx.editor.toLocalVector(node, sceneDelta);
+    // Boxes snap in scene units unless the accelerator is held.
+    const snapped =
+      this.#boxSnap && !next.translate.accelKey ? this.#boxSnap.snap(pointerDelta) : null;
+    const sceneDelta = snapped ? sceneVector(snapped.delta.x, snapped.delta.y) : pointerDelta;
+    const delta = node ? ctx.editor.toLocalVector(node, sceneDelta) : sceneDelta;
     if (this.#transformEdit) {
       this.#transformEdit.preview(() => Mat.Translate(delta.x, delta.y));
       ctx.setState({
         ...next,
-        translate: { ...next.translate, totalDelta: delta, guides: [] },
+        translate: { ...next.translate, totalDelta: delta, guides: snapped?.guides ?? [] },
       });
       return;
     }
@@ -253,10 +263,14 @@ export class Translate implements SelectBehavior {
   #cleanup(): void {
     this.#drag = null;
     this.#transformEdit = null;
+    this.#boxSnap = null;
     this.#done = null;
   }
 
-  /** Moves a whole component or text glyph, selecting it first when the box does not own the drag. */
+  /**
+   * Moves a whole component, text glyph, or box, selecting it first when the
+   * transform box does not own the drag; with Alt, text boxes move as copies.
+   */
   #fromTransformDragStart(
     editor: Editor,
     select: Select,
@@ -269,7 +283,15 @@ export class Translate implements SelectBehavior {
           editor.selection.select([targetId(event.target)]);
         }
         break;
-      case "node":
+      case "node": {
+        // A box (frame or text box) under the pointer moves at once, selected first.
+        const owned = select.boundingBox.containsTranslationPoint(event.origin);
+        const node = event.target.node;
+        const grabs = !owned && editor.nodeDefinition(node.kind).selectable;
+        if (grabs) editor.selection.select([node.id]);
+        if (!owned && !grabs) return null;
+        break;
+      }
       case "canvas":
         if (!select.boundingBox.containsTranslationPoint(event.origin)) return null;
         break;
@@ -279,6 +301,7 @@ export class Translate implements SelectBehavior {
         return null;
     }
 
+    if (event.altKey) duplicateSelectedTextBoxes(editor);
     return editor.transformTarget()?.begin("move") ?? null;
   }
 
@@ -450,6 +473,17 @@ function translatingState(
 /** The selectable identity of an object target. */
 function targetId(target: Exclude<PointerTarget, { kind: "canvas" | "node" }>): SelectableId {
   return target.kind === "text" ? target.itemId : target.id;
+}
+
+/**
+ * Alt-dragging text boxes drags copies: places a copy of each selected box
+ * where it is and selects the copies, inside the drag's undo step.
+ */
+function duplicateSelectedTextBoxes(editor: Editor): void {
+  const boxes = editor.text.boxContent(editor.selection.ids);
+  if (boxes.length === 0) return;
+
+  editor.selection.select(editor.text.placeBoxes(boxes, { x: 0, y: 0 }));
 }
 
 function boundingBoxOwnsDrag(editor: Editor, select: Select, event: DragStartEvent): boolean {

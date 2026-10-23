@@ -1,4 +1,4 @@
-import { computed, type Signal } from "../signals";
+import { computed, effect, signal, type Effect, type Signal } from "../signals";
 import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
@@ -8,11 +8,16 @@ import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
 import type { TextRunNode } from "../../types/node";
 
+/** How long the caret stays shown, then hidden, while it blinks, in milliseconds. */
+const CARET_BLINK_MS = 530;
+
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #editor: Editor;
   readonly stateCell: Signal<TextEditingRecord | null>;
+  readonly #caretShown = signal(true, { name: "editor.textEditing.caretShown" });
+  readonly #blink: Effect;
   #goalX: number | null = null;
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
@@ -20,11 +25,38 @@ export class TextEditing {
     this.#editor = editor;
     this.stateCell = computed(
       () => {
-        const record = store.cell.value.get(currentTextEditingId);
+        const record = store.record(currentTextEditingId);
         return record?.type === "textEditing" && record.active ? record : null;
       },
       { name: "editor.textEditing" },
     );
+    // Any caret or selection change shows the caret again, then it blinks while typing goes on.
+    this.#blink = effect(
+      () => {
+        const state = this.stateCell.value;
+        this.#caretShown.set(true);
+        if (!state) return;
+
+        const timer = setInterval(
+          () => this.#caretShown.set(!this.#caretShown.peek()),
+          CARET_BLINK_MS,
+        );
+        return () => clearInterval(timer);
+      },
+      { name: "editor.textEditing.blink" },
+    );
+  }
+
+  /**
+   * Whether the blinking caret is shown right now: always just after the
+   * caret or selection changes, then on and off while typing goes on.
+   */
+  get caretShownCell(): Signal<boolean> {
+    return this.#caretShown;
+  }
+
+  dispose(): void {
+    this.#blink.dispose();
   }
 
   get state(): TextEditingRecord | null {
@@ -91,7 +123,7 @@ export class TextEditing {
   get selectionRects(): readonly SelectionRect[] {
     const node = this.#node();
     const buffer = this.#buffer();
-    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    const layout = node && this.#editor.text.boxLayoutCell(node).peek();
     if (!buffer || !layout) return [];
     return layout.selectionRects(buffer.selection);
   }
@@ -128,7 +160,7 @@ export class TextEditing {
         const line =
           node &&
           this.#editor.text
-            .layoutCell(node.runId)
+            .boxLayoutCell(node)
             .peek()
             ?.lines.find((line) => cluster >= line.clusterStart && cluster < line.clusterEnd);
         if (!line) {
@@ -146,7 +178,7 @@ export class TextEditing {
   moveVertical(direction: -1 | 1, extend = false): void {
     const node = this.#node();
     const buffer = this.#buffer();
-    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    const layout = node && this.#editor.text.boxLayoutCell(node).peek();
     if (!buffer || !layout) return;
     const caret = Caret.atCluster(layout, buffer.focusCluster);
     this.#goalX ??= caret.position().x;

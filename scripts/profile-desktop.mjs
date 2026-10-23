@@ -28,8 +28,11 @@ const { values: options } = parseArgs({
     scenario: { type: "string", default: "scrub" },
     axis: { type: "string", default: "Weight" },
     seconds: { type: "string", default: "8" },
+    runs: { type: "string", default: "1000" },
+    throttle: { type: "string", default: "1" },
     app: { type: "string" },
     cpu: { type: "string" },
+    "setup-cpu": { type: "string" },
     "keep-open": { type: "boolean", default: false },
   },
 });
@@ -39,8 +42,13 @@ const SCENARIOS = {
   scrub: { run: scrub, editor: true },
   marquee: { run: marquee, editor: true },
   undo: { run: undoRedo, editor: true },
+  frames: { run: dragFrame, editor: true },
+  "frames-pan": { run: panFrames, editor: true },
+  "frames-switch": { run: switchPages, editor: true },
   open: { run: openFont, editor: false },
 };
+/** Wide enough at a frame's zoom to press inside it without hitting a child or a handle. */
+const FRAME_PADDING = 160;
 if (!options.font) usage("--font is required");
 if (!SCENARIOS[options.scenario]) usage(`unknown scenario ${options.scenario}`);
 
@@ -184,6 +192,193 @@ async function marquee(page) {
   });
 }
 
+/**
+ * Fills the page with `--runs` text runs in auto layout frames and waits for layout.
+ *
+ * The page matches `frames.bench.ts`: column frames of 10 row frames of 10 runs.
+ *
+ * @returns the first column frame's id.
+ */
+async function fillFramePage(page) {
+  const count = Number(options.runs);
+  const padding = FRAME_PADDING;
+  const cdp = options["setup-cpu"] ? await page.context().newCDPSession(page) : null;
+  if (cdp) {
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.setSamplingInterval", { interval: 200 });
+    await page.evaluate(() => {
+      window.__shiftLongTasks = [];
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries())
+          window.__shiftLongTasks.push({ start: entry.startTime, duration: entry.duration });
+      }).observe({ type: "longtask" });
+    });
+    await cdp.send("Profiler.start");
+  }
+  const setup = await page.evaluate(
+    async ({ count, padding }) => {
+      const editor = window.shift.editor;
+      const uniform = (size) => ({ top: size, right: size, bottom: size, left: size });
+      const words = ["lorem", "ipsum", "dolor", "sit", "amet", "magna", "aliqua", "veniam"];
+      const started = performance.now();
+      const columns = [];
+      editor.history.withoutRecording(() => {
+        editor.exitNodes();
+        for (let column = 0; column < count / 100; column++) {
+          const frame = editor.frames.create(null, {
+            position: { x: (column % 10) * 8000, y: Math.floor(column / 10) * 12000 },
+            layout: { mode: "column", padding: uniform(padding) },
+          });
+          columns.push(frame.id);
+          for (let row = 0; row < 10; row++) {
+            const rowFrame = editor.frames.create(frame.id, { layout: { mode: "row", gap: 24 } });
+            for (let index = 0; index < 10; index++) {
+              const word = words[(column + row + index) % words.length];
+              editor.frames.addText(rowFrame.id, `${word} ${index}`, { size: 48 });
+            }
+          }
+        }
+      });
+      const createMs = performance.now() - started;
+      await editor.frames.settled();
+      return { columnId: columns[0], createMs, settledMs: performance.now() - started, started };
+    },
+    { count, padding },
+  );
+  console.log(
+    `created ${count} runs in ${setup.createMs.toFixed(0)}ms, laid out by ${setup.settledMs.toFixed(0)}ms`,
+  );
+  await page.waitForTimeout(2000);
+  if (cdp) {
+    const { profile } = await cdp.send("Profiler.stop");
+    writeFileSync(options["setup-cpu"], JSON.stringify(profile));
+    const tasks = await page.evaluate(() => window.__shiftLongTasks);
+    const after = tasks.map((task) => ({ ...task, start: task.start - setup.started }));
+    console.log(
+      `setup long tasks (ms after creation started): ${after.map((task) => `${task.start.toFixed(0)}+${task.duration.toFixed(0)}`).join(", ") || "none"}`,
+    );
+    console.log(`setup CPU profile: ${options["setup-cpu"]}`);
+  }
+  return setup.columnId;
+}
+
+/** Drags the first column frame of a filled page for `seconds` with the pointer held down. */
+async function dragFrame(page) {
+  const padding = FRAME_PADDING;
+  const columnId = await fillFramePage(page);
+  await page.evaluate((columnId) => {
+    const editor = window.shift.editor;
+    editor.selection.select([columnId]);
+    editor.zoomToSelection();
+  }, columnId);
+  await page.waitForTimeout(1000);
+  const setup = { columnId };
+
+  const canvas = await page.locator('[data-shift-capture-target="editor"]').boundingBox();
+  if (!canvas) throw new Error("the editor canvas is not visible");
+  const press = await page.evaluate(
+    ({ columnId, padding }) => {
+      const editor = window.shift.editor;
+      const frame = editor.scene.nodeOfKind(columnId, "frame");
+      const bounds = editor.nodeBounds(frame);
+      const x = Math.min(bounds.min.x, bounds.max.x) + padding / 2;
+      const y = Math.max(bounds.min.y, bounds.max.y) - padding / 2;
+      const low = Math.min(bounds.min.y, bounds.max.y) + padding / 2;
+      const top = editor.sceneToScreen({ x, y });
+      const bottom = editor.sceneToScreen({ x, y: low });
+      // Pick whichever padding corner lands nearer the canvas top, so it is on screen.
+      return top.y < bottom.y ? top : bottom;
+    },
+    { columnId: setup.columnId, padding },
+  );
+  const start = { x: canvas.x + press.x, y: canvas.y + press.y };
+
+  const report = await measure(page, async () => {
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    const end = Date.now() + seconds * 1000;
+    let step = 0;
+    while (Date.now() < end) {
+      step++;
+      const dx = 60 * Math.sin(step / 15) + 8;
+      await page.mouse.move(start.x + dx, start.y + dx / 3);
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+  });
+  const moved = await page.evaluate(
+    (columnId) => window.shift.editor.scene.nodeOfKind(columnId, "frame").position,
+    setup.columnId,
+  );
+  console.log(`column frame now at ${JSON.stringify(moved)} (started at {"x":0,"y":0})`);
+  return report;
+}
+
+/**
+ * Switches between a filled page and an empty one three times each way, timing
+ * each switch to its next painted frame.
+ */
+async function switchPages(page) {
+  await fillFramePage(page);
+  const pages = await page.evaluate(() => {
+    const editor = window.shift.editor;
+    const filled = editor.pages.activeCell.peek();
+    const empty = editor.history.withoutRecording(() => editor.pages.create("Empty").id);
+    return { filled, empty };
+  });
+  await page.waitForTimeout(1000);
+  const switches = [];
+  const report = await measure(page, async () => {
+    for (let round = 0; round < 3; round++) {
+      for (const [label, id] of [
+        ["to empty", pages.empty],
+        ["to filled", pages.filled],
+      ]) {
+        const ms = await page.evaluate(async (id) => {
+          const started = performance.now();
+          window.shift.editor.pages.activate(id);
+          // The second callback runs after the frame that drew the page.
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+          return performance.now() - started;
+        }, id);
+        switches.push(`${label} ${ms.toFixed(0)}ms`);
+        await page.waitForTimeout(500);
+      }
+    }
+  });
+  console.log(`switches to their next frame: ${switches.join(", ")}`);
+  return report;
+}
+
+/** Fits a filled page in view, so every run draws, and pans it with the wheel for `seconds`. */
+async function panFrames(page) {
+  await fillFramePage(page);
+  await page.evaluate(() => {
+    const editor = window.shift.editor;
+    editor.selection.clear();
+    editor.zoomToFit();
+  });
+  await page.waitForTimeout(1000);
+  const canvas = await page.locator('[data-shift-capture-target="editor"]').boundingBox();
+  if (!canvas) throw new Error("the editor canvas is not visible");
+
+  const panBefore = await page.evaluate(() => window.shift.editor.camera.panCell.peek());
+  const report = await measure(page, async () => {
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    const end = Date.now() + seconds * 1000;
+    let step = 0;
+    while (Date.now() < end) {
+      await page.mouse.wheel(step++ % 40 < 20 ? 6 : -6, 0);
+      await page.waitForTimeout(16);
+    }
+  });
+  const zoom = await page.evaluate(() => window.shift.editor.zoom);
+  console.log(`zoom ${zoom.toFixed(4)}, pan started at ${JSON.stringify(panBefore)}`);
+  return report;
+}
+
 /** Runs `drive` while recording frames, React commits, and a CPU profile. */
 async function measure(page, drive) {
   const cdp = await page.context().newCDPSession(page);
@@ -200,9 +395,13 @@ async function measure(page, drive) {
     };
     requestAnimationFrame(tick);
   });
+  // Slows the renderer's main thread by this factor while measuring, to stand in for a slower machine.
+  const throttle = Number(options.throttle);
+  if (throttle > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle });
   await cdp.send("Profiler.start");
   const result = await drive();
   const { profile } = await cdp.send("Profiler.stop");
+  if (throttle > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   const { frames, renders } = await page.evaluate(() => {
     const frames = window.__shiftFrames.slice(5);
     window.__shiftFrames = null;
@@ -423,7 +622,8 @@ function readdirSafe(directory) {
 function usage(problem) {
   console.error(`${problem}
 
-Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open] [--axis Weight]
-                            [--seconds 8] [--cpu out.cpuprofile] [--app <executable>] [--keep-open]`);
+Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|frames|frames-pan|frames-switch] [--axis Weight]
+                            [--seconds 8] [--runs 1000] [--throttle 1] [--cpu out.cpuprofile] [--setup-cpu setup.cpuprofile]
+                            [--app <executable>] [--keep-open]`);
   process.exit(1);
 }

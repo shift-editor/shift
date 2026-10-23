@@ -1,5 +1,6 @@
 export { TextLayout } from "./TextLayout";
-export type { PlacedGlyph, TextLayoutParams } from "./TextLayout";
+export type { PlacedGlyph, TextLayoutParams, ParagraphSegments } from "./TextLayout";
+export type { BreakSegment } from "./lineBreaks";
 export { Caret } from "./Caret";
 export { Positioner, type MarkPlacement } from "./Positioner";
 export { literalRun, splitParagraphs } from "./paragraphs";

@@ -53,6 +53,19 @@ export interface EditorRenderTheme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
+  /**
+   * A box (auto layout frame or text box): invisible itself, outlined under
+   * the pointer and in accent when selected; a frame on a page shows its name
+   * above it.
+   */
+  frame: {
+    label: string;
+    labelFont: string;
+    hoverStroke: string;
+    widthPx: number;
+    selectedStroke: string;
+    selectedWidthPx: number;
+  };
   glyph: { fill: string; editableFill: string; stroke: string; widthPx: number };
   component: {
     fill: string;
@@ -126,6 +139,14 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     fill: "rgba(59, 130, 246, 0.1)",
     stroke: "rgba(59, 130, 246, 0.5)",
     widthPx: 0.5,
+  },
+  frame: {
+    label: "rgba(0, 0, 0, 0.5)",
+    labelFont: "500 11px Inter, system-ui, sans-serif",
+    hoverStroke: "#0C92F4",
+    widthPx: 1,
+    selectedStroke: "#0C92F4",
+    selectedWidthPx: 1.5,
   },
   glyph: {
     fill: "#000000",
@@ -271,7 +292,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     glyphBbox: "#FF00FB",
   },
   textRun: {
-    cursorColor: "#0C92F4",
+    cursorColor: "#000000",
     cursorWidthPx: 1.25,
     selectionFill: "rgba(12, 146, 244, 0.2)",
     hoverOutline: "#0C92F4",
@@ -335,6 +356,7 @@ export function readEditorRenderTheme(
   theme.guides.color = readColor("--editor-guides-color", theme.guides.color);
   theme.selection.fill = readColor("--editor-selection-fill", theme.selection.fill);
   theme.selection.stroke = readColor("--editor-selection-stroke", theme.selection.stroke);
+  theme.frame.label = readColor("--editor-frame-label", theme.frame.label);
   theme.glyph.fill = readColor("--editor-glyph-fill", theme.glyph.fill);
   theme.glyph.editableFill = readColor("--editor-glyph-editable-fill", theme.glyph.editableFill);
   theme.glyph.stroke = readColor("--editor-glyph-stroke", theme.glyph.stroke);

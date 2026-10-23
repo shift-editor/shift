@@ -126,7 +126,7 @@ export type SpacingHalfScope = "gap" | "glyph";
  * overlay measured from the layout redraws when it changes.
  */
 export function trackRunLayouts(editor: Editor): void {
-  for (const run of editor.scene.nodesOfKind("textRun")) track(editor.text.layoutCell(run.runId));
+  for (const run of editor.scene.nodesOfKind("textRun")) track(editor.text.boxLayoutCell(run));
 }
 
 /** The spacing gaps of the editor's text runs, measured on demand. */

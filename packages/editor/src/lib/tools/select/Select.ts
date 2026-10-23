@@ -15,7 +15,10 @@ import {
   SelectHover,
   SegmentDoubleClick,
   NodeDoubleClick,
+  FitToContent,
 } from "./behaviors";
+import { isNodeId, type SelectableId } from "@shift/types";
+import { track } from "../../signals/index";
 import type { CursorType } from "../../../types/editor";
 import { objectIsKindOf, type ShiftObject } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
@@ -37,6 +40,7 @@ export class Select extends BaseTool<SelectState, Select> {
   readonly behaviors: SelectBehavior[] = [
     new ToggleSmooth(),
     new SegmentDoubleClick(),
+    new FitToContent(),
     new NodeDoubleClick(),
     new UpgradeSegment(),
     new Selection(),
@@ -58,11 +62,26 @@ export class Select extends BaseTool<SelectState, Select> {
     return drop.targetWithin(this.editor.hitRadius) !== null;
   }
 
+  /** Whether Alt is held with text boxes selected, so dragging moves copies. */
+  #copiesTextBoxes(): boolean {
+    const { modifiersCell } = this.editor.input;
+    const selection = this.editor.selection.stateCell;
+    track(modifiersCell);
+    track(selection);
+    if (!modifiersCell.peek().altKey) return false;
+    return selection.peek().ids.some((id) => this.#isTextBox(id));
+  }
+
+  #isTextBox(id: SelectableId): boolean {
+    return isNodeId(id) && this.editor.scene.nodeOfKind(id, "textRun") !== null;
+  }
+
   override getCursor(state: SelectState): CursorType {
     if (this.editor.sessionMode === "preview") return { type: "default" };
 
     switch (state.type) {
       case "translating":
+        if (this.#copiesTextBoxes()) return { type: "copy" };
         return this.#dropsOnOpenEnd() ? { type: "end" } : { type: "move" };
       case "resizing":
         return edgeToCursor(state.resize.edge, state.resize.flipX, state.resize.flipY);
@@ -105,6 +124,14 @@ export class Select extends BaseTool<SelectState, Select> {
     if (coords) {
       const cursor = this.boundingBox.cursor(coords);
       if (cursor) return cursor;
+    }
+
+    // Alt over a text box, or inside a selected one: a drag would move a copy.
+    if (state.type === "ready" && coords && modifiers.altKey) {
+      const overBox = hover !== null && this.#isTextBox(hover);
+      const insideSelected =
+        this.#copiesTextBoxes() && this.boundingBox.containsTranslationPoint(coords);
+      if (overBox || insideSelected) return { type: "copy" };
     }
 
     if (coords && this.boundingBox.containsTranslationPoint(coords)) return { type: "move" };
@@ -188,9 +215,10 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override drawOverlay(canvas: Canvas): void {
-    // TODO: perhaps there should be a way for tools to turn on/off bounding box
-    // rendering without it having to be a commit in the Select Tool
-    if (this.editor.sessionMode !== "preview" && !this.isEditing(this.state)) {
+    // The box shows at rest and while resizing (its handles are being dragged);
+    // it hides while moving, turning, or bending, so the shape shows unobstructed.
+    const resizing = this.state.type === "resizing";
+    if (this.editor.sessionMode !== "preview" && (resizing || !this.isEditing(this.state))) {
       this.boundingBox.draw(canvas);
     }
 
@@ -202,8 +230,13 @@ export class Select extends BaseTool<SelectState, Select> {
 
     const ids = this.editor.selection.ids;
     const selection = this.editor.positionSelection(ids);
+    // Boxes moving as a whole snap in scene units: draw their guides as they are.
+    if (!selection) {
+      this.#snapLines.draw(canvas, state.translate.guides);
+      return;
+    }
     const node = this.editor.selectionNode(ids);
-    if (!selection || !node) return;
+    if (!node) return;
 
     const guides = state.translate.guides;
     const crossings = this.editor.snapping.crossings(selection.layer, [
@@ -222,6 +255,7 @@ function shiftClickAddable(object: ShiftObject | null): boolean {
     case "anchor":
     case "segment":
     case "component":
+    case "node":
       return true;
     default:
       return false;

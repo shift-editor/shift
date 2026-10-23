@@ -244,6 +244,7 @@ export class Editor {
     readonly font: Font;
     // (undocumented)
     get fps(): Signal<number>;
+    readonly frames: Frames;
     // (undocumented)
     fromScreen(screen: ScreenPoint): Coordinates;
     // (undocumented)
@@ -286,7 +287,10 @@ export class Editor {
     // (undocumented)
     nodeDefinition(kind: "page"): PageNodeDefinition;
     // (undocumented)
+    nodeDefinition(kind: "frame"): FrameNodeDefinition;
+    // (undocumented)
     nodeDefinition(kind: NodeKind): NodeDefinition;
+    nodeExtent(nodeId: NodeId): SceneBounds | null;
     notifyPreviewMutationAttempt(): void;
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];

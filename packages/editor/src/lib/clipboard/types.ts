@@ -1,5 +1,6 @@
 import type { PointType } from "@shift/types";
 import type { Rect2D } from "@shift/geo";
+import type { Sizing } from "../../types/frame";
 
 export type { PasteResult } from "../../types/bridge";
 
@@ -28,6 +29,27 @@ export type ContourContent = {
  */
 export type ShiftContent = {
   contours: ContourContent[];
+  /** Text boxes, absent when none were copied. */
+  textBoxes?: TextBoxContent[];
+};
+
+/** One piece of a copied text box's text; glyphs travel by name, so they resolve in any font. */
+export type TextBoxItemContent =
+  | { kind: "character"; codepoint: number }
+  | { kind: "glyph"; name: string }
+  | { kind: "linebreak" };
+
+/** A text box's portable text, placement, and size, without its node or run ids. */
+export type TextBoxContent = {
+  items: TextBoxItemContent[];
+  /** Top-left corner on the page, Y-down, in scene units. */
+  position: { x: number; y: number };
+  size: number;
+  width: Sizing;
+  height: Sizing;
+  rotation: number;
+  /** Absent in content from before vertical alignment; read as `top`. */
+  verticalAlign?: "top" | "middle" | "bottom";
 };
 
 /**

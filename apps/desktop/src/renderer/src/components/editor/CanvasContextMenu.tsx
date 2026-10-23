@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
+import type { NodeId } from "@shift/types";
 import type { CommandId } from "@shared/commands";
 import {
   ContextMenu,
@@ -20,6 +21,8 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
   const editor = useEditor();
   useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const anchored = editor.selectedComponentsAnchored();
+  // The run or frame under the pointer when the menu opened, for "Wrap in Frame".
+  const [wrapTarget, setWrapTarget] = useState<NodeId | null>(null);
   const runCommand = useCallback(async (commandId: CommandId) => {
     try {
       await getShiftHost().commands.run(commandId);
@@ -45,6 +48,9 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
           editor.flushMousePosition();
 
           const target = editor.getPointerTarget(editor.fromScreen(screenPos).scene);
+          const node = target.kind === "text" || target.kind === "node" ? target.node : null;
+          const wrappable = node?.kind === "textRun" || node?.kind === "frame";
+          setWrapTarget(wrappable ? node.id : null);
           switch (target.kind) {
             case "point":
             case "anchor":
@@ -110,6 +116,22 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
             >
               Make First Point
             </ContextMenuItem>
+            {wrapTarget !== null && (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                  onClick={() => {
+                    const frame = editor.frames.wrap([wrapTarget], "column");
+                    if (!frame) return;
+                    editor.history.capture("Select frame", () =>
+                      editor.selection.select([frame.id]),
+                    );
+                  }}
+                >
+                  Wrap in Frame
+                </ContextMenuItem>
+              </>
+            )}
           </ContextMenuPopup>
         </ContextMenuPositioner>
       </ContextMenuPortal>

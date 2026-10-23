@@ -565,7 +565,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-debug-hit-radii": palette.base0D,
     "--editor-debug-segment-bounds": palette.base09,
     "--editor-debug-glyph-bbox": palette.base0F,
-    "--editor-text-cursor-color": palette.base0D,
+    "--editor-text-cursor-color": glyphForeground,
     "--editor-text-selection-fill": withAlpha(palette.base0D, 0.22),
     "--editor-text-hover-outline": palette.base0D,
     // Spacing keeps one pink identity and amber for negatives; the faint half needs more

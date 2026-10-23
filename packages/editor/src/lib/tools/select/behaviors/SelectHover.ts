@@ -27,6 +27,11 @@ export class SelectHover implements SelectBehavior {
       }
 
       case "node": {
+        // A box (frame or text box) shows its outline under the pointer.
+        if (ctx.editor.nodeDefinition(target.node.kind).selectable) {
+          ctx.editor.hover.set(target.node.id);
+          return true;
+        }
         ctx.editor.hover.clear();
         return false;
       }

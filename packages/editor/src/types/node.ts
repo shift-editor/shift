@@ -1,5 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
+import type { FrameLayout, Sizing } from "./frame";
 
 /**
  * Describes a placed object in the editor scene.
@@ -60,11 +61,31 @@ export interface GlyphNode extends Node {
 }
 
 /**
- * Places a text run in the editor scene.
+ * Which glyph a glyph node shows, without the rest of its record.
+ *
+ * @remarks
+ * For readers that follow "the glyph on the page" and must not rerun when that
+ * node, or any other node, moves.
+ */
+export interface SceneGlyph {
+  /** The glyph node. */
+  readonly nodeId: NodeId;
+
+  /** The glyph it shows. */
+  readonly glyphId: GlyphId;
+}
+
+/**
+ * Places a text run in the editor scene: a text box.
  *
  * @remarks
  * A text run node is the movable proofing container for text-domain layout. It
- * points at document-scoped run content and carries placement and size.
+ * points at document-scoped run content and carries placement and size. Its
+ * `position` is the top-left corner of its box; the first baseline sits the
+ * ascender below it. Its size follows {@link TextRunNode.width} and
+ * {@link TextRunNode.height}: hugging both is auto width, a fixed width with
+ * a hugging height is auto height, and fixing both is a fixed size, whose
+ * text can run past the box's bottom.
  */
 export interface TextRunNode extends Node {
   readonly kind: "textRun";
@@ -72,9 +93,38 @@ export interface TextRunNode extends Node {
   /** Document-scoped text content placed by this node. */
   readonly runId: RunId;
 
-  /** Proof rendering size for this placement. */
+  /** Proof rendering size for this placement: scene units per em. */
   readonly size: number;
+
+  /**
+   * The box's width: `hug` keeps each paragraph on one line, `fixed` wraps
+   * lines at `size` scene units, and `fill` takes the room left in the parent
+   * frame and wraps there (outside a frame it lays out as `hug`).
+   */
+  readonly width: Sizing;
+
+  /**
+   * The box's height: `hug` fits its lines, `fixed` keeps `size` scene units
+   * whatever the text needs. (`fill` lays out as `hug`.)
+   */
+  readonly height: Sizing;
+
+  /**
+   * How far the box turns about its top-left corner, in radians; positive
+   * turns clockwise on the Y-down canvas. Its text wraps along the box.
+   */
+  readonly rotation: number;
+
+  /**
+   * Where the lines sit in a box taller than its text (a fixed height): at
+   * the top, the middle, or the bottom. Text past a fixed height runs out
+   * the other side.
+   */
+  readonly verticalAlign: TextVerticalAlign;
 }
+
+/** Where a text box's lines sit in a box taller than its text. */
+export type TextVerticalAlign = "top" | "middle" | "bottom";
 
 /**
  * A top-level canvas.
@@ -90,6 +140,26 @@ export interface PageNode extends Node {
 
   /** Shown in the pages list. */
   readonly name: string;
+}
+
+/**
+ * An auto layout frame: stacks its children in a row or column.
+ *
+ * @remarks
+ * A frame sits on a page or inside another frame, and holds text runs and
+ * frames. The page layout (`Frames.laidOut`) sizes it and places its
+ * children, so a child's own `position` is ignored; a frame on a page keeps
+ * its `position`. Frames neither clip nor scale their content.
+ */
+export interface FrameNode extends Node {
+  readonly kind: "frame";
+
+  /** Shown in the inspector. */
+  readonly name: string;
+
+  readonly layout: FrameLayout;
+  readonly width: Sizing;
+  readonly height: Sizing;
 }
 
 /**
@@ -116,6 +186,7 @@ export interface SceneNodeKinds {
   glyph: GlyphNode;
   textRun: TextRunNode;
   page: PageNode;
+  frame: FrameNode;
 }
 
 /** Identifies a registered scene node kind. */
