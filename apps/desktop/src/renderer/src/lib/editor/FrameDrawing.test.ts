@@ -1,8 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Mat } from "@shift/geo";
-import type { FrameNode } from "@shift/editor/types";
-import { scenePoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing/TestEditor";
 import { attachStubSurfaces, createStubCanvas } from "@/testing/stubCanvas";
 
@@ -23,12 +21,18 @@ interface PaintedRect {
   readonly widthPx: number;
 }
 
+/** What the background layer painted in one frame: rectangles and text labels. */
+interface PaintedFrame {
+  readonly rects: PaintedRect[];
+  readonly labels: string[];
+}
+
 /**
- * Records the rectangles the background layer paints in its latest frame,
- * mapped through the canvas transform, however the layer draws them.
+ * Records what the background layer paints in its latest frame: rectangles,
+ * mapped through the canvas transform however the layer draws them, and text.
  */
-function recordBackground(editor: TestEditor): () => readonly PaintedRect[] {
-  const frames: PaintedRect[][] = [];
+function recordBackground(editor: TestEditor): () => PaintedFrame {
+  const frames: PaintedFrame[] = [];
   const ctx = createStubCanvas().ctx;
   const stack: Mat[] = [];
   let matrix = Mat.Identity();
@@ -46,10 +50,13 @@ function recordBackground(editor: TestEditor): () => readonly PaintedRect[] {
   const devicePx = (width: number) =>
     width * Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c));
   const paint = (kind: PaintedRect["kind"], rect: ScreenRect) =>
-    frames.at(-1)?.push({ kind, rect, widthPx: kind === "stroke" ? devicePx(ctx.lineWidth) : 0 });
+    frames
+      .at(-1)
+      ?.rects.push({ kind, rect, widthPx: kind === "stroke" ? devicePx(ctx.lineWidth) : 0 });
 
   // The renderer clears a layer at the start of each frame it draws.
-  ctx.clearRect = () => frames.push([]);
+  ctx.clearRect = () => frames.push({ rects: [], labels: [] });
+  ctx.fillText = (text) => frames.at(-1)?.labels.push(text);
   ctx.save = () => stack.push(matrix.clone());
   ctx.restore = () => {
     matrix = stack.pop() ?? matrix;
@@ -71,66 +78,20 @@ function recordBackground(editor: TestEditor): () => readonly PaintedRect[] {
   ctx.fillRect = (x, y, width, height) => paint("fill", toDevice(x, y, width, height));
   ctx.strokeRect = (x, y, width, height) => paint("stroke", toDevice(x, y, width, height));
   attachStubSurfaces(editor, { background: ctx });
-  return () => frames.at(-1) ?? [];
+  return () => frames.at(-1) ?? { rects: [], labels: [] };
 }
 
-/** A frame's laid-out box on screen, rounded so float noise between paths compares equal. */
-function screenBox(editor: TestEditor, frame: FrameNode): ScreenRect {
-  const bounds = editor.nodeBounds(editor.scene.node(frame.id)!)!;
-  const a = editor.sceneToScreen(scenePoint(bounds.min.x, bounds.min.y));
-  const b = editor.sceneToScreen(scenePoint(bounds.max.x, bounds.max.y));
-  return rounded({
-    x: Math.min(a.x, b.x),
-    y: Math.min(a.y, b.y),
-    width: Math.abs(b.x - a.x),
-    height: Math.abs(b.y - a.y),
-  });
-}
-
-function rounded(rect: ScreenRect): ScreenRect {
-  const round = (value: number) => Math.round(value * 1000) / 1000;
-  return {
-    x: round(rect.x),
-    y: round(rect.y),
-    width: round(rect.width),
-    height: round(rect.height),
-  };
-}
-
-describe("frames paint their boxes behind their children", () => {
-  it("fills then outlines each frame's laid-out box in scene order, the outline one width at any zoom", async () => {
+describe("frames draw no box of their own", () => {
+  it("paints nothing behind their children, and names only the frames on the page", async () => {
     const editor = await new TestEditor().openSession(FONT, "u");
     editor.exitNodes();
-    const outer = editor.frames.create(null, { position: { x: 3000, y: 0 } })!;
-    const inner = editor.frames.create(outer.id, {})!;
-    editor.frames.addText(inner.id, "uu", { size: 72 });
+    const outer = editor.frames.create(null, { position: { x: 3000, y: 0 }, name: "Outer" })!;
+    editor.frames.create(outer.id, { name: "Inner" });
     await editor.settle();
     const latest = recordBackground(editor);
-    const painted = () =>
-      latest().map(({ kind, rect, widthPx }) => ({ kind, rect: rounded(rect), widthPx }));
-    const expected = () =>
-      [outer, inner].flatMap((frame) => {
-        const rect = screenBox(editor, frame);
-        return [
-          { kind: "fill", rect },
-          { kind: "stroke", rect },
-        ];
-      });
 
     editor.setZoom(0.5);
-    await expect
-      .poll(() => painted().map(({ kind, rect }) => ({ kind, rect })))
-      .toEqual(expected());
-    const width = painted()[1]!.widthPx;
-    editor.setZoom(0.25);
-    await expect
-      .poll(() => painted().map(({ kind, rect }) => ({ kind, rect })))
-      .toEqual(expected());
-
-    const strokeWidths = painted()
-      .filter(({ kind }) => kind === "stroke")
-      .map(({ widthPx }) => widthPx);
-    expect(width).toBeGreaterThan(0);
-    strokeWidths.forEach((stroke) => expect(stroke).toBeCloseTo(width));
+    await expect.poll(() => latest().labels).toEqual(["Outer"]);
+    expect(latest().rects).toEqual([]);
   });
 });

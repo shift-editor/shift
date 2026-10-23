@@ -53,10 +53,15 @@ export interface EditorRenderTheme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
-  /** An auto layout frame: a quiet box behind its children, outlined in accent when selected. */
+  /**
+   * A box (auto layout frame or text box): invisible itself, outlined under
+   * the pointer and in accent when selected; a frame on a page shows its name
+   * above it.
+   */
   frame: {
-    fill: string;
-    stroke: string;
+    label: string;
+    labelFont: string;
+    hoverStroke: string;
     widthPx: number;
     selectedStroke: string;
     selectedWidthPx: number;
@@ -136,8 +141,9 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     widthPx: 0.5,
   },
   frame: {
-    fill: "rgba(0, 0, 0, 0.025)",
-    stroke: "rgba(0, 0, 0, 0.18)",
+    label: "rgba(0, 0, 0, 0.5)",
+    labelFont: "500 11px Inter, system-ui, sans-serif",
+    hoverStroke: "#0C92F4",
     widthPx: 1,
     selectedStroke: "#0C92F4",
     selectedWidthPx: 1.5,
@@ -350,8 +356,7 @@ export function readEditorRenderTheme(
   theme.guides.color = readColor("--editor-guides-color", theme.guides.color);
   theme.selection.fill = readColor("--editor-selection-fill", theme.selection.fill);
   theme.selection.stroke = readColor("--editor-selection-stroke", theme.selection.stroke);
-  theme.frame.fill = readColor("--editor-frame-fill", theme.frame.fill);
-  theme.frame.stroke = readColor("--editor-frame-stroke", theme.frame.stroke);
+  theme.frame.label = readColor("--editor-frame-label", theme.frame.label);
   theme.glyph.fill = readColor("--editor-glyph-fill", theme.glyph.fill);
   theme.glyph.editableFill = readColor("--editor-glyph-editable-fill", theme.glyph.editableFill);
   theme.glyph.stroke = readColor("--editor-glyph-stroke", theme.glyph.stroke);

@@ -3,12 +3,11 @@ import type { SelectableId } from "@shift/types";
 import { NodeDefinition } from "./NodeDefinition";
 import { FrameTransform } from "../frames/FrameTransform";
 import { localBounds } from "../editor/spaces";
-import type { LocalBounds, LocalPoint, SpaceTransform } from "../../types/coordinates";
+import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import type { FrameNode, ShiftNode } from "../../types/node";
 import type { LaidOutNode } from "../../types/frame";
 import type { PointerTarget } from "../../types/target";
 import type { RenderContext, RenderPass } from "../../types/rendering";
-import type { RectPaint } from "../editor/rendering/Canvas";
 import type { TransformTarget } from "../../types/transformTarget";
 
 /**
@@ -21,6 +20,9 @@ import type { TransformTarget } from "../../types/transformTarget";
  * anywhere in its box where no child is hit, and the transform box moves and
  * resizes it (see {@link FrameTransform}).
  */
+/** Where a frame's name sits from its top-left corner, in screen pixels. */
+const LABEL_OFFSET = { x: 0, y: -4 };
+
 export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
   readonly kind: FrameNode["kind"] = "frame";
   override readonly selectable = true;
@@ -62,13 +64,16 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
     return new FrameTransform(this.editor, node, Bounds.toRect(bounds));
   }
 
-  /** A frame paints its box behind its children, and its selection outline above them. */
+  /**
+   * A frame draws no box of its own: a frame on a page shows its name above
+   * it, and any frame its outline while selected or under the pointer.
+   */
   override drawsIn(node: FrameNode, pass: RenderPass): boolean {
     switch (pass) {
       case "background":
-        return true;
+        return this.editor.scene.parent(node.id)?.kind === "page";
       case "controls":
-        return this.editor.selection.has(node.id);
+        return this.#outlined(node);
       case "content":
       case "overlay":
         return false;
@@ -80,45 +85,34 @@ export class FrameNodeDefinition extends NodeDefinition<FrameNode> {
     if (!bounds) return;
 
     const { frame } = ctx.canvas.theme;
-    const width = Bounds.width(bounds);
-    const height = Bounds.height(bounds);
     switch (pass) {
-      case "background":
-        ctx.canvas.fillRect(0, 0, width, height, frame.fill);
-        ctx.canvas.strokeRect(0, 0, width, height, frame.stroke, frame.widthPx);
+      case "background": {
+        const selected = this.editor.selection.has(node.id);
+        const color = selected ? frame.selectedStroke : frame.label;
+        ctx.canvas.label({ x: 0, y: 0 }, node.name, color, frame.labelFont, LABEL_OFFSET);
         return;
-      case "controls":
-        if (!this.editor.selection.has(node.id)) return;
-        ctx.canvas.strokeRect(0, 0, width, height, frame.selectedStroke, frame.selectedWidthPx);
+      }
+      case "controls": {
+        if (!this.#outlined(node)) return;
+        const selected = this.editor.selection.has(node.id);
+        ctx.canvas.strokeRect(
+          0,
+          0,
+          Bounds.width(bounds),
+          Bounds.height(bounds),
+          selected ? frame.selectedStroke : frame.hoverStroke,
+          selected ? frame.selectedWidthPx : frame.widthPx,
+        );
         return;
+      }
       case "content":
       case "overlay":
         return;
     }
   }
 
-  /** Paints the frame's box as {@link draw} does, straight in scene units, unless it is rotated or skewed. */
-  override paintBackground(
-    node: FrameNode,
-    transform: SpaceTransform<"local", "scene">,
-    ctx: RenderContext,
-    paint: RectPaint,
-  ): boolean {
-    if (transform.b !== 0 || transform.c !== 0) return false;
-
-    const bounds = this.bounds(node);
-    if (!bounds) return true;
-
-    const { frame } = ctx.canvas.theme;
-    const { a, d, e, f } = transform;
-    const width = a * Bounds.width(bounds);
-    const height = d * Bounds.height(bounds);
-    // A flipped axis gives a negative size; start from the box's lesser corner instead.
-    const x = e + Math.min(width, 0);
-    const y = f + Math.min(height, 0);
-    paint.fill(frame.fill, x, y, Math.abs(width), Math.abs(height));
-    paint.stroke(frame.stroke, frame.widthPx, x, y, Math.abs(width), Math.abs(height));
-    return true;
+  #outlined(node: FrameNode): boolean {
+    return this.editor.selection.has(node.id) || this.editor.hover.has(node.id);
   }
 
   #laidOut(node: ShiftNode): LaidOutNode | null {

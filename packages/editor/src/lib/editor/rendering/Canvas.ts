@@ -183,6 +183,22 @@ export class Canvas {
     this.stroke(stroke, widthPx, dashPx);
   }
 
+  /**
+   * Draws a line of text in screen pixels, left-aligned, its bottom at `at`
+   * moved by `offsetPx`, so it keeps its size at any zoom.
+   */
+  label(at: Point2D, text: string, color: string, font: string, offsetPx: Point2D): void {
+    const { x, y } = Mat.applyToPoint(this.#transform, at);
+    this.withTransform(this.#inverted(), () => {
+      this.ctx.save();
+      this.ctx.font = font;
+      this.ctx.fillStyle = color;
+      this.ctx.textBaseline = "bottom";
+      this.ctx.fillText(text, x + offsetPx.x, y + offsetPx.y);
+      this.ctx.restore();
+    });
+  }
+
   fillRect(x: number, y: number, w: number, h: number, fill: string): void {
     this.ctx.save();
     this.ctx.fillStyle = fill;

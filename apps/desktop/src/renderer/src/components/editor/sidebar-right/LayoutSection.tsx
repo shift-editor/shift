@@ -8,34 +8,14 @@ import type {
   FrameMode,
   FrameNode,
   LayoutBox,
-  ShiftNode,
   Sizing,
 } from "@shift/editor/types";
 import type { NodeId } from "@shift/types";
-import {
-  ArrowDown,
-  ArrowRight,
-  ArrowUp,
-  Select,
-  SelectIcon,
-  SelectItem,
-  SelectItemIndicator,
-  SelectItemText,
-  SelectList,
-  SelectPopup,
-  SelectPortal,
-  SelectPositioner,
-  SelectTrigger,
-  SelectValue,
-  Toggle,
-  ToggleGroup,
-  Tooltip,
-} from "@shift/ui";
-import { IconButton } from "./IconButton";
+import { ArrowDown, ArrowRight, Toggle, ToggleGroup, Tooltip } from "@shift/ui";
+import { LabelledSelect } from "./LabelledSelect";
 import { SidebarNumberField } from "./SidebarNumberField";
-import { SidebarSection, SidebarSubsection } from "./SidebarSection";
+import { SidebarSection } from "./SidebarSection";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import type { FrameChildRow } from "@/types/frameLayout";
 
 const ALIGN_LABELS: Record<FrameAlign, string> = {
   start: "Start",
@@ -56,16 +36,14 @@ const SIZING_LABELS: Record<Sizing["kind"], string> = {
   fill: "Fill",
 };
 
-/** The selected frame's auto layout: direction, spacing, alignment, sizing, and child order. */
+/** The selected frame's auto layout: direction, spacing, alignment, and sizing; order is the Layers panel's. */
 export const LayoutSection = ({ frameId }: { readonly frameId: NodeId }) => {
   const editor = useEditor();
   // Dragging a frame writes its position on every pointer move; none of these follow that.
   const settingsCell = useMemo(() => frameSettingsCell(editor, frameId), [editor, frameId]);
   const sizeCell = useMemo(() => laidOutSizeCell(editor, frameId), [editor, frameId]);
-  const childrenCell = useMemo(() => childRowsCell(editor, frameId), [editor, frameId]);
   const frame = useSignalState(settingsCell);
   const box = useSignalState(sizeCell);
-  const children = useSignalState(childrenCell);
   if (!frame) return null;
 
   const setLayout = (patch: Partial<FrameNode["layout"]>) =>
@@ -124,30 +102,6 @@ export const LayoutSection = ({ frameId }: { readonly frameId: NodeId }) => {
 
       <SizingRow frame={frame} axis="width" label="W" laidOut={box?.width ?? 0} />
       <SizingRow frame={frame} axis="height" label="H" laidOut={box?.height ?? 0} />
-
-      {children.length > 0 ? (
-        <SidebarSubsection title="Children">
-          <ul className="flex flex-col gap-1">
-            {children.map((child, index) => (
-              <li key={child.id} className="flex h-6 items-center gap-1">
-                <span className="min-w-0 flex-1 truncate text-ui text-primary">{child.label}</span>
-                <IconButton
-                  ariaLabel="Move up"
-                  icon={ArrowUp}
-                  disabled={index === 0}
-                  onClick={() => editor.frames.moveChild(child.id, index - 1)}
-                />
-                <IconButton
-                  ariaLabel="Move down"
-                  icon={ArrowDown}
-                  disabled={index === children.length - 1}
-                  onClick={() => editor.frames.moveChild(child.id, index + 1)}
-                />
-              </li>
-            ))}
-          </ul>
-        </SidebarSubsection>
-      ) : null}
     </SidebarSection>
   );
 };
@@ -217,53 +171,6 @@ const SizingRow = ({
   );
 };
 
-function LabelledSelect<Value extends string>({
-  label,
-  value,
-  labels,
-  onChange,
-  hideLabel = false,
-}: {
-  readonly label: string;
-  readonly value: Value;
-  readonly labels: Record<Value, string>;
-  readonly onChange: (value: Value) => void;
-  readonly hideLabel?: boolean;
-}) {
-  const options = Object.keys(labels) as Value[];
-  return (
-    <label className="flex w-full min-w-0 flex-col gap-1">
-      {hideLabel ? null : <span className="text-ui text-secondary">{label}</span>}
-      <Select
-        value={value}
-        items={labels}
-        onValueChange={(next) => {
-          if (next !== null) onChange(next as Value);
-        }}
-      >
-        <SelectTrigger aria-label={label} className="h-6 w-full">
-          <SelectValue />
-          <SelectIcon />
-        </SelectTrigger>
-        <SelectPortal>
-          <SelectPositioner sideOffset={4}>
-            <SelectPopup>
-              <SelectList>
-                {options.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    <SelectItemIndicator />
-                    <SelectItemText>{labels[option]}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectList>
-            </SelectPopup>
-          </SelectPositioner>
-        </SelectPortal>
-      </Select>
-    </label>
-  );
-}
-
 function isFrameMode(value: string): value is FrameMode {
   return value === "row" || value === "column";
 }
@@ -293,45 +200,10 @@ function laidOutSizeCell(editor: Editor, frameId: NodeId): Signal<LayoutBox | nu
   });
 }
 
-/** The frame's children in order, as labelled rows; quiet while a child only moves. */
-function childRowsCell(editor: Editor, frameId: NodeId): Signal<readonly FrameChildRow[]> {
-  return computed(
-    () => {
-      const rows: FrameChildRow[] = [];
-      for (const id of editor.scene.structureCell.value.children(frameId)) {
-        const child = editor.scene.record(id);
-        if (child) rows.push({ id, label: childLabel(editor, child) });
-      }
-      return rows;
-    },
-    { name: "LayoutSection.children", equals: sameChildRows },
-  );
-}
-
 /** Whether two frame records differ only in what the section does not show. */
 function sameFrameSettings(a: FrameNode | null, b: FrameNode | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
 
   return a.id === b.id && a.layout === b.layout && a.width === b.width && a.height === b.height;
-}
-
-function sameChildRows(a: readonly FrameChildRow[], b: readonly FrameChildRow[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((row, index) => row.id === b[index]?.id && row.label === b[index]?.label)
-  );
-}
-
-/** A child's row label: a frame's name, or a run's size and length. */
-function childLabel(editor: Editor, child: ShiftNode): string {
-  switch (child.kind) {
-    case "frame":
-      return child.name;
-    case "textRun":
-      return `Text ${child.size} · ${editor.text.items(child).length} glyphs`;
-    case "glyph":
-    case "page":
-      return child.kind;
-  }
 }
