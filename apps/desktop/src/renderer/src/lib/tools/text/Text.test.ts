@@ -7,6 +7,7 @@ import { Mat } from "@shift/geo";
 import { TestEditor } from "@/testing/TestEditor";
 import { Point } from "@shift/glyph-state";
 import { characterTextItem } from "@shift/editor/text";
+import { scenePoint } from "@shift/editor/spaces";
 import type { Select } from "@shift/editor/tools";
 
 describe("Text tool edits the page run", () => {
@@ -28,12 +29,13 @@ describe("Text tool edits the page run", () => {
     expect(editor.toolIf("select")?.state.type).toBe("ready");
   });
 
-  it("clicking empty canvas leaves the run and caret alone", async () => {
-    const before = editor.textEditing.state;
+  it("clicking empty canvas places a new box and leaves the run's text alone", async () => {
+    const page = run();
     await editor.clickLocal(5000, 0);
-    expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
-    expect(editor.text.run(run().runId)?.items).toHaveLength(1);
-    expect(editor.textEditing.state).toEqual(before);
+    const boxes = editor.scene.nodesOfKind("textRun");
+    expect(boxes).toHaveLength(2);
+    expect(editor.text.run(page.runId)?.items).toHaveLength(1);
+    expect(editor.textEditing.state?.nodeId).toBe(boxes[1]!.id);
   });
 
   it("clicking a glyph in the run places the caret", async () => {
@@ -50,6 +52,44 @@ describe("Text tool edits the page run", () => {
       end: { x: advance * 1.8, y: 0 },
     });
     expect(editor.textEditing.selectedItems).toHaveLength(2);
+  });
+});
+
+describe("Text tool on a page with no run", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    const page = editor.pages.create();
+    editor.pages.activate(page.id);
+    editor.selectTool("text");
+  });
+
+  const clickScene = (x: number, y: number) => {
+    const screen = editor.sceneToScreen(scenePoint(x, y));
+    return editor.click(screen.x, screen.y);
+  };
+
+  it("places a run at the click and types into it", async () => {
+    expect(editor.textRun).toBeNull();
+
+    await clickScene(300, -200);
+    editor.textEditing.insert([characterTextItem(65)]);
+
+    const run = editor.textRun!;
+    expect(run.position).toEqual({ x: 300, y: -200 });
+    expect(editor.pages.pageOf(run.id)).toBe(editor.pages.active);
+    expect(editor.textEditing.state?.nodeId).toBe(run.id);
+    expect(editor.text.run(run.runId)?.items).toHaveLength(1);
+  });
+
+  it("undoes the placement as one step", async () => {
+    await clickScene(300, -200);
+    expect(editor.textRun).not.toBeNull();
+
+    await editor.undo();
+    expect(editor.textRun).toBeNull();
   });
 });
 

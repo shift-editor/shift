@@ -25,7 +25,11 @@ export function openGlyphInRun(editor: Editor, glyphId: GlyphId): GlyphNode | nu
       parentId: page.id,
       runId: editor.text.createRun([]).id,
       size: editor.font.metricsCell.peek().unitsPerEm,
-      position: { x: 0, y: 0 },
+      width: { kind: "hug" },
+      height: { kind: "hug" },
+      rotation: 0,
+      // The box's top sits the ascender above the first baseline, which stays at the scene origin.
+      position: { x: 0, y: -editor.font.metricsForSource(editor.font.defaultSource.id).ascender },
     });
 
   const previous = runs.childGlyph(run);

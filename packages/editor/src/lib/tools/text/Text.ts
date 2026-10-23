@@ -1,6 +1,7 @@
 import type { TextRunNode } from "../../../types/node";
 import { BaseTool, type ToolName } from "../core/BaseTool";
 import { TypingBehavior } from "./behaviors/TypingBehavior";
+import { isNodeId } from "@shift/types";
 import type { TextBehavior, TextState } from "./types";
 import type { CursorType } from "../../../types/editor";
 
@@ -14,7 +15,8 @@ import type { CursorType } from "../../../types/editor";
  */
 export class TextTool extends BaseTool<TextState> {
   readonly id: ToolName = "text";
-  readonly behaviors: TextBehavior[] = [new TypingBehavior()];
+  readonly #typing = new TypingBehavior();
+  readonly behaviors: TextBehavior[] = [this.#typing];
 
   #restoreEditing: (() => void) | null = null;
 
@@ -37,6 +39,7 @@ export class TextTool extends BaseTool<TextState> {
     const items = this.editor.text.items(run);
     const childItemId = this.editor.nodeDefinition("textRun").childGlyph(run)?.itemId;
     this.editor.textEditing.resume(run.id, childItemId ?? items[items.length - 1]?.id ?? null);
+    this.editor.text.rememberBoxSize(run.size);
     this.setState({ type: "editing" });
   }
 
@@ -45,18 +48,24 @@ export class TextTool extends BaseTool<TextState> {
   }
 
   override deactivate(): void {
+    this.#typing.leave(this.editor);
     this.editor.textEditing.end();
     if (this.#restoreEditing) this.#restoreEditing();
     this.#restoreEditing = null;
     this.setState({ type: "idle" });
   }
 
-  /** The run holding the edited glyph, or the canvas's only run. */
+  /** The run holding the edited glyph, else the selected text box, else the canvas's only run. */
   #run(): TextRunNode | null {
+    const scene = this.editor.scene;
     for (const id of this.editor.editing.nodeIds) {
-      const run = this.editor.scene.nodeOfKind(this.editor.scene.parent(id)?.id ?? null, "textRun");
+      const run = scene.nodeOfKind(scene.parent(id)?.id ?? null, "textRun");
       if (run) return run;
     }
-    return this.editor.scene.first("textRun");
+    for (const id of this.editor.selection.ids) {
+      const run = isNodeId(id) ? scene.nodeOfKind(id, "textRun") : null;
+      if (run) return run;
+    }
+    return scene.only("textRun");
   }
 }

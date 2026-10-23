@@ -91,7 +91,7 @@ export class TextEditing {
   get selectionRects(): readonly SelectionRect[] {
     const node = this.#node();
     const buffer = this.#buffer();
-    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    const layout = node && this.#editor.text.boxLayoutCell(node).peek();
     if (!buffer || !layout) return [];
     return layout.selectionRects(buffer.selection);
   }
@@ -128,7 +128,7 @@ export class TextEditing {
         const line =
           node &&
           this.#editor.text
-            .layoutCell(node.runId)
+            .boxLayoutCell(node)
             .peek()
             ?.lines.find((line) => cluster >= line.clusterStart && cluster < line.clusterEnd);
         if (!line) {
@@ -146,7 +146,7 @@ export class TextEditing {
   moveVertical(direction: -1 | 1, extend = false): void {
     const node = this.#node();
     const buffer = this.#buffer();
-    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    const layout = node && this.#editor.text.boxLayoutCell(node).peek();
     if (!buffer || !layout) return;
     const caret = Caret.atCluster(layout, buffer.focusCluster);
     this.#goalX ??= caret.position().x;

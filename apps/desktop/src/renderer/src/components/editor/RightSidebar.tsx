@@ -17,6 +17,7 @@ import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { LayoutSection } from "./sidebar-right/LayoutSection";
+import { TextBoxSection } from "./sidebar-right/TextBoxSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
@@ -44,11 +45,11 @@ export const RightSidebar = () => {
   const selectionBlockRef = useRef<HTMLDivElement>(null);
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
-  // Reading the node needs no subscription: a frame's id stays a frame for its lifetime.
-  const selectedFrame =
-    selection.ids.length === 1 && isNodeId(selection.ids[0])
-      ? editor.scene.nodeOfKind(selection.ids[0], "frame")
-      : null;
+  // Reading the node needs no subscription: a node's id keeps its kind for its lifetime.
+  const selectedNodeId =
+    selection.ids.length === 1 && isNodeId(selection.ids[0]) ? selection.ids[0] : null;
+  const selectedFrame = editor.scene.nodeOfKind(selectedNodeId, "frame");
+  const selectedTextBox = editor.scene.nodeOfKind(selectedNodeId, "textRun");
 
   return (
     <GlyphSidebar
@@ -83,6 +84,11 @@ export const RightSidebar = () => {
               {selectedFrame ? (
                 <SidebarGroup>
                   <LayoutSection frameId={selectedFrame.id} />
+                </SidebarGroup>
+              ) : null}
+              {selectedTextBox ? (
+                <SidebarGroup>
+                  <TextBoxSection nodeId={selectedTextBox.id} />
                 </SidebarGroup>
               ) : null}
               <SidebarGroup>

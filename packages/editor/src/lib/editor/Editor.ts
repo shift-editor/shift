@@ -1879,6 +1879,15 @@ export class Editor {
     return this.#camera.hitRadius;
   }
 
+  /**
+   * The pointer hit radius in a node's own units, so hits stay the same size
+   * on screen inside scaled text.
+   */
+  public hitRadiusIn(node: ShiftNode): number {
+    const units = this.nodeDefinition(node.kind).unitsTransform(node);
+    return this.#camera.hitRadius / Math.hypot(units.a, units.b);
+  }
+
   /** @knipclassignore Indirectly consumed through Renderer. */
   public getCameraTransform(): CameraTransform {
     return {
@@ -2110,6 +2119,9 @@ export class Editor {
   public async copy(): Promise<boolean> {
     await this.font.editCoordinator.settled();
 
+    const textBoxes = this.text.boxContent(this.selection.ids);
+    if (textBoxes.length > 0) return this.#clipboard.write({ contours: [], textBoxes });
+
     const content = this.contentFrom(this.selection.ids);
     if (!content) return false;
 
@@ -2118,6 +2130,14 @@ export class Editor {
 
   public async cut(): Promise<boolean> {
     await this.font.editCoordinator.settled();
+
+    const textBoxes = this.text.boxContent(this.selection.ids);
+    if (textBoxes.length > 0) {
+      const written = await this.#clipboard.write({ contours: [], textBoxes });
+      if (written)
+        this.history.capture("Cut", () => this.#deleteTextBoxes(this.#selectedTextBoxIds()));
+      return written;
+    }
 
     const selection = this.positionSelection(this.selection.ids);
     const pointIds = selection?.targets.points ?? [];
@@ -2149,6 +2169,12 @@ export class Editor {
       this.history.captureOrJoin("Delete frames", () => {
         for (const id of frameIds) this.frames.delete(id);
       });
+      return true;
+    }
+
+    const textBoxIds = this.#selectedTextBoxIds();
+    if (textBoxIds.length > 0) {
+      this.history.captureOrJoin("Delete text", () => this.#deleteTextBoxes(textBoxIds));
       return true;
     }
 
@@ -2350,6 +2376,18 @@ export class Editor {
 
     switch (result.kind) {
       case "content": {
+        const textBoxes = result.content.textBoxes ?? [];
+        if (textBoxes.length > 0) {
+          const offset = this.#clipboard.nextPasteOffset();
+          this.history.capture("Paste", () => {
+            // The paste offset is Y-up for glyph content; boxes sit on the Y-down page.
+            const ids = this.text.placeBoxes(textBoxes, { x: offset.x, y: -offset.y });
+            this.setActiveTool("select");
+            this.selection.select(ids);
+          });
+          return true;
+        }
+
         const inserted = this.history.capture("Paste", () => {
           const ids = this.insertContent(result.content, {
             offset: this.#clipboard.nextPasteOffset(),
@@ -2370,6 +2408,26 @@ export class Editor {
       case "unsupported":
         return false;
     }
+  }
+
+  /** The selected text boxes' ids. */
+  #selectedTextBoxIds(): NodeId[] {
+    return this.selection.ids.filter(
+      (id): id is NodeId => isNodeId(id) && this.scene.nodeOfKind(id, "textRun") !== null,
+    );
+  }
+
+  /** Deletes text boxes, and each run no other node places. */
+  #deleteTextBoxes(ids: readonly NodeId[]): void {
+    for (const id of ids) {
+      const node = this.scene.nodeOfKind(id, "textRun");
+      if (!node) continue;
+
+      for (const child of this.scene.children(node.id)) this.scene.deleteNode(child.id);
+      this.scene.deleteNode(node.id);
+      if (this.scene.nodesReferencing(node.runId).length === 0) this.text.deleteRun(node.runId);
+    }
+    this.selection.clear();
   }
 
   /**

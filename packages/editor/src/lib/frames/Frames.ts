@@ -14,6 +14,8 @@ import {
   type RunMeasure,
 } from "./pageLayout";
 import type { FrameNode, ShiftNode, TextRunNode } from "../../types/node";
+import type { TextLayout } from "../text/layout";
+import type { LayoutTextInput } from "../wasm/generated/shapingLayouts";
 import type {
   FrameAxis,
   FrameLayout,
@@ -162,7 +164,7 @@ export class Frames {
   addText(
     parentId: NodeId | null,
     text: string,
-    options: { readonly size?: number; readonly position?: Point2D } = {},
+    options: { readonly size?: number; readonly width?: Sizing; readonly position?: Point2D } = {},
   ): TextRunNode | null {
     const parent = this.#container(parentId);
     if (!parent) return null;
@@ -175,6 +177,9 @@ export class Frames {
         parentId: parent.id,
         runId: run.id,
         size: options.size ?? DEFAULT_TEXT_SIZE,
+        width: options.width ?? HUG,
+        height: HUG,
+        rotation: 0,
         position: options.position ?? this.#freeSpot(parent),
       });
     });
@@ -388,26 +393,34 @@ export class Frames {
   }
 
   /**
-   * Measures a text run as a fixed leaf: its drawn box in scene units, and its
-   * origin (the first baseline's start) from the box's top-left corner.
+   * Measures a text box for layout: a box that fills its frame as break
+   * segments from its run's unwrapped text, any other as its box's size.
+   *
+   * @remarks
+   * A filling box reads its run's layout, never its own wrapped one: its
+   * width comes from this layout, so measuring it from that would loop.
    */
   #measureRun(run: TextRunNode): RunMeasure {
     const editor = this.#editor;
-    track(editor.text.layoutCell(run.runId));
     track(editor.font.metricsCell);
-    const unitsPerEm = editor.font.metricsCell.peek().unitsPerEm;
-    const bounds = editor.nodeDefinition("textRun").bounds(run);
-    if (!bounds) return { kind: "textRun", size: { width: 0, height: 0 }, offset: { x: 0, y: 0 } };
+    const scale = run.size / editor.font.metricsCell.peek().unitsPerEm;
 
-    const scale = run.size / unitsPerEm;
+    if (run.width.kind === "fill") {
+      const runLayout = editor.text.layoutCell(run.runId);
+      track(runLayout);
+      const layout = runLayout.peek();
+      return { kind: "textRun", fill: true, text: breakInput(layout, scale) };
+    }
+
+    const box = editor.text.boxLayoutCell(run);
+    track(box);
+    const bounds = box.peek() ? editor.nodeDefinition("textRun").bounds(run) : null;
     return {
       kind: "textRun",
-      size: {
-        width: (bounds.max.x - bounds.min.x) * scale,
-        height: (bounds.max.y - bounds.min.y) * scale,
-      },
-      // The run draws Y-up from its baseline, so its box top is `max.y` above the origin.
-      offset: { x: -bounds.min.x * scale, y: bounds.max.y * scale },
+      fill: false,
+      size: bounds
+        ? { width: Bounds.width(bounds) * scale, height: Bounds.height(bounds) * scale }
+        : { width: 0, height: 0 },
     };
   }
 
@@ -514,3 +527,26 @@ function sameLayout(a: FrameLayout, b: FrameLayout): boolean {
     a.padding.left === b.padding.left
   );
 }
+
+/** A run's text as the layout engine's break segments, in the run's units. */
+function breakInput(layout: TextLayout | null, scale: number): LayoutTextInput {
+  const widths: number[] = [];
+  const trailing: number[] = [];
+  const hardBreaks: number[] = [];
+  const metrics = layout?.metrics;
+  for (const paragraph of layout?.paragraphSegments() ?? []) {
+    // An empty paragraph still takes a line.
+    const segments = paragraph.segments.length > 0 ? paragraph.segments : [EMPTY_SEGMENT];
+    for (const segment of segments) {
+      widths.push(segment.width);
+      trailing.push(segment.trailing);
+    }
+    hardBreaks.push(widths.length - 1);
+  }
+  hardBreaks.pop();
+
+  const lineHeight = metrics ? metrics.ascender - metrics.descender + (metrics.lineGap ?? 0) : 0;
+  return { widths, trailing, hardBreaks, lineHeight, scale };
+}
+
+const EMPTY_SEGMENT = { width: 0, trailing: 0 };

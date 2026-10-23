@@ -42,6 +42,14 @@ export class Selection implements SelectBehavior {
         break;
     }
 
+    // Clicking outside the entered text box steps out of it.
+    const runs = editor.nodeDefinition("textRun");
+    const inEnteredBox =
+      runs.entered !== null &&
+      (target.kind === "text" || target.kind === "node") &&
+      target.node.id === runs.entered;
+    if (runs.entered !== null && !inEnteredBox) runs.leave();
+
     if (!ids) {
       if (event.shiftKey || !editor.selection.hasSelection()) return false;
 
