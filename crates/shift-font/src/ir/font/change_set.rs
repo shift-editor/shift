@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::{FontChange, FontChangeSet, Require, SourceCollection};
@@ -101,11 +101,17 @@ impl Font {
         // most of each undo and redo on a large font. Every touched glyph leaves the
         // index before any data changes and is validated against the rest when it
         // returns, so duplicates are caught exactly as a full rebuild would.
+        //
+        // Entity ids move by difference: a replaced glyph usually keeps every
+        // point, contour, and anchor id, and removing then re-adding thousands
+        // of them was most of a large batch's cost.
         let touched_glyph_ids = change_set.touched_glyph_ids();
         let state = self.state_mut();
+        let mut before_glyphs = HashMap::new();
         for glyph_id in &touched_glyph_ids {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
-                state.index.remove_glyph(glyph_id, glyph);
+                state.index.remove_glyph_records(glyph_id, glyph);
+                before_glyphs.insert(glyph_id.clone(), Arc::clone(glyph));
             }
         }
 
@@ -212,14 +218,41 @@ impl Font {
         }
 
         let state = self.state_mut();
+        // Only glyphs whose entity ids changed release and claim ids; the rest
+        // keep theirs in the index, where no other glyph can take them.
+        let mut released = HashSet::new();
+        let mut ids_changed = HashSet::new();
+        for glyph_id in &touched_glyph_ids {
+            let before = before_glyphs.get(glyph_id);
+            let unchanged = before
+                .zip(state.data.glyphs.get(glyph_id))
+                .is_some_and(|(before, after)| before.has_same_entity_ids(after));
+            if unchanged {
+                continue;
+            }
+            ids_changed.insert(glyph_id);
+            if let Some(before) = before {
+                released.extend(before.entity_ids());
+            }
+        }
+        let mut claimed = HashSet::new();
         let mut touched_unicodes = BTreeSet::new();
         for glyph_id in &touched_glyph_ids {
             let Some(glyph) = state.data.glyphs.get(glyph_id) else {
                 continue;
             };
-            state.index.validate_glyph_insert(glyph_id.clone(), glyph)?;
-            state.index.insert_glyph(glyph_id, glyph);
+            let ids = ids_changed
+                .contains(glyph_id)
+                .then_some((&released, &mut claimed));
+            state.index.validate_glyph_return(glyph_id, glyph, ids)?;
+            state.index.insert_glyph_records(glyph_id, glyph);
             touched_unicodes.extend(glyph.unicodes().iter().copied());
+        }
+        for entity_id in released.difference(&claimed) {
+            state.index.entity_ids.remove(entity_id);
+        }
+        for entity_id in claimed.difference(&released) {
+            state.index.entity_ids.insert(entity_id.clone());
         }
         // A full rebuild lists glyphs sharing a code point in glyph order; keep that.
         for unicode in touched_unicodes {
@@ -307,7 +340,7 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AddComponent, AddContour, AddPoints, ApplyBooleanOp, BooleanOp, CreateGlyph,
+        AddComponent, AddContour, AddPoints, ApplyBooleanOp, BooleanOp, Contour, CreateGlyph,
         CreateGlyphLayer, DecomposeComponents, DeleteAxis, EntityChange, FontEntityChange,
         FontIntent, FontIntentSet, PointSeed, PointType, RemoveComponents, RemovePoints,
         Replacement, UpdateFontMetadata,
@@ -484,6 +517,112 @@ mod tests {
 
         font.apply_change_set(&outcome.changes).unwrap();
         assert_eq!(font, edited);
+    }
+
+    /// Edits a copy of one layer.
+    type LayerEdit<'a> = &'a dyn Fn(&mut GlyphLayer);
+
+    /// A changeset replacing each named layer with what its edit makes of it.
+    fn layer_edits(font: &Font, edits: &[(&str, LayerEdit<'_>)]) -> FontChangeSet {
+        FontChangeSet::new(
+            edits
+                .iter()
+                .map(|(layer_id, edit)| {
+                    let layer_id = LayerId::from_raw(*layer_id);
+                    let glyph_id = font.glyph_id_by_layer(&layer_id).unwrap();
+                    let before = font.layer_snapshot(&layer_id).unwrap();
+                    let mut after = (*before).clone();
+                    edit(&mut after);
+                    FontChange::Layer {
+                        glyph_id,
+                        layer: Replacement::new(Some(before), Some(Arc::new(after))),
+                        structural: true,
+                    }
+                })
+                .collect(),
+        )
+    }
+
+    fn single_point_contour(contour_id: &str, point_id: &str) -> Contour {
+        let mut contour = Contour::with_id(ContourId::from_raw(contour_id));
+        contour.push_point(crate::Point::new(
+            PointId::from_raw(point_id),
+            0.0,
+            0.0,
+            PointType::OnCurve,
+            false,
+        ));
+        contour
+    }
+
+    #[test]
+    fn changesets_reject_an_id_an_untouched_glyph_holds() {
+        let mut font = crate::test_support::sample_font();
+        let original = font.clone();
+        // `A_0` belongs to `A`, which this changeset leaves alone.
+        let changes = layer_edits(
+            &font,
+            &[("acute_regular", &|layer| {
+                layer.add_contour(single_point_contour("acute_new", "A_0"));
+            })],
+        );
+
+        assert!(matches!(
+            font.apply_change_set(&changes),
+            Err(CoreError::DuplicatePointId(_))
+        ));
+        assert_eq!(font, original);
+        assert_index_matches_rebuild(&font);
+    }
+
+    #[test]
+    fn changesets_reject_two_touched_glyphs_claiming_one_new_id() {
+        let mut font = crate::test_support::sample_font();
+        let original = font.clone();
+        let changes = layer_edits(
+            &font,
+            &[
+                ("acute_regular", &|layer| {
+                    layer.add_contour(single_point_contour("acute_new", "shared"));
+                }),
+                ("A_bold", &|layer| {
+                    layer.add_contour(single_point_contour("A_new", "shared"));
+                }),
+            ],
+        );
+
+        assert!(matches!(
+            font.apply_change_set(&changes),
+            Err(CoreError::DuplicatePointId(_))
+        ));
+        assert_eq!(font, original);
+    }
+
+    #[test]
+    fn changesets_move_ids_between_touched_glyphs_as_a_full_rebuild_would() {
+        let mut font = crate::test_support::sample_font();
+        let outer = font
+            .layer(&LayerId::from_raw("A_regular"))
+            .unwrap()
+            .contour(&ContourId::from_raw("A_outer"))
+            .unwrap()
+            .clone();
+        let changes = layer_edits(
+            &font,
+            &[
+                ("A_regular", &|layer| {
+                    layer.remove_contour(&ContourId::from_raw("A_outer"));
+                }),
+                ("acute_regular", &|layer| {
+                    layer.add_contour(outer.clone());
+                }),
+            ],
+        );
+
+        font.apply_change_set(&changes).unwrap();
+        assert_index_matches_rebuild(&font);
+        font.apply_change_set(&changes.inverted()).unwrap();
+        assert_index_matches_rebuild(&font);
     }
 
     #[test]

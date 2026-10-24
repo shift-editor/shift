@@ -492,6 +492,24 @@ impl Glyph {
         &self.layers
     }
 
+    /// Every point, contour, component, anchor, and guideline id across the
+    /// glyph's layers, layer by layer.
+    pub(crate) fn entity_ids(&self) -> impl Iterator<Item = GlyphEntityId> + '_ {
+        self.layers.values().flat_map(|layer| layer.entity_ids())
+    }
+
+    /// Whether `other` holds exactly the same entity ids in the same layers,
+    /// compared directly rather than hashed.
+    pub(crate) fn has_same_entity_ids(&self, other: &Self) -> bool {
+        self.layers.len() == other.layers.len()
+            && self.layers.iter().all(|(layer_id, layer)| {
+                other
+                    .layers
+                    .get(layer_id)
+                    .is_some_and(|other| layer.entity_ids().eq(other.entity_ids()))
+            })
+    }
+
     /// Whether any layer draws something: a contour or a component.
     pub fn has_outline(&self) -> bool {
         self.layers
