@@ -26,6 +26,12 @@ pub enum BridgeError {
   Workspace(#[from] WorkspaceError),
 
   #[error(transparent)]
+  Store(#[from] shift_store::StoreError),
+
+  #[error("cannot encode layers: {0}")]
+  LayerEncoding(#[from] rmp_serde::encode::Error),
+
+  #[error(transparent)]
   AuthoredSlug(#[from] AuthoredSlugError),
 
   #[error(transparent)]
@@ -60,6 +66,8 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::FontRead(_)
     | BridgeError::SourceAtlas(_)
     | BridgeError::Workspace(_)
+    | BridgeError::Store(_)
+    | BridgeError::LayerEncoding(_)
     | BridgeError::AuthoredSlug(_)
     | BridgeError::Slug(_)
     | BridgeError::ShaperFont(_)

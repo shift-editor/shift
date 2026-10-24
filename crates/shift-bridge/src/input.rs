@@ -22,6 +22,10 @@ pub(crate) fn parse<T: BridgeParse>(value: &str) -> BridgeResult<T> {
   T::parse_bridge(value)
 }
 
+pub(crate) fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
+  ids.iter().map(|id| parse::<T>(id)).collect()
+}
+
 impl BridgeParse for ContourId {
   const KIND: &'static str = "contour ID";
 }

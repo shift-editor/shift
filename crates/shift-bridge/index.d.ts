@@ -214,6 +214,52 @@ export declare class Bridge {
   getSources(): Array<NapiSource>
 }
 
+/** A read-only view of a workspace's store. */
+export declare class LayerReader {
+  /**
+   * Reads a document together with its recovery overlay.
+   *
+   * # Errors
+   *
+   * Fails when either file cannot be opened read-only or the document is not a supported
+   * Shift document.
+   */
+  static openDocument(documentPath: string, recoveryPath: string): LayerReader
+  /**
+   * Reads the working store behind an untitled or imported workspace.
+   *
+   * # Errors
+   *
+   * Fails when the store cannot be opened read-only.
+   */
+  static openWorkingStore(storePath: string): LayerReader
+  /**
+   * The content of `layer_ids` as one MessagePack array of named-field
+   * layers, the encoding the engine decodes.
+   *
+   * # Errors
+   *
+   * Fails on a malformed or unknown layer id, and when a layer cannot be read or decoded.
+   */
+  loadLayers(layerIds: Array<string>): Buffer
+  /**
+   * `glyph_ids` plus every glyph their components use, transitively.
+   *
+   * # Errors
+   *
+   * Fails on a malformed glyph id or when the component references cannot be read.
+   */
+  componentClosure(glyphIds: Array<string>): Array<string>
+  /**
+   * Glyphs with a component of a glyph that owns one of `layer_ids`.
+   *
+   * # Errors
+   *
+   * Fails on a malformed layer id or when the component references cannot be read.
+   */
+  dependents(layerIds: Array<string>): Array<string>
+}
+
 /** Reads the settings in a `config.toml` source. */
 export declare function configRead(source: string): NapiConfigRead
 

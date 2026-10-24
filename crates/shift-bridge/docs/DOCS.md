@@ -1,12 +1,14 @@
 # shift-bridge
 
-<!-- reviewed: 2026-10-11 review-every: 90d -->
+<!-- reviewed: 2026-10-24 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
 ## Architecture Invariants
 
 **Architecture Invariant:** The bridge does not own hidden edit sessions or durable font state directly. It owns an optional `FontWorkspace` and forwards mutation transactions into `shift-workspace`. **WHY:** Renderer selection state stays in TypeScript, transport stays in `shift-bridge`, and workspace/store synchronization has one Rust owner.
+
+**Architecture Invariant:** `LayerReader` only reads. It opens a store read-only through `shift-store`'s `StoreReader`, beside the utility process that writes it, and returns layers as one MessagePack array of named-field layers for the engine to decode.
 
 **Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 
@@ -36,6 +38,7 @@ crates/shift-bridge/
     config.rs    -- stateless config.toml and theme-file functions over shift-config, used by desktop main
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
+    layer_reader.rs -- `LayerReader` NAPI class: read-only layers, component closure and dependents for the renderer's preload
   scripts/
     profile-slug-atlas.mjs -- release source/native-document page and stream profiler
   Cargo.toml     -- cdylib crate; depends on shift-font, shift-wire, shift-backends, napi

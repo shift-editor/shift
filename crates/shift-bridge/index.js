@@ -577,6 +577,7 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.Bridge = nativeBinding.Bridge
+module.exports.LayerReader = nativeBinding.LayerReader
 module.exports.configRead = nativeBinding.configRead
 module.exports.configSetTheme = nativeBinding.configSetTheme
 module.exports.configSetThemeSlots = nativeBinding.configSetThemeSlots

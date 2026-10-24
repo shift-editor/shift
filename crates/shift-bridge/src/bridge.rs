@@ -1,5 +1,5 @@
 use crate::errors::{self, BridgeError, BridgeResult};
-use crate::input::{BridgeParse, parse};
+use crate::input::{parse, parse_id_list};
 use crate::shaping::{NapiParagraphRequest, NapiShapedRun, ParsedParagraphRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -2324,10 +2324,6 @@ fn path_to_string(path: &Path) -> BridgeResult<String> {
     .to_str()
     .map(str::to_string)
     .ok_or_else(|| WorkspaceError::InvalidPathUtf8(path.to_path_buf()).into())
-}
-
-fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
-  ids.iter().map(|id| parse::<T>(id)).collect()
 }
 
 /// Converts a value the editor sent over NAPI into the domain value it
