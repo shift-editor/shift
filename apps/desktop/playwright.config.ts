@@ -39,6 +39,7 @@ export const VISUAL_SPECS = [
   "hidpi-rendering.spec.ts",
   "home.spec.ts",
   "landing.spec.ts",
+  "layer-reader.spec.ts",
   "pen-snapping.spec.ts",
   "preview-notice.spec.ts",
   "render-budget.spec.ts",

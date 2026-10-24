@@ -6,6 +6,7 @@ import { serveChannel, type ChannelServer, type Transport } from "../../shared/w
 import type {
   FontSourceAtlasPageRequest,
   FontSourceSession,
+  LayerStoreLocation,
   ShellCallMap,
   ShellEventMap,
   SlugAtlasOrigin,
@@ -141,6 +142,7 @@ export class WorkspaceHost {
             ? this.#snapshot(this.#state.allocation.workspaceId)
             : null,
         ),
+      "workspace.layerStore": () => this.#serialize(() => this.#layerStore()),
       "source.snapshot": () =>
         this.#serialize(() => (this.#state.kind === "preview" ? this.#state.preview : null)),
       "source.glyph": ({ glyphId }) =>
@@ -865,6 +867,18 @@ export class WorkspaceHost {
       () => undefined,
     );
     return run;
+  }
+
+  #layerStore(): LayerStoreLocation | null {
+    if (this.#state.kind !== "document") return null;
+    const { allocation, binding } = this.#state;
+    return binding.kind === "bound"
+      ? {
+          kind: "document",
+          documentPath: binding.address.canonicalPath,
+          recoveryPath: allocation.recoveryPath,
+        }
+      : { kind: "working", storePath: allocation.storePath };
   }
 
   #currentAtlasCacheRevision(): string {

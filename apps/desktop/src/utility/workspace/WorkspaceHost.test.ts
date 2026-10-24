@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { layerReaderHost } from "../../preload/layerReaders";
 import { Channel, nodePortTransport, type Transport } from "../../shared/workspace/channel";
 import {
   mintContourId,
@@ -307,6 +308,55 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(await sync.call("document.state", undefined)).toBeNull();
     expect(fs.existsSync(path.join(tmpRoot, "workspaces"))).toBe(false);
     expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
+  });
+
+  it("has no layer store for a retained source", async () => {
+    await shell.call("source.open", { path: retainedFontPath });
+    const sync = await connectSyncLane();
+
+    expect(await sync.call("workspace.layerStore", undefined)).toBeNull();
+  });
+
+  it("points a window's layer reader at an untitled workspace's store", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await sync.call("workspace.apply", {
+      intents: glyph.intents,
+      label: "Add Glyph",
+    });
+
+    const location = await sync.call("workspace.layerStore", undefined);
+    expect(location?.kind).toBe("working");
+    const layers = layerReaderHost();
+    const reader = layers.open(location!);
+    expect(new TextDecoder().decode(layers.load(reader, [glyph.layerId]))).toContain(glyph.layerId);
+
+    layers.close(reader);
+    expect(() => layers.load(reader, [glyph.layerId])).toThrow(/no layer reader/);
+  });
+
+  it("points a window's layer reader at a document and its unsaved edits", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const documentPath = path.join(tmpRoot, "Reader.shift");
+    await sync.call("workspace.saveAs", { path: documentPath });
+    const unsaved = createGlyphALayer(snapshot.sources[0]!.id);
+    await sync.call("workspace.apply", {
+      intents: unsaved.intents,
+      label: "Add Glyph",
+    });
+
+    const location = await sync.call("workspace.layerStore", undefined);
+    expect(location).toMatchObject({
+      kind: "document",
+      documentPath: fs.realpathSync(documentPath),
+    });
+    const layers = layerReaderHost();
+    const reader = layers.open(location!);
+    expect(new TextDecoder().decode(layers.load(reader, [unsaved.layerId]))).toContain(
+      unsaved.layerId,
+    );
   });
 
   it("reads selected retained glyph geometry without authored state", async () => {

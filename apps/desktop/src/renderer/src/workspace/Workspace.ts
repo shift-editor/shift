@@ -1,6 +1,6 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { LayerStoreLocation, WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { Editor } from "@shift/editor";
 import { Font, FontStore } from "@shift/editor/model";
@@ -61,6 +61,14 @@ export class Workspace {
 
   get editCoordinator(): WorkspaceEditCoordinator {
     return this.#edits;
+  }
+
+  /**
+   * Where this workspace's store lives, so the window's editing engine can
+   * read layers from it synchronously through `shiftHost.layers`.
+   */
+  layerStore(): Promise<LayerStoreLocation | null> {
+    return this.#client.layerStore();
   }
 
   connect(): Promise<void> {

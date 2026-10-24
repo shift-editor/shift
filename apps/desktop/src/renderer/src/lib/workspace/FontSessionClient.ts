@@ -4,6 +4,7 @@ import type {
   FontSessionMode,
   FontSourceAtlasPageRequest,
   FontSourceSnapshot,
+  LayerStoreLocation,
   SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
@@ -395,6 +396,18 @@ export class FontSessionClient {
     await this.connect();
 
     await this.#require().call("workspace.slugAtlasPageDiscard", { generation, origin });
+  }
+
+  /**
+   * Where the open workspace's store lives, for this window's read-only layer
+   * reader.
+   *
+   * @returns `null` for a preview, which has no store.
+   */
+  async layerStore(): Promise<LayerStoreLocation | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.layerStore", undefined);
   }
 
   /**
