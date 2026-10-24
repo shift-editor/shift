@@ -81,8 +81,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     },
   });
 
-  /** Node-scoped variation outlines rendered by this glyph behavior plugin. */
-  readonly outlines = new GlyphOutlines();
+  /** Comparison outlines drawn around the scene's first glyph node. */
+  readonly outlines = new GlyphOutlines({
+    activeSourceIdCell: this.editor.activeSourceIdCell,
+    editingSourceIdsCell: this.editor.editingSourceIdsCell,
+    outlinedNodeIdCell: computed(
+      () => {
+        track(this.editor.scene.cell);
+        return this.editor.scene.first("glyph")?.id ?? null;
+      },
+      { name: "glyphNode.outlinedNode" },
+    ),
+  });
 
   unitsTransform(_node: GlyphNode): Mat {
     return Mat.Scale(1, -1);

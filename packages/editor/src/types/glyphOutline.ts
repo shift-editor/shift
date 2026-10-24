@@ -1,4 +1,4 @@
-import type { NamedInstanceId, NodeId, SourceId } from "@shift/types";
+import type { NamedInstanceId, SourceId } from "@shift/types";
 import type { OutlineTargets } from "../lib/nodes/OutlineTargets";
 import type { ExternalAxisLocation } from "./variation";
 
@@ -13,6 +13,14 @@ export interface ResolvedGlyphOutlineTarget {
   readonly activeSourceId: SourceId | null;
 }
 
+/** Outline targets derived for one variation section, in render order. */
+export interface OutlineTargetSet {
+  /** Visible targets: row-chosen first, then sources being edited, then show-all's. */
+  readonly targets: OutlineTargets;
+  /** Targets the section's show-all button currently contributes. */
+  readonly inheritedTargets: OutlineTargets;
+}
+
 /** Props shared by variation sections that edit one node's visible outlines. */
 export interface GlyphOutlineControls {
   readonly targets: OutlineTargets;
@@ -21,6 +29,3 @@ export interface GlyphOutlineControls {
   readonly onToggle: (target: GlyphOutlineTarget) => void;
   readonly onToggleGroup: (targets: OutlineTargets) => void;
 }
-
-/** Node-scoped outline collection exposed by the glyph node definition. */
-export type GlyphOutlinesByNode = ReadonlyMap<NodeId, readonly GlyphOutlineTarget[]>;

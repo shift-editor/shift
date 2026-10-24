@@ -72,6 +72,7 @@ shift-bridge = { path = "crates/shift-bridge" }
 shift-config = { path = "crates/shift-config" }
 shift-shape = { path = "crates/shift-shape" }
 shift-font = { path = "crates/shift-font" }
+shift-proof = { path = "crates/shift-proof" }
 shift-slug = { path = "crates/shift-slug" }
 shift-specimen = { path = "crates/shift-specimen" }
 shift-store = { path = "crates/shift-store" }
