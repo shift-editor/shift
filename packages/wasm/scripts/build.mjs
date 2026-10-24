@@ -8,7 +8,7 @@
 // dev shell's wasm-bindgen (CI: .github/actions/wasm-toolchain), which must
 // match the crate version in Cargo.lock exactly; wasm-opt comes from the
 // pinned binaryen devDependency.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
@@ -16,7 +16,14 @@ import { dirname, join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../../..");
 const src = resolve(import.meta.dirname, "../src");
-const run = (command, args) => execFileSync(command, args, { cwd: root, stdio: "inherit" });
+const run = (command, args, env = process.env) =>
+  new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, { cwd: root, stdio: "inherit", env });
+    child.on("error", reject);
+    child.on("exit", (code) =>
+      code === 0 ? resolvePromise() : reject(new Error(`${command} exited with ${code}`)),
+    );
+  });
 // binaryen's wasm-opt is a Node script, so it runs the same on every OS.
 const binaryen = createRequire(import.meta.url).resolve("binaryen/package.json");
 const wasmOpt = join(dirname(binaryen), JSON.parse(readFileSync(binaryen, "utf8")).bin["wasm-opt"]);
@@ -29,24 +36,38 @@ if (locked !== cli) {
   throw new Error(`wasm-bindgen CLI ${cli} does not match ${locked} in Cargo.lock`);
 }
 
-/** Each build: its folder under src and the crate features it enables. */
+/**
+ * Each build: its folder under src and the crate features it enables. Largest
+ * module first, so its wasm-opt pass overlaps the other variants' compiles.
+ */
 const variants = [
-  { folder: "generated", features: [] },
-  { folder: "generated-reference", features: ["reference"] },
   { folder: "generated-shaping", features: ["shaping"] },
+  { folder: "generated-reference", features: ["reference"] },
+  { folder: "generated", features: [] },
 ];
 
+// Compiles run in turn: they share one target directory, so later variants
+// reuse the crates the first one compiled. Each variant's optimisation then
+// runs while the next one compiles.
+const finishing = [];
 for (const variant of variants) {
-  build(join(src, variant.folder), variant.features);
+  const out = join(src, variant.folder);
+  await compile(out, variant.features);
+  finishing.push(finish(out));
 }
+await Promise.all(finishing);
 
-function build(out, features) {
+/** Compiles shift-wasm with `features` and writes the wasm-bindgen output to `out`. */
+async function compile(out, features) {
   rmSync(out, { recursive: true, force: true });
-  // Paths of the checkout and the Cargo home end up in panic messages; replace
-  // them so the module carries no machine's paths. RUSTFLAGS replaces the
-  // target flags in .cargo/config.toml, so they are repeated here.
+  // Paths of the Cargo home end up in panic messages; replace them so the
+  // module carries no machine's paths. Cargo passes workspace crates as paths
+  // relative to the checkout, so the checkout needs no remapping, and RUSTFLAGS
+  // stays the same in every checkout (it is part of each crate's fingerprint).
+  // RUSTFLAGS replaces the target flags in .cargo/config.toml, so they are
+  // repeated here.
   const cargoHome = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
-  execFileSync(
+  await run(
     "cargo",
     [
       "build",
@@ -58,20 +79,15 @@ function build(out, features) {
       ...features.flatMap((feature) => ["--features", feature]),
     ],
     {
-      cwd: root,
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        RUSTFLAGS: [
-          `--remap-path-prefix=${cargoHome}=/cargo`,
-          `--remap-path-prefix=${root}=/shift`,
-          "--cfg",
-          'getrandom_backend="wasm_js"',
-        ].join(" "),
-      },
+      ...process.env,
+      RUSTFLAGS: [
+        `--remap-path-prefix=${cargoHome}=/cargo`,
+        "--cfg",
+        'getrandom_backend="wasm_js"',
+      ].join(" "),
     },
   );
-  run("wasm-bindgen", [
+  await run("wasm-bindgen", [
     "--target",
     "web",
     "--out-name",
@@ -80,8 +96,12 @@ function build(out, features) {
     out,
     "target/wasm32-unknown-unknown/release/shift_wasm.wasm",
   ]);
+}
+
+/** Optimises the module in `out` and embeds it as base64. */
+async function finish(out) {
   const wasm = join(out, "shift_wasm_bg.wasm");
-  run(process.execPath, [
+  await run(process.execPath, [
     wasmOpt,
     "-Oz",
     ...[
