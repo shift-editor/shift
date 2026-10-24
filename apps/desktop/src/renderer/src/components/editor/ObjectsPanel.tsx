@@ -1,13 +1,34 @@
+import { ScrollArea } from "@shift/ui";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { computed, track, useSignalState } from "@shift/editor/signals";
 import type { SelectableId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useNavigate } from "react-router";
 import type { ObjectTree, ObjectTreeSectionId } from "@/types/objectTree";
 import { useListSelection } from "@/hooks/useListSelection";
-import { createObjectTree, ObjectTreeCache } from "./object-tree/createObjectTree";
+import {
+  createGlyphIconPath,
+  createObjectTree,
+  ObjectTreeCache,
+} from "./object-tree/createObjectTree";
+import { GlyphObjectRow } from "./object-tree/GlyphObjectRow";
 import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
 import { OBJECT_ROW_STEP, VirtualObjectRows } from "./object-tree/VirtualObjectRows";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
+
+/** The edited glyph's heading and its object tree, with empty sections left out. */
+interface GlyphObjects {
+  readonly name: string;
+  /** A filled SVG path previewing the glyph in a 16 × 16 box. */
+  readonly iconPath: string | undefined;
+  readonly tree: ObjectTree;
+}
+
+const NO_OBJECTS: GlyphObjects | null = null;
+const EMPTY_TREE: ObjectTree = [];
+
+// A heading row and the gap below it: the Glyphs section's, then the glyph's.
+const HEADING_HEIGHT = 28 + 8;
 
 export const ObjectsPanel = () => {
   const editor = useEditor();
@@ -18,27 +39,46 @@ export const ObjectsPanel = () => {
   const [focusedParentId, setFocusedParentId] = useState<SelectableId | null>(null);
   const [pendingFocusId, setPendingFocusId] = useState<SelectableId | null>(null);
   const lastFocusedIndexRef = useRef(0);
-  const objectTreeCell = useMemo(() => {
+  const navigate = useNavigate();
+  const glyphObjectsCell = useMemo(() => {
     // Reuses unchanged contours' items, so an edit rebuilds only what it touched.
     const cache = new ObjectTreeCache();
-    return computed(() => {
+    return computed((): GlyphObjects | null => {
       const node = editor.scene.cell.value.nodes.find((candidate) => candidate.kind === "glyph");
       const externalLocation = editor.externalLocationCell.value;
       const activeSourceId = editor.activeSourceIdCell.value;
-      if (!node) return [];
+      if (!node) return NO_OBJECTS;
 
       const glyph = editor.glyphForId(node.glyphId);
-      if (!glyph) return [];
+      if (!glyph) return NO_OBJECTS;
 
       const layer = activeSourceId
         ? glyph.layerForSource(activeSourceId)
         : glyph.layerAt(externalLocation);
       if (layer) track(layer.geometryCell);
 
-      return createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation), cache);
+      // The preview draws the glyph as shown, components included, so it tracks their shapes too.
+      const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+      const placed = view.contoursCell.value;
+      for (const contour of placed) contour.trackShape();
+      const metrics = editor.font.defaultSourceMetricsCell.value;
+      const tree = createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation), cache);
+
+      return {
+        name: glyph.name,
+        iconPath: createGlyphIconPath(placed, {
+          ascender: metrics.ascender,
+          descender: metrics.descender,
+          advance: view.xAdvanceCell.value,
+        }),
+        tree: tree.filter((section) => section.items.length > 0),
+      };
     });
   }, [editor]);
-  const objectTree = useSignalState(objectTreeCell, { schedule: "frame" });
+  const glyphObjects = useSignalState(glyphObjectsCell, { schedule: "frame" });
+  const objectTree = glyphObjects?.tree ?? EMPTY_TREE;
+  const [glyphsOpen, setGlyphsOpen] = useState(true);
+  const [glyphOpen, setGlyphOpen] = useState(true);
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const selectedIds = useMemo(() => new Set(selection.ids), [selection.ids]);
   const [collapsedSectionIds, setCollapsedSectionIds] = useState<ReadonlySet<ObjectTreeSectionId>>(
@@ -64,12 +104,14 @@ export const ObjectsPanel = () => {
       const rows = objectRowsBySection.get(section.id) ?? [];
       result.set(
         section.id,
-        collapsedSectionIds.has(section.id) ? [] : rows.map((row) => row.item.id),
+        !glyphsOpen || !glyphOpen || collapsedSectionIds.has(section.id)
+          ? []
+          : rows.map((row) => row.item.id),
       );
     }
 
     return result;
-  }, [collapsedSectionIds, objectRowsBySection, objectTree]);
+  }, [collapsedSectionIds, glyphOpen, glyphsOpen, objectRowsBySection, objectTree]);
   const visibleObjectIds = useMemo(
     () => objectTree.flatMap((section) => visibleObjectIdsBySection.get(section.id) ?? []),
     [objectTree, visibleObjectIdsBySection],
@@ -118,7 +160,7 @@ export const ObjectsPanel = () => {
   // The section headers and row spacing have fixed heights; keep the scroll
   // geometry independent of how many rows React actually mounts.
   const sectionTopById = new Map<ObjectTreeSectionId, number>();
-  let sectionTop = 8;
+  let sectionTop = 8 + HEADING_HEIGHT * 2;
   for (const section of objectTree) {
     const rows = objectRowsBySection.get(section.id) ?? [];
     const open = !collapsedSectionIds.has(section.id);
@@ -165,58 +207,71 @@ export const ObjectsPanel = () => {
   }, [focusedObjectId, focusedParentId, visibleObjectIds]);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full overflow-y-auto px-1 pb-2"
+    <ScrollArea
+      className="h-full"
+      viewportRef={containerRef}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
     >
-      <nav aria-label="Glyph objects" className="flex flex-col gap-2 pt-2">
-        {objectTree.map((section) => {
-          const rows = objectRowsBySection.get(section.id) ?? [];
-          const visibleIds = visibleObjectIdsBySection.get(section.id) ?? [];
-          const open = !collapsedSectionIds.has(section.id);
-          const rowTop = sectionTopById.get(section.id) ?? 0;
-
-          return (
-            <ObjectSectionRow
-              key={section.id}
-              title={section.label}
-              open={open}
-              onOpenChange={(open) => {
-                setCollapsedSectionIds((previous) => {
-                  const next = new Set(previous);
-                  if (open) next.delete(section.id);
-                  else next.add(section.id);
-                  return next;
-                });
-              }}
+      <nav aria-label="Glyph objects" className="flex flex-col gap-2 px-1 pt-2 pb-2">
+        {glyphObjects ? (
+          <ObjectSectionRow title="Glyphs" open={glyphsOpen} onOpenChange={setGlyphsOpen}>
+            <GlyphObjectRow
+              name={glyphObjects.name}
+              iconPath={glyphObjects.iconPath}
+              open={glyphOpen}
+              onOpenChange={setGlyphOpen}
+              onSelect={() => editor.selectAll()}
+              onClose={() => navigate("/home")}
             >
-              {section.items.length > 0 ? (
-                <VirtualObjectRows
-                  rows={rows}
-                  visibleIds={visibleIds}
-                  selectedIds={selectedIds}
-                  coveredIds={coveredIds}
-                  collapsedObjectIds={collapsedObjectIds}
-                  setObjectOpen={setObjectOpen}
-                  selectObject={selectObject}
-                  sectionLabel={section.label}
-                  sectionTop={rowTop}
-                  scrollTop={scrollTop}
-                  viewportHeight={viewportHeight}
-                  focusedObjectId={focusedObjectId}
-                  pendingFocusId={pendingFocusId}
-                  onFocusObject={onFocusObject}
-                  onNavigate={onNavigate}
-                  onPendingFocusResolved={() => setPendingFocusId(null)}
-                  onDeleteSelection={() => editor.deleteSelection()}
-                />
-              ) : null}
-            </ObjectSectionRow>
-          );
-        })}
+              {objectTree.map((section) => {
+                const rows = objectRowsBySection.get(section.id) ?? [];
+                const visibleIds = visibleObjectIdsBySection.get(section.id) ?? [];
+                const open = !collapsedSectionIds.has(section.id);
+                const rowTop = sectionTopById.get(section.id) ?? 0;
+
+                return (
+                  <ObjectSectionRow
+                    key={section.id}
+                    title={section.label}
+                    open={open}
+                    onOpenChange={(open) => {
+                      setCollapsedSectionIds((previous) => {
+                        const next = new Set(previous);
+                        if (open) next.delete(section.id);
+                        else next.add(section.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    {section.items.length > 0 ? (
+                      <VirtualObjectRows
+                        rows={rows}
+                        visibleIds={visibleIds}
+                        selectedIds={selectedIds}
+                        coveredIds={coveredIds}
+                        collapsedObjectIds={collapsedObjectIds}
+                        setObjectOpen={setObjectOpen}
+                        selectObject={selectObject}
+                        sectionLabel={section.label}
+                        sectionTop={rowTop}
+                        scrollTop={scrollTop}
+                        viewportHeight={viewportHeight}
+                        focusedObjectId={focusedObjectId}
+                        pendingFocusId={pendingFocusId}
+                        onFocusObject={onFocusObject}
+                        onNavigate={onNavigate}
+                        onPendingFocusResolved={() => setPendingFocusId(null)}
+                        onDeleteSelection={() => editor.deleteSelection()}
+                      />
+                    ) : null}
+                  </ObjectSectionRow>
+                );
+              })}
+            </GlyphObjectRow>
+          </ObjectSectionRow>
+        ) : null}
       </nav>
-    </div>
+    </ScrollArea>
   );
 };
 

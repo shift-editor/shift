@@ -8,6 +8,7 @@ import { useEditingSourceIds } from "@/hooks/useEditingSourceIds";
 import { useGlyphOutlineTargets } from "@/hooks/useGlyphOutlineTargets";
 import { useVariationOutlineControls } from "@/hooks/useVariationOutlineControls";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 
 export const VariationPanel = () => {
   const editor = useEditor();
@@ -20,11 +21,19 @@ export const VariationPanel = () => {
 
   return (
     <div className="flex flex-col gap-2 pt-2">
-      <SourcesSection defaultOpen outlineControls={outlines.sourceControls} />
-      <Separator />
-      <InstancesSection defaultOpen outlineControls={outlines.instanceControls} />
-      <Separator />
       <AxesSection defaultOpen />
+      <Separator className="-mx-1 w-auto" />
+      <SourcesSection
+        defaultOpen
+        section={ObjectSectionRow}
+        outlineControls={outlines.sourceControls}
+      />
+      <Separator className="-mx-1 w-auto" />
+      <InstancesSection
+        defaultOpen
+        section={ObjectSectionRow}
+        outlineControls={outlines.instanceControls}
+      />
     </div>
   );
 };

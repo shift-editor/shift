@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { LanguageCoverage } from "@shift/glyph-info";
 import { SidebarRowButton } from "@/components/sidebar";
 import type { LanguageGlyph } from "@/types/glyphCatalog";
+import { GuideSlot } from "@/components/editor/object-tree/ObjectSectionRow";
 import { MissingGlyphsPopover } from "./MissingGlyphsPopover";
 
 export interface LanguageProps {
@@ -37,6 +38,7 @@ export const Language = ({
         }}
         title={language.autonym ?? undefined}
       >
+        <GuideSlot className="-ml-2" />
         <span className="min-w-0 flex-1 truncate pl-5 text-left">{language.name}</span>
         <span className="shrink-0 text-xs">
           {presentCount}/{requiredCount}

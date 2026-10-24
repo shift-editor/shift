@@ -1,4 +1,4 @@
-import { Button, Separator, cn } from "@shift/ui";
+import { Button, ScrollArea, Separator, cn } from "@shift/ui";
 import type { ReactNode } from "react";
 import { useSignalState } from "../lib/signals";
 import { formatCodepointAsUPlus } from "../lib/utils/unicode";
@@ -76,7 +76,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       </div>
       <Separator />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="px-3 py-3">
           <section className="flex flex-col gap-2">
             <h3 className="text-ui font-medium text-primary">Glyph</h3>
@@ -131,7 +131,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
         </div>
         <Separator />
         {host.selection}
-      </div>
+      </ScrollArea>
     </aside>
   );
 }
