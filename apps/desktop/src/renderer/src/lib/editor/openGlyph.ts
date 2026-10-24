@@ -3,7 +3,7 @@ import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import type { GlyphId } from "@shift/types";
 
 /**
- * Opens a glyph from the grid: the active page's run becomes that glyph, edited in place.
+ * Opens a glyph from the grid on the glyph view's page: its run becomes that glyph, edited in place.
  *
  * @remarks
  * The interim policy until runs are placed by the user. Each page has at most
@@ -16,7 +16,9 @@ import type { GlyphId } from "@shift/types";
  * @returns the edited glyph node, or null when the glyph is not loaded.
  */
 export function openGlyphInRun(editor: Editor, glyphId: GlyphId): GlyphNode | null {
-  const page = editor.pages.ensure();
+  // Glyphs open on the glyph view's own page, so the user's boards stay as they left them.
+  const page = editor.pages.glyphView();
+  editor.pages.activate(page.id);
   const runs = editor.nodeDefinition("textRun");
   const run =
     editor.scene.first("textRun") ??

@@ -1,5 +1,6 @@
 import { test, expect } from "./fixtures/electronApp";
 import { expectPageSnapshot } from "./fixtures/snapshots";
+import { glyphSearch } from "./fixtures/appLocators";
 
 test.describe("Landing view", () => {
   test("matches default snapshot", { tag: "@golden" }, async ({ page }) => {
@@ -19,7 +20,7 @@ test.describe("Landing view", () => {
     await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await workspacePage.getByPlaceholder("Search glyphs...").fill("newGlyph");
+    await (await glyphSearch(workspacePage)).fill("newGlyph");
     await expect(
       workspacePage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
     ).toHaveAttribute("data-filtered-glyph-count", "1");

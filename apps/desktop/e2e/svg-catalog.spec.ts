@@ -7,6 +7,7 @@ import {
   glyphCatalogSurface,
   glyphCatalogViewport,
   waitForEditorReady,
+  glyphSearch,
 } from "./fixtures/appLocators";
 
 test.use({ electronArgs: ["--disable-gpu"] });
@@ -37,7 +38,7 @@ test.describe("SVG glyph catalog fallback", () => {
       return glyph.name;
     });
 
-    await page.getByPlaceholder("Search glyphs...").fill(name);
+    await (await glyphSearch(page)).fill(name);
     const svg = glyphCatalogSvg(page);
     await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
     const tile = svg.getByRole("button", { name: /^Open / }).filter({ hasText: "あ" });

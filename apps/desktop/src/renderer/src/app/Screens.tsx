@@ -48,6 +48,7 @@ export const Screens = () => {
       >
         <Route path="/home" />
         <Route path="/editor/:glyphId" element={<Editor />} />
+        <Route path="/canvas" element={<Editor />} />
         <Route path="/e2e-document-render-failure" element={<E2EDocumentRenderFailure />} />
       </Route>
       <Route path="*" element={<Navigate to="/launcher" replace />} />

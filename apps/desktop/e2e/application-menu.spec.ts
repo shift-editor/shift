@@ -12,6 +12,7 @@ import {
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
 import { applicationMenuItemEnabled, clickApplicationMenuItem } from "./fixtures/documentLifecycle";
+import { glyphSearch } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { openScratchGlyph, WAVE_CONTOUR } from "./fixtures/scratchGlyph";
 
@@ -849,7 +850,7 @@ authoredTest(
       .toBe(true);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "edit.copy")).toBe(true);
 
-    const search = page.getByPlaceholder("Search glyphs...");
+    const search = await glyphSearch(page);
     await search.fill("Alpha");
     await search.evaluate((input: HTMLInputElement) => input.select());
     await clickApplicationMenuItem(page, electronApp, "edit.copy");

@@ -28,6 +28,8 @@ export const Editor = () => {
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
   // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
   const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
+  // `/canvas` shows the active page with no glyph opened; `/editor/:glyphId` waits for its glyph.
+  const ready = glyphIdParam === undefined || glyph !== null;
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   const { activeZone, setZone } = useFocusZone();
@@ -37,10 +39,10 @@ export const Editor = () => {
   activeZoneRef.current = activeZone;
 
   useEffect(() => {
-    if (!glyph) return;
+    if (!ready) return;
 
     setZone("canvas");
-  }, [setZone, glyph]);
+  }, [setZone, ready]);
 
   // GlyphGrid acquires the complete Glyph before navigating. Until runs are placed by
   // the user, each page has one text run at its origin that outlives the route, and
@@ -76,7 +78,7 @@ export const Editor = () => {
   }, [activeSourceId, editor, glyph]);
 
   useEffect(() => {
-    if (!glyph) return undefined;
+    if (!ready) return undefined;
 
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(
@@ -112,9 +114,9 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [editor, glyph]);
+  }, [editor, ready]);
 
-  if (!glyph) return null;
+  if (!ready) return null;
 
   return (
     <EditorLayout>

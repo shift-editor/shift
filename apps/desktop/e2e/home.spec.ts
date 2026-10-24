@@ -9,6 +9,7 @@ import {
   glyphCatalogSurface,
   glyphProperties,
   openFirstCatalogGlyph,
+  glyphSearch,
 } from "./fixtures/appLocators";
 import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 
@@ -227,7 +228,7 @@ test.describe("Home view", () => {
   });
 
   test("finds encoded characters and unencoded glyph names", async ({ page }) => {
-    const search = page.getByPlaceholder("Search glyphs...");
+    const search = await glyphSearch(page);
     const surface = glyphCatalogSurface(page);
     const encodedId = await page.evaluate(() => {
       const font = window.shift?.font;
@@ -287,7 +288,7 @@ test.describe("Home view", () => {
   }) => {
     const glyph = await createQuickGlyph(page);
     const nextName = `${glyph.name}.renamed`;
-    await page.getByPlaceholder("Search glyphs...").fill(glyph.name);
+    await (await glyphSearch(page)).fill(glyph.name);
     await expect(glyphCatalogSurface(page)).toHaveAttribute("data-filtered-glyph-count", "1");
     await afterNextPaint(page);
     await clickFirstCatalogGlyphName(page);

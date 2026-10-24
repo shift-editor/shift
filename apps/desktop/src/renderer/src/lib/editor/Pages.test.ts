@@ -30,13 +30,15 @@ describe("pages hold the scene, one page shown at a time", () => {
     await editor.startSession();
   });
 
-  it("starts with Page 1 holding the opened glyph's run", () => {
+  it("lists Page 1, and opens the glyph on the glyph view's page, which the list leaves out", () => {
     const page = firstPage(editor);
+    const glyphView = editor.pages.active!;
 
     expect(pageNames(editor)).toEqual(["Page 1"]);
-    expect(editor.pages.activeCell.peek()).toBe(page.id);
-    expect(editor.pages.pageOf(editor.textRun!.id)).toBe(page);
-    expect(editor.pages.pageOf(editor.runGlyph!.id)).toBe(page);
+    expect(glyphView).toMatchObject({ role: "glyph" });
+    expect(glyphView.id).not.toBe(page.id);
+    expect(editor.pages.pageOf(editor.textRun!.id)).toBe(glyphView);
+    expect(editor.pages.pageOf(editor.runGlyph!.id)).toBe(glyphView);
     expect(editor.pages.pageOf(page.id)).toBe(page);
   });
 
@@ -52,6 +54,7 @@ describe("pages hold the scene, one page shown at a time", () => {
   });
 
   it("publishes the list and the shown page to reactive readers", () => {
+    const glyphView = editor.pages.activeCell.peek();
     const seen: string[][] = [];
     const shown: (string | null)[] = [];
     const listReader = effect(() => {
@@ -68,7 +71,7 @@ describe("pages hold the scene, one page shown at a time", () => {
     activeReader.dispose();
 
     expect(seen).toEqual([["Page 1"], ["Page 1", "Page 2"]]);
-    expect(shown).toEqual([firstPage(editor).id, second.id]);
+    expect(shown).toEqual([glyphView, second.id]);
   });
 
   it("renames a page and ignores a blank name", () => {
@@ -100,8 +103,16 @@ describe("pages hold the scene, one page shown at a time", () => {
 
   it("deletes a page with everything on it and shows its neighbour", () => {
     const page = firstPage(editor);
-    const run = editor.textRun!;
-    const child = editor.runGlyph!;
+    editor.pages.activate(page.id);
+    const run = editor.history.withoutRecording(() =>
+      editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        parentId: page.id,
+        runId: editor.text.createRun(editor.text.itemsFromText("A")).id,
+        size: 1000,
+        position: { x: 0, y: 0 },
+      }),
+    );
     const second = editor.pages.create();
 
     expect(editor.pages.delete(page.id)).toBe(true);
@@ -109,7 +120,6 @@ describe("pages hold the scene, one page shown at a time", () => {
     expect(editor.pages.list).toEqual([second]);
     expect(editor.pages.activeCell.peek()).toBe(second.id);
     expect(editor.scene.node(run.id)).toBeNull();
-    expect(editor.scene.node(child.id)).toBeNull();
     expect(editor.text.run(run.runId)).toBeNull();
   });
 
@@ -168,25 +178,24 @@ describe("pages hold the scene, one page shown at a time", () => {
     expect(editor.scene.nodes().map((candidate) => candidate.id)).not.toContain(node.id);
   });
 
-  it("opens a glyph into the shown page's run, creating it on an empty page", async () => {
-    const page = firstPage(editor);
-    const pageRun = editor.textRun!;
+  it("opens glyphs on the glyph view's page whichever page is shown, leaving pages alone", async () => {
+    const glyphView = editor.pages.active!;
     const glyphB = await addGlyph(editor, "B", 66);
     const second = editor.pages.create();
     editor.pages.activate(second.id);
 
     const child = editor.openGlyph(glyphB);
 
-    const run = editor.textRun!;
-    expect(editor.pages.pageOf(run.id)).toBe(editor.scene.node(second.id));
+    expect(editor.pages.activeCell.peek()).toBe(glyphView.id);
+    expect(editor.pages.pageOf(child.id)?.id).toBe(glyphView.id);
     expect(child.glyphId).toBe(glyphB);
     expect(editor.editing.nodeIds).toEqual([child.id]);
-    expect(editor.pages.pageOf(pageRun.id)).toBe(page);
-    expect(editor.nodeDefinition("textRun").childGlyph(pageRun)?.glyphId).not.toBe(glyphB);
+    expect(editor.scene.children(second.id)).toEqual([]);
   });
 
   it("remembers each page's camera for the session", () => {
     const page = firstPage(editor);
+    editor.pages.activate(page.id);
     const second = editor.pages.create();
     editor.setZoom(2);
     editor.setPan({ x: 40, y: 60 });

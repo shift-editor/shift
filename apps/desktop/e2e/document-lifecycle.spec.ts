@@ -34,6 +34,7 @@ import {
   clickFirstCatalogGlyph,
   openFirstCatalogGlyph,
   waitForEditorReady,
+  glyphSearch,
 } from "./fixtures/appLocators";
 
 const execFileAsync = promisify(execFile);
@@ -593,7 +594,7 @@ test.describe("document lifecycle through the application shell", () => {
           ),
         )
         .toBe(true);
-      await reopenedPage.getByPlaceholder("Search glyphs...").fill("newGlyph.1");
+      await (await glyphSearch(reopenedPage)).fill("newGlyph.1");
       await expect(
         reopenedPage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
       ).toHaveAttribute("data-filtered-glyph-count", "1");
