@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { KerningPairPosition } from "@shift/editor/model";
-import type { GlyphId } from "@shift/types";
 import {
   Popover,
   PopoverClose,
@@ -18,33 +17,13 @@ import {
 } from "@shift/ui";
 import { GroupsIcon } from "@/components/icons/GroupsIcon";
 import { SidebarActionButton } from "@/components/sidebar";
+import type { KerningGroupsTarget } from "@/lib/kerning/KerningGroupsTarget";
 import { GroupView } from "./GroupView";
 
 const EDGE_TABS: ReadonlyArray<{ position: KerningPairPosition; label: string }> = [
   { position: "first", label: "Right" },
   { position: "second", label: "Left" },
 ];
-
-/**
- * What the panel opens on: a selected pair, whose groups are set against
- * each other in the preview, or one glyph, both of whose edges are shown
- * with nothing to kern them against.
- */
-export type KerningGroupsTarget =
-  | { readonly kind: "pair"; readonly first: GlyphId; readonly second: GlyphId }
-  | { readonly kind: "glyph"; readonly glyphId: GlyphId };
-
-/** The target's glyph at a pair position, whose group a tab opens on. */
-function targetGlyph(target: KerningGroupsTarget, position: KerningPairPosition): GlyphId {
-  if (target.kind === "glyph") return target.glyphId;
-  return position === "first" ? target.first : target.second;
-}
-
-/** The glyph a tab's preview sets the members against: the pair's other glyph, if any. */
-function targetPartner(target: KerningGroupsTarget, position: KerningPairPosition): GlyphId | null {
-  if (target.kind === "glyph") return null;
-  return position === "first" ? target.second : target.first;
-}
 
 interface KerningGroupsPanelProps {
   readonly target: KerningGroupsTarget;
@@ -59,8 +38,6 @@ interface KerningGroupsPanelProps {
  * current kern), and the members to add to or remove from.
  */
 export function KerningGroupsPanel({ target, anchorRef }: KerningGroupsPanelProps) {
-  const targetKey =
-    target.kind === "pair" ? `${target.first}:${target.second}` : `glyph:${target.glyphId}`;
   const [position, setPosition] = useState<KerningPairPosition>("first");
 
   return (
@@ -108,10 +85,10 @@ export function KerningGroupsPanel({ target, anchorRef }: KerningGroupsPanelProp
               {EDGE_TABS.map((tab) => (
                 <TabsPanel key={tab.position} value={tab.position}>
                   <GroupView
-                    key={targetKey}
+                    key={target.key}
                     position={tab.position}
-                    glyphId={targetGlyph(target, tab.position)}
-                    otherGlyphId={targetPartner(target, tab.position)}
+                    glyphId={target.glyphAt(tab.position)}
+                    otherGlyphId={target.partnerAt(tab.position)}
                   />
                 </TabsPanel>
               ))}

@@ -36,14 +36,8 @@ export const Instances = ({ canAuthor, outlineControls }: InstancesProps) => {
     <div className="flex flex-col items-start justify-start gap-1">
       {instances.map((instance) => {
         const target = { kind: "instance", instanceId: instance.id } as const;
-        const visible =
-          outlineControls?.targets.some(
-            (candidate) => candidate.kind === "instance" && candidate.instanceId === instance.id,
-          ) ?? false;
-        const inherited =
-          outlineControls?.inheritedTargets.some(
-            (candidate) => candidate.kind === "instance" && candidate.instanceId === instance.id,
-          ) ?? false;
+        const visible = outlineControls?.targets.hasInstance(instance.id) ?? false;
+        const inherited = outlineControls?.inheritedTargets.hasInstance(instance.id) ?? false;
 
         return (
           <SidebarActionRow

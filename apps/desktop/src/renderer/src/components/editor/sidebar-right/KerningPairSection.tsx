@@ -13,6 +13,7 @@ import KerningIcon from "@/assets/toolbar/kerning.svg";
 import MinusIcon from "@/assets/general/minus.svg";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
 import { KerningGroupsPanel } from "@/components/kerning/groups/KerningGroupsPanel";
+import { KerningGroupsTarget } from "@/lib/kerning/KerningGroupsTarget";
 import { LockIcon } from "@/components/icons/LockIcon";
 import { LockOpenIcon } from "@/components/icons/LockOpenIcon";
 import type { Editor } from "@shift/editor";
@@ -55,7 +56,7 @@ export const KerningPairSection = () => {
         contentClassName="gap-3"
         actions={
           <KerningGroupsPanel
-            target={{ kind: "pair", first: pair.first, second: pair.second }}
+            target={KerningGroupsTarget.pair(pair.first, pair.second)}
             anchorRef={sectionRef}
           />
         }

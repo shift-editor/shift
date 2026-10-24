@@ -5,7 +5,8 @@ import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
-import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
+import { OutlineTargets } from "@shift/editor/model";
+import type { GlyphOutlineControls } from "@shift/editor/types";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 
@@ -22,10 +23,7 @@ export const InstancesSection = ({
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
   const canAuthor = useFontSession().mode === "workspace";
   const instances = useNamedInstances();
-  const instanceTargets: GlyphOutlineTarget[] = instances.map((instance) => ({
-    kind: "instance",
-    instanceId: instance.id,
-  }));
+  const instanceTargets = OutlineTargets.instances(instances.map((instance) => instance.id));
   const toggleAll = () => outlineControls?.onToggleGroup(instanceTargets);
 
   return (
@@ -36,7 +34,7 @@ export const InstancesSection = ({
       isActive={instanceMenuOpen}
       actions={
         <>
-          {outlineControls && instanceTargets.length > 0 && (
+          {outlineControls && instanceTargets.size > 0 && (
             <OutlineVisibilityButton
               visible={outlineControls.groupActive}
               alwaysOpen

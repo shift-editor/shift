@@ -56,14 +56,8 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
     <div className="flex justify-start items-start flex-col gap-1">
       {sources.map((source, index) => {
         const target = { kind: "source", sourceId: source.id } as const;
-        const visible =
-          outlineControls?.targets.some(
-            (candidate) => candidate.kind === "source" && candidate.sourceId === source.id,
-          ) ?? false;
-        const inherited =
-          outlineControls?.inheritedTargets.some(
-            (candidate) => candidate.kind === "source" && candidate.sourceId === source.id,
-          ) ?? false;
+        const visible = outlineControls?.targets.hasSource(source.id) ?? false;
+        const inherited = outlineControls?.inheritedTargets.hasSource(source.id) ?? false;
         const selected = editingSourceIds.has(source.id);
         const joinsPrevious = selected && index > 0 && editingSourceIds.has(sources[index - 1].id);
         const joinsNext =
