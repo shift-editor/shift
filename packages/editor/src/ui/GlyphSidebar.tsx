@@ -19,6 +19,8 @@ export interface GlyphSidebarHost {
    * Called with the glyph the sidebar shows, which changes as the edited glyph does.
    */
   glyphLabel?: (glyphId: GlyphId) => string | undefined;
+  /** Rendered at the end of the Glyph section, for more of the glyph's own data. */
+  glyph?: ReactNode;
   /** Rendered below the glyph metrics, for panels about the current selection. */
   selection?: ReactNode;
 }
@@ -127,6 +129,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                 {glyphLabel ?? "—"}
               </div>
             </main>
+            {host.glyph}
           </section>
         </div>
         <Separator />
