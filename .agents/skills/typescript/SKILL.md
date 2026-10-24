@@ -38,6 +38,7 @@ const axes = useExternalAxes(); // font.externalAxesCell, a computed
 ```
 
 - **Name every order.** Pass a named comparator to `sort`/`toSorted`: `ascending`, `descending`, `alphabetical`, `byName`, `comparing(key, order)` and `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a comparator named next to the type it orders (`newestFirst`, `byMappingInput(axis)`). Enforced by `shift/no-inline-comparator`.
+- **Match typed names through `NameQuery`.** A search field's text becomes `NameQuery.from(text)` (trimmed; an empty query matches everything; `{ prefix: "@" }` drops a typed marker), and the list asks `query.filter(items)`, `query.matches(item)` or `query.filterBy(items, (item) => [item.displayName])`, never `x.name.toLowerCase().includes(lower)`.
 - **Sort once, where the collection changes,** not at every read. An immutable owner sorts in its constructor (`KerningGroups`); a reactive owner sorts in a `computed`.
 
 ## Owners answer questions
