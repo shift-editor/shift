@@ -160,7 +160,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const geometry = this.#view(node);
     if (!geometry) return null;
 
-    const hit = geometry.hitAt(point, this.editor.hitRadius);
+    const radius = this.editor.hitRadiusIn(node);
+    const hit = geometry.hitAt(point, radius);
     if (hit) {
       switch (hit.kind) {
         case "segment": {
@@ -202,8 +203,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       const contour = contours[index];
       const component = contour?.component;
       if (!component) continue;
-      if (!contour.segments().some((segment) => segment.hit(point, this.editor.hitRadius)))
-        continue;
+      if (!contour.segments().some((segment) => segment.hit(point, radius))) continue;
 
       const componentId = component.componentPath[0];
       if (!componentId) continue;
