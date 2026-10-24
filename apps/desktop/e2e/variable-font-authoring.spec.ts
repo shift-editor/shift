@@ -10,7 +10,7 @@ interface VariableFixture {
 }
 
 async function openSettings(page: Page, category: "Axes" | "Sources" | "Instances") {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: /font info$/ }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: category, exact: true }).click();

@@ -1,5 +1,6 @@
 import { ScrollArea, Separator } from "@shift/ui";
 import { ObjectSectionRow } from "@/components/editor/object-tree/ObjectSectionRow";
+import { SidebarBrand } from "@/components/chrome/SidebarBrand";
 import { PagesSection } from "@/components/pages/PagesSection";
 import { AxesSection } from "@/components/variation/AxesSection";
 import { InstancesSection } from "@/components/variation/InstancesSection";
@@ -13,10 +14,11 @@ export const LeftSidebar = () => {
   return (
     <aside
       aria-label="Font navigation"
-      className="h-full w-full min-w-0 border-r border-line-subtle bg-surface"
+      className="flex h-full w-full min-w-0 flex-col border-r border-line-subtle bg-surface"
     >
+      <SidebarBrand />
       <ScrollArea
-        className="h-full"
+        className="min-h-0 flex-1"
         viewportRef={scrollRef}
         viewportStyle={{ overflowAnchor: "none" }}
       >

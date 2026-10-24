@@ -558,7 +558,7 @@ authoredTest(
 authoredTest(
   "Settings rounds mapping display without losing editing precision",
   async ({ page }) => {
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /font info$/ }).click();
     const settings = page.getByRole("dialog", { name: "Settings" });
     await settings.getByRole("button", { name: "Axes", exact: true }).click();
     await settings.getByRole("button", { name: "Create axis", exact: true }).click();
@@ -599,7 +599,7 @@ authoredTest(
 authoredTest(
   "Mapping graph keeps a crossed-point drag as one undoable edit",
   async ({ electronApp, page }) => {
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /font info$/ }).click();
     const settings = page.getByRole("dialog", { name: "Settings" });
     await settings.getByRole("button", { name: "Axes", exact: true }).click();
     await settings.getByRole("button", { name: "Create axis", exact: true }).click();

@@ -7,6 +7,7 @@ import {
   TabsPanel,
   TabsTab,
 } from "@shift/ui";
+import { SidebarBrand } from "@/components/chrome/SidebarBrand";
 import { PagesSection } from "@/components/pages/PagesSection";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 import { ObjectsPanel } from "./ObjectsPanel";
@@ -19,9 +20,10 @@ const TAB_CLASS =
 export const LeftSidebar = () => (
   <aside
     aria-label="Layers and designspace"
-    className="h-full w-full min-w-0 overflow-hidden border-r border-line-subtle bg-surface"
+    className="flex h-full w-full min-w-0 flex-col overflow-hidden border-r border-line-subtle bg-surface"
   >
-    <Tabs defaultValue="layers" className="flex h-full min-h-0 flex-col">
+    <SidebarBrand />
+    <Tabs defaultValue="layers" className="flex min-h-0 flex-1 flex-col">
       <TabsList className="mx-2 mt-2 h-6 shrink-0 gap-0 rounded-md border-0 bg-input p-0.5">
         <TabsTab value="layers" className={TAB_CLASS}>
           Layers

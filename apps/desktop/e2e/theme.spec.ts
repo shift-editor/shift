@@ -70,7 +70,7 @@ async function configFile(page: Page): Promise<string> {
 
 /** Opens Settings → Appearance. */
 async function openAppearance(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: /font info$/ }).click();
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
 }
 
