@@ -8,6 +8,7 @@ import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AppConfigState, ThemeSetting } from "../config/config";
+import type { DebugOverlays } from "../debug";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 export type DocumentCallMap = {
@@ -47,6 +48,8 @@ export type RendererToMain = {
   /** Persists whether local agents may connect and starts or stops the MCP server. */
   "agentConnections.setAllowed": (allowed: boolean) => AgentConnectionsState;
   "commands.run": (id: CommandId) => void;
+  /** Returns the Debug menu's overlay toggles. */
+  "debug.overlays": () => DebugOverlays;
   "config.state": () => AppConfigState;
   /** Writes the theme setting to `config.toml`; rejects when the file has errors. */
   "config.setTheme": (theme: ThemeSetting) => AppConfigState;
@@ -120,6 +123,8 @@ export type MainToRenderer = {
   "config.changed": (state: AppConfigState) => void;
   /** Recent files changed after an open, Save As, removal, or Clear Menu. */
   "recents.changed": (documents: RecentDocument[]) => void;
+  /** A Debug menu overlay was toggled. */
+  "debug.overlaysChanged": (overlays: DebugOverlays) => void;
   /** The Windows and Linux menus changed: rebuilt, or command states re-evaluated. */
   "menu.barChanged": (bar: MenuBar) => void;
 };

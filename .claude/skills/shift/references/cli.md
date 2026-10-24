@@ -57,15 +57,20 @@ shift-cli kerning group create Lab.shift O O Q --position first
 - **Kerning sides**: `first` is the left glyph, and its first-position group kerns its right edge; `second` is the right glyph. A side is a glyph name or `@GROUP` for a group at that position. Values are per master and default to the default source; set every master you mean to change.
 - **`kerning set --input`** applies `groups` (created if missing; `members` replaces membership) and then `pairs` (`value: null` removes) atomically, so pairs can name groups the batch creates.
 
-## Check
+## Check and proof
 
 ```sh
 shift-cli check Family.glyphs                       # problems in masters, axes, outlines, kerning
 shift-cli check Family.designspace --json           # findings with stable codes for scripts and CI
 shift-cli check Lab.shift --charset latin1 --mono   # opt-in character-set and monospace checks
+shift-cli proof Lab.shift --output proof.png        # look at what you drew
+shift-cli proof Lab.shift --output weights.png --masters --text "HOHnon"
+shift-cli proof Lab.shift --output grid.png --grid
 ```
 
 - Run `check` after authoring and before compiling. Errors (exit status 1) mean the font won't build or a glyph renders wrongly somewhere in the design space; fix those first. Codes starting with `I` are interpolation problems between a master and the default master, and name the glyph, master, and contour.
+- **Look before you claim a glyph is right.** `proof` compiles the source in memory and draws real shaped text; read the PNG. `--masters`, `--instances`, and repeated `--at TAG=VALUE` stack the same text at several locations, which is how interpolation problems show. `/name` in `--text` sets a glyph by name (`--text "H/a.ss01H"`).
+- Missing characters are drawn red and listed in `missingCharacters` in `--json`, so an agent can check coverage without reading pixels.
 
 ## Compile
 

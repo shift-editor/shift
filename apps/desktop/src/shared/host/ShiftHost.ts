@@ -5,6 +5,7 @@ import type { FontSessionMode } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AppConfigState, ThemeSetting } from "../config/config";
+import type { DebugOverlays } from "../debug";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
 
 /**
@@ -143,6 +144,17 @@ export interface ShiftHost {
     reportRenderer: (report: RendererErrorReport) => Promise<void>;
   };
   /** App-shell UI events owned by the main process. */
+  /** Development-build overlays toggled from the Debug menu. */
+  debug: {
+    /** Returns the current overlay toggles; all off in a packaged build. */
+    overlays: () => Promise<DebugOverlays>;
+    /**
+     * Subscribes to overlay toggles from the Debug menu.
+     *
+     * @returns an unsubscribe function.
+     */
+    onOverlaysChanged: (callback: (overlays: DebugOverlays) => void) => () => void;
+  };
   ui: {
     /**
      * Subscribes to interface-size changes driven by the View menu.
