@@ -112,6 +112,31 @@ describe("Editor scene bootstrap", () => {
     expect(editor.scene.first("glyph")).toBe(firstChild);
   });
 
+  it("follows the one glyph node reactively as glyph nodes come and go", () => {
+    const [, firstChild] = editor.scene.nodes();
+    const onlyGlyph = editor.scene.onlyCell("glyph");
+    const seen: (string | null)[] = [];
+    const reader = effect(() => {
+      seen.push(onlyGlyph.value?.id ?? null);
+    });
+
+    const record = editor.font.recordForName("A")!;
+    const second = editor.scene.createNode<GlyphNode>({
+      kind: "glyph",
+      glyphId: record.id,
+      sourceId: editor.font.defaultSource.id,
+      position: { x: 700, y: 0 },
+    });
+    expect(onlyGlyph.peek()).toBeNull();
+
+    editor.scene.deleteNode(firstChild!.id);
+    reader.dispose();
+
+    expect(onlyGlyph.peek()).toBe(editor.scene.node(second.id));
+    expect(seen.at(-1)).toBe(second.id);
+    expect(seen).toContain(null);
+  });
+
   it("can place the same glyph id twice with distinct node ids", () => {
     const record = editor.font.recordForName("A")!;
     const left = mintNodeId();
@@ -306,6 +331,16 @@ describe("Editor scene bootstrap", () => {
     expect(editor.toggleAllSourcesForEditing()).toBe(true);
     expect([...editor.editingSourceIds]).toEqual([referenceId]);
     expect(editor.collapseEditingSources()).toBe(false);
+  });
+
+  it("lists only the axes users set directly as external axes", async () => {
+    const externalAxes = editor.font.externalAxesCell;
+    const weightId = editor.font.createAxis(weightAxis());
+    editor.font.createAxis({ ...weightAxis(), tag: "opsz", name: "Optical", role: "internal" });
+    await editor.settle();
+
+    expect(editor.font.getAxes()).toHaveLength(2);
+    expect(externalAxes.peek().map(({ id }) => id)).toEqual([weightId]);
   });
 
   it("materializes the opened glyph when selecting a sparse source", async () => {

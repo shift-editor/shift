@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { alphabetical, comparing, orderBy } from "@shift/types";
 import { z } from "zod";
 import type { WorkspaceRecovery } from "../../shared/workspace/protocol";
 import { DocumentAddress, type DocumentBinding, type WorkspaceAllocation } from "./types";
@@ -212,7 +213,7 @@ export class DocumentStorage {
       bindings.push(binding);
     }
 
-    return bindings.sort((left, right) => left.canonicalPath.localeCompare(right.canonicalPath));
+    return bindings.sort(byCanonicalPath);
   }
 
   #listAllDocumentBindings(): DocumentBinding[] {
@@ -236,11 +237,7 @@ export class DocumentStorage {
       }
     }
 
-    return bindings.sort((left, right) =>
-      left.documentId === right.documentId
-        ? left.canonicalPath.localeCompare(right.canonicalPath)
-        : left.documentId.localeCompare(right.documentId),
-    );
+    return bindings.sort(byDocumentThenPath);
   }
 
   /** Atomically binds one canonical document address to an app-local workspace. */
@@ -311,13 +308,23 @@ function readDocumentBinding(bindingPath: string): DocumentBinding {
   throw new Error(`invalid document binding: ${bindingPath}: ${details}`);
 }
 
-function sortRecoveries(recoveries: WorkspaceRecovery[]): WorkspaceRecovery[] {
-  return recoveries.sort((left, right) => {
-    const kind = left.kind.localeCompare(right.kind);
-    if (kind !== 0) return kind;
+const byCanonicalPath = comparing(
+  (binding: DocumentBinding) => binding.canonicalPath,
+  alphabetical,
+);
 
-    return left.workspaceId.localeCompare(right.workspaceId);
-  });
+const byDocumentThenPath = orderBy<DocumentBinding>(
+  comparing((binding) => binding.documentId, alphabetical),
+  byCanonicalPath,
+);
+
+const byKindThenWorkspace = orderBy<WorkspaceRecovery>(
+  comparing((recovery) => recovery.kind, alphabetical),
+  comparing((recovery) => recovery.workspaceId, alphabetical),
+);
+
+function sortRecoveries(recoveries: WorkspaceRecovery[]): WorkspaceRecovery[] {
+  return recoveries.sort(byKindThenWorkspace);
 }
 
 function writeJsonAtomic(targetPath: string, value: unknown): void {

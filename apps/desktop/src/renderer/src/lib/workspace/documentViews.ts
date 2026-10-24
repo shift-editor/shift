@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { asGlyphId, type WorkspaceDocumentState } from "@shift/types";
+import { asGlyphId, comparing, descending, type WorkspaceDocumentState } from "@shift/types";
 
 const documentViewSchema = z
   .object({
@@ -20,6 +20,8 @@ export type DocumentView = z.output<typeof documentViewSchema>;
 type StoredView = z.output<typeof storedViewSchema>;
 
 type ViewStorage = Pick<Storage, "getItem" | "setItem">;
+
+const mostRecentlyUsed = comparing((stored: StoredView) => stored.usedAt, descending);
 
 const STORAGE_KEY = "shift.documentViews";
 
@@ -61,7 +63,7 @@ export class DocumentViews {
   write(key: string, view: DocumentView, usedAt: number = Date.now()): void {
     const others = this.#readAll().filter((stored) => stored.key !== key);
     const views = [{ ...view, key, usedAt }, ...others]
-      .sort((left, right) => right.usedAt - left.usedAt)
+      .sort(mostRecentlyUsed)
       .slice(0, DOCUMENT_VIEWS_LIMIT);
 
     try {

@@ -1,4 +1,4 @@
-import type { Axis, AxisType } from "@shift/types";
+import { ascending, type Axis, type AxisType } from "@shift/types";
 import {
   Checkbox,
   Input,
@@ -182,7 +182,7 @@ function axisWithType(axis: Axis, axisType: AxisType): Axis {
     case "discrete": {
       const values = [...new Set([axis.minimum, axis.default, axis.maximum])]
         .filter((value): value is number => value !== undefined)
-        .sort((left, right) => left - right);
+        .sort(ascending);
       return { ...axis, axisType, minimum: undefined, maximum: undefined, values };
     }
   }

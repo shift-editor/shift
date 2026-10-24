@@ -18,7 +18,7 @@ import {
 import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
-import { useAxes } from "@/hooks/useAxes";
+import { useExternalAxes } from "@/hooks/useAxes";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { instanceCreationIssue, instanceLocation, suggestedInstanceName } from "./instanceCreation";
@@ -44,7 +44,7 @@ export const CreateInstanceMenu = ({
   onOpenChange,
 }: CreateInstanceMenuProps) => {
   const font = useFont();
-  const axes = useAxes().filter((axis) => axis.role === "external");
+  const axes = useExternalAxes();
   const instances = useNamedInstances();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<CreateInstanceFormValues>(emptyValues);

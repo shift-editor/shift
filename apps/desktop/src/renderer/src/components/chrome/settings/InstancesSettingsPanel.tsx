@@ -6,7 +6,7 @@ import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton, SidebarActionRow } from "@/components/sidebar";
 import { CreateInstanceMenu } from "@/components/variation/CreateInstanceMenu";
-import { useAxes } from "@/hooks/useAxes";
+import { useExternalAxes } from "@/hooks/useAxes";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { SettingsNumberField } from "./SettingsNumberField";
@@ -23,7 +23,7 @@ export const InstancesSettingsPanel = ({
 }: InstancesSettingsPanelProps) => {
   const font = useFont();
   const instances = useNamedInstances();
-  const axes = useAxes().filter((axis) => axis.role === "external");
+  const axes = useExternalAxes();
   const [selectedInstanceId, setSelectedInstanceId] = useState<NamedInstanceId | null>(
     initialInstanceId ?? instances[0]?.id ?? null,
   );

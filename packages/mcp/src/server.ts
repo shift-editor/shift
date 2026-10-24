@@ -9,6 +9,7 @@ import {
   type ShiftCaptureInput,
   type ShiftObservation,
 } from "@shift/runtime";
+import { comparing, descending } from "@shift/types";
 import { SHIFT_CODE_TYPES } from "./declarations";
 import { SHIFT_GUIDE_TOPICS, SHIFT_MCP_INSTRUCTIONS, shiftGuide } from "./guide";
 import type { ShiftMcpActivity, ShiftMcpConnection } from "./types";
@@ -86,7 +87,7 @@ export class ShiftMcpServer {
     const clients = [...this.#clients]
       .filter(([, lastSeenAt]) => lastSeenAt >= cutoff)
       .map(([name, lastSeenAt]) => ({ name, lastSeenAt }))
-      .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+      .sort(comparing((client) => client.lastSeenAt, descending));
     return { lastRequestAt: this.#lastRequestAt, clients };
   }
 

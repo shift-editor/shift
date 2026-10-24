@@ -6,12 +6,16 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createZstdCompress, createZstdDecompress } from "node:zlib";
-import type {
-  GlyphId,
-  InterpolationBasis,
-  SlugAtlas,
-  SlugGlyph,
-  SlugWeightSet,
+import {
+  alphabetical,
+  ascending,
+  comparing,
+  orderBy,
+  type GlyphId,
+  type InterpolationBasis,
+  type SlugAtlas,
+  type SlugGlyph,
+  type SlugWeightSet,
 } from "@shift/types";
 import { z } from "zod";
 import type {
@@ -410,6 +414,12 @@ export async function publishCachedAtlas(
   }
 }
 
+/** Cached atlas files oldest first, by name when two were touched together. */
+const leastRecentlyTouched = orderBy<CachedAtlasFile>(
+  comparing((entry) => entry.touched, ascending),
+  comparing((entry) => entry.name, alphabetical),
+);
+
 /** Removes least-recently-used published entries until the global byte budget is met. */
 export async function pruneCachedAtlases(rootPath: string, byteBudget: number): Promise<void> {
   if (!Number.isSafeInteger(byteBudget) || byteBudget < 0) {
@@ -432,9 +442,7 @@ export async function pruneCachedAtlases(rootPath: string, byteBudget: number): 
   }
 
   let totalBytes = entries.reduce((total, entry) => total + entry.bytes, 0);
-  entries.sort(
-    (left, right) => left.touched - right.touched || left.name.localeCompare(right.name),
-  );
+  entries.sort(leastRecentlyTouched);
   for (const entry of entries) {
     if (totalBytes <= byteBudget) break;
 

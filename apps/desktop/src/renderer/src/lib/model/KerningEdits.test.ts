@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "node:path";
-import type { GlyphId, GlyphName } from "@shift/types";
+import { alphabetical, type GlyphId, type GlyphName } from "@shift/types";
 import { isGroupSide, kerningValueEdit, type Font } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
@@ -217,6 +217,22 @@ describe("kerning group edits", () => {
 
     expect(groupOf(font, "second", a)).toMatchObject({ id: group.id, name: "Apex" });
     expect(kernAt(font, "BoldWide", "T", "A")).toBe(before);
+  });
+
+  it("lists each position's groups in name order and finds one by name", async () => {
+    const { font, t, a } = await openMutatorSans();
+
+    await font.createKerningGroup("first", "zz-last", [t]);
+    await font.createKerningGroup("first", "aa-first", [a]);
+
+    const groups = font.kerningCell.peek().groups;
+    const firstNames = groups.atPosition("first").map(({ name }) => name);
+    expect(firstNames.indexOf("aa-first")).toBeLessThan(firstNames.indexOf("zz-last"));
+    expect(firstNames).toEqual(firstNames.toSorted(alphabetical));
+    expect(groups.atPosition("first").every(({ position }) => position === "first")).toBe(true);
+    expect(groups.atPosition("second").every(({ position }) => position === "second")).toBe(true);
+    expect(groups.named("first", "zz-last")?.glyphIds).toEqual([t]);
+    expect(groups.named("second", "zz-last")).toBeNull();
   });
 
   it("deletes a group, stopping its kerning until undo restores it", async () => {

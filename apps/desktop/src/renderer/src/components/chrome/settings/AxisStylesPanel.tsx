@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
-import { mintAxisLabelId } from "@shift/types";
+import { ascending, mintAxisLabelId } from "@shift/types";
 import { Button, Checkbox, Input, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -315,9 +315,7 @@ function nextLabelValue(axis: Axis): number | null {
   if (!used.has(minimum)) return minimum;
   if (!used.has(maximum)) return maximum;
 
-  const values = [...used]
-    .filter((value) => minimum <= value && value <= maximum)
-    .sort((left, right) => left - right);
+  const values = [...used].filter((value) => minimum <= value && value <= maximum).sort(ascending);
   let largestGap = 0;
   let available: number | null = null;
 

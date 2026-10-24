@@ -21,10 +21,8 @@ interface GlyphKerningSectionProps {
 
 export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => {
   const editor = useEditor();
-  const scene = useSignalState(editor.scene.cell);
-  const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-  const node = glyphNodes.length === 1 ? glyphNodes[0] : undefined;
-  if (node?.kind !== "glyph") return null;
+  const node = useSignalState(editor.scene.onlyCell("glyph"));
+  if (!node) return null;
 
   const glyphId = node.glyphId;
   const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;

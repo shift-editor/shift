@@ -1415,6 +1415,7 @@ export class GlyphRenderModel {
     ComponentGlyph,
     readonly RenderContour[]
   > | null>;
+  readonly #rootContoursCell: Signal<readonly GlyphContour[]>;
   readonly #contoursCell: Signal<readonly GlyphContour[]>;
   readonly #boundsCell: Signal<BoundsType | null>;
   readonly #drawPathCell: Signal<Path2D>;
@@ -1530,13 +1531,13 @@ export class GlyphRenderModel {
     this.#decomposedContoursCell = computed(() => this.#decomposedContours(), {
       name: "glyph.renderModel.decomposedContours",
     });
-    const rootContoursCell = this.contoursAt(
+    this.#rootContoursCell = this.contoursAt(
       signal(this.#glyphId, { name: "glyph.renderModel.glyphId" }),
       IDENTITY_GLYPH_TRANSFORM_CELL,
       null,
     );
     this.#contoursCell = computed(() => [
-      ...rootContoursCell.value,
+      ...this.#rootContoursCell.value,
       ...this.#componentsCell.value.flatMap((component) => component.contoursCell.value),
     ]);
     this.#boundsCell = computed(() => {
@@ -1555,9 +1556,9 @@ export class GlyphRenderModel {
     });
     this.#rootClosedContoursPathCell = computed(() => {
       const path = new Path2D();
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#rootContoursCell.value) {
         contour.trackShape();
-        if (contour.component === null && contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.path);
       }
       return path;
     });
@@ -1880,6 +1881,15 @@ export class GlyphRenderModel {
     return this.#contoursCell;
   }
 
+  /** The glyph's own contours, without those its components place. */
+  get rootContours(): readonly GlyphContour[] {
+    return this.#rootContoursCell.peek();
+  }
+
+  get rootContoursCell(): Signal<readonly GlyphContour[]> {
+    return this.#rootContoursCell;
+  }
+
   get components(): readonly ComponentGlyph[] {
     return this.#componentsCell.peek();
   }
@@ -2010,8 +2020,7 @@ export class GlyphRenderModel {
       hits.push({ kind: "component", componentPath: component.componentPath });
     }
 
-    const rootContours = this.#contoursCell.peek().filter((contour) => contour.component === null);
-    if (filledContoursContain(rootContours, pos)) hits.push({ kind: "root" });
+    if (filledContoursContain(this.#rootContoursCell.peek(), pos)) hits.push({ kind: "root" });
 
     return hits;
   }
