@@ -1364,6 +1364,53 @@ mod tests {
     }
 
     #[test]
+    fn decompose_components_draws_the_base_on_every_master() {
+        // Each master's components have their own ids, so decomposing on a
+        // master other than the default must read that master's components.
+        let mut font = crate::test_support::sample_font();
+        let sources: Vec<SourceId> = font.sources().iter().map(Source::id).collect();
+        let mut base = Glyph::with_id(GlyphId::from_raw("base"), "base");
+        let mut composite = Glyph::with_id(GlyphId::from_raw("composite"), "composite");
+        for source_id in &sources {
+            let mut layer = GlyphLayer::with_width(
+                LayerId::from_raw(format!("base_{source_id}")),
+                source_id.clone(),
+                500.0,
+            );
+            layer.add_contour(crate::contour![(0, 0), (400, 0), (400, 700)]);
+            base.set_layer(layer);
+            let mut layer = GlyphLayer::with_width(
+                LayerId::from_raw(format!("composite_{source_id}")),
+                source_id.clone(),
+                500.0,
+            );
+            layer.add_component(Component::with_id(
+                ComponentId::from_raw(format!("component_{source_id}")),
+                GlyphId::from_raw("base"),
+                "base",
+                DecomposedTransform::identity(),
+            ));
+            composite.set_layer(layer);
+        }
+        font.insert_glyph(base).unwrap();
+        font.insert_glyph(composite).unwrap();
+
+        for source_id in &sources {
+            let mut font = font.clone();
+            let layer_id = LayerId::from_raw(format!("composite_{source_id}"));
+            font.apply_intents(&FontIntentSet::from(DecomposeComponents {
+                layer_id: layer_id.clone(),
+                component_ids: vec![ComponentId::from_raw(format!("component_{source_id}"))],
+            }))
+            .unwrap();
+
+            let layer = font.layer(&layer_id).unwrap();
+            assert!(layer.components().is_empty(), "{source_id}");
+            assert_eq!(layer.contours_iter().count(), 1, "{source_id}");
+        }
+    }
+
+    #[test]
     fn materialize_glyph_layer_applies_values_with_fresh_structure_ids() {
         let mut font = Font::new();
         let default_source_id = font
