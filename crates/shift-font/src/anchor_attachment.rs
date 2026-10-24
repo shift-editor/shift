@@ -54,21 +54,33 @@ pub(crate) fn realign_attached_components<'a>(
         return Vec::new();
     }
 
-    let candidates: Vec<LayerId> = after
-        .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
-        .filter(|layer| layer.components_iter().nth(1).is_some())
-        .filter(|layer| {
-            touched.contains(&layer.id())
-                || layer
-                    .components_iter()
-                    .any(|component| anchor_glyphs.contains(&component.base_glyph_id()))
+    // Touched layers plus composites that stack components on a glyph whose
+    // anchors moved, found through the component index, once each and in
+    // glyph then layer order so every engine emits the same changeset.
+    // Derived anchored placement retires this query.
+    let candidates: BTreeSet<(Option<usize>, LayerId)> = touched
+        .iter()
+        .copied()
+        .chain(
+            anchor_glyphs
+                .iter()
+                .flat_map(|glyph_id| after.layers_using_component_base(glyph_id)),
+        )
+        .filter(|layer_id| {
+            after
+                .layer(layer_id)
+                .is_some_and(|layer| layer.components_iter().nth(1).is_some())
         })
-        .map(|layer| layer.id())
+        .map(|layer_id| {
+            let glyph_order = after
+                .glyph_id_by_layer(layer_id)
+                .and_then(|glyph_id| after.glyph_order(&glyph_id));
+            (glyph_order, layer_id.clone())
+        })
         .collect();
 
     let mut changed_layers = Vec::new();
-    for layer_id in candidates {
+    for (_, layer_id) in candidates {
         let (Some(old), Some(new)) = (before.layer(&layer_id), after.layer(&layer_id)) else {
             continue;
         };

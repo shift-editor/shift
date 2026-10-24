@@ -26,6 +26,10 @@ impl LayerIntent for AddPoints {
             before,
             points,
         } = self;
+        points
+            .iter()
+            .flat_map(PointSeed::coordinates)
+            .require_finite(Coordinates::NewPoints)?;
         let mut point_ids = HashSet::new();
         for seed in points {
             if font.has_point_id(&seed.id) || !point_ids.insert(seed.id.clone()) {
@@ -168,6 +172,10 @@ impl LayerIntent for MovePoints {
             point_ids,
             coords,
         } = self;
+        coords
+            .iter()
+            .copied()
+            .require_finite(Coordinates::PointPositions)?;
         if coords.len() != point_ids.len() * 2 {
             return Err(CoreError::InvalidPointId(format!(
                 "movePoints expects {} coords for {} points, got {}",
@@ -230,6 +238,7 @@ impl LayerIntent for RemovePoints {
             layer_id,
             point_ids,
         } = self;
+        let before = font.layer_snapshot(layer_id)?;
         let empty_contours = {
             let layer = font.require_layer_mut(layer_id)?;
             layer.remove_points(point_ids)?
@@ -238,7 +247,7 @@ impl LayerIntent for RemovePoints {
         if empty_contours.is_empty() {
             font.forget_point_ids(point_ids);
         } else {
-            font.rebuild_structure_index()?;
+            font.reindex_layer(layer_id, &before)?;
         }
 
         Ok(())
@@ -262,6 +271,10 @@ impl LayerIntent for AddAnchors {
 
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, anchors } = self;
+        anchors
+            .iter()
+            .flat_map(AnchorSeed::coordinates)
+            .require_finite(Coordinates::NewAnchors)?;
         let mut anchor_ids = HashSet::new();
         for seed in anchors {
             if font.has_anchor_id(&seed.id) || !anchor_ids.insert(seed.id.clone()) {
@@ -313,6 +326,10 @@ impl LayerIntent for MoveAnchors {
             anchor_ids,
             coords,
         } = self;
+        coords
+            .iter()
+            .copied()
+            .require_finite(Coordinates::AnchorPositions)?;
         if coords.len() != anchor_ids.len() * 2 {
             return Err(CoreError::InvalidAnchorId(format!(
                 "moveAnchors expects {} coords for {} anchors, got {}",
@@ -444,6 +461,7 @@ impl LayerIntent for AddComponent {
         }
 
         let aligned = font.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
+        let before = font.layer_snapshot(layer_id)?;
         {
             let layer = font.require_layer_mut(layer_id)?;
             let mut component = Component::with_id(
@@ -460,7 +478,7 @@ impl LayerIntent for AddComponent {
             layer.add_component(component);
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(layer_id, &before)?;
         Ok(())
     }
 }
@@ -501,12 +519,10 @@ impl LayerIntent for SetComponentTransforms {
                 ),
             });
         }
-        if transforms.iter().any(|value| !value.is_finite()) {
-            return Err(CoreError::InvalidPositionUpdateInput {
-                kind: "component transforms",
-                message: "values must be finite".to_string(),
-            });
-        }
+        transforms
+            .iter()
+            .copied()
+            .require_finite(Coordinates::ComponentTransforms)?;
 
         let layer = font.require_layer_mut(layer_id)?;
         for component_id in component_ids {
@@ -575,6 +591,7 @@ impl LayerIntent for RemoveComponents {
             layer_id,
             component_ids,
         } = self;
+        let before = font.layer_snapshot(layer_id)?;
         {
             let layer = font.require_layer_mut(layer_id)?;
             for component_id in component_ids {
@@ -587,7 +604,7 @@ impl LayerIntent for RemoveComponents {
             }
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(layer_id, &before)?;
         Ok(())
     }
 }
@@ -626,6 +643,7 @@ impl LayerIntent for DecomposeComponents {
             projection.component_contours(&glyph_id, &component_ids)?
         };
 
+        let before = font.layer_snapshot(layer_id)?;
         {
             let layer = font.require_layer_mut(layer_id)?;
             for component_id in component_ids {
@@ -643,7 +661,7 @@ impl LayerIntent for DecomposeComponents {
             }
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(layer_id, &before)?;
         Ok(())
     }
 }
@@ -722,6 +740,7 @@ impl LayerIntent for TranslatePoints {
             dx,
             dy,
         } = self;
+        [*dx, *dy].require_finite(Coordinates::PointTranslation)?;
         let layer = font.require_layer_mut(layer_id)?;
         layer.move_points(point_ids, *dx, *dy)?;
 
@@ -763,12 +782,7 @@ impl LayerIntent for TransformLayer {
             transform.dx,
             transform.dy,
         ];
-        if values.iter().any(|value| !value.is_finite()) {
-            return Err(CoreError::InvalidPositionUpdateInput {
-                kind: "layer transform",
-                message: "values must be finite".to_string(),
-            });
-        }
+        values.require_finite(Coordinates::LayerTransform)?;
 
         font.require_layer_mut(layer_id)?.transform_layer(transform);
         Ok(())
@@ -792,6 +806,7 @@ impl LayerIntent for SetXAdvance {
 
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, width } = self;
+        [*width].require_finite(Coordinates::AdvanceWidth)?;
         let layer = font.require_layer_mut(layer_id)?;
         layer.set_x_advance(*width);
 
@@ -821,12 +836,13 @@ impl LayerIntent for ApplyBooleanOp {
             contour_id_b,
             operation,
         } = self;
+        let before = font.layer_snapshot(layer_id)?;
         {
             let layer = font.require_layer_mut(layer_id)?;
             layer.apply_boolean_op(contour_id_a, contour_id_b, *operation)?;
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(layer_id, &before)?;
         Ok(())
     }
 }

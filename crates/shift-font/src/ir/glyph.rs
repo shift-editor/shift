@@ -8,7 +8,7 @@ use crate::entity::{
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
-use crate::point::Point;
+use crate::point::{Canonical, Point};
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
@@ -88,7 +88,7 @@ impl GlyphLayer {
 
     pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
         Self {
-            width,
+            width: width.canonical(),
             ..Self::new(id, source_id)
         }
     }
@@ -223,7 +223,7 @@ impl GlyphLayer {
             });
         }
 
-        self.width = width;
+        self.width = width.canonical();
         self.contours = new_contours;
         self.anchors = anchors;
         self.components = new_components;
@@ -239,7 +239,7 @@ impl GlyphLayer {
     }
 
     pub fn set_width(&mut self, width: f64) {
-        self.width = width;
+        self.width = width.canonical();
     }
 
     pub fn set_height(&mut self, height: Option<f64>) {
@@ -490,6 +490,24 @@ impl Glyph {
 
     pub fn layers(&self) -> &BTreeMap<LayerId, Arc<GlyphLayer>> {
         &self.layers
+    }
+
+    /// Every point, contour, component, anchor, and guideline id across the
+    /// glyph's layers, layer by layer.
+    pub(crate) fn entity_ids(&self) -> impl Iterator<Item = GlyphEntityId> + '_ {
+        self.layers.values().flat_map(|layer| layer.entity_ids())
+    }
+
+    /// Whether `other` holds exactly the same entity ids in the same layers,
+    /// compared directly rather than hashed.
+    pub(crate) fn has_same_entity_ids(&self, other: &Self) -> bool {
+        self.layers.len() == other.layers.len()
+            && self.layers.iter().all(|(layer_id, layer)| {
+                other
+                    .layers
+                    .get(layer_id)
+                    .is_some_and(|other| layer.entity_ids().eq(other.entity_ids()))
+            })
     }
 
     /// Whether any layer draws something: a contour or a component.

@@ -42,7 +42,7 @@ impl std::fmt::Display for EntityId {
 macro_rules! typed_id {
     ($name:ident, $prefix:literal) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize)]
-        pub struct $name(String);
+        pub struct $name(std::sync::Arc<str>);
 
         impl Default for $name {
             fn default() -> Self {
@@ -52,7 +52,7 @@ macro_rules! typed_id {
 
         impl $name {
             pub fn new() -> Self {
-                Self(prefixed_id($prefix))
+                Self(prefixed_id($prefix).into())
             }
 
             pub fn as_str(&self) -> &str {
@@ -62,9 +62,9 @@ macro_rules! typed_id {
             pub fn from_raw(raw: impl std::fmt::Display) -> Self {
                 let raw = raw.to_string();
                 if raw.starts_with(concat!($prefix, "_")) {
-                    Self(raw)
+                    Self(raw.into())
                 } else {
-                    Self(format!("{}_{raw}", $prefix))
+                    Self(format!("{}_{raw}", $prefix).into())
                 }
             }
         }
@@ -77,7 +77,7 @@ macro_rules! typed_id {
 
         impl From<$name> for String {
             fn from(id: $name) -> Self {
-                id.0
+                id.0.to_string()
             }
         }
 
@@ -86,7 +86,7 @@ macro_rules! typed_id {
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 if s.starts_with(concat!($prefix, "_")) {
-                    Ok(Self(s.to_string()))
+                    Ok(Self(s.into()))
                 } else {
                     Err(InvalidEntityId {
                         expected_prefix: $prefix,
@@ -203,7 +203,7 @@ impl GlyphId {
     /// `source_key` identifies the source font, such as its canonical path, so same-named
     /// glyphs from different fonts get different IDs. `name` must be unique within the source.
     pub fn from_source(source_key: &str, name: &str) -> Self {
-        Self(format!("glyph_{}", derived_id_suffix(source_key, name)))
+        Self(format!("glyph_{}", derived_id_suffix(source_key, name)).into())
     }
 }
 typed_id!(SourceId, "source");
