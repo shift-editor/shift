@@ -50,7 +50,7 @@ import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/varia
 import type { WeightedSource } from "../../types/glyphRender";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
-import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
+import { SourceInterpolation, interpolationWeights } from "../interpolation/InterpolationBasis";
 import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
@@ -2440,8 +2440,8 @@ export class Glyph {
     const axes = this.#designspace.axes;
     const interpolation = projection.interpolation;
     if (interpolation) {
-      const weights = interpolationWeights(interpolation.basis, designLocation, axes);
-      const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
+      const sourceInterpolation = new SourceInterpolation(interpolation.basis);
+      const values = sourceInterpolation.valuesAt(designLocation, axes, (sourceId) => {
         const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
         if (sourceLayer) {
           track(sourceLayer.geometryCell);

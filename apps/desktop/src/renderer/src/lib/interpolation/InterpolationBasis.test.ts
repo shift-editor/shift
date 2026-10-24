@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 import type { Axis, AxisId, InterpolationBasis, SourceId } from "@shift/types";
 import { mintAxisId, mintSourceId } from "@shift/types";
 import {
+  SourceInterpolation,
   designAxisLocationFromLocation,
-  interpolateSourceValues,
   interpolationWeights,
 } from "@shift/editor/variation";
 
@@ -52,17 +52,31 @@ describe("InterpolationBasis", () => {
     const boldId = mintSourceId();
     const basis = twoSourceBasis(axis.id, regularId, boldId);
     const location = designAxisLocationFromLocation({ values: { [axis.id]: 650 } });
-    const weights = interpolationWeights(basis, location, [axis]);
+    const interpolation = new SourceInterpolation(basis);
 
-    const values = interpolateSourceValues(basis, weights, (sourceId) =>
+    const values = interpolation.valuesAt(location, [axis], (sourceId) =>
       sourceId === regularId ? new Float64Array([400, 10]) : new Float64Array([900, 30]),
     );
-    const incompatible = interpolateSourceValues(basis, weights, (sourceId) =>
+    const incompatible = interpolation.valuesAt(location, [axis], (sourceId) =>
       sourceId === regularId ? new Float64Array([400, 10]) : new Float64Array([900]),
     );
 
     expect(values ? [...values] : null).toEqual([650, 20]);
     expect(incompatible).toBeNull();
+  });
+
+  it("mixes one number per source", () => {
+    const axis = continuousAxis(mintAxisId());
+    const regularId = mintSourceId();
+    const boldId = mintSourceId();
+    const interpolation = new SourceInterpolation(twoSourceBasis(axis.id, regularId, boldId));
+    const location = designAxisLocationFromLocation({ values: { [axis.id]: 650 } });
+
+    const amount = interpolation.valueAt(location, [axis], (sourceId) =>
+      sourceId === regularId ? -40 : -80,
+    );
+
+    expect(amount).toBe(-60);
   });
 
   it("matches the Rust fontdrasil fixture across two axes", () => {
@@ -74,8 +88,7 @@ describe("InterpolationBasis", () => {
     const location = designAxisLocationFromLocation({
       values: { [width.id]: 500, [weight.id]: 500 },
     });
-    const weights = interpolationWeights(basis, location, [width, weight]);
-    const values = interpolateSourceValues(basis, weights, (sourceId) => {
+    const values = new SourceInterpolation(basis).valuesAt(location, [width, weight], (sourceId) => {
       const sourceIndex = sourceIds.indexOf(sourceId);
       const master = fixture.masters[sourceIndex];
       return master ? new Float64Array(master.expected) : null;

@@ -79,7 +79,7 @@ Rust owns every rule the font compiler or format decides, and the editor and exp
 
 ### What stays in TypeScript
 
-- **Blending** (`interpolateSourceValues`) runs over the live coordinate buffers every frame; it multiplies by weights and has no rule to drift.
+- **Blending** (`SourceInterpolation`) runs over the live coordinate buffers every frame; it multiplies by weights and has no rule to drift.
 - **Kerning precedence** (`Kerning.resolve`) resolves against the per-frame pending-edit overlay, and syncing that overlay into the module would cost more than the rule. `Kerning.reference.test.ts` checks it against `Kerning::resolve`, with and without pending edits.
 - **Per-frame geometry**: component matrix compose and decompose (`Mat`), segment parsing and bounds (`Contour`, `Segment`), and whole-layer transforms (`LayerBuffers.transformLayer`) run on every drag frame over the live buffers. `Component.reference.test.ts`, `Contour.reference.test.ts`, and `LayerBuffers.reference.test.ts` check them against `DecomposedTransform`, `CurveSegmentIter` with `segment_bounds`, and `GlyphLayer::transform_layer`.
 - **The inverse axis mapping** (`unmapAxisMappings`) searches over the forward mapping, which itself runs here.

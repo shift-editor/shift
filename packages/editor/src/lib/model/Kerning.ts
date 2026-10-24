@@ -2,7 +2,6 @@ import {
   isKerningGroupId,
   type Axis,
   type GlyphId,
-  type InterpolationBasis,
   type KerningGroup,
   type KerningGroupId,
   type KerningPairValue,
@@ -13,7 +12,7 @@ import {
   EntityMap,
   type ReadonlyEntityMap,
 } from "@shift/types";
-import { interpolationWeights } from "../interpolation/InterpolationBasis";
+import { SourceInterpolation } from "../interpolation/InterpolationBasis";
 import type { DesignAxisLocation } from "../../types/variation";
 
 /**
@@ -224,16 +223,16 @@ export class Kerning {
 
   readonly #groups: KerningGroups;
   readonly #sources: ReadonlyMap<SourceId, SourceKerning>;
-  readonly #basis: InterpolationBasis | null;
+  readonly #interpolation: SourceInterpolation | null;
 
   private constructor(
     groups: KerningGroups,
     sources: ReadonlyMap<SourceId, SourceKerning>,
-    basis: InterpolationBasis | null,
+    interpolation: SourceInterpolation | null,
   ) {
     this.#groups = groups;
     this.#sources = sources;
-    this.#basis = basis;
+    this.#interpolation = interpolation;
   }
 
   /** Indexes a snapshot; a missing snapshot is a font without kerning. */
@@ -242,7 +241,8 @@ export class Kerning {
     const sources = new Map(
       snapshot.sources.map((source) => [source.sourceId, SourceKerning.from(source.pairs)]),
     );
-    return new Kerning(KerningGroups.from(snapshot.groups), sources, snapshot.basis ?? null);
+    const interpolation = snapshot.basis ? new SourceInterpolation(snapshot.basis) : null;
+    return new Kerning(KerningGroups.from(snapshot.groups), sources, interpolation);
   }
 
   /** Returns this kerning with `edits` applied in order on top, sharing the snapshot's indexes. */
@@ -267,7 +267,7 @@ export class Kerning {
     for (const [sourceId, sourceEdits] of bySource) {
       sources.set(sourceId, (sources.get(sourceId) ?? SourceKerning.EMPTY).withEdits(sourceEdits));
     }
-    return new Kerning(this.#groups, sources, this.#basis);
+    return new Kerning(this.#groups, sources, this.#interpolation);
   }
 
   /** The font's kerning groups. */
@@ -351,16 +351,11 @@ export class Kerning {
     first: GlyphId,
     second: GlyphId,
   ): number | null {
-    const basis = this.#basis;
-    if (!basis) return null;
-
-    const weights = interpolationWeights(basis, location, axes);
-    let amount = 0;
-    for (const [index, sourceId] of basis.sourceIds.entries()) {
-      const weight = weights[index] ?? 0;
-      if (weight !== 0) amount += weight * this.valueAtSource(sourceId, first, second);
-    }
-    return amount;
+    return (
+      this.#interpolation?.valueAt(location, axes, (sourceId) =>
+        this.valueAtSource(sourceId, first, second),
+      ) ?? null
+    );
   }
 
   /**

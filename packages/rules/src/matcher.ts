@@ -2,7 +2,7 @@
  * Pattern Matcher - Matches point patterns against rules
  */
 
-import { wrapIndex } from "@shift/geo";
+import { cyclicAt } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type {
   ConstrainDragGlyph,
@@ -27,7 +27,7 @@ type ConstrainDragPoint = ConstrainDragContour["points"][number];
  * Get point token for pattern matching
  */
 function getPointToken(
-  point: ConstrainDragPoint | undefined,
+  point: ConstrainDragPoint | null,
   selectedIds: ReadonlySet<PointId>,
   isCentral: boolean,
 ): string {
@@ -51,18 +51,6 @@ function getPointToken(
 
 type ContourMatchInput = ConstrainDragContour;
 
-function getPointAtOffset(
-  contour: ContourMatchInput,
-  centerIndex: number,
-  offset: number,
-): ConstrainDragPoint | undefined {
-  const index = centerIndex + offset;
-  if (index >= 0 && index < contour.points.length) return contour.points[index];
-  if (!contour.closed || contour.points.length === 0) return undefined;
-
-  return contour.points[wrapIndex(index, contour.points.length)];
-}
-
 /**
  * Build a pattern string for points around a given index
  */
@@ -76,7 +64,7 @@ function buildPattern(
   let pattern = "";
 
   for (let offset = -halfWindow; offset <= halfWindow; offset++) {
-    const point = getPointAtOffset(contour, centerIndex, offset);
+    const point = cyclicAt(contour.points, centerIndex + offset, contour.closed);
     const isCentral = offset === 0;
     pattern += getPointToken(point, selectedIds, isCentral);
   }
@@ -95,7 +83,7 @@ function computeAffectedPoints<Id extends RuleId>(
   const affected: MatchedRuleAffected<Id> = {};
 
   for (const ref of refs) {
-    const point = getPointAtOffset(contour, pointIndex, ref.offset);
+    const point = cyclicAt(contour.points, pointIndex + ref.offset, contour.closed);
     if (point) {
       affected[ref.role] = point.id;
     }

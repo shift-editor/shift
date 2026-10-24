@@ -1,7 +1,4 @@
-export {
-  interpolateSourceValues,
-  interpolationWeights,
-} from "./lib/interpolation/InterpolationBasis";
+export { SourceInterpolation, interpolationWeights } from "./lib/interpolation/InterpolationBasis";
 export {
   axisValue,
   defaultExternalAxisLocation,

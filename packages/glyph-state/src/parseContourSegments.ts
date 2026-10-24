@@ -1,3 +1,4 @@
+import { cyclicAt } from "@shift/geo";
 import { Point, type NewPoint } from "./Point";
 import type { ContourGeometry, SegmentPoints } from "./types/contour";
 
@@ -21,18 +22,11 @@ export function parseContourSegments<TPoint extends NewPoint>(
   const segments: SegmentPoints<TPoint>[] = [];
   let index = 0;
 
-  const getPoint = (i: number): TPoint | null => {
-    if (i < points.length) return points[i];
-    if (closed) return points[i % points.length];
-
-    return null;
-  };
-
   const limit = closed ? points.length : points.length - 1;
 
   while (index < limit) {
-    const p1 = getPoint(index);
-    const p2 = getPoint(index + 1);
+    const p1 = cyclicAt(points, index, closed);
+    const p2 = cyclicAt(points, index + 1, closed);
     if (!p1 || !p2) break;
 
     if (Point.isOnCurve(p1) && Point.isOnCurve(p2)) {
@@ -42,7 +36,7 @@ export function parseContourSegments<TPoint extends NewPoint>(
     }
 
     if (Point.isOnCurve(p1) && Point.isOffCurve(p2)) {
-      const p3 = getPoint(index + 2);
+      const p3 = cyclicAt(points, index + 2, closed);
       if (!p3) break;
 
       if (Point.isOnCurve(p3)) {
@@ -52,7 +46,7 @@ export function parseContourSegments<TPoint extends NewPoint>(
       }
 
       if (Point.isOffCurve(p3)) {
-        const p4 = getPoint(index + 3);
+        const p4 = cyclicAt(points, index + 3, closed);
         if (!p4) break;
 
         segments.push({ type: "cubic", start: p1, controlStart: p2, controlEnd: p3, end: p4 });

@@ -1,26 +1,43 @@
-use crate::point::Point;
+use crate::point::{Point, PointType};
+
+/// What segment classification reads from a point: whether it is on the curve.
+pub trait SegmentPoint {
+    fn is_on_curve(&self) -> bool;
+}
+
+impl SegmentPoint for Point {
+    fn is_on_curve(&self) -> bool {
+        Point::is_on_curve(self)
+    }
+}
+
+impl SegmentPoint for PointType {
+    fn is_on_curve(&self) -> bool {
+        matches!(self, PointType::OnCurve | PointType::QCurve)
+    }
+}
 
 /// A typed curve segment extracted from a contour's point list.
 #[derive(Debug, Clone)]
-pub enum CurveSegment<'a> {
-    Line(&'a Point, &'a Point),
-    Quad(&'a Point, &'a Point, &'a Point),
-    Cubic(&'a Point, &'a Point, &'a Point, &'a Point),
+pub enum CurveSegment<'a, P = Point> {
+    Line(&'a P, &'a P),
+    Quad(&'a P, &'a P, &'a P),
+    Cubic(&'a P, &'a P, &'a P, &'a P),
 }
 
 /// Iterator that yields [`CurveSegment`]s from a point slice.
 ///
 /// Walks the point list and classifies consecutive points into line,
 /// quadratic, or cubic segments based on their on-curve/off-curve types.
-pub struct CurveSegmentIter<'a> {
-    points: &'a [Point],
+pub struct CurveSegmentIter<'a, P = Point> {
+    points: &'a [P],
     closed: bool,
     pos: usize,
     limit: usize,
 }
 
-impl<'a> CurveSegmentIter<'a> {
-    pub fn new(points: &'a [Point], closed: bool) -> Self {
+impl<'a, P: SegmentPoint> CurveSegmentIter<'a, P> {
+    pub fn new(points: &'a [P], closed: bool) -> Self {
         let limit = if closed {
             points.len()
         } else {
@@ -34,7 +51,7 @@ impl<'a> CurveSegmentIter<'a> {
         }
     }
 
-    fn get(&self, idx: usize) -> Option<&'a Point> {
+    fn get(&self, idx: usize) -> Option<&'a P> {
         if idx < self.points.len() {
             Some(&self.points[idx])
         } else if self.closed && !self.points.is_empty() {
@@ -45,8 +62,8 @@ impl<'a> CurveSegmentIter<'a> {
     }
 }
 
-impl<'a> Iterator for CurveSegmentIter<'a> {
-    type Item = CurveSegment<'a>;
+impl<'a, P: SegmentPoint> Iterator for CurveSegmentIter<'a, P> {
+    type Item = CurveSegment<'a, P>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.pos < self.limit {

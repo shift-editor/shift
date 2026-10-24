@@ -12,7 +12,7 @@ import {
   EntityMap,
   type ReadonlyEntityMap,
 } from "@shift/types";
-import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
+import { SourceInterpolation } from "../interpolation/InterpolationBasis";
 import type { DesignAxisLocation } from "../../types/variation";
 
 /**
@@ -26,6 +26,7 @@ import type { DesignAxisLocation } from "../../types/variation";
  */
 export class SourceMetricsInterpolation {
   readonly #snapshot: SourceMetricsInterpolationSnapshot;
+  readonly #interpolation: SourceInterpolation;
   readonly #unitsPerEm: number;
   readonly #positionIndexByKind: ReadonlyMap<MetricKind, number>;
   readonly #technicalIndexByField: ReadonlyMap<SourceMetricField, number>;
@@ -41,6 +42,7 @@ export class SourceMetricsInterpolation {
     valueCount: number,
   ) {
     this.#snapshot = snapshot;
+    this.#interpolation = new SourceInterpolation(snapshot.basis);
     this.#unitsPerEm = unitsPerEm;
     this.#positionIndexByKind = positionIndexByKind;
     this.#technicalIndexByField = technicalIndexByField;
@@ -103,8 +105,7 @@ export class SourceMetricsInterpolation {
 
   /** Resolves interpolated source metrics at one internal design-space location. */
   resolve(location: DesignAxisLocation, axes: readonly Axis[]): SourceMetrics | null {
-    const weights = interpolationWeights(this.#snapshot.basis, location, axes);
-    const values = interpolateSourceValues(this.#snapshot.basis, weights, (sourceId) =>
+    const values = this.#interpolation.valuesAt(location, axes, (sourceId) =>
       this.#valuesBySource.get(sourceId),
     );
     if (!values) return null;

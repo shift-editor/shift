@@ -2,7 +2,7 @@
  * Rule Actions - Apply matched rules to compute point positions
  */
 
-import { Vec2, wrapIndex, type Point2D } from "@shift/geo";
+import { Vec2, cyclicAt, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type {
   ConstrainDragGlyph,
@@ -33,20 +33,6 @@ export interface PreparedConstrainDrag {
   selectedPoints: readonly ConstrainDragPoint[];
   matchedRules: readonly MatchedRule[];
   allowsUniformTranslationCommit: boolean;
-}
-
-function getPointAtContourOffset(
-  contour: ConstrainDragContour,
-  centerIndex: number,
-  offset: number,
-): ConstrainDragPoint | undefined {
-  const nextIndex = centerIndex + offset;
-  if (contour.closed) {
-    const total = contour.points.length;
-    if (total === 0) return undefined;
-    return contour.points[wrapIndex(nextIndex, total)];
-  }
-  return contour.points[nextIndex];
 }
 
 function buildPointIndex(glyph: ConstrainDragGlyph): PointIndex {
@@ -123,8 +109,8 @@ function selectionNeedsRuleResolution(
       return true;
     }
 
-    const prev = getPointAtContourOffset(contour, index, -1);
-    const next = getPointAtContourOffset(contour, index, 1);
+    const prev = cyclicAt(contour.points, index - 1, contour.closed);
+    const next = cyclicAt(contour.points, index + 1, contour.closed);
     if (
       prev?.pointType === "offCurve" ||
       next?.pointType === "offCurve" ||

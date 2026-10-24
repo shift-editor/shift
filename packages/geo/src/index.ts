@@ -48,7 +48,7 @@ export { Polygon } from "./Polygon";
 export type { LineCurve, QuadraticCurve, CubicCurve, CurveType, ClosestPoint } from "./Curve";
 
 // Cyclic indexing
-export { wrapIndex } from "./wrapIndex";
+export { cyclicAt, wrapIndex } from "./wrapIndex";
 
 // Matrix transformations
 export { Mat, type DecomposedTransform, type MatModel } from "./Mat";

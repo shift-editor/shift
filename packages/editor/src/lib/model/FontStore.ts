@@ -24,8 +24,7 @@ import type {
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
 } from "@shift/types";
-import { segmentIdFor } from "@shift/glyph-state";
-import { Validate } from "@shift/validation";
+import { parseContourSegments, segmentIdFor, type SegmentPoints } from "@shift/glyph-state";
 import {
   batch,
   computed,
@@ -759,76 +758,23 @@ function componentBaseGlyphIds(structure: GlyphStructure): readonly GlyphId[] {
   return structure.components.map((component) => component.baseGlyphId);
 }
 
+/** The segments `Segment.parse` would give the contour, as ids only. */
 function indexedSegments(contour: ContourData): GlyphObjectSegment[] {
-  const { points, closed } = contour;
-  if (points.length < 2) return [];
+  return parseContourSegments(contour).map((segment) => ({
+    id: segmentIdFor(segment.start.id, segment.end.id),
+    pointIds: segmentPointIds(segment),
+  }));
+}
 
-  const segments: GlyphObjectSegment[] = [];
-  let index = 0;
-
-  const limit = closed ? points.length : points.length - 1;
-
-  while (index < limit) {
-    const start = pointAt(points, closed, index);
-    const next = pointAt(points, closed, index + 1);
-    if (!start || !next) break;
-
-    if (isOnCurve(start) && isOnCurve(next)) {
-      segments.push(indexedSegment(start, next, [start.id, next.id]));
-      index += 1;
-      continue;
-    }
-
-    if (isOnCurve(start) && isOffCurve(next)) {
-      const maybeEnd = pointAt(points, closed, index + 2);
-      if (!maybeEnd) break;
-
-      if (isOnCurve(maybeEnd)) {
-        segments.push(indexedSegment(start, maybeEnd, [start.id, next.id, maybeEnd.id]));
-        index += 2;
-        continue;
-      }
-
-      if (isOffCurve(maybeEnd)) {
-        const end = pointAt(points, closed, index + 3);
-        if (!end) break;
-
-        segments.push(indexedSegment(start, end, [start.id, next.id, maybeEnd.id, end.id]));
-        index += 3;
-        continue;
-      }
-    }
-
-    index += 1;
+function segmentPointIds(segment: SegmentPoints<PointData>): readonly PointId[] {
+  switch (segment.type) {
+    case "line":
+      return [segment.start.id, segment.end.id];
+    case "quad":
+      return [segment.start.id, segment.control.id, segment.end.id];
+    case "cubic":
+      return [segment.start.id, segment.controlStart.id, segment.controlEnd.id, segment.end.id];
   }
-
-  return segments;
-}
-
-function indexedSegment(
-  start: PointData,
-  end: PointData,
-  pointIds: readonly PointId[],
-): GlyphObjectSegment {
-  return {
-    id: segmentIdFor(start.id, end.id),
-    pointIds,
-  };
-}
-
-function pointAt(points: readonly PointData[], closed: boolean, index: number): PointData | null {
-  if (index < points.length) return points[index] ?? null;
-  if (!closed) return null;
-
-  return points[index - points.length] ?? null;
-}
-
-function isOnCurve(point: PointData): boolean {
-  return Validate.isOnCurve(point);
-}
-
-function isOffCurve(point: PointData): boolean {
-  return Validate.isOffCurve(point);
 }
 
 function glyphEntry(record: GlyphRecord): GlyphEntry {
