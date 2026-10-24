@@ -300,6 +300,8 @@ jobs:
         run: pnpm lint:tailwind
       - name: Format check (oxfmt)
         run: pnpm format:check
+      - name: Task graph (typecheck skips release builds)
+        run: pnpm check:task-graph
 
   typecheck:
     name: Typecheck
