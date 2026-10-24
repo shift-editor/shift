@@ -342,6 +342,78 @@ fn glyph_edit_is_sparse() {
 }
 
 #[test]
+fn glyph_replacements_rewrite_only_the_layers_that_changed() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("working.sqlite");
+    let original = sample_font();
+    let mut store = ShiftStore::open(&path).unwrap();
+    store.replace_font_state(&original).unwrap();
+    let audit = rusqlite::Connection::open(&path).unwrap();
+    audit
+        .execute_batch(
+            "CREATE TABLE payload_write_audit (layer_id TEXT NOT NULL);
+             CREATE TRIGGER audit_payload_insert AFTER INSERT ON glyph_layer_payloads BEGIN
+               INSERT INTO payload_write_audit VALUES (NEW.layer_id);
+             END;
+             CREATE TRIGGER audit_payload_update AFTER UPDATE ON glyph_layer_payloads BEGIN
+               INSERT INTO payload_write_audit VALUES (NEW.layer_id);
+             END;",
+        )
+        .unwrap();
+    let written_payloads = || -> Vec<String> {
+        audit
+            .prepare("SELECT layer_id FROM payload_write_audit ORDER BY rowid")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    };
+    let glyph_id = shift_font::GlyphId::from_raw("A");
+    let regular = shift_font::LayerId::from_raw("A_regular");
+    let bold = shift_font::LayerId::from_raw("A_bold");
+    let replaced = |before: &shift_font::Glyph, after: &shift_font::Glyph| {
+        shift_font::FontChangeSet::from(shift_font::FontChange::Glyph(Box::new(
+            shift_font::Replacement::new(Some(before.clone()), Some(after.clone())),
+        )))
+    };
+
+    // Widening one layer rewrites that layer and leaves the other alone.
+    let before = original.glyph(&glyph_id).unwrap().clone();
+    let mut widened = before.clone();
+    let mut layer = widened.layer(&regular).unwrap().clone();
+    layer.set_width(layer.width() + 10.0);
+    widened.set_layer(layer);
+    let mut expected = original.clone();
+    expected
+        .apply_change_set(&replaced(&before, &widened))
+        .unwrap();
+    store
+        .apply_change_set_with_font(&replaced(&before, &widened), &expected, SaveState::Unsaved)
+        .unwrap();
+    assert_eq!(written_payloads(), [regular.to_string()]);
+    assert_eq!(store.load_font_state().unwrap(), expected);
+
+    // Dropping a layer deletes only that layer's rows.
+    let mut without_bold = widened.clone();
+    without_bold.remove_layer(&bold);
+    let after_widening = expected.clone();
+    expected
+        .apply_change_set(&replaced(&widened, &without_bold))
+        .unwrap();
+    store
+        .apply_change_set_with_font(
+            &replaced(&widened, &without_bold),
+            &expected,
+            SaveState::Unsaved,
+        )
+        .unwrap();
+    assert_eq!(written_payloads(), [regular.to_string()]);
+    assert_eq!(store.load_font_state().unwrap(), expected);
+    assert_ne!(expected, after_widening);
+}
+
+#[test]
 fn failed_change_set_rolls_back_all_entity_and_order_changes() {
     let mut store = ShiftStore::open_memory_for_test().unwrap();
     let original = sample_font();

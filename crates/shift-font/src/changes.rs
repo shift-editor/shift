@@ -7,9 +7,9 @@ use crate::collection::Identified;
 use crate::error::{CoreError, CoreResult, EntityKind};
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId, TouchedLayer,
+    Axis, AxisMapping, Component, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup,
+    KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
+    NamedInstance, Source, SourceId, TouchedLayer,
 };
 
 bitflags! {
@@ -89,6 +89,23 @@ impl Replacement<Option<Glyph>> {
             self.after.as_ref().map(Glyph::id),
         )
     }
+
+    /// The layers this replacement writes: every layer of a new glyph, and
+    /// the layers of a replaced glyph that differ from what it had.
+    pub fn changed_layers(&self) -> impl Iterator<Item = &GlyphLayer> {
+        self.after.iter().flat_map(move |glyph| {
+            glyph
+                .layers()
+                .iter()
+                .filter(move |(layer_id, layer)| {
+                    self.before
+                        .as_ref()
+                        .and_then(|before| before.layers().get(*layer_id))
+                        .is_none_or(|before| before != *layer)
+                })
+                .map(|(_, layer)| layer.as_ref())
+        })
+    }
 }
 
 impl Replacement<Option<Arc<GlyphLayer>>> {
@@ -105,6 +122,18 @@ impl Replacement<Option<Arc<GlyphLayer>>> {
             self.before.as_deref().map(GlyphLayer::id),
             self.after.as_deref().map(GlyphLayer::id),
         )
+    }
+
+    /// Whether this replacement changes what its glyph's record lists: the
+    /// glyph's layers and the glyphs its components reference.
+    fn changes_glyph_record(&self) -> bool {
+        match (&self.before, &self.after) {
+            (Some(before), Some(after)) => !before
+                .components_iter()
+                .map(Component::base_glyph_id)
+                .eq(after.components_iter().map(Component::base_glyph_id)),
+            _ => true,
+        }
     }
 }
 
@@ -247,6 +276,30 @@ impl FontChange {
         )
     }
 
+    /// The layers this change writes: a replaced layer, or the changed
+    /// layers of a replaced glyph.
+    pub fn written_layers(&self) -> impl Iterator<Item = &GlyphLayer> + '_ {
+        let replaced = match self {
+            Self::Glyph(value) => Some(value.changed_layers()),
+            _ => None,
+        };
+        let layer = match self {
+            Self::Layer { layer, .. } => layer.after.as_deref(),
+            _ => None,
+        };
+        replaced.into_iter().flatten().chain(layer)
+    }
+
+    /// Whether this change can take layers out of the font: replacing a
+    /// glyph or the sources, or removing a layer.
+    pub fn can_remove_layers(&self) -> bool {
+        match self {
+            Self::Glyph(_) | Self::Sources(_) => true,
+            Self::Layer { layer, .. } => layer.after.is_none(),
+            _ => false,
+        }
+    }
+
     /// Returns every domain projection invalidated by this replacement.
     pub fn impact(&self) -> FontChangeImpact {
         match self {
@@ -274,10 +327,8 @@ impl FontChange {
                     | FontChangeImpact::SOURCE_METRICS
                     | FontChangeImpact::KERNING
             }
-            Self::Glyph(_)
-            | Self::Layer {
-                structural: true, ..
-            } => FontChangeImpact::GLYPHS,
+            Self::Glyph(_) => FontChangeImpact::GLYPHS,
+            Self::Layer { layer, .. } if layer.changes_glyph_record() => FontChangeImpact::GLYPHS,
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
             Self::LibValue { .. } | Self::Layer { .. } => FontChangeImpact::empty(),
         }
@@ -391,6 +442,23 @@ impl FontChangeSet {
             .iter()
             .flat_map(FontChange::glyph_ids)
             .collect()
+    }
+
+    /// The layers this changeset writes, in change order.
+    pub fn written_layers(&self) -> impl Iterator<Item = &GlyphLayer> {
+        self.changes.iter().flat_map(FontChange::written_layers)
+    }
+
+    /// Whether this changeset can take layers out of the font.
+    pub fn can_remove_layers(&self) -> bool {
+        self.changes.iter().any(FontChange::can_remove_layers)
+    }
+
+    /// Whether this changeset replaces the font's sources.
+    pub fn replaces_sources(&self) -> bool {
+        self.changes
+            .iter()
+            .any(|change| matches!(change, FontChange::Sources(_)))
     }
 
     /// Returns the layers this changeset leaves behind: each replaced layer,

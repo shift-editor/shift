@@ -189,7 +189,11 @@ impl RecoveryOverlay {
         }
 
         for layer_id in layer_ids {
-            if let Some((glyph_id, layer)) = find_layer(post_font, &layer_id) {
+            // The font's layer index finds the owner without scanning every glyph.
+            let owned = post_font
+                .glyph_id_by_layer(&layer_id)
+                .zip(post_font.layer(&layer_id));
+            if let Some((glyph_id, layer)) = owned {
                 clear_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
                 write_layer_in_tx(&tx, &glyph_id, layer)?;
                 mark_replaced(&tx, GLYPH_COMPONENTS, layer_id.as_str())?;
@@ -329,16 +333,4 @@ fn delete_layer_override(tx: &Transaction<'_>, layer_id: &font::LayerId) -> Resu
     )?;
     tx.execute("DELETE FROM glyph_layers WHERE id = ?1", [layer_id])?;
     Ok(())
-}
-
-fn find_layer<'a>(
-    font: &'a font::Font,
-    layer_id: &font::LayerId,
-) -> Option<(font::GlyphId, &'a font::GlyphLayer)> {
-    font.glyphs().find_map(|glyph| {
-        glyph
-            .layers()
-            .get(layer_id)
-            .map(|layer| (glyph.id(), layer.as_ref()))
-    })
 }
