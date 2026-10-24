@@ -83,7 +83,12 @@ export interface GlyphCatalogSource {
   sourceId: SourceId | null;
   canAuthor: boolean;
   openedGlyph: RenderGlyph | null;
+  /** Opens a glyph in a tab of its own: a double-click in the grid. */
   openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  /** The glyph selected in the grid, which the glyph sidebar describes; null when none is. */
+  selectedGlyphId: GlyphId | null;
+  /** Selects a glyph without leaving the grid: a single click. */
+  selectGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
 }
 
 export interface GlyphCatalogLayoutMetrics {
@@ -132,6 +137,7 @@ export interface GlyphCatalogControllerFrame {
   readonly resolvedTheme: ColorTheme;
   readonly active: boolean;
   readonly editingGlyphId: GlyphId | null;
+  readonly selectedGlyphId: GlyphId | null;
 }
 
 export interface GlyphNameInputProps {
@@ -150,6 +156,8 @@ export interface GlyphCatalogBackendGateProps {
   readonly glyphPreviews: GlyphCatalogSource["glyphPreviews"];
   readonly canAuthor: boolean;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  readonly selectedGlyphId: GlyphId | null;
+  readonly selectGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;
 }
@@ -161,7 +169,12 @@ export interface GlyphCatalogViewProps {
   readonly active: boolean;
   readonly observeAtlasInvalidation: GlyphCatalogSource["observeAtlasInvalidation"];
   readonly canAuthor: boolean;
+  /** Opens a glyph in a tab of its own, on double-click. */
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  /** The selected glyph, drawn selected; null when none is. */
+  readonly selectedGlyphId: GlyphId | null;
+  /** Selects a glyph, on single click. */
+  readonly selectGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   readonly onPendingGlyphName: (glyphId: GlyphId, glyphName: GlyphName) => void;
   readonly onFirstFrame: () => void;
   readonly onUnavailable: () => void;

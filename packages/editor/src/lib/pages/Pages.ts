@@ -55,9 +55,20 @@ export class Pages {
    * time, so call it inside `history.withoutRecording` when it is navigation.
    */
   glyphView(): PageNode {
-    const existing = this.#editor.scene.pages().find((page) => page.role === "glyph");
-    if (existing) return existing;
+    return (
+      this.#editor.scene.pages().find((page) => page.role === "glyph") ?? this.createGlyphPage()
+    );
+  }
 
+  /**
+   * Adds a glyph-view page and returns it. Does not show it.
+   *
+   * @remarks
+   * A page the pages list leaves out (`PageNode.role`), for a glyph opened
+   * outside the user's pages, such as in its own tab. Writes a record, so call
+   * it inside `history.withoutRecording` when it is navigation.
+   */
+  createGlyphPage(): PageNode {
     return this.#editor.scene.createNode<PageNode>({
       kind: "page",
       name: "Glyph",
@@ -65,6 +76,26 @@ export class Pages {
       position: { x: 0, y: 0 },
       index: indexAfter(this.#editor.scene.pages().at(-1)?.index ?? null),
     });
+  }
+
+  /**
+   * Removes a glyph-view page and everything on it, as navigation: no undo step.
+   *
+   * @remarks
+   * For closing what showed it, such as a glyph tab. Text runs placed only on
+   * the page go with it. Does nothing for one of the user's pages, which only
+   * {@link Pages.delete} removes.
+   */
+  discardGlyphPage(pageId: NodeId): void {
+    const page = this.#editor.scene.nodeOfKind(pageId, "page");
+    if (page?.role !== "glyph") return;
+
+    if (this.activeCell.peek() === pageId) {
+      const fallback = this.list[0];
+      if (fallback) this.activate(fallback.id);
+    }
+    this.#editor.history.withoutRecording(() => this.#removePage(pageId));
+    this.#cameras.delete(pageId);
   }
 
   /**
@@ -173,21 +204,7 @@ export class Pages {
     const neighbour = pages[at + 1] ?? pages[at - 1];
     if (neighbour && this.activeCell.peek() === pageId) this.activate(neighbour.id);
 
-    const scene = this.#editor.scene;
-    this.#editor.history.capture("Delete page", () => {
-      const nodes = scene.descendants(pageId);
-      const deleted = new Set(nodes.map((node) => node.id));
-      for (const node of [...nodes].reverse()) scene.deleteNode(node.id);
-      scene.deleteNode(pageId);
-
-      for (const node of nodes) {
-        if (node.kind !== "textRun") continue;
-        const elsewhere = scene
-          .nodesReferencing(node.runId)
-          .some((other) => !deleted.has(other.id));
-        if (!elsewhere) this.#editor.text.deleteRun(node.runId);
-      }
-    });
+    this.#editor.history.capture("Delete page", () => this.#removePage(pageId));
     this.#cameras.delete(pageId);
     return true;
   }
@@ -223,6 +240,20 @@ export class Pages {
    */
   pageOf(nodeId: NodeId): PageNode | null {
     return this.#editor.scene.pageOf(nodeId);
+  }
+
+  #removePage(pageId: NodeId): void {
+    const scene = this.#editor.scene;
+    const nodes = scene.descendants(pageId);
+    const deleted = new Set(nodes.map((node) => node.id));
+    for (const node of [...nodes].reverse()) scene.deleteNode(node.id);
+    scene.deleteNode(pageId);
+
+    for (const node of nodes) {
+      if (node.kind !== "textRun") continue;
+      const elsewhere = scene.nodesReferencing(node.runId).some((other) => !deleted.has(other.id));
+      if (!elsewhere) this.#editor.text.deleteRun(node.runId);
+    }
   }
 
   #camera(): PageCamera {

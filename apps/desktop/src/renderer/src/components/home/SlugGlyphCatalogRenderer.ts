@@ -29,6 +29,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   readonly #onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null;
   readonly #onEditingUnavailable: () => void;
   readonly #openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
+  readonly #selectGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
   readonly #onReadyChange: (ready: boolean) => void;
   readonly #onUnavailable: () => void;
   readonly #overlay: GlyphCatalogOverlay;
@@ -66,7 +67,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
    * @param observeAtlasInvalidation - Subscribes to directory and geometry revisions.
    * @param onEditGlyph - Starts inline naming, or null for read-only sessions.
    * @param onEditingUnavailable - Ends editing when its cell leaves the frame.
-   * @param openGlyph - Opens a preview cell, or null when interaction is disabled.
+   * @param openGlyph - Opens a double-clicked preview cell, or null when interaction is disabled.
+   * @param selectGlyph - Selects a clicked preview cell, or null when interaction is disabled.
    * @param onReadyChange - Publishes whether the selected renderer has a complete frame.
    * @param onUnavailable - Reports a selected Slug renderer that cannot present a frame.
    * @param signal - Cancels initialization when the owning catalog is disposed.
@@ -84,6 +86,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
     onEditingUnavailable: () => void,
     openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
+    selectGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
     signal: AbortSignal,
@@ -112,6 +115,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       onEditGlyph,
       onEditingUnavailable,
       openGlyph,
+      selectGlyph,
       onReadyChange,
       onUnavailable,
       layer,
@@ -130,6 +134,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
     onEditingUnavailable: () => void,
     openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
+    selectGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
     layer: ResidentGlyphLayer,
@@ -140,6 +145,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#onEditGlyph = onEditGlyph;
     this.#onEditingUnavailable = onEditingUnavailable;
     this.#openGlyph = openGlyph;
+    this.#selectGlyph = selectGlyph;
     this.#onReadyChange = onReadyChange;
     this.#onUnavailable = onUnavailable;
     this.#layer = layer;
@@ -156,6 +162,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     container.addEventListener("pointermove", this.#handlePointerMove, { passive: true });
     container.addEventListener("pointerleave", this.#handlePointerLeave);
     container.addEventListener("click", this.#handleClick);
+    container.addEventListener("dblclick", this.#handleDoubleClick);
     document.fonts.addEventListener("loadingdone", this.#handleFontsLoaded);
     void this.#redrawWhenFontsReady();
 
@@ -223,6 +230,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#container.removeEventListener("pointermove", this.#handlePointerMove);
     this.#container.removeEventListener("pointerleave", this.#handlePointerLeave);
     this.#container.removeEventListener("click", this.#handleClick);
+    this.#container.removeEventListener("dblclick", this.#handleDoubleClick);
     this.#container.style.cursor = "";
     document.fonts.removeEventListener("loadingdone", this.#handleFontsLoaded);
   }
@@ -486,7 +494,15 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
 
     const hoveredCell = this.#pointer ? layout.hit(frame, this.#pointer) : null;
     this.#updateHoveredCatalogIndex(hoveredCell?.catalogIndex ?? null);
-    this.#overlay.draw(this.#container, frame, hoveredCell?.catalogIndex ?? null, emptyGlyphIds);
+    // Each part of a cell lights up only under the pointer: the preview or the name.
+    const hoveredPreview = this.#pointer ? layout.hit(frame, this.#pointer, "preview") : null;
+    const hoveredName = this.#pointer ? layout.hit(frame, this.#pointer, "name") : null;
+    this.#overlay.draw(this.#container, frame, {
+      hoveredPreviewIndex: hoveredPreview?.catalogIndex ?? null,
+      hoveredNameIndex: hoveredName?.catalogIndex ?? null,
+      selectedGlyphId: input.selectedGlyphId,
+      emptyGlyphIds,
+    });
 
     if (input.editingGlyphId && !this.#overlay.positionInput(frame, input.editingGlyphId)) {
       this.#onEditingUnavailable();
@@ -644,18 +660,43 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     }
 
     const previewCell = layout.hit(frame, point, "preview");
-    if (!previewCell || !this.#openGlyph) return;
-    void this.#open(previewCell.glyph);
+    if (!previewCell || !this.#selectGlyph) return;
+    void this.#run(this.#selectGlyph, previewCell.glyph);
   };
 
-  async #open(glyph: GlyphCatalogItem): Promise<void> {
-    const openGlyph = this.#openGlyph;
-    if (!openGlyph) return;
+  glyphAt(clientX: number, clientY: number): GlyphCatalogItem | null {
+    const input = this.#activeFrame;
+    if (!input) return null;
 
+    const layout = this.#layout(input);
+    const frame = this.#currentFrame(layout, input);
+    const point = CanvasSurface.screenPoint(this.#container, { x: clientX, y: clientY });
+    return layout.hit(frame, point)?.glyph ?? null;
+  }
+
+  /** Opens the double-clicked preview cell; its first click already selected it. */
+  #handleDoubleClick = (event: MouseEvent): void => {
+    const input = this.#activeFrame;
+    if (!input || !this.#openGlyph) return;
+
+    const layout = this.#layout(input);
+    const frame = this.#currentFrame(layout, input);
+    const point = CanvasSurface.screenPoint(this.#container, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    const previewCell = layout.hit(frame, point, "preview");
+    if (previewCell) void this.#run(this.#openGlyph, previewCell.glyph);
+  };
+
+  async #run(
+    action: (glyph: GlyphCatalogItem) => Promise<void>,
+    glyph: GlyphCatalogItem,
+  ): Promise<void> {
     try {
-      await openGlyph(glyph);
+      await action(glyph);
     } catch (error) {
-      console.error("failed to open catalog Glyph", error);
+      console.error("failed to select or open catalog Glyph", error);
     }
   }
 

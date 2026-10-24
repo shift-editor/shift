@@ -7,6 +7,17 @@ const LABEL_HORIZONTAL_INSET = 8;
 const HOVER_RADIUS = 4;
 
 /** Owns the Canvas2D catalog chrome and temporary DOM input placement. */
+/** What the overlay marks on top of the glyphs. */
+export interface GlyphCatalogOverlayState {
+  /** The cell whose preview is under the pointer, by catalog index. */
+  readonly hoveredPreviewIndex: number | null;
+  /** The cell whose name is under the pointer, by catalog index. */
+  readonly hoveredNameIndex: number | null;
+  readonly selectedGlyphId: GlyphId | null;
+  /** Glyphs with no outline, drawn as their character in a muted colour. */
+  readonly emptyGlyphIds: ReadonlySet<GlyphId>;
+}
+
 export class GlyphCatalogOverlay {
   readonly #canvas: HTMLCanvasElement;
   #inputContainer: HTMLDivElement | null = null;
@@ -34,12 +45,8 @@ export class GlyphCatalogOverlay {
     return true;
   }
 
-  draw(
-    container: HTMLElement,
-    frame: GlyphCatalogFrame,
-    hoveredCatalogIndex: number | null,
-    emptyGlyphIds: ReadonlySet<GlyphId>,
-  ): void {
+  draw(container: HTMLElement, frame: GlyphCatalogFrame, state: GlyphCatalogOverlayState): void {
+    const { hoveredPreviewIndex, hoveredNameIndex, selectedGlyphId, emptyGlyphIds } = state;
     const context = Canvas2DSurface.from(this.#canvas).ctx;
     const style = getComputedStyle(container);
     const mutedColor = style.getPropertyValue("--color-muted").trim() || style.color;
@@ -49,7 +56,8 @@ export class GlyphCatalogOverlay {
     context.clearRect(0, 0, frame.layout.viewportWidth, frame.layout.viewportHeight);
 
     for (const cell of frame.cells) {
-      if (cell.catalogIndex === hoveredCatalogIndex) {
+      // The selected glyph keeps the hover fill, so it stays marked once the pointer leaves.
+      if (cell.catalogIndex === hoveredPreviewIndex || cell.glyph.id === selectedGlyphId) {
         context.fillStyle = hoverColor;
         context.beginPath();
         context.roundRect(
@@ -75,7 +83,8 @@ export class GlyphCatalogOverlay {
         );
       }
 
-      context.fillStyle = inputColor;
+      // The name is a field: a shade darker under the pointer, like the sidebar's inputs.
+      context.fillStyle = cell.catalogIndex === hoveredNameIndex ? hoverColor : inputColor;
       context.beginPath();
       context.roundRect(
         cell.nameRect.x,

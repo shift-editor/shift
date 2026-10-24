@@ -96,10 +96,13 @@ async function waitForCatalogCells(page: Page): Promise<void> {
   );
 }
 
-/** Keeps the catalog preview coordinate contract in one place. */
+/**
+ * Opens the first catalog glyph: a double-click, since a single click only selects it.
+ * Keeps the catalog preview coordinate contract in one place.
+ */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await waitForCatalogCells(page);
-  await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
+  await glyphCatalogViewport(page).dblclick({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
 /** Keeps the catalog name-cell coordinate contract in one place. */

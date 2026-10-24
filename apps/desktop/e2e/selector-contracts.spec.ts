@@ -44,7 +44,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings.getByRole("navigation", { name: "Settings categories" })).toBeVisible();
   await expect(settingsDetails(page)).toBeVisible();

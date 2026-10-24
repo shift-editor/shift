@@ -1,9 +1,9 @@
 import type { Editor } from "@shift/editor";
-import type { GlyphNode, TextRunNode } from "@shift/editor/types";
+import type { GlyphNode, PageNode, TextRunNode } from "@shift/editor/types";
 import type { GlyphId } from "@shift/types";
 
 /**
- * Opens a glyph from the grid on the glyph view's page: its run becomes that glyph, edited in place.
+ * Opens a glyph from the grid on a glyph-view page: its run becomes that glyph, edited in place.
  *
  * @remarks
  * The interim policy until runs are placed by the user. Each page has at most
@@ -11,13 +11,16 @@ import type { GlyphId } from "@shift/types";
  * glyph the run already edits re-enters it. Writes scene and text records, so
  * call it inside `history.withoutRecording` when it is navigation.
  *
- * @param editor - editor whose active page receives the glyph.
+ * @param editor - editor that shows the page.
  * @param glyphId - a loaded glyph.
+ * @param page - the page to show and open it on; defaults to the first glyph-view page.
  * @returns the edited glyph node, or null when the glyph is not loaded.
  */
-export function openGlyphInRun(editor: Editor, glyphId: GlyphId): GlyphNode | null {
-  // Glyphs open on the glyph view's own page, so the user's boards stay as they left them.
-  const page = editor.pages.glyphView();
+export function openGlyphInRun(
+  editor: Editor,
+  glyphId: GlyphId,
+  page: PageNode = editor.pages.glyphView(),
+): GlyphNode | null {
   editor.pages.activate(page.id);
   const runs = editor.nodeDefinition("textRun");
   const run =
