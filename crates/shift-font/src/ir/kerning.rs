@@ -9,7 +9,9 @@
 //! retained but never resolve, so deleting and restoring one keeps its
 //! kerning intact.
 
-use crate::persistent::PersistentOrdMap;
+use std::collections::{BTreeSet, HashSet};
+
+use crate::persistent::{PersistentMultiMap, PersistentOrdMap};
 use crate::{CoreError, CoreResult, GlyphId, KerningGroupId, Require, SourceId};
 use serde::{Deserialize, Serialize};
 
@@ -126,11 +128,104 @@ impl From<SourceKerning> for Vec<(KerningPair, f64)> {
     }
 }
 
+/// Kerning groups by id, and the groups each glyph belongs to.
+///
+/// Equality and serialization see only the groups; the member index is
+/// derived from them. A glyph belongs to one group per position, except while
+/// a recorded change replays one group before another.
+#[derive(Clone, Debug, Default)]
+struct KerningGroups {
+    groups: PersistentOrdMap<KerningGroupId, KerningGroup>,
+    members: PersistentMultiMap<(KerningPosition, GlyphId), KerningGroupId>,
+}
+
+impl KerningGroups {
+    fn get(&self, group_id: &KerningGroupId) -> Option<&KerningGroup> {
+        self.groups.get(group_id)
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&KerningGroupId, &KerningGroup)> {
+        self.groups.iter()
+    }
+
+    fn ids(&self) -> impl Iterator<Item = &KerningGroupId> {
+        self.groups.keys()
+    }
+
+    fn contains(&self, group_id: &KerningGroupId) -> bool {
+        self.groups.contains_key(group_id)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.groups.is_empty()
+    }
+
+    /// The group `glyph_id` belongs to at `position`; the first by id if a
+    /// replay left it in several.
+    fn group_of(&self, position: KerningPosition, glyph_id: &GlyphId) -> Option<&KerningGroupId> {
+        self.members.get(&(position, glyph_id.clone())).min()
+    }
+
+    /// Inserts `group` as `group_id`, returning the group it replaced.
+    fn insert(&mut self, group_id: KerningGroupId, group: KerningGroup) -> Option<KerningGroup> {
+        let replaced = self.remove(&group_id);
+        for member in &group.members {
+            self.members
+                .insert((group.position, member.clone()), group_id.clone());
+        }
+        self.groups.insert(group_id, group);
+        replaced
+    }
+
+    fn remove(&mut self, group_id: &KerningGroupId) -> Option<KerningGroup> {
+        let group = self.groups.remove(group_id)?;
+        for member in &group.members {
+            self.members
+                .remove(&(group.position, member.clone()), group_id);
+        }
+        Some(group)
+    }
+
+    fn rename(&mut self, group_id: &KerningGroupId, name: String) -> CoreResult<()> {
+        self.groups.get_mut(group_id).require(group_id)?.name = name;
+        Ok(())
+    }
+}
+
+impl PartialEq for KerningGroups {
+    fn eq(&self, other: &Self) -> bool {
+        self.groups == other.groups
+    }
+}
+
+impl FromIterator<(KerningGroupId, KerningGroup)> for KerningGroups {
+    fn from_iter<I: IntoIterator<Item = (KerningGroupId, KerningGroup)>>(groups: I) -> Self {
+        let mut collected = Self::default();
+        for (group_id, group) in groups {
+            collected.insert(group_id, group);
+        }
+        collected
+    }
+}
+
+impl Serialize for KerningGroups {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.groups.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for KerningGroups {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let groups = PersistentOrdMap::<KerningGroupId, KerningGroup>::deserialize(deserializer)?;
+        Ok(groups.into_iter().collect())
+    }
+}
+
 /// Font-wide kerning groups and the pair values of every source.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Kerning {
     // Persistent maps, so copying a font to edit one value shares the rest.
-    groups: PersistentOrdMap<KerningGroupId, KerningGroup>,
+    groups: KerningGroups,
     sources: PersistentOrdMap<SourceId, SourceKerning>,
 }
 
@@ -166,9 +261,7 @@ impl Kerning {
         position: KerningPosition,
         glyph_id: &GlyphId,
     ) -> Option<&KerningGroupId> {
-        self.groups(position)
-            .find(|(_, group)| group.members.contains(glyph_id))
-            .map(|(group_id, _)| group_id)
+        self.groups.group_of(position, glyph_id)
     }
 
     /// Inserts `group` as `group_id`, replacing any group with that id.
@@ -198,33 +291,28 @@ impl Kerning {
         }
         group.members = unique;
 
-        let mut moved = Vec::new();
-        // Changing a persistent map's value copies its path, so change only
-        // the groups that lose a member.
-        let losing: Vec<KerningGroupId> = self
-            .groups
+        // Only the groups the new members come from change, in id order.
+        let claimed: HashSet<&GlyphId> = group.members.iter().collect();
+        let losing: BTreeSet<KerningGroupId> = group
+            .members
             .iter()
-            .filter(|(other_id, other)| {
-                **other_id != group_id
-                    && other.position == group.position
-                    && other
-                        .members
-                        .iter()
-                        .any(|member| group.members.contains(member))
-            })
-            .map(|(other_id, _)| other_id.clone())
+            .filter_map(|member| self.groups.group_of(group.position, member))
+            .filter(|other_id| **other_id != group_id)
+            .cloned()
             .collect();
+        let mut moved = Vec::new();
         for other_id in losing {
-            let Some(other) = self.groups.get_mut(&other_id) else {
+            let Some(mut other) = self.groups.get(&other_id).cloned() else {
                 continue;
             };
             other.members.retain(|member| {
-                let claimed = group.members.contains(member);
-                if claimed {
+                let taken = claimed.contains(member);
+                if taken {
                     moved.push(member.clone());
                 }
-                !claimed
+                !taken
             });
+            self.groups.insert(other_id, other);
         }
         self.groups.insert(group_id, group);
         Ok(moved)
@@ -246,8 +334,7 @@ impl Kerning {
         let name = name.into();
         let position = self.groups.get(group_id).require(group_id)?.position;
         self.ensure_name_available(group_id, position, &name)?;
-        self.groups.get_mut(group_id).require(group_id)?.name = name;
-        Ok(())
+        self.groups.rename(group_id, name)
     }
 
     /// Returns every group at either position, ordered by id.
@@ -272,10 +359,10 @@ impl Kerning {
     > {
         let added = after
             .groups
-            .keys()
-            .filter(|group_id| !self.groups.contains_key(*group_id));
+            .ids()
+            .filter(|group_id| !self.groups.contains(group_id));
         self.groups
-            .keys()
+            .ids()
             .chain(added)
             .map(|group_id| (group_id, self.group(group_id), after.group(group_id)))
             .filter(|(_, before, after)| before != after)
@@ -407,6 +494,56 @@ mod tests {
 
     fn glyph(name: &str) -> GlyphId {
         GlyphId::from_raw(name)
+    }
+
+    /// Asserts each glyph's group comes out of the member index as a scan of
+    /// every group, first by id, would find it.
+    fn assert_members_match_scan(kerning: &Kerning, glyphs: &[GlyphId]) {
+        for position in [KerningPosition::First, KerningPosition::Second] {
+            for glyph_id in glyphs {
+                let scanned = kerning
+                    .groups(position)
+                    .find(|(_, group)| group.members.contains(glyph_id))
+                    .map(|(group_id, _)| group_id);
+                assert_eq!(kerning.group_of(position, glyph_id), scanned, "{glyph_id}");
+            }
+        }
+    }
+
+    #[test]
+    fn member_index_answers_as_a_scan_of_every_group() {
+        let glyphs = ["a", "b", "c", "d"].map(glyph);
+        let [a, b, c, d] = glyphs.clone();
+        let left = KerningGroupId::from_raw("left");
+        let right = KerningGroupId::from_raw("right");
+        let mut kerning = Kerning::new();
+        let first = |name: &str, members: Vec<GlyphId>| {
+            KerningGroup::new(KerningPosition::First, name, members)
+        };
+
+        kerning
+            .set_group(left.clone(), first("left", vec![a.clone(), b.clone()]))
+            .unwrap();
+        let moved = kerning
+            .set_group(right.clone(), first("right", vec![b.clone(), c.clone()]))
+            .unwrap();
+        assert_eq!(moved, [b.clone()]);
+        assert_members_match_scan(&kerning, &glyphs);
+
+        // A replayed change can leave a glyph in two groups for a moment.
+        kerning.put_group(&left, Some(first("left", vec![a.clone(), c.clone()])));
+        assert_members_match_scan(&kerning, &glyphs);
+
+        kerning.remove_group(&left);
+        assert_members_match_scan(&kerning, &glyphs);
+
+        kerning
+            .set_group(left.clone(), first("left", vec![d.clone()]))
+            .unwrap();
+        let reloaded: Kerning =
+            serde_json::from_str(&serde_json::to_string(&kerning).unwrap()).unwrap();
+        assert_eq!(reloaded, kerning);
+        assert_members_match_scan(&reloaded, &glyphs);
     }
 
     fn group_id(name: &str) -> KerningGroupId {
