@@ -11,7 +11,6 @@
 
 use crate::{CoreError, CoreResult, GlyphId, KerningGroupId, Require, SourceId};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 /// The position a glyph or group occupies in a kerning pair.
 ///
@@ -90,7 +89,7 @@ pub struct ResolvedKerning {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(from = "Vec<(KerningPair, f64)>", into = "Vec<(KerningPair, f64)>")]
 pub struct SourceKerning {
-    values: BTreeMap<KerningPair, f64>,
+    values: imbl::OrdMap<KerningPair, f64>,
 }
 
 impl SourceKerning {
@@ -129,8 +128,9 @@ impl From<SourceKerning> for Vec<(KerningPair, f64)> {
 /// Font-wide kerning groups and the pair values of every source.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Kerning {
-    groups: BTreeMap<KerningGroupId, KerningGroup>,
-    sources: BTreeMap<SourceId, SourceKerning>,
+    // Persistent maps, so copying a font to edit one value shares the rest.
+    groups: imbl::OrdMap<KerningGroupId, KerningGroup>,
+    sources: imbl::OrdMap<SourceId, SourceKerning>,
 }
 
 impl Kerning {
@@ -198,10 +198,25 @@ impl Kerning {
         group.members = unique;
 
         let mut moved = Vec::new();
-        for (other_id, other) in &mut self.groups {
-            if *other_id == group_id || other.position != group.position {
+        // Changing a persistent map's value copies its path, so change only
+        // the groups that lose a member.
+        let losing: Vec<KerningGroupId> = self
+            .groups
+            .iter()
+            .filter(|(other_id, other)| {
+                **other_id != group_id
+                    && other.position == group.position
+                    && other
+                        .members
+                        .iter()
+                        .any(|member| group.members.contains(member))
+            })
+            .map(|(other_id, _)| other_id.clone())
+            .collect();
+        for other_id in losing {
+            let Some(other) = self.groups.get_mut(&other_id) else {
                 continue;
-            }
+            };
             other.members.retain(|member| {
                 let claimed = group.members.contains(member);
                 if claimed {

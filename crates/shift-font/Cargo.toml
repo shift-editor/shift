@@ -22,7 +22,7 @@ kurbo = "0.13.0"
 # Trigonometry with identical bits natively and in WebAssembly.
 libm = "0.2.16"
 # Persistent maps, so a font copy shares its index instead of copying it.
-imbl = "6"
+imbl = { version = "6", features = ["serde"] }
 linesweeper = "0.3.0"
 serde = { version = "1.0", features = ["derive", "rc"] }
 thiserror = "2.0.18"

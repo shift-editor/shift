@@ -2990,6 +2990,50 @@ mod tests {
     }
 
     #[test]
+    fn perf_mark_one_kerning_edit_costs_the_same_with_many_pairs() {
+        let mark = PerfFontMark {
+            label: "cjk-scale",
+            glyphs: 10_000,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let source_id = font.default_source_id().unwrap();
+        let glyph_ids: Vec<GlyphId> = font.glyphs().map(Glyph::id).take(530).collect();
+        // 280,900 pairs: every pair of the first 530 glyphs.
+        for first in &glyph_ids {
+            for second in &glyph_ids {
+                font.kerning_mut().set_value(
+                    source_id.clone(),
+                    crate::KerningPair::glyphs(first.clone(), second.clone()),
+                    -10.0,
+                );
+            }
+        }
+        let pair = crate::KerningPair::glyphs(glyph_ids[7].clone(), glyph_ids[9].clone());
+
+        let edited = median_time(|run| {
+            font.apply_intents(&crate::FontIntentSet::from(crate::SetKerningValues {
+                edits: vec![crate::KerningValueEdit {
+                    source_id: source_id.clone(),
+                    pair: pair.clone(),
+                    value: Some(f64::from(run)),
+                }],
+            }))
+            .unwrap();
+        });
+
+        print_perf_mark("set one kerning value among 280,900 pairs", mark, edited);
+        if cfg!(debug_assertions) {
+            return;
+        }
+        assert!(
+            edited < Duration::from_millis(1),
+            "setting one kerning value took {edited:?}"
+        );
+    }
+
+    #[test]
     fn perf_mark_large_font_mutating_one_glyph_preserves_unedited_glyph_sharing() {
         let mark = PerfFontMark {
             label: "cjk-scale",
