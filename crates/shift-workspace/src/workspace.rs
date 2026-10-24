@@ -476,7 +476,7 @@ impl FontWorkspace {
         self.font = next_font;
         // Sweeping residency looks up every unloaded layer, so do it only when
         // a change could have removed layers from the directory.
-        if removes_directory_layers(change_set) {
+        if change_set.can_remove_layers() {
             self.residency.retain_directory_layers(&self.font);
         }
         Ok(())
@@ -875,14 +875,4 @@ fn source_from_workspace_state(state: &WorkspaceState) -> Result<WorkspaceSource
             Ok(WorkspaceSource::Imported { original_path })
         }
     }
-}
-
-/// Whether a changeset can remove layers from the directory: only glyph or
-/// source replacements and layer removals do.
-fn removes_directory_layers(change_set: &FontChangeSet) -> bool {
-    change_set.changes.iter().any(|change| match change {
-        FontChange::Glyph(_) | FontChange::Sources(_) => true,
-        FontChange::Layer { layer, .. } => layer.after.is_none(),
-        _ => false,
-    })
 }

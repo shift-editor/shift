@@ -518,7 +518,7 @@ impl<'a> StoreWriter<'a> {
                             .execute("DELETE FROM glyph_layers WHERE glyph_id = ?1", [&glyph_id])?;
                     }
                 }
-                for layer in changed_layers(value) {
+                for layer in value.changed_layers() {
                     prepared.write(self.tx, &glyph_id, layer)?;
                 }
             }
@@ -1158,29 +1158,11 @@ fn kerning_groups_after(
     })
 }
 
-/// The layers a glyph replacement writes: every layer of a new glyph, and
-/// the layers of a replaced glyph that differ from what it had.
-fn changed_layers(
-    value: &font::Replacement<Option<font::Glyph>>,
-) -> impl Iterator<Item = &font::GlyphLayer> {
-    value.after.iter().flat_map(move |glyph| {
-        glyph
-            .layers()
-            .iter()
-            .filter(move |(layer_id, layer)| {
-                value
-                    .before
-                    .as_ref()
-                    .and_then(|before| before.layers().get(*layer_id))
-                    .is_none_or(|before| before != *layer)
-            })
-            .map(|(_, layer)| layer.as_ref())
-    })
-}
-
 /// Every layer a changeset writes, encoded and compressed in parallel before
 /// the transaction opens, so a large batch doesn't encode one layer at a time.
-struct PreparedLayers(HashMap<font::LayerId, StoredLayerPayload>);
+struct PreparedLayers {
+    payloads: HashMap<font::LayerId, StoredLayerPayload>,
+}
 
 impl PreparedLayers {
     /// Encodes and compresses the layers `change_set` writes.
@@ -1190,29 +1172,15 @@ impl PreparedLayers {
     /// Returns a layer-encoding or compression error for the first layer that
     /// fails.
     fn for_change_set(change_set: &font::FontChangeSet) -> Result<Self, StoreError> {
-        let layers: Vec<&font::GlyphLayer> = change_set
-            .changes
-            .iter()
-            .flat_map(
-                |change| -> Box<dyn Iterator<Item = &font::GlyphLayer> + '_> {
-                    match change {
-                        font::FontChange::Glyph(value) => Box::new(changed_layers(value)),
-                        font::FontChange::Layer { layer, .. } => {
-                            Box::new(layer.after.as_deref().into_iter())
-                        }
-                        _ => Box::new(std::iter::empty()),
-                    }
-                },
-            )
-            .collect();
-        layers
+        let layers: Vec<&font::GlyphLayer> = change_set.written_layers().collect();
+        let payloads = layers
             .par_iter()
             .map(|layer| {
                 let stored = StoredLayerPayload::compress(&encode_layer(layer)?)?;
                 Ok((layer.id(), stored))
             })
-            .collect::<Result<_, StoreError>>()
-            .map(Self)
+            .collect::<Result<_, StoreError>>()?;
+        Ok(Self { payloads })
     }
 
     /// Writes `layer` from its prepared payload, encoding it now if it wasn't
@@ -1223,7 +1191,7 @@ impl PreparedLayers {
         glyph_id: &font::GlyphId,
         layer: &font::GlyphLayer,
     ) -> Result<(), StoreError> {
-        match self.0.get(&layer.id()) {
+        match self.payloads.get(&layer.id()) {
             Some(stored) => {
                 store_stored_layer_in_tx(tx, glyph_id, layer, stored, WriteMode::Upsert)
             }
