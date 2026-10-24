@@ -5,6 +5,7 @@ import { useParams } from "react-router";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@shift/ui";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
+import { useToolbarDock } from "@/components/chrome/useToolbarDock";
 import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
@@ -159,6 +160,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
     resetLeftSidebar,
     resetRightSidebar,
   } = useSidebarLayout("editor");
+  const { dock: toolbarDock, onDockChange: onToolbarDockChange } = useToolbarDock();
 
   // Cursor and gesture change on every pointer event. Writing them to the shell directly keeps
   // those events from re-rendering the toolbar, sidebars, and canvas beneath it.
@@ -201,7 +203,11 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
         <ResizablePanel id="canvas" minSize={300} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="relative h-full">
             {children}
-            <FloatingToolbar editor={editor} />
+            <FloatingToolbar
+              editor={editor}
+              dock={toolbarDock}
+              onDockChange={onToolbarDockChange}
+            />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle

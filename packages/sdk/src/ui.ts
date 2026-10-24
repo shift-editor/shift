@@ -17,6 +17,7 @@ export type {
   ShiftEditorProps,
   ShiftEditorChromeProps,
   ShiftEditorRootProps,
+  ToolbarDock,
   VariationSidebarHost,
   VariationSidebarProps,
   VariationSidebarSectionHost,

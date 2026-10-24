@@ -4,10 +4,12 @@ import type { MenuBar } from "../../shared/menu/types";
 import { menuBarFromTemplate, withMenuItemIds } from "./menuBar";
 import {
   commandMenuItem,
+  debugMenuItems,
   editMenuItems,
   fileMenuItems,
   helpMenuItems,
   viewMenuItems,
+  type DebugMenu,
   type RecentMenu,
 } from "./menuItems";
 import { commands } from "../commands/Commands";
@@ -27,6 +29,7 @@ export class ApplicationMenu {
   readonly #isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean;
   readonly #recent: () => RecentMenu;
   readonly #onMenuBarChanged: () => void;
+  readonly #debug: DebugMenu;
   #menu: Menu | null = null;
   #template: MenuItemConstructorOptions[] = [];
 
@@ -37,17 +40,20 @@ export class ApplicationMenu {
    * @param isCommandEnabled - resolves each command's current native enabled state.
    * @param recent - resolves File → Open Recent's current files and actions.
    * @param onMenuBarChanged - called on Windows and Linux whenever {@link menuBar} would change.
+   * @param debug - overlay toggles for the Debug menu, shown only in unpackaged builds.
    */
   constructor(
     runCommand: (id: CommandId, window?: BrowserWindow) => void,
     isCommandEnabled: (id: CommandId, window?: BrowserWindow) => boolean,
     recent: () => RecentMenu,
     onMenuBarChanged: () => void,
+    debug: DebugMenu,
   ) {
     this.#runCommand = runCommand;
     this.#isCommandEnabled = isCommandEnabled;
     this.#recent = recent;
     this.#onMenuBarChanged = onMenuBarChanged;
+    this.#debug = debug;
   }
 
   /** Installs the current menu template as Electron's application menu. */
@@ -145,6 +151,7 @@ export class ApplicationMenu {
         label: "Glyph",
         submenu: this.#glyphItems(),
       },
+      ...this.#debugMenu(),
       {
         role: "windowMenu",
         submenu: [
@@ -182,6 +189,7 @@ export class ApplicationMenu {
         label: "Glyph",
         submenu: this.#glyphItems(),
       },
+      ...this.#debugMenu(),
       {
         role: "help",
         submenu: this.#helpItems(true),
@@ -198,6 +206,13 @@ export class ApplicationMenu {
       { type: "separator" },
       { label: "Developer", submenu: this.#developerItems() },
     ];
+  }
+
+  /** The Debug menu, or nothing in a packaged build. */
+  #debugMenu(): MenuItemConstructorOptions[] {
+    if (app.isPackaged) return [];
+
+    return [{ label: "Debug", submenu: debugMenuItems(this.#debug) }];
   }
 
   #developerItems(): MenuItemConstructorOptions[] {

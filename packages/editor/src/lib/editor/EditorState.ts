@@ -12,6 +12,7 @@ const DEFAULT_MODIFIERS: Modifiers = {
 };
 
 const DEFAULT_DEBUG_OVERLAYS: DebugOverlays = {
+  toolbarZones: false,
   tightBounds: false,
   hitRadii: false,
   segmentBounds: false,

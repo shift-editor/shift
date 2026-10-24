@@ -2327,12 +2327,14 @@ dependencies = [
  "serde_json",
  "shift-backends",
  "shift-font",
+ "shift-proof",
  "shift-store",
  "shift-workspace",
  "skrifa",
  "svgtypes",
  "tempfile",
  "thiserror",
+ "tiny-skia",
 ]
 
 [[package]]
@@ -2362,6 +2364,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-proof"
+version = "0.1.0"
+dependencies = [
+ "harfrust",
+ "png",
+ "serde",
+ "skrifa",
+ "thiserror",
+ "tiny-skia",
+ "unicode-bidi",
+ "unicode-script",
+]
+
+[[package]]
 name = "shift-shape"
 version = "0.1.0"
 dependencies = [
@@ -2388,7 +2404,7 @@ dependencies = [
 name = "shift-specimen"
 version = "0.1.0"
 dependencies = [
- "harfrust",
+ "shift-proof",
  "skrifa",
  "unicode-script",
 ]
@@ -2924,6 +2940,12 @@ dependencies = [
  "tracing",
  "write-fonts",
 ]
+
+[[package]]
+name = "unicode-bidi"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
 name = "unicode-ident"
