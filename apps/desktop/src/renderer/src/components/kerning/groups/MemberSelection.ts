@@ -29,25 +29,25 @@ export class MemberSelection {
   private constructor(
     members: readonly GlyphId[],
     memberSet: ReadonlySet<GlyphId>,
-    ids: readonly GlyphId[],
+    selected: ReadonlySet<GlyphId>,
     anchor: GlyphId | null,
     focus: GlyphId | null,
   ) {
     this.members = members;
     this.#memberSet = memberSet;
-    this.ids = ids;
-    this.#selected = new Set(ids);
+    this.#selected = selected;
+    this.ids = members.filter((member) => selected.has(member));
     this.anchor = anchor;
     this.focus = focus;
   }
 
   /** Nothing selected among `members`. */
   static empty(members: readonly GlyphId[]): MemberSelection {
-    return new MemberSelection(members, new Set(members), [], null, null);
+    return new MemberSelection(members, new Set(members), new Set(), null, null);
   }
 
   get isEmpty(): boolean {
-    return this.ids.length === 0;
+    return this.#selected.size === 0;
   }
 
   has(member: GlyphId): boolean {
@@ -72,12 +72,9 @@ export class MemberSelection {
       return this.#with(this.#range(this.anchor, member), this.anchor, member);
     }
     if (modifiers.toggle) {
-      const ids = this.has(member)
-        ? this.ids.filter((id) => id !== member)
-        : this.#inMemberOrder([...this.ids, member]);
-      return this.#with(ids, member, member);
+      return this.#with(this.#selected.symmetricDifference(new Set([member])), member, member);
     }
-    return this.#with([member], member, member);
+    return this.#with(new Set([member]), member, member);
   }
 
   /** The selection while dragging from `anchor` to `member`: the members between them. */
@@ -94,19 +91,19 @@ export class MemberSelection {
     const first = this.members[0];
     if (first === undefined) return this.clear();
     const focusIndex = this.focus === null ? -1 : this.members.indexOf(this.focus);
-    if (focusIndex === -1) return this.#with([first], first, first);
+    if (focusIndex === -1) return this.#with(new Set([first]), first, first);
 
     const nextIndex = Math.min(Math.max(focusIndex + offset, 0), this.members.length - 1);
     const next = this.members[nextIndex] ?? first;
     if (extend && this.#isMember(this.anchor)) {
       return this.#with(this.#range(this.anchor, next), this.anchor, next);
     }
-    return this.#with([next], next, next);
+    return this.#with(new Set([next]), next, next);
   }
 
   /** Every member, anchored at the first. */
   all(): MemberSelection {
-    return this.#with([...this.members], this.members[0] ?? null, this.members.at(-1) ?? null);
+    return this.#with(this.#memberSet, this.members[0] ?? null, this.members.at(-1) ?? null);
   }
 
   /** The selection carried over to `members`, without glyphs that are no longer members. */
@@ -117,28 +114,27 @@ export class MemberSelection {
     return new MemberSelection(
       members,
       memberSet,
-      this.ids.filter((id) => memberSet.has(id)),
+      this.#selected.intersection(memberSet),
       kept(this.anchor),
       kept(this.focus),
     );
   }
 
-  #with(ids: readonly GlyphId[], anchor: GlyphId | null, focus: GlyphId | null): MemberSelection {
-    return new MemberSelection(this.members, this.#memberSet, ids, anchor, focus);
+  #with(
+    selected: ReadonlySet<GlyphId>,
+    anchor: GlyphId | null,
+    focus: GlyphId | null,
+  ): MemberSelection {
+    return new MemberSelection(this.members, this.#memberSet, selected, anchor, focus);
   }
 
   #isMember(id: GlyphId | null): id is GlyphId {
     return id !== null && this.#memberSet.has(id);
   }
 
-  #range(from: GlyphId, to: GlyphId): GlyphId[] {
+  #range(from: GlyphId, to: GlyphId): ReadonlySet<GlyphId> {
     const a = this.members.indexOf(from);
     const b = this.members.indexOf(to);
-    return this.members.slice(Math.min(a, b), Math.max(a, b) + 1);
-  }
-
-  #inMemberOrder(ids: readonly GlyphId[]): GlyphId[] {
-    const wanted = new Set(ids);
-    return this.members.filter((member) => wanted.has(member));
+    return new Set(this.members.slice(Math.min(a, b), Math.max(a, b) + 1));
   }
 }
