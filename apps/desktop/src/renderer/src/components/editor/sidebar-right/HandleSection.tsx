@@ -6,7 +6,7 @@ import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection } from "./SidebarSection";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import type { GlyphLayer } from "@shift/editor/model";
-import { PointRuleConstraint } from "@shift/editor/model";
+import { PointRuleConstraint, PositionTargets } from "@shift/editor/model";
 import { track } from "@shift/editor/signals";
 import type { CubicHandle } from "@shift/editor/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
@@ -65,7 +65,7 @@ export const HandleSection = () => {
 
     const pointIds = [handle.pointId];
     const move = layer.positions
-      .move({ points: pointIds })
+      .move(PositionTargets.points(pointIds))
       .constrainedBy(PointRuleConstraint.forSelection(layer.geometry, pointIds));
     move.preview(delta);
     move.commit(label);

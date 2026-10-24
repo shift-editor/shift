@@ -174,7 +174,7 @@ export class Translate implements SelectBehavior {
   /** Snaps dragged points to source metrics and into line with on-screen points that stay put. */
   #configurePositionSnap(editor: Editor, select: Select, drag: TranslateInteraction): void {
     const { layer, targets } = drag.selection;
-    const moving = targets.points ?? [];
+    const moving = targets.points;
     const candidates = snapCandidates(layer, moving);
     if (candidates.length === 0) return;
 

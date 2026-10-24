@@ -27,6 +27,7 @@ export interface ToolManifest {
   tooltip: string;
   shortcut?: string;
   onSelect?: () => void;
+  // oxlint-disable-next-line shift/no-optional-collection-field -- absent renders a plain button; present renders a menu button
   menuItems?: readonly ToolMenuItem[];
   menuSelectionCell?: Signal<string>;
   hidden?: boolean;

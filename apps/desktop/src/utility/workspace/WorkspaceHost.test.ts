@@ -11,6 +11,7 @@ import {
   mintContourId,
   mintGlyphId,
   mintLayerId,
+  ascending,
   mintPointId,
   type FontIntent,
   type GlyphId,
@@ -1333,7 +1334,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       samples.push(performance.now() - start);
     }
 
-    samples.sort((a, b) => a - b);
+    samples.sort(ascending);
     const p50 = samples[49];
     const p99 = samples[98];
     console.info(

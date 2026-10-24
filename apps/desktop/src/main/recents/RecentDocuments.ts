@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { RecentDocument, RecentDocumentVisit } from "../../shared/recents";
 import type { Specimen } from "../../shared/workspace/protocol";
+import { comparing, descending } from "@shift/types";
 
 /** Most files kept in recents; older opens fall off the end. */
 export const RECENT_DOCUMENTS_LIMIT = 20;
@@ -19,6 +20,9 @@ type Thumbnail = {
   modifiedAt: number;
   revision?: number;
 };
+
+/** Recent entries newest first, the order the list shows and keeps. */
+const newestFirst = comparing((entry: RecentEntry) => entry.openedAt, descending);
 
 type RecentEntry = {
   path: string;
@@ -164,9 +168,7 @@ export class RecentDocuments {
         revision: SPECIMEN_REVISION,
       };
     }
-    this.#entries = [...remaining, restored]
-      .sort((a, b) => b.openedAt - a.openedAt)
-      .slice(0, RECENT_DOCUMENTS_LIMIT);
+    this.#entries = [...remaining, restored].sort(newestFirst).slice(0, RECENT_DOCUMENTS_LIMIT);
     this.#changed();
   }
 

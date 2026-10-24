@@ -245,7 +245,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (!isTextItemId(id)) return null;
       const placed = layout.placedGlyphForItem(id);
       const glyphId = placed?.glyph.glyphId;
-      const layer = glyphId ? this.editor.glyphForId(glyphId)?.layerForSource(sourceId) : null;
+      const layer = glyphId ? this.editor.layerForGlyph(glyphId, sourceId) : null;
       const itemBounds = this.itemBounds(node, id);
       if (!placed || !glyphId || !layer || !itemBounds) return null;
 
@@ -269,7 +269,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     if (this.editor.editing.hasScope()) return [];
 
     const ids: SelectableId[] = [];
-    for (const item of this.editor.text.run(node.runId)?.items ?? []) {
+    for (const item of this.textItems(node)) {
       const bounds = this.itemBounds(node, item.id);
       if (bounds && Bounds.overlaps(bounds, rect)) ids.push(item.id);
     }

@@ -35,6 +35,7 @@ import type { TransformAction, TransformTarget } from "../../types/transformTarg
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
 import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../variation/location";
 import { GlyphOutlines } from "./GlyphOutlines";
+import { OutlineTargets } from "./OutlineTargets";
 
 const EMPTY_OUTLINE_LOCATION = emptyExternalAxisLocation();
 
@@ -61,14 +62,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly #guides = new Guides();
   readonly #outlineViews = keyedCache({
     name: "glyphNode.outlineViews",
-    key: (target: GlyphOutlineTarget) => {
-      switch (target.kind) {
-        case "source":
-          return `source:${target.sourceId}`;
-        case "instance":
-          return `instance:${target.instanceId}`;
-      }
-    },
+    key: OutlineTargets.key,
     create: (targetCell) => {
       const resolvedCell = computed(() => this.#resolveOutlineTarget(targetCell.value), {
         name: "glyphNode.outlineTarget",
@@ -87,8 +81,18 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     },
   });
 
-  /** Node-scoped variation outlines rendered by this glyph behavior plugin. */
-  readonly outlines = new GlyphOutlines();
+  /** Comparison outlines drawn around the scene's first glyph node. */
+  readonly outlines = new GlyphOutlines({
+    activeSourceIdCell: this.editor.activeSourceIdCell,
+    editingSourceIdsCell: this.editor.editingSourceIdsCell,
+    outlinedNodeIdCell: computed(
+      () => {
+        track(this.editor.scene.cell);
+        return this.editor.scene.first("glyph")?.id ?? null;
+      },
+      { name: "glyphNode.outlinedNode" },
+    ),
+  });
 
   /**
    * Flips font units to Y-down; a glyph edited inside text also takes the
@@ -523,9 +527,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       this.editor.activeSourceId === null &&
       this.editor.font.sourceAt(this.editor.externalLocation) === null;
 
-    track(view.contoursCell);
-    const rootContours = view.contours.filter(
-      (contour) => contour.component === null && this.editor.handlesVisible(contour.contour.id),
+    track(view.rootContoursCell);
+    const rootContours = view.rootContours.filter((contour) =>
+      this.editor.handlesVisible(contour.contour.id),
     );
     return { interpolated, rootContours };
   }

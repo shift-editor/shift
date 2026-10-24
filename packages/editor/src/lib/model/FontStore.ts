@@ -1,3 +1,4 @@
+import { ascending, EntityMap } from "@shift/types";
 import type {
   KerningValueEdit,
   AppliedChange,
@@ -152,40 +153,40 @@ export class FontStore {
 
   /** Returns the glyph that owns a layer, from the glyph directory; the glyph need not be loaded. */
   glyphIdForLayer(layerId: LayerId): GlyphId | null {
-    return this.#indexCell.peek().glyphByLayer.get(layerId) ?? null;
+    return this.#indexCell.peek().glyphByLayer.get(layerId);
   }
 
   /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
   layerIdForGlyphSource(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
-    return this.#indexCell.peek().layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId)) ?? null;
+    return this.#indexCell.peek().layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {
-    return this.#glyphObjectIndexCell.peek().layerIdByPointId.get(pointId) ?? null;
+    return this.#glyphObjectIndexCell.peek().layerIdByPointId.get(pointId);
   }
 
   contourIdForPoint(pointId: PointId): ContourId | null {
-    return this.#glyphObjectIndexCell.peek().contourIdByPointId.get(pointId) ?? null;
+    return this.#glyphObjectIndexCell.peek().contourIdByPointId.get(pointId);
   }
 
   layerIdForAnchor(anchorId: AnchorId): LayerId | null {
-    return this.#glyphObjectIndexCell.peek().layerIdByAnchorId.get(anchorId) ?? null;
+    return this.#glyphObjectIndexCell.peek().layerIdByAnchorId.get(anchorId);
   }
 
   layerIdForContour(contourId: ContourId): LayerId | null {
-    return this.#glyphObjectIndexCell.peek().layerIdByContourId.get(contourId) ?? null;
+    return this.#glyphObjectIndexCell.peek().layerIdByContourId.get(contourId);
   }
 
   layerIdForSegment(segmentId: SegmentId): LayerId | null {
-    return this.#glyphObjectIndexCell.peek().layerIdBySegmentId.get(segmentId) ?? null;
+    return this.#glyphObjectIndexCell.peek().layerIdBySegmentId.get(segmentId);
   }
 
   contourIdForSegment(segmentId: SegmentId): ContourId | null {
-    return this.#glyphObjectIndexCell.peek().contourIdBySegmentId.get(segmentId) ?? null;
+    return this.#glyphObjectIndexCell.peek().contourIdBySegmentId.get(segmentId);
   }
 
   pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null {
-    return this.#glyphObjectIndexCell.peek().pointIdsBySegmentId.get(segmentId) ?? null;
+    return this.#glyphObjectIndexCell.peek().pointIdsBySegmentId.get(segmentId);
   }
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
@@ -419,12 +420,12 @@ export class FontStore {
 
   entryForId(glyphId: GlyphId): GlyphEntry | null {
     track(this.#indexCell);
-    return this.#indexCell.peek().glyphById.get(glyphId) ?? null;
+    return this.#indexCell.peek().glyphById.get(glyphId);
   }
 
   recordForId(glyphId: GlyphId): GlyphRecord | null {
     track(this.#indexCell);
-    return this.#indexCell.peek().recordsById.get(glyphId) ?? null;
+    return this.#indexCell.peek().recordsById.get(glyphId);
   }
 
   records(): readonly GlyphRecord[] {
@@ -603,13 +604,13 @@ export class FontStore {
     // Layer state cells materialize lazily, so the cell-set version is what
     // lets cells created after the last rebuild enter the tracked set.
     track(this.#layerCellSetVersion);
-    const layerIdByPointId = new Map<PointId, LayerId>();
-    const contourIdByPointId = new Map<PointId, ContourId>();
-    const layerIdByContourId = new Map<ContourId, LayerId>();
-    const layerIdByAnchorId = new Map<AnchorId, LayerId>();
-    const layerIdBySegmentId = new Map<SegmentId, LayerId>();
-    const contourIdBySegmentId = new Map<SegmentId, ContourId>();
-    const pointIdsBySegmentId = new Map<SegmentId, readonly PointId[]>();
+    const layerIdByPointId = new EntityMap<PointId, LayerId>("point layer");
+    const contourIdByPointId = new EntityMap<PointId, ContourId>("point contour");
+    const layerIdByContourId = new EntityMap<ContourId, LayerId>("contour layer");
+    const layerIdByAnchorId = new EntityMap<AnchorId, LayerId>("anchor layer");
+    const layerIdBySegmentId = new EntityMap<SegmentId, LayerId>("segment layer");
+    const contourIdBySegmentId = new EntityMap<SegmentId, ContourId>("segment contour");
+    const pointIdsBySegmentId = new EntityMap<SegmentId, readonly PointId[]>("segment points");
 
     for (const cell of this.#layerStateCells.values()) {
       track(cell);
@@ -672,8 +673,8 @@ function recordIndex(
   entries: readonly GlyphEntry[],
   records: readonly GlyphRecord[],
 ): FontRecordIndex {
-  const glyphById = new Map<GlyphId, GlyphEntry>();
-  const entryByName = new Map<GlyphName, GlyphEntry>();
+  const glyphById = new EntityMap<GlyphId, GlyphEntry>("glyph");
+  const entryByName = new EntityMap<GlyphName, GlyphEntry>("glyph name");
   const nameByUnicode = new Map<Unicode, GlyphName>();
   for (const entry of entries) {
     glyphById.set(entry.id, entry);
@@ -684,11 +685,11 @@ function recordIndex(
   }
 
   const knownRecords = records.filter((record) => glyphById.has(record.id));
-  const recordsById = new Map<GlyphId, GlyphRecord>();
-  const recordByName = new Map<GlyphName, GlyphRecord>();
+  const recordsById = new EntityMap<GlyphId, GlyphRecord>("glyph record");
+  const recordByName = new EntityMap<GlyphName, GlyphRecord>("glyph record name");
   const dependentsById = new Map<GlyphId, Set<GlyphId>>();
-  const layerByGlyphSource = new Map<GlyphSourceKey, LayerId>();
-  const glyphByLayer = new Map<LayerId, GlyphId>();
+  const layerByGlyphSource = new EntityMap<GlyphSourceKey, LayerId>("glyph source layer");
+  const glyphByLayer = new EntityMap<LayerId, GlyphId>("layer glyph");
   for (const record of knownRecords) {
     recordsById.set(record.id, record);
     recordByName.set(record.name, record);
@@ -709,10 +710,7 @@ function recordIndex(
   return {
     entries: [...entries],
     records: knownRecords,
-    unicodes: nameByUnicode
-      .keys()
-      .toArray()
-      .sort((a, b) => a - b),
+    unicodes: nameByUnicode.keys().toArray().sort(ascending),
     glyphById,
     recordsById,
     entryByName,

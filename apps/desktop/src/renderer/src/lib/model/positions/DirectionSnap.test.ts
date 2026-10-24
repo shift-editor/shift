@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import { DirectionSnap, PositionReference } from "@shift/editor/model";
+import { DirectionSnap, PositionReference, PositionTargets } from "@shift/editor/model";
 
 describe("direction snapping distinguishes the moving reference from its fixed pivot", () => {
   let editor: TestEditor;
@@ -18,7 +18,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("preserves candidate distance from an explicit pivot and emits a pivot-based guide", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(45).around(PositionReference.position({ x: 0, y: 100 })),
@@ -42,7 +42,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     const layer = editor.requireGlyphLayer();
     const pivot = layer.allPoints[1]!.id;
     const edit = layer.positions
-      .move({ points: [pointId, pivot] })
+      .move(PositionTargets.points([pointId, pivot]))
       .directionSnappedBy(DirectionSnap.everyDegrees(90).around(PositionReference.point(pivot)))
       .from(PositionReference.point(pointId));
 
@@ -60,7 +60,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     const pivot = layer.addAnchor("top", { x: 0, y: 100 });
     await editor.settle();
     const edit = layer.positions
-      .move({ points: [pointId], anchors: [pivot] })
+      .move(new PositionTargets([pointId], [pivot]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(DirectionSnap.everyDegrees(90).around(PositionReference.anchor(pivot)));
 
@@ -78,7 +78,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("uses the explicit moving reference rather than a target position", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.position({ x: 100, y: 200 }))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(90).around(PositionReference.position({ x: 0, y: 200 })),
@@ -95,7 +95,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("allows a caller to suppress guides without disabling direction snapping", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(90)
@@ -113,7 +113,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     let enabled = true;
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(90, { when: () => enabled }).around(
@@ -135,7 +135,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("commits the snapped position through the workspace with undo and redo", async () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(90).around(PositionReference.position({ x: 0, y: 100 })),
@@ -154,7 +154,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("requires a moving reference before a pivoted preview without consuming configuration", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(90).around(PositionReference.position({ x: 0, y: 100 })),
       );
@@ -172,7 +172,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     const layer = editor
       .glyphForId(editor.font.recordForName("B")!.id)!
       .layerForSource(editor.font.defaultSource.id)!;
-    const edit = layer.positions.move({ points: [] });
+    const edit = layer.positions.move(PositionTargets.points([]));
 
     expect(() =>
       edit.directionSnappedBy(
@@ -186,7 +186,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("handles a candidate exactly on the pivot without invalid coordinates", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(45).around(PositionReference.position({ x: 0, y: 100 })),
@@ -204,7 +204,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     );
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(snap);
 
@@ -217,7 +217,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("does not expose the frozen pivot through returned guides", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .from(PositionReference.point(pointId))
       .directionSnappedBy(
         DirectionSnap.everyDegrees(45).around(PositionReference.position({ x: 0, y: 100 })),
@@ -240,7 +240,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   it("retains delta-based snapping without a pivot or moving reference", () => {
     const edit = editor
       .requireGlyphLayer()
-      .positions.move({ points: [pointId] })
+      .positions.move(PositionTargets.points([pointId]))
       .directionSnappedBy(DirectionSnap.everyDegrees(90));
 
     const feedback = edit.preview({ x: 120, y: 50 });

@@ -184,7 +184,7 @@ function isIteratorValueRead(node) {
 }
 
 const SIGNAL_PRIMITIVES = new Set(["signal", "computed", "effect", "track"]);
-const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet"]);
+const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet", "EntityMap"]);
 const COLLECTION_MUTATORS = new Set(["set", "delete", "clear", "add"]);
 const SIGNAL_TYPES = new Set(["Signal", "WritableSignal", "ComputedSignal", "ReadonlySignal"]);
 const NON_REACTIVE_ANNOTATION = /^\s*non-reactive:\s*\S/;
@@ -228,7 +228,7 @@ function typeArgumentsOf(node) {
 function collectionShape(kind, typeArgs) {
   if (!MUTABLE_COLLECTIONS.has(kind)) return null;
 
-  const valueIndex = kind === "Map" || kind === "WeakMap" ? 1 : 0;
+  const valueIndex = kind === "Map" || kind === "WeakMap" || kind === "EntityMap" ? 1 : 0;
   const valueType = typeArgs[valueIndex];
   const holdsSignals = SIGNAL_TYPES.has(typeReferenceName(valueType));
   return { kind, holdsSignals };
@@ -1480,6 +1480,147 @@ export default {
             if (node.right.type !== "Literal" || node.right.value !== 1) return;
 
             context.report({ node, messageId: "useOnly" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban optional collection fields.
+     *
+     * `readonly points?: readonly PointId[]` makes every reader write
+     * `points ?? []`. Make the field required and let an empty collection mean
+     * "none". When absence really differs from empty (an option that falls back
+     * to a default, a wire format), keep it and say why in a disable comment.
+     */
+    "no-optional-collection-field": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          requiredCollection:
+            "`{{name}}` is an optional collection, so readers must write `?? []`. Make it required and use an empty collection for none, or justify the absence in a disable comment.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (filename.includes(".test.") || filename.includes("/testing/")) return {};
+        // Generated bindings mirror Rust's Option<Vec<_>> wire fields.
+        if (filename.includes("/generated")) return {};
+
+        const isCollection = (type) => {
+          if (!type) return false;
+          if (type.type === "TSArrayType") return true;
+          if (type.type === "TSTypeOperator" && type.operator === "readonly") {
+            return isCollection(type.typeAnnotation);
+          }
+          return (
+            type.type === "TSTypeReference" &&
+            type.typeName?.type === "Identifier" &&
+            ["Array", "ReadonlyArray", "Set", "ReadonlySet", "Map", "ReadonlyMap"].includes(
+              type.typeName.name,
+            )
+          );
+        };
+
+        return {
+          TSPropertySignature(node) {
+            if (!node.optional || !isCollection(node.typeAnnotation?.typeAnnotation)) return;
+
+            const name = node.key?.name ?? source(node.key);
+            context.report({ node, messageId: "requiredCollection", data: { name } });
+          },
+        };
+
+        function source(key) {
+          return (context.sourceCode ?? context.getSourceCode()).getText(key);
+        }
+      },
+    },
+
+    /**
+     * Ban comparators written inline in `sort` and `toSorted`.
+     *
+     * `(a, b) => a - b` says how to order but not what the order is, and the
+     * same comparator gets written again at the next call site. Pass a named
+     * order instead: `ascending`, `byName`, `comparing(key, order)` and
+     * `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a
+     * comparator named next to the type it orders. When the order is part of
+     * the domain, let the owning collection keep it so callers do not sort.
+     */
+    "no-inline-comparator": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          nameComparator:
+            "Name this order instead of writing the comparator inline: pass `ascending`, `byName`, `comparing(key, order)` or `orderBy(...)` from @shift/types, `byAxis` from @shift/geo, or a comparator named next to the type it orders.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const SORTS = new Set(["sort", "toSorted"]);
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee || callee.type !== "MemberExpression" || callee.computed) return;
+            if (!SORTS.has(callee.property?.name)) return;
+
+            const comparator = node.arguments[0];
+            if (!comparator) return;
+            if (
+              comparator.type !== "ArrowFunctionExpression" &&
+              comparator.type !== "FunctionExpression"
+            ) {
+              return;
+            }
+
+            context.report({ node: comparator, messageId: "nameComparator" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban `this.#map.get(key) ?? null` on a class's own collections.
+     *
+     * Shift's lookups return `null` for a missing entity, while `Map.get`
+     * returns `undefined`, so each lookup method converted by hand. Hold the
+     * collection in an `EntityMap` from `@shift/types`: its `get` returns
+     * `null`, and its `require` throws a named not-found error.
+     */
+    "no-map-get-to-null": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useEntityMap:
+            "Hold `{{field}}` in an EntityMap from @shift/types, whose get returns null, instead of converting Map.get with `?? null`.",
+        },
+        schema: [],
+      },
+      create(context) {
+        if (context.getFilename().replace(/\\/g, "/").endsWith("packages/types/src/EntityMap.ts")) {
+          return {};
+        }
+
+        return {
+          LogicalExpression(node) {
+            if (node.operator !== "??") return;
+            if (node.right.type !== "Literal" || node.right.value !== null) return;
+
+            const call = node.left;
+            if (call.type !== "CallExpression" || call.callee.type !== "MemberExpression") return;
+            if (call.callee.property?.name !== "get") return;
+
+            const field = call.callee.object;
+            if (field.type !== "MemberExpression" || field.object.type !== "ThisExpression") return;
+            if (field.property.type !== "PrivateIdentifier") return;
+
+            context.report({
+              node,
+              messageId: "useEntityMap",
+              data: { field: `#${field.property.name}` },
+            });
           },
         };
       },

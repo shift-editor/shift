@@ -25,6 +25,16 @@ export type {
   TextItemId,
   SourceId,
 } from "./ids";
+export { EntityMap, EntityNotFoundError, type ReadonlyEntityMap } from "./EntityMap";
+export {
+  alphabetical,
+  ascending,
+  byName,
+  comparing,
+  descending,
+  orderBy,
+  type Comparator,
+} from "./order";
 export {
   asPointId,
   asContourId,

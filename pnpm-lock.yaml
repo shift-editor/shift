@@ -286,6 +286,9 @@ importers:
 
   packages/glyph-info:
     dependencies:
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
       minisearch:
         specifier: ^7.1.1
         version: 7.2.0
@@ -339,6 +342,9 @@ importers:
       '@shift/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@shift/types':
+        specifier: workspace:*
+        version: link:../types
       fastify:
         specifier: ^5.12.5
         version: 5.12.5

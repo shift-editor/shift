@@ -13,6 +13,7 @@ import CheckIcon from "@/assets/general/check.svg";
 import ExpandMoreIcon from "@/assets/general/expand-more.svg";
 import SearchIcon from "@/assets/general/search.svg";
 import { themeById, type ColorTheme } from "@/lib/themes";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 interface ThemePickerProps {
   label: string;
@@ -38,8 +39,7 @@ export const ThemePicker = ({ label, themes, value, onPreview, onChoose }: Theme
   const [highlightedId, setHighlightedId] = useState<string>(value);
 
   const chosen = themeById(value, themes);
-  const needle = query.trim().toLowerCase();
-  const matching = themes.filter((theme) => theme.name.toLowerCase().includes(needle));
+  const matching = NameQuery.from(query).filter(themes);
   const builtIn = matching.filter((theme) => !theme.file).sort(compareShipped);
   const yours = matching.filter((theme) => theme.file);
   /** The listed order, which the arrow keys follow. */

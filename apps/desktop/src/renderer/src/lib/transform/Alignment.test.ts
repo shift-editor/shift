@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Alignment } from "@shift/editor/transform";
-import { Bounds } from "@shift/geo";
+import { Bounds, byAxis } from "@shift/geo";
 import type { PointId } from "@shift/types";
 
 interface TestPosition {
@@ -73,7 +73,7 @@ describe("Alignment", () => {
       const points = [createPoint(1, 100, 100), createPoint(2, 300, 100), createPoint(3, 120, 100)];
       const distributed = Alignment.distributePoints(points, "horizontal");
 
-      const sorted = distributed.sort((a, b) => a.x - b.x);
+      const sorted = distributed.sort(byAxis("x"));
       expect(sorted[0]?.x).toBe(100);
       expect(sorted[1]?.x).toBe(200);
       expect(sorted[2]?.x).toBe(300);
@@ -83,7 +83,7 @@ describe("Alignment", () => {
       const points = [createPoint(1, 100, 100), createPoint(2, 100, 400), createPoint(3, 100, 150)];
       const distributed = Alignment.distributePoints(points, "vertical");
 
-      const sorted = distributed.sort((a, b) => a.y - b.y);
+      const sorted = distributed.sort(byAxis("y"));
       expect(sorted[0]?.y).toBe(100);
       expect(sorted[1]?.y).toBe(250);
       expect(sorted[2]?.y).toBe(400);
@@ -114,7 +114,7 @@ describe("Alignment", () => {
       ];
       const distributed = Alignment.distributePoints(points, "horizontal");
 
-      const sorted = distributed.sort((a, b) => a.x - b.x);
+      const sorted = distributed.sort(byAxis("x"));
       expect(sorted[0]?.x).toBe(0);
       expect(sorted[1]?.x).toBeCloseTo(100);
       expect(sorted[2]?.x).toBeCloseTo(200);

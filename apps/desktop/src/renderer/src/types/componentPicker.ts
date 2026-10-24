@@ -1,4 +1,5 @@
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
+import type { GlyphCatalogItem } from "./glyphCatalog";
 
 export type ComponentCandidate =
   | {
@@ -15,3 +16,12 @@ export type ComponentCandidate =
       readonly displayName: string;
       readonly unicode: number;
     };
+
+/** The glyph a new component goes into, looked up once for the whole picker query. */
+export interface ComponentOwner {
+  readonly id: GlyphId;
+  /** Its catalog entry, or null when the catalog does not list it. */
+  readonly glyph: GlyphCatalogItem | null;
+  /** Its committed record, or null before it has one. */
+  readonly record: GlyphRecord | null;
+}

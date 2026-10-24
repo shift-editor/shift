@@ -5,7 +5,6 @@ export { Canvas } from "../lib/editor/rendering/Canvas";
 export { HandleItems } from "../lib/editor/rendering/overlays/handles/HandleItems";
 export { ContourPath } from "../lib/graphics/ContourPath";
 export { PackedArray } from "../lib/model/PackedArray";
-export { GlyphOutlines } from "../lib/nodes/GlyphOutlines";
 export { ShiftStore } from "../lib/store/ShiftStore";
 export { Caret } from "../lib/text/layout/Caret";
 export { Positioner } from "../lib/text/layout/Positioner";

@@ -11,3 +11,9 @@ export const useAxes = (): Axis[] => {
   const font = useFont();
   return useSignalState(font.axesCell);
 };
+
+/** Axes the user sets directly, without the internal axes mappings derive. */
+export const useExternalAxes = (): readonly Axis[] => {
+  const font = useFont();
+  return useSignalState(font.externalAxesCell);
+};

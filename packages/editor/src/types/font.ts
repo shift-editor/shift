@@ -20,6 +20,7 @@ import type {
   WorkspaceSnapshot,
   GlyphName,
   Unicode,
+  ReadonlyEntityMap,
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
 import type { PendingEditId } from "./editing";
@@ -44,21 +45,22 @@ export interface FontRecordIndex {
   readonly records: readonly GlyphRecord[];
   /** Every assigned codepoint, ascending. */
   readonly unicodes: readonly Unicode[];
-  readonly glyphById: ReadonlyMap<GlyphId, GlyphEntry>;
-  readonly recordsById: ReadonlyMap<GlyphId, GlyphRecord>;
-  readonly entryByName: ReadonlyMap<GlyphName, GlyphEntry>;
-  readonly recordByName: ReadonlyMap<GlyphName, GlyphRecord>;
+  readonly glyphById: ReadonlyEntityMap<GlyphId, GlyphEntry>;
+  readonly recordsById: ReadonlyEntityMap<GlyphId, GlyphRecord>;
+  readonly entryByName: ReadonlyEntityMap<GlyphName, GlyphEntry>;
+  readonly recordByName: ReadonlyEntityMap<GlyphName, GlyphRecord>;
   /** The first glyph, in font order, that claims each codepoint. */
   readonly nameByUnicode: ReadonlyMap<Unicode, GlyphName>;
   /** Glyphs that reference each base glyph as a component. */
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>>;
   /** At most one layer per glyph and source, as Rust enforces. */
-  readonly layerByGlyphSource: ReadonlyMap<GlyphSourceKey, LayerId>;
-  readonly glyphByLayer: ReadonlyMap<LayerId, GlyphId>;
+  readonly layerByGlyphSource: ReadonlyEntityMap<GlyphSourceKey, LayerId>;
+  readonly glyphByLayer: ReadonlyEntityMap<LayerId, GlyphId>;
 }
 
 export interface FontStoreOptions {
   readonly font?: FontSnapshot | null;
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent starts with no glyph records
   readonly records?: readonly GlyphRecord[];
   readonly workspace?: WorkspaceSnapshot | null;
 }

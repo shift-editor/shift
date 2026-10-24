@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Axis, AxisMapping, AxisMappingPoint } from "@shift/types";
-import { mintAxisMappingId } from "@shift/types";
+import { ascending, mintAxisMappingId } from "@shift/types";
 import { Button, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -8,6 +8,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { useSignalState } from "@shift/editor/signals";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { MappingGraph } from "./MappingGraph";
+import { byInput, byMappingInput } from "./mappingOrder";
 import { SettingsNumberField } from "./SettingsNumberField";
 import { useSettingsForm } from "./useSettingsForm";
 
@@ -169,9 +170,7 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
 
               return {
                 ...current,
-                points: [...current.points, point].sort(
-                  (left, right) => mappingInput(left, axis) - mappingInput(right, axis),
-                ),
+                points: [...current.points, point].sort(byMappingInput(axis)),
               };
             });
           }}
@@ -227,7 +226,7 @@ function identityMapping(axis: Axis): AxisMapping {
     axis.default,
     axis.maximum ?? axis.default,
   ];
-  const unique = [...new Set(values)].sort((left, right) => left - right);
+  const unique = [...new Set(values)].sort(ascending);
   return {
     id: mintAxisMappingId(),
     name: `${axis.name} mapping`,
@@ -254,7 +253,7 @@ function nextMappingPoint(axis: Axis, mapping: AxisMapping): AxisMappingPoint | 
       (point): point is { input: number; output: number } =>
         point.input !== undefined && point.output !== undefined,
     )
-    .sort((left, right) => left.input - right.input);
+    .sort(byInput);
   const inputs = new Set(coordinates.map(({ input }) => input));
 
   if (axis.axisType === "discrete") {
@@ -273,7 +272,7 @@ function nextMappingPoint(axis: Axis, mapping: AxisMapping): AxisMappingPoint | 
 
   const ordered = [...inputs]
     .filter((value) => minimum <= value && value <= maximum)
-    .sort((left, right) => left - right);
+    .sort(ascending);
   let largestGap = 0;
   let input: number | null = null;
 
@@ -312,8 +311,4 @@ function interpolateMapping(
   }
 
   return input;
-}
-
-function mappingInput(point: AxisMappingPoint, axis: Axis): number {
-  return point.input.values[axis.id] ?? axis.default;
 }

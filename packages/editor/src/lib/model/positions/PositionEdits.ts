@@ -78,7 +78,7 @@ export class PositionEdits {
    * const contourId = edit.addContour(false);
    * const pointIds = edit.addPoints(contourId, points);
    *
-   * const move = layer.positions.within(edit).move({ points: pointIds });
+   * const move = layer.positions.within(edit).move(PositionTargets.points(pointIds));
    * move.preview(delta);
    * move.commit(); // Commits the contour, points, and movement together.
    * ```

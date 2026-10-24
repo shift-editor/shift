@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { comparing, descending } from "@shift/types";
 import { Window } from "../windows/Window";
 import { getRendererSource } from "../utils";
 import * as ipc from "../../shared/ipc/main";
@@ -1471,6 +1472,6 @@ function developmentCommandLineTool(): string | null {
   const candidates = ["release", "debug"]
     .map((profile) => path.join(targetRoot, profile, executableName("shift-cli")))
     .filter((candidate) => fs.existsSync(candidate))
-    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+    .sort(comparing((candidate) => fs.statSync(candidate).mtimeMs, descending));
   return candidates[0] ?? null;
 }

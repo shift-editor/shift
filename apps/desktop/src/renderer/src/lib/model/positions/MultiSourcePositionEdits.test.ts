@@ -5,7 +5,7 @@ import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
 import type { PositionSelection } from "@shift/editor/types";
-import { PositionEdits } from "@shift/editor/model";
+import { PositionEdits, PositionTargets } from "@shift/editor/model";
 
 describe("multi-source position edits", () => {
   let editor: TestEditor;
@@ -41,7 +41,7 @@ describe("multi-source position edits", () => {
     const selection = requirePositionSelection(editor, [firstId, lastId]);
     const targetSelection = selection.additionalLayers[0];
     if (!targetSelection) throw new Error("Expected matched target layer");
-    const [firstTarget, lastTarget] = targetSelection.targets.points ?? [];
+    const [firstTarget, lastTarget] = targetSelection.targets.points;
     if (!firstTarget || !lastTarget) throw new Error("Expected matched target points");
     targetLayer = targetSelection.layer;
     targetFirstId = firstTarget;
@@ -51,7 +51,7 @@ describe("multi-source position edits", () => {
   it("moves matched anchors and discards every source preview", () => {
     const selection = requirePositionSelection(editor, [anchorId]);
     const targetSelection = selection.additionalLayers[0];
-    const targetAnchorId = targetSelection?.targets.anchors?.[0];
+    const targetAnchorId = targetSelection?.targets.anchors[0];
     if (!targetSelection || !targetAnchorId) throw new Error("Expected matched target anchor");
     const move = PositionEdits.fromSelection(selection).move(selection.targets);
 
@@ -65,7 +65,9 @@ describe("multi-source position edits", () => {
   });
 
   it("scales each source around its corresponding pivot and undoes both atomically", async () => {
-    const targetOffset = targetLayer.positions.move({ points: [targetFirstId, targetLastId] });
+    const targetOffset = targetLayer.positions.move(
+      PositionTargets.points([targetFirstId, targetLastId]),
+    );
     targetOffset.preview({ x: 100, y: 50 });
     targetOffset.commit();
     await editor.settle();
@@ -89,7 +91,9 @@ describe("multi-source position edits", () => {
   });
 
   it("rotates around corresponding pivots and discards every source preview", async () => {
-    const targetOffset = targetLayer.positions.move({ points: [targetFirstId, targetLastId] });
+    const targetOffset = targetLayer.positions.move(
+      PositionTargets.points([targetFirstId, targetLastId]),
+    );
     targetOffset.preview({ x: 100, y: 50 });
     targetOffset.commit();
     await editor.settle();
