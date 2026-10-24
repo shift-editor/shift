@@ -121,6 +121,24 @@ export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
     return { layout: this, scrollTop: boundedScrollTop, cells };
   }
 
+  /**
+   * Returns the scroll offset that brings a glyph's whole cell into view, the
+   * least distance from `scrollTop`.
+   *
+   * @returns null when the cell is already fully visible or the index is out of range.
+   */
+  scrollTopToReveal(catalogIndex: number, scrollTop: number): number | null {
+    if (this.columns === 0 || catalogIndex < 0 || catalogIndex >= this.glyphCount) return null;
+
+    const top = this.viewportPadding + Math.floor(catalogIndex / this.columns) * this.rowPitch;
+    const bottom = top + CELL_HEIGHT;
+    if (top < scrollTop) return Math.max(0, top - this.viewportPadding);
+    if (bottom > scrollTop + this.viewportHeight) {
+      return bottom - this.viewportHeight + this.viewportPadding;
+    }
+    return null;
+  }
+
   /** Finds the first visible cell containing `point` in the requested area. */
   hit(
     frame: GlyphCatalogFrame,

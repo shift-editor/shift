@@ -19,7 +19,7 @@ import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { asGlyphId } from "@shift/types";
-import { openGlyphInRun } from "@/lib/editor/openGlyph";
+import { windowTabs } from "@/lib/tabs/WindowTabs";
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -44,17 +44,16 @@ export const Editor = () => {
     setZone("canvas");
   }, [setZone, ready]);
 
-  // GlyphGrid acquires the complete Glyph before navigating. Until runs are placed by
-  // the user, each page has one text run at its origin that outlives the route, and
-  // opening a glyph replaces the active page's run text with it and edits it in place.
+  // GlyphGrid acquires the complete Glyph before navigating. The glyph shows in its tab:
+  // a tab already open for it as it was left, else the preview tab, which it replaces.
   useEffect(() => {
     if (!glyph) return undefined;
 
     // Route hydration is navigation, never a history entry.
-    const node = editor.history.withoutRecording(() => openGlyphInRun(editor, glyph.id));
+    const opened = editor.history.withoutRecording(() => windowTabs(editor).openGlyph(glyph.id));
     // Tools activate against the glyph node they find, so reset after it is placed.
     editor.toolManager.reset();
-    if (node) editor.fitGlyphFrame(node);
+    if (opened.node && opened.placed) editor.fitGlyphFrame(opened.node);
 
     return () => {
       editor.toolManager.reset();
@@ -137,6 +136,8 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
     sidebarPanelProps,
     toggleLeftSidebar,
     toggleRightSidebar,
+    leftSidebarOpen,
+    rightSidebarOpen,
     resetLeftSidebar,
     resetRightSidebar,
   } = useSidebarLayout("editor");
@@ -160,7 +161,12 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
       data-testid="editor-shell"
       className="shift-editor-shell flex h-screen w-screen min-w-150 flex-col bg-background"
     >
-      <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
+      <Toolbar
+        toggleLeftSidebar={toggleLeftSidebar}
+        toggleRightSidebar={toggleRightSidebar}
+        leftSidebarOpen={leftSidebarOpen}
+        rightSidebarOpen={rightSidebarOpen}
+      />
       <ResizablePanelGroup
         id="editor-layout-panels"
         orientation="horizontal"

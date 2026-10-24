@@ -6,9 +6,10 @@ import {
   type GlyphCategoryCatalog,
   type LanguageCatalog,
 } from "@shift/glyph-info";
-import type { GlyphName } from "@shift/types";
+import type { GlyphId, GlyphName } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
 import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
+import { windowTabs } from "@/lib/tabs/WindowTabs";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
@@ -83,6 +84,9 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogSource["openedGlyph"]>(null);
   const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
   const openRequestRef = useRef(new LatestRequest());
+  const [selectedGlyphId, setSelectedGlyphId] = useState<GlyphId | null>(null);
+  const selectRequestRef = useRef(new LatestRequest());
+  const pendingSelectionRef = useRef<GlyphId | null>(null);
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
@@ -189,6 +193,21 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     [catalog],
   );
 
+  const selectGlyph = useCallback<GlyphCatalogSource["selectGlyph"]>(
+    async (glyph) => {
+      setSelectedGlyphId(glyph.id);
+      if (!workspace) return;
+
+      // Loaded as opening loads it, then shown on the overview's own page, never navigated to.
+      const result = await selectRequestRef.current.run(() => catalog.openGlyph(glyph.id));
+      if (result.status === "stale") return;
+
+      const editor = workspace.editor;
+      editor.history.withoutRecording(() => windowTabs(editor).selectGlyph(glyph.id));
+    },
+    [catalog, workspace],
+  );
+
   useEffect(() => {
     const sourceGlyphId = glyphIdFromPath(routeLocation.pathname);
     if (sourceGlyphId === null) {
@@ -239,8 +258,20 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     setQuery("");
     setCategoryFilters([]);
     setSelectedLanguageId(null);
+    // Selected once it reaches the grid, which then scrolls to it.
+    pendingSelectionRef.current = record.id;
     return record.name;
   }, [workspace]);
+
+  useEffect(() => {
+    const pendingId = pendingSelectionRef.current;
+    if (pendingId === null) return;
+    const glyph = availableGlyphs.find((candidate) => candidate.id === pendingId);
+    if (!glyph) return;
+
+    pendingSelectionRef.current = null;
+    void selectGlyph(glyph);
+  }, [availableGlyphs, selectGlyph]);
 
   const setTrackedLanguageIds = useCallback<GlyphCatalogSource["setTrackedLanguageIds"]>(
     (languageIds) => {
@@ -302,6 +333,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     canAuthor,
     openedGlyph,
     openGlyph,
+    selectedGlyphId,
+    selectGlyph,
     createQuickGlyph,
     selectAll: () => {
       setCategoryFilters([]);

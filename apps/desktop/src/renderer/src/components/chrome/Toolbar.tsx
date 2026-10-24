@@ -15,7 +15,12 @@ import { useFontSession } from "@/workspace/WorkspaceContext";
 // the title, edited flag, and sidebar toggles have not actually changed.
 const MemoizedEditorToolbar = memo(EditorToolbar);
 
-export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps) => {
+export const Toolbar = ({
+  toggleLeftSidebar,
+  toggleRightSidebar,
+  leftSidebarOpen,
+  rightSidebarOpen,
+}: ToolbarProps) => {
   const session = useFontSession();
   const { filename, dirty } = useDocumentChromeState();
   const isMac = getShiftHost().platform === "darwin";
@@ -53,6 +58,8 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
         <MemoizedEditorToolbar
           session={session}
           host={host}
+          leftSidebarOpen={leftSidebarOpen}
+          rightSidebarOpen={rightSidebarOpen}
           onToggleLeftSidebar={toggleLeftSidebar}
           onToggleRightSidebar={toggleRightSidebar}
         />

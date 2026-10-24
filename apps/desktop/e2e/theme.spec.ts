@@ -70,7 +70,7 @@ async function configFile(page: Page): Promise<string> {
 
 /** Opens Settings → Appearance. */
 async function openAppearance(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
 }
 
@@ -220,7 +220,7 @@ test.describe("Theme", () => {
     await openAppearance(page);
     await chooseTheme(page, "Dark", "Dracula");
     await page.getByRole("button", { name: "Close settings" }).click();
-    await page.getByRole("button", { name: "Font overview" }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home$/);
     await expect(catalog).toBeVisible();
 

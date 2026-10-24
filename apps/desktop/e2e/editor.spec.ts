@@ -494,7 +494,7 @@ test.describe("Editor view", () => {
     await expect.poll(() => elementWidth(editorSidebarPanel)).toBeGreaterThan(initialWidth + 1);
     const widenedWidth = await elementWidth(editorSidebarPanel);
 
-    await page.getByRole("button", { name: "Font overview", exact: true }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home/);
     await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(widenedWidth, 0);
 
