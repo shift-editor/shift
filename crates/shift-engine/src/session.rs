@@ -5,7 +5,7 @@ use shift_font::{
     GlyphLayer, LayerId,
 };
 
-use crate::{LayerResidency, LayerSource, LoadPlan};
+use crate::{LayerResidency, LayerSource, ReadSet};
 
 /// Why a staged edit failed. The session is unchanged.
 #[derive(Debug, thiserror::Error)]
@@ -92,13 +92,13 @@ impl EngineSession {
         source: &mut S,
         set: &FontIntentSet,
     ) -> Result<(), LoadError<S::Error>> {
-        self.load_layers(source, LoadPlan::named_layers(&self.font, set))?;
-        // Decomposed components are read from the named layers, so plan only
-        // once those are loaded.
-        let plan = LoadPlan::for_intents(&self.font, set);
-        let anchor_layers: Vec<LayerId> = plan.anchor_layers().cloned().collect();
-        let mut roots: BTreeSet<GlyphId> = plan.component_roots().cloned().collect();
-        roots.extend(self.dependents(source, &anchor_layers)?);
+        self.load_layers(source, ReadSet::named_layers(&self.font, set))?;
+        // Decomposed components are read from the named layers, so find the
+        // rest of the read set only once those are loaded.
+        let reads = ReadSet::for_intents(&self.font, set);
+        let anchor_edits: Vec<LayerId> = reads.anchor_edits().cloned().collect();
+        let mut roots: BTreeSet<GlyphId> = reads.component_bases().cloned().collect();
+        roots.extend(self.dependents(source, &anchor_edits)?);
         self.load_glyph_closure(source, roots)
     }
 
@@ -112,7 +112,7 @@ impl EngineSession {
         source: &mut S,
         change_set: &FontChangeSet,
     ) -> Result<(), LoadError<S::Error>> {
-        self.load_layers(source, LoadPlan::change_set_layers(change_set))
+        self.load_layers(source, ReadSet::change_set_layers(change_set))
     }
 
     /// Loads every layer of `glyph_ids`.

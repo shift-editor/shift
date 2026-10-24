@@ -5,22 +5,21 @@ use shift_font::{
     FontEntityChange, FontIntent, FontIntentSet, GlyphId, LayerId, ReplaceGlyphLayerContent,
 };
 
-/// What an edit reads beyond the layers it names, read from the font once
+/// What an edit reads beyond the layers it names, found from the font once
 /// those layers are loaded.
 ///
 /// This is the one place that knows what shift-font reads while applying:
 /// the glyphs the edited layers' components are built from, since new
 /// components attach to them; the glyphs new or decomposed components are
-/// built from; and the composites
-/// that follow an edited glyph's anchors. A session loads each of those with
-/// the glyphs it is built from in turn.
+/// built from; and the composites that follow an edited glyph's anchors. A
+/// session loads each of those with the glyphs it is built from in turn.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct LoadPlan {
-    component_roots: BTreeSet<GlyphId>,
-    anchor_layers: BTreeSet<LayerId>,
+pub struct ReadSet {
+    component_bases: BTreeSet<GlyphId>,
+    anchor_edits: BTreeSet<LayerId>,
 }
 
-impl LoadPlan {
+impl ReadSet {
     /// The layers `set` names, which must be loaded before [`Self::for_intents`]
     /// can read their components.
     pub fn named_layers(font: &Font, set: &FontIntentSet) -> Vec<LayerId> {
@@ -38,24 +37,24 @@ impl LoadPlan {
             .flat_map(|layer| layer.components_iter().map(Component::base_glyph_id))
             .collect();
         Self {
-            component_roots: set
+            component_bases: set
                 .intents
                 .iter()
                 .flat_map(|intent| component_bases(font, intent))
                 .chain(attached_to)
                 .collect(),
-            anchor_layers: set.layers_with_anchor_edits().into_iter().collect(),
+            anchor_edits: set.layers_with_anchor_edits().into_iter().collect(),
         }
     }
 
     /// Glyphs the edit's components, existing or new, are built from.
-    pub fn component_roots(&self) -> impl Iterator<Item = &GlyphId> {
-        self.component_roots.iter()
+    pub fn component_bases(&self) -> impl Iterator<Item = &GlyphId> {
+        self.component_bases.iter()
     }
 
     /// Layers whose anchor edits move the composites built on their glyph.
-    pub fn anchor_layers(&self) -> impl Iterator<Item = &LayerId> {
-        self.anchor_layers.iter()
+    pub fn anchor_edits(&self) -> impl Iterator<Item = &LayerId> {
+        self.anchor_edits.iter()
     }
 
     /// The layers replaying `change_set`, for undo or redo, reads.
