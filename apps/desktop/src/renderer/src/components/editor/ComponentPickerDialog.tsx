@@ -23,7 +23,7 @@ import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import type { ComponentCandidate } from "@/types/componentPicker";
 import { useEditor, useFont } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo, loadComponentGlyphInfo } from "@/workspace/glyphInfo";
-import { componentPickerCandidates } from "./componentPicker";
+import { ComponentPicker } from "./componentPicker";
 
 interface ComponentPickerDialogProps {
   open: boolean;
@@ -62,26 +62,17 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
 
   const addingComponentRef = useRef(false);
   const currentGlyphId = editor.scene.only("glyph")?.glyphId ?? null;
-  const candidates = useMemo(
+  const picker = useMemo(
     () =>
       currentGlyphId
-        ? componentPickerCandidates(
-            catalog.availableGlyphs,
-            records,
-            currentGlyphId,
-            componentQuery,
-            glyphInfo,
-          )
-        : [],
+        ? ComponentPicker.for(catalog.availableGlyphs, records, currentGlyphId, glyphInfo)
+        : null,
     // Suggestions and search fill in once decomposition and search data load.
-    [
-      catalog.availableGlyphs,
-      componentDataLoaded,
-      componentQuery,
-      currentGlyphId,
-      glyphInfo,
-      records,
-    ],
+    [catalog.availableGlyphs, componentDataLoaded, currentGlyphId, glyphInfo, records],
+  );
+  const candidates = useMemo(
+    () => picker?.candidates(componentQuery) ?? [],
+    [componentQuery, picker],
   );
 
   const close = useCallback(() => {
