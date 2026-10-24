@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { Tooltip } from "@shift/ui";
-import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
+import {
+  CollapsibleSection,
+  SidebarActionButton,
+  type CollapsibleSectionProps,
+} from "@/components/sidebar";
 import { CreateSourceMenu } from "./CreateSourceMenu";
 import { Sources } from "./Sources";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
@@ -12,10 +16,16 @@ import PlusIcon from "@/assets/general/plus.svg";
 
 interface SourcesSectionProps {
   defaultOpen?: boolean;
+  /** Draws the section, so it can match the sections around it. */
+  section?: ComponentType<CollapsibleSectionProps>;
   outlineControls?: GlyphOutlineControls;
 }
 
-export const SourcesSection = ({ defaultOpen = false, outlineControls }: SourcesSectionProps) => {
+export const SourcesSection = ({
+  defaultOpen = false,
+  outlineControls,
+  section: Section = CollapsibleSection,
+}: SourcesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const canAuthor = useFontSession().mode === "workspace";
@@ -30,7 +40,7 @@ export const SourcesSection = ({ defaultOpen = false, outlineControls }: Sources
   const toggleAll = () => outlineControls?.onToggleGroup(sourceTargets);
 
   return (
-    <CollapsibleSection
+    <Section
       title="Sources"
       open={open || sourceMenuOpen}
       onOpenChange={setOpen}
@@ -58,6 +68,6 @@ export const SourcesSection = ({ defaultOpen = false, outlineControls }: Sources
       }
     >
       <Sources canAuthor={canAuthor} outlineControls={outlineControls} />
-    </CollapsibleSection>
+    </Section>
   );
 };
