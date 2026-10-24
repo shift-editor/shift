@@ -11,7 +11,9 @@ import type { PositionCondition } from "../../types/positionEdit";
 /** Editor state snapping reads when it builds a snap set. */
 export interface SnappingContext {
   readonly font: Pick<Font, "metricsForSource">;
-  /** Snap distance in scene units at the current zoom. */
+  /** Snap distance at the current zoom in the units of `node`. */
+  hitRadiusIn(node: ShiftNode): number;
+  /** Snap distance in scene units at the current zoom, for a layer placed in no node. */
   readonly hitRadius: number;
   visibleLocalBounds(node: ShiftNode): LocalBounds | null;
 }
@@ -52,7 +54,8 @@ export class Snapping {
    * @param node - Node the layer is placed in; its visible area limits alignment targets.
    */
   forLayer(layer: GlyphLayer, node: ShiftNode | null, options: LayerSnapOptions = {}): SnapSet {
-    const { font, hitRadius } = this.#context;
+    const { font } = this.#context;
+    const hitRadius = node ? this.#context.hitRadiusIn(node) : this.#context.hitRadius;
     const { excluding, marking } = options;
     const visible = node ? this.#context.visibleLocalBounds(node) : null;
     const onScreenOnCurve = layer.allPoints.filter(

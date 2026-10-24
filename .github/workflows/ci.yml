@@ -16,6 +16,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
+# Caches are restored on every run but saved only from pushes to main. A pull
+# request or merge-queue ref can restore only its own caches and main's, so
+# entries they saved were never reused; they filled the 10 GB limit and evicted
+# main's Rust caches, so macOS builds compiled the workspace from scratch.
 env:
   CARGO_INCREMENTAL: 0
   CARGO_PROFILE_TEST_DEBUG: 0
@@ -206,9 +210,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -220,6 +224,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Context drift check
         run: python3 scripts/context-drift-check.py --ci
@@ -251,9 +266,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -265,6 +280,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Lint (oxlint)
         run: pnpm test:lint
@@ -295,9 +321,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -310,8 +336,20 @@ jobs:
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache Typecheck Turbo results
-        uses: actions/cache@v6
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore Typecheck Turbo results
+        id: typecheck-turbo-cache
+        uses: actions/cache/restore@v6
         with:
           path: .turbo/cache
           key: typecheck-turbo-v1-${{ runner.os }}-${{ github.sha }}
@@ -320,6 +358,13 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Save Typecheck Turbo results
+        if: github.ref == 'refs/heads/main' && steps.typecheck-turbo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .turbo/cache
+          key: typecheck-turbo-v1-${{ runner.os }}-${{ github.sha }}
 
       - name: Check browser editor bundle
         run: pnpm check:browser
@@ -351,9 +396,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -366,9 +411,20 @@ jobs:
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache native Turbo build
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore native Turbo build
         id: native-turbo-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             .turbo/cache
@@ -383,6 +439,15 @@ jobs:
 
       - name: Run unit tests
         run: pnpm test:unit
+
+      - name: Save native Turbo build
+        if: github.ref == 'refs/heads/main' && steps.native-turbo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .turbo/cache
+            crates/shift-bridge/*.node
+          key: native-turbo-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
 
   deadcode:
     name: Dead Code
@@ -402,9 +467,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -416,6 +481,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Dead code check (knip)
         run: pnpm deadcode:strict
@@ -579,9 +655,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           shared-key: shift-rust
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -593,6 +669,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Build native module
         run: pnpm build:native
@@ -711,8 +798,9 @@ jobs:
           if (( ${#debs[@]} > 0 )); then sudo dpkg -i "${debs[@]}"; fi
           command -v fluxbox Xvfb
 
-      - name: Cache node_modules
-        uses: actions/cache@v6
+      - name: Restore node_modules
+        id: modules-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -724,6 +812,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Download E2E app
         uses: actions/download-artifact@v8
@@ -914,8 +1013,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
-        uses: actions/cache@v6
+      - name: Restore node_modules
+        id: modules-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -927,6 +1027,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Download blob reports
         uses: actions/download-artifact@v8

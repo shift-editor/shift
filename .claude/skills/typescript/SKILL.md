@@ -38,7 +38,26 @@ const axes = useExternalAxes(); // font.externalAxesCell, a computed
 ```
 
 - **Name every order.** Pass a named comparator to `sort`/`toSorted`: `ascending`, `descending`, `alphabetical`, `byName`, `comparing(key, order)` and `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a comparator named next to the type it orders (`newestFirst`, `byMappingInput(axis)`). Enforced by `shift/no-inline-comparator`.
+- **Match typed names through `NameQuery`.** A search field's text becomes `NameQuery.from(text)` (trimmed; an empty query matches everything; `{ prefix: "@" }` drops a typed marker), and the list asks `query.filter(items)`, `query.matches(item)` or `query.filterBy(items, (item) => [item.displayName])`, never `x.name.toLowerCase().includes(lower)`.
 - **Sort once, where the collection changes,** not at every read. An immutable owner sorts in its constructor (`KerningGroups`); a reactive owner sorts in a `computed`.
+
+## List and set invariants
+
+**When an edit to a list or set must re-establish an invariant (unique, ordered, capped, keyed), the invariant belongs to a type or named function, not to each call site.**
+
+```ts
+// Before: every edit filters, re-adds, sorts and slices to keep the list valid.
+const remaining = entries.filter((entry) => !sameDocument(entry, visit));
+entries = [{ ...visit, openedAt }, ...remaining].sort(newestFirst).slice(0, LIMIT);
+
+// After: the list keeps one entry per document, newest first, capped.
+entries = entries.touch(visit, (previous) => ({ ...previous, ...visit, openedAt }));
+```
+
+- **Recency lists** use `RecentList` from `@shift/types`: `of(items, rules)`, `find`, `touch`, `update`, `remove`, `where`.
+- **Keyed lists** use `upsertBy`, `replaceBy` and `removeBy` from `@shift/types` instead of `findIndex`, copy and assign, or `map((x) => (x.id === id ? f(x) : x))`. A domain rule beyond the key gets a named function, such as `withIndependentMapping` in `@shift/editor/variation`.
+- **Sets in React state** use `useMemberSet`, never a copied `Set` toggled in each handler.
+- **Stored JSON lists** read through `parseEach(schema, text)`, which keeps each valid entry and reads anything malformed as empty.
 
 ## Owners answer questions
 

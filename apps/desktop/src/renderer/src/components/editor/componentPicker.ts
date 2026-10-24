@@ -2,6 +2,7 @@ import type { GlyphInfo } from "@shift/glyph-info";
 import type { GlyphId, GlyphName, GlyphRecord } from "@shift/types";
 import type { ComponentCandidate, ComponentOwner } from "@/types/componentPicker";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 /**
  * Returns existing and creatable component candidates that cannot create a reference cycle.
@@ -99,7 +100,7 @@ export function componentPickerCandidates(
   const rankedCandidates: ComponentCandidate[] = [];
   const includedGlyphIds = new Set<GlyphId>();
   const includedCodepoints = new Set<number>();
-  const normalizedQuery = query.trim().toLowerCase();
+  const search = NameQuery.from(query);
   const directUnicode = unicodeFromQuery(query);
   const directName = glyphInfo.resolveGlyphName(query.trim());
   const directNameGlyph = glyphInfo.getGlyphByName(directName);
@@ -111,12 +112,7 @@ export function componentPickerCandidates(
 
   for (const candidate of candidates) {
     if (candidate.glyphId === null) continue;
-    if (
-      candidate.name.toLowerCase() !== normalizedQuery &&
-      candidate.displayName.toLowerCase() !== normalizedQuery
-    ) {
-      continue;
-    }
+    if (!search.isExactly(candidate.name) && !search.isExactly(candidate.displayName)) continue;
 
     rankedCandidates.push(candidate);
     includedGlyphIds.add(candidate.glyphId);
@@ -174,20 +170,20 @@ function componentPickerGlyphs(
   glyphInfo: GlyphInfo,
 ): GlyphCatalogItem[] {
   const excludedGlyphIds = cycleProducingGlyphIds(records, owner.id);
-  const normalizedQuery = query.trim().toLowerCase();
+  const search = NameQuery.from(query);
   const unicodeQuery = unicodeFromQuery(query);
 
   const eligibleGlyphs = glyphs.filter((glyph) => {
     if (excludedGlyphIds.has(glyph.id)) return false;
-    if (normalizedQuery === "") return true;
+    if (search.isEmpty) return true;
 
     return (
-      glyph.name.toLowerCase().includes(normalizedQuery) ||
-      glyph.displayName.toLowerCase().includes(normalizedQuery) ||
+      search.matchesText(glyph.name) ||
+      search.matchesText(glyph.displayName) ||
       (unicodeQuery !== null && glyph.unicode === unicodeQuery)
     );
   });
-  if (normalizedQuery !== "") return eligibleGlyphs;
+  if (!search.isEmpty) return eligibleGlyphs;
 
   return relatedGlyphsFirst(eligibleGlyphs, owner, glyphInfo);
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Axis, AxisMapping, AxisMappingPoint } from "@shift/types";
-import { ascending, mintAxisMappingId } from "@shift/types";
+import { ascending, mintAxisMappingId, removeBy } from "@shift/types";
+import { independentMappingFor, withIndependentMapping } from "@shift/editor/variation";
 import { Button, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -19,23 +20,14 @@ interface AxisMappingPanelProps {
 export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
   const font = useFont();
   const mappings = useSignalState(font.axisMappingsCell);
-  const stored = independentMappingForAxis(mappings, axis);
+  const stored = independentMappingFor(mappings, axis);
   const [fallback] = useState(() => identityMapping(axis));
   const form = useSettingsForm<AxisMapping>({
     canonical: stored ?? fallback,
     errorMessage: message("settings.mappingSaveFailed"),
     save: async (nextMapping) => {
-      const current = font.getAxisMappings();
-      const index = current.findIndex(
-        (mapping) =>
-          mapping.id === nextMapping.id || independentMappingForAxis([mapping], axis) !== null,
-      );
-      const next = [...current];
-      if (index === -1) next.push(nextMapping);
-      else next[index] = nextMapping;
-
-      await font.setAxisMappings(next);
-      return independentMappingForAxis(font.getAxisMappings(), axis) ?? nextMapping;
+      await font.setAxisMappings(withIndependentMapping(font.getAxisMappings(), axis, nextMapping));
+      return independentMappingFor(font.getAxisMappings(), axis) ?? nextMapping;
     },
   });
   const draft = form.draft;
@@ -66,9 +58,11 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
       return;
     }
 
-    const next = font
-      .getAxisMappings()
-      .filter((mapping) => mapping.id !== form.form.getValues().id);
+    const next = removeBy(
+      font.getAxisMappings(),
+      form.form.getValues().id,
+      (mapping) => mapping.id,
+    );
     try {
       await font.setAxisMappings(next);
       form.form.reset(fallback);
@@ -204,21 +198,6 @@ const MappingValueCell = ({ label, value, onChange, onCommit }: MappingValueCell
     />
   </td>
 );
-
-function independentMappingForAxis(
-  mappings: readonly AxisMapping[],
-  axis: Axis,
-): AxisMapping | null {
-  return (
-    mappings.find(
-      (mapping) =>
-        mapping.inputs.length === 1 &&
-        mapping.outputs.length === 1 &&
-        mapping.inputs[0] === axis.id &&
-        mapping.outputs[0] === axis.id,
-    ) ?? null
-  );
-}
 
 function identityMapping(axis: Axis): AxisMapping {
   const values = axis.values ?? [

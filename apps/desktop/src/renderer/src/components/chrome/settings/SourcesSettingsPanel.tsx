@@ -1,5 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { Axis, MetricDefinition, Source, SourceId, SourceMetricValue } from "@shift/types";
+import {
+  upsertBy,
+  type Axis,
+  type MetricDefinition,
+  type Source,
+  type SourceId,
+  type SourceMetricValue,
+} from "@shift/types";
 import { Input, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -194,7 +201,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
                 onChange={(next) => {
                   form.update((current) => ({
                     ...current,
-                    metricValues: replaceMetricValue(current.metricValues, next),
+                    metricValues: upsertBy(current.metricValues, next, (value) => value.metricId),
                   }));
                 }}
                 onCommit={commit}
@@ -324,16 +331,4 @@ function metricValue(source: Source, definition: MetricDefinition): SourceMetric
       overshoot: 0,
     }
   );
-}
-
-function replaceMetricValue(
-  values: readonly SourceMetricValue[],
-  replacement: SourceMetricValue,
-): SourceMetricValue[] {
-  const index = values.findIndex((value) => value.metricId === replacement.metricId);
-  if (index < 0) return [...values, replacement];
-
-  const next = [...values];
-  next[index] = replacement;
-  return next;
 }

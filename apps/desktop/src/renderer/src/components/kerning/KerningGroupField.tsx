@@ -21,6 +21,7 @@ import {
   cn,
 } from "@shift/ui";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 /** The glyph edge whose group a pair position names: a first glyph's right, a second's left. */
 const EDGE_LABEL: Readonly<Record<KerningPairPosition, string>> = {
@@ -154,13 +155,13 @@ function GroupList({ position, glyphId, glyphName, current, onDone }: GroupListP
   // The name being typed for a new group, while its row is open.
   const [naming, setNaming] = useState<string | null>(null);
 
-  const typed = query.replace(/^@/, "").trim();
+  const search = NameQuery.from(query, { prefix: "@" });
+  const typed = search.text;
   // "No group" only while not searching, so Enter on a search with no match names a new group.
   const choices = useMemo<readonly GroupChoice[]>(() => {
     const groups: readonly GroupChoice[] = kerning.groups.atPosition(position);
     if (!typed) return [...groups, NO_GROUP];
-    const lower = typed.toLowerCase();
-    return groups.filter((group) => group.name.toLowerCase().includes(lower));
+    return NameQuery.from(typed).filter(groups);
   }, [kerning, position, typed]);
   const startNaming = () => setNaming(newGroupName(kerning, position, typed || glyphName));
 
