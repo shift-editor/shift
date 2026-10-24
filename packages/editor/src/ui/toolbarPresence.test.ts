@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ascending } from "@shift/types";
 import { springEasing } from "./springEasing";
 import { TOOL_TURN_DIM, TOOL_TURN_OPACITY, toolDipKeyframes } from "./toolbarPresence";
 
@@ -10,7 +11,7 @@ describe("tools dim early in a turn and are back before it settles", () => {
   it("run forward in time so the browser accepts them", () => {
     const offsets = keyframes.map((keyframe) => keyframe.offset);
 
-    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+    expect(offsets).toEqual([...offsets].sort(ascending));
     expect(offsets[0]).toBe(0);
     expect(offsets.at(-1)).toBe(1);
   });
