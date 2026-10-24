@@ -44,25 +44,62 @@ Release Please reads conventional commits merged to `main` and maintains a draft
 
 ## Pull request body
 
-Use a concise body with evidence:
+A reviewer should understand the change in a minute and know where to look. Write for that reader: simple sentences, the code that changed shape, and the files that matter.
 
-```markdown
-## Summary
+````markdown
+One or two plain sentences: what the change does and why.
 
-- what changed and why
-- important behavioral or architectural boundary
+## What changed
+
+### <first idea, named by its outcome>
+
+A sentence of why.
+
+```ts
+// before
+<the few lines that show the old pattern>
+
+// after
+<the same lines with the change>
+```
+
+Also used in `OtherFile` and `AnotherFile`.
+
+### <second idea>
+
+…
+
+## Files worth reading
+
+- `path/to/Core.ts`: the new type.
+- `path/to/Owner.ts`: the largest conversion; `remove` has the subtle case below.
+
+The other N files are call sites switching to these helpers.
+
+## Behaviour
+
+No change is intended. <Only the edge cases that really differ, one line each.>
+
+## Testing
+
+- New tests: …
+- `exact command` passed.
+- Not run: … and why.
 
 ## Issue
 
 Closes #123
+````
 
-## Testing
+- **Open with prose, not a bulleted summary.** One or two sentences a reviewer can read aloud.
+- **One section per idea.** A PR that does three things has three short sections. Name each by what it achieves, not by the type it adds.
+- **Before/after snippets where the code changes shape:** a new API, a pattern replaced, a rule moved to an owner. Trim each to the lines that matter, label them `// before` and `// after`, and name the other call sites in one line instead of showing each. Skip snippets for renames, moves, and mechanical edits.
+- **Files worth reading** lists only the files where the change lives, each with a few words on why. Sum up everything else (imports, reordering, call-site conversions) in one line.
+- **A diagram only when it shows what the snippets can't:** data or control moving across a process or the WASM boundary, a sequence over time, a state machine, a value's layout (a packed buffer, an id format), or a file tree when the PR moves files or packages around. Say in the sentence before it what to take from it, and label what each arrow carries. Never draw an import or dependency graph, and never diagram a refactor that merges duplicated code; a before/after snippet shows that better. Attach an image with `gh pr create --attach` or `gh pr edit --attach` (reference the local path in the body file and gh swaps in the uploaded URL), write it in Mermaid, which GitHub renders, or write a file tree as text in a code block.
+- **Behaviour** says whether behaviour changes. List only real differences and edge cases, one line each; don't restate the implementation.
+- **Plain prose:** no type signatures or method lists in sentences. A sentence that needs a parenthetical usually wants a snippet instead.
 
-- `exact command`
-- focused manual verification
-```
-
-Add `## Risks` or `## Follow-up` only when they materially help review. Do not add empty sections, generic claims such as “tests pass,” generated marketing prose, or agent attribution.
+Leave out a section that has nothing to say. Do not add generic claims such as “tests pass,” generated marketing prose, or agent attribution. Add `## Risks` or `## Follow-up` only when they materially help review.
 
 Testing entries must distinguish:
 
@@ -79,7 +116,7 @@ For materially visible UI changes, attach screenshots or recordings before marki
 
 - Cover every distinct state needed to review the change, including native dialogs and fallback, error, empty, loading, or disabled states when affected.
 - Capture the actual implementation. Include before-and-after evidence when the change intentionally modifies existing appearance or interaction.
-- Prefer GitHub user attachments over committing review-only media to the repository.
+- Upload media with `--attach` on `gh pr create`, `gh pr edit`, or `gh pr comment` rather than committing review-only media to the repository.
 - Redact private user data, credentials, and sensitive documents before uploading.
 - If useful evidence cannot be captured safely or reliably, state why in the pull request rather than silently omitting it.
 
@@ -115,7 +152,7 @@ Never use a closing keyword merely because an issue is related. If any accepted 
 5. Use `/commit` to create any required logical commits.
 6. Rebase or merge the current `main` only when needed. Do not rewrite a published branch without explicit approval.
 7. Run focused validation and the repository checks required by the affected subsystem.
-8. Re-read the final diff and summarize observable behavior, not implementation trivia.
+8. Re-read the final diff and summarize observable behavior, not implementation trivia. On a stacked branch, describe only this branch: diff against the branch below it, not `main`.
 9. Choose a Conventional Commit title that matches the dominant change.
 10. Push the named branch without force unless explicitly approved.
 11. Create the pull request with an explicit base and head, preferably using a body file to preserve formatting.
