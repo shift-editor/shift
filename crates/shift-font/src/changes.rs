@@ -7,9 +7,9 @@ use crate::collection::Identified;
 use crate::error::{CoreError, CoreResult, EntityKind};
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId, TouchedLayer,
+    Axis, AxisMapping, Component, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup,
+    KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
+    NamedInstance, Source, SourceId, TouchedLayer,
 };
 
 bitflags! {
@@ -105,6 +105,18 @@ impl Replacement<Option<Arc<GlyphLayer>>> {
             self.before.as_deref().map(GlyphLayer::id),
             self.after.as_deref().map(GlyphLayer::id),
         )
+    }
+
+    /// Whether this replacement changes what its glyph's record lists: the
+    /// glyph's layers and the glyphs its components reference.
+    fn changes_glyph_record(&self) -> bool {
+        match (&self.before, &self.after) {
+            (Some(before), Some(after)) => !before
+                .components_iter()
+                .map(Component::base_glyph_id)
+                .eq(after.components_iter().map(Component::base_glyph_id)),
+            _ => true,
+        }
     }
 }
 
@@ -274,10 +286,8 @@ impl FontChange {
                     | FontChangeImpact::SOURCE_METRICS
                     | FontChangeImpact::KERNING
             }
-            Self::Glyph(_)
-            | Self::Layer {
-                structural: true, ..
-            } => FontChangeImpact::GLYPHS,
+            Self::Glyph(_) => FontChangeImpact::GLYPHS,
+            Self::Layer { layer, .. } if layer.changes_glyph_record() => FontChangeImpact::GLYPHS,
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
             Self::LibValue { .. } | Self::Layer { .. } => FontChangeImpact::empty(),
         }

@@ -132,11 +132,14 @@ struct FontData {
 
 #[derive(Clone, Debug, Default)]
 struct FontIndex {
-    glyph_by_name: HashMap<GlyphName, GlyphId>,
-    layer_owner: HashMap<LayerId, GlyphId>,
-    layer_by_glyph_source: HashMap<(GlyphId, SourceId), LayerId>,
-    glyphs_by_unicode: HashMap<u32, Vec<GlyphId>>,
-    entity_ids: HashSet<GlyphEntityId>,
+    glyph_by_name: imbl::HashMap<GlyphName, GlyphId>,
+    layer_owner: imbl::HashMap<LayerId, GlyphId>,
+    layer_by_glyph_source: imbl::HashMap<(GlyphId, SourceId), LayerId>,
+    glyphs_by_unicode: imbl::HashMap<u32, Vec<GlyphId>>,
+    entity_ids: imbl::HashSet<GlyphEntityId>,
+    /// Layers with a component of each base glyph, so an edit to a base finds
+    /// the composites that follow it without scanning every layer.
+    layers_by_component_base: imbl::HashMap<GlyphId, imbl::HashSet<LayerId>>,
 }
 
 impl FontIndex {
@@ -221,7 +224,7 @@ impl FontIndex {
     fn validate_layer_replacements(
         &self,
         replacements: &[(GlyphId, Arc<GlyphLayer>, Arc<GlyphLayer>)],
-    ) -> CoreResult<HashSet<GlyphEntityId>> {
+    ) -> CoreResult<()> {
         let removed_ids = replacements
             .iter()
             .flat_map(|(_, previous, _)| previous.entity_ids())
@@ -238,7 +241,7 @@ impl FontIndex {
             }
         }
 
-        Ok(replacement_ids)
+        Ok(())
     }
 
     fn insert_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
@@ -247,6 +250,12 @@ impl FontIndex {
             .insert((glyph_id, layer.source_id()), layer.id());
 
         self.entity_ids.extend(layer.entity_ids());
+        for component in layer.components_iter() {
+            self.layers_by_component_base
+                .entry(component.base_glyph_id())
+                .or_default()
+                .insert(layer.id());
+        }
     }
 
     fn remove_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
@@ -256,6 +265,15 @@ impl FontIndex {
 
         for entity_id in layer.entity_ids() {
             self.entity_ids.remove(&entity_id);
+        }
+        for component in layer.components_iter() {
+            let base_glyph_id = component.base_glyph_id();
+            if let Some(layers) = self.layers_by_component_base.get_mut(&base_glyph_id) {
+                layers.remove(&layer.id());
+                if layers.is_empty() {
+                    self.layers_by_component_base.remove(&base_glyph_id);
+                }
+            }
         }
     }
 
@@ -1287,16 +1305,54 @@ impl Font {
         }
     }
 
-    /// Rebuilds identity indexes after a structural operation mints nodes internally.
+    /// Layers with at least one component whose base is `base_glyph_id`.
+    pub(crate) fn layers_using_component_base(
+        &self,
+        base_glyph_id: &GlyphId,
+    ) -> impl Iterator<Item = &LayerId> {
+        self.index()
+            .layers_by_component_base
+            .get(base_glyph_id)
+            .into_iter()
+            .flatten()
+    }
+
+    /// The shared copy of one layer, kept to re-index it after an in-place edit.
     ///
     /// # Errors
     ///
-    /// Returns a duplicate-identity error when the resulting font structure
-    /// violates font-wide stable identity.
-    pub(crate) fn rebuild_structure_index(&mut self) -> CoreResult<()> {
-        let mut state = (*self.state).clone();
-        state.rebuild_index()?;
-        self.state = Arc::new(state);
+    /// Returns [`CoreError::LayerNotFound`] when no glyph owns `layer_id`.
+    pub(crate) fn layer_snapshot(&self, layer_id: &LayerId) -> CoreResult<Arc<GlyphLayer>> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        self.require_glyph(&glyph_id)?
+            .layers()
+            .get(layer_id)
+            .cloned()
+            .require(layer_id)
+    }
+
+    /// Re-indexes one layer after an in-place structural edit, in time
+    /// proportional to the layer rather than the font.
+    ///
+    /// `before`'s identities leave the index and the edited layer's return,
+    /// validated against the rest of the font.
+    ///
+    /// # Errors
+    ///
+    /// Returns a duplicate-identity error when the edited layer reuses an
+    /// identity another layer holds. The index is then partly updated, so call
+    /// this only on a staged copy that is discarded on failure.
+    pub(crate) fn reindex_layer(
+        &mut self,
+        layer_id: &LayerId,
+        before: &GlyphLayer,
+    ) -> CoreResult<()> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        let after = self.layer_snapshot(layer_id)?;
+        let index = &mut self.state_mut().index;
+        index.remove_layer(glyph_id.clone(), before);
+        index.validate_layer_insert(&glyph_id, &after)?;
+        index.insert_layer(glyph_id, &after);
         Ok(())
     }
 
@@ -1525,18 +1581,14 @@ impl Font {
             replacements.push((glyph_id, previous, layer));
         }
 
-        let replacement_ids = self.index().validate_layer_replacements(&replacements)?;
+        self.index().validate_layer_replacements(&replacements)?;
 
         let state = self.state_mut();
         for (glyph_id, previous, _) in &replacements {
             state.index.remove_layer(glyph_id.clone(), previous);
         }
         for (glyph_id, _, layer) in replacements {
-            state.index.layer_owner.insert(layer.id(), glyph_id.clone());
-            state
-                .index
-                .layer_by_glyph_source
-                .insert((glyph_id.clone(), layer.source_id()), layer.id());
+            state.index.insert_layer(glyph_id.clone(), &layer);
             let glyph = state
                 .data
                 .glyphs
@@ -1544,7 +1596,6 @@ impl Font {
                 .expect("replacement owner was resolved before mutation");
             Arc::make_mut(glyph).set_layer(layer);
         }
-        state.index.entity_ids.extend(replacement_ids);
 
         Ok(())
     }
@@ -2811,6 +2862,74 @@ mod tests {
                 ),
             );
         }
+    }
+
+    /// Median time of `edit` over fifteen runs, after one warm-up run.
+    fn median_time(mut edit: impl FnMut(u32)) -> Duration {
+        edit(0);
+        let mut samples: Vec<Duration> = (1..=15)
+            .map(|run| {
+                let start = Instant::now();
+                edit(run);
+                start.elapsed()
+            })
+            .collect();
+        samples.sort();
+        samples[samples.len() / 2]
+    }
+
+    #[test]
+    fn perf_mark_one_edit_and_its_undo_cost_what_the_edited_layer_costs() {
+        // Every glyph carries geometry, the worst case for anything that walks
+        // the whole font: one edit used to copy or rehash all of it.
+        let mark = PerfFontMark {
+            label: "cjk-scale",
+            glyphs: 10_000,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let glyph_id = font.glyph_id_by_name("g05000").unwrap();
+        let layer_id = font
+            .layer_id_for_glyph_source(glyph_id, font.default_source_id().unwrap())
+            .unwrap();
+        let point_ids: Vec<PointId> = font
+            .layer(&layer_id)
+            .unwrap()
+            .contours_iter()
+            .flat_map(|contour| contour.points().iter().map(crate::Point::id))
+            .collect();
+
+        let moved = median_time(|run| {
+            font.apply_intents(&crate::FontIntentSet::from(crate::MovePoints {
+                layer_id: layer_id.clone(),
+                point_ids: vec![point_ids[0].clone()],
+                coords: vec![f64::from(run), 0.0],
+            }))
+            .unwrap();
+        });
+        // Removing a whole contour also takes the path that re-indexes the layer.
+        let removed = median_time(|_| {
+            let applied = font
+                .apply_intents(&crate::FontIntentSet::from(crate::RemovePoints {
+                    layer_id: layer_id.clone(),
+                    point_ids: point_ids[8..].to_vec(),
+                }))
+                .unwrap();
+            font.apply_change_set(&applied.changes.inverted()).unwrap();
+        });
+
+        print_perf_mark("move one point", mark, moved);
+        print_perf_mark("remove a contour, then undo", mark, removed);
+        if cfg!(debug_assertions) {
+            return;
+        }
+        let budget = Duration::from_millis(5);
+        assert!(moved < budget, "moving one point took {moved:?}");
+        assert!(
+            removed < budget * 2,
+            "removing and restoring a contour took {removed:?}"
+        );
     }
 
     #[test]

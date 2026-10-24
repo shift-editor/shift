@@ -23,7 +23,7 @@ impl Font {
 
         let mut target = self.clone();
         target.install_change_targets(change_set)?;
-        target.validate_change_target()?;
+        target.validate_change_target(change_set)?;
         *self = target;
         Ok(())
     }
@@ -67,7 +67,15 @@ impl Font {
                         .glyph(glyph_id)
                         .and_then(|glyph| glyph.layers().get(&layer_id))
                         .cloned();
-                    layer.require_before(&current, "glyph layer")?;
+                    // A recorded changeset usually holds the very layer the font
+                    // holds, so identity settles it without comparing every point.
+                    let same_layer = current
+                        .as_ref()
+                        .zip(layer.before.as_ref())
+                        .is_some_and(|(current, before)| Arc::ptr_eq(current, before));
+                    if !same_layer {
+                        layer.require_before(&current, "glyph layer")?;
+                    }
                 }
                 FontChange::KerningGroup { group_id, group } => {
                     let current = self.kerning().group(group_id).cloned();
@@ -222,7 +230,7 @@ impl Font {
         Ok(())
     }
 
-    fn validate_change_target(&self) -> CoreResult<()> {
+    fn validate_change_target(&self, change_set: &FontChangeSet) -> CoreResult<()> {
         let mut axis_ids = HashSet::new();
         let mut axis_tags = HashSet::new();
         for axis in self.axes() {
@@ -260,13 +268,31 @@ impl Font {
             None => {}
         }
 
-        for glyph in self.glyphs() {
-            for layer in glyph.layers().values() {
-                let source_id = layer.source_id();
-                self.require_source(&source_id)?;
+        // Every layer's source must exist. Untouched glyphs were valid before,
+        // so unless the sources change only the touched glyphs need checking.
+        let sources_changed = change_set
+            .changes
+            .iter()
+            .any(|change| matches!(change, FontChange::Sources(_)));
+        if sources_changed {
+            for glyph in self.glyphs() {
+                self.require_layer_sources(glyph)?;
+            }
+        } else {
+            for glyph_id in change_set.touched_glyph_ids() {
+                if let Some(glyph) = self.glyph(&glyph_id) {
+                    self.require_layer_sources(glyph)?;
+                }
             }
         }
 
+        Ok(())
+    }
+
+    fn require_layer_sources(&self, glyph: &Glyph) -> CoreResult<()> {
+        for layer in glyph.layers().values() {
+            self.require_source(&layer.source_id())?;
+        }
         Ok(())
     }
 
@@ -281,7 +307,9 @@ impl Font {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CreateGlyph, CreateGlyphLayer, DeleteAxis, EntityChange, FontEntityChange, FontIntentSet,
+        AddComponent, AddContour, AddPoints, ApplyBooleanOp, BooleanOp, CreateGlyph,
+        CreateGlyphLayer, DecomposeComponents, DeleteAxis, EntityChange, FontEntityChange,
+        FontIntent, FontIntentSet, PointSeed, PointType, RemoveComponents, RemovePoints,
         Replacement, UpdateFontMetadata,
     };
 
@@ -295,6 +323,105 @@ mod tests {
         assert_eq!(index.layer_by_glyph_source, rebuilt.layer_by_glyph_source);
         assert_eq!(index.glyphs_by_unicode, rebuilt.glyphs_by_unicode);
         assert_eq!(index.entity_ids, rebuilt.entity_ids);
+        assert_eq!(
+            index.layers_by_component_base,
+            rebuilt.layers_by_component_base
+        );
+    }
+
+    /// A closed 100-unit square on `A_regular`.
+    fn square(id: &str, x: f64) -> (ContourId, Vec<FontIntent>) {
+        let layer_id = LayerId::from_raw("A_regular");
+        let contour_id = ContourId::from_raw(id);
+        let points = [(x, 0.0), (x + 100.0, 0.0), (x + 100.0, 100.0), (x, 100.0)]
+            .into_iter()
+            .enumerate()
+            .map(|(index, (x, y))| PointSeed {
+                id: PointId::from_raw(format!("{id}_{index}")),
+                x,
+                y,
+                point_type: PointType::OnCurve,
+                smooth: false,
+            })
+            .collect();
+        let intents = vec![
+            AddContour {
+                layer_id: layer_id.clone(),
+                contour_id: contour_id.clone(),
+                closed: true,
+            }
+            .into(),
+            AddPoints {
+                layer_id,
+                contour_id: Some(contour_id.clone()),
+                before: None,
+                points,
+            }
+            .into(),
+        ];
+        (contour_id, intents)
+    }
+
+    #[test]
+    fn structural_intents_index_exactly_as_a_full_rebuild() {
+        let mut font = crate::test_support::sample_font();
+        let layer_id = LayerId::from_raw("A_regular");
+        let (left, mut squares) = square("left", 0.0);
+        let (right, right_square) = square("right", 50.0);
+        squares.extend(right_square);
+        let steps: Vec<Vec<FontIntent>> = vec![
+            squares,
+            vec![
+                AddComponent {
+                    layer_id: layer_id.clone(),
+                    component_id: ComponentId::from_raw("added"),
+                    base_glyph_id: GlyphId::from_raw("acute"),
+                }
+                .into(),
+            ],
+            vec![
+                RemoveComponents {
+                    layer_id: layer_id.clone(),
+                    component_ids: vec![ComponentId::from_raw("z_first")],
+                }
+                .into(),
+            ],
+            vec![
+                DecomposeComponents {
+                    layer_id: layer_id.clone(),
+                    component_ids: vec![ComponentId::from_raw("a_second")],
+                }
+                .into(),
+            ],
+            vec![
+                ApplyBooleanOp {
+                    layer_id: layer_id.clone(),
+                    contour_id_a: left,
+                    contour_id_b: right,
+                    operation: BooleanOp::Union,
+                }
+                .into(),
+            ],
+            // Removing every point of a contour removes the contour too.
+            vec![
+                RemovePoints {
+                    layer_id,
+                    point_ids: ["A_0", "A_1", "A_2"].map(PointId::from_raw).to_vec(),
+                }
+                .into(),
+            ],
+        ];
+
+        for intents in steps {
+            let applied = font.apply_intents(&intents.into_iter().collect()).unwrap();
+            assert_index_matches_rebuild(&font);
+
+            let mut undone = font.clone();
+            undone
+                .apply_change_set(&applied.changes.inverted())
+                .unwrap();
+            assert_index_matches_rebuild(&undone);
+        }
     }
 
     #[test]

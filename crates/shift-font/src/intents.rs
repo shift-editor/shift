@@ -173,6 +173,26 @@ trait LayerIntent {
     fn apply(&self, font: &mut Font) -> CoreResult<()>;
 }
 
+/// Requires every value an intent writes as a coordinate to be finite.
+///
+/// A stored NaN or infinity poisons every later geometry operation; boolean
+/// operations on such a contour can overflow the stack.
+///
+/// # Errors
+///
+/// Returns [`CoreError::InvalidPositionUpdateInput`] naming `kind` when any
+/// value is NaN or infinite.
+fn require_finite(kind: &'static str, values: impl IntoIterator<Item = f64>) -> CoreResult<()> {
+    if values.into_iter().all(f64::is_finite) {
+        return Ok(());
+    }
+
+    Err(CoreError::InvalidPositionUpdateInput {
+        kind,
+        message: "values must be finite".to_string(),
+    })
+}
+
 /// An intent that acts on the font rather than on one existing layer.
 trait FontLevelIntent {
     /// Authored layers to load before applying it.
@@ -903,6 +923,9 @@ mod replacement_tests;
 
 #[cfg(test)]
 mod kerning_tests;
+
+#[cfg(test)]
+mod consistency_tests;
 
 /// A kerning group name trimmed of surrounding space.
 ///
