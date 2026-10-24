@@ -105,7 +105,7 @@ test.describe("retained font source Grid preview", () => {
   test("shows preview font settings with disabled authoring controls", async ({ page }) => {
     await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /font info$/ }).click();
     const settingsDialog = page.getByRole("dialog", { name: "Settings" });
     await expect(settingsDialog).toBeVisible();
     await expect(page.getByText("Read-only preview")).toBeHidden();

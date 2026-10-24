@@ -650,6 +650,7 @@ export class Glyph {
     get contours(): readonly Contour[];
     // (undocumented)
     get entry(): GlyphEntry;
+    get entryCell(): Signal<GlyphEntry>;
     // (undocumented)
     geometryAt(externalLocation: ExternalAxisLocation): GlyphGeometry;
     // (undocumented)

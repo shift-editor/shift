@@ -42,11 +42,11 @@ test.describe("Home view", () => {
     await expectPanelSnapshot(fontNavigation(page), "home-language-filtered.png");
   });
 
-  test("Settings opens over the grid, and the Glyphs tab stays current", async ({ page }) => {
+  test("the font name opens its info, and the Glyphs tab stays current", async ({ page }) => {
     const glyphs = page.getByRole("tab", { name: "Glyphs", exact: true });
     await expect(glyphs).toHaveAttribute("aria-selected", "true");
 
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /font info$/ }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
