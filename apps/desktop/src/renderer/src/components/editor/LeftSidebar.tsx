@@ -38,7 +38,7 @@ export const LeftSidebar = () => (
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <div className="shrink-0 px-1 pt-2">
-          <PagesSection section={ObjectSectionRow} />
+          <PagesSection section={ObjectSectionRow} takesRenameRequests />
         </div>
         <Separator className="mt-2 shrink-0" />
         <div className="min-h-0 flex-1 overflow-hidden">
