@@ -39,6 +39,12 @@ pub struct PointSeed {
     pub smooth: bool,
 }
 
+impl PointSeed {
+    fn coordinates(&self) -> [f64; 2] {
+        [self.x, self.y]
+    }
+}
+
 /// One kerning pair value to set or remove at one source.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KerningValueEdit {
@@ -55,6 +61,12 @@ pub struct AnchorSeed {
     pub name: Option<String>,
     pub x: f64,
     pub y: f64,
+}
+
+impl AnchorSeed {
+    fn coordinates(&self) -> [f64; 2] {
+        [self.x, self.y]
+    }
 }
 
 /// Declares [`FontIntent`] from the intents of each kind, listed once.
@@ -173,24 +185,57 @@ trait LayerIntent {
     fn apply(&self, font: &mut Font) -> CoreResult<()>;
 }
 
-/// Requires every value an intent writes as a coordinate to be finite.
+/// The values an intent writes as coordinates, as errors name them.
+#[derive(Clone, Copy, Debug)]
+enum Coordinates {
+    NewPoints,
+    PointPositions,
+    PointTranslation,
+    NewAnchors,
+    AnchorPositions,
+    AdvanceWidth,
+    ComponentTransforms,
+    LayerTransform,
+}
+
+impl Coordinates {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::NewPoints => "new points",
+            Self::PointPositions => "point positions",
+            Self::PointTranslation => "point translation",
+            Self::NewAnchors => "new anchors",
+            Self::AnchorPositions => "anchor positions",
+            Self::AdvanceWidth => "advance width",
+            Self::ComponentTransforms => "component transforms",
+            Self::LayerTransform => "layer transform",
+        }
+    }
+}
+
+/// Values an intent writes as coordinates, which must all be finite.
 ///
 /// A stored NaN or infinity poisons every later geometry operation; boolean
 /// operations on such a contour can overflow the stack.
-///
-/// # Errors
-///
-/// Returns [`CoreError::InvalidPositionUpdateInput`] naming `kind` when any
-/// value is NaN or infinite.
-fn require_finite(kind: &'static str, values: impl IntoIterator<Item = f64>) -> CoreResult<()> {
-    if values.into_iter().all(f64::is_finite) {
-        return Ok(());
-    }
+trait RequireFinite {
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidPositionUpdateInput`] naming `coordinates`
+    /// when any value is NaN or infinite.
+    fn require_finite(self, coordinates: Coordinates) -> CoreResult<()>;
+}
 
-    Err(CoreError::InvalidPositionUpdateInput {
-        kind,
-        message: "values must be finite".to_string(),
-    })
+impl<I: IntoIterator<Item = f64>> RequireFinite for I {
+    fn require_finite(self, coordinates: Coordinates) -> CoreResult<()> {
+        if self.into_iter().all(f64::is_finite) {
+            return Ok(());
+        }
+
+        Err(CoreError::InvalidPositionUpdateInput {
+            kind: coordinates.as_str(),
+            message: "values must be finite".to_string(),
+        })
+    }
 }
 
 /// An intent that acts on the font rather than on one existing layer.

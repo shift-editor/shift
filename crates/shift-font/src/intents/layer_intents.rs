@@ -26,10 +26,10 @@ impl LayerIntent for AddPoints {
             before,
             points,
         } = self;
-        require_finite(
-            "new points",
-            points.iter().flat_map(|point| [point.x, point.y]),
-        )?;
+        points
+            .iter()
+            .flat_map(PointSeed::coordinates)
+            .require_finite(Coordinates::NewPoints)?;
         let mut point_ids = HashSet::new();
         for seed in points {
             if font.has_point_id(&seed.id) || !point_ids.insert(seed.id.clone()) {
@@ -172,7 +172,10 @@ impl LayerIntent for MovePoints {
             point_ids,
             coords,
         } = self;
-        require_finite("point positions", coords.iter().copied())?;
+        coords
+            .iter()
+            .copied()
+            .require_finite(Coordinates::PointPositions)?;
         if coords.len() != point_ids.len() * 2 {
             return Err(CoreError::InvalidPointId(format!(
                 "movePoints expects {} coords for {} points, got {}",
@@ -268,10 +271,10 @@ impl LayerIntent for AddAnchors {
 
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, anchors } = self;
-        require_finite(
-            "new anchors",
-            anchors.iter().flat_map(|anchor| [anchor.x, anchor.y]),
-        )?;
+        anchors
+            .iter()
+            .flat_map(AnchorSeed::coordinates)
+            .require_finite(Coordinates::NewAnchors)?;
         let mut anchor_ids = HashSet::new();
         for seed in anchors {
             if font.has_anchor_id(&seed.id) || !anchor_ids.insert(seed.id.clone()) {
@@ -323,7 +326,10 @@ impl LayerIntent for MoveAnchors {
             anchor_ids,
             coords,
         } = self;
-        require_finite("anchor positions", coords.iter().copied())?;
+        coords
+            .iter()
+            .copied()
+            .require_finite(Coordinates::AnchorPositions)?;
         if coords.len() != anchor_ids.len() * 2 {
             return Err(CoreError::InvalidAnchorId(format!(
                 "moveAnchors expects {} coords for {} anchors, got {}",
@@ -513,7 +519,10 @@ impl LayerIntent for SetComponentTransforms {
                 ),
             });
         }
-        require_finite("component transforms", transforms.iter().copied())?;
+        transforms
+            .iter()
+            .copied()
+            .require_finite(Coordinates::ComponentTransforms)?;
 
         let layer = font.require_layer_mut(layer_id)?;
         for component_id in component_ids {
@@ -731,7 +740,7 @@ impl LayerIntent for TranslatePoints {
             dx,
             dy,
         } = self;
-        require_finite("point translation", [*dx, *dy])?;
+        [*dx, *dy].require_finite(Coordinates::PointTranslation)?;
         let layer = font.require_layer_mut(layer_id)?;
         layer.move_points(point_ids, *dx, *dy)?;
 
@@ -773,7 +782,7 @@ impl LayerIntent for TransformLayer {
             transform.dx,
             transform.dy,
         ];
-        require_finite("layer transform", values)?;
+        values.require_finite(Coordinates::LayerTransform)?;
 
         font.require_layer_mut(layer_id)?.transform_layer(transform);
         Ok(())
@@ -797,7 +806,7 @@ impl LayerIntent for SetXAdvance {
 
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, width } = self;
-        require_finite("advance width", [*width])?;
+        [*width].require_finite(Coordinates::AdvanceWidth)?;
         let layer = font.require_layer_mut(layer_id)?;
         layer.set_x_advance(*width);
 
