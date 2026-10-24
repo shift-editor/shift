@@ -2,12 +2,13 @@ import type { Editor } from "@shift/editor";
 import type { AlignmentType } from "@shift/editor/transform";
 import { Bounds, Mat } from "@shift/geo";
 import type { ContourId } from "@shift/types";
+import { PositionTargets } from "@shift/editor/model";
 
 export function alignSelection(editor: Editor, alignment: AlignmentType): boolean {
   if (editor.isEditing) return false;
 
   const selection = editor.positionSelection(editor.selection.ids);
-  const pointIds = selection?.targets.points ?? [];
+  const pointIds = (selection?.targets ?? PositionTargets.NONE).points;
   if (!selection || pointIds.length < 2) return false;
 
   selection.layer.align(pointIds, alignment);
@@ -36,7 +37,7 @@ export function flipSelection(editor: Editor, axis: "horizontal" | "vertical"): 
   if (editor.isEditing) return false;
 
   const selection = editor.positionSelection(ids);
-  const pointIds = selection?.targets.points ?? [];
+  const pointIds = (selection?.targets ?? PositionTargets.NONE).points;
   const bounds = editor.selectionBounds();
   if (!selection || !bounds || pointIds.length === 0) return false;
 

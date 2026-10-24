@@ -7,7 +7,7 @@
 //! that script, any other font that draws `Ag` shows `Ag`, a font
 //! covering another script shows a pair from that script, and a font with one
 //! Latin case shows `AG` or `ag`.
-//! Text is shaped with HarfRust at the font's
+//! Text is shaped and outlined by [`shift_proof::ProofFont`] at the font's
 //! default location, and a candidate only counts as covered when shaping
 //! draws ink for every cluster, so a mapped but empty glyph that the font
 //! decomposes through GSUB still qualifies.
@@ -22,12 +22,11 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use harfrust::{ShapeOptions, ShaperData, UnicodeBuffer};
-use skrifa::instance::{LocationRef, Size};
-use skrifa::outline::{DrawSettings, OutlinePen};
+use shift_proof::{Coordinates, ProofFont, Segment, ShapingOptions};
+use skrifa::outline::OutlinePen;
 use skrifa::raw::TableProvider;
 use skrifa::raw::types::Tag;
-use skrifa::{FontRef, GlyphId, MetadataProvider};
+use skrifa::{FontRef, MetadataProvider};
 use unicode_script::{Script, UnicodeScript};
 
 /// Letters of a non-Latin script a font must cover before that script is
@@ -356,9 +355,12 @@ struct PlacedGlyph {
     y: f64,
 }
 
+/// A compiled font at its default location: skrifa reads the tables that
+/// choose the specimen, and the shared proof primitive shapes and outlines
+/// it.
 struct SpecimenFont<'a> {
-    data: &'a [u8],
     font: FontRef<'a>,
+    proof: ProofFont<'a>,
     units_per_em: f64,
 }
 
@@ -366,9 +368,10 @@ impl<'a> SpecimenFont<'a> {
     fn new(data: &'a [u8]) -> Option<Self> {
         let font = FontRef::new(data).ok()?;
         let units_per_em = f64::from(font.head().ok()?.units_per_em());
+        let proof = ProofFont::new(data, &Coordinates::default()).ok()?;
         Some(Self {
-            data,
             font,
+            proof,
             units_per_em,
         })
     }
@@ -433,36 +436,31 @@ impl<'a> SpecimenFont<'a> {
             return None;
         }
 
-        let font = harfrust::FontRef::new(self.data).ok()?;
-        let data = ShaperData::new(&font);
-        let shaper = data.shaper(&font).build();
-        let mut buffer = UnicodeBuffer::new();
-        buffer.push_str(text);
-        buffer.guess_segment_properties();
-        let shaped = shaper.shape(buffer, ShapeOptions::new());
-
+        let shaped = self
+            .proof
+            .shape_glyphs(text, &ShapingOptions::default())
+            .glyphs;
         let mut placed = Vec::new();
         let mut inked_clusters = Vec::new();
         let mut pen_x = 0.0;
-        for (info, position) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
-            if info.glyph_id == 0 {
+        for glyph in &shaped {
+            if glyph.glyph_id == 0 {
                 return None;
             }
-            if self.has_ink(info.glyph_id) {
-                inked_clusters.push(info.cluster);
+            if self.has_ink(glyph.glyph_id) {
+                inked_clusters.push(glyph.cluster);
             }
             placed.push(PlacedGlyph {
-                glyph_id: info.glyph_id,
-                x: pen_x + f64::from(position.x_offset),
-                y: f64::from(position.y_offset),
+                glyph_id: glyph.glyph_id,
+                x: pen_x + f64::from(glyph.x_offset),
+                y: f64::from(glyph.y_offset),
             });
-            pen_x += f64::from(position.x_advance);
+            pen_x += f64::from(glyph.x_advance);
         }
 
         let every_cluster_inked = shaped
-            .glyph_infos()
             .iter()
-            .all(|info| inked_clusters.contains(&info.cluster));
+            .all(|glyph| inked_clusters.contains(&glyph.cluster));
         if !every_cluster_inked {
             return None;
         }
@@ -475,11 +473,7 @@ impl<'a> SpecimenFont<'a> {
 
     /// Places the first two glyphs with ink by glyph order, skipping `.notdef`.
     fn glyph_order_specimen(&self) -> Option<Specimen> {
-        let glyph_count = u32::from(self.font.maxp().ok()?.num_glyphs());
-        let metrics = self
-            .font
-            .glyph_metrics(Size::unscaled(), LocationRef::default());
-
+        let glyph_count = self.proof.glyph_count();
         let mut placed = Vec::new();
         let mut pen_x = 0.0;
         for glyph_id in (1..glyph_count)
@@ -491,11 +485,7 @@ impl<'a> SpecimenFont<'a> {
                 x: pen_x,
                 y: 0.0,
             });
-            pen_x += f64::from(
-                metrics
-                    .advance_width(GlyphId::new(glyph_id))
-                    .unwrap_or_default(),
-            );
+            pen_x += f64::from(self.proof.advance_width(glyph_id).unwrap_or_default());
         }
         self.outline(String::new(), &placed, false)
     }
@@ -507,13 +497,17 @@ impl<'a> SpecimenFont<'a> {
     }
 
     fn draw(&self, glyph_id: u32, pen: &mut SvgPen) {
-        let outlines = self.font.outline_glyphs();
-        let Some(glyph) = outlines.get(GlyphId::new(glyph_id)) else {
-            return;
-        };
-        let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
-        // A glyph that fails to draw simply contributes no ink.
-        let _ = glyph.draw(settings, pen);
+        for segment in self.proof.outline(glyph_id) {
+            match segment {
+                Segment::Move(x, y) => pen.move_to(x, y),
+                Segment::Line(x, y) => pen.line_to(x, y),
+                Segment::Quad(cx0, cy0, x, y) => pen.quad_to(cx0, cy0, x, y),
+                Segment::Cubic(cx0, cy0, cx1, cy1, x, y) => {
+                    pen.curve_to(cx0, cy0, cx1, cy1, x, y);
+                }
+                Segment::Close => pen.close(),
+            }
+        }
     }
 
     fn outline(

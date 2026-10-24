@@ -25,8 +25,8 @@ export class Nudge implements SelectBehavior {
     const selection = ctx.editor.positionSelection(ctx.editor.selection.ids);
     if (!selection) return false;
 
-    const pointIds = selection.targets.points ?? [];
-    const anchorIds = selection.targets.anchors ?? [];
+    const pointIds = selection.targets.points;
+    const anchorIds = selection.targets.anchors;
     if (pointIds.length === 0 && anchorIds.length === 0) return false;
 
     const [onlyPointId] = pointIds;

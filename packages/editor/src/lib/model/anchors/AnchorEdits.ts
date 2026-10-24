@@ -42,12 +42,12 @@ export class AnchorEdits {
 
   rename(name: string): void {
     for (const { layer, targets } of this.#layers) {
-      layer.renameAnchors(new Map((targets.anchors ?? []).map((id) => [id, name] as const)));
+      layer.renameAnchors(new Map(targets.anchors.map((id) => [id, name] as const)));
     }
   }
 
   remove(): void {
-    for (const { layer, targets } of this.#layers) layer.removeAnchors(targets.anchors ?? []);
+    for (const { layer, targets } of this.#layers) layer.removeAnchors(targets.anchors);
   }
 
   /**
@@ -60,13 +60,13 @@ export class AnchorEdits {
   setAxis(axis: "x" | "y", value: number): void {
     const [reference] = this.#layers;
     if (!reference) return;
-    const deltas = (reference.targets.anchors ?? []).map((id) => {
+    const deltas = reference.targets.anchors.map((id) => {
       const anchor = reference.layer.anchor(id);
       return anchor ? value - anchor[axis] : 0;
     });
     for (const { layer, targets } of this.#layers) {
       layer.applyPositionPatch(
-        (targets.anchors ?? []).flatMap((id, index) => {
+        targets.anchors.flatMap((id, index) => {
           const anchor = layer.anchor(id);
           const delta = deltas[index] ?? 0;
           if (!anchor || delta === 0) return [];

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MenuItemConstructorOptions } from "electron";
 import {
   commandMenuItem,
+  debugMenuItems,
   editMenuItems,
   fileMenuItems,
   helpMenuItems,
@@ -9,6 +10,7 @@ import {
   viewMenuItems,
 } from "./menuItems";
 import type { RecentDocument } from "../../shared/recents";
+import { NO_DEBUG_OVERLAYS, type DebugOverlayId } from "../../shared/debug";
 
 const run = () => {};
 const enabled = () => true;
@@ -151,5 +153,24 @@ describe("application command menu items", () => {
 
     expect(ids(items)).toEqual(["view.zoomIn", "view.zoomOut"]);
     expect(sizeItems.map(({ label }) => label)).toEqual(["Increase", "Decrease", "Reset"]);
+  });
+});
+
+describe("debug menu items", () => {
+  it("shows each overlay's state and toggles the one clicked", () => {
+    const toggled: DebugOverlayId[] = [];
+    const items = debugMenuItems({
+      overlays: () => ({ ...NO_DEBUG_OVERLAYS, toolbarZones: true }),
+      toggle: (id) => toggled.push(id),
+    });
+    const zones = items.find((item) => item.label === "Toolbar Dock Zones");
+    const bounds = items.find((item) => item.label === "Tight Bounds");
+
+    expect(zones).toMatchObject({ type: "checkbox", checked: true });
+    expect(bounds).toMatchObject({ type: "checkbox", checked: false });
+
+    const click = bounds?.click;
+    if (click) click(undefined as never, undefined, undefined as never);
+    expect(toggled).toEqual(["tightBounds"]);
   });
 });

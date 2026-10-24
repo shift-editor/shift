@@ -29,7 +29,7 @@ import {
   type SelectableId,
   type ShiftId,
 } from "@shift/types";
-import { isSegmentId } from "@shift/glyph-state";
+import { isSegmentId, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type {
@@ -131,6 +131,7 @@ import { PageNodeDefinition } from "../nodes/PageNodeDefinition";
 import { Pages } from "../pages/Pages";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { PositionTargets } from "../model/positions/PositionTargets";
 
 interface EditorOptions {
   font: Font;
@@ -790,7 +791,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         if (!geometry?.point(id)) continue;
 
         const contourId = geometry.contourIdOfPoint(id);
@@ -809,7 +810,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         if (!geometry?.anchor(id)) continue;
 
         return new AnchorObject(id, geometry, node);
@@ -827,7 +828,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         const segment = geometry?.segment(id);
         if (!geometry || !segment) continue;
 
@@ -849,7 +850,7 @@ export class Editor {
       }
 
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const geometry = this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation);
+        const geometry = this.#geometryShownBy(node);
         if (!geometry?.contour(id)) continue;
 
         return new ContourObject(id, geometry, node);
@@ -1040,10 +1041,7 @@ export class Editor {
 
     return this.#multiSourceEditing.resolve({
       layer,
-      targets: {
-        points: [...points],
-        anchors: [...anchors],
-      },
+      targets: new PositionTargets([...points], [...anchors]),
     });
   }
 
@@ -1101,6 +1099,11 @@ export class Editor {
       if (this.scene.pageOf(node.id)?.id === pageId) return node;
     }
     return null;
+  }
+
+  /** The geometry a glyph node shows at the current location; null while its glyph is not loaded. */
+  #geometryShownBy(node: GlyphNode): GlyphGeometry | null {
+    return this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation) ?? null;
   }
 
   /** The active source's layer of the scene's one glyph node; null without exactly one. */
@@ -2073,8 +2076,8 @@ export class Editor {
     await this.font.editCoordinator.settled();
 
     const selection = this.positionSelection(this.selection.ids);
-    const pointIds = selection?.targets.points ?? [];
-    if (!selection || pointIds.length === 0 || (selection.targets.anchors?.length ?? 0) > 0) {
+    const pointIds = (selection?.targets ?? PositionTargets.NONE).points;
+    if (!selection || pointIds.length === 0 || selection.targets.hasAnchors) {
       return false;
     }
 
@@ -2104,8 +2107,8 @@ export class Editor {
     const selection = this.positionSelection(this.selection.ids);
     if (!selection) return false;
 
-    const pointIds = selection.targets.points ?? [];
-    const anchorIds = selection.targets.anchors ?? [];
+    const pointIds = selection.targets.points;
+    const anchorIds = selection.targets.anchors;
     if (pointIds.length === 0 && anchorIds.length > 0) {
       this.transaction("Delete Anchors", () => AnchorEdits.fromSelection(selection).remove());
       await this.#clearSelectionAfterEdit();

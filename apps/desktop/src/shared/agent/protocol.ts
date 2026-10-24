@@ -89,6 +89,7 @@ export type AgentCallMap = {
     request: {
       pairs: KerningPairQuery[];
       sourceId?: SourceId;
+      // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use sourceId or the default location"
       location?: AxisCoordinate[];
       ifFontRevision?: FontRevision;
     };

@@ -21,6 +21,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `crates/shift-backends/**`  | [`crates/shift-backends/docs/DOCS.md`](../../crates/shift-backends/docs/DOCS.md)   | Font format backends for reading/writing various font formats                               |
 | `crates/shift-config/**`    | [`crates/shift-config/docs/DOCS.md`](../../crates/shift-config/docs/DOCS.md)       | Reading, validating, and comment-preserving edits of `config.toml` and theme files          |
 | `crates/shift-font/**`      | [`crates/shift-font/docs/DOCS.md`](../../crates/shift-font/docs/DOCS.md)           | First-class Rust font object model and editing behavior                                     |
+| `crates/shift-proof/**`     | [`crates/shift-proof/README.md`](../../crates/shift-proof/README.md)               | Shaping, layout, and SVG/PNG rendering of proof text from compiled font bytes               |
 | `crates/shift-shape/**`     | [`crates/shift-shape/docs/DOCS.md`](../../crates/shift-shape/docs/DOCS.md)         | Text shaping for every host: script itemization, HarfRust, line-break opportunities         |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
 | `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
@@ -52,6 +53,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | -------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `packages/editor/src/lib/editor/**`    | [`editor/docs/DOCS.md`](../../packages/editor/src/lib/editor/docs/DOCS.md)       | Editor facade, viewport, selection, and rendering                  |
 | `packages/editor/src/lib/model/**`     | [`model/docs/DOCS.md`](../../packages/editor/src/lib/model/docs/DOCS.md)         | Reactive font, glyph layers, interpolation, and editing            |
+| `packages/editor/src/ui/**`            | [`ui/docs/DOCS.md`](../../packages/editor/src/ui/docs/DOCS.md)                   | Floating toolbar docking, drag, and animation                      |
 | `packages/editor/src/lib/tools/**`     | [`tools/docs/DOCS.md`](../../packages/editor/src/lib/tools/docs/DOCS.md)         | Tool state machines and interaction behaviors                      |
 | `packages/editor/src/lib/signals/**`   | [`signals/docs/DOCS.md`](../../packages/editor/src/lib/signals/docs/DOCS.md)     | Fine-grained reactive graph                                        |
 | `packages/editor/src/lib/text/**`      | [`text/docs/DOCS.md`](../../packages/editor/src/lib/text/docs/DOCS.md)           | Text records, interaction, and layout                              |

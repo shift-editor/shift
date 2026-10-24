@@ -1,4 +1,4 @@
-import { mintNodeId, type NodeId } from "@shift/types";
+import { EntityMap, mintNodeId, type NodeId, type ReadonlyEntityMap } from "@shift/types";
 import { Tree } from "../utils/Tree";
 import { computed, signal, type Signal, type WritableSignal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -49,7 +49,7 @@ export class Scene {
   readonly #requestedPageId: WritableSignal<NodeId | null>;
   readonly #activePageIdCell: Signal<NodeId | null>;
   readonly #cell: Signal<SceneValue>;
-  readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
+  readonly #nodesById: Signal<ReadonlyEntityMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
@@ -103,11 +103,11 @@ export class Scene {
     );
     this.#nodesById = computed(
       () => {
-        const nodes = new Map<NodeId, ShiftNode>();
-        for (const node of this.#documentCell.value.nodes) {
-          nodes.set(node.id, node);
-        }
-        return nodes;
+        // Lookups by id see every page, not only the one shown.
+        return new EntityMap(
+          "node",
+          this.#documentCell.value.nodes.map((node) => [node.id, node] as const),
+        );
       },
       { name: "editor.scene.nodesById" },
     );
@@ -237,7 +237,7 @@ export class Scene {
   node(nodeId: NodeId | null): ShiftNode | null {
     if (!nodeId) return null;
 
-    return this.#nodesById.peek().get(nodeId) ?? null;
+    return this.#nodesById.peek().get(nodeId);
   }
 
   /**

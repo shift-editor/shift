@@ -10,6 +10,8 @@ import {
   type KerningSnapshot,
   type KerningValueEdit,
   type SourceId,
+  EntityMap,
+  type ReadonlyEntityMap,
 } from "@shift/types";
 import { interpolationWeights } from "../interpolation/InterpolationBasis";
 import type { DesignAxisLocation } from "../../types/variation";
@@ -68,15 +70,24 @@ type MembershipByPosition = Readonly<Record<KerningPairPosition, GroupMembership
 export class KerningGroups {
   static readonly EMPTY = new KerningGroups(new Map(), { first: new Map(), second: new Map() });
 
-  readonly #byId: ReadonlyMap<KerningGroupId, KerningGroup>;
+  readonly #byId: ReadonlyEntityMap<KerningGroupId, KerningGroup>;
   readonly #membership: MembershipByPosition;
+  readonly #byPosition: Readonly<Record<KerningPairPosition, readonly KerningGroup[]>>;
 
   private constructor(
     byId: ReadonlyMap<KerningGroupId, KerningGroup>,
     membership: MembershipByPosition,
   ) {
-    this.#byId = byId;
+    this.#byId = new EntityMap("kerning group", byId);
     this.#membership = membership;
+    const sorted = byId
+      .values()
+      .toArray()
+      .sort((a, b) => a.name.localeCompare(b.name));
+    this.#byPosition = {
+      first: sorted.filter((group) => group.position === "first"),
+      second: sorted.filter((group) => group.position === "second"),
+    };
   }
 
   static from(groups: readonly KerningGroup[]): KerningGroups {
@@ -94,20 +105,16 @@ export class KerningGroups {
 
   /** The group with this id, or null when the font has none. */
   group(groupId: KerningGroupId): KerningGroup | null {
-    return this.#byId.get(groupId) ?? null;
+    return this.#byId.get(groupId);
   }
 
   /** The group `glyphId` kerns through at a pair position. */
   groupOf(position: KerningPairPosition, glyphId: GlyphId): KerningGroupId | null {
     return this.#membership[position].get(glyphId) ?? null;
   }
-  /** The groups at a pair position, in name order. */
-  atPosition(position: KerningPairPosition): KerningGroup[] {
-    return this.#byId
-      .values()
-      .filter((group) => group.position === position)
-      .toArray()
-      .sort((a, b) => a.name.localeCompare(b.name));
+  /** The groups at a pair position, in name order; sorted once, when the groups change. */
+  atPosition(position: KerningPairPosition): readonly KerningGroup[] {
+    return this.#byPosition[position];
   }
 
   /** The group named `name` at a pair position; names are unique per position. */

@@ -20,5 +20,6 @@ export {
   PointRuleConstraint,
   PositionEdits,
   PositionReference,
+  PositionTargets,
   SnapSet,
 } from "./lib/model/positions";

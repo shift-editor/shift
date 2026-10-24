@@ -9,6 +9,7 @@ import { useSignalState } from "@shift/editor/signals";
 import { Bounds, Mat } from "@shift/geo";
 import ScaleIcon from "@/assets/sidebar-right/scale.svg";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
+import { PositionTargets } from "@shift/editor/model";
 
 export const ScaleSection = () => {
   const editor = useEditor();
@@ -24,7 +25,7 @@ export const ScaleSection = () => {
     () => editor.componentTransformSelection(selection.ids),
     [editor, selection],
   );
-  const selectedPointIds = positionSelection?.targets.points ?? [];
+  const selectedPointIds = (positionSelection?.targets ?? PositionTargets.NONE).points;
   const isEditing = useSignalState(editor.isEditingCell);
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
   const editable = positionSelection !== null || componentSelection !== null;

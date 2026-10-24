@@ -21,6 +21,7 @@ export interface MemoryFontSessionOptions {
    * Tools shown in the toolbar, in order. The first becomes active; an empty
    * list makes the session view-only. Defaults to Select then Hand.
    */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- absent means Select then Hand; empty means view-only
   readonly tools?: readonly MemoryToolName[];
 }
 

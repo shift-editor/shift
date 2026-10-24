@@ -5,7 +5,7 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import type { GlyphId, ShapedRun } from "@shift/types";
+import { EntityMap, type GlyphId, type ReadonlyEntityMap, type ShapedRun } from "@shift/types";
 import { Caret } from "./Caret";
 import type {
   CaretPosition,
@@ -69,7 +69,7 @@ export class TextLayout {
   readonly bufferLength: number;
   /** Every positioned glyph in line, run, and glyph order. */
   readonly placedGlyphs: readonly PlacedGlyph[];
-  readonly #placedByItem: ReadonlyMap<TextItemId, PlacedGlyph>;
+  readonly #placedByItem: ReadonlyEntityMap<TextItemId, PlacedGlyph>;
 
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, externalLocation, shaped = null } = params;
@@ -98,7 +98,7 @@ export class TextLayout {
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
     this.placedGlyphs = placeGlyphs(lines, origin);
-    const placedByItem = new Map<TextItemId, PlacedGlyph>();
+    const placedByItem = new EntityMap<TextItemId, PlacedGlyph>("placed glyph");
     for (const placed of this.placedGlyphs) {
       for (const itemId of placed.glyph.sourceItemIds) {
         const current = placedByItem.get(itemId);
@@ -118,7 +118,7 @@ export class TextLayout {
    * @returns null for line breaks and unknown items.
    */
   placedGlyphForItem(itemId: TextItemId): PlacedGlyph | null {
-    return this.#placedByItem.get(itemId) ?? null;
+    return this.#placedByItem.get(itemId);
   }
 
   /**

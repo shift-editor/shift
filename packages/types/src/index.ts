@@ -25,6 +25,7 @@ export type {
   TextItemId,
   SourceId,
 } from "./ids";
+export { EntityMap, EntityNotFoundError, type ReadonlyEntityMap } from "./EntityMap";
 export {
   asPointId,
   asContourId,
