@@ -1,5 +1,5 @@
 use crate::entity::AnchorId;
-use crate::point::canonical_zero;
+use crate::point::Canonical;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -15,8 +15,8 @@ impl Anchor {
         Self {
             id: AnchorId::new(),
             name: name.into(),
-            x: canonical_zero(x),
-            y: canonical_zero(y),
+            x: x.canonical(),
+            y: y.canonical(),
         }
     }
 
@@ -24,8 +24,8 @@ impl Anchor {
         Self {
             id,
             name: name.into(),
-            x: canonical_zero(x),
-            y: canonical_zero(y),
+            x: x.canonical(),
+            y: y.canonical(),
         }
     }
 
@@ -58,8 +58,8 @@ impl Anchor {
     }
 
     pub fn set_position(&mut self, x: f64, y: f64) {
-        self.x = canonical_zero(x);
-        self.y = canonical_zero(y);
+        self.x = x.canonical();
+        self.y = y.canonical();
     }
 
     pub fn set_name(&mut self, name: impl Into<Option<String>>) {

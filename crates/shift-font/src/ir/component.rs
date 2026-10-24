@@ -1,7 +1,7 @@
 use crate::GlyphName;
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
-use crate::point::canonical_zero;
+use crate::point::Canonical;
 use serde::{Deserialize, Serialize};
 
 /// Whether a component is placed by its anchors or by hand.
@@ -253,24 +253,14 @@ impl DecomposedTransform {
     }
 
     pub fn set_offset(&mut self, offset: kurbo::Vec2) {
-        self.translate_x = canonical_zero(offset.x);
-        self.translate_y = canonical_zero(offset.y);
+        self.translate_x = offset.x.canonical();
+        self.translate_y = offset.y.canonical();
     }
+}
 
-    /// The same transform with `-0.0` stored as `0.0` in every field.
-    #[must_use]
-    pub fn canonical(self) -> Self {
-        Self {
-            translate_x: canonical_zero(self.translate_x),
-            translate_y: canonical_zero(self.translate_y),
-            rotation: canonical_zero(self.rotation),
-            scale_x: canonical_zero(self.scale_x),
-            scale_y: canonical_zero(self.scale_y),
-            skew_x: canonical_zero(self.skew_x),
-            skew_y: canonical_zero(self.skew_y),
-            t_center_x: canonical_zero(self.t_center_x),
-            t_center_y: canonical_zero(self.t_center_y),
-        }
+impl Canonical for DecomposedTransform {
+    fn canonical(self) -> Self {
+        Self::from_values(self.to_values().map(Canonical::canonical))
     }
 }
 

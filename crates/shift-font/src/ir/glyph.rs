@@ -8,7 +8,7 @@ use crate::entity::{
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
-use crate::point::{Point, canonical_zero};
+use crate::point::{Canonical, Point};
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
@@ -88,7 +88,7 @@ impl GlyphLayer {
 
     pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
         Self {
-            width: canonical_zero(width),
+            width: width.canonical(),
             ..Self::new(id, source_id)
         }
     }
@@ -223,7 +223,7 @@ impl GlyphLayer {
             });
         }
 
-        self.width = canonical_zero(width);
+        self.width = width.canonical();
         self.contours = new_contours;
         self.anchors = anchors;
         self.components = new_components;
@@ -239,7 +239,7 @@ impl GlyphLayer {
     }
 
     pub fn set_width(&mut self, width: f64) {
-        self.width = canonical_zero(width);
+        self.width = width.canonical();
     }
 
     pub fn set_height(&mut self, height: Option<f64>) {
