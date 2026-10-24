@@ -12,6 +12,7 @@ import {
   X,
 } from "@shift/ui";
 import PlusIcon from "@/assets/general/plus.svg";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
 import { REGISTERED_AXIS_PRESETS, nextCustomAxisDefinition } from "@/lib/variation/axisPresets";
@@ -40,6 +41,8 @@ export const CreateAxisMenu = ({ onAxisCreated, onOpenChange }: CreateAxisMenuPr
     if (onAxisCreated) onAxisCreated(axisId);
   };
 
+  const panelAnchor = useSidebarPanelAnchor();
+
   if (availablePresets.length === 0) {
     return (
       <Tooltip content="Create custom axis">
@@ -57,6 +60,7 @@ export const CreateAxisMenu = ({ onAxisCreated, onOpenChange }: CreateAxisMenuPr
     <Menu modal={false} open={open} onOpenChange={changeOpen}>
       <Tooltip content="Create axis">
         <MenuTrigger
+          ref={panelAnchor.triggerRef}
           render={
             <SidebarActionButton label="Create axis">
               <PlusIcon className="h-3 w-3" />
@@ -65,7 +69,7 @@ export const CreateAxisMenu = ({ onAxisCreated, onOpenChange }: CreateAxisMenuPr
         />
       </Tooltip>
       <MenuPortal>
-        <MenuPositioner sideOffset={4} align="start">
+        <MenuPositioner {...panelAnchor.positioner}>
           <MenuPopup className="w-50">
             {/* The same title and close as the Create Source and Create Instance popovers. */}
             <div className="-mx-1 -mt-1 mb-1 flex h-8 items-center justify-between border-b border-line-subtle pl-3 pr-1">

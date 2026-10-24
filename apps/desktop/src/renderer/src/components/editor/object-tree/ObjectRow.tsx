@@ -55,7 +55,7 @@ export const ObjectRow = ({
                   aria-hidden
                   className="-my-0.5 flex h-8 w-6 shrink-0 justify-end pr-0.75"
                 >
-                  <span className="h-full border-l border-line-subtle" />
+                  <span className="h-full border-l border-control-muted/45" />
                 </span>
               ))}
               {hasChildren ? (
