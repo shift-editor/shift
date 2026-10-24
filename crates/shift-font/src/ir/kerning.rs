@@ -9,6 +9,7 @@
 //! retained but never resolve, so deleting and restoring one keeps its
 //! kerning intact.
 
+use crate::persistent::PersistentOrdMap;
 use crate::{CoreError, CoreResult, GlyphId, KerningGroupId, Require, SourceId};
 use serde::{Deserialize, Serialize};
 
@@ -89,7 +90,7 @@ pub struct ResolvedKerning {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(from = "Vec<(KerningPair, f64)>", into = "Vec<(KerningPair, f64)>")]
 pub struct SourceKerning {
-    values: imbl::OrdMap<KerningPair, f64>,
+    values: PersistentOrdMap<KerningPair, f64>,
 }
 
 impl SourceKerning {
@@ -129,8 +130,8 @@ impl From<SourceKerning> for Vec<(KerningPair, f64)> {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Kerning {
     // Persistent maps, so copying a font to edit one value shares the rest.
-    groups: imbl::OrdMap<KerningGroupId, KerningGroup>,
-    sources: imbl::OrdMap<SourceId, SourceKerning>,
+    groups: PersistentOrdMap<KerningGroupId, KerningGroup>,
+    sources: PersistentOrdMap<SourceId, SourceKerning>,
 }
 
 impl Kerning {
@@ -322,8 +323,7 @@ impl Kerning {
     /// Sets the value of `pair` at `source_id` and returns the previous value.
     pub fn set_value(&mut self, source_id: SourceId, pair: KerningPair, value: f64) -> Option<f64> {
         self.sources
-            .entry(source_id)
-            .or_default()
+            .get_or_default(source_id)
             .values
             .insert(pair, value)
     }

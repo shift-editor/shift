@@ -223,6 +223,19 @@ pub enum GlyphEntityId {
     Guideline(GuidelineId),
 }
 
+impl GlyphEntityId {
+    /// The error for this id being used twice in one font.
+    pub(crate) fn duplicate_error(self) -> crate::CoreError {
+        match self {
+            Self::Contour(id) => crate::CoreError::DuplicateContourId(id),
+            Self::Point(id) => crate::CoreError::DuplicatePointId(id),
+            Self::Component(id) => crate::CoreError::DuplicateComponentId(id),
+            Self::Anchor(id) => crate::CoreError::DuplicateAnchorId(id),
+            Self::Guideline(id) => crate::CoreError::DuplicateGuidelineId(id),
+        }
+    }
+}
+
 /// Converts each id, and each entity holding one, into a [`GlyphEntityId`].
 macro_rules! glyph_entities {
     ($($variant:ident($id:ty, $entity:ty)),+ $(,)?) => {

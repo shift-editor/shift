@@ -16,6 +16,7 @@ pub mod kerning;
 pub mod lib_data;
 pub mod metrics;
 pub mod named_instance;
+pub(crate) mod persistent;
 pub mod point;
 pub mod segment;
 pub mod source;

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::{FontChange, FontChangeSet, Require, SourceCollection};
@@ -110,7 +110,7 @@ impl Font {
         let mut before_glyphs = HashMap::new();
         for glyph_id in &touched_glyph_ids {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
-                state.index.remove_glyph_records(glyph_id, glyph);
+                state.index.remove_records(glyph_id, glyph);
                 before_glyphs.insert(glyph_id.clone(), Arc::clone(glyph));
             }
         }
@@ -217,50 +217,8 @@ impl Font {
             Arc::make_mut(glyph).set_layer(Arc::clone(layer));
         }
 
-        let state = self.state_mut();
-        // Only glyphs whose entity ids changed release and claim ids; the rest
-        // keep theirs in the index, where no other glyph can take them.
-        let mut released = HashSet::new();
-        let mut ids_changed = HashSet::new();
-        for glyph_id in &touched_glyph_ids {
-            let before = before_glyphs.get(glyph_id);
-            let unchanged = before
-                .zip(state.data.glyphs.get(glyph_id))
-                .is_some_and(|(before, after)| before.has_same_entity_ids(after));
-            if unchanged {
-                continue;
-            }
-            ids_changed.insert(glyph_id);
-            if let Some(before) = before {
-                released.extend(before.entity_ids());
-            }
-        }
-        let mut claimed = HashSet::new();
-        let mut touched_unicodes = BTreeSet::new();
-        for glyph_id in &touched_glyph_ids {
-            let Some(glyph) = state.data.glyphs.get(glyph_id) else {
-                continue;
-            };
-            let ids = ids_changed
-                .contains(glyph_id)
-                .then_some((&released, &mut claimed));
-            state.index.validate_glyph_return(glyph_id, glyph, ids)?;
-            state.index.insert_glyph_records(glyph_id, glyph);
-            touched_unicodes.extend(glyph.unicodes().iter().copied());
-        }
-        for entity_id in released.difference(&claimed) {
-            state.index.entity_ids.remove(entity_id);
-        }
-        for entity_id in claimed.difference(&released) {
-            state.index.entity_ids.insert(entity_id.clone());
-        }
-        // A full rebuild lists glyphs sharing a code point in glyph order; keep that.
-        for unicode in touched_unicodes {
-            if let Some(glyph_ids) = state.index.glyphs_by_unicode.get_mut(&unicode) {
-                glyph_ids.sort_by_key(|glyph_id| state.data.glyphs.index_of(glyph_id));
-            }
-        }
-        Ok(())
+        let FontState { data, index } = self.state_mut();
+        index.return_glyphs(&touched_glyph_ids, &before_glyphs, &data.glyphs)
     }
 
     fn validate_change_target(&self, change_set: &FontChangeSet) -> CoreResult<()> {
@@ -351,15 +309,9 @@ mod tests {
     fn assert_index_matches_rebuild(font: &Font) {
         let rebuilt = FontIndex::from_glyphs(&font.state.data.glyphs).unwrap();
         let index = &font.state.index;
-        assert_eq!(index.glyph_by_name, rebuilt.glyph_by_name);
-        assert_eq!(index.layer_owner, rebuilt.layer_owner);
-        assert_eq!(index.layer_by_glyph_source, rebuilt.layer_by_glyph_source);
-        assert_eq!(index.glyphs_by_unicode, rebuilt.glyphs_by_unicode);
+        assert_eq!(index.glyphs, rebuilt.glyphs);
+        assert_eq!(index.layers, rebuilt.layers);
         assert_eq!(index.entity_ids, rebuilt.entity_ids);
-        assert_eq!(
-            index.layers_by_component_base,
-            rebuilt.layers_by_component_base
-        );
     }
 
     /// A closed 100-unit square on `A_regular`.

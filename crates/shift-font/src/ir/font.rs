@@ -25,6 +25,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 mod change_set;
+mod index;
+
+use index::{EntityIdTransfer, FontIndex};
 
 /// Font lib key holding tracked Hyperglot language ids (for example
 /// `eng-latin`) as a plist array of strings.
@@ -128,255 +131,6 @@ struct FontData {
     data_files: BinaryData,
     #[serde(default)]
     images: BinaryData,
-}
-
-#[derive(Clone, Debug, Default)]
-struct FontIndex {
-    glyph_by_name: imbl::HashMap<GlyphName, GlyphId>,
-    layer_owner: imbl::HashMap<LayerId, GlyphId>,
-    layer_by_glyph_source: imbl::HashMap<(GlyphId, SourceId), LayerId>,
-    glyphs_by_unicode: imbl::HashMap<u32, Vec<GlyphId>>,
-    entity_ids: imbl::HashSet<GlyphEntityId>,
-    /// Layers with a component of each base glyph, so an edit to a base finds
-    /// the composites that follow it without scanning every layer.
-    layers_by_component_base: imbl::HashMap<GlyphId, imbl::HashSet<LayerId>>,
-}
-
-impl FontIndex {
-    fn from_glyphs(glyphs: &PersistentEntityList<Arc<Glyph>>) -> CoreResult<Self> {
-        let mut index = Self::default();
-
-        for (glyph_id, glyph) in glyphs.iter() {
-            index.validate_glyph_insert(&glyph_id, glyph)?;
-            index.insert_glyph(&glyph_id, glyph);
-        }
-
-        Ok(index)
-    }
-
-    fn validate_glyph_insert(&self, glyph_id: &GlyphId, glyph: &Glyph) -> CoreResult<()> {
-        self.validate_glyph_records(glyph_id, glyph)?;
-
-        let mut local_entities = HashSet::new();
-        for entity_id in glyph.entity_ids() {
-            if self.entity_ids.contains(&entity_id) || !local_entities.insert(entity_id.clone()) {
-                return Err(duplicate_entity_error(entity_id));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Validates everything about a glyph joining the index except its entity
-    /// ids: its name, layer ids, and one layer per source.
-    fn validate_glyph_records(&self, glyph_id: &GlyphId, glyph: &Glyph) -> CoreResult<()> {
-        if *glyph_id != glyph.id() {
-            return Err(CoreError::MismatchedGlyphId {
-                key: glyph_id.clone(),
-                glyph_id: glyph.id(),
-            });
-        }
-
-        if self.glyph_by_name.contains_key(glyph.glyph_name()) {
-            return Err(CoreError::DuplicateGlyphName(glyph.glyph_name().clone()));
-        }
-
-        let mut local_sources = HashSet::new();
-
-        for layer in glyph.layers().values().map(Arc::as_ref) {
-            if self.layer_owner.contains_key(&layer.id()) {
-                return Err(CoreError::DuplicateLayerId(layer.id()));
-            }
-
-            if self
-                .layer_by_glyph_source
-                .contains_key(&(glyph_id.clone(), layer.source_id()))
-                || !local_sources.insert(layer.source_id())
-            {
-                return Err(CoreError::DuplicateGlyphLayer {
-                    glyph_id: glyph_id.clone(),
-                    source_id: layer.source_id(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_layer_insert(&self, glyph_id: &GlyphId, layer: &GlyphLayer) -> CoreResult<()> {
-        if self.layer_owner.contains_key(&layer.id()) {
-            return Err(CoreError::DuplicateLayerId(layer.id()));
-        }
-
-        if self
-            .layer_by_glyph_source
-            .contains_key(&(glyph_id.clone(), layer.source_id()))
-        {
-            return Err(CoreError::DuplicateGlyphLayer {
-                glyph_id: glyph_id.clone(),
-                source_id: layer.source_id(),
-            });
-        }
-
-        let mut local_entities = HashSet::new();
-        for entity_id in layer.entity_ids() {
-            if self.entity_ids.contains(&entity_id) || !local_entities.insert(entity_id.clone()) {
-                return Err(duplicate_entity_error(entity_id));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_layer_replacements(
-        &self,
-        replacements: &[(GlyphId, Arc<GlyphLayer>, Arc<GlyphLayer>)],
-    ) -> CoreResult<()> {
-        let removed_ids = replacements
-            .iter()
-            .flat_map(|(_, previous, _)| previous.entity_ids())
-            .collect::<HashSet<_>>();
-        let mut replacement_ids = HashSet::new();
-
-        for (_, _, replacement) in replacements {
-            for entity_id in replacement.entity_ids() {
-                if (self.entity_ids.contains(&entity_id) && !removed_ids.contains(&entity_id))
-                    || !replacement_ids.insert(entity_id.clone())
-                {
-                    return Err(duplicate_entity_error(entity_id));
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn insert_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
-        self.insert_layer_records(glyph_id, layer);
-        self.entity_ids.extend(layer.entity_ids());
-    }
-
-    /// Indexes a layer's ownership and component bases, but not its entity ids.
-    fn insert_layer_records(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
-        self.layer_owner.insert(layer.id(), glyph_id.clone());
-        self.layer_by_glyph_source
-            .insert((glyph_id, layer.source_id()), layer.id());
-        for component in layer.components_iter() {
-            self.layers_by_component_base
-                .entry(component.base_glyph_id())
-                .or_default()
-                .insert(layer.id());
-        }
-    }
-
-    fn remove_layer(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
-        self.remove_layer_records(glyph_id, layer);
-        for entity_id in layer.entity_ids() {
-            self.entity_ids.remove(&entity_id);
-        }
-    }
-
-    /// Forgets a layer's ownership and component bases, but not its entity ids.
-    fn remove_layer_records(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
-        self.layer_owner.remove(&layer.id());
-        self.layer_by_glyph_source
-            .remove(&(glyph_id, layer.source_id()));
-        for component in layer.components_iter() {
-            let base_glyph_id = component.base_glyph_id();
-            if let Some(layers) = self.layers_by_component_base.get_mut(&base_glyph_id) {
-                layers.remove(&layer.id());
-                if layers.is_empty() {
-                    self.layers_by_component_base.remove(&base_glyph_id);
-                }
-            }
-        }
-    }
-
-    fn insert_glyph(&mut self, glyph_id: &GlyphId, glyph: &Glyph) {
-        self.insert_glyph_records(glyph_id, glyph);
-        self.entity_ids.extend(glyph.entity_ids());
-    }
-
-    /// Indexes a glyph's name, code points, and layers, but not its entity ids.
-    fn insert_glyph_records(&mut self, glyph_id: &GlyphId, glyph: &Glyph) {
-        self.glyph_by_name
-            .insert(glyph.glyph_name().clone(), glyph_id.clone());
-
-        for unicode in glyph.unicodes() {
-            self.glyphs_by_unicode
-                .entry(*unicode)
-                .or_default()
-                .push(glyph_id.clone());
-        }
-
-        for layer in glyph.layers().values().map(Arc::as_ref) {
-            self.insert_layer_records(glyph_id.clone(), layer);
-        }
-    }
-
-    fn remove_glyph(&mut self, glyph_id: &GlyphId, glyph: &Glyph) {
-        self.remove_glyph_records(glyph_id, glyph);
-        for entity_id in glyph.entity_ids() {
-            self.entity_ids.remove(&entity_id);
-        }
-    }
-
-    /// Forgets a glyph's name, code points, and layers, but not its entity ids.
-    fn remove_glyph_records(&mut self, glyph_id: &GlyphId, glyph: &Glyph) {
-        self.glyph_by_name.remove(glyph.glyph_name());
-
-        for unicode in glyph.unicodes() {
-            if let Some(glyph_ids) = self.glyphs_by_unicode.get_mut(unicode) {
-                glyph_ids.retain(|id| *id != *glyph_id);
-                if glyph_ids.is_empty() {
-                    self.glyphs_by_unicode.remove(unicode);
-                }
-            }
-        }
-
-        for layer in glyph.layers().values().map(Arc::as_ref) {
-            self.remove_layer_records(glyph_id.clone(), layer);
-        }
-    }
-
-    /// Validates a glyph returning to the index while a change set installs.
-    ///
-    /// The glyph's records are always checked. Its entity ids are checked only
-    /// when `ids` is given: ids in `released`, held by the touched glyphs
-    /// before the change, count as free, and `claimed` collects every id the
-    /// returning glyphs take, so two of them can't share one.
-    ///
-    /// # Errors
-    ///
-    /// Returns the same duplicate-identity errors as a full rebuild would.
-    fn validate_glyph_return(
-        &self,
-        glyph_id: &GlyphId,
-        glyph: &Glyph,
-        ids: Option<(&HashSet<GlyphEntityId>, &mut HashSet<GlyphEntityId>)>,
-    ) -> CoreResult<()> {
-        self.validate_glyph_records(glyph_id, glyph)?;
-        let Some((released, claimed)) = ids else {
-            return Ok(());
-        };
-        for entity_id in glyph.entity_ids() {
-            let taken = self.entity_ids.contains(&entity_id) && !released.contains(&entity_id);
-            if taken || !claimed.insert(entity_id.clone()) {
-                return Err(duplicate_entity_error(entity_id));
-            }
-        }
-        Ok(())
-    }
-}
-
-fn duplicate_entity_error(id: GlyphEntityId) -> CoreError {
-    match id {
-        GlyphEntityId::Contour(id) => CoreError::DuplicateContourId(id),
-        GlyphEntityId::Point(id) => CoreError::DuplicatePointId(id),
-        GlyphEntityId::Component(id) => CoreError::DuplicateComponentId(id),
-        GlyphEntityId::Anchor(id) => CoreError::DuplicateAnchorId(id),
-        GlyphEntityId::Guideline(id) => CoreError::DuplicateGuidelineId(id),
-    }
 }
 
 impl FontState {
@@ -1172,7 +926,7 @@ impl Font {
     }
 
     pub fn glyph_id_by_name(&self, name: &str) -> Option<GlyphId> {
-        self.index().glyph_by_name.get(name).cloned()
+        self.index().glyphs.id_by_name(name).cloned()
     }
 
     pub fn glyph_by_name(&self, name: &str) -> Option<&Glyph> {
@@ -1181,15 +935,13 @@ impl Font {
 
     pub fn glyphs_by_unicode(&self, unicode: u32) -> impl Iterator<Item = &Glyph> {
         self.index()
-            .glyphs_by_unicode
-            .get(&unicode)
-            .into_iter()
-            .flatten()
+            .glyphs
+            .ids_with_unicode(unicode)
             .filter_map(|glyph_id| self.glyph(glyph_id))
     }
 
     pub fn glyph_id_by_layer(&self, layer_id: &LayerId) -> Option<GlyphId> {
-        self.index().layer_owner.get(layer_id).cloned()
+        self.index().layers.owner(layer_id).cloned()
     }
 
     pub fn layer_id_for_glyph_source(
@@ -1197,10 +949,7 @@ impl Font {
         glyph_id: GlyphId,
         source_id: SourceId,
     ) -> Option<LayerId> {
-        self.index()
-            .layer_by_glyph_source
-            .get(&(glyph_id, source_id))
-            .cloned()
+        self.index().layers.layer_at(glyph_id, source_id).cloned()
     }
 
     pub fn layer(&self, layer_id: &LayerId) -> Option<&GlyphLayer> {
@@ -1331,7 +1080,7 @@ impl Font {
         self.state_mut()
             .index
             .entity_ids
-            .extend(point_ids.into_iter().map(GlyphEntityId::from));
+            .insert_all(point_ids.into_iter().map(GlyphEntityId::from));
     }
 
     /// Records anchors minted by an in-place layer edit.
@@ -1339,7 +1088,7 @@ impl Font {
         self.state_mut()
             .index
             .entity_ids
-            .extend(anchor_ids.into_iter().map(GlyphEntityId::from));
+            .insert_all(anchor_ids.into_iter().map(GlyphEntityId::from));
     }
 
     /// Forgets point identities removed by an in-place layer edit.
@@ -1367,11 +1116,7 @@ impl Font {
         &self,
         base_glyph_id: &GlyphId,
     ) -> impl Iterator<Item = &LayerId> {
-        self.index()
-            .layers_by_component_base
-            .get(base_glyph_id)
-            .into_iter()
-            .flatten()
+        self.index().layers.composites_of(base_glyph_id)
     }
 
     /// The shared copy of one layer, kept to re-index it after an in-place edit.
@@ -1391,14 +1136,13 @@ impl Font {
     /// Re-indexes one layer after an in-place structural edit, in time
     /// proportional to the layer rather than the font.
     ///
-    /// `before`'s identities leave the index and the edited layer's return,
-    /// validated against the rest of the font.
+    /// `before`'s ids move to the edited layer by difference, validated
+    /// against the rest of the font.
     ///
     /// # Errors
     ///
     /// Returns a duplicate-identity error when the edited layer reuses an
-    /// identity another layer holds. The index is then partly updated, so call
-    /// this only on a staged copy that is discarded on failure.
+    /// identity another layer holds; the index is unchanged.
     pub(crate) fn reindex_layer(
         &mut self,
         layer_id: &LayerId,
@@ -1406,10 +1150,14 @@ impl Font {
     ) -> CoreResult<()> {
         let glyph_id = self.require_layer_owner(layer_id)?;
         let after = self.layer_snapshot(layer_id)?;
+        let mut transfer = EntityIdTransfer::default();
+        transfer.release(before.entity_ids());
+        transfer.claim(after.entity_ids(), &self.index().entity_ids)?;
+
         let index = &mut self.state_mut().index;
-        index.remove_layer(glyph_id.clone(), before);
-        index.validate_layer_insert(&glyph_id, &after)?;
-        index.insert_layer(glyph_id, &after);
+        index.layers.remove(&glyph_id, before);
+        index.layers.insert(&glyph_id, &after);
+        transfer.apply_to(&mut index.entity_ids);
         Ok(())
     }
 
@@ -1518,7 +1266,7 @@ impl Font {
         if self.source(&source_id).is_none() {
             return Err(CoreError::SourceNotFound(source_id));
         }
-        if self.index().layer_owner.contains_key(&layer_id) {
+        if self.index().layers.owner(&layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
@@ -1559,7 +1307,7 @@ impl Font {
             .glyphs
             .get_mut(&glyph_id)
             .expect("glyph existence was checked before mutation");
-        state.index.insert_layer(glyph_id, &layer);
+        state.index.insert_layer(&glyph_id, &layer);
         Arc::make_mut(glyph).set_layer(layer);
         Ok(())
     }
@@ -1638,14 +1386,21 @@ impl Font {
             replacements.push((glyph_id, previous, layer));
         }
 
-        self.index().validate_layer_replacements(&replacements)?;
+        let mut transfer = EntityIdTransfer::default();
+        for (_, previous, _) in &replacements {
+            transfer.release(previous.entity_ids());
+        }
+        for (_, _, layer) in &replacements {
+            transfer.claim(layer.entity_ids(), &self.index().entity_ids)?;
+        }
 
         let state = self.state_mut();
         for (glyph_id, previous, _) in &replacements {
-            state.index.remove_layer(glyph_id.clone(), previous);
+            state.index.layers.remove(glyph_id, previous);
         }
+        transfer.apply_to(&mut state.index.entity_ids);
         for (glyph_id, _, layer) in replacements {
-            state.index.insert_layer(glyph_id.clone(), &layer);
+            state.index.layers.insert(&glyph_id, &layer);
             let glyph = state
                 .data
                 .glyphs
@@ -1669,7 +1424,7 @@ impl Font {
         let layer = Arc::make_mut(glyph)
             .remove_layer(layer_id)
             .require(&layer_id)?;
-        state.index.remove_layer(glyph_id, &layer);
+        state.index.remove_layer(&glyph_id, &layer);
         Ok(layer)
     }
 

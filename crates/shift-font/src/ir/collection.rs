@@ -12,6 +12,8 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use indexmap::IndexMap;
+
+use crate::persistent::{PersistentMap, PersistentVec};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -255,8 +257,8 @@ pub struct PersistentEntityList<T>
 where
     T: Identified + Clone,
 {
-    entries: imbl::Vector<T>,
-    positions: imbl::HashMap<T::Id, usize>,
+    entries: PersistentVec<T>,
+    positions: PersistentMap<T::Id, usize>,
 }
 
 impl<T> PersistentEntityList<T>
@@ -265,8 +267,8 @@ where
 {
     pub fn new() -> Self {
         Self {
-            entries: imbl::Vector::new(),
-            positions: imbl::HashMap::new(),
+            entries: PersistentVec::default(),
+            positions: PersistentMap::default(),
         }
     }
 
@@ -320,7 +322,7 @@ where
         }
 
         self.positions.insert(id, self.entries.len());
-        self.entries.push_back(entity);
+        self.entries.push(entity);
         None
     }
 
