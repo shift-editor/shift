@@ -1112,7 +1112,10 @@ impl Font {
     }
 
     /// Layers with at least one component whose base is `base_glyph_id`.
-    pub(crate) fn layers_using_component_base(
+    ///
+    /// Only layers whose content is loaded are indexed; a directory
+    /// placeholder carries no components.
+    pub fn layers_using_component_base(
         &self,
         base_glyph_id: &GlyphId,
     ) -> impl Iterator<Item = &LayerId> {

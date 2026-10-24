@@ -353,6 +353,7 @@ impl TouchedLayers {
 }
 
 /// One touched layer after an intent set applied.
+#[derive(Debug)]
 pub struct TouchedLayer {
     pub layer: Arc<GlyphLayer>,
     pub structural: bool,
@@ -370,6 +371,7 @@ impl TouchedLayer {
 
 /// Outcome of applying an intent set: one reversible changeset plus
 /// replace-grade layer state for echo assembly.
+#[derive(Debug)]
 pub struct AppliedIntents {
     pub changes: FontChangeSet,
     /// Unique touched layers in first-touch order; `structural` is OR-ed

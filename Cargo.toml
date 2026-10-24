@@ -70,6 +70,7 @@ shift-wire = { path = "crates/shift-wire" }
 shift-backends = { path = "crates/shift-backends" }
 shift-bridge = { path = "crates/shift-bridge" }
 shift-config = { path = "crates/shift-config" }
+shift-engine = { path = "crates/shift-engine" }
 shift-shape = { path = "crates/shift-shape" }
 shift-font = { path = "crates/shift-font" }
 shift-proof = { path = "crates/shift-proof" }
