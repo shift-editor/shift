@@ -434,3 +434,40 @@ describe("transforming several run glyphs", () => {
     expect(aLayer.components[0]?.matrix).toMatchObject({ a: 1, d: 1, e: 0, f: 0 });
   });
 });
+
+describe("Text tool on an empty page", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    const page = editor.pages.create();
+    editor.pages.activate(page.id);
+  });
+
+  const runs = () => editor.scene.nodesOfKind("textRun");
+
+  it("places an empty run in view with a caret, so typing can start", () => {
+    editor.selectTool("text");
+
+    expect(runs()).toHaveLength(1);
+    expect(editor.toolIf("text")?.state.type).toBe("editing");
+    expect(editor.textEditing.state?.nodeId).toBe(runs()[0]!.id);
+  });
+
+  it("removes the run again when nothing was typed", () => {
+    editor.selectTool("text");
+    editor.escape();
+
+    expect(runs()).toEqual([]);
+  });
+
+  it("keeps the run once something is typed into it", () => {
+    editor.selectTool("text");
+    editor.textEditing.insert([characterTextItem(65)]);
+    editor.escape();
+
+    expect(runs()).toHaveLength(1);
+    expect(editor.text.items(runs()[0]!)).toHaveLength(1);
+  });
+});
