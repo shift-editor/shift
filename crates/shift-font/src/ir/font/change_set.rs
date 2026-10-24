@@ -181,7 +181,7 @@ impl Font {
                     .checked_sub(1)
                     .and_then(|index| glyphs.get_index(index))
                     .map(|(id, _)| id);
-                if tail_id != Some(&glyph_id) {
+                if tail_id.as_ref() != Some(&glyph_id) {
                     return Err(CoreError::GlyphNotAtTail(glyph_id));
                 }
                 glyphs.shift_remove(&glyph_id);
