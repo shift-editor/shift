@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
-import { ascending, mintAxisLabelId } from "@shift/types";
+import { ascending, mintAxisLabelId, removeBy, replaceBy } from "@shift/types";
 import { Button, Checkbox, Input, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -240,7 +240,7 @@ const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) =>
         onClick={async () => {
           await draft.updateAndCommit((axis) => ({
             ...axis,
-            labels: axis.labels.filter((item) => item.id !== label.id),
+            labels: removeBy(axis.labels, label.id, (item) => item.id),
           }));
         }}
       >
@@ -269,7 +269,7 @@ function replaceLabel(
 ): Axis {
   return {
     ...axis,
-    labels: axis.labels.map((label) => (label.id === labelId ? transform(label) : label)),
+    labels: replaceBy(axis.labels, labelId, transform, (label) => label.id),
   };
 }
 

@@ -8,6 +8,7 @@ import { createObjectTree, ObjectTreeCache } from "./object-tree/createObjectTre
 import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
 import { OBJECT_ROW_STEP, VirtualObjectRows } from "./object-tree/VirtualObjectRows";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
+import { useMemberSet } from "@/hooks/useMemberSet";
 
 export const ObjectsPanel = () => {
   const editor = useEditor();
@@ -41,12 +42,11 @@ export const ObjectsPanel = () => {
   const objectTree = useSignalState(objectTreeCell, { schedule: "frame" });
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const selectedIds = useMemo(() => new Set(selection.ids), [selection.ids]);
-  const [collapsedSectionIds, setCollapsedSectionIds] = useState<ReadonlySet<ObjectTreeSectionId>>(
-    () => new Set(),
-  );
-  const [collapsedObjectIds, setCollapsedObjectIds] = useState<ReadonlySet<SelectableId>>(
-    () => new Set(),
-  );
+  const collapsedSections = useMemberSet<ObjectTreeSectionId>();
+  const collapsedSectionIds = collapsedSections.values;
+  const collapsedObjects = useMemberSet<SelectableId>();
+  const collapsedObjectIds = collapsedObjects.values;
+  const setObjectCollapsed = collapsedObjects.set;
   const objectRowsBySection = useMemo(() => {
     const result = new Map(
       objectTree.map((section) => [
@@ -91,14 +91,10 @@ export const ObjectsPanel = () => {
     editor.history.capture("Select object", () => editor.selection.select(ids));
   });
 
-  const setObjectOpen = useCallback((id: SelectableId, open: boolean) => {
-    setCollapsedObjectIds((previous) => {
-      const next = new Set(previous);
-      if (open) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const setObjectOpen = useCallback(
+    (id: SelectableId, open: boolean) => setObjectCollapsed(id, !open),
+    [setObjectCollapsed],
+  );
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -182,14 +178,7 @@ export const ObjectsPanel = () => {
               key={section.id}
               title={section.label}
               open={open}
-              onOpenChange={(open) => {
-                setCollapsedSectionIds((previous) => {
-                  const next = new Set(previous);
-                  if (open) next.delete(section.id);
-                  else next.add(section.id);
-                  return next;
-                });
-              }}
+              onOpenChange={(open) => collapsedSections.set(section.id, !open)}
             >
               {section.items.length > 0 ? (
                 <VirtualObjectRows

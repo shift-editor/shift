@@ -20,6 +20,7 @@ import type {
   GlyphCategoryFilter,
 } from "@/types/glyphCatalog";
 import { NameQuery } from "@/lib/utils/NameQuery";
+import { useMemberSet } from "@/hooks/useMemberSet";
 
 const NO_LANGUAGE_IDS = signal<readonly string[] | null>(null, {
   name: "glyphCatalog.previewLanguageIds",
@@ -104,9 +105,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [query, setQuery] = useState("");
   const [categoryFilters, setCategoryFilters] = useState<readonly GlyphCategoryFilter[]>([]);
   const [selectedLanguageId, setSelectedLanguageId] = useState<string | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<GlyphCategory>>(
-    () => new Set(),
-  );
+  const expanded = useMemberSet<GlyphCategory>();
+  const expandedCategories = expanded.values;
 
   const availableUnicodes = useMemo(
     () => availableGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [glyph.unicode])),
@@ -287,7 +287,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     selectedLanguageId,
     visibleCategoryFilters,
     expandedCategories,
-    setExpandedCategories,
+    setCategoryExpanded: expanded.set,
     query,
     setQuery,
     atlasSource: catalog.atlas,
