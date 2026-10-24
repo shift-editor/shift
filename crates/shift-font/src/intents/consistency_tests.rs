@@ -2,9 +2,10 @@ use crate::test_support::sample_font;
 use crate::{
     AddAnchors, AddComponent, AddPoints, AnchorId, AnchorSeed, AppliedIntents, ComponentAlignment,
     ComponentId, ContourId, CoreError, CreateGlyph, CreateGlyphLayer, Font, FontChangeImpact,
-    FontIntent, FontIntentSet, GlyphId, LayerId, MoveAnchors, MovePoints, PointId, PointSeed,
-    PointType, RemoveComponents, ReverseContour, SetComponentAlignment, SetXAdvance, Source,
-    SourceId, Transform, TransformLayer, TranslatePoints,
+    FontIntent, FontIntentSet, GlyphId, GlyphInterpolationValues, LayerId, MoveAnchors, MovePoints,
+    PointId, PointSeed, PointType, RemoveComponents, ReverseContour, SetComponentAlignment,
+    SetComponentTransforms, SetXAdvance, Source, SourceId, Transform, TransformLayer,
+    TranslatePoints,
 };
 
 fn apply(font: &mut Font, intents: impl IntoIterator<Item = FontIntent>) -> AppliedIntents {
@@ -312,4 +313,80 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
             assert!(font == original, "{intent:?} changed the font");
         }
     }
+}
+
+#[test]
+fn negative_zero_is_stored_as_zero() {
+    let mut font = sample_font();
+    let layer_id = LayerId::from_raw("A_regular");
+    let positive = |value: f64| value.to_bits() == 0.0_f64.to_bits();
+    apply(
+        &mut font,
+        [
+            MovePoints {
+                layer_id: layer_id.clone(),
+                point_ids: vec![PointId::from_raw("A_0")],
+                coords: vec![-0.0, -0.0],
+            }
+            .into(),
+            AddAnchors {
+                layer_id: layer_id.clone(),
+                anchors: vec![AnchorSeed {
+                    id: AnchorId::from_raw("zero"),
+                    name: Some("bottom".to_string()),
+                    x: -0.0,
+                    y: -0.0,
+                }],
+            }
+            .into(),
+            SetXAdvance {
+                layer_id: layer_id.clone(),
+                width: -0.0,
+            }
+            .into(),
+            SetComponentTransforms {
+                layer_id: layer_id.clone(),
+                component_ids: vec![ComponentId::from_raw("a_second")],
+                transforms: vec![-0.0, -0.0, -0.0, 1.0, 1.0, -0.0, -0.0, -0.0, -0.0],
+            }
+            .into(),
+        ],
+    );
+
+    let layer = font.layer(&layer_id).unwrap();
+    let point = layer
+        .points()
+        .find(|point| point.id() == PointId::from_raw("A_0"))
+        .unwrap();
+    assert!(positive(point.x()) && positive(point.y()));
+    let anchor = layer.anchor(&AnchorId::from_raw("zero")).unwrap();
+    assert!(positive(anchor.x()) && positive(anchor.y()));
+    assert!(positive(layer.width()));
+    let transform = layer
+        .component(&ComponentId::from_raw("a_second"))
+        .unwrap()
+        .transform();
+    for value in [
+        transform.translate_x,
+        transform.translate_y,
+        transform.rotation,
+        transform.skew_x,
+        transform.skew_y,
+        transform.t_center_x,
+        transform.t_center_y,
+    ] {
+        assert!(positive(value), "{transform:?}");
+    }
+
+    // Values installed in bulk, as a load or an echo does, are stored the same way.
+    let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
+    values
+        .iter_mut()
+        .filter(|value| **value == 0.0)
+        .for_each(|value| *value = -0.0);
+    let mut reloaded = layer.clone();
+    reloaded
+        .apply_interpolation_values(&GlyphInterpolationValues::new(values))
+        .unwrap();
+    assert_eq!(reloaded, *layer);
 }
