@@ -259,25 +259,29 @@ impl Font {
             None => {}
         }
 
-        // Every layer's source must exist. Untouched glyphs were valid before,
-        // so unless the sources change only the touched glyphs need checking.
-        let sources_changed = change_set
-            .changes
-            .iter()
-            .any(|change| matches!(change, FontChange::Sources(_)));
-        if sources_changed {
-            for glyph in self.glyphs() {
-                self.require_layer_sources(glyph)?;
-            }
-        } else {
-            for glyph_id in change_set.touched_glyph_ids() {
-                if let Some(glyph) = self.glyph(&glyph_id) {
-                    self.require_layer_sources(glyph)?;
-                }
-            }
-        }
+        self.require_layer_sources_after(change_set)
+    }
 
-        Ok(())
+    /// Requires every layer's source to exist after `change_set`.
+    ///
+    /// Untouched glyphs were valid before, so only the touched glyphs are
+    /// checked unless the change set replaces the sources.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::SourceNotFound`] for the first layer whose source
+    /// is missing.
+    fn require_layer_sources_after(&self, change_set: &FontChangeSet) -> CoreResult<()> {
+        if change_set.replaces_sources() {
+            return self
+                .glyphs()
+                .try_for_each(|glyph| self.require_layer_sources(glyph));
+        }
+        change_set
+            .touched_glyph_ids()
+            .iter()
+            .filter_map(|glyph_id| self.glyph(glyph_id))
+            .try_for_each(|glyph| self.require_layer_sources(glyph))
     }
 
     fn require_layer_sources(&self, glyph: &Glyph) -> CoreResult<()> {

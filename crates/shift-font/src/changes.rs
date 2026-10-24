@@ -403,6 +403,13 @@ impl FontChangeSet {
             .collect()
     }
 
+    /// Whether this changeset replaces the font's sources.
+    pub fn replaces_sources(&self) -> bool {
+        self.changes
+            .iter()
+            .any(|change| matches!(change, FontChange::Sources(_)))
+    }
+
     /// Returns the layers this changeset leaves behind: each replaced layer,
     /// and every layer of a glyph it creates, which counts as structural.
     pub fn touched_layers(&self) -> Vec<TouchedLayer> {
