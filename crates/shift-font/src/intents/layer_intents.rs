@@ -625,23 +625,16 @@ impl LayerIntent for DecomposeComponents {
             layer_id,
             component_ids,
         } = self;
-        let (glyph_id, location) = {
-            let glyph_id = font.require_layer_owner(layer_id)?;
-            let layer = font.require_layer_mut(layer_id)?;
-            for component_id in component_ids {
-                if layer.component(component_id).is_none() {
-                    return Err(CoreError::InvalidComponentId(component_id.to_string()));
-                }
+        let layer = font.require_layer(layer_id)?;
+        for component_id in component_ids {
+            if layer.component(component_id).is_none() {
+                return Err(CoreError::InvalidComponentId(component_id.to_string()));
             }
-            let source_id = layer.source_id();
-            let location = font.require_source(&source_id)?.location().clone();
-            (glyph_id, location)
-        };
-        let resolved_contours = {
-            let mut projection = font.projection(&location);
-            let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
-            projection.component_contours(&glyph_id, &component_ids)?
-        };
+        }
+        let resolved_contours = font.layer_component_contours(
+            layer_id,
+            &component_ids.iter().cloned().collect::<HashSet<_>>(),
+        )?;
 
         let before = font.layer_snapshot(layer_id)?;
         {

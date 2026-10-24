@@ -5,7 +5,7 @@ import { useSignalState } from "../lib/signals";
 import type { ToolbarDock, ToolbarDragState } from "../types/toolbar";
 import { SLOT_FRAME, ToolbarBar } from "./ToolbarBar";
 import { BAR_THICKNESS } from "./toolbarGeometry";
-import { toolbarBarOrigin, toolbarLift, toolbarToolOpacity } from "./toolbarDrag";
+import { toolbarBarOrigin, toolbarLift } from "./toolbarDrag";
 import { TOOLBAR_DOCKS, fitDockToFrame, poseForDock } from "./toolbarPose";
 import { ToolbarZonesOverlay } from "./ToolbarZonesOverlay";
 import { useToolbarDrag } from "./useToolbarDrag";
@@ -149,7 +149,6 @@ export function FloatingToolbar({ editor, dock: hostDock, onDockChange }: Floati
         followStyle={followStyleOf(drag, slot)}
         dragging={drag !== null}
         lift={toolbarLift(drag)}
-        toolOpacity={toolbarToolOpacity(drag)}
         onGripPointerDown={onGripPointerDown}
       />
     </div>
