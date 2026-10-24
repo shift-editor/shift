@@ -474,7 +474,11 @@ impl FontWorkspace {
         self.store
             .apply_change_set_with_font(change_set, &next_font, save_state)?;
         self.font = next_font;
-        self.residency.retain_directory_layers(&self.font);
+        // Sweeping residency looks up every unloaded layer, so do it only when
+        // a change could have removed layers from the directory.
+        if change_set.can_remove_layers() {
+            self.residency.retain_directory_layers(&self.font);
+        }
         Ok(())
     }
 

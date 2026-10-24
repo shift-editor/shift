@@ -1,6 +1,7 @@
 use crate::GlyphName;
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
+use crate::point::Canonical;
 use serde::{Deserialize, Serialize};
 
 /// Whether a component is placed by its anchors or by hand.
@@ -252,8 +253,14 @@ impl DecomposedTransform {
     }
 
     pub fn set_offset(&mut self, offset: kurbo::Vec2) {
-        self.translate_x = offset.x;
-        self.translate_y = offset.y;
+        self.translate_x = offset.x.canonical();
+        self.translate_y = offset.y.canonical();
+    }
+}
+
+impl Canonical for DecomposedTransform {
+    fn canonical(self) -> Self {
+        Self::from_values(self.to_values().map(Canonical::canonical))
     }
 }
 
@@ -371,7 +378,7 @@ impl Component {
             id: ComponentId::new(),
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform,
+            transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -386,7 +393,7 @@ impl Component {
             id,
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform,
+            transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -400,7 +407,7 @@ impl Component {
             id: ComponentId::new(),
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform: DecomposedTransform::from_matrix(matrix),
+            transform: DecomposedTransform::from_matrix(matrix).canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -426,7 +433,7 @@ impl Component {
     }
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
-        self.transform = transform;
+        self.transform = transform.canonical();
     }
 
     pub fn alignment(&self) -> ComponentAlignment {
@@ -438,8 +445,10 @@ impl Component {
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
-        self.transform.translate_x += dx;
-        self.transform.translate_y += dy;
+        let mut transform = self.transform;
+        transform.translate_x += dx;
+        transform.translate_y += dy;
+        self.set_transform(transform);
     }
 }
 
