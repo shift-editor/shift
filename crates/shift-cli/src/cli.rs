@@ -6,6 +6,7 @@ use clap::{Args, ColorChoice, Parser, Subcommand, ValueHint};
 
 use crate::glyph_inspect::GlyphInspectView;
 use crate::inspect::InspectView;
+use crate::proof::ProofArgs;
 
 mod font;
 pub(crate) use font::{FontInfoArgs, SetFontArgs};
@@ -54,6 +55,9 @@ pub(crate) enum Command {
 
     /// Compile a SQLite .shift document to a TrueType font.
     Compile(CompileArgs),
+
+    /// Render text or a glyph grid set in a font to a PNG or SVG proof image.
+    Proof(ProofArgs),
 
     /// Check a font source for problems in its masters, axes, and kerning.
     Check(CheckArgs),

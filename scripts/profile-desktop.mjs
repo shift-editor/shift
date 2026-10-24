@@ -39,6 +39,7 @@ const SCENARIOS = {
   scrub: { run: scrub, editor: true },
   marquee: { run: marquee, editor: true },
   undo: { run: undoRedo, editor: true },
+  "toolbar-drag": { run: toolbarDrag, editor: true },
   open: { run: openFont, editor: false },
 };
 if (!options.font) usage("--font is required");
@@ -181,6 +182,61 @@ async function marquee(page) {
       await page.waitForTimeout(16);
     }
     await page.mouse.up();
+  });
+}
+
+/**
+ * Drags the floating toolbar by its handle in a lap around the canvas for
+ * `seconds`, so tear-off and steering through every edge zone run. Then it
+ * docks the bar on the left and back on the bottom, so both turns between
+ * flat and standing (slide, rotate, and the tools dip) are measured too.
+ */
+async function toolbarDrag(page) {
+  const grip = page.locator('[title="Drag to move"]');
+  await grip.waitFor({ timeout: 10_000 });
+  const gripBox = await grip.boundingBox();
+  const layer = await grip.evaluate((element) => {
+    const rect = element
+      .closest("[data-floating-toolbar]")
+      .parentElement.parentElement.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  if (!gripBox) throw new Error("the toolbar handle is not visible");
+
+  return measure(page, async () => {
+    const centre = { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+    const radius = { x: layer.width * 0.45, y: layer.height * 0.45 };
+    const at = (angle) => ({
+      x: centre.x + radius.x * Math.cos(angle),
+      y: centre.y + radius.y * Math.sin(angle),
+    });
+    const bottom = Math.PI / 2;
+    await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+    await page.mouse.down();
+    const end = Date.now() + seconds * 1000;
+    // One lap takes about two seconds at 16ms per step.
+    let angle = bottom;
+    while (Date.now() < end) {
+      angle += (2 * Math.PI) / 125;
+      const point = at(angle);
+      await page.mouse.move(point.x, point.y);
+      await page.waitForTimeout(16);
+    }
+    // Release over the left zone to stand the bar, then carry it back to the bottom.
+    const left = at(Math.PI);
+    await page.mouse.move(left.x, left.y, { steps: 10 });
+    await page.mouse.up();
+    // Let each drop's slide and turn play out so they are part of the measurement.
+    await page.waitForTimeout(600);
+
+    const standing = await grip.boundingBox();
+    if (!standing) throw new Error("the toolbar handle is not visible after docking left");
+    await page.mouse.move(standing.x + standing.width / 2, standing.y + standing.height / 2);
+    await page.mouse.down();
+    const drop = at(bottom);
+    await page.mouse.move(drop.x, drop.y, { steps: 20 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
   });
 }
 
@@ -423,7 +479,7 @@ function readdirSafe(directory) {
 function usage(problem) {
   console.error(`${problem}
 
-Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open] [--axis Weight]
+Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|toolbar-drag] [--axis Weight]
                             [--seconds 8] [--cpu out.cpuprofile] [--app <executable>] [--keep-open]`);
   process.exit(1);
 }
