@@ -127,6 +127,8 @@ import {
 import type { NodeDefinition } from "../nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
+import { PageNodeDefinition } from "../nodes/PageNodeDefinition";
+import { Pages } from "../pages/Pages";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
 import { PositionTargets } from "../model/positions/PositionTargets";
@@ -193,6 +195,8 @@ export class Editor {
   readonly scene: Scene;
   readonly text: Text;
   readonly textEditing: TextEditing;
+  /** The document's pages and the page the canvas shows. */
+  readonly pages: Pages;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -291,9 +295,11 @@ export class Editor {
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
+    const PageDefinition = options.nodeDefinitions?.page ?? PageNodeDefinition;
     this.#nodeDefinitions = {
       glyph: new GlyphDefinition(this),
       textRun: new TextRunDefinition(this),
+      page: new PageDefinition(this),
     };
 
     this.#view = new EditorViewState();
@@ -313,6 +319,9 @@ export class Editor {
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
+    this.pages = new Pages(this);
+    // A session starts with one page; setup, not an edit.
+    this.pages.ensure();
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectionBounds = computed(
@@ -1079,12 +1088,15 @@ export class Editor {
   }
 
   /** Returns the glyph node showing a layer: one placing the layer's glyph at the layer's source. */
+  /** The glyph node on the active page that shows `layer`, or null. */
   #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
     const glyphId = this.font.glyphIdForLayer(layer.id);
     if (!glyphId) return null;
 
+    const pageId = this.scene.activePageIdCell.peek();
     for (const node of this.scene.nodesReferencing(glyphId)) {
-      if (node.kind === "glyph" && node.sourceId === layer.sourceId) return node;
+      if (node.kind !== "glyph" || node.sourceId !== layer.sourceId) continue;
+      if (this.scene.pageOf(node.id)?.id === pageId) return node;
     }
     return null;
   }
@@ -1147,6 +1159,7 @@ export class Editor {
 
   nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
   nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
+  nodeDefinition(kind: "page"): PageNodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition {
     return this.#nodeDefinitions[kind];

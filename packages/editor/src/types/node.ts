@@ -77,6 +77,22 @@ export interface TextRunNode extends Node {
 }
 
 /**
+ * A top-level canvas.
+ *
+ * @remarks
+ * Every other node descends from exactly one page. A page has no parent, sits
+ * at the scene origin, and draws nothing itself; the canvas shows one page at
+ * a time (`Scene.activePageIdCell`). Pages are ordered among themselves by
+ * `index`, which is their order in the pages list.
+ */
+export interface PageNode extends Node {
+  readonly kind: "page";
+
+  /** Shown in the pages list. */
+  readonly name: string;
+}
+
+/**
  * Maps each scene node kind to its node type.
  *
  * @remarks
@@ -99,6 +115,7 @@ export interface TextRunNode extends Node {
 export interface SceneNodeKinds {
   glyph: GlyphNode;
   textRun: TextRunNode;
+  page: PageNode;
 }
 
 /** Identifies a registered scene node kind. */
