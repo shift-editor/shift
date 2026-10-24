@@ -2,7 +2,7 @@ import type { NodeId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import { indexAfter } from "../editor/Scene";
-import type { Signal } from "../signals";
+import { computed, type Signal } from "../signals";
 import type { PageNode } from "../../types/node";
 import type { PageCamera } from "../../types/page";
 
@@ -23,18 +23,48 @@ export class Pages {
   /**
    * @param editor - editor whose scene holds the pages.
    */
+  readonly #listCell: Signal<readonly PageNode[]>;
+
   constructor(editor: Editor) {
     this.#editor = editor;
+    this.#listCell = computed(
+      () => editor.scene.pagesCell.value.filter((page) => page.role !== "glyph"),
+      { name: "editor.pages.list", equals: samePages },
+    );
   }
 
-  /** Pages in list order; keeps its identity until a page record changes, so a list can render from it. */
+  /**
+   * The user's pages in list order, the glyph view's page left out; keeps its
+   * identity until a page record changes, so a list can render from it.
+   */
   get listCell(): Signal<readonly PageNode[]> {
-    return this.#editor.scene.pagesCell;
+    return this.#listCell;
   }
 
-  /** Pages in list order. */
+  /** The user's pages in list order, the glyph view's page left out. */
   get list(): readonly PageNode[] {
-    return this.#editor.scene.pages();
+    return this.#listCell.peek();
+  }
+
+  /**
+   * Returns the glyph view's page, creating it the first time.
+   *
+   * @remarks
+   * A page that never shows in the pages list (`PageNode.role`), where a
+   * glyph opened from the font overview is edited. Writes a record the first
+   * time, so call it inside `history.withoutRecording` when it is navigation.
+   */
+  glyphView(): PageNode {
+    const existing = this.#editor.scene.pages().find((page) => page.role === "glyph");
+    if (existing) return existing;
+
+    return this.#editor.scene.createNode<PageNode>({
+      kind: "page",
+      name: "Glyph",
+      role: "glyph",
+      position: { x: 0, y: 0 },
+      index: indexAfter(this.#editor.scene.pages().at(-1)?.index ?? null),
+    });
   }
 
   /**
@@ -207,4 +237,8 @@ export class Pages {
 
     return `Page ${number}`;
   }
+}
+
+function samePages(a: readonly PageNode[], b: readonly PageNode[]): boolean {
+  return a.length === b.length && a.every((page, index) => page === b[index]);
 }

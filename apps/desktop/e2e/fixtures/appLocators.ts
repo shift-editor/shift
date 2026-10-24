@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
@@ -6,6 +6,14 @@ const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
 
 export function glyphCatalogViewport(page: Page) {
   return page.getByLabel("Glyph catalog", { exact: true });
+}
+
+/** The glyph search field, opened from the Glyphs header when it is closed. */
+export async function glyphSearch(page: Page): Promise<Locator> {
+  const field = page.getByPlaceholder("Search glyphs...");
+  if (!(await field.isVisible())) await page.getByRole("button", { name: "Search glyphs" }).click();
+  await expect(field).toBeVisible();
+  return field;
 }
 
 export function glyphCatalogSurface(page: Page) {
@@ -43,7 +51,7 @@ export function fontNavigation(page: Page) {
 }
 
 export function editorSidebar(page: Page) {
-  return page.getByRole("complementary", { name: "Glyph objects and variations" });
+  return page.getByRole("complementary", { name: "Layers and designspace" });
 }
 
 export function variationControls(page: Page) {
@@ -159,7 +167,7 @@ export async function openCatalogGlyph(
 ): Promise<void> {
   const surface = glyphCatalogSurface(page);
   await expect(surface).toBeVisible();
-  await page.getByPlaceholder("Search glyphs...").fill(glyphName);
+  await (await glyphSearch(page)).fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
   await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {

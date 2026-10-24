@@ -11,6 +11,7 @@ export interface SidebarActionRowProps {
   joinsPrevious?: boolean;
   joinsNext?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onDoubleClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   className?: string;
   contentClassName?: string;
@@ -27,6 +28,7 @@ export const SidebarActionRow = ({
   joinsPrevious,
   joinsNext,
   onClick,
+  onDoubleClick,
   onKeyDown,
   className,
   contentClassName,
@@ -60,6 +62,7 @@ export const SidebarActionRow = ({
           delete event.currentTarget.dataset.pointerFocus;
         }}
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
         onKeyDown={onKeyDown}
         className={cn("w-auto flex-1 data-[pointer-focus]:focus-visible:ring-0", contentClassName)}
       >

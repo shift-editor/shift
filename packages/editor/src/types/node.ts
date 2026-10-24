@@ -90,6 +90,13 @@ export interface PageNode extends Node {
 
   /** Shown in the pages list. */
   readonly name: string;
+
+  /**
+   * `glyph` for the glyph view's page: where a glyph opened from the font
+   * overview is edited. It never shows in the pages list, so boards stay as
+   * the user arranged them. Absent for an ordinary page.
+   */
+  readonly role?: "glyph";
 }
 
 /**
