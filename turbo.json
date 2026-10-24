@@ -78,7 +78,8 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
+      "outputs": ["src/generated/**", "src/generated-shaping/**"],
+      "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:debug": {
       "inputs": [
@@ -91,7 +92,8 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
+      "outputs": ["src/generated/**", "src/generated-shaping/**"],
+      "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:e2e": {
       "inputs": [
@@ -104,7 +106,22 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
+      "outputs": ["src/generated/**", "src/generated-shaping/**"],
+      "env": ["SHIFT_WASM_OPT"]
+    },
+    "@shift/wasm#build:reference": {
+      "inputs": [
+        "scripts/**",
+        "package.json",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["src/generated-reference/**"],
+      "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#types": {
       "inputs": [
@@ -261,12 +278,12 @@
     "test": {
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"],
-      "dependsOn": ["@shift/wasm#build"]
+      "dependsOn": ["@shift/wasm#build", "@shift/wasm#build:reference"]
     },
     "@shift/editor#test": {
       "outputs": [],
       "inputs": ["src/**", "*.config.ts", "$TURBO_ROOT$/packages/*/src/**"],
-      "dependsOn": ["@shift/wasm#build"]
+      "dependsOn": ["@shift/wasm#build", "@shift/wasm#build:reference"]
     },
     "@shift/glyph-info#test": {
       "dependsOn": ["generate"],
@@ -278,7 +295,8 @@
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
         "@shift/glyph-info#generate",
-        "@shift/wasm#build"
+        "@shift/wasm#build",
+        "@shift/wasm#build:reference"
       ],
       "outputs": [],
       "inputs": [
@@ -296,7 +314,7 @@
     "test:watch": {
       "cache": false,
       "persistent": true,
-      "dependsOn": ["@shift/wasm#build"]
+      "dependsOn": ["@shift/wasm#build", "@shift/wasm#build:reference"]
     },
     "@shift/glyph-info#test:watch": {
       "dependsOn": ["generate"],
@@ -308,7 +326,8 @@
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
         "@shift/glyph-info#generate",
-        "@shift/wasm#build"
+        "@shift/wasm#build",
+        "@shift/wasm#build:reference"
       ],
       "cache": false,
       "persistent": true

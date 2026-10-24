@@ -9,9 +9,15 @@
 // match the crate version in Cargo.lock exactly; wasm-opt comes from the
 // pinned binaryen devDependency.
 //
-// With `--types`, it writes only each variant's declarations (shift_wasm.d.ts
-// and module.d.ts) from a debug build without wasm-opt, for typecheck. The
-// release build writes the same declarations, so the two never disagree.
+// A plain run builds the variants the app loads (`generated`,
+// `generated-shaping`); `--reference` builds only the test-only reference
+// variant. With `--types`, it writes every variant's declarations
+// (shift_wasm.d.ts and module.d.ts) from a debug build, for typecheck. Release
+// builds write the same declarations, so the two never disagree.
+//
+// wasm-opt only shrinks the module, so it runs only with SHIFT_WASM_OPT=1, which
+// the Nightly, release and perf workflows set; everywhere else, including
+// local builds and CI tests, skips its ~20 s.
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -21,6 +27,8 @@ import { dirname, join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "../../..");
 const src = resolve(import.meta.dirname, "../src");
 const typesOnly = process.argv.includes("--types");
+const referenceOnly = process.argv.includes("--reference");
+const optimise = process.env.SHIFT_WASM_OPT === "1";
 const profile = typesOnly ? "debug" : "release";
 const run = (command, args, env = process.env) =>
   new Promise((resolvePromise, reject) => {
@@ -43,14 +51,18 @@ if (locked !== cli) {
 }
 
 /**
- * Each build: its folder under src and the crate features it enables. Largest
- * module first, so its wasm-opt pass overlaps the other variants' compiles.
+ * Each build: its folder under src, the crate features it enables, and whether
+ * only tests load it. Largest module first, so its wasm-opt pass overlaps the
+ * other variants' compiles.
  */
-const variants = [
-  { folder: "generated-shaping", features: ["shaping"] },
-  { folder: "generated-reference", features: ["reference"] },
-  { folder: "generated", features: [] },
+const allVariants = [
+  { folder: "generated-shaping", features: ["shaping"], testOnly: false },
+  { folder: "generated-reference", features: ["reference"], testOnly: true },
+  { folder: "generated", features: [], testOnly: false },
 ];
+const variants = typesOnly
+  ? allVariants
+  : allVariants.filter((variant) => variant.testOnly === referenceOnly);
 
 // Compiles run in turn: they share one target directory, so later variants
 // reuse the crates the first one compiled. Each variant's optimisation then
@@ -135,24 +147,10 @@ function writeDeclarations(staged, out) {
   );
 }
 
-/** Optimises the staged module and installs the glue and the embedded module in `out`. */
+/** Optimises the staged module when asked and installs the glue and the embedded module in `out`. */
 async function finish(staged, out) {
   const wasm = join(staged, "shift_wasm_bg.wasm");
-  await run(process.execPath, [
-    wasmOpt,
-    "-Oz",
-    ...[
-      "bulk-memory",
-      "multivalue",
-      "mutable-globals",
-      "nontrapping-float-to-int",
-      "reference-types",
-      "sign-ext",
-    ].map((feature) => `--enable-${feature}`),
-    wasm,
-    "-o",
-    wasm,
-  ]);
+  if (optimise) await optimiseModule(wasm);
 
   // The module is embedded below; the glue's fetch-by-URL fallback would make
   // bundlers emit an unused copy of it.
@@ -177,4 +175,23 @@ function install(path, contents) {
   const next = `${path}.next`;
   writeFileSync(next, contents);
   renameSync(next, path);
+}
+
+/** Shrinks `wasm` in place with wasm-opt. */
+async function optimiseModule(wasm) {
+  await run(process.execPath, [
+    wasmOpt,
+    "-Oz",
+    ...[
+      "bulk-memory",
+      "multivalue",
+      "mutable-globals",
+      "nontrapping-float-to-int",
+      "reference-types",
+      "sign-ext",
+    ].map((feature) => `--enable-${feature}`),
+    wasm,
+    "-o",
+    wasm,
+  ]);
 }
