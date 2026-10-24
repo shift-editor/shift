@@ -525,20 +525,20 @@ mod tests {
             .set_group(left.clone(), first("left", vec![a.clone(), b.clone()]))
             .unwrap();
         let moved = kerning
-            .set_group(right.clone(), first("right", vec![b.clone(), c.clone()]))
+            .set_group(right, first("right", vec![b.clone(), c.clone()]))
             .unwrap();
-        assert_eq!(moved, [b.clone()]);
+        assert_eq!(moved, [b]);
         assert_members_match_scan(&kerning, &glyphs);
 
         // A replayed change can leave a glyph in two groups for a moment.
-        kerning.put_group(&left, Some(first("left", vec![a.clone(), c.clone()])));
+        kerning.put_group(&left, Some(first("left", vec![a, c])));
         assert_members_match_scan(&kerning, &glyphs);
 
         kerning.remove_group(&left);
         assert_members_match_scan(&kerning, &glyphs);
 
         kerning
-            .set_group(left.clone(), first("left", vec![d.clone()]))
+            .set_group(left.clone(), first("left", vec![d]))
             .unwrap();
         let reloaded: Kerning =
             serde_json::from_str(&serde_json::to_string(&kerning).unwrap()).unwrap();
