@@ -10,6 +10,17 @@ use crate::{ShiftStore, StoreError};
 
 pub use overlay::{RecoveryOverlay, RecoveryState};
 
+/// Attaches the overlay at `path` and shows the merged document through the
+/// connection's temporary views, as a recovered store reads it. The
+/// connection's open flags carry over, so a read-only connection stays one.
+pub(crate) fn attach_merged_views(
+    conn: &rusqlite::Connection,
+    path: &Path,
+) -> Result<(), StoreError> {
+    views::attach_recovery(conn, path)?;
+    views::install_merged_views(conn)
+}
+
 pub(crate) fn apply_overlay_to_snapshot(
     conn: &mut rusqlite::Connection,
     recovery: &RecoveryOverlay,

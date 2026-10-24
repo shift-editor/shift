@@ -20,6 +20,9 @@ pub use load::{MAX_LAYER_READ_BATCH_COUNT, MAX_LAYER_READ_BATCH_DECODED_BYTES};
 pub(crate) use format::encode_layer;
 pub(crate) use load::load_glyph_layers_from_conn;
 pub(crate) use payload::StoredLayerPayload;
+pub(crate) use references::{
+    dependent_glyph_ids_for_layers_from_conn, referenced_glyph_closure_from_conn,
+};
 #[cfg(test)]
 pub(crate) use write::rewrite_layer_in_tx;
 pub(crate) use write::{store_stored_layer_in_tx, write_layer_in_tx};
