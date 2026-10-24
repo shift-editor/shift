@@ -2346,6 +2346,7 @@ export class Editor {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
     this.#multiSourceEditing.dispose();
+    this.nodeDefinition("glyph").outlines.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
     this.text.dispose();
