@@ -110,7 +110,9 @@ impl Font {
         let mut before_glyphs = HashMap::new();
         for glyph_id in &touched_glyph_ids {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
-                state.index.remove_records(glyph_id, glyph);
+                state
+                    .index
+                    .remove(&IndexEntries::records_of_glyph(glyph_id, glyph));
                 before_glyphs.insert(glyph_id.clone(), Arc::clone(glyph));
             }
         }
@@ -312,10 +314,7 @@ mod tests {
 
     fn assert_index_matches_rebuild(font: &Font) {
         let rebuilt = FontIndex::from_glyphs(&font.state.data.glyphs).unwrap();
-        let index = &font.state.index;
-        assert_eq!(index.glyphs, rebuilt.glyphs);
-        assert_eq!(index.layers, rebuilt.layers);
-        assert_eq!(index.entity_ids, rebuilt.entity_ids);
+        assert_eq!(font.state.index, rebuilt);
     }
 
     /// A closed 100-unit square on `A_regular`.

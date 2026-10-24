@@ -111,6 +111,31 @@ where
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.0.iter()
     }
+
+    /// Inserts every value, failing with the first one already present.
+    ///
+    /// # Errors
+    ///
+    /// Returns that value, with the values before it inserted. Insert into a
+    /// copy and keep it only on success.
+    pub(crate) fn try_extend(&mut self, values: impl IntoIterator<Item = T>) -> Result<(), T> {
+        for value in values {
+            if self.0.contains(&value) {
+                return Err(value);
+            }
+            self.0.insert(value);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn remove_all<'a>(&mut self, values: impl IntoIterator<Item = &'a T>)
+    where
+        T: 'a,
+    {
+        for value in values {
+            self.0.remove(value);
+        }
+    }
 }
 
 impl<T> Default for PersistentSet<T>
@@ -163,12 +188,170 @@ where
             self.0.remove(key);
         }
     }
+
+    pub(crate) fn remove_all<'a>(&mut self, entries: impl IntoIterator<Item = &'a (K, V)>)
+    where
+        K: 'a,
+        V: 'a,
+    {
+        for (key, value) in entries {
+            self.remove(key, value);
+        }
+    }
+}
+
+impl<K, V> Extend<(K, V)> for PersistentMultiMap<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Hash + Eq + Clone,
+{
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, entries: I) {
+        for (key, value) in entries {
+            self.insert(key, value);
+        }
+    }
 }
 
 impl<K, V> Default for PersistentMultiMap<K, V>
 where
     K: Hash + Eq + Clone,
     V: Hash + Eq + Clone,
+{
+    fn default() -> Self {
+        Self(PersistentMap::default())
+    }
+}
+
+/// A map whose keys may each be held by one value, whose copies share
+/// structure.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UniqueIndex<K, V>(PersistentMap<K, V>)
+where
+    K: Hash + Eq + Clone,
+    V: Clone;
+
+impl<K, V> UniqueIndex<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Clone,
+{
+    pub(crate) fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        self.0.get(key)
+    }
+
+    /// Inserts every entry, failing with the first key already held.
+    ///
+    /// # Errors
+    ///
+    /// Returns that key, with the entries before it inserted. Insert into a
+    /// copy and keep it only on success.
+    pub(crate) fn try_extend(
+        &mut self,
+        entries: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), K> {
+        for (key, value) in entries {
+            if self.0.contains_key(&key) {
+                return Err(key);
+            }
+            self.0.insert(key, value);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn remove_all<'a>(&mut self, entries: impl IntoIterator<Item = &'a (K, V)>)
+    where
+        K: 'a,
+        V: 'a,
+    {
+        for (key, _) in entries {
+            self.0.remove(key);
+        }
+    }
+}
+
+impl<K, V> Default for UniqueIndex<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Clone,
+{
+    fn default() -> Self {
+        Self(PersistentMap::default())
+    }
+}
+
+/// A map from each key to the values filed under it in the order they were
+/// filed, whose copies share structure. A key with no values is never
+/// stored.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PersistentListMultiMap<K, V>(PersistentMap<K, Vec<V>>)
+where
+    K: Hash + Eq + Clone,
+    V: Eq + Clone;
+
+impl<K, V> PersistentListMultiMap<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Eq + Clone,
+{
+    /// The values filed under `key`, in order.
+    pub(crate) fn get(&self, key: &K) -> impl Iterator<Item = &V> + use<'_, K, V> {
+        self.0.get(key).into_iter().flatten()
+    }
+
+    /// Files `value` last under `key`.
+    pub(crate) fn push(&mut self, key: K, value: V) {
+        self.0.get_or_default(key).push(value);
+    }
+
+    /// Removes `value` from `key`, and `key` with it when no values remain.
+    pub(crate) fn remove(&mut self, key: &K, value: &V) {
+        let Some(values) = self.0.get_mut(key) else {
+            return;
+        };
+        values.retain(|held| held != value);
+        if values.is_empty() {
+            self.0.remove(key);
+        }
+    }
+
+    pub(crate) fn remove_all<'a>(&mut self, entries: impl IntoIterator<Item = &'a (K, V)>)
+    where
+        K: 'a,
+        V: 'a,
+    {
+        for (key, value) in entries {
+            self.remove(key, value);
+        }
+    }
+
+    /// Orders the values under `key` by `order`.
+    pub(crate) fn sort_by_key<O: Ord>(&mut self, key: &K, order: impl FnMut(&V) -> O) {
+        if let Some(values) = self.0.get_mut(key) {
+            values.sort_by_key(order);
+        }
+    }
+}
+
+impl<K, V> Extend<(K, V)> for PersistentListMultiMap<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Eq + Clone,
+{
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, entries: I) {
+        for (key, value) in entries {
+            self.push(key, value);
+        }
+    }
+}
+
+impl<K, V> Default for PersistentListMultiMap<K, V>
+where
+    K: Hash + Eq + Clone,
+    V: Eq + Clone,
 {
     fn default() -> Self {
         Self(PersistentMap::default())
@@ -331,6 +514,29 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unique_index_rejects_a_held_or_repeated_key() {
+        let mut index = UniqueIndex::default();
+        index.try_extend([("A", 1)]).unwrap();
+
+        assert_eq!(index.clone().try_extend([("B", 2), ("A", 3)]), Err("A"));
+        assert_eq!(index.clone().try_extend([("C", 4), ("C", 5)]), Err("C"));
+        assert_eq!(index.get("A"), Some(&1));
+    }
+
+    #[test]
+    fn list_multimap_keeps_filing_order_and_drops_an_empty_key() {
+        let mut map = PersistentListMultiMap::default();
+        map.extend([(65, "b"), (65, "a")]);
+        assert_eq!(map.get(&65).collect::<Vec<_>>(), [&"b", &"a"]);
+
+        map.sort_by_key(&65, |value| *value);
+        assert_eq!(map.get(&65).collect::<Vec<_>>(), [&"a", &"b"]);
+
+        map.remove_all(&[(65, "a"), (65, "b")]);
+        assert_eq!(map, PersistentListMultiMap::default());
+    }
 
     #[test]
     fn multimap_drops_a_key_with_no_values_left() {
