@@ -78,6 +78,16 @@ Let the type system state intent instead of comments, flags and tuples. Clippy e
 - **Points and vectors are `kurbo::Point`/`Vec2`**, and blending uses their operators (`point += weight * master_point`), not paired `x`/`y` arithmetic.
 - **Prefer `let … else`, `if let` chains (edition 2024) and early returns** over nested `match` or `if let`, and name non-trivial intermediate values.
 
+## Data structures
+
+An edit should cost what the edited thing costs, not what the font costs. A `Font` is copied on the first write of every edit, so whatever it holds is copied or rescanned on every keystroke.
+
+- **Answer a repeated query from an index, not a scan.** A lookup that walks every glyph, layer, group or pair (`iter().find(…)`, `iter().filter(…).collect()`) is a missing index. Keep one beside the data and update it where the data changes: `FontIndex` maps layers to owners and component bases to the layers that use them; `KerningGroups` maps each glyph to its groups.
+- **Give each invariant one owner.** An index with several maps that must agree is a named type whose methods change them together (`FontIndex { glyphs, layers, entity_ids }`), not loose fields that every caller updates by hand. Validate before mutating, so a rejected edit leaves the font unchanged.
+- **Wrap third-party collections.** Font state that grows with the font uses the persistent collections in `ir/persistent.rs` (`PersistentMap`, `PersistentSet`, `PersistentMultiMap`, `PersistentOrdMap`, `PersistentVec`), which copy in O(1) and change in O(log n). Only that module names the backing crate; add the operation you need there instead of reaching through to `imbl`.
+- **Collect a query's result into a type that states its order and uniqueness**, such as a `BTreeSet`, rather than pushing, sorting and deduplicating a `Vec`.
+- **Change only what changed.** Compare persistent copies with `ptr_eq` before walking them, and diff two versions of a collection rather than rebuilding everything derived from it.
+
 ## Rules the editor needs
 
 When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
@@ -93,4 +103,5 @@ When the editor needs a shift-font rule synchronously, write it as a plain-data 
 - [ ] No new `bool` parameter for a choice with consequences; no new `kind: "…"` string.
 - [ ] Collections built in loops implement `FromIterator`/`Extend` and are collected.
 - [ ] No tuple of three or more fields returned, stored or destructured with `_`; no free function whose first parameter is its owner.
+- [ ] No scan of the whole font for a query an edit repeats; indexes that must agree have one owning type; no `imbl` outside `ir/persistent.rs`.
 - [ ] `cargo fmt`, `cargo clippy` for the affected crates, and their tests pass.
