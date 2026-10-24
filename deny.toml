@@ -38,10 +38,15 @@ allow = [
 ]
 confidence-threshold = 0.9
 # BSD-3-Clause is permissive; allowed per crate so each new one is reviewed.
+# MPL-2.0 is file-level copyleft: Shift uses these crates unmodified, so its
+# own code stays MIT OR Apache-2.0. Only changes to their files must be shared.
 exceptions = [
   # PNG proof rendering in shift-proof.
   { crate = "tiny-skia", allow = ["BSD-3-Clause"] },
   { crate = "tiny-skia-path", allow = ["BSD-3-Clause"] },
+  # Persistent collections behind shift-font's ir/persistent.rs.
+  { crate = "imbl", allow = ["MPL-2.0"] },
+  { crate = "imbl-sized-chunks", allow = ["MPL-2.0"] },
 ]
 
 [bans]
