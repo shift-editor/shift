@@ -51,6 +51,22 @@
       ],
       "outputs": ["index.js", "index.d.ts", "*.node"]
     },
+    "shift-bridge#types": {
+      "inputs": [
+        "src/**",
+        "package.json",
+        "Cargo.toml",
+        "dts-header.d.ts",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**",
+        "scripts/**"
+      ],
+      "outputs": ["index.d.ts"]
+    },
     "@shift/wasm#build": {
       "inputs": [
         "scripts/**",
@@ -90,8 +106,21 @@
       ],
       "outputs": ["src/generated/**", "src/generated-reference/**", "src/generated-shaping/**"]
     },
+    "@shift/wasm#types": {
+      "inputs": [
+        "scripts/**",
+        "package.json",
+        "$TURBO_ROOT$/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/rust-toolchain.toml",
+        "$TURBO_ROOT$/crates/*/Cargo.toml",
+        "$TURBO_ROOT$/crates/*/build.rs",
+        "$TURBO_ROOT$/crates/*/src/**"
+      ],
+      "outputs": ["src/generated*/shift_wasm.d.ts", "src/generated*/module.d.ts"]
+    },
     "generate:bridge-types": {
-      "dependsOn": ["shift-bridge#build"],
+      "dependsOn": ["shift-bridge#types"],
       "inputs": [
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
         "$TURBO_ROOT$/crates/shift-bridge/dts-header.d.ts",
@@ -103,7 +132,7 @@
       "outputs": ["resources/**"]
     },
     "typecheck": {
-      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#build"],
+      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#types"],
       "outputs": []
     },
     "@shift/glyph-info#typecheck": {
@@ -115,7 +144,7 @@
         "@shift/glyph-info#generate",
         "^generate:bridge-types",
         "generate:bridge-types",
-        "@shift/wasm#build"
+        "@shift/wasm#types"
       ],
       "outputs": [],
       "inputs": [

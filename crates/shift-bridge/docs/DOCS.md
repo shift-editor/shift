@@ -115,7 +115,7 @@ All selected-glyph reads must stay location-independent. Do not add resolved SVG
 ## Gotchas
 
 - Every ID crosses the NAPI boundary as a string. Parse through `input.rs` (`parse::<PointId>(&value)`) so a malformed ID becomes a typed `BridgeError::InvalidInput`; a bare `.parse().unwrap()` inside a `#[napi]` method panics across the FFI boundary and takes the utility process down.
-- `index.d.ts` is generated output — hand edits are overwritten by the next native build. The order matters: rebuild the addon with `pnpm --filter shift-bridge run build:debug` first, then run `pnpm generate:bridge-types`. Regenerating without rebuilding derives the TypeScript facade from a stale declaration file, which typechecks but lies.
+- `index.d.ts` is generated output — hand edits are overwritten by the next native build or `types` run. `pnpm generate:bridge-types` refreshes it first through `shift-bridge#types` (`scripts/types.mjs`), which writes the same file from a `cargo check` in seconds instead of a release build: napi-derive's macros write each crate's definitions while they expand. That check uses its own target directory (`target/napi-types`), because napi-derive writes definitions only when `NAPI_TYPE_DEF_TMP_FOLDER` is set, and a check without it in a shared directory would leave a crate up to date with no fresh definitions.
 - A new branded ID type used in a `#[napi]` signature must also be added to `dts-header.d.ts`, or the generated declarations reference a type TypeScript cannot resolve.
 - The bridge never allocates recovery paths or decides which document address owns an overlay; putting that policy here can attach one recovery database to two live sessions.
 - Mutations must go through the paths that call `mark_font_changed()`. Dirty/saved reporting comes from the workspace ledger via `workspace.is_dirty()`, not from the bridge's `live_version`/`saved_version` counters (written but never read), so what a skipped `mark_font_changed()` actually breaks is Slug invalidation: stale prepared Slug atlas output stays live, violating the contract that every font edit invalidates unconsumed output.
@@ -130,7 +130,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm --filter shift-bridge run build:debug
-pnpm generate:bridge-types
+pnpm generate:bridge-types   # runs shift-bridge#types first
 SHIFT_PROFILE_SLUG_ATLAS=1 node crates/shift-bridge/scripts/profile-slug-atlas.mjs /path/to/font.shift 10
 ```
 
