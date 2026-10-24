@@ -55,10 +55,10 @@ pub(crate) fn realign_attached_components<'a>(
     }
 
     // Touched layers plus composites that stack components on a glyph whose
-    // anchors moved, found through the component index rather than a scan of
-    // every layer. Visited in glyph order, then layer order, so every engine
-    // emits the same changeset.
-    let mut candidates: Vec<(Option<usize>, LayerId)> = touched
+    // anchors moved, found through the component index, once each and in
+    // glyph then layer order so every engine emits the same changeset.
+    // Derived anchored placement retires this query.
+    let candidates: BTreeSet<(Option<usize>, LayerId)> = touched
         .iter()
         .copied()
         .chain(
@@ -66,8 +66,6 @@ pub(crate) fn realign_attached_components<'a>(
                 .iter()
                 .flat_map(|glyph_id| after.layers_using_component_base(glyph_id)),
         )
-        .collect::<HashSet<&LayerId>>()
-        .into_iter()
         .filter(|layer_id| {
             after
                 .layer(layer_id)
@@ -80,7 +78,6 @@ pub(crate) fn realign_attached_components<'a>(
             (glyph_order, layer_id.clone())
         })
         .collect();
-    candidates.sort_unstable();
 
     let mut changed_layers = Vec::new();
     for (_, layer_id) in candidates {
