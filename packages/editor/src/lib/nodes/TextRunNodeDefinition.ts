@@ -1,4 +1,4 @@
-import { NodeDefinition } from "./NodeDefinition";
+import { NodeDefinition, type ChildPlacement } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
@@ -38,18 +38,27 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   readonly #outline = new OutlineRenderer();
 
   unitsTransform(node: TextRunNode): Mat {
-    const scale = this.#scale(node);
+    const scale = this.emScale(node);
     return Mat.Scale(scale, -scale);
   }
 
   /**
-   * Places a child glyph at its item's layout position, so the run reflows around it.
+   * Returns how many scene units one font unit of the run spans: its size over
+   * the font's units per em, 1 when the run is set at the font's own size.
+   */
+  emScale(node: TextRunNode): number {
+    return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
+  }
+
+  /**
+   * Places a child glyph at its item's layout position and the run's size, so
+   * the run reflows around it and it matches the glyphs beside it.
    *
    * @remarks
    * Tracks the run's layout, so reactive readers of the child's placement
    * update when text, metrics, or location move it.
    */
-  override childPosition(node: TextRunNode, child: ShiftNode): Point2D | null {
+  override childPlacement(node: TextRunNode, child: ShiftNode): ChildPlacement | null {
     if (child.kind !== "glyph" || !child.itemId) return null;
     const layoutCell = this.editor.text.layoutCell(node.runId);
     track(layoutCell);
@@ -58,7 +67,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       layout?.placedGlyph(child.itemId, child.glyphId) ?? layout?.placedGlyphForItem(child.itemId);
     if (!placed) return null;
 
-    return Mat.applyToPoint(this.unitsTransform(node), placed.origin);
+    return {
+      position: Mat.applyToPoint(this.unitsTransform(node), placed.origin),
+      scale: this.emScale(node),
+    };
   }
 
   /** Returns the run's child glyph node, the glyph edited in place, or null. */
@@ -280,7 +292,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const radius = this.editor.hitRadius / this.#scale(node);
+    const radius = this.editor.hitRadiusIn(node);
     let target: PointerTarget | null = null;
     this.#forEachRunGlyph(node, layout, (placed, itemId, model, glyphId) => {
       const local = {
@@ -311,7 +323,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const layout = this.editor.text.layoutCell(node.runId).peek();
     if (!layout) return null;
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     let nearest: SpacingGap | null = null;
     for (const gap of this.#gaps(node, layout)) {
       if (point.y < gap.bottom - padding || point.y > gap.top + padding) continue;
@@ -431,7 +443,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const hit = layout.hitTest(point);
     if (hit) return hit.cluster + (hit.side === "right" ? 1 : 0);
 
-    const padding = this.editor.hitRadius / this.#scale(node);
+    const padding = this.editor.hitRadiusIn(node);
     for (const line of layout.lines) {
       if (point.y < line.y + line.descent - padding || point.y > line.y + line.ascent + padding)
         continue;
@@ -601,10 +613,6 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (isTextItemId(id)) ids.add(id);
     }
     return ids;
-  }
-
-  #scale(node: TextRunNode): number {
-    return node.size / this.editor.font.metricsCell.peek().unitsPerEm;
   }
 }
 
