@@ -9,8 +9,6 @@
 //! retained but never resolve, so deleting and restoring one keeps its
 //! kerning intact.
 
-use std::collections::{BTreeSet, HashSet};
-
 use crate::persistent::{PersistentMultiMap, PersistentOrdMap};
 use crate::{CoreError, CoreResult, GlyphId, KerningGroupId, Require, SourceId};
 use serde::{Deserialize, Serialize};
@@ -186,6 +184,17 @@ impl KerningGroups {
         Some(group)
     }
 
+    /// Takes `glyph_id` out of `group_id`, leaving the group's other members
+    /// filed where they are.
+    fn remove_member(&mut self, group_id: &KerningGroupId, glyph_id: &GlyphId) {
+        let Some(group) = self.groups.get_mut(group_id) else {
+            return;
+        };
+        group.members.retain(|member| member != glyph_id);
+        self.members
+            .remove(&(group.position, glyph_id.clone()), group_id);
+    }
+
     fn rename(&mut self, group_id: &KerningGroupId, name: String) -> CoreResult<()> {
         self.groups.get_mut(group_id).require(group_id)?.name = name;
         Ok(())
@@ -291,28 +300,15 @@ impl Kerning {
         }
         group.members = unique;
 
-        // Only the groups the new members come from change, in id order.
-        let claimed: HashSet<&GlyphId> = group.members.iter().collect();
-        let losing: BTreeSet<KerningGroupId> = group
-            .members
-            .iter()
-            .filter_map(|member| self.groups.group_of(group.position, member))
-            .filter(|other_id| **other_id != group_id)
-            .cloned()
-            .collect();
         let mut moved = Vec::new();
-        for other_id in losing {
-            let Some(mut other) = self.groups.get(&other_id).cloned() else {
+        for member in &group.members {
+            let Some(other_id) = self.groups.group_of(group.position, member).cloned() else {
                 continue;
             };
-            other.members.retain(|member| {
-                let taken = claimed.contains(member);
-                if taken {
-                    moved.push(member.clone());
-                }
-                !taken
-            });
-            self.groups.insert(other_id, other);
+            if other_id != group_id {
+                self.groups.remove_member(&other_id, member);
+                moved.push(member.clone());
+            }
         }
         self.groups.insert(group_id, group);
         Ok(moved)
