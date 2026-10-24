@@ -7,6 +7,7 @@ import {
   externalAxisLocationFromRecord,
   type Designspace,
 } from "@shift/editor/variation";
+import { LocationDraft, type LocationDraftValues } from "./locationDraft";
 
 const LOCATION_TOLERANCE = 1e-6;
 
@@ -19,16 +20,10 @@ const LOCATION_TOLERANCE = 1e-6;
  */
 export function sourceLocation(
   axes: readonly Axis[],
-  values: Readonly<Record<string, string>>,
+  values: LocationDraftValues["location"],
 ): ExternalAxisLocation | null {
-  const entries = axes.map((axis) => {
-    const input = values[axis.id];
-    const value = input?.trim() ? Number(input) : Number.NaN;
-    return [axis.id, value] as const;
-  });
-  if (entries.some(([, value]) => !Number.isFinite(value))) return null;
-
-  return externalAxisLocationFromRecord(Object.fromEntries(entries));
+  const coordinates = new LocationDraft({ name: "", location: values }).coordinates(axes);
+  return coordinates ? externalAxisLocationFromRecord(coordinates) : null;
 }
 
 /**
@@ -42,20 +37,15 @@ export function sourceLocation(
  */
 export function sourceCreationIssue(
   name: string,
-  values: Readonly<Record<string, string>>,
+  values: LocationDraftValues["location"],
   designspace: Designspace,
 ): SourceCreationIssue | null {
   const { axes, sources } = designspace;
-  const trimmedName = name.trim();
-  if (!trimmedName) return { kind: "name", message: "Enter a source name" };
-  if (sources.some((source) => source.name === trimmedName)) {
-    return { kind: "name", message: `A source named “${trimmedName}” already exists` };
-  }
+  const draft = new LocationDraft({ name, location: values });
+  const nameIssue = draft.nameIssue("a source", sources);
+  if (nameIssue) return nameIssue;
 
-  const invalidAxis = axes.find((axis) => {
-    const input = values[axis.id];
-    return !input?.trim() || !Number.isFinite(Number(input));
-  });
+  const invalidAxis = draft.invalidAxis(axes);
   if (invalidAxis) {
     return {
       kind: "axis",
@@ -64,10 +54,10 @@ export function sourceCreationIssue(
     };
   }
 
-  const external = externalAxisLocationFromRecord(
-    Object.fromEntries(axes.map((axis) => [axis.id, Number(values[axis.id])])),
-  );
-  const target = designspace.toDesign(external);
+  const coordinates = draft.coordinates(axes);
+  if (!coordinates) return null;
+
+  const target = designspace.toDesign(externalAxisLocationFromRecord(coordinates));
   const existing = sources.find((source) =>
     designAxisLocationsEqual(
       designAxisLocationFromLocation(source.location),
