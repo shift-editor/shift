@@ -119,21 +119,21 @@ impl FontIndex {
         before: &HashMap<GlyphId, Arc<Glyph>>,
         glyphs: &PersistentEntityList<Arc<Glyph>>,
     ) -> CoreResult<()> {
-        let ids_changed: HashSet<&GlyphId> = touched
-            .iter()
-            .filter(|glyph_id| {
-                !before
-                    .get(*glyph_id)
-                    .zip(glyphs.get(glyph_id))
-                    .is_some_and(|(before, after)| before.has_same_entity_ids(after))
-            })
-            .collect();
+        // Every release lands before any claim, so a glyph can take an id
+        // another touched glyph gave up.
         let mut transfer = EntityIdTransfer::default();
-        for glyph in ids_changed
-            .iter()
-            .filter_map(|glyph_id| before.get(*glyph_id))
-        {
-            transfer.release(glyph.entity_ids());
+        let mut ids_changed = HashSet::new();
+        for glyph_id in touched {
+            let old = before.get(glyph_id);
+            if let (Some(old), Some(new)) = (old, glyphs.get(glyph_id))
+                && old.has_same_entity_ids(new)
+            {
+                continue;
+            }
+            if let Some(old) = old {
+                transfer.release(old.entity_ids());
+            }
+            ids_changed.insert(glyph_id);
         }
 
         let mut unicodes = BTreeSet::new();
