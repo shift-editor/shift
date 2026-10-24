@@ -31,6 +31,8 @@ export type SelectionRecord = ShiftRecord<"selection", SelectionId> & {
 export type EditingRecord = ShiftRecord<"editing", EditingId> & {
   readonly scope: "session";
   readonly nodeIds: readonly NodeId[];
+  /** Whether editing `nodeIds` is suspended, as in Hand and Text modes, until restored. */
+  readonly suspended: boolean;
 };
 
 export type ShiftEditorRecord =

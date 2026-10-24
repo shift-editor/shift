@@ -22,20 +22,22 @@ const EMPTY_METRICS: GlyphMetricsState = {
 };
 
 /**
- * Tracks live metrics for the single glyph placed in the scene.
+ * Tracks live metrics for the glyph the session shows, `editing.subject("glyph")`.
  *
- * Returns empty metrics when the scene holds zero or several glyph nodes, so
- * metric edits never target an ambiguous occurrence.
+ * @remarks
+ * Keeps reading while editing is suspended (Hand, Text), like the editor's
+ * metric setters, which write through the same reader. Returns empty metrics
+ * when no single glyph qualifies, so metric edits never target an ambiguous
+ * occurrence.
  */
 export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
   const metricsCell = useMemo(
     () =>
       computed((): GlyphMetricsState => {
-        const node = editor.scene.onlyCell("glyph").value;
-        if (!node) return EMPTY_METRICS;
+        const subject = editor.editing.subjectCell("glyph").value;
+        if (!subject) return EMPTY_METRICS;
 
-        const glyph = editor.glyphForId(node.glyphId);
-        if (!glyph) return EMPTY_METRICS;
+        const { glyph } = subject;
 
         const externalLocation = editor.externalLocationCell.value;
         const activeSourceId = editor.activeSourceIdCell.value;

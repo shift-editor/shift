@@ -233,11 +233,11 @@ export class Pen extends BaseTool<PenState, Pen> {
   override activate(): void {
     this.setState({ type: "ready" });
 
-    const node = this.editor.scene.only("glyph");
-    if (!node) return;
+    const edited = this.editor.editing.only("glyph");
+    if (!edited) return;
 
     this.#ctx.set({
-      glyphNode: node,
+      glyphNode: edited.node,
       activeContourId: null,
       outgoingHandle: null,
     });

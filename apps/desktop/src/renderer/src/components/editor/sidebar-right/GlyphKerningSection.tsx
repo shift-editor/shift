@@ -11,8 +11,9 @@ import { SidebarSection, SidebarSubsection } from "./SidebarSection";
  * to browse every group.
  *
  * @remarks
- * Renders nothing unless the scene holds exactly one glyph, as the Glyph
- * section above it does.
+ * Shows the glyph the session is about, `editing.subject("glyph")`, as the
+ * Glyph section above it does, so it stays while editing is suspended. The
+ * group fields write to that same glyph.
  */
 interface GlyphKerningSectionProps {
   /** The sidebar block the section sits in, which the groups panel opens beside. */
@@ -21,10 +22,10 @@ interface GlyphKerningSectionProps {
 
 export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => {
   const editor = useEditor();
-  const node = useSignalState(editor.scene.onlyCell("glyph"));
-  if (!node) return null;
+  const subject = useSignalState(editor.editing.subjectCell("glyph"));
+  if (!subject) return null;
 
-  const glyphId = node.glyphId;
+  const glyphId = subject.glyphId;
   const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
   const disabled = editor.sessionMode !== "workspace";
 

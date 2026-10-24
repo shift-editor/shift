@@ -8,6 +8,7 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { SelectableId } from "@shift/types";
 import type { TransformTarget } from "../../types/transformTarget";
 import type { TextItem } from "../text/layout/types";
+import type { NodeEditContext } from "../../types/editing";
 
 /**
  * Defines behavior shared by every scene node of one kind.
@@ -19,7 +20,7 @@ import type { TextItem } from "../text/layout/types";
  *
  * Two kinds of method, kept apart:
  * - Queries (`unitsTransform`, `bounds`, `hit`, `selectableInRect`, `childPosition`,
- *   `transformTarget`, `draw`) run during rendering, hit testing, and gesture
+ *   `transformTarget`, `editContext`, `draw`) run during rendering, hit testing, and gesture
  *   starts and must never write. A transform target writes only once begun.
  * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
  *   them inside a history capture, so their writes are one undo step with the
@@ -115,6 +116,21 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
    * without knowing the kind. Nodes that hold no text leave this out.
    */
   textItems?(node: N): readonly TextItem[];
+
+  /**
+   * Returns what tools and commands act on while this node is edited.
+   *
+   * @remarks
+   * `Editing.only(kind)`, `Editing.of(kind)` and `Editing.subject(kind)` hand
+   * this to their callers, typed per kind, so a tool reads the model objects
+   * it edits without looking them up from the node. A query: may be called
+   * from a computed, so it reads reactive state with `track` and `peek`.
+   * Kinds that leave this out expose `{ node }`.
+   *
+   * @param node - the node being edited.
+   * @returns null when the node cannot be edited now.
+   */
+  editContext?(node: N): NodeEditContext<N> | null;
 
   /**
    * Resolves selected objects inside this node into something the transform box can move, scale, and rotate.

@@ -50,10 +50,7 @@ export function flipSelection(editor: Editor, axis: "horizontal" | "vertical"): 
 }
 
 export function selectedBooleanContourIds(editor: Editor): readonly ContourId[] | null {
-  const glyphNode = editor.scene.only("glyph");
-  if (!glyphNode) return null;
-
-  const layer = editor.layerForGlyph(glyphNode.glyphId, glyphNode.sourceId);
+  const layer = editor.editing.only("glyph")?.layer;
   if (!layer) return null;
 
   const selectedIds = new Set(editor.selection.ids);

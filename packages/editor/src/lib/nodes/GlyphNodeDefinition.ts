@@ -29,6 +29,7 @@ import type { HandleState } from "../../types/graphics";
 import type { GlyphRenderContour } from "../../types/glyphRender";
 import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
+import type { GlyphEditContext } from "../../types/editing";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import type { TransformAction, TransformTarget } from "../../types/transformTarget";
@@ -52,6 +53,21 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   /** A glyph node depends on the glyph it shows. */
   override references(node: GlyphNode): readonly NodeReference[] {
     return [node.glyphId];
+  }
+
+  /**
+   * Returns the glyph a node shows and its layer at the active source.
+   *
+   * @returns null while the node's glyph is not loaded.
+   */
+  override editContext(node: GlyphNode): GlyphEditContext | null {
+    const glyph = this.editor.glyphForId(node.glyphId);
+    if (!glyph) return null;
+
+    track(this.editor.activeSourceIdCell);
+    const sourceId = this.editor.activeSourceIdCell.peek();
+    const layer = sourceId ? this.editor.layerForGlyph(node.glyphId, sourceId) : null;
+    return { node, glyphId: node.glyphId, glyph, layer };
   }
   readonly #debugOverlays = new DebugOverlays();
   readonly #controlLines = new ControlLines();

@@ -306,7 +306,10 @@ export class Editor {
     };
 
     this.selection = new Selection(this.#store);
-    this.editing = new Editing(this.#store);
+    this.editing = new Editing(this.#store, this.scene, (node) => {
+      const definition = this.nodeDefinition(node.kind);
+      return definition.editContext ? definition.editContext(node) : { node };
+    });
     this.history = new EditorHistory(
       this,
       this.#store,
@@ -639,10 +642,10 @@ export class Editor {
     const activeSourceId = this.activeSourceId;
     if (this.sessionMode !== "workspace" || !activeSourceId) return null;
 
-    const node = this.scene.only("glyph");
-    if (!node) return null;
+    const edited = this.editing.only("glyph");
+    if (!edited) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(edited.glyphId);
     if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
@@ -680,10 +683,10 @@ export class Editor {
     // Load the base first so the component draws its outline as soon as it is added.
     await this.font.loadGlyph(baseGlyphId);
 
-    const node = this.scene.only("glyph");
-    if (!node || node.glyphId === baseGlyphId) return null;
+    const edited = this.editing.only("glyph");
+    if (!edited || edited.glyphId === baseGlyphId) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(edited.glyphId);
     if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
@@ -1094,13 +1097,17 @@ export class Editor {
     return this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation) ?? null;
   }
 
-  /** The active source's layer of the scene's one glyph node; null without exactly one. */
-  #soleActiveLayer(): GlyphLayer | null {
-    const sourceId = this.activeSourceId;
-    const node = this.scene.only("glyph");
-    if (!sourceId || !node) return null;
+  /** The active source's layer of the one glyph in edit mode; null while editing is suspended. */
+  #editedActiveLayer(): GlyphLayer | null {
+    return this.editing.only("glyph")?.layer ?? null;
+  }
 
-    return this.layerForGlyph(node.glyphId, sourceId);
+  /**
+   * The active source's layer of the glyph this session shows, even while
+   * editing is suspended; the glyph sidebar displays and edits its metrics.
+   */
+  #subjectActiveLayer(): GlyphLayer | null {
+    return this.editing.subject("glyph")?.layer ?? null;
   }
 
   /**
@@ -1326,7 +1333,7 @@ export class Editor {
       return;
     }
 
-    const layer = this.#soleActiveLayer();
+    const layer = this.#editedActiveLayer();
     if (!layer) return;
 
     this.history.capture("Select all", () => {
@@ -1479,12 +1486,10 @@ export class Editor {
   }
 
   #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {
-    const node = this.scene.only("glyph");
-    if (!node) return;
+    const edited = this.editing.only("glyph");
+    if (!edited) return;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
-    if (!glyph) return;
-
+    const { node, glyph } = edited;
     if (!glyph.layerForSource(sourceId)) {
       const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
       if (!defaultLayer) return;
@@ -1759,8 +1764,15 @@ export class Editor {
     this.#camera.setRect(rect);
   }
 
+  /**
+   * Returns the shown glyph's advance at the active source.
+   *
+   * @remarks
+   * This and the metric setters below act on `editing.subject("glyph")`, the
+   * glyph the sidebar shows, so they keep working while editing is suspended.
+   */
   public get xAdvance(): number {
-    return this.#soleActiveLayer()?.xAdvance ?? 0;
+    return this.#subjectActiveLayer()?.xAdvance ?? 0;
   }
 
   /**
@@ -1769,7 +1781,7 @@ export class Editor {
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
-    this.#soleActiveLayer()?.setXAdvance(width);
+    this.#subjectActiveLayer()?.setXAdvance(width);
   }
 
   /**
@@ -1778,7 +1790,7 @@ export class Editor {
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
-    this.#soleActiveLayer()?.setLeftSidebearing(value);
+    this.#subjectActiveLayer()?.setLeftSidebearing(value);
   }
 
   /**
@@ -1787,7 +1799,7 @@ export class Editor {
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
-    this.#soleActiveLayer()?.setRightSidebearing(value);
+    this.#subjectActiveLayer()?.setRightSidebearing(value);
   }
 
   public get screenMousePositionCell(): Signal<ScreenPoint> {
@@ -2002,8 +2014,9 @@ export class Editor {
    * Inserts portable content into the current editor destination.
    *
    * @remarks
-   * The first insertion destination is conservative: exactly one glyph node in
-   * the scene plus an active source resolves to one authored glyph layer.
+   * The first insertion destination is conservative: exactly one glyph in edit
+   * mode plus an active source resolves to one authored glyph layer, so
+   * nothing is inserted while editing is suspended.
    *
    * @param content - Detached content produced by {@link contentFrom} or clipboard import.
    * @param options - Placement options applied while minting destination objects.
@@ -2014,7 +2027,7 @@ export class Editor {
     content: ShiftContent,
     options: PasteOptions = { offset: { x: 0, y: 0 } },
   ): readonly SelectableId[] | null {
-    const layer = this.#soleActiveLayer();
+    const layer = this.#editedActiveLayer();
     if (!layer) return null;
 
     const inserted: SelectableId[] = [];
@@ -2123,9 +2136,9 @@ export class Editor {
    * @returns `false` when there is no single edited glyph at an active source.
    */
   public addAnchorAtPointer(): boolean {
-    const node = this.scene.only("glyph");
-    if (!node) return false;
-    return this.addAnchorAt(this.toLocal(node, this.getMousePosition()));
+    const edited = this.editing.only("glyph");
+    if (!edited) return false;
+    return this.addAnchorAt(this.toLocal(edited.node, this.getMousePosition()));
   }
 
   /**
@@ -2142,8 +2155,8 @@ export class Editor {
    */
   public addAnchorAt(position: Point2D): boolean {
     const activeSourceId = this.activeSourceId;
-    const node = this.scene.only("glyph");
-    const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
+    const edited = this.editing.only("glyph");
+    const layers = edited ? this.#multiSourceEditing.layersFor(edited.glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
     const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, position));
@@ -2317,7 +2330,7 @@ export class Editor {
     contourIdB: ContourId,
     operation: "union" | "subtract" | "intersect" | "difference",
   ): Promise<void> {
-    const layer = this.#soleActiveLayer();
+    const layer = this.#editedActiveLayer();
     if (!layer || !layer.contour(contourIdA) || !layer.contour(contourIdB)) return;
 
     await this.history.captureAsync("Boolean operation", async () => {

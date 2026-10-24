@@ -36,7 +36,7 @@ describe("ShiftStore change publication", () => {
   it("publishes every removed record when clearing", () => {
     const records: ShiftEditorRecord[] = [
       { id: currentSelectionId, type: "selection", scope: "session", ids: [] },
-      { id: currentEditingId, type: "editing", scope: "session", nodeIds: [] },
+      { id: currentEditingId, type: "editing", scope: "session", nodeIds: [], suspended: false },
     ];
     const store = new ShiftStore(records);
     const changes: StoreChange<ShiftEditorRecord>[] = [];

@@ -59,10 +59,10 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
    *
    * @param state - Initial drag coordinates in scene space.
    * @param ctx - Drag scope that owns rollback and handle-visibility cleanup.
-   * @returns False when there is no single editable glyph layer.
+   * @returns False when no single glyph is in edit mode or its layer is not editable.
    */
   beginShape(state: ShapeState, ctx: ToolContext<ShapeState, ShapeTool>): boolean {
-    const node = this.editor.scene.only("glyph");
+    const node = this.editor.editing.only("glyph")?.node;
     if (!node) return false;
 
     const layer = this.editor.editableLayer(node);
