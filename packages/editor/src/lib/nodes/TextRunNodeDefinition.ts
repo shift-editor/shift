@@ -1,4 +1,4 @@
-import { NodeDefinition } from "./NodeDefinition";
+import { NodeDefinition, type ChildPlacement } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
@@ -51,13 +51,14 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   /**
-   * Places a child glyph at its item's layout position, so the run reflows around it.
+   * Places a child glyph at its item's layout position and the run's size, so
+   * the run reflows around it and it matches the glyphs beside it.
    *
    * @remarks
    * Tracks the run's layout, so reactive readers of the child's placement
    * update when text, metrics, or location move it.
    */
-  override childPosition(node: TextRunNode, child: ShiftNode): Point2D | null {
+  override childPlacement(node: TextRunNode, child: ShiftNode): ChildPlacement | null {
     if (child.kind !== "glyph" || !child.itemId) return null;
     const layoutCell = this.editor.text.layoutCell(node.runId);
     track(layoutCell);
@@ -66,7 +67,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       layout?.placedGlyph(child.itemId, child.glyphId) ?? layout?.placedGlyphForItem(child.itemId);
     if (!placed) return null;
 
-    return Mat.applyToPoint(this.unitsTransform(node), placed.origin);
+    return {
+      position: Mat.applyToPoint(this.unitsTransform(node), placed.origin),
+      scale: this.emScale(node),
+    };
   }
 
   /** Returns the run's child glyph node, the glyph edited in place, or null. */

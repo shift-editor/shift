@@ -1641,16 +1641,20 @@ export class Editor {
    * position, nested in its parent's frame.
    *
    * @remarks
-   * Frames carry placement only. Each node's units apply to its own content and
-   * never to its children's frames. A parent that lays out its children
-   * supplies their positions through `NodeDefinition.childPosition`.
+   * Frames carry placement: where a node sits in its parent's frame and, for a
+   * child its parent lays out, at what size. Each node's units apply to its own
+   * content and never to its children's frames. A parent that lays out its
+   * children supplies both through `NodeDefinition.childPlacement`.
    */
   #frameToScene(node: ShiftNode): Mat {
     const parent = this.scene.node(node.parentId);
     if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
-    const position = this.nodeDefinition(parent.kind).childPosition(parent, node) ?? node.position;
-    return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
+    const placement = this.nodeDefinition(parent.kind).childPlacement(parent, node);
+    const position = placement?.position ?? node.position;
+    const scale = placement?.scale ?? 1;
+    const placed = Mat.Compose(Mat.Translate(position.x, position.y), Mat.Scale(scale, scale));
+    return Mat.Compose(this.#frameToScene(parent), placed);
   }
 
   /**

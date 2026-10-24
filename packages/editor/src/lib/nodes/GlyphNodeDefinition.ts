@@ -94,15 +94,8 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     ),
   });
 
-  /**
-   * Flips font units to Y-down; a glyph edited inside text also takes the
-   * text's size, so it stays the size of the glyphs around it.
-   */
-  unitsTransform(node: GlyphNode): Mat {
-    const parent = node.parentId === null ? null : this.editor.scene.node(node.parentId);
-    const scale =
-      parent?.kind === "textRun" ? this.editor.nodeDefinition("textRun").emScale(parent) : 1;
-    return Mat.Scale(scale, -scale);
+  unitsTransform(_node: GlyphNode): Mat {
+    return Mat.Scale(1, -1);
   }
 
   bounds(node: GlyphNode): LocalBounds | null {
