@@ -40,7 +40,7 @@ export function MenuPopup({ className, ...props }: MenuPopupProps) {
 }
 
 export interface MenuItemProps extends React.ComponentProps<typeof BaseMenu.Item> {
-  variant?: "default" | "danger" | "outlined";
+  variant?: "default" | "outlined";
 }
 
 export function MenuItem({ className, variant = "default", ...props }: MenuItemProps) {
@@ -48,7 +48,6 @@ export function MenuItem({ className, variant = "default", ...props }: MenuItemP
     <BaseMenu.Item
       className={cn(
         menuItemStyles,
-        variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
         variant === "outlined" &&
           "h-8 justify-center gap-2 border border-line-subtle bg-surface-muted hover:bg-hover data-[highlighted]:bg-hover",
         className,

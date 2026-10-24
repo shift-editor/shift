@@ -151,8 +151,8 @@ const SourceActionsMenu = ({
             {!isDefaultSource && (
               <>
                 <MenuSeparator />
-                <MenuItem variant="danger" disabled={!canDelete} onClick={onDelete}>
-                  "Delete source"
+                <MenuItem disabled={!canDelete} onClick={onDelete}>
+                  Delete
                 </MenuItem>
               </>
             )}

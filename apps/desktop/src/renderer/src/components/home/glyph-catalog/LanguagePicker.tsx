@@ -16,6 +16,7 @@ import {
   X,
 } from "@shift/ui";
 import PlusIcon from "@/assets/general/plus.svg";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
 import { ScriptIcon } from "./ScriptIcon";
@@ -84,6 +85,8 @@ export const LanguagePicker = ({
     setOpen(false);
   };
 
+  const panelAnchor = useSidebarPanelAnchor();
+
   if (disabled) {
     return (
       <Tooltip content="Add languages">
@@ -98,6 +101,7 @@ export const LanguagePicker = ({
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
       <Tooltip content="Add languages">
         <PopoverTrigger
+          ref={panelAnchor.triggerRef}
           render={
             <SidebarActionButton label="Add languages">
               <PlusIcon className="h-3 w-3" />
@@ -106,7 +110,7 @@ export const LanguagePicker = ({
         />
       </Tooltip>
       <PopoverPortal>
-        <PopoverPositioner side="right" sideOffset={8} align="start">
+        <PopoverPositioner {...panelAnchor.positioner}>
           <PopoverPopup className="flex w-64 flex-col p-0" initialFocus={searchRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
               <PopoverTitle>Scripts</PopoverTitle>
