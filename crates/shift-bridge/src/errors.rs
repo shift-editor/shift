@@ -26,6 +26,9 @@ pub enum BridgeError {
   Workspace(#[from] WorkspaceError),
 
   #[error(transparent)]
+  Wire(#[from] shift_wire::intents::WireError),
+
+  #[error(transparent)]
   Store(#[from] shift_store::StoreError),
 
   #[error("cannot encode layers: {0}")]
@@ -47,6 +50,7 @@ pub enum BridgeError {
 pub(crate) fn to_napi_error(error: BridgeError) -> Error {
   let status = match &error {
     BridgeError::InvalidInput { .. }
+    | BridgeError::Wire(_)
     | BridgeError::Backend(
       BackendError::MissingExtension { .. }
       | BackendError::InvalidPathUtf8 { .. }

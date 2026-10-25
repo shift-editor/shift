@@ -2602,7 +2602,9 @@ dependencies = [
  "napi",
  "napi-derive",
  "serde",
+ "serde_json",
  "shift-font",
+ "thiserror",
 ]
 
 [[package]]

@@ -73,7 +73,7 @@ const bridgeApi = `export interface BridgeApi {${withoutNapiPrefix(bridgeMethods
 body = body.replace(classMatch[0], bridgeApi);
 
 body = body.replace(
-  /export declare const enum (Napi[A-Za-z0-9_]+) \{([\s\S]*?)\n\}/g,
+  /export declare const enum ([A-Za-z0-9_]+) \{([\s\S]*?)\n\}/g,
   (_match, name, enumBody) => enumToUnion(name, enumBody),
 );
 // Free functions, such as config.toml parsing, and classes other than Bridge,

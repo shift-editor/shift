@@ -1,6 +1,6 @@
 # shift-bridge
 
-<!-- reviewed: 2026-10-24 review-every: 90d -->
+<!-- reviewed: 2026-10-25 review-every: 90d -->
 
 NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bridge` class.
 
@@ -12,7 +12,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 
-**Architecture Invariant:** Public cross-process DTOs live in `shift-wire`; NAPI-specific wrappers for snapshots, projections, and Slug atlas values live under `shift-wire::bridges::napi`. `shift-bridge` only normalizes backend source data into those canonical types. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient values such as `Float64Array`. `shift-bridge` and `shift-wire` are the only crates that may link the NAPI runtime — enforced by `scripts/check-invariants.py` (`napi-boundary`).
+**Architecture Invariant:** Public cross-process DTOs live in `shift-wire`; NAPI-specific wrappers for snapshots, projections, and Slug atlas values live under `shift-wire::bridges::napi`. The edits the editor sends live in `shift-wire::intents`, defined once for every transport: NAPI here and serde for the WebAssembly engine, with one `TryFrom` into each shift-font value. `shift-bridge` only normalizes backend source data into those canonical types. **WHY:** Wire shapes remain independent of the native module implementation, while NAPI can still return efficient values such as `Float64Array`. `shift-bridge` and `shift-wire` are the only crates that may link the NAPI runtime — enforced by `scripts/check-invariants.py` (`napi-boundary`).
 
 **Architecture Invariant:** Bridge methods return native NAPI values, not JSON strings. Domain failures flow through `BridgeError` and are converted at the NAPI boundary. **WHY:** Rust keeps typed errors internally, and TypeScript receives normal exceptions plus generated declaration types.
 
@@ -73,7 +73,7 @@ crates/shift-bridge/
 
 1. The renderer resolves glyph state with `GlyphHandle + SourceId` and receives a stable `layerId`.
 2. JS batches one or more `NapiFontIntent` values (kind discriminator plus one populated payload field, e.g. "setContourClosed") into a single `apply(intents, label?)` call; the optional `label` string names the resulting undo ledger entry. `apply`, `undo`, and `redo` are the only font-mutation entry points — there are no per-mutation NAPI methods. `discardRedo()` only truncates unreachable ledger history and does not mutate font or dirty state.
-3. `Bridge` decodes each intent through `map_intent`, parsing boundary strings into typed IDs, and forwards the set as one atomic `FontWorkspace` apply: one SQLite transaction, one undo step.
+3. `Bridge` converts each `shift_wire::intents::FontIntent` into shift-font's `FontIntent` with `TryFrom`, parsing boundary strings into typed IDs, and forwards the set as one atomic `FontWorkspace` apply: one SQLite transaction, one undo step.
 4. The bridge returns a pure-state `NapiAppliedChange` — replaced layers, optional font-level replacement collections, and `dependents: Array<GlyphId>` naming the composite glyphs that reference the touched layers; no change records cross to the renderer — and bumps the live version. Component-list replacements also return refreshed glyph records so renderer dependency edges follow apply, undo, and redo.
 5. Full glyph snapshots first acquire requested layer payloads, then include authored state plus the same `GlyphProjection` used by lightweight reads. `getGlyphProjections()` and previews expand transitive component identities through SQLite indexes, acquire those layers, and only then project without further I/O. `getLayerMatch()` validates same-glyph ownership, acquires that glyph, and transports the Rust-owned complete mappings or mismatch diagnostics without renderer caching. Source reads expose master sources only; layer-only/background sources remain native authoring details and never enter renderer interpolation.
 6. `saveWorkspace()` applies a document's sparse recovery overlay to its canonical SQLite file. `saveWorkspaceAsDocument(path, recoveryPath)` publishes a new native document identity and adopts its fresh overlay; `discardWorkspaceChanges()` clears recovery and reloads canonical directory state.
@@ -102,8 +102,8 @@ On the Mini release build, OpenSans-CondensedItalic (3,431 glyphs, 3,063 compone
 
 1. Add the domain operation to the relevant model object in `shift-font`, exposed as a `FontIntent` variant.
 2. Add or reuse a canonical DTO in `shift-wire`.
-3. Add the intent payload struct in `shift-wire::bridges::napi`, then extend `NapiFontIntent` with a new optional payload field and its `kind` discriminator value.
-4. Add the matching `map_intent` branch in `bridge.rs`, parsing string IDs into typed IDs. Do not add a per-intent `#[napi]` method — every mutation flows through the single shared `apply` path.
+3. Add the intent payload struct in `shift-wire::intents` (`#[cfg_attr(feature = "napi", napi(object))]` plus `serde::Deserialize`), add one line to the `wire_intents!` list, and implement `TryFrom<PayloadIntent> for font::FontIntent`, parsing string IDs with `parse`.
+4. Do not add a per-intent `#[napi]` method — every mutation flows through the single shared `apply` path.
 5. Carry `LayerId` in the payload when the operation targets glyph outline state; the shared `apply` path returns the replacement state as `NapiAppliedChange`.
 6. Run `cargo check -p shift-bridge` and rebuild the native module before regenerating bridge types.
 

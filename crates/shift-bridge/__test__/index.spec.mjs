@@ -84,6 +84,10 @@ describe("Bridge", () => {
     return snapshots[0]?.layers[0]?.state;
   }
 
+  it("rejects an intent kind it does not know", () => {
+    expect(() => bridge.apply([{ kind: "explodeFont", explodeFont: {} }])).toThrow();
+  });
+
   it("exposes the durable Slug cache revision", () => {
     expect(bridge.slugAtlasCacheRevision()).toBe("0");
 

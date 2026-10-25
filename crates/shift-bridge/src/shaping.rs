@@ -3,11 +3,10 @@ use shift_backends::shaper_font::{
   FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, TextDirection,
 };
 use shift_font::{ExternalLocation, GlyphId};
-use shift_wire::bridges::napi::NapiLocation;
 
-use crate::bridge::IntoDomain;
 use crate::errors::{BridgeError, BridgeResult};
 use crate::input::parse;
+use shift_wire::intents;
 
 /// One unit of text to shape: exactly one of a character or a glyph inserted
 /// by name.
@@ -33,7 +32,7 @@ pub struct NapiFeatureSetting {
 pub struct NapiParagraphRequest {
   pub units: Vec<NapiShapeUnit>,
   /// User-space location to shape at; omitted axes are at their default.
-  pub location: NapiLocation,
+  pub location: intents::Location,
   /// BCP 47 language tag; the default language system when omitted.
   pub language: Option<String>,
   /// Settings over the features applied by default.
@@ -130,7 +129,8 @@ impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
       .into_iter()
       .map(shape_unit)
       .collect::<BridgeResult<_>>()?;
-    let location = ExternalLocation::from_untyped(request.location.into_domain()?);
+    let location =
+      ExternalLocation::from_untyped(shift_font::Location::try_from(request.location)?);
     let features = request
       .features
       .unwrap_or_default()
