@@ -1,7 +1,6 @@
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
 import { type ContourData, type PointId, type SegmentId } from "@shift/types";
-import type { Point } from "@shift/glyph-state";
-import { Contour, type GlyphPosition, type Segment } from "@shift/glyph-state";
+import { Contour, type GlyphPosition, type Point, type Segment } from "@shift/glyph-state";
 import {
   computed,
   signal,
