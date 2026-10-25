@@ -2588,9 +2588,15 @@ name = "shift-wasm"
 version = "0.0.0"
 dependencies = [
  "fontir",
+ "js-sys",
+ "rmp-serde",
  "serde",
+ "serde-wasm-bindgen",
+ "shift-engine",
  "shift-font",
  "shift-shape",
+ "shift-wire",
+ "thiserror",
  "tsify",
  "wasm-bindgen",
 ]

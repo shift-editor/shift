@@ -83,6 +83,7 @@ jobs:
             packages/wasm/src/generated
             packages/wasm/src/generated-reference
             packages/wasm/src/generated-shaping
+            packages/wasm/src/generated-engine
           key: installed-native-v3-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
 
       - name: Install Rust toolchain

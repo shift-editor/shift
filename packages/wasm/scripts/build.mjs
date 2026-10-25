@@ -34,6 +34,7 @@ const variants = [
   { folder: "generated", features: [] },
   { folder: "generated-reference", features: ["reference"] },
   { folder: "generated-shaping", features: ["shaping"] },
+  { folder: "generated-engine", features: ["engine"] },
 ];
 
 for (const variant of variants) {

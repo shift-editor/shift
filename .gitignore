@@ -131,3 +131,4 @@ packages/sdk/THIRD_PARTY_LICENSES.txt
 packages/wasm/src/generated/
 packages/wasm/src/generated-reference/
 packages/wasm/src/generated-shaping/
+packages/wasm/src/generated-engine/

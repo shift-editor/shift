@@ -1,6 +1,6 @@
 # shift-wasm
 
-<!-- reviewed: 2026-10-18 review-every: 90d -->
+<!-- reviewed: 2026-10-25 review-every: 90d -->
 
 Runs shift-font's rules in the editor through WebAssembly, so the editor calls the same Rust the workspace and export use instead of a TypeScript copy. `crates/shift-wasm` is the Rust side; `packages/wasm` (`@shift/wasm`) builds it and ships the module to TypeScript.
 
@@ -8,10 +8,11 @@ Runs shift-font's rules in the editor through WebAssembly, so the editor calls t
 
 - **One implementation.** Each export calls shift-font code that native callers also use: anchor kinds from fontir's `AnchorKind::new`, `anchor_propagation::compiled_anchors`, `anchor_attachment::follow_anchors`, and the variation evaluators (`AxisMappingBasis::evaluate`, `map_location_with_bases`, `InterpolationBasis::weights_at`). This crate only converts between numbers and those types. A rule that needs logic here is a rule that belongs in shift-font.
 - **Synchronous.** The module is embedded in `@shift/wasm` as base64 and instantiated with `initSync` at import, so computeds and render paths call it directly. Nothing awaits, fetches, or needs a bundler plugin; desktop, vitest, and the SDK import it the same way.
-- **Built, never committed.** `packages/wasm/src/generated/`, `src/generated-reference/`, and `src/generated-shaping/` are gitignored and built like the native addon: `@shift/wasm#build` is a turbo task over the Rust sources, `build:native` runs it, and typecheck, tests, and desktop builds depend on it. WHY: rustc's output depends on the build host (Cargo hashes `rustc -vV`, host line included, into symbol names, which decides data layout), so a module built on macOS never matches one built on Linux, and a committed copy could not be checked against a fresh build.
+- **Built, never committed.** `packages/wasm/src/generated/`, `src/generated-reference/`, `src/generated-shaping/`, and `src/generated-engine/` are gitignored and built like the native addon: `@shift/wasm#build` is a turbo task over the Rust sources, `build:native` runs it, and typecheck, tests, and desktop builds depend on it. WHY: rustc's output depends on the build host (Cargo hashes `rustc -vV`, host line included, into symbol names, which decides data layout), so a module built on macOS never matches one built on Linux, and a committed copy could not be checked against a fresh build.
 - **Pinned toolchain.** wasm-bindgen is pinned exactly (`=0.2.121`); the build script refuses a CLI that does not match `Cargo.lock`. wasm-opt is the npm `binaryen` package, pinned exactly as a devDependency of `@shift/wasm` and run through Node from the package's own `bin`, never from PATH, with explicit features. The checkout and Cargo home paths that panic messages embed are remapped, so the module carries no machine's paths.
 - **Numbers across the boundary.** Hot calls take and return `Float64Array`s, with no per-call objects. **CRITICAL**: each layout is declared once, in Rust (`layout!`, `foreign_layout!`, `enum_layout!` in `src/layout.rs`), and the editor's side of every hot call — interfaces, encoder, the call, decoder — is generated from it into `packages/editor/src/lib/wasm/generated/layouts.ts` by the `generated_file_wasm_layouts` test. Never hand-write a packer: a field order typed out twice drifts silently, because reading past the end yields zeros rather than an error. Anchor names are interned once (`internName`/`nameOf`) and travel as ids. Axes and compiled bases are registered once, giving a handle; a location then travels as numbers in axis order, NaN for a missing coordinate. Cold, structured values (`AnchorKind`, registration inputs) are typed with tsify, so `shift_wasm.d.ts` is generated, not hand-written.
 - **Shaping is a module of its own, loaded on demand.** The `shaping` feature builds shift-shape and HarfRust into `src/generated-shaping/`, loaded by `@shift/wasm/shaping`, several times the size of the production module. The editor imports it dynamically (`lib/wasm/shaping.ts`, `loadShaping`) so bundlers split it into a chunk that loads when text is first laid out. It is a separate instance with its own memory and name table, so its layouts carry no interned names: units, locations, and tags cross as numbers. Each module's generated calls go to their own file (`generated/layouts.ts`, `generated/shapingLayouts.ts`), importing only that module.
+- **The editing engine is a module of its own, loaded when a font opens for editing.** The `engine` feature builds shift-engine's `EngineSession` into `src/generated-engine/`, loaded by `@shift/wasm/engine` and wrapped by the editor's `lib/wasm/engine.ts` (`loadEngine`, `EngineSession`). It is the same session the native workspace runs. Intents cross as `shift_wire::intents::FontIntent` values through serde, the shape the workspace takes; touched layers come back in the echo's shape. Layers load through an `EngineLayerSource` the editor passes in, whose TypeScript interface is declared once in `engine.rs` (`typescript_custom_section`), so the Rust trait and the JavaScript object cannot drift. The source must not call back into the engine.
 - **The reference module never ships.** The `reference` cargo feature adds test-only exports (`src/reference/`) that return shift-font's answers for the rules the editor keeps in TypeScript. It builds into a second module, `src/generated-reference/`, loaded by `@shift/wasm/reference`. The production module is built without the feature and is unchanged by it. Lint (`shift/no-reference-module-outside-tests`) rejects importing it outside `.test.ts` files and `testing/` helpers, and the SDK build fails if its bundle contains it.
 - **Handles follow their objects.** The editor registers each axes array and basis once per object identity (`lib/wasm/variation.ts`, `Handles`). A `FinalizationRegistry` releases the module's copy when the object is collected.
 
@@ -23,6 +24,7 @@ crates/shift-wasm/src/
   anchors.rs     anchorKind, propagateAnchors, followAnchors
   decomposition.rs   blendDecomposedGlyph: component outlines between masters of a decomposed glyph
   shaping.rs     registerShaper, setShaperGlyphs, shapeParagraphs (the `shaping` feature)
+  engine.rs      engineOpen, engineApply, engineEvict, engineRelease, EngineLayerSource (the `engine` feature)
   variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
   names.rs       interned anchor names
   layout.rs      Reader, Writer, the Layout trait, and the layout! macros hot calls are declared with
@@ -32,7 +34,7 @@ crates/shift-wasm/src/
     kerning.rs       resolveKerning
     axis_mapping.rs  compileAxisMappings, mapLocation
 packages/wasm/
-  scripts/build.mjs   cargo build → wasm-bindgen → wasm-opt (npm binaryen) → base64 module.ts, for each module into src/generated, src/generated-reference, and src/generated-shaping (gitignored)
+  scripts/build.mjs   cargo build → wasm-bindgen → wasm-opt (npm binaryen) → base64 module.ts, for each module into src/generated, src/generated-reference, src/generated-shaping, and src/generated-engine (gitignored)
   src/index.ts        instantiates the module and re-exports the glue
   src/reference.ts    @shift/wasm/reference: instantiates the reference module, for tests only
   src/embedded.ts     compiles a base64-embedded module synchronously
@@ -61,7 +63,7 @@ packages/editor/src/lib/wasm/
 
 ### Building
 
-`build.mjs` builds the crate for `wasm32-unknown-unknown` three times: without features into `src/generated/`, with `--features reference` into `src/generated-reference/`, and with `--features shaping` into `src/generated-shaping/`. Each build runs wasm-bindgen for the web target, shrinks the module with wasm-opt, and writes it as base64 into `module.ts`, dropping the glue's fetch-by-URL fallback so bundlers emit no stray copy. `src/index.ts` and `src/reference.ts` decode their module and call `initSync` at import. The production bytes do not depend on the reference build. The editor's wrappers in `lib/wasm/` intern names, register axes and bases once, pack inputs into typed arrays, and unpack results; they hold no rules of their own.
+`build.mjs` builds the crate for `wasm32-unknown-unknown` four times: without features into `src/generated/`, with `--features reference` into `src/generated-reference/`, with `--features shaping` into `src/generated-shaping/`, and with `--features engine` into `src/generated-engine/`. Each build runs wasm-bindgen for the web target, shrinks the module with wasm-opt, and writes it as base64 into `module.ts`, dropping the glue's fetch-by-URL fallback so bundlers emit no stray copy. `src/index.ts` and `src/reference.ts` decode their module and call `initSync` at import. The production bytes do not depend on the reference build. The editor's wrappers in `lib/wasm/` intern names, register axes and bases once, pack inputs into typed arrays, and unpack results; they hold no rules of their own.
 
 Every `@shift/wasm` build task (`build`, `build:debug`, `build:e2e`) runs the script, and its turbo outputs cover both folders, so a cached build restores the reference module too and a reference test needs no step of its own.
 
@@ -120,7 +122,7 @@ The reference module never ships. It is a second instance with its own memory, a
 
 ```bash
 nix develop --command cargo test -p shift-wasm --lib  # layout round trips; fails when generated/layouts.ts is stale
-nix develop --command pnpm build:wasm                # build src/generated, src/generated-reference, and src/generated-shaping
+nix develop --command pnpm build:wasm                # build src/generated, src/generated-reference, src/generated-shaping, and src/generated-engine
 nix develop --command pnpm check                     # typecheck and tests build both first
 nix develop --command cargo clippy -p shift-wasm --target wasm32-unknown-unknown -- -D warnings
 nix develop --command cargo clippy -p shift-wasm --features reference --target wasm32-unknown-unknown -- -D warnings

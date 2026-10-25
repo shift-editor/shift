@@ -17,12 +17,29 @@ reference = []
 # @shift/wasm/shaping, a separate module the editor loads when text first
 # needs shaping.
 shaping = ["dep:shift-shape"]
+# The editing engine (shift-engine over shift-font), built into
+# @shift/wasm/engine, a separate module the editor loads when a font opens
+# for editing.
+engine = [
+    "dep:js-sys",
+    "dep:rmp-serde",
+    "dep:serde-wasm-bindgen",
+    "dep:shift-engine",
+    "dep:shift-wire",
+    "dep:thiserror",
+]
 
 [dependencies]
 fontir = "1.0.0"
 serde = { version = "1.0", features = ["derive"] }
 shift-font = { workspace = true }
 shift-shape = { workspace = true, optional = true }
+js-sys = { version = "0.3", optional = true }
+rmp-serde = { version = "1.3", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+shift-engine = { workspace = true, optional = true }
+shift-wire = { workspace = true, optional = true }
+thiserror = { version = "2", optional = true }
 # Generates the TypeScript types of exported values and converts them.
 tsify = { version = "0.5", default-features = false, features = ["js"] }
 # Must match the wasm-bindgen CLI in the Nix dev shell exactly; scripts check it.
