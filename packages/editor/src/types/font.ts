@@ -26,7 +26,7 @@ import type {
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
 import type { Signal } from "../lib/signals/signal";
-import type { EditablePair } from "../lib/wasm/engine";
+import type { EditablePair, InterpolatedMetrics } from "../lib/wasm/engine";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -67,7 +67,7 @@ export interface FontStoreOptions {
   // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent starts with no glyph records
   readonly records?: readonly GlyphRecord[];
   readonly workspace?: WorkspaceSnapshot | null;
-  /** The window's editing engine, which answers kerning reads; absent, nothing kerns. */
+  /** The window's editing engine, which answers kerning and metric reads; absent, nothing kerns. */
   readonly engine?: FontEngine | null;
 }
 
@@ -81,16 +81,18 @@ export type KerningPlace =
 
 /**
  * The font as the window's editing engine holds it, read synchronously: the
- * kerning rules run once, in Rust, over the engine's own font.
+ * kerning and metric rules run once, in Rust, over the engine's own font.
  *
  * @remarks
  * Reads answer from the engine's font as it stands, an open edit included.
- * The revision cell changes whenever what a read returns may have changed,
- * including when the engine opens, so reactive readers track it.
+ * The revision cells change whenever what a read returns may have changed,
+ * including when the engine opens, so reactive readers track them.
  */
 export interface FontEngine {
   /** Changes whenever {@link kerningRun} or {@link kerningPairs} may answer differently. */
   readonly kerningRevisionCell: Signal<number>;
+  /** Changes whenever {@link sourceMetricsAt} may answer differently. */
+  readonly sourceMetricsRevisionCell: Signal<number>;
 
   /**
    * Reads the kerning between glyph pairs at one place, in one call.
@@ -108,6 +110,14 @@ export interface FontEngine {
    * @returns One entry per pair; empty while the engine is not open.
    */
   kerningPairs(sourceId: SourceId, pairs: readonly GlyphId[]): readonly EditablePair[];
+
+  /**
+   * Interpolates the masters' source metrics at a design location.
+   *
+   * @param location - Design coordinates in the font's axis order, NaN for an axis default.
+   * @returns null for a font whose masters do not interpolate, or while the engine is not open.
+   */
+  sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null;
 }
 
 /**

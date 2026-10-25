@@ -31,6 +31,7 @@ export {
   engineRedo,
   engineRelease,
   engineRewindEdit,
+  engineSourceMetricsAt,
   engineSourceNumbers,
   engineStage,
   engineUndo,

@@ -14,7 +14,9 @@ use shift_font::test_support::generated::assert_generated_file;
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
 use crate::decomposition::DecomposedGlyph;
-use crate::engine_reads::{EditablePair, KerningRun, SourcePairs};
+use crate::engine_reads::{
+    EditablePair, InterpolatedMetrics, KerningRun, SourceMetricsAt, SourcePairs,
+};
 use crate::shaping::{ShapeParagraphs, ShapedRunOutput, ShaperGlyphs};
 
 /// One WebAssembly module and the hot calls it exports, generated into one
@@ -109,6 +111,12 @@ fn engine_calls() -> Vec<Call> {
             doc: "Reads, for each glyph pair, the authored pair an edit to it at a source changes in the engine's font.",
             input: SourcePairs::kind(),
             output: Vec::<EditablePair>::kind(),
+        },
+        Call {
+            name: "engineSourceMetricsAt",
+            doc: "Interpolates the engine's font's source metrics at a design location; null for a font whose masters do not interpolate.",
+            input: SourceMetricsAt::kind(),
+            output: Option::<InterpolatedMetrics>::kind(),
         },
     ]
 }

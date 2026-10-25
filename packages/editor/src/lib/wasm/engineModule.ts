@@ -21,7 +21,13 @@ import {
   type EngineLayerSource,
   type EngineStage,
 } from "@shift/wasm/engine";
-import { engineKerningPairs, engineKerningRun, type EditablePair } from "./generated/engineLayouts";
+import {
+  engineKerningPairs,
+  engineKerningRun,
+  engineSourceMetricsAt,
+  type EditablePair,
+  type InterpolatedMetrics,
+} from "./generated/engineLayouts";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 
@@ -149,6 +155,16 @@ export class EngineSession {
     return engineKerningPairs({ engine: this.#handle, source: source ?? 0, glyphs });
   }
 
+  /**
+   * Interpolates the session's font's source metrics at a design location.
+   *
+   * @param location - Design coordinates in the font's axis order, NaN for an axis default.
+   * @returns null when the font's masters do not interpolate, as for a static font.
+   */
+  sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
+    return engineSourceMetricsAt({ engine: this.#handle, location });
+  }
+
   /** Each of `ids` by the number the session interned it as, interning new ones in one call. */
   #numbers<Id extends string>(
     ids: readonly Id[],
@@ -219,4 +235,11 @@ export class EngineSession {
   }
 }
 
-export type { EditablePair, EngineEdit, EngineLayer, EngineLayerSource, EngineStage };
+export type {
+  EditablePair,
+  EngineEdit,
+  EngineLayer,
+  EngineLayerSource,
+  EngineStage,
+  InterpolatedMetrics,
+};

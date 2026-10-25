@@ -1,5 +1,5 @@
-//! What the editor reads from the editing engine's font: kerning, answered by
-//! the same shift-font code the workspace and export run.
+//! What the editor reads from the editing engine's font: kerning and source
+//! metrics, answered by the same shift-font code the workspace and export run.
 //!
 //! The exports exist only with the `engine` feature, beside the session they
 //! read ([`crate::engine`]). The layouts below are declared either way, so the
@@ -11,7 +11,8 @@
 //! and passes its number from then on. A location crosses as numbers in the
 //! font's axis order, NaN for an axis at its default.
 
-use crate::layout::layout;
+use crate::layout::{foreign_layout, layout};
+use shift_font::MetricValue;
 
 layout! {
     /// Glyph pairs whose kerning one call reads, and where it is read.
@@ -53,6 +54,36 @@ layout! {
     }
 }
 
+layout! {
+    /// A design location at which to read source metrics.
+    pub struct SourceMetricsAt {
+        /// The engine session's handle.
+        pub engine: usize,
+        /// The design location in the font's axis order, NaN for an axis default.
+        pub location: Vec<f64>,
+    }
+}
+
+foreign_layout! {
+    /// One metric's position and overshoot, in font units.
+    MetricValue => SourceMetricValue {
+        position: f64,
+        overshoot: f64,
+    }
+}
+
+layout! {
+    /// Source metrics between the masters, as export interpolates them; a technical field is present only when every master sets it.
+    pub struct InterpolatedMetrics {
+        /// Each metric definition's value, in the font's definition order.
+        pub metrics: Vec<MetricValue>,
+        pub italic_angle: Option<f64>,
+        pub line_gap: Option<f64>,
+        pub underline_position: Option<f64>,
+        pub underline_thickness: Option<f64>,
+    }
+}
+
 #[cfg(feature = "engine")]
 pub(crate) use exports::InternedIds;
 
@@ -65,7 +96,7 @@ mod exports {
     use shift_wire::intents::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
-    use super::{EditablePair, KerningRun, SourcePairs};
+    use super::{EditablePair, InterpolatedMetrics, KerningRun, SourceMetricsAt, SourcePairs};
     use crate::engine::{Engine, with_engine};
     use crate::layout::call;
     use crate::variation::to_location;
@@ -233,6 +264,48 @@ mod exports {
             second_group: matches!(resolved.pair.second, KerningSide::Group(_)),
             amount: resolved.value,
         }
+    }
+
+    /// Input: `SourceMetricsAt`. Output: the masters' metrics interpolated at
+    /// the location by `SourceMetricInterpolation::resolve`; null for a static
+    /// font, one whose masters cannot be interpolated, or an unknown engine.
+    #[wasm_bindgen(js_name = engineSourceMetricsAt)]
+    pub fn engine_source_metrics_at(input: &[f64]) -> Vec<f64> {
+        call(input, |request: SourceMetricsAt| {
+            let handle = u32::try_from(request.engine).ok()?;
+            with_engine(handle, |engine| {
+                Ok(interpolated_metrics(
+                    engine.session.font(),
+                    &request.location,
+                ))
+            })
+            .ok()
+            .flatten()
+        })
+    }
+
+    fn interpolated_metrics(font: &Font, location: &[f64]) -> Option<InterpolatedMetrics> {
+        let interpolation = font.source_metric_interpolation()?;
+        let resolved = interpolation
+            .resolve(&design_location(font, location), font.axes())
+            .ok()?;
+        Some(InterpolatedMetrics {
+            metrics: interpolation
+                .metric_ids()
+                .iter()
+                .map(|metric_id| {
+                    resolved
+                        .metric_values()
+                        .get(metric_id)
+                        .copied()
+                        .unwrap_or_default()
+                })
+                .collect(),
+            italic_angle: resolved.italic_angle(),
+            line_gap: resolved.line_gap(),
+            underline_position: resolved.underline_position(),
+            underline_thickness: resolved.underline_thickness(),
+        })
     }
 
     fn design_location(font: &Font, values: &[f64]) -> DesignLocation {

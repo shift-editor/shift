@@ -57,11 +57,12 @@ export interface EngineEdit {
 /**
  * What applying intents within the open edit did, without the font-level
  * records an `EngineEdit` carries: the layers they touched, and whether they
- * changed what the engine's kerning reads return.
+ * changed what the engine's kerning and source-metric reads return.
  */
 export interface EngineStage {
   layers: EngineLayer[];
   kerning: boolean;
+  sourceMetrics: boolean;
 }
 
 /** One layer an edit touched, as the workspace's echo carries it. */
@@ -312,6 +313,11 @@ pub fn engine_stage(
             &stage,
             "kerning",
             &JsValue::from_bool(impact.intersects(FontChangeImpact::KERNING)),
+        )?;
+        set(
+            &stage,
+            "sourceMetrics",
+            &JsValue::from_bool(impact.intersects(FontChangeImpact::SOURCE_METRICS)),
         )?;
         Ok(stage.into())
     })

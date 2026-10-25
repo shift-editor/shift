@@ -8,6 +8,7 @@ import {
   type EngineLayer,
   type EngineSession,
   type EngineStage,
+  type InterpolatedMetrics,
   unkerned,
 } from "@shift/editor/model";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
@@ -17,9 +18,10 @@ import { engineLayerSource } from "./engineLayerSource";
 /** Which of the engine's reads a change may have changed. */
 interface ChangedReads {
   readonly kerning: boolean;
+  readonly sourceMetrics: boolean;
 }
 
-const UNCHANGED: ChangedReads = { kerning: false };
+const UNCHANGED: ChangedReads = { kerning: false, sourceMetrics: false };
 
 /**
  * The open session and the reader it loads layers through, which moves with
@@ -43,15 +45,18 @@ interface Opened {
  * engine's own history. {@link reopen} starts over from the store, dropping
  * that history: only after a persist failed.
  *
- * The window reads kerning from here too, as the {@link FontEngine}; its
- * revision cell changes with every edit, undo, redo or staged frame that
- * changed what those reads return, and on every open.
+ * The window reads kerning and interpolated metrics from here too, as the
+ * {@link FontEngine}; its revision cells change with every edit, undo, redo
+ * or staged frame that changed what those reads return, and on every open.
  */
 export class WindowEngine implements FontEngine {
   readonly #layers: LayerReaderHost;
   readonly #storeLocation: () => Promise<FontStoreLocation | null>;
   readonly #kerningRevision: WritableSignal<number> = signal(0, {
     name: "windowEngine.kerningRevision",
+  });
+  readonly #sourceMetricsRevision: WritableSignal<number> = signal(0, {
+    name: "windowEngine.sourceMetricsRevision",
   });
   #opened: Opened | null = null;
   /** Which reads the open edit changed so far, to show again when it is rewound or cancelled. */
@@ -64,6 +69,10 @@ export class WindowEngine implements FontEngine {
 
   get kerningRevisionCell(): Signal<number> {
     return this.#kerningRevision;
+  }
+
+  get sourceMetricsRevisionCell(): Signal<number> {
+    return this.#sourceMetricsRevision;
   }
 
   get isOpen(): boolean {
@@ -91,7 +100,7 @@ export class WindowEngine implements FontEngine {
       );
       this.#close();
       this.#opened = { session, reader, location };
-      this.#changed({ kerning: true });
+      this.#changed({ kerning: true, sourceMetrics: true });
     } catch (error) {
       this.#layers.close(reader);
       throw error;
@@ -239,6 +248,10 @@ export class WindowEngine implements FontEngine {
     return this.#opened?.session.kerningPairs(sourceId, pairs) ?? [];
   }
 
+  sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
+    return this.#opened?.session.sourceMetricsAt(location) ?? null;
+  }
+
   /** Forgets every undone edit. */
   discardRedo(): void {
     this.#require().discardRedo();
@@ -277,7 +290,10 @@ export class WindowEngine implements FontEngine {
 
   /** `edit`, after telling readers which of the engine's reads it changed. */
   #shown(edit: EngineEdit): EngineEdit {
-    this.#record({ kerning: edit.next?.kerning !== undefined });
+    this.#record({
+      kerning: edit.next?.kerning !== undefined,
+      sourceMetrics: edit.next?.sourceMetricsInterpolation !== undefined,
+    });
     return edit;
   }
 
@@ -290,7 +306,10 @@ export class WindowEngine implements FontEngine {
 
   /** Records what a change within the open edit, if one is open, changed, and tells readers. */
   #record(changed: ChangedReads): void {
-    this.#inEdit = { kerning: this.#inEdit.kerning || changed.kerning };
+    this.#inEdit = {
+      kerning: this.#inEdit.kerning || changed.kerning,
+      sourceMetrics: this.#inEdit.sourceMetrics || changed.sourceMetrics,
+    };
     this.#changed(changed);
   }
 
@@ -298,6 +317,7 @@ export class WindowEngine implements FontEngine {
   #changed(changed: ChangedReads): void {
     batch(() => {
       if (changed.kerning) this.#kerningRevision.update((revision) => revision + 1);
+      if (changed.sourceMetrics) this.#sourceMetricsRevision.update((revision) => revision + 1);
     });
   }
 

@@ -25,4 +25,5 @@ export type {
   EngineLayerSource,
   EngineSession,
   EngineStage,
+  InterpolatedMetrics,
 } from "./engineModule";

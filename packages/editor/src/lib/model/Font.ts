@@ -62,6 +62,7 @@ import type {
   KerningPlace,
   WorkspaceEditCoordinator,
 } from "../../types/font";
+import type { InterpolatedMetrics } from "../wasm/engine";
 import { locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -69,7 +70,6 @@ import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import { setKerningValuesIntent, type Kerning, type KerningPairPosition } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
-import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
   locationFromDesignAxisLocation,
@@ -240,7 +240,7 @@ export class Font {
   readonly #metricsCell: Signal<FontMetrics>;
   readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
 
-  readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
+  readonly #sourceMetricsRevisionCell: Signal<number>;
   readonly #kerningCell: Signal<Kerning>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
@@ -291,15 +291,7 @@ export class Font {
     this.#metricsCell = computed(() => fontCell.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#metricDefinitionsCell = computed(() => fontCell.value?.metricDefinitions ?? []);
 
-    this.#sourceMetricsInterpolationCell = computed(() => {
-      const font = fontCell.value;
-      return SourceMetricsInterpolation.from(
-        font?.sourceMetricsInterpolation ?? null,
-        font?.metricDefinitions ?? [],
-        font?.metrics ?? DEFAULT_FONT_METRICS,
-      );
-    });
-
+    this.#sourceMetricsRevisionCell = store.engine?.sourceMetricsRevisionCell ?? NO_REVISIONS;
     this.#kerningCell = store.kerningCell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
@@ -386,9 +378,12 @@ export class Font {
     return this.#metricDefinitionsCell;
   }
 
-  /** Reactive decoder for the Rust-built source-metric interpolation model. */
-  get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null> {
-    return this.#sourceMetricsInterpolationCell;
+  /**
+   * Changes whenever {@link metricsAtLocation} may answer differently between
+   * sources; track it with the location and the sources it reads.
+   */
+  get sourceMetricsRevisionCell(): Signal<number> {
+    return this.#sourceMetricsRevisionCell;
   }
 
   /** Reactive kerning groups and pair reads; a new value whenever kerning may have changed. */
@@ -1630,10 +1625,10 @@ export class Font {
    *
    * @remarks
    * Exact source locations return their authored values. Intermediate
-   * locations evaluate the Rust-built variation model used by the glyph
-   * interpolation path. Sparse optional technical fields remain undefined
-   * between sources; the model includes them only when every master authors a
-   * value.
+   * locations read the window's engine, which interpolates the masters with
+   * the variation model export uses. Sparse optional technical fields remain
+   * undefined between sources; the model includes them only when every master
+   * authors a value.
    *
    * @param location - External location displayed by editor controls.
    * @returns Resolved standard and technical metrics in font units.
@@ -1649,10 +1644,10 @@ export class Font {
     });
     if (exactSource) return this.#metricsForSource(exactSource);
 
-    return (
-      this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, axes) ??
-      this.defaultSourceMetrics
+    const interpolated = this.#store.engine?.sourceMetricsAt(
+      Array.from(locationValues(axes, designLocation)),
     );
+    return (interpolated && this.#interpolatedMetrics(interpolated)) ?? this.defaultSourceMetrics;
   }
 
   /**
@@ -1785,6 +1780,36 @@ export class Font {
     );
   }
 
+  /** The engine's interpolated metrics as source metrics; null when they no longer match the definitions. */
+  #interpolatedMetrics(interpolated: InterpolatedMetrics): SourceMetrics | null {
+    const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
+    const definitions = this.#metricDefinitionsCell.peek();
+    if (interpolated.metrics.length !== definitions.length) return null;
+
+    const metricValues = definitions.map((definition, index) => ({
+      metricId: definition.id,
+      position: interpolated.metrics[index]!.position,
+      overshoot: interpolated.metrics[index]!.overshoot,
+    }));
+    const position = (kind: MetricKind): number | undefined => {
+      const index = definitions.findIndex((definition) => definition.kind === kind);
+      return index < 0 ? undefined : metricValues[index]!.position;
+    };
+    return {
+      unitsPerEm,
+      metricValues,
+      ascender: position("ascender") ?? unitsPerEm * 0.8,
+      descender: position("descender") ?? unitsPerEm * -0.2,
+      baseline: position("baseline") ?? 0,
+      capHeight: position("capHeight"),
+      xHeight: position("xHeight"),
+      italicAngle: interpolated.italicAngle ?? undefined,
+      lineGap: interpolated.lineGap ?? undefined,
+      underlinePosition: interpolated.underlinePosition ?? undefined,
+      underlineThickness: interpolated.underlineThickness ?? undefined,
+    };
+  }
+
   #metricsForSource(source: Source | null): SourceMetrics {
     const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
     const definitions = this.#metricDefinitionsCell.peek();
@@ -1833,6 +1858,9 @@ export class Font {
     return untracked(() => read(this.#designspace));
   }
 }
+
+/** Never changes: the revision of reads a font without an engine answers. */
+const NO_REVISIONS: Signal<number> = computed(() => 0);
 
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */
 function memberIntent(

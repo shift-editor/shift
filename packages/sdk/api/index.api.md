@@ -571,7 +571,7 @@ export class Font {
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
     sourceAtOrDefault(location: ExternalAxisLocation): Source;
-    get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null>;
+    get sourceMetricsRevisionCell(): Signal<number>;
     get sources(): Source[];
     get sourcesCell(): Signal<Source[]>;
     // (undocumented)

@@ -18,6 +18,7 @@ export {
   type EngineLayerSource,
   type EngineSession,
   type EngineStage,
+  type InterpolatedMetrics,
 } from "./lib/wasm/engine";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
