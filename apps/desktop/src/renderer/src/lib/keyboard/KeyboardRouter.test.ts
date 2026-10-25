@@ -53,8 +53,8 @@ describe("KeyboardRouter", () => {
       () => ({
         canvasActive,
         activeTool: editor.tool?.id ?? null,
-        editor,
-        toolManager: editor.toolManager,
+        editor: editor.editor,
+        toolManager: editor.editor.toolManager,
       }),
       (id) => {
         command = id;

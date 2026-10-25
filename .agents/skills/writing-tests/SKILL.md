@@ -208,6 +208,7 @@ Before committing a test, run through these. Any miss means the test is wrong.
 
 - `beforeEach` is ≤ 5 lines: `new TestEditor()` + `startSession()` + `selectTool()` + optional fixture.
 - No wrapper factories around `TestEditor`. If you need a reusable helper, it belongs as a method on `TestEditor` itself (see `pointerMove`, `click`, `escape`).
+- `TestEditor` wraps `Editor`; tests see only its helpers and the members listed in `EDITOR_SURFACE`. Prefer a helper to growing that list, and never add tool, scene, history or signal internals to it. Pass `editor.editor` only to production code under test that needs a real `Editor` (commands, keyboard routing, catalogs) — never read through it.
 - If your test needs a pre-drawn shape, draw it with the pen/shape tool in `beforeEach` — don't construct glyph snapshots inline.
 - In E2E specs, prefer the shared `editor` fixture over constructing `EditorDriver` for the primary page. Construct a driver directly only for additional workspace windows.
 - Do not add one-off scene-node, glyph-layer, canvas-offset, or projection helpers when `EditorDriver` can express the same reusable boundary.

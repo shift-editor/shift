@@ -36,7 +36,7 @@ describe("Kerning tool", () => {
     return state?.type === "ready" ? state.hit : undefined;
   };
   const tool = () => editor.activeToolAs(KerningTool);
-  const editedPair = () => hovered()!.editablePair(editor)!;
+  const editedPair = () => hovered()!.editablePair(editor.editor)!;
 
   beforeEach(async () => {
     editor = new TestEditor();
@@ -114,8 +114,8 @@ describe("Kerning tool", () => {
       amount: -75,
     });
     expect(isGroupSide(editedPair().second)).toBe(true);
-    expect(hovered()!.lock(editor, "first")).toEqual({ locked: true, toggleable: false });
-    expect(hovered()!.lock(editor, "second")).toEqual({ locked: false, toggleable: true });
+    expect(hovered()!.lock(editor.editor, "first")).toEqual({ locked: true, toggleable: false });
+    expect(hovered()!.lock(editor.editor, "second")).toEqual({ locked: false, toggleable: true });
   });
 
   it("drops the selected pair when an undo takes one of its glyphs away", async () => {
@@ -163,7 +163,7 @@ describe("Kerning tool", () => {
   it("locking a side makes it an exception at the active source without moving the kern", async () => {
     hoverKern();
 
-    expect(hovered()!.toggleLock(editor, "second")).toBe(true);
+    expect(hovered()!.toggleLock(editor.editor, "second")).toBe(true);
     await editor.settle();
     hoverKern();
 
@@ -196,7 +196,7 @@ describe("Kerning tool", () => {
   it("redraws its overlay when the active source changes", () => {
     const drawn: number[] = [];
     const overlay = effect(() => {
-      trackRunLayouts(editor);
+      trackRunLayouts(editor.editor);
       drawn.push(placed()[1]!.left);
     });
 

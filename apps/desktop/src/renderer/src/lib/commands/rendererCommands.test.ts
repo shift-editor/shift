@@ -7,7 +7,7 @@ describe("preview editor commands", () => {
   it("does not create canvas selection through Select All", async () => {
     const editor = new TestEditor("preview");
     await editor.startSession("preview", null);
-    expect(await runRendererCommand(editor, "edit.selectAll")).toBe(false);
+    expect(await runRendererCommand(editor.editor, "edit.selectAll")).toBe(false);
     expect(editor.selection.ids).toEqual([]);
   });
 });
@@ -34,9 +34,9 @@ describe("Make First Point", () => {
     const pointId = before.points[1].id;
     editor.selection.select([pointId]);
 
-    expect(canMakeFirstPoint(editor)).toBe(true);
-    expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(true);
-    expect(canMakeFirstPoint(editor)).toBe(false);
+    expect(canMakeFirstPoint(editor.editor)).toBe(true);
+    expect(await runRendererCommand(editor.editor, "glyph.makeFirstPoint")).toBe(true);
+    expect(canMakeFirstPoint(editor.editor)).toBe(false);
     const after = editor.glyphContours[0];
     expect(after.closed).toBe(true);
     expect(after.points).toEqual([...before.points.slice(1), before.points[0]]);
@@ -60,17 +60,17 @@ describe("Make First Point", () => {
   it("does not promote handles, accept multiple points, or record an unchanged start", async () => {
     const before = editor.glyphContours[0];
     editor.selection.select([before.points[3].id]);
-    expect(canMakeFirstPoint(editor)).toBe(false);
-    expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
+    expect(canMakeFirstPoint(editor.editor)).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.makeFirstPoint")).toBe(false);
     editor.selection.select([before.points[1].id, before.points[2].id]);
-    expect(canMakeFirstPoint(editor)).toBe(false);
-    expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
+    expect(canMakeFirstPoint(editor.editor)).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.makeFirstPoint")).toBe(false);
     editor.selection.select([before.points[0].id]);
-    expect(canMakeFirstPoint(editor)).toBe(false);
-    expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
+    expect(canMakeFirstPoint(editor.editor)).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.makeFirstPoint")).toBe(false);
     editor.selection.clear();
-    expect(canMakeFirstPoint(editor)).toBe(false);
-    expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
+    expect(canMakeFirstPoint(editor.editor)).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.makeFirstPoint")).toBe(false);
     expect(editor.glyphContours[0].points).toEqual(before.points);
 
     await editor.undo();
@@ -84,8 +84,8 @@ describe("Make First Point", () => {
     const before = editor.glyphContours[0].points;
     editor.selection.select([before[1].id]);
 
-    expect(canMakeFirstPoint(editor)).toBe(false);
-    expect(await runRendererCommand(editor, "glyph.makeFirstPoint")).toBe(false);
+    expect(canMakeFirstPoint(editor.editor)).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.makeFirstPoint")).toBe(false);
     expect(editor.glyphContours[0].closed).toBe(false);
     expect(editor.glyphContours[0].points).toEqual(before);
   });
@@ -109,13 +109,13 @@ describe("empty and invalid editor operations", () => {
 
   it("refuses deletion and duplication without selected geometry", async () => {
     expect(await editor.deleteSelection()).toBe(false);
-    expect(await runRendererCommand(editor, "edit.duplicate")).toBe(false);
-    expect(await runRendererCommand(editor, "edit.deselect")).toBe(false);
+    expect(await runRendererCommand(editor.editor, "edit.duplicate")).toBe(false);
+    expect(await runRendererCommand(editor.editor, "edit.deselect")).toBe(false);
     expect(editor.pointCount).toBe(0);
   });
 
   it("refuses contour commands without a valid contour selection", async () => {
-    expect(await runRendererCommand(editor, "glyph.reverseSelectedContour")).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.reverseSelectedContour")).toBe(false);
     expect(editor.glyphContours).toEqual([]);
   });
 
@@ -132,7 +132,7 @@ describe("empty and invalid editor operations", () => {
     editor.selectAll();
     const originalSelection = editor.selection.ids;
 
-    expect(await runRendererCommand(editor, "edit.duplicate")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.duplicate")).toBe(true);
     expect(editor.pointCount).toBe(4);
     const duplicateSelection = editor.selection.ids;
     expect(duplicateSelection).toHaveLength(2);
@@ -144,16 +144,16 @@ describe("empty and invalid editor operations", () => {
     expect(editor.pointCount).toBe(4);
     expect(editor.selection.ids).toEqual(duplicateSelection);
 
-    expect(await runRendererCommand(editor, "edit.deselect")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.deselect")).toBe(true);
     expect(editor.selection.ids).toEqual([]);
   });
 
   it("routes native View commands through the canvas editor", async () => {
     const originalZoom = editor.zoom;
 
-    expect(await runRendererCommand(editor, "view.zoomIn")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "view.zoomIn")).toBe(true);
     expect(editor.zoom).toBeGreaterThan(originalZoom);
-    expect(await runRendererCommand(editor, "view.zoomOut")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "view.zoomOut")).toBe(true);
     expect(editor.zoom).toBeCloseTo(originalZoom);
   });
 
@@ -165,28 +165,28 @@ describe("empty and invalid editor operations", () => {
     ]);
     const originalPointCount = editor.pointCount;
 
-    expect(await runRendererCommand(editor, "edit.selectAll")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.selectAll")).toBe(true);
     expect(editor.selection.ids).toHaveLength(originalPointCount);
-    expect(await runRendererCommand(editor, "edit.copy")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.copy")).toBe(true);
     expect(editor.clipboardBuffer).not.toBe("");
 
-    expect(await runRendererCommand(editor, "edit.paste")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.paste")).toBe(true);
     expect(editor.pointCount).toBe(originalPointCount * 2);
 
-    expect(await runRendererCommand(editor, "edit.undo")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.undo")).toBe(true);
     expect(editor.pointCount).toBe(originalPointCount);
-    expect(await runRendererCommand(editor, "edit.redo")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.redo")).toBe(true);
     expect(editor.pointCount).toBe(originalPointCount * 2);
 
-    expect(await runRendererCommand(editor, "edit.deleteSelection")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.deleteSelection")).toBe(true);
     expect(editor.pointCount).toBe(originalPointCount);
-    expect(await runRendererCommand(editor, "edit.undo")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.undo")).toBe(true);
     expect(editor.pointCount).toBe(originalPointCount * 2);
 
-    expect(await runRendererCommand(editor, "edit.selectAll")).toBe(true);
-    expect(await runRendererCommand(editor, "edit.cut")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.selectAll")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.cut")).toBe(true);
     expect(editor.pointCount).toBe(0);
-    expect(await runRendererCommand(editor, "edit.undo")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "edit.undo")).toBe(true);
     expect(editor.pointCount).toBe(originalPointCount * 2);
   });
 });

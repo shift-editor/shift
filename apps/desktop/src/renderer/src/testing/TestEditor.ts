@@ -1,5 +1,5 @@
 /**
- * TestEditor — a real Editor with input simulation for testing.
+ * TestEditor — a real Editor behind a stable test API, with input simulation.
  *
  * Usage:
  *   const editor = new TestEditor();
@@ -82,6 +82,105 @@ interface DragResult {
 }
 
 /**
+ * The {@link Editor} members tests may use directly: its user actions and the
+ * domain objects (selection, font, text) a user works with.
+ *
+ * @remarks
+ * Everything else is reached through a TestEditor helper, so restructuring the
+ * editor changes this list and the helpers, not the tests. Shrink the list as
+ * helpers replace entries; do not add tool, scene, history or signal internals.
+ */
+const EDITOR_SURFACE = [
+  "activeSource",
+  "activeSourceId",
+  "addAnchorAt",
+  "addAnchorAtPointer",
+  "addComponent",
+  "attachRenderSurfaces",
+  "boolean",
+  "camera",
+  "canDecomposeSelection",
+  "collapseEditingSources",
+  "componentTransformSelection",
+  "copy",
+  "createGlyph",
+  "createGlyphAndAddComponent",
+  "createGlyphsForUnicodes",
+  "createSource",
+  "currentModifiers",
+  "cursor",
+  "cut",
+  "deleteSelection",
+  "destroy",
+  "duplicateSelection",
+  "editing",
+  "editingSourceIds",
+  "externalLocation",
+  "fitGlyphFrame",
+  "flushMousePosition",
+  "font",
+  "getPointerTarget",
+  "getToolShortcuts",
+  "glyphForId",
+  "handlesVisible",
+  "hideHandles",
+  "hitRadius",
+  "hitRadiusIn",
+  "hover",
+  "input",
+  "insertContent",
+  "isDragging",
+  "layerForGeometry",
+  "nodeBounds",
+  "object",
+  "pan",
+  "paste",
+  "positionSelection",
+  "redo",
+  "registerTool",
+  "renameAnchor",
+  "requestTemporaryTool",
+  "returnFromTemporaryTool",
+  "sceneToScreen",
+  "screenToScene",
+  "selectAll",
+  "selectedComponentsAnchored",
+  "selection",
+  "selectionBounds",
+  "selectSource",
+  "selectSourceForEditing",
+  "setAnchorAxis",
+  "setCameraRect",
+  "setExternalLocation",
+  "setLanguageIds",
+  "setLeftSidebearing",
+  "setRightSidebearing",
+  "setSelectedComponentsAnchored",
+  "setSourceToDefault",
+  "setXAdvance",
+  "setZoom",
+  "snapping",
+  "text",
+  "textEditing",
+  "toggleAllSourcesForEditing",
+  "toLocal",
+  "tool",
+  "toolIf",
+  "toolRegistry",
+  "toScene",
+  "transaction",
+  "transformTarget",
+  "undo",
+  "updateMousePosition",
+  "xAdvance",
+  "zoom",
+  "zoomToFit",
+  "zoomToSelection",
+] as const satisfies readonly (keyof Editor)[];
+
+type EditorSurface = (typeof EDITOR_SURFACE)[number];
+
+/**
  * In-memory {@link SystemClipboard} for tests. The buffer is directly
  * readable via {@link TestEditor.clipboardBuffer} so tests can assert on
  * what the Editor wrote without needing a round-trip.
@@ -96,7 +195,23 @@ class InMemorySystemClipboard implements SystemClipboard {
   }
 }
 
-export class TestEditor extends Editor {
+// Declaration merging types the members the static block below forwards to the wrapped editor.
+// oxlint-disable-next-line typescript/no-unsafe-declaration-merging
+export interface TestEditor extends Pick<Editor, EditorSurface> {}
+
+export class TestEditor {
+  static {
+    for (const name of EDITOR_SURFACE) {
+      Object.defineProperty(TestEditor.prototype, name, {
+        get(this: TestEditor) {
+          const value: unknown = this.#editor[name];
+          return typeof value === "function" ? value.bind(this.#editor) : value;
+        },
+      });
+    }
+  }
+
+  readonly #editor: Editor;
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
 
@@ -108,11 +223,12 @@ export class TestEditor extends Editor {
   constructor(sessionMode: FontSessionMode = "workspace") {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
+    const editor = new Editor({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
+    this.#editor = editor;
     this.#stack = stack;
     this.#clipboard = clipboard;
-    registerBuiltInTools(this);
-    this.setActiveTool("select");
+    registerBuiltInTools(editor);
+    editor.setActiveTool("select");
   }
 
   /**
@@ -121,10 +237,10 @@ export class TestEditor extends Editor {
    */
   async startSession(name = "A", unicode: number | null = 65): Promise<this> {
     await this.#stack.createWorkspace();
-    this.selectSource(this.font.defaultSource.id);
+    this.#editor.selectSource(this.#editor.font.defaultSource.id);
 
     const glyph = await this.#createAndOpenGlyph(name, unicode);
-    const record = this.font.recordForName(glyph.handle.name);
+    const record = this.#editor.font.recordForName(glyph.handle.name);
     if (!record) throw new Error("created glyph did not appear in the font directory");
     this.#placeGlyph(record.id);
     return this;
@@ -133,13 +249,25 @@ export class TestEditor extends Editor {
   /** Opens a saved package through a fresh workspace stack and places one glyph. */
   async openSession(sourcePath: string, glyphName: string): Promise<this> {
     await this.#stack.openWorkspace(sourcePath);
-    this.selectSource(this.font.defaultSource.id);
+    this.#editor.selectSource(this.#editor.font.defaultSource.id);
 
-    const record = this.font.recordForName(glyphName as GlyphName);
+    const record = this.#editor.font.recordForName(glyphName as GlyphName);
     if (!record) throw new Error(`Opened package has no ${glyphName} glyph`);
-    await this.font.loadGlyph(record.id);
+    await this.#editor.font.loadGlyph(record.id);
     this.#placeGlyph(record.id);
     return this;
+  }
+
+  /**
+   * The wrapped editor, for handing to desktop code under test such as
+   * commands, keyboard routing and the glyph catalog.
+   *
+   * @remarks
+   * Observe and drive the editor through TestEditor itself; reading through
+   * this getter couples the test to the editor's internals again.
+   */
+  get editor(): Editor {
+    return this.#editor;
   }
 
   /** The real renderer edit coordinator, for desktop components built around this editor. */
@@ -161,7 +289,7 @@ export class TestEditor extends Editor {
   async closeSession(): Promise<void> {
     await this.settle();
     await this.#stack.closeWorkspace();
-    this.destroy();
+    this.#editor.destroy();
     this.#stack.dispose();
   }
 
@@ -172,8 +300,8 @@ export class TestEditor extends Editor {
 
   async #createAndOpenGlyph(name: string, unicode: number | null): Promise<Glyph> {
     const glyphId = mintGlyphId();
-    const sourceId = this.font.defaultSource.id;
-    const applied = await this.history.withoutRecording(() =>
+    const sourceId = this.#editor.font.defaultSource.id;
+    const applied = await this.#editor.history.withoutRecording(() =>
       this.#stack.editCoordinator.apply([
         {
           kind: "createGlyph",
@@ -197,34 +325,34 @@ export class TestEditor extends Editor {
     const record = applied.next?.glyphs?.find((glyph) => glyph.name === name);
     if (!record) throw new Error("createGlyph did not echo the new record");
 
-    return this.font.loadGlyph(record.id);
+    return this.#editor.font.loadGlyph(record.id);
   }
 
   /** The canvas's text run; the editor route creates it on the first open. */
   get textRun(): TextRunNode | null {
-    return this.scene.first("textRun");
+    return this.#editor.scene.first("textRun");
   }
 
   /** The glyph edited in place in {@link textRun}. */
   get runGlyph(): GlyphNode | null {
     const run = this.textRun;
-    return run ? this.nodeDefinition("textRun").childGlyph(run) : null;
+    return run ? this.#editor.nodeDefinition("textRun").childGlyph(run) : null;
   }
 
   /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
   #placeGlyph(glyphId: GlyphId): void {
-    const item = this.text.glyphItem(glyphId);
-    if (!item || !this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
-    const record = this.text.createRun([item]);
-    const run = this.scene.createNode<TextRunNode>({
+    const item = this.#editor.text.glyphItem(glyphId);
+    if (!item || !this.#editor.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
+    const record = this.#editor.text.createRun([item]);
+    const run = this.#editor.scene.createNode<TextRunNode>({
       kind: "textRun",
       runId: record.id,
-      size: this.font.metricsCell.peek().unitsPerEm,
+      size: this.#editor.font.metricsCell.peek().unitsPerEm,
       position: { x: 0, y: 0 },
     });
-    const child = this.nodeDefinition("textRun").editItem(run, item.id);
+    const child = this.#editor.nodeDefinition("textRun").editItem(run, item.id);
     if (!child) throw new Error("placed glyph is not loaded");
-    this.enterNode(child.id);
+    this.#editor.enterNode(child.id);
   }
 
   /**
@@ -232,7 +360,7 @@ export class TestEditor extends Editor {
    * where no source sits, so the displayed glyph is interpolated and read-only.
    */
   async moveToInterpolatedLocation(): Promise<this> {
-    const axisId = this.font.createAxis({
+    const axisId = this.#editor.font.createAxis({
       tag: "wght",
       name: "Weight",
       role: "external",
@@ -244,7 +372,7 @@ export class TestEditor extends Editor {
       hidden: false,
     });
     await this.settle();
-    this.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
+    this.#editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
     return this;
   }
 
@@ -253,8 +381,8 @@ export class TestEditor extends Editor {
    * loads it asks for; geometry and text reads see confirmed truth after.
    */
   async settle(): Promise<this> {
-    await this.font.editCoordinator.settled();
-    await this.text.settled();
+    await this.#editor.font.editCoordinator.settled();
+    await this.#editor.text.settled();
     return this;
   }
 
@@ -267,13 +395,13 @@ export class TestEditor extends Editor {
   }
 
   get glyphLayer(): GlyphLayer | null {
-    const sourceId = this.activeSourceId;
+    const sourceId = this.#editor.activeSourceId;
     if (!sourceId) return null;
 
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.layerForGlyph(node.glyphId, sourceId) ?? null;
+    return this.#editor.layerForGlyph(node.glyphId, sourceId) ?? null;
   }
 
   requireGlyphLayer(): GlyphLayer {
@@ -312,7 +440,7 @@ export class TestEditor extends Editor {
   }
 
   get glyphNode(): GlyphNode | null {
-    return this.scene.first("glyph");
+    return this.#editor.scene.first("glyph");
   }
 
   get sceneGlyphRenderModel(): GlyphRenderModel | null {
@@ -320,10 +448,9 @@ export class TestEditor extends Editor {
     if (!node) return null;
 
     return (
-      this.glyphForId(node.glyphId)?.renderModelAt(
-        this.externalLocationCell,
-        this.activeSourceIdCell,
-      ) ?? null
+      this.#editor
+        .glyphForId(node.glyphId)
+        ?.renderModelAt(this.#editor.externalLocationCell, this.#editor.activeSourceIdCell) ?? null
     );
   }
 
@@ -331,7 +458,7 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.font.recordForId(node.glyphId);
+    return this.#editor.font.recordForId(node.glyphId);
   }
 
   get glyphContours(): readonly Contour[] {
@@ -344,8 +471,8 @@ export class TestEditor extends Editor {
 
   async click(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<this> {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
-    this.toolManager.handlePointerDown(screenPoint(x, y), mods);
-    this.toolManager.handlePointerUp(screenPoint(x, y), mods);
+    this.#editor.toolManager.handlePointerDown(screenPoint(x, y), mods);
+    this.#editor.toolManager.handlePointerUp(screenPoint(x, y), mods);
 
     return this.settle();
   }
@@ -362,7 +489,7 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) throw new Error("localToScreen needs an open glyph node");
 
-    return this.sceneToScreen(this.toScene(node, localPoint(point.x, point.y)));
+    return this.#editor.sceneToScreen(this.#editor.toScene(node, localPoint(point.x, point.y)));
   }
 
   /**
@@ -392,8 +519,8 @@ export class TestEditor extends Editor {
   dragScene(input: DragInput): Promise<DragResult> {
     return this.#drag(
       input,
-      (point) => this.sceneToScreen(scenePoint(point.x, point.y)),
-      (screen) => this.screenToScene(screen),
+      (point) => this.#editor.sceneToScreen(scenePoint(point.x, point.y)),
+      (screen) => this.#editor.screenToScene(screen),
     );
   }
 
@@ -414,7 +541,7 @@ export class TestEditor extends Editor {
     return this.#drag(
       input,
       (point) => this.localToScreen(point),
-      (screen) => this.toLocal(node, this.screenToScene(screen)),
+      (screen) => this.#editor.toLocal(node, this.#editor.screenToScene(screen)),
     );
   }
 
@@ -455,33 +582,39 @@ export class TestEditor extends Editor {
    * @returns null when nothing is selected or the selection spans nodes.
    */
   selectionLocalRect(): Rect2D | null {
-    const bounds = this.selectionBounds();
+    const bounds = this.#editor.selectionBounds();
     return bounds ? Bounds.toRect(bounds) : null;
   }
 
   pointerDown(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerDown(screenPoint(x, y), { ...DEFAULT_MODIFIERS, ...options });
+    this.#editor.toolManager.handlePointerDown(screenPoint(x, y), {
+      ...DEFAULT_MODIFIERS,
+      ...options,
+    });
     return this;
   }
 
   pointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerMove(
+    this.#editor.toolManager.handlePointerMove(
       screenPoint(x, y),
       { ...DEFAULT_MODIFIERS, ...options },
       { force: true },
     );
-    this.toolManager.flushPointerMoves();
+    this.#editor.toolManager.flushPointerMoves();
     return this;
   }
 
   pointerUp(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerUp(screenPoint(x, y), { ...DEFAULT_MODIFIERS, ...options });
+    this.#editor.toolManager.handlePointerUp(screenPoint(x, y), {
+      ...DEFAULT_MODIFIERS,
+      ...options,
+    });
     return this;
   }
 
   keyDown(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
     const mods = { ...DEFAULT_MODIFIERS, ...options };
-    this.toolManager.handleKeyDown({
+    this.#editor.toolManager.handleKeyDown({
       key,
       code: key,
       shiftKey: mods.shiftKey,
@@ -505,13 +638,13 @@ export class TestEditor extends Editor {
 
   /** Abandons the in-flight pointer gesture, as losing pointer capture does. */
   cancelGesture(): this {
-    this.toolManager.cancelPointerGesture();
+    this.#editor.toolManager.cancelPointerGesture();
     return this;
   }
 
   /** The cursor the active tool asks for at the current pointer position. */
   get toolCursor(): CursorType | null {
-    return this.toolManager.activeTool?.cursorCell.value ?? null;
+    return this.#editor.toolManager.activeTool?.cursorCell.value ?? null;
   }
 
   /**
@@ -521,14 +654,14 @@ export class TestEditor extends Editor {
    * @throws {Error} when the active tool is not an instance of `type`.
    */
   activeToolAs<T>(type: abstract new (...args: never[]) => T): T {
-    const tool = this.toolManager.activeTool;
+    const tool = this.#editor.toolManager.activeTool;
     if (!(tool instanceof type)) throw new Error(`Expected active tool to be ${type.name}`);
 
     return tool;
   }
 
   selectTool(name: ToolName): this {
-    this.setActiveTool(name);
+    this.#editor.setActiveTool(name);
     return this;
   }
 
@@ -541,7 +674,10 @@ export class TestEditor extends Editor {
    * a release still honours the last sample (and its modifiers) the tool never saw.
    */
   queuePointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    this.toolManager.handlePointerMove(screenPoint(x, y), { ...DEFAULT_MODIFIERS, ...options });
+    this.#editor.toolManager.handlePointerMove(screenPoint(x, y), {
+      ...DEFAULT_MODIFIERS,
+      ...options,
+    });
     return this;
   }
 
@@ -567,7 +703,7 @@ export class TestEditor extends Editor {
     const run = this.textRun;
     if (!run) throw new Error("setTextRunSize needs an open text run");
 
-    this.scene.updateNode({ id: run.id, size });
+    this.#editor.scene.updateNode({ id: run.id, size });
     return this;
   }
 
@@ -579,10 +715,10 @@ export class TestEditor extends Editor {
    */
   get editGhostContours(): readonly (readonly Point2D[])[] | null {
     const node = this.glyphNode;
-    const sourceId = this.activeSourceId;
-    if (!node || !sourceId || this.tool?.id !== "select") return null;
+    const sourceId = this.#editor.activeSourceId;
+    if (!node || !sourceId || this.#editor.tool?.id !== "select") return null;
 
-    const base = this.layerForGlyph(node.glyphId, sourceId)?.editBaseGeometryCell.peek();
+    const base = this.#editor.layerForGlyph(node.glyphId, sourceId)?.editBaseGeometryCell.peek();
     if (!base) return null;
 
     return base.contours.map((contour) => contour.points.map(({ x, y }) => ({ x, y })));
@@ -593,7 +729,7 @@ export class TestEditor extends Editor {
    * the reference layer's, keyed by target layer.
    */
   get editingLayerMatches(): EditingLayerMatches {
-    return this.editingLayerMatchesCell.peek();
+    return this.#editor.editingLayerMatchesCell.peek();
   }
 
   /**
@@ -604,22 +740,22 @@ export class TestEditor extends Editor {
    * or changed, and only then.
    */
   sceneNodes(): readonly ShiftNode[] {
-    return this.scene.cell.value.nodes;
+    return this.#editor.scene.cell.value.nodes;
   }
 
   /** The placed scene node with `nodeId`, or null when there is none. */
   sceneNode(nodeId: NodeId): ShiftNode | null {
-    return this.scene.node(nodeId);
+    return this.#editor.scene.node(nodeId);
   }
 
   /** Every placed node of `kind`, in scene order. */
   nodesOfKind<K extends NodeKind>(kind: K): readonly NodeOfKind<K>[] {
-    return this.scene.nodesOfKind(kind);
+    return this.#editor.scene.nodesOfKind(kind);
   }
 
   /** The first placed node of `kind` in scene order, or null when there is none. */
   firstNode<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
-    return this.scene.first(kind);
+    return this.#editor.scene.first(kind);
   }
 
   /**
@@ -629,7 +765,7 @@ export class TestEditor extends Editor {
    * Reactive: an effect that calls this reruns when the nodes of `kind` change.
    */
   onlyNode<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
-    return this.scene.onlyCell(kind).value;
+    return this.#editor.scene.onlyCell(kind).value;
   }
 
   /**
@@ -639,35 +775,35 @@ export class TestEditor extends Editor {
    * Reactive: an effect that calls this reruns when the nodes showing `id` change.
    */
   nodesReferencing(id: SceneReference): readonly ShiftNode[] {
-    return this.scene.nodesReferencing(id);
+    return this.#editor.scene.nodesReferencing(id);
   }
 
   /** Places another node in the scene, as opening a glyph beside the current one does. */
   placeNode(node: NewSceneNode): ShiftNode {
-    return this.scene.createNode(node);
+    return this.#editor.scene.createNode(node);
   }
 
   /** Replaces every placed node with `nodes`, as restoring a saved canvas does. */
   replaceSceneNodes(nodes: readonly ShiftNode[]): this {
-    this.scene.setNodes(nodes);
+    this.#editor.scene.setNodes(nodes);
     return this;
   }
 
   /** Moves a placed node to a scene position. */
   moveNode(nodeId: NodeId, position: Point2D): this {
-    this.scene.updateNode({ id: nodeId, position });
+    this.#editor.scene.updateNode({ id: nodeId, position });
     return this;
   }
 
   /** Removes a placed node from the scene. */
   removeNode(nodeId: NodeId): this {
-    this.scene.deleteNode(nodeId);
+    this.#editor.scene.deleteNode(nodeId);
     return this;
   }
 
   /** Removes every placed node, as navigating away from the canvas does. */
   clearScene(): this {
-    this.scene.clear();
+    this.#editor.scene.clear();
     return this;
   }
 
@@ -680,18 +816,18 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) throw new Error("showGlyphInNode needs an open glyph node");
 
-    this.scene.updateNode({ id: node.id, glyphId });
+    this.#editor.scene.updateNode({ id: node.id, glyphId });
     return this;
   }
 
   /** The comparison outlines drawn around a glyph node, in draw order. */
   visibleOutlines(nodeId: NodeId): readonly GlyphOutlineTarget[] {
-    return this.nodeDefinition("glyph").visibleOutlines(nodeId);
+    return this.#editor.nodeDefinition("glyph").visibleOutlines(nodeId);
   }
 
   /** Shows or hides one comparison outline, as clicking its source or instance row does. */
   toggleOutline(target: GlyphOutlineTarget): this {
-    this.nodeDefinition("glyph").outlines.toggle(target);
+    this.#editor.nodeDefinition("glyph").outlines.toggle(target);
     return this;
   }
 
@@ -704,12 +840,12 @@ export class TestEditor extends Editor {
     const node = this.glyphNode;
     if (!node) throw new Error("handleStates needs an open glyph node");
 
-    return this.nodeDefinition("glyph").handleStates(node);
+    return this.#editor.nodeDefinition("glyph").handleStates(node);
   }
 
   /** Flushes pending edits and reads the document's save state (dirty, needs Save As). */
   documentState(): Promise<WorkspaceDocumentState | null> {
-    return this.font.editCoordinator.state();
+    return this.#editor.font.editCoordinator.state();
   }
 
   /**
@@ -722,7 +858,7 @@ export class TestEditor extends Editor {
     const name = this.glyphRecord?.name;
     if (!name) throw new Error("submitRejectedEdit needs an open glyph");
 
-    return this.font.editCoordinator.apply([
+    return this.#editor.font.editCoordinator.apply([
       { kind: "createGlyph", createGlyph: { glyphId: mintGlyphId(), name, unicodes: [] } },
     ]);
   }
@@ -732,12 +868,12 @@ export class TestEditor extends Editor {
    * A throwing body records nothing.
    */
   recordAction<T>(label: string, body: () => T): T {
-    return this.history.capture(label, body);
+    return this.#editor.history.capture(label, body);
   }
 
   /** Asynchronous {@link recordAction}: a rejecting body records nothing. */
   recordActionAsync<T>(label: string, body: () => Promise<T>): Promise<T> {
-    return this.history.captureAsync(label, body);
+    return this.#editor.history.captureAsync(label, body);
   }
 
   /**
@@ -745,22 +881,22 @@ export class TestEditor extends Editor {
    * the returned capture closes it.
    */
   beginAction(label: string): HistoryCapture {
-    return this.history.begin(label);
+    return this.#editor.history.begin(label);
   }
 
   /** Whether an undoable editor action is still open. */
   get recordingAction(): boolean {
-    return this.history.capturing;
+    return this.#editor.history.capturing;
   }
 
   /** The font's tracked language ids, or null when the font tracks none. */
   get trackedLanguageIds(): readonly string[] | null {
-    return this.font.languageIdsCell.peek();
+    return this.#editor.font.languageIdsCell.peek();
   }
 
   /** The axes users set directly, in font order. */
   get externalAxes(): readonly Axis[] {
-    return this.font.externalAxesCell.peek();
+    return this.#editor.font.externalAxesCell.peek();
   }
 
   /**
@@ -818,7 +954,7 @@ export class TestEditor extends Editor {
    * @returns null when the run does not exist.
    */
   runAdvance(runId: RunId): number | null {
-    return this.text.layoutCell(runId).peek()?.totalAdvance ?? null;
+    return this.#editor.text.layoutCell(runId).peek()?.totalAdvance ?? null;
   }
 
   /**
@@ -828,7 +964,7 @@ export class TestEditor extends Editor {
    * @returns an empty list when the run does not exist.
    */
   runPlacedGlyphs(runId: RunId): PlacedGlyphs {
-    return this.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+    return this.#editor.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
   }
 
   /**
@@ -842,7 +978,7 @@ export class TestEditor extends Editor {
     const run = this.textRun;
     if (!run) throw new Error("runCaretAt needs an open text run");
 
-    return this.nodeDefinition("textRun").caretAt(run, point);
+    return this.#editor.nodeDefinition("textRun").caretAt(run, point);
   }
 
   /**
@@ -855,7 +991,7 @@ export class TestEditor extends Editor {
     const run = this.textRun;
     if (!run) throw new Error("runSpacingGaps needs an open text run");
 
-    return this.nodeDefinition("textRun").spacingGaps(run);
+    return this.#editor.nodeDefinition("textRun").spacingGaps(run);
   }
 
   /**
@@ -864,7 +1000,7 @@ export class TestEditor extends Editor {
    * @returns null when nothing is selected.
    */
   selectionSceneRect(): Rect2D | null {
-    const bounds = this.selectionSceneBoundsCell.peek();
+    const bounds = this.#editor.selectionSceneBoundsCell.peek();
     return bounds ? Bounds.toRect(bounds) : null;
   }
 
@@ -876,13 +1012,14 @@ export class TestEditor extends Editor {
    */
   renderModelFor(glyphId: GlyphId): GlyphRenderModel | null {
     return (
-      this.glyphForId(glyphId)?.renderModelAt(this.externalLocationCell, this.activeSourceIdCell) ??
-      null
+      this.#editor
+        .glyphForId(glyphId)
+        ?.renderModelAt(this.#editor.externalLocationCell, this.#editor.activeSourceIdCell) ?? null
     );
   }
 
   #assertWorkspaceSettled(): void {
-    if (!this.font.editCoordinator.settledCell.value) {
+    if (!this.#editor.font.editCoordinator.settledCell.value) {
       throw new Error("Workspace edits are pending; await the user action before reading geometry");
     }
   }

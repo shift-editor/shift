@@ -17,7 +17,7 @@ describe("Positioner", () => {
 
   // Levien invariant: positioned.advance === sum of xAdvance.
   it("advance equals sum of xAdvance", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const positioner = new Positioner(editor.editor, signal(editor.font.defaultLocation()));
     const run = ltrRun(editor, [char(65), char(66), char(67)]);
 
     const positioned = positioner.position(run, "literal");
@@ -29,7 +29,7 @@ describe("Positioner", () => {
 
   // cluster numbering honors clusterStart and is monotonic.
   it("cluster equals clusterStart + i", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const positioner = new Positioner(editor.editor, signal(editor.font.defaultLocation()));
     const run = ltrRun(editor, [char(65), char(66)], /* clusterStart */ 7);
 
     const positioned = positioner.position(run, "literal");
@@ -42,7 +42,7 @@ describe("Positioner", () => {
     const a = char(65);
     const run = ltrRun(editor, [a]);
     const locationCell = signal(editor.font.defaultLocation());
-    const positioner = new Positioner(editor, locationCell);
+    const positioner = new Positioner(editor.editor, locationCell);
 
     const positioned = positioner.position(run, "literal");
     const record = editor.font.recordForName("A");
@@ -58,7 +58,7 @@ describe("Positioner", () => {
 
   // Character the font maps no glyph to → zero advance, null bounds, no throw.
   it("handles an unmapped character gracefully", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const positioner = new Positioner(editor.editor, signal(editor.font.defaultLocation()));
     const run = ltrRun(editor, [char(0x10fffd)]);
 
     const positioned = positioner.position(run, "literal");
@@ -80,8 +80,10 @@ describe("Positioner", () => {
 
     function positionedAfterA(name: string) {
       const run = ltrRun(editor, [char(65), glyph(id(name))]);
-      return new Positioner(editor, signal(editor.font.defaultLocation())).position(run, "literal")
-        .glyphs[1]!;
+      return new Positioner(editor.editor, signal(editor.font.defaultLocation())).position(
+        run,
+        "literal",
+      ).glyphs[1]!;
     }
 
     // Glyph data reads `x.comb` as a suffixed `x`: a letter, though its name says `comb`.
@@ -115,7 +117,7 @@ describe("Positioner", () => {
 
       const kernAfterA = (name: string) => {
         const run = ltrRun(editor, [char(65), glyph(id(name))]);
-        return new Positioner(editor, signal(editor.font.defaultLocation())).position(
+        return new Positioner(editor.editor, signal(editor.font.defaultLocation())).position(
           run,
           "literal",
         ).glyphs[0]!.xKern;
@@ -137,7 +139,7 @@ describe("Positioner", () => {
 
   // Empty run → empty positioned glyphs, zero advance.
   it("empty run yields empty positioned glyphs", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+    const positioner = new Positioner(editor.editor, signal(editor.font.defaultLocation()));
     const run = ltrRun(editor, []);
 
     const positioned = positioner.position(run, "literal");
@@ -162,10 +164,10 @@ describe("Positioner mark attachment", () => {
   it("attaches a mark to an anchor a composite takes from its components", () => {
     const run = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
 
-    const [base, mark] = new Positioner(editor, signal(editor.font.defaultLocation())).position(
-      run,
-      "anchors",
-    ).glyphs;
+    const [base, mark] = new Positioner(
+      editor.editor,
+      signal(editor.font.defaultLocation()),
+    ).position(run, "anchors").glyphs;
 
     expect(mark!.origin).toEqual(base!.origin);
     // acutecomb's `top` (100, 700) moved by its component offset (150, 0), less its `_top` (100, 500).

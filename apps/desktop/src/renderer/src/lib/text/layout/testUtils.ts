@@ -57,7 +57,7 @@ export function makeLayout(items: readonly TextItem[], editor: TestEditor): Text
   return new TextLayout({
     items,
     origin: { x: 0, y: 0 },
-    editor,
+    editor: editor.editor,
     externalLocation: signal(editor.font.defaultLocation()),
   });
 }

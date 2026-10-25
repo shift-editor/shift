@@ -34,7 +34,7 @@ class DisposableTestTool extends BaseTool<ContractState> {
   readonly #cursorSourceCell: Signal<CursorType>;
 
   constructor(editor: TestEditor, cursorSourceCell: Signal<CursorType>) {
-    super(editor);
+    super(editor.editor);
     this.#cursorSourceCell = cursorSourceCell;
   }
 
@@ -79,7 +79,7 @@ describe("BaseTool contract", () => {
 
   beforeEach(() => {
     editor = new TestEditor();
-    tool = new ContractTestTool(editor);
+    tool = new ContractTestTool(editor.editor);
     tool.activate();
     tool.stateChanges.length = 0;
   });

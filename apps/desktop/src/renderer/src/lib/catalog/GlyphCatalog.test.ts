@@ -32,7 +32,7 @@ describe("GlyphCatalog", () => {
     expect(editor.activeSourceId).toBe(boldId);
 
     const catalog = new GlyphCatalog(
-      editor,
+      editor.editor,
       getGlyphInfo(),
       new AuthoredGlyphAtlasSource(
         editor.workspaceEditCoordinator,

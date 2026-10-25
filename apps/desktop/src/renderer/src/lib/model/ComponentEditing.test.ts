@@ -160,7 +160,7 @@ describe("Decompose Components replaces selected components with outlines", () =
     const componentId = await editor.addComponent(base.id);
 
     expect(editor.canDecomposeSelection()).toBe(true);
-    expect(await runRendererCommand(editor, "glyph.decomposeComponents")).toBe(true);
+    expect(await runRendererCommand(editor.editor, "glyph.decomposeComponents")).toBe(true);
     const layer = editor.requireGlyphLayer();
     expect(layer.components).toEqual([]);
     expect(layer.allPoints.map(({ x, y }) => ({ x, y }))).toEqual([{ x: 40, y: 25 }]);
@@ -177,7 +177,7 @@ describe("Decompose Components replaces selected components with outlines", () =
     editor.selection.select([pointId]);
 
     expect(editor.canDecomposeSelection()).toBe(false);
-    expect(await runRendererCommand(editor, "glyph.decomposeComponents")).toBe(false);
+    expect(await runRendererCommand(editor.editor, "glyph.decomposeComponents")).toBe(false);
     expect(editor.requireGlyphLayer().allPoints).toHaveLength(1);
   });
 });
