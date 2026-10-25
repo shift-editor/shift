@@ -85,7 +85,7 @@ Run:
 pnpm generate:bridge-types
 ```
 
-`turbo run typecheck` depends on `generate:bridge-types`, so stale bridge declarations are refreshed before typecheck when inputs change.
+`generate:bridge-types` depends on `shift-bridge#types`, which rewrites `index.d.ts` from a `cargo check` (see the shift-bridge DOCS), and `turbo run typecheck` depends on `generate:bridge-types`. So a typecheck refreshes stale bridge declarations from the Rust sources without building the addon.
 
 ### Generated layouts
 
