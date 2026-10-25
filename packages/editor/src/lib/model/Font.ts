@@ -56,12 +56,18 @@ import {
   type Effect,
   type Signal,
 } from "../signals/signal";
-import type { FontOptions, FontRecordIndex, WorkspaceEditCoordinator } from "../../types/font";
+import type {
+  FontOptions,
+  FontRecordIndex,
+  KerningPlace,
+  WorkspaceEditCoordinator,
+} from "../../types/font";
+import { locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import type { Kerning, KerningPairPosition } from "./Kerning";
+import { setKerningValuesIntent, type Kerning, type KerningPairPosition } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
 import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
@@ -294,7 +300,7 @@ export class Font {
       );
     });
 
-    this.#kerningCell = store.kerning.cell;
+    this.#kerningCell = store.kerningCell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
@@ -385,7 +391,7 @@ export class Font {
     return this.#sourceMetricsInterpolationCell;
   }
 
-  /** Reactive kerning groups and per-source pair values. */
+  /** Reactive kerning groups and pair reads; a new value whenever kerning may have changed. */
   get kerningCell(): Signal<Kerning> {
     return this.#kerningCell;
   }
@@ -1653,12 +1659,7 @@ export class Font {
    * Resolves the kerning between `first` followed by `second`.
    *
    * @remarks
-   * A variable font blends the sources kerning is authored at, evaluated at
-   * the active source's location when one is being edited and at `location`
-   * otherwise, so every location shows what the compiled font kerns there.
-   * A source without pairs of its own, such as a sparse intermediate master,
-   * therefore shows the blended value. A static font reads the active or
-   * default source.
+   * As {@link kerningRun} reads it, for one pair.
    *
    * @param location - External location displayed by editor controls.
    * @param sourceId - Source being edited, which takes precedence over `location`.
@@ -1670,37 +1671,49 @@ export class Font {
     location: ExternalAxisLocation,
     sourceId: SourceId | null,
   ): number {
-    const kerning = this.#kerningCell.peek();
-    // An authoring source reads its own values, including ones not echoed yet,
-    // whose source the Rust-built basis may not cover until the echo arrives.
-    if (sourceId && kerning.authors(sourceId)) {
-      return kerning.valueAtSource(sourceId, first, second);
-    }
-    const { designLocation, staticSourceId, axes } = this.#peekDesignspace((designspace) => {
-      const source = sourceId ? designspace.source(sourceId) : null;
-      const staticSource = source ?? designspace.sourceAt(designspace.defaultLocation());
-      return {
-        designLocation: source
-          ? designAxisLocationFromLocation(source.location)
-          : designspace.toDesign(location),
-        staticSourceId: staticSource?.id ?? null,
-        axes: designspace.axes,
-      };
-    });
-
-    const interpolated = kerning.valueAtLocation(designLocation, axes, first, second);
-    if (interpolated !== null) return interpolated;
-    return staticSourceId ? kerning.valueAtSource(staticSourceId, first, second) : 0;
+    return this.kerningRun([first, second], location, sourceId)[0] ?? 0;
   }
 
   /**
-   * Opens a kerning edit: previews show at once, and committing submits one
-   * undoable change whose values stay visible until the workspace confirms them.
+   * Resolves the kerning of every glyph pair in `pairs`, in one engine call.
    *
-   * @throws {Error} When another kerning edit is open, or editing is not wired.
+   * @remarks
+   * The window's engine reads it, so it is what the compiled font kerns. A
+   * variable font blends the sources kerning is authored at, evaluated at the
+   * edited source's location when one is being edited and at `location`
+   * otherwise; a source that authors pairs of its own reads them as they are.
+   * A source without pairs of its own, such as a sparse intermediate master,
+   * therefore shows the blended value. A static font reads the edited or
+   * default source.
+   *
+   * @param pairs - Each pair's first glyph then its second.
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns One value per pair, in font units added after its first glyph's advance.
+   */
+  kerningRun(
+    pairs: readonly GlyphId[],
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): readonly number[] {
+    const place = this.#peekDesignspace((designspace): KerningPlace => {
+      if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
+      return {
+        kind: "location",
+        location: Array.from(locationValues(designspace.axes, designspace.toDesign(location))),
+      };
+    });
+    return this.#kerningCell.peek().between(pairs, place);
+  }
+
+  /**
+   * Opens a kerning edit: each preview applies in the window's engine at
+   * once, and committing persists one undoable change.
+   *
+   * @throws {Error} When another edit is open, or editing is not wired.
    */
   beginKerningEdit(): KerningEdit {
-    return new KerningEdit(this.#store.kerning, this.editCoordinator);
+    return new KerningEdit(this.editCoordinator);
   }
 
   /**
@@ -1710,9 +1723,9 @@ export class Font {
    * @param label - Undo label.
    */
   setKerningValues(edits: readonly KerningValueEdit[], label: string): void {
-    const edit = this.beginKerningEdit();
-    edit.preview(edits);
-    edit.commit(label);
+    if (edits.length === 0) return;
+    const coordinator = this.editCoordinator;
+    coordinator.transaction(label, () => coordinator.push(setKerningValuesIntent(edits)));
   }
 
   /**

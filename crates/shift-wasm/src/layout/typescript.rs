@@ -14,6 +14,7 @@ use shift_font::test_support::generated::assert_generated_file;
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
 use crate::decomposition::DecomposedGlyph;
+use crate::engine_reads::{EditablePair, KerningRun, SourcePairs};
 use crate::shaping::{ShapeParagraphs, ShapedRunOutput, ShaperGlyphs};
 
 /// One WebAssembly module and the hot calls it exports, generated into one
@@ -27,7 +28,7 @@ struct Module {
     calls: Vec<Call>,
 }
 
-fn modules() -> [Module; 2] {
+fn modules() -> [Module; 3] {
     [
         Module {
             output: "packages/editor/src/lib/wasm/generated/layouts.ts",
@@ -38,6 +39,11 @@ fn modules() -> [Module; 2] {
             output: "packages/editor/src/lib/wasm/generated/shapingLayouts.ts",
             import: "@shift/wasm/shaping",
             calls: shaping_calls(),
+        },
+        Module {
+            output: "packages/editor/src/lib/wasm/generated/engineLayouts.ts",
+            import: "@shift/wasm/engine",
+            calls: engine_calls(),
         },
     ]
 }
@@ -86,6 +92,23 @@ fn shaping_calls() -> Vec<Call> {
             doc: "Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null.",
             input: ShapeParagraphs::kind(),
             output: Vec::<Option<Vec<ShapedRunOutput>>>::kind(),
+        },
+    ]
+}
+
+fn engine_calls() -> Vec<Call> {
+    vec![
+        Call {
+            name: "engineKerningRun",
+            doc: "Reads the kerning between glyph pairs in the engine's font, at a source being edited or at a design location; null when the place cannot be read.",
+            input: KerningRun::kind(),
+            output: Option::<Vec<f64>>::kind(),
+        },
+        Call {
+            name: "engineKerningPairs",
+            doc: "Reads, for each glyph pair, the authored pair an edit to it at a source changes in the engine's font.",
+            input: SourcePairs::kind(),
+            output: Vec::<EditablePair>::kind(),
         },
     ]
 }

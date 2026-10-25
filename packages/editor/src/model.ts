@@ -1,5 +1,5 @@
 export { Font } from "./lib/model/Font";
-export { isGroupSide, kerningValueEdit, wireSide } from "./lib/model/Kerning";
+export { isGroupSide, kerningValueEdit, unkerned, wireSide } from "./lib/model/Kerning";
 export type {
   Kerning,
   KerningPairPosition,
@@ -12,10 +12,12 @@ export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
 export {
   loadEngine,
+  type EditablePair,
   type EngineEdit,
   type EngineLayer,
   type EngineLayerSource,
   type EngineSession,
+  type EngineStage,
 } from "./lib/wasm/engine";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";

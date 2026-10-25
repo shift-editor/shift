@@ -22,7 +22,6 @@ export {
   contourGeometry,
   decomposeMatrix,
   mapLocation,
-  resolveKerning,
   transformLayer,
   transformPoint,
 } from "./generated-reference/shift_wasm.js";

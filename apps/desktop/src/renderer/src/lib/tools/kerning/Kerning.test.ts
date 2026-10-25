@@ -146,6 +146,29 @@ describe("Kerning tool", () => {
     expect(kern()).toBe(-75);
   });
 
+  it("shows a drag's kern while it drags and puts it back on Escape, persisting nothing", async () => {
+    const layoutCell = editor.text.layoutCell(editor.textRun!.runId);
+    const kerns: number[] = [];
+    const subscription = effect(() => {
+      const [t, a] = layoutCell.value!.placedGlyphs;
+      kerns.push(a!.left - (t!.left + t!.glyph.xAdvance));
+    });
+    const center = kernCenter();
+    const at = (dx: number) => editor.localToScreen({ x: center.x + dx, y: center.y });
+
+    editor.pointerDown(at(0).x, at(0).y);
+    editor.pointerMove(at(4).x, at(4).y);
+    editor.pointerMove(at(20).x, at(20).y);
+    expect(kern()).toBe(-55);
+    editor.escape();
+    subscription.dispose();
+
+    expect(kerns).toContain(-55);
+    expect(kern()).toBe(-75);
+    await editor.settle();
+    expect(kern()).toBe(-75);
+  });
+
   it("arrow keys nudge the selected pair, Shift by 10", async () => {
     hoverKern();
     const screen = editor.localToScreen({ x: kernCenter().x, y: 120 });

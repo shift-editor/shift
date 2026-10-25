@@ -11,4 +11,3 @@
 
 mod axis_mapping;
 mod geometry;
-mod kerning;

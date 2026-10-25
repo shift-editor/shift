@@ -62,9 +62,9 @@ export function createWorkspaceStack(): WorkspaceStack {
       return refusingPersists(nodePortTransport(lane.port2), refusals);
     },
   });
-  const store = new FontStore();
   // The window's engine reads the same store through the preload's reader, as in production.
   const engine = new WindowEngine(layerReaderHost(), () => client.storeLocation());
+  const store = new FontStore({ engine });
   const editCoordinator = new WorkspaceEditCoordinator(client, store, engine);
   const font = new Font({ store, glyphInfo: getGlyphInfo(), editCoordinator });
 

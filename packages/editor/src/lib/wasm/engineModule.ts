@@ -1,21 +1,29 @@
-import type { FontIntent, GlyphId } from "@shift/types";
+import type { FontIntent, GlyphId, SourceId } from "@shift/types";
 import {
   engineApply,
   engineBeginEdit,
   engineCancelEdit,
   engineDiscardRedo,
   engineEndEdit,
+  engineGlyphNumbers,
   engineMarkSaved,
   engineOpen,
   enginePreload,
   enginePreview,
   engineRedo,
   engineRelease,
+  engineRewindEdit,
+  engineSourceNumbers,
+  engineStage,
   engineUndo,
   type EngineEdit,
   type EngineLayer,
   type EngineLayerSource,
+  type EngineStage,
 } from "@shift/wasm/engine";
+import { engineKerningPairs, engineKerningRun, type EditablePair } from "./generated/engineLayouts";
+import type { KerningPlace } from "../../types/font";
+import { unkerned } from "../model/Kerning";
 
 const released = new FinalizationRegistry<number>(engineRelease);
 
@@ -31,6 +39,10 @@ const released = new FinalizationRegistry<number>(engineRelease);
  */
 export class EngineSession {
   readonly #handle: number;
+  // non-reactive: numbers the session interned for each id; an id's number never changes
+  readonly #glyphNumbers = new Map<GlyphId, number>();
+  // non-reactive: as #glyphNumbers, for sources
+  readonly #sourceNumbers = new Map<SourceId, number>();
 
   private constructor(handle: number) {
     this.#handle = handle;
@@ -84,6 +96,71 @@ export class EngineSession {
    */
   beginEdit(): void {
     engineBeginEdit(this.#handle);
+  }
+
+  /**
+   * Puts the session back where the open edit began, keeping the edit open,
+   * so the applies that follow replace what it applied so far.
+   *
+   * @throws When no edit is open.
+   */
+  rewindEdit(): void {
+    engineRewindEdit(this.#handle);
+  }
+
+  /**
+   * Applies `intents` within the open edit, as {@link EngineSession.apply}
+   * does, without building the font-level records it changed: one frame of a
+   * gesture, whose records are built once when it commits.
+   *
+   * @returns The layers they touched and which reads they changed.
+   * @throws As {@link EngineSession.apply}.
+   */
+  stage(intents: readonly FontIntent[]): EngineStage {
+    return engineStage(this.#handle, [...intents]);
+  }
+
+  /**
+   * Reads the kerning between glyph pairs at one place in the session's font.
+   *
+   * @param pairs - Each pair's first glyph then its second.
+   * @returns One value per pair in font units; zeros when the place cannot be read.
+   */
+  kerningRun(pairs: readonly GlyphId[], place: KerningPlace): readonly number[] {
+    const glyphs = this.#numbers(pairs, this.#glyphNumbers, engineGlyphNumbers);
+    const source =
+      place.kind === "source"
+        ? this.#numbers([place.sourceId], this.#sourceNumbers, engineSourceNumbers)[0]
+        : null;
+    const location = place.kind === "location" ? place.location : [];
+    const values = engineKerningRun({ engine: this.#handle, source, location, glyphs });
+    return values ?? unkerned(pairs);
+  }
+
+  /**
+   * Reads, for each glyph pair, the authored pair an edit to it at `sourceId`
+   * changes in the session's font, and whether it applies there.
+   *
+   * @param pairs - Each pair's first glyph then its second.
+   */
+  kerningPairs(sourceId: SourceId, pairs: readonly GlyphId[]): readonly EditablePair[] {
+    const [source] = this.#numbers([sourceId], this.#sourceNumbers, engineSourceNumbers);
+    const glyphs = this.#numbers(pairs, this.#glyphNumbers, engineGlyphNumbers);
+    return engineKerningPairs({ engine: this.#handle, source: source ?? 0, glyphs });
+  }
+
+  /** Each of `ids` by the number the session interned it as, interning new ones in one call. */
+  #numbers<Id extends string>(
+    ids: readonly Id[],
+    numbers: Map<Id, number>,
+    intern: (handle: number, ids: string[]) => Uint32Array,
+  ): number[] {
+    const missing = [...new Set(ids.filter((id) => !numbers.has(id)))];
+    if (missing.length > 0) {
+      const interned = intern(this.#handle, missing);
+      for (const [index, id] of missing.entries()) numbers.set(id, interned[index]!);
+    }
+    return ids.map((id) => numbers.get(id)!);
   }
 
   /**
@@ -142,4 +219,4 @@ export class EngineSession {
   }
 }
 
-export type { EngineEdit, EngineLayer, EngineLayerSource };
+export type { EditablePair, EngineEdit, EngineLayer, EngineLayerSource, EngineStage };

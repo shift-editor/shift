@@ -19,6 +19,8 @@ use shift_wire::replacement::FontReplacement;
 use shift_wire::{GlyphState, intents};
 use wasm_bindgen::prelude::*;
 
+use crate::engine_reads::InternedIds;
+
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
 import type { FontIntent, FontReplacement, GlyphStructure, LayerId } from "@shift/types";
@@ -50,6 +52,16 @@ export interface EngineEdit {
   changeSet?: Uint8Array;
   /** For an undo or redo: whether it left the font as last saved. */
   matchesSaved?: boolean;
+}
+
+/**
+ * What applying intents within the open edit did, without the font-level
+ * records an `EngineEdit` carries: the layers they touched, and whether they
+ * changed what the engine's kerning reads return.
+ */
+export interface EngineStage {
+  layers: EngineLayer[];
+  kerning: boolean;
 }
 
 /** One layer an edit touched, as the workspace's echo carries it. */
@@ -146,14 +158,15 @@ fn ids(values: &Array) -> Result<Vec<GlyphId>, HostError> {
     Ok(intents::parse_id_list::<GlyphId>(&texts)?)
 }
 
-/// An open session, the source it reads from, its undo history, and the
+/// An open session, the source it reads from, its undo history, the
 /// session as it stood when the open edit began, to go back to if it is
-/// cancelled.
-struct Engine {
-    session: EngineSession,
+/// cancelled, and the ids the editor's reads name by number.
+pub(crate) struct Engine {
+    pub(crate) session: EngineSession,
     source: EngineLayerSource,
     history: EditHistory,
     before_edit: Option<EngineSession>,
+    pub(crate) ids: InternedIds,
 }
 
 thread_local! {
@@ -161,7 +174,7 @@ thread_local! {
 }
 
 /// Runs `edit` on the engine at `handle`.
-fn with_engine<T>(
+pub(crate) fn with_engine<T>(
     handle: u32,
     edit: impl FnOnce(&mut Engine) -> Result<T, JsError>,
 ) -> Result<T, JsError> {
@@ -192,6 +205,7 @@ pub fn engine_open(directory: &[u8], source: EngineLayerSource) -> Result<u32, J
             source,
             history: EditHistory::default(),
             before_edit: None,
+            ids: InternedIds::default(),
         }));
         Ok(handle)
     })
@@ -239,6 +253,67 @@ pub fn engine_apply(
         let edit = edit_object(engine.session.font(), &applied)?;
         engine.history.record(applied.changes);
         Ok(edit.into())
+    })
+}
+
+/// Puts the session back where the open edit began and keeps the edit open,
+/// so the applies that follow replace what it applied so far: a gesture
+/// re-applies its latest intents each frame.
+///
+/// # Errors
+///
+/// Fails on an unknown handle, or when no edit is open.
+#[wasm_bindgen(js_name = engineRewindEdit)]
+pub fn engine_rewind_edit(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        let before = engine
+            .before_edit
+            .clone()
+            .ok_or_else(|| JsError::new("no edit is open; begin one first"))?;
+        engine.session = before;
+        engine.history.begin();
+        Ok(())
+    })
+}
+
+/// Applies `intents` as part of the open edit, as [`engine_apply`] does, but
+/// returns only the layers they touched and which reads they changed, not the
+/// font-level records: a gesture's frame, whose records are built once when
+/// it commits.
+///
+/// # Errors
+///
+/// As [`engine_apply`].
+#[wasm_bindgen(js_name = engineStage, unchecked_return_type = "EngineStage")]
+pub fn engine_stage(
+    handle: u32,
+    #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
+) -> Result<JsValue, JsError> {
+    let intents = intent_set(&intents)?;
+    with_engine(handle, |engine| {
+        if !engine.history.is_open() {
+            return Err(JsError::new("no edit is open; begin one first"));
+        }
+        let applied = engine
+            .session
+            .apply(&mut HostLayers(&engine.source), &intents)
+            .map_err(apply_error)?;
+        let layers: Array = applied
+            .layers
+            .iter()
+            .map(engine_layer)
+            .collect::<Result<_, _>>()?;
+        let impact = applied.changes.impact();
+        engine.history.record(applied.changes);
+
+        let stage = Object::new();
+        set(&stage, "layers", &layers)?;
+        set(
+            &stage,
+            "kerning",
+            &JsValue::from_bool(impact.intersects(FontChangeImpact::KERNING)),
+        )?;
+        Ok(stage.into())
     })
 }
 

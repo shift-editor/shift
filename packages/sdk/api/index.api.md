@@ -520,6 +520,7 @@ export class Font {
     isVariable(): boolean;
     kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
     get kerningCell(): Signal<Kerning>;
+    kerningRun(pairs: readonly GlyphId[], location: ExternalAxisLocation, sourceId: SourceId | null): readonly number[];
     get languageIdsCell(): Signal<readonly string[] | null>;
     layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;

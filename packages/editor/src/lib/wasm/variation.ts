@@ -64,7 +64,7 @@ const mappingHandles = new Handles<readonly AxisMappingBasis[]>(
 );
 
 /** A location as numbers in `axes` order; NaN where it has no coordinate, read as the default. */
-function locationValues(
+export function locationValues(
   axes: readonly Axis[],
   location: ReadonlyMap<AxisId, number>,
 ): Float64Array {

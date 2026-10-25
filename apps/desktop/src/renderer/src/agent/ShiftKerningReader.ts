@@ -107,13 +107,18 @@ export class ShiftKerningReader {
       throw new Error(`Source ${sourceId} is not in this font`);
 
     const external = location ? font.designspace.location(location) : font.defaultLocation();
-    const items = queries.map(({ first, second }): KerningResolution => {
-      const firstId = this.#glyphId(first);
-      const secondId = this.#glyphId(second);
+    const pairs = queries.flatMap(({ first, second }) => [
+      this.#glyphId(first),
+      this.#glyphId(second),
+    ]);
+    const amounts = font.kerningRun(pairs, external, sourceId ?? null);
+    const items = queries.map((_, index): KerningResolution => {
+      const firstId = pairs[2 * index]!;
+      const secondId = pairs[2 * index + 1]!;
       return {
         first: this.#glyph(firstId),
         second: this.#glyph(secondId),
-        amount: font.kerningBetween(firstId, secondId, external, sourceId ?? null),
+        amount: amounts[index] ?? 0,
         masters: font.sources.map((source) => this.#masterValue(source.id, firstId, secondId)),
       };
     });

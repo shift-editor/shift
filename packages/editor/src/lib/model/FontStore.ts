@@ -1,6 +1,5 @@
 import { ascending, EntityMap } from "@shift/types";
 import type {
-  KerningValueEdit,
   AppliedChange,
   FontReplacement,
   AnchorId,
@@ -36,11 +35,15 @@ import {
   type Signal,
   type WritableSignal,
 } from "../signals/signal";
-import type { FontRecordIndex, FontStoreOptions, GlyphSourceKey } from "../../types/font";
+import type {
+  FontEngine,
+  FontRecordIndex,
+  FontStoreOptions,
+  GlyphSourceKey,
+} from "../../types/font";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
 import { GlyphLayerState } from "./GlyphLayerState";
-import { Kerning } from "./Kerning";
-import { PreviewedState } from "./PreviewedState";
+import { Kerning, KerningRecords } from "./Kerning";
 import type { Glyph } from "./Glyph";
 import type { EngineEdit } from "../wasm/engine";
 
@@ -63,7 +66,8 @@ export interface GlyphInvalidation {
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #kerning: PreviewedState<Kerning, KerningValueEdit>;
+  readonly #engine: FontEngine | null;
+  readonly #kerning: Signal<Kerning>;
   readonly #committedRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
@@ -98,7 +102,13 @@ export class FontStore {
   // non-reactive: interning table that dedupes projection bases; only read while interning
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor({ font = null, records = [], workspace = null }: FontStoreOptions = {}) {
+  constructor({
+    font = null,
+    records = [],
+    workspace = null,
+    engine = null,
+  }: FontStoreOptions = {}) {
+    this.#engine = engine;
     this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
       name: "fontStore.font",
     });
@@ -115,24 +125,34 @@ export class FontStore {
     }
 
     // Echoes rebuild the font snapshot but keep its kerning reference unless
-    // kerning changed, so the lookup is indexed again only then.
+    // kerning changed, so the groups are indexed again only then.
     const kerningSnapshot = computed(() => this.#font.value?.kerning ?? null, {
       name: "fontStore.kerningSnapshot",
     });
-    const confirmedKerning = computed(() => Kerning.from(kerningSnapshot.value), {
-      name: "fontStore.confirmedKerning",
+    const kerningRecords = computed(() => KerningRecords.from(kerningSnapshot.value), {
+      name: "fontStore.kerningRecords",
     });
-    this.#kerning = new PreviewedState(confirmedKerning, (kerning, edits) =>
-      kerning.withEdits(edits),
+    this.#kerning = computed(
+      () => {
+        if (engine) track(engine.kerningRevisionCell);
+        return new Kerning(kerningRecords.value, engine);
+      },
+      { name: "fontStore.kerning" },
     );
   }
 
   /**
-   * The font's kerning as the renderer shows it: as the window's engine left
-   * it, with an open kerning edit's preview over it.
+   * The font's kerning: its records as the window's engine left them, and
+   * pair reads answered by the engine, an open edit included. A new value
+   * whenever either may have changed.
    */
-  get kerning(): PreviewedState<Kerning, KerningValueEdit> {
+  get kerningCell(): Signal<Kerning> {
     return this.#kerning;
+  }
+
+  /** The window's editing engine, which answers kerning and metric reads; null without one. */
+  get engine(): FontEngine | null {
+    return this.#engine;
   }
 
   get fontCell(): Signal<FontSnapshot | null> {
@@ -193,7 +213,6 @@ export class FontStore {
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
-      this.#kerning.endEdit();
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
@@ -208,7 +227,6 @@ export class FontStore {
 
   replaceFont(snapshot: FontSnapshot): void {
     batch(() => {
-      this.#kerning.endEdit();
       this.#indexCell.set(fontRecordIndex(snapshot));
       this.#font.set(snapshot);
       this.#workspace.set(null);

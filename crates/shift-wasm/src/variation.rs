@@ -406,7 +406,7 @@ fn variation_basis(data: VariationBasisData) -> VariationBasis {
     )
 }
 
-fn to_location(axes: &[Axis], values: &[f64]) -> Location {
+pub(crate) fn to_location(axes: &[Axis], values: &[f64]) -> Location {
     let mut location = Location::new();
     for (axis, value) in axes.iter().zip(values) {
         if !value.is_nan() {

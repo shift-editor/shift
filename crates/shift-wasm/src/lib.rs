@@ -25,6 +25,7 @@ pub mod anchors;
 pub mod decomposition;
 #[cfg(feature = "engine")]
 pub mod engine;
+pub mod engine_reads;
 mod layout;
 pub mod names;
 #[cfg(feature = "reference")]
