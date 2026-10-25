@@ -78,6 +78,17 @@ Let the type system state intent instead of comments, flags and tuples. Clippy e
 - **Points and vectors are `kurbo::Point`/`Vec2`**, and blending uses their operators (`point += weight * master_point`), not paired `x`/`y` arithmetic.
 - **Prefer `let … else`, `if let` chains (edition 2024) and early returns** over nested `match` or `if let`, and name non-trivial intermediate values.
 
+## Ownership, borrowing and types
+
+- **Don't clone to quiet the borrow checker.** A clone that only ends a borrow makes a silent copy whose later changes are lost, and on font state it can copy a whole glyph. Try these first, in order: a named `let` or a block to shorten the borrow; typed intermediates so the failing step is visible; move out of `&mut` with `std::mem::take`, `std::mem::replace` or `Option::take` (`std::mem::replace(&mut self.data_mut().metadata, metadata)` hands back the old metadata without copying it); split a struct so disjoint fields borrow separately. Clone small immutable data on purpose, and say why when it isn't obvious.
+- **Accept the most general borrowed type.** `&str` not `&String`, `&[T]` not `&Vec<T>`, `Option<&T>` not `&Option<T>`, and `impl IntoIterator<Item = &T>` for an input that is only iterated, as `DesignLocation::at_defaults(axes)` takes, so callers pass a slice, a set or an iterator without collecting first. Store owned data in structs (`String`, `Vec`, ids); a borrowed field puts a lifetime on everything that holds it.
+- **No `Rc`, `Arc` or `RefCell` in public signatures.** Take `&T`, `&mut T` or `T` and let the caller decide how to own it, as `FontWorkspace`'s methods take `&mut self` and leave sharing to whoever holds the workspace. A type that must be shared wraps its state in an `Arc` inside and implements a cheap `Clone`.
+- **A type with an invariant validates on the way in, and says so in its signature.** `GlyphName::new(name)` returns a `Result` because an empty string is not a glyph name. An infallible `From` from the raw type either skips that check or hides a panic: `GlyphName`'s own `From<String>` calls `new(…).expect(…)`, so a conversion that looks safe crashes on an empty name. Don't add more like it; use `TryFrom`, `FromStr` (`FeatureSetting: FromStr`) or a fallible `new`, and keep `from_raw` for values already known valid, such as ids read back from the store.
+- **`Option` for absence, never a sentinel**, such as `-1`, `0.0`, `""` or an empty id, which callers must remember to check and which can be a real value (an advance of `0.0` is valid). When a field means something only while another is set, model the cases as an enum with data instead of two loosely related fields.
+- **Keep the standard trait contracts.** Derive `Debug`, `Clone`, `PartialEq` and `Eq` whenever the fields allow it. A total order derives `Ord` with `PartialOrd`, never `PartialOrd` alone, so the type works as a `BTreeMap` key and in `sort`. A hand-written `Ord` or `Hash` must agree with `Eq`, comparing and ignoring the same fields, or `BTreeMap` and `dedup` misbehave. Mark pure functions and values whose discarding is a bug `#[must_use]`, such as a staged edit that does nothing until committed.
+- **Write the type where inference hides it.** `let glyph_ids: BTreeSet<GlyphId> = … .collect();` says what was built; a turbofish buried in a chain doesn't, and neither does a bare `.parse()` or `.into()`. Prefer `for x in items` to `.for_each(|x| …)`, and give a long chain a name before looping over it.
+- **A magic number is a named `const` with a doc comment** saying what it means, its unit, and what changing it affects. Today `EPSILON`, `SAME_WIDTH` and `SAME` are three undocumented `1e-6` tolerances in shift-font; one documented constant (`/// Font units closer than this are the same position: …`) would say once why the value is safe, and keep the three from drifting apart.
+
 ## Data structures
 
 An edit should cost what the edited thing costs, not what the font costs. A `Font` is copied on the first write of every edit, so whatever it holds is copied or rescanned on every keystroke.
@@ -103,5 +114,10 @@ When the editor needs a shift-font rule synchronously, write it as a plain-data 
 - [ ] No new `bool` parameter for a choice with consequences; no new `kind: "…"` string.
 - [ ] Collections built in loops implement `FromIterator`/`Extend` and are collected.
 - [ ] No tuple of three or more fields returned, stored or destructured with `_`; no free function whose first parameter is its owner.
+- [ ] No clone that only ends a borrow; `mem::take`, `mem::replace` or `Option::take` where a value moves out of `&mut`.
+- [ ] Parameters borrow the most general type (`&str`, `&[T]`, `Option<&T>`, `impl IntoIterator`); no `Rc`, `Arc` or `RefCell` in a public signature.
+- [ ] A type with an invariant has no infallible `From` from its raw type; absence is `Option`, not a sentinel.
+- [ ] Total orders derive `Ord` with `PartialOrd`; hand-written `Ord`/`Hash` agree with `Eq`; discarding-is-a-bug values are `#[must_use]`.
+- [ ] Collected and parsed values name their type; magic numbers are documented `const`s.
 - [ ] No scan of the whole font for a query an edit repeats; indexes that must agree are declared on one type and updated through a copy; no `imbl` outside `ir/persistent.rs`.
 - [ ] `cargo fmt`, `cargo clippy` for the affected crates, and their tests pass.
