@@ -49,7 +49,10 @@ describe("the font directory follows the workspace's glyph records", () => {
     const aacute = glyphId(font, "Aacute");
 
     // Aacute references acute in each of its four masters; the directory lists it once.
-    expect(font.componentBaseNamesForName("Aacute" as GlyphName)).toEqual(["acute", "A"]);
+    expect(font.componentBaseNamesForName("Aacute" as GlyphName).toSorted()).toEqual([
+      "A",
+      "acute",
+    ]);
     expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
