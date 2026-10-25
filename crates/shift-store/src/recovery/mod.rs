@@ -112,6 +112,34 @@ impl ShiftStore {
         recovery.discard(&saved_commit_id)
     }
 
+    /// Whether the document, with its unsaved changes, equals what is saved.
+    ///
+    /// Compares only what the overlay touches, so the cost follows the unsaved
+    /// work rather than the font. Rows that are equal but encoded differently
+    /// count as changed, so the answer errs towards keeping unsaved work.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::DocumentRequiresRecoveryOverlay`] when the store has no recovery
+    /// overlay, and [`StoreError::Sqlite`] when the comparison cannot run.
+    pub fn recovery_matches_saved(&self) -> Result<bool, StoreError> {
+        if self.recovery.is_none() {
+            return Err(StoreError::DocumentRequiresRecoveryOverlay);
+        }
+        for table in catalog::load_recovery_table_shapes(&self.conn)? {
+            let Some(differs) = views::differs_from_saved_sql(&table) else {
+                continue;
+            };
+            let differs: bool = self
+                .conn
+                .query_row(&format!("SELECT {differs}"), [], |row| row.get(0))?;
+            if differs {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     /// Applies sparse unsaved changes to the canonical document and acknowledges the commit.
     ///
     /// # Errors
