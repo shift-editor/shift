@@ -36,14 +36,17 @@ export function layerReaderHost(): LayerReaderHost {
       readers.set(handle, opened);
       return handle;
     },
-    load: (handle, layerIds) => {
-      const bytes = reader(handle).loadLayers([...layerIds]);
-      return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    },
+    directory: (handle) => bytes(reader(handle).loadDirectory()),
+    load: (handle, layerIds) => bytes(reader(handle).loadLayers([...layerIds])),
     componentClosure: (handle, glyphIds) => reader(handle).componentClosure([...glyphIds]),
     dependents: (handle, layerIds) => reader(handle).dependents([...layerIds]),
     close: (handle) => {
       readers.delete(handle);
     },
   };
+}
+
+/** A native buffer as a plain view the context bridge copies. */
+function bytes(buffer: Uint8Array): Uint8Array {
+  return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
 }

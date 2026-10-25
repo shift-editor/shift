@@ -234,6 +234,15 @@ export declare class LayerReader {
    */
   static openWorkingStore(storePath: string): LayerReader
   /**
+   * The font's metadata and its glyph and layer directory, every layer a
+   * placeholder, as named MessagePack: what an engine session opens with.
+   *
+   * # Errors
+   *
+   * Fails when the directory cannot be read or encoded.
+   */
+  loadDirectory(): Buffer
+  /**
    * The content of `layer_ids` as one MessagePack array of named-field
    * layers, the encoding the engine decodes.
    *
