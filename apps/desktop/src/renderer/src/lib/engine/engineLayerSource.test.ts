@@ -69,7 +69,10 @@ describe("the window's engine edits from the store", () => {
     const reader = layers.open({ kind: "working", storePath });
     openEngine = async () => {
       const { EngineSession } = await loadEngine();
-      return EngineSession.open(layers.directory(reader), engineLayerSource(layers, reader));
+      return EngineSession.open(
+        layers.directory(reader),
+        engineLayerSource(layers, () => reader),
+      );
     };
     engine = await openEngine();
   });
@@ -80,15 +83,55 @@ describe("the window's engine edits from the store", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  /** What `intent` does in the engine, as one edit. */
+  function edit(intent: FontIntent) {
+    engine.beginEdit();
+    const done = engine.apply([intent]);
+    engine.endEdit();
+    return done;
+  }
+
   /** The layer `intent` leaves `id` as, from the engine. */
   function applied(intent: FontIntent, id: LayerId = layerId) {
-    return engine.apply([intent]).find((layer) => layer.layerId === id);
+    return edit(intent).layers.find((layer) => layer.layerId === id);
   }
 
   /** Whether `values` holds the coordinate pair `x, y`. */
   function holdsPair(values: Float64Array, x: number, y: number): boolean {
     return values.some((value, index) => value === x && values[index + 1] === y);
   }
+
+  it("returns the same font-level records the workspace echoes for the edit", () => {
+    const glyphId = bridge.getGlyphs()[0]!.id;
+    const sourceId = bridge.getSources()[0]!.id;
+    const edits: FontIntent[] = [
+      {
+        kind: "setKerningValues",
+        setKerningValues: {
+          edits: [
+            {
+              sourceId,
+              first: { kind: "glyph", id: glyphId },
+              second: { kind: "glyph", id: glyphId },
+              amount: -40,
+            },
+          ],
+        },
+      },
+      {
+        kind: "updateFontMetadata",
+        updateFontMetadata: { metadata: { ...bridge.getMetadata(), familyName: "Parity Sans" } },
+      },
+      { kind: "setLanguages", setLanguages: { languageIds: ["en", "fr"] } },
+    ];
+
+    for (const intent of edits) {
+      const fromEngine = edit(intent).next;
+      const fromWorkspace = bridge.apply([intent]).next;
+      expect(Object.keys(asJson(fromEngine) as object)).not.toHaveLength(0);
+      expect(asJson(fromEngine)).toEqual(asJson({ ...fromWorkspace, glyphs: undefined }));
+    }
+  });
 
   it("loads the edited layer and returns its moved values", () => {
     const layer = applied({
@@ -174,3 +217,12 @@ describe("the window's engine edits from the store", () => {
     expect(holdsPair(layer!.values, 210, 720)).toBe(true);
   });
 });
+
+/** `value` as JSON would carry it: typed arrays as arrays, absent fields dropped. */
+function asJson(value: unknown): unknown {
+  return JSON.parse(
+    JSON.stringify(value, (_key, field: unknown) =>
+      field instanceof Float64Array ? [...field] : field,
+    ),
+  );
+}

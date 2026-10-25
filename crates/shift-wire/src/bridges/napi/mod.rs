@@ -1359,6 +1359,37 @@ pub struct NapiFontReplacement {
     pub kerning: Option<NapiKerningSnapshot>,
 }
 
+impl NapiFontReplacement {
+    /// The shared font-level records with the workspace's glyph records,
+    /// present when the edit changed them.
+    pub fn new(
+        replacement: crate::replacement::FontReplacement,
+        glyphs: Option<Vec<NapiGlyphRecord>>,
+    ) -> Self {
+        Self {
+            metadata: replacement.metadata.map(Into::into),
+            glyphs,
+            axes: replacement.axes.map(IntoEach::into_each),
+            axis_mappings: replacement.axis_mappings.map(IntoEach::into_each),
+            axis_mapping_bases: replacement.axis_mapping_bases.map(IntoEach::into_each),
+            metric_definitions: replacement.metric_definitions.map(IntoEach::into_each),
+            source_metrics_interpolation: replacement.source_metrics_interpolation.map(
+                |interpolation| NapiSourceMetricsInterpolationReplacement {
+                    snapshot: interpolation.snapshot.map(Into::into),
+                },
+            ),
+            named_instances: replacement.named_instances.map(IntoEach::into_each),
+            languages: replacement
+                .languages
+                .map(|languages| NapiLanguagesReplacement {
+                    language_ids: languages.language_ids,
+                }),
+            sources: replacement.sources.map(IntoEach::into_each),
+            kerning: replacement.kerning.map(Into::into),
+        }
+    }
+}
+
 /// Pure-state response to `apply`: no change records cross to the renderer.
 #[napi(object)]
 pub struct NapiAppliedChange {

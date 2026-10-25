@@ -86,6 +86,21 @@ export interface BridgeApi {
    * stack is empty.
    */
   redo(): AppliedChange | null
+  /**
+   * Persists a change set, as named MessagePack, that a session over this
+   * font already applied, and returns its echo: the layers it touched, the
+   * font-level and glyph records it changed, and the composites that depend
+   * on them. Nothing is added to this workspace's undo ledger. `save_state`
+   * claims where the change leaves the font; the store verifies a claim to
+   * match the saved document before discarding unsaved edits.
+   *
+   * # Errors
+   *
+   * Fails when the bytes do not decode to a change set, when a `before` in it
+   * does not match this font, or when the write fails; the font is then
+   * unchanged.
+   */
+  persist(changeSet: Uint8Array, saveState: SaveState): AppliedChange
   /** Permanently removes every redo entry without changing font or dirty state. */
   discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
@@ -299,6 +314,12 @@ export interface ParagraphRequest {
   /** Settings over the features applied by default. */
   features?: Array<FeatureSetting>
 }
+
+/**
+ * Where a persisted change leaves the font, as the session that made it
+ * claims.
+ */
+export type SaveState = "unsaved" | "matchesSaved";
 
 /**
  * One shaped glyph. Advances and offsets hold only what the font's feature

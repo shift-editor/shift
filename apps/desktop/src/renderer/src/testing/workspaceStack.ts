@@ -81,7 +81,7 @@ export function createWorkspaceStack(): WorkspaceStack {
       }
 
       store.replaceWorkspace(snapshot);
-      await engine.reopen();
+      await editCoordinator.reopenEngine();
     },
     async openWorkspace(sourcePath: string): Promise<void> {
       await shell.call("workspace.open", { path: sourcePath });
@@ -93,7 +93,7 @@ export function createWorkspaceStack(): WorkspaceStack {
       }
 
       store.replaceWorkspace(snapshot);
-      await engine.reopen();
+      await editCoordinator.reopenEngine();
     },
     async closeWorkspace(): Promise<void> {
       await shell.call("workspace.close", { discard: false });
@@ -145,7 +145,7 @@ function isApplyRequest(message: unknown): message is { id: string } {
     "kind" in message &&
     message.kind === "request" &&
     "type" in message &&
-    message.type === "workspace.apply" &&
+    message.type === "workspace.persist" &&
     "id" in message &&
     typeof message.id === "string"
   );

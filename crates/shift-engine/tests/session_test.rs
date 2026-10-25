@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use proptest::prelude::*;
-use shift_engine::{EngineSession, LayerSource};
+use shift_engine::{EditHistory, EngineSession, LayerSource};
 use shift_font::test_support::sample_font;
 use shift_font::{
     AddComponent, Anchor, AnchorId, Component, ComponentId, DecomposeComponents,
@@ -406,4 +406,122 @@ fn a_preview_shows_the_edit_and_keeps_the_font_as_it_was() {
     let kept = session.font().layer(&layer_id).unwrap();
     assert_eq!(components(&shown.layer), components(kept) + 1);
     assert_eq!(kept, font.layer(&layer_id).unwrap());
+}
+
+#[test]
+fn a_replayed_change_set_leaves_the_font_as_the_session_that_made_it() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
+    let add = FontIntentSet::from(FontIntent::from(AddComponent {
+        layer_id: layer_id.clone(),
+        component_id: ComponentId::from_raw("replayed"),
+        base_glyph_id: GlyphId::from_raw("base1"),
+    }));
+
+    // Native applies the edit; the window's engine only ever sees its change set.
+    let mut native = EngineSession::open_directory(placeholders(&font));
+    let applied = native.apply(&mut persisted, &add).unwrap();
+    let mut window = EngineSession::open_directory(placeholders(&font));
+    window
+        .replay(&mut persisted, applied.changes.clone())
+        .unwrap();
+    assert_eq!(
+        window.font().layer(&layer_id),
+        native.font().layer(&layer_id)
+    );
+
+    // Undo replays the inverse, back to the font as it was.
+    window
+        .replay(&mut persisted, applied.changes.inverted())
+        .unwrap();
+    assert_eq!(window.font().layer(&layer_id), font.layer(&layer_id));
+}
+
+#[test]
+fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
+    let mut window = EngineSession::open_directory(placeholders(&font));
+    let mut native = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+
+    // Two applies to the same layer, as one transaction.
+    history.begin();
+    for (index, base) in ["base1", "base2"].into_iter().enumerate() {
+        let add = FontIntentSet::from(FontIntent::from(AddComponent {
+            layer_id: layer_id.clone(),
+            component_id: ComponentId::from_raw(format!("added{index}")),
+            base_glyph_id: GlyphId::from_raw(base),
+        }));
+        history.record(window.apply(&mut persisted, &add).unwrap().changes);
+    }
+    let edit = history
+        .end(window.font())
+        .unwrap()
+        .expect("the edit changed the layer");
+
+    // Native persists the one change set the window sends.
+    native.replay(&mut persisted, edit).unwrap();
+    assert_eq!(
+        native.font().layer(&layer_id),
+        window.font().layer(&layer_id)
+    );
+    let edited = window.font().layer(&layer_id).cloned();
+
+    // Undo in the window, persisted the same way.
+    let undone = history
+        .undo(&mut window, &mut persisted)
+        .unwrap()
+        .expect("one edit to undo");
+    native.replay(&mut persisted, undone.changes).unwrap();
+    assert_eq!(window.font().layer(&layer_id), font.layer(&layer_id));
+    assert_eq!(native.font().layer(&layer_id), font.layer(&layer_id));
+
+    let redone = history
+        .redo(&mut window, &mut persisted)
+        .unwrap()
+        .expect("one edit to redo");
+    native.replay(&mut persisted, redone.changes).unwrap();
+    assert_eq!(window.font().layer(&layer_id).cloned(), edited);
+    assert_eq!(native.font().layer(&layer_id).cloned(), edited);
+}
+
+#[test]
+fn the_history_knows_when_undo_and_redo_reach_the_saved_font() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    let edit = |session: &mut EngineSession, history: &mut EditHistory, name: &str| {
+        history.begin();
+        let add = FontIntentSet::from(FontIntent::from(AddComponent {
+            layer_id: layer_id.clone(),
+            component_id: ComponentId::from_raw(name),
+            base_glyph_id: GlyphId::from_raw("base1"),
+        }));
+        let mut source = Persisted(font.clone());
+        history.record(session.apply(&mut source, &add).unwrap().changes);
+        history.end(session.font()).unwrap();
+    };
+
+    edit(&mut session, &mut history, "first");
+    history.mark_saved();
+    edit(&mut session, &mut history, "second");
+    assert!(!history.matches_saved());
+
+    history.undo(&mut session, &mut persisted).unwrap();
+    assert!(history.matches_saved(), "undo landed on the save");
+    history.undo(&mut session, &mut persisted).unwrap();
+    assert!(!history.matches_saved());
+    history.redo(&mut session, &mut persisted).unwrap();
+    assert!(history.matches_saved(), "redo landed on the save");
+
+    // Undo past the save, then edit: the saved font is no longer reachable.
+    history.undo(&mut session, &mut persisted).unwrap();
+    edit(&mut session, &mut history, "branch");
+    history.undo(&mut session, &mut persisted).unwrap();
+    assert!(!history.matches_saved());
 }

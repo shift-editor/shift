@@ -18,9 +18,9 @@ import type {
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type {
   AppliedChange,
+  SaveState,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  FontIntent,
   GlyphId,
   GlyphPreview,
   GlyphLayerSnapshot,
@@ -96,46 +96,22 @@ export class FontSessionClient {
   }
 
   /**
-   * Applies an intent set; the response is pure replace-grade state.
+   * Persists a change set the window's engine applied, as named MessagePack.
    *
-   * @param intents - Complete set of edits to commit as one undo operation.
-   * @param label - Optional human-readable name for the undo operation.
-   * @returns The committed replacement state echoed by the workspace.
-   * @throws {Error} when the workspace rejects or cannot persist the edit.
+   * @returns The workspace's receipt: what it wrote, with the glyph records
+   * and dependent composites only it can build.
+   * @throws {Error} when the change set does not match the workspace's font or
+   * cannot be written.
    */
-  async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
+  async persist(changeSet: Uint8Array, saveState: SaveState): Promise<AppliedChange> {
     await this.connect();
 
-    const { applied, documentState } = await this.#require().call("workspace.apply", {
-      intents,
-      label,
+    const { applied, documentState } = await this.#require().call("workspace.persist", {
+      changeSet,
+      saveState,
     });
     this.#setDocumentState(documentState);
     return this.#fold(applied);
-  }
-
-  /** Replays the latest ledger entry; null when nothing is undoable. */
-  async undo(): Promise<AppliedChange | null> {
-    await this.connect();
-
-    const { applied, documentState } = await this.#require().call("workspace.undo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
-  }
-
-  /** Replays the latest undone entry; null when nothing is redoable. */
-  async redo(): Promise<AppliedChange | null> {
-    await this.connect();
-
-    const { applied, documentState } = await this.#require().call("workspace.redo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
-  }
-
-  /** Permanently removes the current redo branch without changing document state. */
-  async discardRedo(): Promise<void> {
-    await this.connect();
-    await this.#require().call("workspace.discardRedo", undefined);
   }
 
   async snapshot(): Promise<WorkspaceSnapshot | null> {

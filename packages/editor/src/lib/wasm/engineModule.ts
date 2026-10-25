@@ -1,11 +1,18 @@
 import type { FontIntent, GlyphId } from "@shift/types";
 import {
   engineApply,
-  engineEvict,
+  engineBeginEdit,
+  engineCancelEdit,
+  engineDiscardRedo,
+  engineEndEdit,
+  engineMarkSaved,
   engineOpen,
   enginePreload,
   enginePreview,
+  engineRedo,
   engineRelease,
+  engineUndo,
+  type EngineEdit,
   type EngineLayer,
   type EngineLayerSource,
 } from "@shift/wasm/engine";
@@ -41,13 +48,13 @@ export class EngineSession {
   }
 
   /**
-   * Applies `intents` as one edit and returns every layer it touched, in the
-   * shape of the workspace's echo.
+   * Applies `intents` within the open edit and returns every layer they
+   * touched and the font-level records they changed.
    *
    * @throws When an intent is invalid or the source fails; the session is then
    * as loading left it.
    */
-  apply(intents: readonly FontIntent[]): EngineLayer[] {
+  apply(intents: readonly FontIntent[]): EngineEdit {
     return engineApply(this.#handle, [...intents]);
   }
 
@@ -71,9 +78,61 @@ export class EngineSession {
     return enginePreview(this.#handle, [...intents]);
   }
 
-  /** Drops the loaded layers of `glyphIds`, so the next edit reads them from the store again. */
-  evict(glyphIds: readonly GlyphId[]): void {
-    engineEvict(this.#handle, [...glyphIds]);
+  /**
+   * Opens an edit: the applies until {@link EngineSession.endEdit} become one
+   * undo step and one change set.
+   */
+  beginEdit(): void {
+    engineBeginEdit(this.#handle);
+  }
+
+  /**
+   * Closes the open edit as one undo step.
+   *
+   * @returns Its change set, as named MessagePack, to persist; `undefined`
+   * when it changed nothing.
+   */
+  endEdit(): Uint8Array | undefined {
+    return engineEndEdit(this.#handle);
+  }
+
+  /** Drops the open edit; the session goes back to where it began. */
+  cancelEdit(): void {
+    engineCancelEdit(this.#handle);
+  }
+
+  /**
+   * Takes back the latest edit.
+   *
+   * @returns What it did, with its change set to persist; `undefined` when
+   * there is nothing to undo.
+   * @throws When the inverse no longer applies; the edit stays undoable.
+   */
+  undo(): EngineEdit | undefined {
+    return engineUndo(this.#handle);
+  }
+
+  /**
+   * Makes the latest undone edit again.
+   *
+   * @returns As {@link EngineSession.undo}; `undefined` when there is nothing
+   * to redo.
+   */
+  redo(): EngineEdit | undefined {
+    return engineRedo(this.#handle);
+  }
+
+  /** Forgets every undone edit. */
+  discardRedo(): void {
+    engineDiscardRedo(this.#handle);
+  }
+
+  /**
+   * Records that the font, where the history now stands, is the saved
+   * document: after a save, or on opening one with no unsaved edits.
+   */
+  markSaved(): void {
+    engineMarkSaved(this.#handle);
   }
 
   /** Releases the session; it applies nothing afterwards. */
@@ -83,4 +142,4 @@ export class EngineSession {
   }
 }
 
-export type { EngineLayer, EngineLayerSource };
+export type { EngineEdit, EngineLayer, EngineLayerSource };

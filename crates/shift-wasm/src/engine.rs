@@ -9,14 +9,19 @@
 use std::cell::RefCell;
 
 use js_sys::{Array, Float64Array, Object, Reflect, Uint8Array};
-use shift_engine::{ApplyError, EngineSession, LayerSource};
-use shift_font::{Font, FontIntent, FontIntentSet, GlyphId, GlyphLayer, LayerId, TouchedLayer};
+use serde::Serialize;
+use shift_engine::{ApplyError, EditHistory, EngineSession, LayerSource};
+use shift_font::{
+    AppliedIntents, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId, GlyphLayer,
+    LayerId, TouchedLayer,
+};
+use shift_wire::replacement::FontReplacement;
 use shift_wire::{GlyphState, intents};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
-import type { FontIntent, GlyphStructure, LayerId } from "@shift/types";
+import type { FontIntent, FontReplacement, GlyphStructure, LayerId } from "@shift/types";
 
 /**
  * Where an engine session reads layers it has not loaded: the saved and
@@ -29,6 +34,22 @@ export interface EngineLayerSource {
   componentClosure(glyphIds: string[]): string[];
   /** Glyphs with a component of a glyph that owns one of `layerIds`. */
   dependents(layerIds: string[]): string[];
+}
+
+/** What one edit did: the layers it touched and the font-level records it changed. */
+export interface EngineEdit {
+  layers: EngineLayer[];
+  /**
+   * Each font-level collection the edit changed, whole, as the workspace's
+   * echo carries it; absent when it changed none. Glyph records never come
+   * from the engine: they need the store's component references and glyph
+   * categories.
+   */
+  next?: FontReplacement;
+  /** For an undo or redo: its change set, as named MessagePack, to persist. */
+  changeSet?: Uint8Array;
+  /** For an undo or redo: whether it left the font as last saved. */
+  matchesSaved?: boolean;
 }
 
 /** One layer an edit touched, as the workspace's echo carries it. */
@@ -125,10 +146,14 @@ fn ids(values: &Array) -> Result<Vec<GlyphId>, HostError> {
     Ok(intents::parse_id_list::<GlyphId>(&texts)?)
 }
 
-/// An open session and the source it reads from.
+/// An open session, the source it reads from, its undo history, and the
+/// session as it stood when the open edit began, to go back to if it is
+/// cancelled.
 struct Engine {
     session: EngineSession,
     source: EngineLayerSource,
+    history: EditHistory,
+    before_edit: Option<EngineSession>,
 }
 
 thread_local! {
@@ -162,24 +187,195 @@ pub fn engine_open(directory: &[u8], source: EngineLayerSource) -> Result<u32, J
     let session = EngineSession::open_directory(font);
     ENGINES.with_borrow_mut(|engines| {
         let handle = u32::try_from(engines.len())?;
-        engines.push(Some(Engine { session, source }));
+        engines.push(Some(Engine {
+            session,
+            source,
+            history: EditHistory::default(),
+            before_edit: None,
+        }));
         Ok(handle)
     })
 }
 
-/// Applies `intents`, in the shape the workspace takes, as one edit: loads
-/// what they read, applies them, and returns every layer they touched.
+/// Opens an edit: the applies until [`engine_end_edit`] become one undo step
+/// and one change set. Remembers the session as it stands, for
+/// [`engine_cancel_edit`]; sessions share structure, so this copies nothing.
 ///
 /// # Errors
 ///
-/// Fails when an intent does not decode, when the source fails, or when the
-/// edit is invalid; the session is then as loading left it.
-#[wasm_bindgen(js_name = engineApply, unchecked_return_type = "EngineLayer[]")]
+/// Fails on an unknown handle.
+#[wasm_bindgen(js_name = engineBeginEdit)]
+pub fn engine_begin_edit(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        engine.before_edit = Some(engine.session.clone());
+        engine.history.begin();
+        Ok(())
+    })
+}
+
+/// Applies `intents`, in the shape the workspace takes, as part of the open
+/// edit: loads what they read, applies them, and returns every layer they
+/// touched and the font-level records they changed.
+///
+/// # Errors
+///
+/// Fails when no edit is open, when an intent does not decode, when the source
+/// fails, or when the intents are invalid; the session is then as loading left
+/// it.
+#[wasm_bindgen(js_name = engineApply, unchecked_return_type = "EngineEdit")]
 pub fn engine_apply(
     handle: u32,
     #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
-) -> Result<Array, JsError> {
-    run_edit(handle, &intents, Edit::Keep)
+) -> Result<JsValue, JsError> {
+    let intents = intent_set(&intents)?;
+    with_engine(handle, |engine| {
+        if !engine.history.is_open() {
+            return Err(JsError::new("no edit is open; begin one first"));
+        }
+        let applied = engine
+            .session
+            .apply(&mut HostLayers(&engine.source), &intents)
+            .map_err(apply_error)?;
+        let edit = edit_object(engine.session.font(), &applied)?;
+        engine.history.record(applied.changes);
+        Ok(edit.into())
+    })
+}
+
+/// Closes the open edit as one undo step and returns its change set, as named
+/// MessagePack, to persist; `undefined` when it changed nothing.
+///
+/// # Errors
+///
+/// Fails on an unknown handle, or when the edit's changes cannot be coalesced
+/// or encoded.
+#[wasm_bindgen(js_name = engineEndEdit)]
+pub fn engine_end_edit(handle: u32) -> Result<Option<Uint8Array>, JsError> {
+    with_engine(handle, |engine| {
+        engine.before_edit = None;
+        let Some(change_set) = engine.history.end(engine.session.font())? else {
+            return Ok(None);
+        };
+        Ok(Some(Uint8Array::from(
+            &rmp_serde::to_vec_named(&change_set)?[..],
+        )))
+    })
+}
+
+/// Drops the open edit: the session goes back to where the edit began.
+///
+/// # Errors
+///
+/// Fails on an unknown handle.
+#[wasm_bindgen(js_name = engineCancelEdit)]
+pub fn engine_cancel_edit(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        if let Some(before) = engine.before_edit.take() {
+            engine.session = before;
+        }
+        engine.history.cancel();
+        Ok(())
+    })
+}
+
+/// Takes back the latest edit and returns what it did, with the change set
+/// to persist; `undefined` when there is nothing to undo.
+///
+/// # Errors
+///
+/// Fails when the source fails or the inverse no longer applies; the edit
+/// stays undoable.
+#[wasm_bindgen(js_name = engineUndo, unchecked_return_type = "EngineEdit | undefined")]
+pub fn engine_undo(handle: u32) -> Result<JsValue, JsError> {
+    with_engine(handle, |engine| {
+        let undone = engine
+            .history
+            .undo(&mut engine.session, &mut HostLayers(&engine.source))
+            .map_err(apply_error)?;
+        replayed(engine, undone)
+    })
+}
+
+/// Makes the latest undone edit again and returns what it did, with the change
+/// set to persist; `undefined` when there is nothing to redo.
+///
+/// # Errors
+///
+/// As [`engine_undo`].
+#[wasm_bindgen(js_name = engineRedo, unchecked_return_type = "EngineEdit | undefined")]
+pub fn engine_redo(handle: u32) -> Result<JsValue, JsError> {
+    with_engine(handle, |engine| {
+        let redone = engine
+            .history
+            .redo(&mut engine.session, &mut HostLayers(&engine.source))
+            .map_err(apply_error)?;
+        replayed(engine, redone)
+    })
+}
+
+/// Forgets every undone edit.
+///
+/// # Errors
+///
+/// Fails on an unknown handle.
+#[wasm_bindgen(js_name = engineDiscardRedo)]
+pub fn engine_discard_redo(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        engine.history.discard_redo();
+        Ok(())
+    })
+}
+
+/// An undo or redo as an `EngineEdit` carrying its change set and whether it
+/// left the font as last saved, or `undefined`.
+fn replayed(engine: &Engine, applied: Option<AppliedIntents>) -> Result<JsValue, JsError> {
+    let Some(applied) = applied else {
+        return Ok(JsValue::UNDEFINED);
+    };
+    let edit = edit_object(engine.session.font(), &applied)?;
+    let change_set = rmp_serde::to_vec_named(&applied.changes)?;
+    set(&edit, "changeSet", &Uint8Array::from(&change_set[..]))?;
+    set(
+        &edit,
+        "matchesSaved",
+        &JsValue::from_bool(engine.history.matches_saved()),
+    )?;
+    Ok(edit.into())
+}
+
+/// Records that the font, where the history now stands, is the saved
+/// document: after a save, or on opening one with no unsaved edits.
+///
+/// # Errors
+///
+/// Fails on an unknown handle.
+#[wasm_bindgen(js_name = engineMarkSaved)]
+pub fn engine_mark_saved(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        engine.history.mark_saved();
+        Ok(())
+    })
+}
+
+/// What an edit did as an `EngineEdit`: its touched layers and the font-level
+/// records it changed. Glyph records are left to the workspace's echo.
+fn edit_object(font: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
+    let layers: Array = applied
+        .layers
+        .iter()
+        .map(engine_layer)
+        .collect::<Result<_, _>>()?;
+    let edit = Object::new();
+    set(&edit, "layers", &layers)?;
+    let impact = applied
+        .changes
+        .impact()
+        .difference(FontChangeImpact::GLYPHS);
+    if let Some(next) = FontReplacement::changed_by(font, impact)? {
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        set(&edit, "next", &next.serialize(&serializer)?)?;
+    }
+    Ok(edit)
 }
 
 /// Returns every layer applying `intents` would touch, as they would be,
@@ -194,38 +390,32 @@ pub fn engine_preview(
     handle: u32,
     #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
 ) -> Result<Array, JsError> {
-    run_edit(handle, &intents, Edit::Discard)
+    let set = intent_set(&intents)?;
+    with_engine(handle, |engine| {
+        let previewed = engine
+            .session
+            .preview(&mut HostLayers(&engine.source), &set)
+            .map_err(apply_error)?;
+        previewed.layers.iter().map(engine_layer).collect()
+    })
 }
 
-/// What becomes of an edit once its touched layers are returned.
-#[derive(Clone, Copy)]
-enum Edit {
-    /// The session keeps it.
-    Keep,
-    /// The session stays as it was, apart from what loading added.
-    Discard,
-}
-
-fn run_edit(handle: u32, intents: &JsValue, edit: Edit) -> Result<Array, JsError> {
+/// `intents`, in the shape the workspace takes, as one set.
+fn intent_set(intents: &JsValue) -> Result<FontIntentSet, JsError> {
     let wire: Vec<intents::FontIntent> = serde_wasm_bindgen::from_value(plain_arrays(intents)?)?;
-    let set = FontIntentSet {
+    Ok(FontIntentSet {
         intents: wire
             .into_iter()
             .map(FontIntent::try_from)
             .collect::<Result<_, _>>()?,
-    };
-    with_engine(handle, |engine| {
-        let source = &mut HostLayers(&engine.source);
-        let applied = match edit {
-            Edit::Keep => engine.session.apply(source, &set),
-            Edit::Discard => engine.session.preview(source, &set),
-        }
-        .map_err(|error| match error {
-            ApplyError::Load(error) => JsError::new(&error.to_string()),
-            ApplyError::Engine(error) => JsError::new(&error.to_string()),
-        })?;
-        applied.layers.iter().map(engine_layer).collect()
     })
+}
+
+fn apply_error(error: ApplyError<HostError>) -> JsError {
+    match error {
+        ApplyError::Load(error) => JsError::new(&error.to_string()),
+        ApplyError::Engine(error) => JsError::new(&error.to_string()),
+    }
 }
 
 /// Loads every layer of `glyph_ids` and of the glyphs their components use,
@@ -243,18 +433,6 @@ pub fn engine_preload(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError
             .load_glyph_closure(&mut HostLayers(&engine.source), glyph_ids)
             .map_err(|error| JsError::new(&error.to_string()))
     })
-}
-
-/// Drops the loaded layers of `glyph_ids`, so the next edit that reads them
-/// loads them from the store again.
-///
-/// # Errors
-///
-/// Fails on an unknown handle or glyph id.
-#[wasm_bindgen(js_name = engineEvict)]
-pub fn engine_evict(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError> {
-    let glyph_ids = intents::parse_id_list::<GlyphId>(&glyph_ids)?;
-    with_engine(handle, |engine| Ok(engine.session.evict(&glyph_ids)?))
 }
 
 /// Releases a session; its handle applies nothing afterwards.

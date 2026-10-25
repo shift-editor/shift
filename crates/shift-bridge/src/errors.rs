@@ -31,8 +31,13 @@ pub enum BridgeError {
   #[error(transparent)]
   Store(#[from] shift_store::StoreError),
 
-  #[error("cannot encode layers: {0}")]
-  LayerEncoding(#[from] rmp_serde::encode::Error),
+  /// Layers could not be encoded for the window.
+  #[error("cannot encode for the window: {0}")]
+  Encoding(#[from] rmp_serde::encode::Error),
+
+  /// A change set from the window could not be decoded.
+  #[error("cannot decode from the window: {0}")]
+  Decoding(#[from] rmp_serde::decode::Error),
 
   #[error(transparent)]
   AuthoredSlug(#[from] AuthoredSlugError),
@@ -71,7 +76,8 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::SourceAtlas(_)
     | BridgeError::Workspace(_)
     | BridgeError::Store(_)
-    | BridgeError::LayerEncoding(_)
+    | BridgeError::Encoding(_)
+    | BridgeError::Decoding(_)
     | BridgeError::AuthoredSlug(_)
     | BridgeError::Slug(_)
     | BridgeError::ShaperFont(_)

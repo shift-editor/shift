@@ -12,11 +12,13 @@
 // WebAssembly engine. Tests may unwrap (clippy.toml).
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
+mod history;
 mod read_set;
 mod residency;
 mod session;
 mod source;
 
+pub use history::EditHistory;
 pub use read_set::ReadSet;
 pub use residency::LayerResidency;
 pub use session::{ApplyError, EngineError, EngineSession, LoadError, StagedEdit};

@@ -71,6 +71,21 @@ export declare class Bridge {
    * stack is empty.
    */
   redo(): NapiAppliedChange | null
+  /**
+   * Persists a change set, as named MessagePack, that a session over this
+   * font already applied, and returns its echo: the layers it touched, the
+   * font-level and glyph records it changed, and the composites that depend
+   * on them. Nothing is added to this workspace's undo ledger. `save_state`
+   * claims where the change leaves the font; the store verifies a claim to
+   * match the saved document before discarding unsaved edits.
+   *
+   * # Errors
+   *
+   * Fails when the bytes do not decode to a change set, when a `before` in it
+   * does not match this font, or when the write fails; the font is then
+   * unchanged.
+   */
+  persist(changeSet: Uint8Array, saveState: NapiSaveState): NapiAppliedChange
   /** Permanently removes every redo entry without changing font or dirty state. */
   discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
@@ -366,6 +381,20 @@ export interface NapiParagraphRequest {
   language?: string
   /** Settings over the features applied by default. */
   features?: Array<NapiFeatureSetting>
+}
+
+/**
+ * Where a persisted change leaves the font, as the session that made it
+ * claims.
+ */
+export declare const enum NapiSaveState {
+  /** The font now differs from the saved document. */
+  Unsaved = 'unsaved',
+  /**
+   * The font is back to the saved document, as an undo or redo onto the
+   * saved position leaves it; the store verifies this before trusting it.
+   */
+  MatchesSaved = 'matchesSaved'
 }
 
 /**

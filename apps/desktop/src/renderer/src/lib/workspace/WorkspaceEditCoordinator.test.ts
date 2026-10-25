@@ -204,6 +204,24 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(1);
   });
 
+  it("shows a font-level edit at once and takes it back when its transaction throws", async () => {
+    const languages = () => stack.store.workspaceCell.peek()?.languageIds ?? null;
+    const before = languages();
+    const french: FontIntent = { kind: "setLanguages", setLanguages: { languageIds: ["fr"] } };
+
+    expect(() =>
+      stack.editCoordinator.transaction("Set languages", () => {
+        stack.editCoordinator.push(french);
+        expect(languages()).toEqual(["fr"]);
+        throw new Error("abandoned");
+      }),
+    ).toThrow("abandoned");
+
+    expect(languages()).toEqual(before);
+    await stack.editCoordinator.settled();
+    expect(languages()).toEqual(before);
+  });
+
   it("keeps separate pushes as separate undo entries", async () => {
     const { store, editCoordinator } = stack;
 

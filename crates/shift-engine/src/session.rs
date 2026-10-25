@@ -111,7 +111,18 @@ impl EngineSession {
         source: &mut S,
         change_set: &FontChangeSet,
     ) -> Result<(), LoadError<S::Error>> {
-        self.load_layers(source, change_set.changed_layer_ids())
+        // A glyph replaced whole compares every layer of it, loaded or not.
+        let replaced_glyphs: Vec<GlyphId> = change_set
+            .changes
+            .iter()
+            .filter_map(|change| match change {
+                FontChange::Glyph(glyph) => glyph.sides().next().map(shift_font::Glyph::id),
+                _ => None,
+            })
+            .collect();
+        let mut layer_ids: BTreeSet<LayerId> = change_set.changed_layer_ids().into_iter().collect();
+        layer_ids.extend(self.font.layer_ids_of_glyphs(&replaced_glyphs));
+        self.load_layers(source, layer_ids)
     }
 
     /// Loads every layer of `glyph_ids`.
@@ -277,8 +288,7 @@ impl EngineSession {
         source: &mut S,
         set: &FontIntentSet,
     ) -> Result<AppliedIntents, ApplyError<S::Error>> {
-        self.load_for_intents(source, set)?;
-        Ok(self.stage_intents(set)?.applied)
+        Ok(self.stage_loaded(source, set)?.applied)
     }
 
     /// Loads what `set` reads, then stages and commits it.
@@ -292,8 +302,61 @@ impl EngineSession {
         source: &mut S,
         set: &FontIntentSet,
     ) -> Result<AppliedIntents, ApplyError<S::Error>> {
+        let staged = self.stage_loaded(source, set)?;
+        Ok(self.commit(staged))
+    }
+
+    /// Loads what `set` reads and stages it. A glyph the edit replaces whole
+    /// is recorded with every layer, so any of its layers still unloaded are
+    /// loaded and the edit staged again: every session that persists or undoes
+    /// the change then compares complete glyphs.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::apply`].
+    pub fn stage_loaded<S: LayerSource>(
+        &mut self,
+        source: &mut S,
+        set: &FontIntentSet,
+    ) -> Result<StagedEdit, ApplyError<S::Error>> {
         self.load_for_intents(source, set)?;
         let staged = self.stage_intents(set)?;
+        let partly_loaded: Vec<GlyphId> = staged
+            .changes()
+            .changes
+            .iter()
+            .filter_map(|change| match change {
+                FontChange::Glyph(glyph) => glyph.sides().next().map(shift_font::Glyph::id),
+                _ => None,
+            })
+            .filter(|glyph_id| {
+                self.font
+                    .layer_ids_of_glyphs([glyph_id])
+                    .iter()
+                    .any(|layer_id| self.residency.is_unloaded(layer_id))
+            })
+            .collect();
+        if partly_loaded.is_empty() {
+            return Ok(staged);
+        }
+        self.load_glyphs(source, &partly_loaded)?;
+        Ok(self.stage_intents(set)?)
+    }
+
+    /// Loads what replaying `change_set` reads, then applies and commits it:
+    /// an edit recorded by another session over the same font, as undo and
+    /// redo replay one.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::apply`].
+    pub fn replay<S: LayerSource>(
+        &mut self,
+        source: &mut S,
+        change_set: FontChangeSet,
+    ) -> Result<AppliedIntents, ApplyError<S::Error>> {
+        self.load_for_change_set(source, &change_set)?;
+        let staged = self.stage_change_set(change_set)?;
         Ok(self.commit(staged))
     }
 

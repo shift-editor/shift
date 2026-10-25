@@ -17,11 +17,18 @@ initSync({ module: embeddedModule(moduleBase64) });
 
 export {
   engineApply,
-  engineEvict,
+  engineBeginEdit,
+  engineCancelEdit,
+  engineDiscardRedo,
+  engineEndEdit,
+  engineMarkSaved,
   engineOpen,
   enginePreload,
   enginePreview,
+  engineRedo,
   engineRelease,
+  engineUndo,
+  type EngineEdit,
   type EngineLayer,
   type EngineLayerSource,
 } from "./generated-engine/shift_wasm.js";

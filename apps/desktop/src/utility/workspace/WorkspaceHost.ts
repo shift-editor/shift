@@ -158,33 +158,14 @@ export class WorkspaceHost {
       "source.atlasWeights": ({ coordinates }) =>
         this.#serialize(() => this.#bridge.sourceAtlasWeights(coordinates)),
       "document.state": () => this.#serialize(() => this.#documentState()),
-      "workspace.apply": ({ intents, label }) =>
+      "workspace.persist": ({ changeSet, saveState }) =>
         this.#serialize(() => {
-          const applied = this.#bridge.apply(intents, label);
+          const applied = this.#bridge.persist(changeSet, saveState);
           this.#atlasCacheRevision = null;
           return { applied, documentState: this.#emitDocumentChanged() };
         }),
-      "workspace.undo": () =>
-        this.#serialize(() => {
-          const applied = this.#bridge.undo();
-          if (applied) this.#atlasCacheRevision = null;
-          const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
-          return { applied, documentState };
-        }),
-      "workspace.redo": () =>
-        this.#serialize(() => {
-          const applied = this.#bridge.redo();
-          if (applied) this.#atlasCacheRevision = null;
-          const documentState = applied ? this.#emitDocumentChanged() : this.#documentState();
-          return { applied, documentState };
-        }),
-      "workspace.discardRedo": () =>
-        this.#serialize(() => {
-          this.#bridge.discardRedo();
-          return null;
-        }),
       // Save rides the edit lane: the same #serialize queue orders it behind
-      // every committed apply/undo/redo, so it never writes stale state.
+      // every persisted edit, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
       "workspace.export": ({ path }) => this.#export(path),

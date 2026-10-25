@@ -8,8 +8,10 @@ use std::{
 use shift_backends::{
     FontExportRequest, FontExportResult, FontExporter, ImportBatchLimit, font_loader::FontLoader,
 };
-use shift_engine::{EngineError, EngineSession, LayerSource, LoadError, StagedEdit};
-use shift_font::{AppliedIntents, FontIntentSet, GlyphId, GlyphLayer, LayerId, error::CoreError};
+use shift_engine::{ApplyError, EngineError, EngineSession, LayerSource, LoadError, StagedEdit};
+use shift_font::{
+    AppliedIntents, FontChangeSet, FontIntentSet, GlyphId, GlyphLayer, LayerId, error::CoreError,
+};
 use shift_store::{
     DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
 };
@@ -305,14 +307,40 @@ impl FontWorkspace {
         set: &FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
-        self.session
-            .load_for_intents(&mut StoreLayers(&self.store), set)
-            .map_err(WorkspaceError::from_load)?;
-        let staged = self.session.stage_intents(set)?;
+        let staged = self
+            .session
+            .stage_loaded(&mut StoreLayers(&self.store), set)
+            .map_err(WorkspaceError::from_apply)?;
         let outcome = self.commit(staged, SaveState::Unsaved)?;
 
         self.ledger.push(label, outcome.changes.clone());
         Ok(outcome)
+    }
+
+    /// Persists a change set already applied to a session over this font,
+    /// without replaying intents or adding a ledger entry: the session that
+    /// made it keeps its undo history. Every `before` must match this font, so a
+    /// change set made from a stale font is refused.
+    ///
+    /// `save_state` is the caller's claim about where the change leaves the
+    /// font; the store verifies a [`SaveState::MatchesSaved`] claim against the
+    /// saved document before discarding any unsaved edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when what it touches cannot be loaded
+    /// or the write fails, and [`WorkspaceError::Font`] when it does not apply
+    /// to this font. The live font is unchanged on failure.
+    pub fn persist_change_set(
+        &mut self,
+        change_set: FontChangeSet,
+        save_state: SaveState,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        self.session
+            .load_for_change_set(&mut StoreLayers(&self.store), &change_set)
+            .map_err(WorkspaceError::from_load)?;
+        let staged = self.session.stage_change_set(change_set)?;
+        self.commit(staged, save_state)
     }
 
     /// Applies the inverse of the most recent reversible changeset.
@@ -694,6 +722,13 @@ impl WorkspaceError {
         match error {
             LoadError::Source(error) => Self::Store(error),
             LoadError::Font(error) => Self::Font(error),
+        }
+    }
+
+    fn from_apply(error: ApplyError<shift_store::StoreError>) -> Self {
+        match error {
+            ApplyError::Load(error) => Self::from_load(error),
+            ApplyError::Engine(error) => error.into(),
         }
     }
 }

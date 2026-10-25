@@ -2,8 +2,8 @@ import type {
   AppliedChange,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  FontIntent,
   FontSnapshot,
+  SaveState,
   GlyphId,
   GlyphLayerSnapshot,
   GlyphPreview,
@@ -234,31 +234,20 @@ export type SyncCallMap = {
   };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
-   * The one mutation verb. Requests carry intents; the response is pure
-   * replace-grade state (never change records — the renderer substitutes,
-   * it does not interpret).
+   * The one mutation verb: persists a change set the window's engine already
+   * applied, as named MessagePack. The window keeps the undo history; the
+   * response is a receipt plus what only the workspace can build (glyph
+   * records, dependent composites).
    */
-  "workspace.apply": {
-    request: { intents: FontIntent[]; label?: string };
+  "workspace.persist": {
+    /**
+     * `saveState` claims where the change leaves the font; the workspace
+     * verifies a claim to match the saved document before discarding unsaved
+     * edits.
+     */
+    request: { changeSet: Uint8Array; saveState: SaveState };
     response: { applied: AppliedChange; documentState: WorkspaceDocumentState };
   };
-  /** Replays the most recent ledger entry; null when the stack is empty. */
-  "workspace.undo": {
-    request: void;
-    response: {
-      applied: AppliedChange | null;
-      documentState: WorkspaceDocumentState | null;
-    };
-  };
-  "workspace.redo": {
-    request: void;
-    response: {
-      applied: AppliedChange | null;
-      documentState: WorkspaceDocumentState | null;
-    };
-  };
-  /** Permanently removes the current redo branch without changing document state. */
-  "workspace.discardRedo": { request: void; response: null };
   /**
    * Saves to the current canonical document, or rejects when the workspace still
    * needs a path. Rides the edit lane so the utility serializes it behind every

@@ -234,8 +234,8 @@ describe("Editor scene bootstrap", () => {
     await editor.settle();
     const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
 
-    expect(editor.activeSourceId).toBeNull();
-    expect(editor.activeSource).toBeNull();
+    // The window's engine shows the new source in the frame it is made.
+    expect(editor.activeSourceId).toBe(sourceId);
 
     await editor.settle();
 

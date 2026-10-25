@@ -98,7 +98,7 @@ export class Workspace {
       }
 
       this.#store.replaceWorkspace(snapshot);
-      await this.#engine.reopen();
+      await this.#edits.reopenEngine();
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

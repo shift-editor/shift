@@ -108,6 +108,8 @@ export type {
   AnchorMatch,
   AnchorSeed,
   AppliedChange,
+  FontReplacement,
+  SaveState,
   BooleanOpIntent,
   MoveAnchorsIntent,
   MovePointsIntent,

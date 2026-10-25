@@ -489,12 +489,83 @@ impl Font {
         }
 
         let mut changes = font_record_changes(&before, &after);
-        changes.extend(kerning_changes(set, &before, &after));
+        let kerning_keys = set
+            .intents
+            .iter()
+            .filter_map(|intent| match intent {
+                FontIntent::SetKerningValues(intent) => Some(&intent.edits),
+                _ => None,
+            })
+            .flatten()
+            .map(|edit| (edit.source_id.clone(), edit.pair.clone()))
+            .collect();
+        let edits_groups = set.intents.iter().any(FontIntent::edits_kerning_groups);
+        changes.extend(kerning_changes(kerning_keys, edits_groups, &before, &after));
         changes.extend(glyph_changes(&glyph_ids, &before, &after));
         let (layer_changes, layers) = layer_changes(touched, &glyph_ids, &before, &after)?;
         changes.extend(layer_changes);
 
         *self = after;
+        Ok(AppliedIntents {
+            changes: FontChangeSet::new(changes),
+            layers,
+        })
+    }
+
+    /// One change set for several that were applied in turn and left this
+    /// font: each scope they touched, from its value before the first to its
+    /// value now, as [`Self::apply_intents`] coalesces repeated writes within
+    /// one set. The values before come from the change sets themselves, so
+    /// layers loaded only partway through are still right.
+    ///
+    /// # Errors
+    ///
+    /// Returns the font's error when the change sets do not undo from this
+    /// font, or a touched layer moved between glyphs.
+    pub fn coalesce(&self, change_sets: &[FontChangeSet]) -> CoreResult<AppliedIntents> {
+        let mut before = self.clone();
+        for change_set in change_sets.iter().rev() {
+            before.apply_change_set(&change_set.inverted())?;
+        }
+        let before = &before;
+        let mut glyph_ids: Vec<GlyphId> = Vec::new();
+        let mut touched = TouchedLayers::default();
+        let mut kerning_keys = BTreeSet::new();
+        let mut edits_groups = false;
+        for change in change_sets.iter().flat_map(|set| &set.changes) {
+            match change {
+                FontChange::Glyph(glyph) => {
+                    for side in glyph.sides() {
+                        if !glyph_ids.contains(&side.id()) {
+                            glyph_ids.push(side.id());
+                        }
+                        for layer in side.layers().values() {
+                            touched.touch(layer.id(), true);
+                        }
+                    }
+                }
+                FontChange::Layer {
+                    layer, structural, ..
+                } => {
+                    if let Some(side) = layer.after.as_ref().or(layer.before.as_ref()) {
+                        touched.touch(side.id(), *structural);
+                    }
+                }
+                FontChange::KerningValue {
+                    source_id, pair, ..
+                } => {
+                    kerning_keys.insert((source_id.clone(), pair.clone()));
+                }
+                FontChange::KerningGroup { .. } => edits_groups = true,
+                _ => {}
+            }
+        }
+
+        let mut changes = font_record_changes(before, self);
+        changes.extend(kerning_changes(kerning_keys, edits_groups, before, self));
+        changes.extend(glyph_changes(&glyph_ids, before, self));
+        let (layer_changes, layers) = layer_changes(touched, &glyph_ids, before, self)?;
+        changes.extend(layer_changes);
         Ok(AppliedIntents {
             changes: FontChangeSet::new(changes),
             layers,
@@ -904,18 +975,15 @@ fn font_record_changes(before: &Font, after: &Font) -> Vec<FontChange> {
 }
 
 /// Kerning values the set edited and groups it created, renamed, filled, or deleted.
-fn kerning_changes(set: &FontIntentSet, before: &Font, after: &Font) -> Vec<FontChange> {
+/// Kerning value replacements for `kerning_keys`, and every changed group
+/// when the edit touched groups.
+fn kerning_changes(
+    kerning_keys: BTreeSet<(SourceId, KerningPair)>,
+    edits_groups: bool,
+    before: &Font,
+    after: &Font,
+) -> Vec<FontChange> {
     let mut changes = Vec::new();
-    let kerning_keys = set
-        .intents
-        .iter()
-        .filter_map(|intent| match intent {
-            FontIntent::SetKerningValues(intent) => Some(&intent.edits),
-            _ => None,
-        })
-        .flatten()
-        .map(|edit| (edit.source_id.clone(), edit.pair.clone()))
-        .collect::<BTreeSet<_>>();
     for (source_id, pair) in kerning_keys {
         let original = before.kerning().value(&source_id, &pair);
         let replacement = after.kerning().value(&source_id, &pair);
@@ -928,7 +996,7 @@ fn kerning_changes(set: &FontIntentSet, before: &Font, after: &Font) -> Vec<Font
         }
     }
 
-    if set.intents.iter().any(FontIntent::edits_kerning_groups) {
+    if edits_groups {
         for (group_id, original, replacement) in before.kerning().changed_groups(after.kerning()) {
             changes.push(FontChange::KerningGroup {
                 group_id: group_id.clone(),

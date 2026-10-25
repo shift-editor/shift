@@ -2,6 +2,7 @@ import { ascending, EntityMap } from "@shift/types";
 import type {
   KerningValueEdit,
   AppliedChange,
+  FontReplacement,
   AnchorId,
   ContourData,
   ContourId,
@@ -14,7 +15,6 @@ import type {
   GlyphSnapshot,
   GlyphStructure,
   GlyphState,
-  LayerReplaced,
   InterpolationBasis,
   LayerId,
   PointData,
@@ -25,7 +25,7 @@ import type {
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
 } from "@shift/types";
-import { GlyphGeometry, segmentIdFor } from "@shift/glyph-state";
+import { segmentIdFor } from "@shift/glyph-state";
 import { Validate } from "@shift/validation";
 import {
   batch,
@@ -42,7 +42,7 @@ import { GlyphLayerState } from "./GlyphLayerState";
 import { Kerning } from "./Kerning";
 import { PendingState } from "./PendingState";
 import type { Glyph } from "./Glyph";
-import type { EngineLayer } from "../wasm/engine";
+import type { EngineEdit } from "../wasm/engine";
 
 /**
  * Renderer-local owner for font records, concrete glyph layer state, glyphs, and views.
@@ -285,6 +285,35 @@ export class FontStore {
    *
    * @returns The resident layers' states before, to restore if the edit is undone locally.
    */
+  /**
+   * Shows what the window's engine did for an edit: the font-level records it
+   * changed and the layers it touched.
+   *
+   * @returns The resident layers' states before, to restore if the edit is undone locally.
+   */
+  applyEngineEdit(edit: EngineEdit): GlyphState[] {
+    return batch(() => {
+      if (edit.next) this.#applyRecords(edit.next);
+      return this.publishLayers(edit.layers);
+    });
+  }
+
+  /** The font-level records as they stand, for {@link restoreRecords}; copies nothing. */
+  recordsCheckpoint(): WorkspaceSnapshot | null {
+    return this.#workspace.peek();
+  }
+
+  /** Shows the font-level records of `checkpoint` again: a local edit was taken back. */
+  restoreRecords(checkpoint: WorkspaceSnapshot | null): void {
+    if (!checkpoint || checkpoint === this.#workspace.peek()) return;
+    batch(() => {
+      this.#indexCell.set(workspaceRecordIndex(checkpoint));
+      this.#font.set(fontSnapshotFromWorkspace(checkpoint));
+      this.#workspace.set(checkpoint);
+      this.#interpolationBases.clear();
+    });
+  }
+
   publishLayers(states: readonly GlyphState[]): GlyphState[] {
     const before: GlyphState[] = [];
     batch(() => {
@@ -300,23 +329,17 @@ export class FontStore {
 
   /**
    * Confirms an edit the window's engine applied and folds its workspace echo.
-   * A layer whose echo matches what the engine `published` stays as shown; any
-   * other touched layer takes the echo, and its glyph is reported stale.
+   * The engine already showed the layers it touched and the font-level records
+   * it changed, so only layers not shown yet and glyph records come from the
+   * echo.
    */
-  confirmEdit(
-    editId: PendingEditId,
-    applied: AppliedChange,
-    published: ReadonlyMap<LayerId, EngineLayer>,
-  ): WorkspaceFold {
-    return this.#foldWorkspaceChange(applied, editId, published);
+  confirmEdit(editId: PendingEditId, applied: AppliedChange): readonly GlyphId[] {
+    return this.#foldWorkspaceChange(applied, editId);
   }
 
-  /**
-   * Folds an undo, redo, or other echo the window's engine did not make; every
-   * glyph it touched is reported stale.
-   */
-  applyWorkspaceChange(applied: AppliedChange): WorkspaceFold {
-    return this.#foldWorkspaceChange(applied, null, new Map());
+  /** Folds the echo of an undo or redo, which the window's engine did not make. */
+  applyWorkspaceChange(applied: AppliedChange): readonly GlyphId[] {
+    return this.#foldWorkspaceChange(applied, null);
   }
 
   /**
@@ -326,14 +349,9 @@ export class FontStore {
    * work. Axis/source topology, glyph-layer membership, and structural layer
    * replacements return only resident glyph identities that need native rebuilding.
    */
-  #foldWorkspaceChange(
-    applied: AppliedChange,
-    editId: PendingEditId | null,
-    published: ReadonlyMap<LayerId, EngineLayer>,
-  ): WorkspaceFold {
+  #foldWorkspaceChange(applied: AppliedChange, editId: PendingEditId | null): readonly GlyphId[] {
     const current = this.#workspace.peek();
-    if (!current) return { projectionGlyphIds: [], staleGlyphIds: [] };
-    const staleGlyphIds = new Set<GlyphId>();
+    if (!current) return [];
     const changedGlyphLayers = applied.next?.glyphs
       ? glyphIdsWithChangedLayers(current.glyphs, applied.next.glyphs)
       : [];
@@ -348,72 +366,21 @@ export class FontStore {
     }
 
     batch(() => {
-      const next = applied.next;
-      const nextWorkspace = next
-        ? {
-            ...current,
-            metadata: next.metadata ?? current.metadata,
-            glyphs: next.glyphs ?? current.glyphs,
-            axes: next.axes ?? current.axes,
-            axisMappings: next.axisMappings ?? current.axisMappings,
-            axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
-            metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
-            sourceMetricsInterpolation: next.sourceMetricsInterpolation
-              ? (next.sourceMetricsInterpolation.snapshot ?? null)
-              : current.sourceMetricsInterpolation,
-            namedInstances: next.namedInstances ?? current.namedInstances,
-            languageIds: next.languages
-              ? (next.languages.languageIds ?? null)
-              : current.languageIds,
-            sources: next.sources ?? current.sources,
-            kerning: next.kerning ?? current.kerning,
-          }
-        : current;
-
-      if (nextWorkspace !== current) {
-        this.#indexCell.set(workspaceRecordIndex(nextWorkspace));
-        this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
-        this.#workspace.set(nextWorkspace);
-      }
+      // The window's engine already showed its own edits' font-level records;
+      // only glyph records, which it cannot build, come from their echo.
+      const records = editId === null ? applied.next : glyphRecordsOf(applied.next);
+      if (records) this.#applyRecords(records);
       // The echo now carries this edit's kerning values, if it had any.
       if (editId !== null) this.#kerning.confirm(editId);
 
       const index = this.#indexCell.peek();
-      if (nextWorkspace !== current) {
-        for (const [glyphId, cell] of this.#glyphCells) {
-          if (index.glyphById.has(glyphId)) continue;
-
-          cell.set(null);
-          this.#glyphCells.delete(glyphId);
-        }
-        if (next?.axes || next?.sources || next?.axisMappingBases) this.#interpolationBases.clear();
-
-        for (const [layerId, cell] of this.#layerStateCells) {
-          if (index.glyphByLayer.has(layerId)) continue;
-
-          cell.set(null);
-          this.#layerStateCells.delete(layerId);
-        }
-
-        for (const [glyphId, cell] of this.#projectionCells) {
-          if (index.glyphById.has(glyphId)) continue;
-
-          cell.set(null);
-          this.#projectionCells.delete(glyphId);
-        }
-      }
-
       for (const layer of applied.layers) {
-        const glyphId = index.glyphByLayer.get(layer.layerId);
-        if (!glyphId) continue;
-
-        const shown = published.get(layer.layerId);
-        const asShown = shown !== undefined && echoMatches(shown, layer);
-        if (!asShown) staleGlyphIds.add(glyphId);
+        if (!index.glyphByLayer.has(layer.layerId)) continue;
 
         const state = this.#peekLayerState(layer.layerId);
         if (state) {
-          if (asShown) continue;
+          // The window's engine already showed the layers of its own edits.
+          if (editId !== null) continue;
           state.replace({
             layerId: layer.layerId,
             structure: layer.structure ?? state.structure,
@@ -439,19 +406,61 @@ export class FontStore {
     this.#committedRevision.update((revision) => revision + 1);
 
     if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
-      return {
-        projectionGlyphIds: this.#residentProjectionGlyphIds(),
-        staleGlyphIds: [...staleGlyphIds],
-      };
+      return this.#residentProjectionGlyphIds();
     }
 
     const { glyphById } = this.#indexCell.peek();
-    return {
-      projectionGlyphIds: [...structurallyChangedGlyphIds].filter(
-        (glyphId) => glyphById.has(glyphId) && Boolean(this.#projectionCells.get(glyphId)?.peek()),
-      ),
-      staleGlyphIds: [...staleGlyphIds],
+    return [...structurallyChangedGlyphIds].filter(
+      (glyphId) => glyphById.has(glyphId) && Boolean(this.#projectionCells.get(glyphId)?.peek()),
+    );
+  }
+
+  /** Folds `next`'s font-level records into the workspace and drops what they removed. */
+  #applyRecords(next: FontReplacement): void {
+    const current = this.#workspace.peek();
+    if (!current) return;
+    const nextWorkspace = {
+      ...current,
+      metadata: next.metadata ?? current.metadata,
+      glyphs: next.glyphs ?? current.glyphs,
+      axes: next.axes ?? current.axes,
+      axisMappings: next.axisMappings ?? current.axisMappings,
+      axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
+      metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
+      sourceMetricsInterpolation: next.sourceMetricsInterpolation
+        ? (next.sourceMetricsInterpolation.snapshot ?? null)
+        : current.sourceMetricsInterpolation,
+      namedInstances: next.namedInstances ?? current.namedInstances,
+      languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
+      sources: next.sources ?? current.sources,
+      kerning: next.kerning ?? current.kerning,
     };
+    this.#indexCell.set(workspaceRecordIndex(nextWorkspace));
+    this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
+    this.#workspace.set(nextWorkspace);
+
+    const index = this.#indexCell.peek();
+    for (const [glyphId, cell] of this.#glyphCells) {
+      if (index.glyphById.has(glyphId)) continue;
+
+      cell.set(null);
+      this.#glyphCells.delete(glyphId);
+    }
+    if (next.axes || next.sources || next.axisMappingBases) this.#interpolationBases.clear();
+
+    for (const [layerId, cell] of this.#layerStateCells) {
+      if (index.glyphByLayer.has(layerId)) continue;
+
+      cell.set(null);
+      this.#layerStateCells.delete(layerId);
+    }
+
+    for (const [glyphId, cell] of this.#projectionCells) {
+      if (index.glyphById.has(glyphId)) continue;
+
+      cell.set(null);
+      this.#projectionCells.delete(glyphId);
+    }
   }
 
   layerState(layerId: LayerId): GlyphLayerState | null {
@@ -904,22 +913,7 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
   };
 }
 
-/** What folding a workspace echo leaves to do. */
-export interface WorkspaceFold {
-  /** Resident glyphs whose projections native must rebuild. */
-  readonly projectionGlyphIds: readonly GlyphId[];
-  /** Glyphs the echo changed differently from the window's engine, which must drop them. */
-  readonly staleGlyphIds: readonly GlyphId[];
-}
-
-/** Whether the echo of a layer is exactly what the window's engine showed for it. */
-function echoMatches(shown: EngineLayer, echo: LayerReplaced): boolean {
-  const sameStructure = echo.structure
-    ? GlyphGeometry.structuresEqual(shown.structure, echo.structure)
-    : !shown.structural;
-  return (
-    sameStructure &&
-    shown.values.length === echo.values.length &&
-    shown.values.every((value, index) => Object.is(value, echo.values[index]))
-  );
+/** Only the glyph records of `next`, which the window's engine cannot build. */
+function glyphRecordsOf(next: FontReplacement | undefined): FontReplacement | undefined {
+  return next?.glyphs ? { glyphs: next.glyphs } : undefined;
 }

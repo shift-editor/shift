@@ -27,6 +27,7 @@ use shift_slug::{
 };
 use shift_wire::bridges::napi::IntoEach;
 use shift_wire::intents;
+use shift_wire::replacement::FontReplacement;
 use shift_wire::{
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
   ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
@@ -42,10 +43,9 @@ use shift_wire::{
     NapiCatalogAtlasWeights, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
     NapiGlyphLayerSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
     NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningSnapshot,
-    NapiLanguagesReplacement, NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas,
-    NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection,
-    NapiSlugWeightSet, NapiSource, NapiSourceMetricsInterpolationReplacement,
-    NapiSourceMetricsInterpolationSnapshot,
+    NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas, NapiSlugExactSource,
+    NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet,
+    NapiSource, NapiSourceMetricsInterpolationSnapshot,
   },
 };
 use shift_workspace::{
@@ -1137,6 +1137,26 @@ pub struct Bridge {
   shaper: Option<LiveShaper>,
 }
 
+/// Where a persisted change leaves the font, as the session that made it
+/// claims.
+#[napi(string_enum = "camelCase")]
+pub enum NapiSaveState {
+  /// The font now differs from the saved document.
+  Unsaved,
+  /// The font is back to the saved document, as an undo or redo onto the
+  /// saved position leaves it; the store verifies this before trusting it.
+  MatchesSaved,
+}
+
+impl From<NapiSaveState> for shift_store::SaveState {
+  fn from(state: NapiSaveState) -> Self {
+    match state {
+      NapiSaveState::Unsaved => Self::Unsaved,
+      NapiSaveState::MatchesSaved => Self::MatchesSaved,
+    }
+  }
+}
+
 #[napi]
 impl Bridge {
   #[napi(constructor)]
@@ -1383,17 +1403,7 @@ impl Bridge {
   /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
     let impact = outcome.changes.impact();
-    let metadata_changed = impact.contains(FontChangeImpact::METADATA);
-    let languages_changed = impact.contains(FontChangeImpact::LANGUAGES);
     let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
-    let axes_changed = impact.contains(FontChangeImpact::AXES);
-    let axis_mappings_changed = impact.contains(FontChangeImpact::AXIS_MAPPINGS);
-    let axis_mapping_bases_changed = impact.contains(FontChangeImpact::AXIS_MAPPING_BASES);
-    let metric_definitions_changed = impact.contains(FontChangeImpact::METRIC_DEFINITIONS);
-    let source_metrics_changed = impact.contains(FontChangeImpact::SOURCE_METRICS);
-    let named_instances_changed = impact.contains(FontChangeImpact::NAMED_INSTANCES);
-    let sources_changed = impact.contains(FontChangeImpact::SOURCES);
-    let kerning_changed = impact.contains(FontChangeImpact::KERNING);
 
     let touched_layer_ids: Vec<LayerId> = outcome
       .layers
@@ -1420,43 +1430,10 @@ impl Bridge {
       })
       .collect();
 
-    let next = (!impact.is_empty())
-      .then(|| -> errors::Result<NapiFontReplacement> {
-        Ok(NapiFontReplacement {
-          metadata: metadata_changed.then(|| self.get_metadata()).transpose()?,
-          glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
-          axes: axes_changed.then(|| self.get_axes()).transpose()?,
-          axis_mappings: axis_mappings_changed
-            .then(|| self.get_axis_mappings())
-            .transpose()?,
-          axis_mapping_bases: axis_mapping_bases_changed
-            .then(|| self.get_axis_mapping_bases())
-            .transpose()?,
-          metric_definitions: metric_definitions_changed
-            .then(|| self.get_metric_definitions())
-            .transpose()?,
-          source_metrics_interpolation: source_metrics_changed
-            .then(
-              || -> errors::Result<NapiSourceMetricsInterpolationReplacement> {
-                Ok(NapiSourceMetricsInterpolationReplacement {
-                  snapshot: self.get_source_metrics_interpolation()?,
-                })
-              },
-            )
-            .transpose()?,
-          named_instances: named_instances_changed
-            .then(|| self.get_named_instances())
-            .transpose()?,
-          languages: languages_changed
-            .then(|| -> errors::Result<NapiLanguagesReplacement> {
-              Ok(NapiLanguagesReplacement {
-                language_ids: self.get_language_ids()?,
-              })
-            })
-            .transpose()?,
-          sources: sources_changed.then(|| self.get_sources()).transpose()?,
-          kerning: kerning_changed.then(|| self.get_kerning()).transpose()?,
-        })
+    let next = FontReplacement::changed_by(self.font()?, impact)?
+      .map(|replacement| -> errors::Result<NapiFontReplacement> {
+        let glyphs = glyphs_changed.then(|| self.get_glyphs()).transpose()?;
+        Ok(NapiFontReplacement::new(replacement, glyphs))
       })
       .transpose()?;
 
@@ -1489,6 +1466,32 @@ impl Bridge {
 
     self.mark_font_changed();
     Ok(Some(self.applied_echo(outcome)?))
+  }
+
+  /// Persists a change set, as named MessagePack, that a session over this
+  /// font already applied, and returns its echo: the layers it touched, the
+  /// font-level and glyph records it changed, and the composites that depend
+  /// on them. Nothing is added to this workspace's undo ledger. `save_state`
+  /// claims where the change leaves the font; the store verifies a claim to
+  /// match the saved document before discarding unsaved edits.
+  ///
+  /// # Errors
+  ///
+  /// Fails when the bytes do not decode to a change set, when a `before` in it
+  /// does not match this font, or when the write fails; the font is then
+  /// unchanged.
+  #[napi]
+  pub fn persist(
+    &mut self,
+    change_set: Uint8Array,
+    save_state: NapiSaveState,
+  ) -> errors::Result<NapiAppliedChange> {
+    let change_set: shift_font::FontChangeSet = rmp_serde::from_slice(&change_set)?;
+    let outcome = self
+      .workspace_mut()?
+      .persist_change_set(change_set, save_state.into())?;
+    self.mark_font_changed();
+    self.applied_echo(outcome)
   }
 
   /// Permanently removes every redo entry without changing font or dirty state.
@@ -2130,34 +2133,7 @@ impl Bridge {
 
   #[napi]
   pub fn get_sources(&self) -> errors::Result<Vec<NapiSource>> {
-    let font = self.font()?;
-    let metric_order = font
-      .metric_definitions()
-      .iter()
-      .enumerate()
-      .map(|(index, definition)| (definition.id().to_string(), index))
-      .collect::<HashMap<_, _>>();
-    let mut sources = font
-      .masters()
-      .map(Source::from)
-      .map(NapiSource::from)
-      .collect::<Vec<_>>();
-    for source in &mut sources {
-      source.metric_values.sort_by(|left, right| {
-        metric_order
-          .get(&left.metric_id)
-          .copied()
-          .unwrap_or(usize::MAX)
-          .cmp(
-            &metric_order
-              .get(&right.metric_id)
-              .copied()
-              .unwrap_or(usize::MAX),
-          )
-          .then_with(|| left.metric_id.cmp(&right.metric_id))
-      });
-    }
-    Ok(sources)
+    Ok(Source::masters_of(self.font()?).into_each())
   }
 
   /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
@@ -2995,6 +2971,51 @@ mod tests {
     assert!(redone.layers[0].structure.is_none());
     assert_eq!(&redone.layers[0].values[1..3], &[30.0, 40.0]);
     assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
+  }
+
+  #[test]
+  fn persist_writes_a_change_set_applied_to_another_copy_of_the_font() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let point_id = PointId::new().to_string();
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&point_id, 10.0, 20.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let mut elsewhere = bridge.workspace().unwrap().font().clone();
+    let moved = elsewhere
+      .apply_intents(&FontIntentSet::from(shift_font::FontIntent::from(
+        shift_font::MovePoints {
+          layer_id: LayerId::from_raw(&layer_id),
+          point_ids: vec![PointId::from_raw(&point_id)],
+          coords: vec![30.0, 40.0],
+        },
+      )))
+      .unwrap();
+    let bytes = rmp_serde::to_vec_named(&moved.changes).unwrap();
+
+    let echo = bridge
+      .persist(bytes.into(), NapiSaveState::Unsaved)
+      .unwrap();
+    assert_eq!(&echo.layers[0].values[1..3], &[30.0, 40.0]);
+    assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
+    // A second persist of the same change set no longer matches the font.
+    assert!(
+      bridge
+        .persist(
+          rmp_serde::to_vec_named(&moved.changes).unwrap().into(),
+          NapiSaveState::Unsaved,
+        )
+        .is_err()
+    );
   }
 
   #[test]

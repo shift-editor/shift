@@ -1,14 +1,19 @@
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
 import { sameFontStoreLocation, type FontStoreLocation } from "@shared/workspace/protocol";
 import type { FontIntent, GlyphId } from "@shift/types";
-import { loadEngine, type EngineLayer, type EngineSession } from "@shift/editor/model";
+import {
+  loadEngine,
+  type EngineEdit,
+  type EngineLayer,
+  type EngineSession,
+} from "@shift/editor/model";
 import { engineLayerSource } from "./engineLayerSource";
 
-/** The open session and the reader it loads layers through. */
+/** The open session and the reader it loads layers through, which moves with the store. */
 interface Opened {
   readonly session: EngineSession;
-  readonly reader: number;
-  readonly location: FontStoreLocation;
+  reader: number;
+  location: FontStoreLocation;
 }
 
 /**
@@ -16,11 +21,12 @@ interface Opened {
  * reading layers synchronously through the window's read-only reader.
  *
  * @remarks
- * Every edit the window makes applies here first, in the frame it is made, and
- * the engine's layers are what the window shows. The native workspace still
- * persists each edit and echoes it. {@link reopen} starts over from the store,
- * for changes the engine did not make, such as undo, or a new store location
- * after Save As.
+ * Every edit the window makes applies here, in the frame it is made, and the
+ * engine's layers are what the window shows. An edit opens with
+ * {@link beginEdit} and closes with {@link endEdit}, which returns the change
+ * set the native workspace persists. Undo and redo run here too, on the
+ * engine's own history. {@link reopen} starts over from the store, dropping
+ * that history: only after a persist failed.
  */
 export class WindowEngine {
   readonly #layers: LayerReaderHost;
@@ -49,9 +55,11 @@ export class WindowEngine {
 
     const reader = this.#layers.open(location);
     try {
+      // The session reads layers only while an edit runs, after this open, so
+      // its source can follow the current reader.
       const session = EngineSession.open(
         this.#layers.directory(reader),
-        engineLayerSource(this.#layers, reader),
+        engineLayerSource(this.#layers, () => this.#requireOpened().reader),
       );
       this.#close();
       this.#opened = { session, reader, location };
@@ -61,20 +69,34 @@ export class WindowEngine {
     }
   }
 
-  /** Reopens when the workspace's store has moved, as after Save As. */
+  /**
+   * Reads from the workspace's store where it now lives, as after Save As. The
+   * session and its history stay: the font is the same, only its file moved.
+   */
   async followStore(): Promise<void> {
+    const opened = this.#opened;
     const location = await this.#storeLocation();
-    if (location && !sameFontStoreLocation(location, this.#opened?.location ?? null)) {
-      await this.reopen();
-    }
+    if (!opened || !location || sameFontStoreLocation(location, opened.location)) return;
+
+    const previous = opened.reader;
+    opened.reader = this.#layers.open(location);
+    opened.location = location;
+    this.#layers.close(previous);
+  }
+
+  /** Opens an edit: the applies until {@link endEdit} become one undo step and one change set. */
+  beginEdit(): void {
+    this.#require().beginEdit();
   }
 
   /**
-   * Applies `intents` as one edit and returns every layer it touched.
+   * Applies `intents` within the open edit and returns every layer they
+   * touched and the font-level records they changed.
    *
-   * @throws When the engine is not open, an intent is invalid, or a read fails.
+   * @throws When the engine is not open, no edit is open, an intent is
+   * invalid, or a read fails.
    */
-  apply(intents: readonly FontIntent[]): EngineLayer[] {
+  apply(intents: readonly FontIntent[]): EngineEdit {
     const session = this.#require();
     performance.mark("engine.apply.start");
     try {
@@ -100,10 +122,44 @@ export class WindowEngine {
     }
   }
 
-  /** Drops `glyphIds`' loaded layers, so the next edit reads them from the store. */
-  evict(glyphIds: readonly GlyphId[]): void {
-    if (glyphIds.length === 0) return;
-    this.#opened?.session.evict(glyphIds);
+  /**
+   * Closes the open edit as one undo step.
+   *
+   * @returns Its change set, as named MessagePack, to persist; `undefined`
+   * when it changed nothing.
+   */
+  endEdit(): Uint8Array | undefined {
+    return this.#require().endEdit();
+  }
+
+  /** Drops the open edit; the engine goes back to where it began. */
+  cancelEdit(): void {
+    this.#require().cancelEdit();
+  }
+
+  /**
+   * Takes back the latest edit.
+   *
+   * @returns What it did, with its change set to persist; `undefined` when
+   * there is nothing to undo.
+   */
+  undo(): EngineEdit | undefined {
+    return this.#require().undo();
+  }
+
+  /** Makes the latest undone edit again; `undefined` when there is nothing to redo. */
+  redo(): EngineEdit | undefined {
+    return this.#require().redo();
+  }
+
+  /** Forgets every undone edit. */
+  discardRedo(): void {
+    this.#require().discardRedo();
+  }
+
+  /** Records that the font, where the history now stands, is the saved document. */
+  markSaved(): void {
+    this.#require().markSaved();
   }
 
   /**
@@ -133,8 +189,12 @@ export class WindowEngine {
   }
 
   #require(): EngineSession {
+    return this.#requireOpened().session;
+  }
+
+  #requireOpened(): Opened {
     if (!this.#opened) throw new Error("the window's editing engine is not open");
-    return this.#opened.session;
+    return this.#opened;
   }
 
   #close(): void {
