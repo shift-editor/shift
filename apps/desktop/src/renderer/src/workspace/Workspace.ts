@@ -11,6 +11,7 @@ import {
   type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { Signal } from "@shift/editor/signals";
+import { WindowEngine } from "@/lib/engine/WindowEngine";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {
@@ -23,6 +24,7 @@ export interface WorkspaceOptions {
 export class Workspace {
   readonly #client: FontSessionClient;
   readonly #store: FontStore;
+  readonly #engine: WindowEngine;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #documentBridge: WorkspaceDocumentBridge;
   #connection: Promise<void> | null = null;
@@ -35,7 +37,8 @@ export class Workspace {
   constructor(options: WorkspaceOptions) {
     this.#client = options.client;
     this.#store = new FontStore();
-    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
+    this.#engine = new WindowEngine(options.host.layers, () => this.#client.storeLocation());
+    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store, this.#engine);
     this.#documentBridge = new WorkspaceDocumentBridge({
       host: options.host,
       edits: this.#edits,
@@ -82,6 +85,7 @@ export class Workspace {
   dispose(): void {
     this.font.dispose();
     this.#documentBridge.dispose();
+    this.#engine.dispose();
   }
 
   async #connect(): Promise<void> {
@@ -94,6 +98,7 @@ export class Workspace {
       }
 
       this.#store.replaceWorkspace(snapshot);
+      await this.#engine.reopen();
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

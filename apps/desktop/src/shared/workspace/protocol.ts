@@ -192,6 +192,21 @@ export type FontStoreLocation =
   | { kind: "document"; documentPath: string; recoveryPath: string }
   | { kind: "working"; storePath: string };
 
+/** Whether `a` and `b` name the same store files. */
+export function sameFontStoreLocation(a: FontStoreLocation, b: FontStoreLocation | null): boolean {
+  if (!b) return false;
+  switch (a.kind) {
+    case "document":
+      return (
+        b.kind === "document" &&
+        a.documentPath === b.documentPath &&
+        a.recoveryPath === b.recoveryPath
+      );
+    case "working":
+      return b.kind === "working" && a.storePath === b.storePath;
+  }
+}
+
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   /** The open workspace's store, for the window's read-only layer reader; `null` for a preview. */

@@ -1,7 +1,6 @@
-import type { AnchorData, AnchorId, AnchorSeed } from "@shift/types";
+import type { AnchorData, AnchorId } from "@shift/types";
 import { Anchor, type GlyphPosition } from "@shift/glyph-state";
 import {
-  batch,
   computed,
   signal,
   type ComputedSignal,
@@ -75,59 +74,6 @@ export class AnchorBuffer {
       x: coordinates.getComponent(index, 0),
       y: coordinates.getComponent(index, 1),
     };
-  }
-
-  add(anchors: readonly AnchorSeed[]): void {
-    const data: AnchorData[] = [
-      ...this.#dataCell.peek(),
-      ...anchors.map((anchor) => ({
-        id: anchor.id,
-        ...(anchor.name === undefined ? {} : { name: anchor.name }),
-      })),
-    ];
-
-    batch(() => {
-      const coordinates = this.#coordinates;
-      coordinates.splice(
-        coordinates.length,
-        0,
-        anchors.flatMap((anchor) => [anchor.x, anchor.y]),
-      );
-      this.#dataCell.set(data);
-      this.#markChanged();
-    });
-  }
-
-  remove(anchorIds: ReadonlySet<AnchorId>): void {
-    const data = this.#dataCell.peek();
-    const indexes: number[] = [];
-    for (let index = 0; index < data.length; index++) {
-      if (anchorIds.has(data[index].id)) indexes.push(index);
-    }
-    if (indexes.length === 0) return;
-
-    batch(() => {
-      const coordinates = this.#coordinates;
-      for (let index = indexes.length - 1; index >= 0; index--) {
-        coordinates.splice(indexes[index], 1);
-      }
-      this.#dataCell.set(data.filter((anchor) => !anchorIds.has(anchor.id)));
-      this.#markChanged();
-    });
-  }
-
-  /** Renames anchors by id; returns false, changing nothing, when an id is missing. */
-  rename(names: ReadonlyMap<AnchorId, string>): boolean {
-    const data = this.#dataCell.peek();
-    if (names.keys().some((id) => !data.some((anchor) => anchor.id === id))) return false;
-
-    this.#dataCell.set(
-      data.map((anchor) => {
-        const name = names.get(anchor.id);
-        return name === undefined ? anchor : { ...anchor, name };
-      }),
-    );
-    return true;
   }
 
   patchPositions(updates: readonly GlyphPosition[]): void {

@@ -119,11 +119,13 @@ describe("kerning edits", () => {
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
   });
 
-  it("drops an edit the workspace rejects", async () => {
+  it("refuses an edit the engine rejects and keeps the kerning", async () => {
     const { stack, font, t, a, lightCondensed } = await openMutatorSans();
     const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
 
-    font.setKerningValues([kerningValueEdit(lightCondensed, pair, Number.NaN)], "Bad kerning");
+    expect(() =>
+      font.setKerningValues([kerningValueEdit(lightCondensed, pair, Number.NaN)], "Bad kerning"),
+    ).toThrow("not finite");
     await stack.editCoordinator.settled();
 
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);

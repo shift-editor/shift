@@ -1,5 +1,4 @@
 import { Mat } from "@shift/geo";
-import { batch } from "../signals";
 import type { Sidebearing } from "../../types/spacing";
 import type { GlyphLayer } from "./Glyph";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -20,7 +19,6 @@ export class SidebearingEdit {
   readonly #layer: GlyphLayer;
   readonly #state: GlyphLayerState;
   readonly #sidebearing: Sidebearing;
-  readonly #base: Float64Array;
   readonly #xAdvance: number;
 
   #delta = 0;
@@ -34,7 +32,6 @@ export class SidebearingEdit {
     this.#layer = layer;
     this.#state = state;
     this.#sidebearing = sidebearing;
-    this.#base = state.buffers.snapshot;
     this.#xAdvance = state.buffers.xAdvance;
 
     state.beginEdit(() => this.#reapply());
@@ -59,10 +56,7 @@ export class SidebearingEdit {
     }
 
     this.#layer.transaction(label, () => {
-      this.#state.finishEdit(() => {
-        if (this.#sidebearing === "lsb") this.#layer.transformLayer(Mat.Translate(delta, 0));
-        this.#layer.setXAdvance(this.#xAdvance + delta);
-      });
+      this.#state.finishEdit(() => this.#steps(delta));
     });
   }
 
@@ -73,12 +67,17 @@ export class SidebearingEdit {
     this.#state.cancelEdit();
   }
 
+  /** Shows the latest delta as the window's engine applies it to the base. */
   #reapply(): void {
-    const buffers = this.#state.buffers;
-    batch(() => {
-      buffers.replaceValues(this.#base);
-      if (this.#sidebearing === "lsb") buffers.transformLayer(Mat.Translate(this.#delta, 0));
-      buffers.setXAdvance(this.#xAdvance + this.#delta);
+    const delta = this.#delta;
+    this.#layer.preview(() => {
+      if (delta !== 0) this.#steps(delta);
     });
+  }
+
+  /** The edit for `delta`, as the commit sends it: the left sidebearing moves the outline. */
+  #steps(delta: number): void {
+    if (this.#sidebearing === "lsb") this.#layer.transformLayer(Mat.Translate(delta, 0));
+    this.#layer.setXAdvance(this.#xAdvance + delta);
   }
 }

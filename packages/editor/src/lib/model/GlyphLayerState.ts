@@ -1,15 +1,4 @@
-import type {
-  AnchorId,
-  AnchorSeed,
-  ComponentId,
-  ContourId,
-  GlyphState,
-  GlyphStructure,
-  LayerId,
-  LayerReplaced,
-  PointId,
-  PointSeed,
-} from "@shift/types";
+import type { ContourId, GlyphState, GlyphStructure, LayerId, PointId } from "@shift/types";
 import {
   GlyphGeometry,
   type GlyphPosition,
@@ -17,8 +6,7 @@ import {
   type GlyphPositions,
   type GlyphSidebearings,
 } from "@shift/glyph-state";
-import type { Bounds, DecomposedTransform, MatModel } from "@shift/geo";
-import type { PendingEditId } from "../../types/editing";
+import type { Bounds } from "@shift/geo";
 import {
   batch,
   computed,
@@ -30,11 +18,13 @@ import {
 import { LayerBuffers, type LayerChangeToken } from "./LayerBuffers";
 
 /**
- * Reactive state and pending-confirmation lifecycle for one authored layer.
+ * Reactive state for one authored layer, as the window's editing engine last
+ * left it.
  *
- * Local operation semantics belong to {@link LayerBuffers}; this class only
- * wraps successful operations in the pending lifecycle and folds authoritative
- * workspace replacements. Rust remains the sole `FontIntent` interpreter.
+ * Edits apply in shift-font, through the engine, and arrive here whole through
+ * {@link GlyphLayerState.replace}; this class applies no edit itself. A drag
+ * previews positions with {@link GlyphLayerState.patchPositions} between
+ * {@link GlyphLayerState.beginEdit} and its finish or cancel.
  */
 export class GlyphLayerState {
   readonly #layerId: LayerId;
@@ -45,13 +35,6 @@ export class GlyphLayerState {
   readonly #buffersChanged: ComputedSignal<LayerChangeToken>;
   readonly #geometry: ComputedSignal<GlyphGeometry>;
   readonly #acceptedGeometry: ComputedSignal<GlyphGeometry | null>;
-
-  /** The last accepted state while local edits await confirmation; null when none are pending. */
-  readonly #confirmedState: WritableSignal<GlyphState | null> = signal<GlyphState | null>(null, {
-    name: "glyphLayer.confirmed",
-  });
-  // non-reactive: rollback snapshots per pending edit; only read by the imperative edit, fold, and rollback paths
-  readonly #pendingStates = new Map<PendingEditId, GlyphState>();
 
   readonly #editBaseState: WritableSignal<GlyphState | null> = signal<GlyphState | null>(null, {
     name: "glyphLayer.editBase",
@@ -81,7 +64,7 @@ export class GlyphLayerState {
     );
     this.#acceptedGeometry = computed(
       () => {
-        const accepted = this.#editBaseState.value ?? this.#confirmedState.value;
+        const accepted = this.#editBaseState.value;
         return accepted ? new GlyphGeometry(accepted.structure, accepted.values) : null;
       },
       { name: "glyphLayer.acceptedGeometry" },
@@ -148,8 +131,7 @@ export class GlyphLayerState {
   }
 
   /**
-   * The layer as the workspace last accepted it, while a local edit or an
-   * unconfirmed one shows something else; null when the layer shows exactly that.
+   * The layer as it stood when the active drag began; null outside a drag.
    *
    * @remarks
    * Lets other glyphs decide what was true before an edit in progress, such
@@ -187,92 +169,8 @@ export class GlyphLayerState {
     return this.#buffers.peek().contourIdOfPoint(pointId);
   }
 
-  addContour(editId: PendingEditId, contourId: ContourId, closed: boolean): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().addContour(contourId, closed));
-  }
-
-  addPoints(
-    editId: PendingEditId,
-    points: readonly PointSeed[],
-    contourId?: ContourId,
-    before?: PointId,
-  ): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().addPoints(points, contourId, before));
-  }
-
-  setContourClosed(editId: PendingEditId, contourId: ContourId, closed: boolean): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().setContourClosed(contourId, closed));
-  }
-
-  movePoints(
-    editId: PendingEditId,
-    pointIds: readonly PointId[],
-    coords: readonly number[],
-  ): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().movePoints(pointIds, coords));
-  }
-
-  setPointSmooth(editId: PendingEditId, pointId: PointId, smooth: boolean): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().setPointSmooth(pointId, smooth));
-  }
-
-  removePoints(editId: PendingEditId, pointIds: readonly PointId[]): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().removePoints(pointIds));
-  }
-
-  reverseContour(editId: PendingEditId, contourId: ContourId): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().reverseContour(contourId));
-  }
-
-  setContourStart(editId: PendingEditId, contourId: ContourId, pointId: PointId): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().setContourStart(contourId, pointId));
-  }
-
-  transformLayer(editId: PendingEditId, matrix: MatModel): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().transformLayer(matrix));
-  }
-
-  setXAdvance(editId: PendingEditId, width: number): void {
-    this.#applyEdit(editId, () => this.#buffers.peek().setXAdvance(width));
-  }
-
-  addAnchors(editId: PendingEditId, anchors: readonly AnchorSeed[]): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().addAnchors(anchors));
-  }
-
-  moveAnchors(
-    editId: PendingEditId,
-    anchorIds: readonly AnchorId[],
-    coords: readonly number[],
-  ): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().moveAnchors(anchorIds, coords));
-  }
-
-  renameAnchors(
-    editId: PendingEditId,
-    anchorIds: readonly AnchorId[],
-    names: readonly string[],
-  ): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().renameAnchors(anchorIds, names));
-  }
-
-  removeAnchors(editId: PendingEditId, anchorIds: readonly AnchorId[]): boolean {
-    return this.#applyEdit(editId, () => this.#buffers.peek().removeAnchors(anchorIds));
-  }
-
-  setComponentTransforms(
-    editId: PendingEditId,
-    componentIds: readonly ComponentId[],
-    transforms: readonly DecomposedTransform[],
-  ): boolean {
-    return this.#applyEdit(editId, () =>
-      this.#buffers.peek().setComponentTransforms(componentIds, transforms),
-    );
-  }
-
+  /** Shows `state`, as the window's engine or the workspace's echo left the layer. */
   replace(state: GlyphState): void {
-    this.#confirmedState.set(null);
-    this.#pendingStates.clear();
     this.#publish(state);
   }
 
@@ -284,36 +182,11 @@ export class GlyphLayerState {
     });
   }
 
-  rollbackEdit(editId: PendingEditId): void {
-    const state = this.#pendingStates.get(editId);
-    if (!state) return;
-
-    this.#pendingStates.delete(editId);
-    this.#publish(state);
-    if (this.#pendingStates.size === 0) this.#confirmedState.set(null);
-  }
-
-  foldWorkspaceState(editId: PendingEditId | null, replacement: LayerReplaced): void {
-    const confirmed = this.#confirmedState.peek() ?? this.#editBaseState.peek() ?? this.state;
-    const state = {
-      layerId: this.#layerId,
-      structure: replacement.structure ?? confirmed.structure,
-      values: replacement.values,
-    };
-    this.#confirmedState.set(state);
-
-    if (editId !== null) this.#pendingStates.delete(editId);
-    if (this.#pendingStates.size > 0) return;
-
-    this.#confirmedState.set(null);
-    this.#publish(state);
-  }
-
   patchPositions(updates: GlyphPositions): void {
     this.#buffers.peek().patchPositions(updates);
   }
 
-  /** Begins one reversible local edit against the current reactive layer. */
+  /** Begins a drag previewed by position patches; `reapply` repeats it on a new base. */
   beginEdit(reapply: () => void): void {
     if (this.#editBaseState.peek()) throw new Error("glyph layer already has an active edit");
 
@@ -321,7 +194,7 @@ export class GlyphLayerState {
     this.#reapplyEdit = reapply;
   }
 
-  /** Restores the latest accepted base, then applies the edit as pending workspace operations. */
+  /** Restores the base the drag began from, then commits the edit through `apply`. */
   finishEdit(apply: () => void): void {
     const baseState = this.#editBaseState.peek();
     if (!baseState) throw new Error("glyph layer has no active edit to finish");
@@ -348,34 +221,26 @@ export class GlyphLayerState {
   }
 
   /**
-   * Applies one typed renderer operation and records its pre-edit snapshot once.
-   *
-   * The closure stays local to the layer model; it is never transported through
-   * `LayerIntents` or interpreted as a `FontIntent`. Returning `false` means the
-   * operation validated without mutating. Transactions reuse one edit identity,
-   * so their first successful closure owns the rollback snapshot.
+   * Shows the layer as a gesture under way would leave it, keeping the base
+   * the gesture began from; null shows that base again.
    */
-  #applyEdit(editId: PendingEditId, operation: () => boolean): boolean {
-    const alreadyPending = this.#pendingStates.has(editId);
-    const before = alreadyPending ? null : this.state;
-
-    return batch(() => {
-      try {
-        const applied = operation();
-        if (!applied) return false;
-        if (alreadyPending || !before) return true;
-
-        if (this.#pendingStates.size === 0) this.#confirmedState.set(before);
-        this.#pendingStates.set(editId, before);
-        return true;
-      } catch (error) {
-        if (before) this.#publish(before);
-        throw error;
-      }
-    });
+  showPreview(state: GlyphState | null): void {
+    const shown = state ?? this.#editBaseState.peek();
+    if (!shown) throw new Error("glyph layer has no active edit to preview");
+    this.#show(shown);
   }
 
   #publish(state: GlyphState): void {
+    batch(() => {
+      this.#show(state);
+      if (!this.#reapplyEdit) return;
+
+      this.#editBaseState.set(this.state);
+      this.#reapplyEdit();
+    });
+  }
+
+  #show(state: GlyphState): void {
     batch(() => {
       const buffers = this.#buffers.peek();
       if (GlyphGeometry.structuresEqual(buffers.structure, state.structure)) {
@@ -389,11 +254,6 @@ export class GlyphLayerState {
       } else {
         this.#buffers.set(LayerBuffers.fromState(state));
       }
-
-      if (!this.#reapplyEdit) return;
-
-      this.#editBaseState.set(this.state);
-      this.#reapplyEdit();
     });
   }
 }

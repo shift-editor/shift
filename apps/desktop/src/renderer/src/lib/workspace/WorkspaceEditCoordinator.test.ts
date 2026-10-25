@@ -174,15 +174,33 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     ]);
   });
 
-  it("publishes a failure after restoring workspace truth", async () => {
+  it("restores workspace truth and reopens the engine when the workspace fails an edit", async () => {
+    await stack.editCoordinator.apply([createGlyph("A", 65)]);
+    const events: WorkspaceEditEvent[] = [];
+    stack.editCoordinator.onEdit((event) => events.push(event));
+
+    stack.failNextApply();
+    await expect(stack.editCoordinator.apply([createGlyph("B", 66)])).rejects.toThrow(
+      "refused the write",
+    );
+
+    expect(events.map((event) => event.kind)).toEqual(["accepted", "failed"]);
+    expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(1);
+    // The engine dropped the failed glyph with everything else, so it can be made again.
+    await stack.editCoordinator.apply([createGlyph("B", 66)]);
+    expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(2);
+  });
+
+  it("never accepts or sends an edit the engine rejects", async () => {
     await stack.editCoordinator.apply([createGlyph("A", 65)]);
     const events: WorkspaceEditEvent[] = [];
     stack.editCoordinator.onEdit((event) => events.push(event));
 
     const applying = stack.editCoordinator.apply([createGlyph("A", 66)]);
     await expect(applying).rejects.toThrow();
+    await stack.editCoordinator.settled();
 
-    expect(events.map((event) => event.kind)).toEqual(["accepted", "failed"]);
+    expect(events).toEqual([]);
     expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(1);
   });
 

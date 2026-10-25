@@ -8,6 +8,7 @@ import type {
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshot,
+  GlyphState,
   GlyphSnapshotRequest,
   LayerId,
   LayerMatch,
@@ -67,6 +68,8 @@ export interface FontStoreOptions {
 
 export interface WorkspaceEditCoordinator {
   push(intent: FontIntent): PendingEditId;
+  /** Every layer `intents` would touch, as they would leave it, without keeping the edit. */
+  preview(intents: readonly FontIntent[]): readonly GlyphState[];
   transaction<TResult>(label: string, body: () => TResult): TResult;
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange>;
   readGlyphSnapshots(requests: readonly GlyphSnapshotRequest[]): Promise<GlyphSnapshot[]>;

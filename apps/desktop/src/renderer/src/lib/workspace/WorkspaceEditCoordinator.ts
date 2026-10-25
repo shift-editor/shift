@@ -6,6 +6,7 @@ import type {
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
+  GlyphState,
   LayerId,
   LayerMatch,
   LayerRead,
@@ -24,17 +25,27 @@ import type {
   WorkspaceSlugAtlasPageRequest,
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
-import type { FontStore } from "@shift/editor/model";
+import type { EngineLayer, FontStore, WorkspaceFold } from "@shift/editor/model";
 import type { PendingEditId, WorkspaceEditEvent, WorkspaceEditListener } from "@shift/editor/types";
 import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
+import type { WindowEngine } from "../engine/WindowEngine";
 
 export type { WorkspaceApplyStatus } from "@/types/workspace";
 
 /**
- * Tracks pending renderer edits until the utility workspace confirms them.
+ * Applies the window's edits through its editing engine, then sends them to
+ * the utility workspace to persist, in order.
  *
  * @remarks
+ * Each edit applies in the window's engine first, in the frame it is made, and
+ * the layers it touched are shown at once; an edit the engine rejects is never
+ * sent. The workspace's echo then confirms it: a layer that matches what the
+ * engine showed stays, and one that differs takes the echo while the engine
+ * drops that glyph and reloads it on the next edit. Echoes the engine did not
+ * make (undo, redo) are shown as they come, and the engine drops what they
+ * touched.
+ *
  * Every editing verb pushes one operation by default. Use
  * {@link transaction} to group multiple intents into one `workspace.apply`,
  * one SQLite transaction, and one undo step. The coordinator assigns opaque
@@ -50,6 +61,9 @@ export type { WorkspaceApplyStatus } from "@/types/workspace";
 export class WorkspaceEditCoordinator {
   readonly #session: FontSessionClient;
   readonly #store: FontStore;
+  readonly #engine: WindowEngine;
+  // non-reactive: the layers the engine showed for each edit awaiting its echo; read only when that echo folds
+  readonly #shown = new Map<PendingEditId, Map<LayerId, EngineLayer>>();
   readonly #settledCell: WritableSignal<boolean>;
   readonly #applyStatus: WritableSignal<WorkspaceApplyStatus>;
   readonly #authoredRevisionCell: WritableSignal<number>;
@@ -63,11 +77,14 @@ export class WorkspaceEditCoordinator {
     readonly id: PendingEditId;
     readonly label: string;
     readonly intents: FontIntent[];
+    /** Each resident layer's state before the transaction first changed it. */
+    readonly before: Map<LayerId, GlyphState>;
   } | null = null;
 
-  constructor(session: FontSessionClient, store: FontStore) {
+  constructor(session: FontSessionClient, store: FontStore, engine: WindowEngine) {
     this.#session = session;
     this.#store = store;
+    this.#engine = engine;
     this.#settledCell = signal(true);
     this.#applyStatus = signal<WorkspaceApplyStatus>("idle", {
       name: "workspace.applyStatus",
@@ -100,15 +117,39 @@ export class WorkspaceEditCoordinator {
     return this.#authoredRevisionCell;
   }
 
-  /** Accepts one intent and returns its renderer-local pending identity. */
+  /**
+   * Applies one intent in the window's engine, shows the result, and queues it
+   * for the workspace.
+   *
+   * @returns The edit's renderer-local pending identity.
+   * @throws When the engine rejects the intent; nothing is shown or sent.
+   */
   push(intent: FontIntent): PendingEditId {
     const transaction = this.#transaction;
     if (transaction) {
+      this.#applyInEngine(transaction.id, [intent], transaction.before);
       transaction.intents.push(intent);
       return transaction.id;
     }
 
-    return this.#enqueueApply([intent]);
+    // Readers of the shown layers run when the batch ends, so any read they
+    // queue on the workspace lane follows this edit rather than overtaking it.
+    return batch(() => {
+      const id = this.#mintPendingEditId();
+      this.#applyInEngine(id, [intent], null);
+      return this.#enqueueApply([intent], undefined, id);
+    });
+  }
+
+  /**
+   * Every layer `intents` would touch, as they would leave it, worked out by
+   * the window's engine without keeping the edit or sending it: a gesture's
+   * preview.
+   *
+   * @throws When the engine rejects the intents.
+   */
+  preview(intents: readonly FontIntent[]): EngineLayer[] {
+    return this.#engine.preview(intents);
   }
 
   /**
@@ -131,7 +172,8 @@ export class WorkspaceEditCoordinator {
     }
 
     const id = this.#mintPendingEditId();
-    this.#transaction = { id, label, intents: [] };
+    const before = new Map<LayerId, GlyphState>();
+    this.#transaction = { id, label, intents: [], before };
 
     return batch(() => {
       try {
@@ -144,7 +186,7 @@ export class WorkspaceEditCoordinator {
         return result;
       } catch (error) {
         this.#transaction = null;
-        this.#store.rollbackEdit(id);
+        this.#undoInEngine(id, before);
         throw error;
       }
     });
@@ -190,9 +232,17 @@ export class WorkspaceEditCoordinator {
    */
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
     this.#assertNoTransaction("apply workspace edits");
-    const edit = this.#acceptEdit(intents, label);
-
-    return this.#serialize(() => this.#commitEdit(edit));
+    try {
+      // As in `push`, readers of the shown layers queue behind this edit.
+      return batch(() => {
+        const id = this.#mintPendingEditId();
+        this.#applyInEngine(id, intents, null);
+        const edit = this.#acceptEdit(intents, label, id);
+        return this.#serialize(() => this.#commitEdit(edit));
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   /** Replays the latest undo entry after pending pushes flush. */
@@ -347,9 +397,12 @@ export class WorkspaceEditCoordinator {
    * @param path - target path for Save As, or null to save the current target.
    */
   save(path: string | null): Promise<WorkspaceDocumentState> {
-    return this.#withFlush(() =>
-      path === null ? this.#session.save() : this.#session.saveAs(path),
-    );
+    return this.#withFlush(async () => {
+      const state = await (path === null ? this.#session.save() : this.#session.saveAs(path));
+      // Saving can move the store the engine reads, as when a working store becomes a document.
+      await this.#engine.followStore();
+      return state;
+    });
   }
 
   /**
@@ -422,6 +475,7 @@ export class WorkspaceEditCoordinator {
     try {
       applied = await this.#sendEdit(edit);
     } catch (error) {
+      this.#takeShown(edit.id);
       try {
         await this.#resync();
         this.#advanceAuthoredRevision();
@@ -465,14 +519,78 @@ export class WorkspaceEditCoordinator {
   }
 
   async #applyChange(applied: AppliedChange, editId: PendingEditId | null): Promise<void> {
-    const glyphIds =
-      editId !== null
-        ? this.#store.confirmEdit(editId, applied)
-        : this.#store.applyWorkspaceChange(applied);
+    let fold: WorkspaceFold;
+    if (editId !== null) {
+      fold = this.#store.confirmEdit(editId, applied, this.#takeShown(editId));
+      this.#engine.evict(fold.staleGlyphIds);
+    } else {
+      fold = this.#store.applyWorkspaceChange(applied);
+      // Undo and redo can add or remove glyphs, sources and axes, which only a
+      // fresh directory knows; otherwise dropping the touched glyphs is enough.
+      if (applied.next?.glyphs || applied.next?.sources || applied.next?.axes) {
+        await this.#engine.reopen();
+      } else {
+        this.#engine.evict(fold.staleGlyphIds);
+      }
+    }
+    const glyphIds = fold.projectionGlyphIds;
     if (glyphIds.length === 0) return;
 
     const projections = await this.#session.glyphProjections(glyphIds);
     this.#store.replaceGlyphProjections(glyphIds, projections);
+  }
+
+  /**
+   * Applies `intents` in the engine as part of edit `id`, shows every layer
+   * they touched, and keeps what was shown for the echo to confirm. With
+   * `before`, records each layer's state before its first change, for a
+   * transaction to restore.
+   */
+  #applyInEngine(
+    id: PendingEditId,
+    intents: readonly FontIntent[],
+    before: Map<LayerId, GlyphState> | null,
+  ): void {
+    const layers = this.#engine.apply(intents);
+    if (layers.length === 0) return;
+
+    const previous = this.#store.publishLayers(layers);
+    if (before) {
+      for (const state of previous) {
+        if (!before.has(state.layerId)) before.set(state.layerId, state);
+      }
+    }
+    let shown = this.#shown.get(id);
+    if (!shown) {
+      shown = new Map();
+      this.#shown.set(id, shown);
+    }
+    for (const layer of layers) shown.set(layer.layerId, layer);
+  }
+
+  /**
+   * Takes back a transaction the engine applied but the workspace never saw:
+   * shows each layer as it was, and drops the touched glyphs from the engine
+   * so it reloads them from the store.
+   */
+  #undoInEngine(id: PendingEditId, before: ReadonlyMap<LayerId, GlyphState>): void {
+    const shown = this.#takeShown(id);
+    this.#store.rollbackEdit(id);
+    this.#store.publishLayers(before.values().toArray());
+
+    const glyphIds = new Set<GlyphId>();
+    for (const layerId of shown.keys()) {
+      const glyphId = this.#store.glyphIdForLayer(layerId);
+      if (glyphId) glyphIds.add(glyphId);
+    }
+    this.#engine.evict([...glyphIds]);
+  }
+
+  /** The layers the engine showed for edit `id`, forgotten as they are returned. */
+  #takeShown(id: PendingEditId): ReadonlyMap<LayerId, EngineLayer> {
+    const shown = this.#shown.get(id);
+    this.#shown.delete(id);
+    return shown ?? new Map();
   }
 
   #afterJob(): void {
@@ -496,8 +614,9 @@ export class WorkspaceEditCoordinator {
     throw new Error(`cannot ${action} while workspace transaction "${transaction.label}" is open`);
   }
 
-  /** Recovery: discard loaded projections and reload the workspace summary from utility. */
+  /** Recovery: discard loaded projections, reload the workspace summary, and reopen the engine. */
   async #resync(): Promise<void> {
     this.#store.replaceWorkspace(await this.#session.snapshot());
+    await this.#engine.reopen();
   }
 }
