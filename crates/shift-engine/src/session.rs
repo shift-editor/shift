@@ -5,7 +5,7 @@ use shift_font::{
     LayerId,
 };
 
-use crate::{LayerResidency, LayerSource, ReadSet};
+use crate::{LayerResidency, LayerSource};
 
 /// Why a staged edit failed. The session is unchanged.
 #[derive(Debug, thiserror::Error)]
@@ -81,47 +81,43 @@ impl EngineSession {
         &self.residency
     }
 
-    /// Loads everything applying `set` reads.
+    /// Loads everything applying `set` reads: the layers it names, the
+    /// glyphs its components are built from (see
+    /// [`FontIntentSet::component_bases`]), and the composites that follow
+    /// anchors it moves, each with every glyph it is built from.
     ///
     /// # Errors
     ///
     /// Returns [`LoadError::Source`] when the source fails and
     /// [`LoadError::Font`] when a loaded layer cannot replace its placeholder.
-    pub fn load_for_intents<S: LayerSource>(
+    pub fn load_reads<S: LayerSource>(
         &mut self,
         source: &mut S,
         set: &FontIntentSet,
     ) -> Result<(), LoadError<S::Error>> {
         self.load_layers(source, set.required_layer_ids(&self.font))?;
-        // Decomposed components are read from the named layers, so find the
-        // rest of the read set only once those are loaded.
-        let reads = ReadSet::for_intents(&self.font, set);
-        let mut roots = reads.component_bases().clone();
-        roots.extend(self.dependents(source, reads.anchor_edits())?);
+        // Decomposed components are read from the named layers, so their
+        // bases are found only once those are loaded.
+        let mut roots = set.component_bases(&self.font);
+        let anchor_edits: Vec<LayerId> = set.layers_with_anchor_edits().into_iter().collect();
+        roots.extend(self.dependents(source, &anchor_edits)?);
         self.load_glyph_closure(source, roots)
     }
 
-    /// Loads what replaying `change_set` reads.
+    /// Loads every layer `change_set` changes, and every layer of the glyphs
+    /// it replaces whole, which replaying it compares loaded or not.
     ///
     /// # Errors
     ///
-    /// As [`Self::load_for_intents`].
-    pub fn load_for_change_set<S: LayerSource>(
+    /// As [`Self::load_reads`].
+    pub fn load_changed<S: LayerSource>(
         &mut self,
         source: &mut S,
         change_set: &FontChangeSet,
     ) -> Result<(), LoadError<S::Error>> {
-        // A glyph replaced whole compares every layer of it, loaded or not.
-        let replaced_glyphs: Vec<GlyphId> = change_set
-            .changes
-            .iter()
-            .filter_map(|change| match change {
-                FontChange::Glyph(glyph) => glyph.sides().next().map(shift_font::Glyph::id),
-                _ => None,
-            })
-            .collect();
+        let replaced: Vec<GlyphId> = change_set.replaced_glyph_ids().collect();
         let mut layer_ids: BTreeSet<LayerId> = change_set.changed_layer_ids().into_iter().collect();
-        layer_ids.extend(self.font.layer_ids_of_glyphs(&replaced_glyphs));
+        layer_ids.extend(self.font.layer_ids_of_glyphs(&replaced));
         self.load_layers(source, layer_ids)
     }
 
@@ -129,7 +125,7 @@ impl EngineSession {
     ///
     /// # Errors
     ///
-    /// As [`Self::load_for_intents`].
+    /// As [`Self::load_reads`].
     pub fn load_glyphs<S: LayerSource>(
         &mut self,
         source: &mut S,
@@ -143,7 +139,7 @@ impl EngineSession {
     ///
     /// # Errors
     ///
-    /// As [`Self::load_for_intents`].
+    /// As [`Self::load_reads`].
     pub fn load_glyph_closure<S: LayerSource>(
         &mut self,
         source: &mut S,
@@ -174,7 +170,7 @@ impl EngineSession {
     ///
     /// # Errors
     ///
-    /// As [`Self::load_for_intents`].
+    /// As [`Self::load_reads`].
     pub fn load_all<S: LayerSource>(&mut self, source: &mut S) -> Result<(), LoadError<S::Error>> {
         let layer_ids: Vec<LayerId> = self.residency.unloaded_layer_ids().cloned().collect();
         self.load_layers(source, layer_ids)
@@ -184,7 +180,7 @@ impl EngineSession {
     ///
     /// # Errors
     ///
-    /// As [`Self::load_for_intents`].
+    /// As [`Self::load_reads`].
     pub fn load_layers<S: LayerSource>(
         &mut self,
         source: &mut S,
@@ -319,22 +315,12 @@ impl EngineSession {
         source: &mut S,
         set: &FontIntentSet,
     ) -> Result<StagedEdit, ApplyError<S::Error>> {
-        self.load_for_intents(source, set)?;
+        self.load_reads(source, set)?;
         let staged = self.stage_intents(set)?;
         let partly_loaded: Vec<GlyphId> = staged
             .changes()
-            .changes
-            .iter()
-            .filter_map(|change| match change {
-                FontChange::Glyph(glyph) => glyph.sides().next().map(shift_font::Glyph::id),
-                _ => None,
-            })
-            .filter(|glyph_id| {
-                self.font
-                    .layer_ids_of_glyphs([glyph_id])
-                    .iter()
-                    .any(|layer_id| self.residency.is_unloaded(layer_id))
-            })
+            .replaced_glyph_ids()
+            .filter(|glyph_id| self.is_partly_loaded(glyph_id))
             .collect();
         if partly_loaded.is_empty() {
             return Ok(staged);
@@ -355,9 +341,17 @@ impl EngineSession {
         source: &mut S,
         change_set: FontChangeSet,
     ) -> Result<AppliedIntents, ApplyError<S::Error>> {
-        self.load_for_change_set(source, &change_set)?;
+        self.load_changed(source, &change_set)?;
         let staged = self.stage_change_set(change_set)?;
         Ok(self.commit(staged))
+    }
+
+    /// Whether any layer of `glyph_id` is still a placeholder.
+    fn is_partly_loaded(&self, glyph_id: &GlyphId) -> bool {
+        self.font
+            .layer_ids_of_glyphs([glyph_id])
+            .iter()
+            .any(|layer_id| self.residency.is_unloaded(layer_id))
     }
 
     /// Glyphs with a component of a glyph owning one of `layer_ids`.

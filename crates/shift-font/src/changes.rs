@@ -463,6 +463,15 @@ impl FontChangeSet {
             .collect()
     }
 
+    /// Glyphs this changeset replaces whole: created, deleted or renamed
+    /// with all their layers.
+    pub fn replaced_glyph_ids(&self) -> impl Iterator<Item = GlyphId> {
+        self.changes.iter().filter_map(|change| match change {
+            FontChange::Glyph(glyph) => glyph.sides().next().map(Glyph::id),
+            _ => None,
+        })
+    }
+
     /// The layers this changeset writes, in change order.
     pub fn written_layers(&self) -> impl Iterator<Item = &GlyphLayer> {
         self.changes.iter().flat_map(FontChange::written_layers)

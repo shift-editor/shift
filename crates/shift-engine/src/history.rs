@@ -13,7 +13,7 @@ use crate::{ApplyError, EngineSession, LayerSource};
 /// redo that lands there can say it matches the saved document.
 #[derive(Clone, Debug, Default)]
 pub struct EditHistory {
-    open: Option<Vec<FontChangeSet>>,
+    open: Option<OpenEdit>,
     undo: Vec<FontChangeSet>,
     redo: Vec<FontChangeSet>,
     /// How many edits were undoable when the font was last saved; `None`
@@ -24,7 +24,7 @@ pub struct EditHistory {
 impl EditHistory {
     /// Opens an edit, dropping any edit still open.
     pub fn begin(&mut self) {
-        self.open = Some(Vec::new());
+        self.open = Some(OpenEdit::Empty);
     }
 
     pub fn is_open(&self) -> bool {
@@ -44,10 +44,8 @@ impl EditHistory {
 
     /// Adds one apply's change set to the open edit.
     pub fn record(&mut self, change_set: FontChangeSet) {
-        if let Some(open) = self.open.as_mut()
-            && !change_set.changes.is_empty()
-        {
-            open.push(change_set);
+        if let Some(open) = self.open.take() {
+            self.open = Some(open.record(change_set));
         }
     }
 
@@ -62,10 +60,10 @@ impl EditHistory {
         let Some(open) = self.open.take() else {
             return Ok(None);
         };
-        let change_set = match open.len() {
-            0 => return Ok(None),
-            1 => open.into_iter().next().unwrap_or_default(),
-            _ => font.coalesce(&open)?.changes,
+        let change_set = match open {
+            OpenEdit::Empty => return Ok(None),
+            OpenEdit::One(change_set) => change_set,
+            OpenEdit::Many(change_sets) => font.coalesce(&change_sets)?.changes,
         };
         if change_set.changes.is_empty() {
             return Ok(None);
@@ -138,6 +136,32 @@ impl EditHistory {
         self.redo.clear();
         if self.saved.is_some_and(|saved| saved > self.undo.len()) {
             self.saved = None;
+        }
+    }
+}
+
+/// The applies an open edit has recorded so far. One apply's change set is
+/// the edit's; several are coalesced when the edit ends.
+#[derive(Clone, Debug)]
+enum OpenEdit {
+    Empty,
+    One(FontChangeSet),
+    Many(Vec<FontChangeSet>),
+}
+
+impl OpenEdit {
+    /// Adds one apply's change set; one that changed nothing is dropped.
+    fn record(self, change_set: FontChangeSet) -> Self {
+        if change_set.changes.is_empty() {
+            return self;
+        }
+        match self {
+            Self::Empty => Self::One(change_set),
+            Self::One(first) => Self::Many(vec![first, change_set]),
+            Self::Many(mut change_sets) => {
+                change_sets.push(change_set);
+                Self::Many(change_sets)
+            }
         }
     }
 }

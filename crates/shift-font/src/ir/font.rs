@@ -1128,11 +1128,13 @@ impl Font {
         &self,
         layer_ids: impl IntoIterator<Item = &'a LayerId>,
     ) -> BTreeSet<GlyphId> {
-        layer_ids
+        let index = self.index();
+        let base_glyph_ids = layer_ids
             .into_iter()
-            .filter_map(|layer_id| self.index().owner(layer_id))
-            .flat_map(|base_glyph_id| self.index().composites_of(base_glyph_id))
-            .filter_map(|layer_id| self.index().owner(layer_id).cloned())
+            .filter_map(|layer_id| index.owner(layer_id));
+        base_glyph_ids
+            .flat_map(|base_glyph_id| index.composite_glyphs_of(base_glyph_id))
+            .cloned()
             .collect()
     }
 

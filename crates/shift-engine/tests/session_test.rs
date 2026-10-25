@@ -373,7 +373,7 @@ fn components_not_persisted_yet_still_load_their_bases() {
         layer_id,
         component_ids: vec![component],
     }));
-    session.load_for_intents(&mut persisted, &edit).unwrap();
+    session.load_reads(&mut persisted, &edit).unwrap();
 
     let base_layers: Vec<LayerId> = font.glyph(&base).unwrap().layer_ids().collect();
     assert!(

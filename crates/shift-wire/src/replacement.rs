@@ -58,49 +58,83 @@ impl FontReplacement {
         if impact.is_empty() {
             return Ok(None);
         }
-        let changed = |flag| impact.contains(flag);
+        let changed = ChangedScopes { font, impact };
         Ok(Some(Self {
-            metadata: changed(FontChangeImpact::METADATA)
-                .then(|| FontMetadata::from(font.metadata())),
-            axes: changed(FontChangeImpact::AXES)
-                .then(|| font.axes().iter().map(Axis::from).collect()),
-            axis_mappings: changed(FontChangeImpact::AXIS_MAPPINGS)
-                .then(|| font.axis_mappings().iter().map(AxisMapping::from).collect()),
-            axis_mapping_bases: changed(FontChangeImpact::AXIS_MAPPING_BASES)
-                .then(|| -> CoreResult<_> {
-                    Ok(font
-                        .axis_mapping_bases()?
-                        .iter()
-                        .map(AxisMappingBasis::from)
-                        .collect())
-                })
-                .transpose()?,
-            metric_definitions: changed(FontChangeImpact::METRIC_DEFINITIONS).then(|| {
+            metadata: changed.read(FontChangeImpact::METADATA, |font| font.metadata().into()),
+            axes: changed.read(FontChangeImpact::AXES, |font| {
+                font.axes().iter().map(Axis::from).collect()
+            }),
+            axis_mappings: changed.read(FontChangeImpact::AXIS_MAPPINGS, |font| {
+                font.axis_mappings().iter().map(AxisMapping::from).collect()
+            }),
+            axis_mapping_bases: changed.try_read(FontChangeImpact::AXIS_MAPPING_BASES, |font| {
+                Ok(font
+                    .axis_mapping_bases()?
+                    .iter()
+                    .map(AxisMappingBasis::from)
+                    .collect())
+            })?,
+            metric_definitions: changed.read(FontChangeImpact::METRIC_DEFINITIONS, |font| {
                 font.metric_definitions()
                     .iter()
                     .map(MetricDefinition::from)
                     .collect()
             }),
-            source_metrics_interpolation: changed(FontChangeImpact::SOURCE_METRICS).then(|| {
-                SourceMetricsInterpolationReplacement {
-                    snapshot: font
-                        .source_metric_interpolation()
-                        .as_ref()
-                        .map(SourceMetricsInterpolationSnapshot::from),
-                }
-            }),
-            named_instances: changed(FontChangeImpact::NAMED_INSTANCES).then(|| {
+            source_metrics_interpolation: changed.read(
+                FontChangeImpact::SOURCE_METRICS,
+                SourceMetricsInterpolationReplacement::of,
+            ),
+            named_instances: changed.read(FontChangeImpact::NAMED_INSTANCES, |font| {
                 font.named_instances()
                     .iter()
                     .map(NamedInstance::from)
                     .collect()
             }),
-            languages: changed(FontChangeImpact::LANGUAGES).then(|| LanguagesReplacement {
-                language_ids: font.language_ids(),
-            }),
-            sources: changed(FontChangeImpact::SOURCES).then(|| Source::masters_of(font)),
-            kerning: changed(FontChangeImpact::KERNING).then(|| KerningSnapshot::from(font)),
+            languages: changed.read(FontChangeImpact::LANGUAGES, LanguagesReplacement::of),
+            sources: changed.read(FontChangeImpact::SOURCES, Source::masters_of),
+            kerning: changed.read(FontChangeImpact::KERNING, KerningSnapshot::from),
         }))
+    }
+}
+
+impl SourceMetricsInterpolationReplacement {
+    fn of(font: &Font) -> Self {
+        Self {
+            snapshot: font
+                .source_metric_interpolation()
+                .as_ref()
+                .map(SourceMetricsInterpolationSnapshot::from),
+        }
+    }
+}
+
+impl LanguagesReplacement {
+    fn of(font: &Font) -> Self {
+        Self {
+            language_ids: font.language_ids(),
+        }
+    }
+}
+
+/// A font after an edit, read only in the scopes the edit changed.
+struct ChangedScopes<'a> {
+    font: &'a Font,
+    impact: FontChangeImpact,
+}
+
+impl<'a> ChangedScopes<'a> {
+    /// `read` of the font when the edit changed `scope`, else `None`.
+    fn read<T>(&self, scope: FontChangeImpact, read: impl FnOnce(&'a Font) -> T) -> Option<T> {
+        self.impact.contains(scope).then(|| read(self.font))
+    }
+
+    /// As [`Self::read`], for a read that can fail.
+    fn try_read<T>(
+        &self,
+        scope: FontChangeImpact,
+        read: impl FnOnce(&'a Font) -> CoreResult<T>,
+    ) -> CoreResult<Option<T>> {
+        self.read(scope, read).transpose()
     }
 }
 

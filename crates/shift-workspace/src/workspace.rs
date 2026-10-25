@@ -337,7 +337,7 @@ impl FontWorkspace {
         save_state: SaveState,
     ) -> Result<AppliedIntents, WorkspaceError> {
         self.session
-            .load_for_change_set(&mut StoreLayers(&self.store), &change_set)
+            .load_changed(&mut StoreLayers(&self.store), &change_set)
             .map_err(WorkspaceError::from_load)?;
         let staged = self.session.stage_change_set(change_set)?;
         self.commit(staged, save_state)
@@ -412,7 +412,7 @@ impl FontWorkspace {
             ReplaySide::Post => entry.change_set.clone(),
         };
         self.session
-            .load_for_change_set(&mut StoreLayers(&self.store), &change_set)
+            .load_changed(&mut StoreLayers(&self.store), &change_set)
             .map_err(WorkspaceError::from_load)?;
         let staged = self.session.stage_change_set(change_set)?;
         self.commit(staged, save_state)
