@@ -27,18 +27,18 @@ describe("Shape tool", () => {
   });
 
   it("updates the cursor when the selected shape kind changes", () => {
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "crosshair-square" });
+    expect(editor.toolCursor).toEqual({ type: "crosshair-square" });
     editor.toolRegistry
       .get("shape")!
       .menuItems!.find((item) => item.id === "ellipse")!
       .onSelect();
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "crosshair-circle" });
+    expect(editor.toolCursor).toEqual({ type: "crosshair-circle" });
 
     editor.toolRegistry
       .get("shape")!
       .menuItems!.find((item) => item.id === "rectangle")!
       .onSelect();
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "crosshair-square" });
+    expect(editor.toolCursor).toEqual({ type: "crosshair-square" });
   });
 
   it("drag then release commits a closed 4-point rectangle contour", async () => {
@@ -174,12 +174,12 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
 
   it("retains the shape cursor during drawing and after cancellation", () => {
     editor.pointerDown(10, 10).pointerMove(100, 60);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({
+    expect(editor.toolCursor).toEqual({
       type: kind === "ellipse" ? "crosshair-circle" : "crosshair-square",
     });
 
     editor.escape();
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({
+    expect(editor.toolCursor).toEqual({
       type: kind === "ellipse" ? "crosshair-circle" : "crosshair-square",
     });
   });
@@ -229,10 +229,10 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
   it("publishes live selection bounds and retains draft identity on release", async () => {
     editor.pointerDown(10, 10).pointerMove(100, 60);
     const contour = editor.glyphContours[0];
-    const bounds = editor.selectionBoundsCell.peek()!;
+    const bounds = editor.selectionBounds()!;
     expect(Bounds.width(bounds)).toBeGreaterThan(0);
     editor.pointerMove(200, 90);
-    expect(Bounds.width(editor.selectionBoundsCell.peek()!)).toBeGreaterThan(Bounds.width(bounds));
+    expect(Bounds.width(editor.selectionBounds()!)).toBeGreaterThan(Bounds.width(bounds));
     const points = editor.glyphContours[0].points;
     editor.pointerUp(200, 90);
     await editor.settle();
@@ -243,10 +243,10 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
 
   it("updates the live dimensions when Shift changes without pointer movement", () => {
     editor.pointerDown(10, 10).pointerMove(110, 60);
-    const bounds = editor.selectionBoundsCell.peek()!;
+    const bounds = editor.selectionBounds()!;
     expect(Bounds.width(bounds)).not.toBeCloseTo(Bounds.height(bounds));
     editor.keyDown("Shift", { shiftKey: true });
-    const constrained = editor.selectionBoundsCell.peek()!;
+    const constrained = editor.selectionBounds()!;
     expect(Bounds.width(constrained)).toBeCloseTo(Bounds.height(constrained));
     editor.escape();
   });

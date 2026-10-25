@@ -11,8 +11,15 @@
  * change sets; until then the editor surface under test is tool/input state.
  */
 
-import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
-import { Editor } from "@shift/editor";
+import {
+  localPoint,
+  scenePoint,
+  screenPoint,
+  type LocalPoint,
+  type ScreenPoint,
+} from "@shift/editor/spaces";
+import { Editor, type HistoryCapture } from "@shift/editor";
+import { effect, track, untracked } from "@shift/editor/signals";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
@@ -24,17 +31,41 @@ import {
   type GlyphId,
   type GlyphName,
   type AnchorId,
+  type Axis,
+  type NodeId,
   type GlyphRecord,
   type PointId,
+  type RunId,
   type Unicode,
 } from "@shift/types";
 import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
-import type { GlyphNode, TextRunNode } from "@shift/editor/types";
+import type {
+  CursorType,
+  GlyphNode,
+  GlyphOutlineTarget,
+  NodeKind,
+  NodeOfKind,
+  ShiftNode,
+  TextRunNode,
+} from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
+
+type PlacedGlyphs = NonNullable<
+  ReturnType<ReturnType<Editor["text"]["layoutCell"]>["peek"]>
+>["placedGlyphs"];
+type EditingLayerMatches = ReturnType<Editor["editingLayerMatchesCell"]["peek"]>;
+type SceneReference = Parameters<Editor["scene"]["nodesReferencing"]>[0];
+type NewSceneNode = Parameters<Editor["scene"]["createNode"]>[0];
+
+/** What a reactive reader saw, oldest first; `stop()` ends the reading. */
+interface ReactiveWatch<T> {
+  readonly values: readonly T[];
+  stop(): void;
+}
 
 interface DragInput {
   down: Point2D;
@@ -472,9 +503,382 @@ export class TestEditor extends Editor {
     return this.keyDown("Escape");
   }
 
+  /** Abandons the in-flight pointer gesture, as losing pointer capture does. */
+  cancelGesture(): this {
+    this.toolManager.cancelPointerGesture();
+    return this;
+  }
+
+  /** The cursor the active tool asks for at the current pointer position. */
+  get toolCursor(): CursorType | null {
+    return this.toolManager.activeTool?.cursorCell.value ?? null;
+  }
+
+  /**
+   * Returns the active tool as the given class, for tool tests that read the
+   * tool's own public state.
+   *
+   * @throws {Error} when the active tool is not an instance of `type`.
+   */
+  activeToolAs<T>(type: abstract new (...args: never[]) => T): T {
+    const tool = this.toolManager.activeTool;
+    if (!(tool instanceof type)) throw new Error(`Expected active tool to be ${type.name}`);
+
+    return tool;
+  }
+
   selectTool(name: ToolName): this {
     this.setActiveTool(name);
     return this;
+  }
+
+  /**
+   * Queues a pointer move without draining it, as a browser move that arrives
+   * between animation frames does.
+   *
+   * @remarks
+   * The next {@link pointerMove} or {@link pointerUp} drains it. Use to test that
+   * a release still honours the last sample (and its modifiers) the tool never saw.
+   */
+  queuePointerMove(x: number, y: number, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
+    this.toolManager.handlePointerMove(screenPoint(x, y), { ...DEFAULT_MODIFIERS, ...options });
+    return this;
+  }
+
+  /**
+   * Places the open glyph's scene node at a scene position, as dragging the
+   * node on the canvas does.
+   *
+   * @throws {Error} when no glyph node is open.
+   */
+  placeGlyphNodeAt(position: Point2D): this {
+    const node = this.glyphNode;
+    if (!node) throw new Error("placeGlyphNodeAt needs an open glyph node");
+
+    return this.moveNode(node.id, position);
+  }
+
+  /**
+   * Sets the open text run's type size in scene units.
+   *
+   * @throws {Error} when no text run is open.
+   */
+  setTextRunSize(size: number): this {
+    const run = this.textRun;
+    if (!run) throw new Error("setTextRunSize needs an open text run");
+
+    this.scene.updateNode({ id: run.id, size });
+    return this;
+  }
+
+  /**
+   * The pre-gesture outline Select draws behind a live edit of the open glyph,
+   * as each root contour's point positions.
+   *
+   * @returns null when no ghost is drawn: Select is not active, or no edit is live.
+   */
+  get editGhostContours(): readonly (readonly Point2D[])[] | null {
+    const node = this.glyphNode;
+    const sourceId = this.activeSourceId;
+    if (!node || !sourceId || this.tool?.id !== "select") return null;
+
+    const base = this.layerForGlyph(node.glyphId, sourceId)?.editBaseGeometryCell.peek();
+    if (!base) return null;
+
+    return base.contours.map((contour) => contour.points.map(({ x, y }) => ({ x, y })));
+  }
+
+  /**
+   * How each non-reference layer being edited together pairs its points with
+   * the reference layer's, keyed by target layer.
+   */
+  get editingLayerMatches(): EditingLayerMatches {
+    return this.editingLayerMatchesCell.peek();
+  }
+
+  /**
+   * Every placed scene node, parents before children and siblings in order.
+   *
+   * @remarks
+   * Reactive: an effect that calls this reruns when a node is added, removed,
+   * or changed, and only then.
+   */
+  sceneNodes(): readonly ShiftNode[] {
+    return this.scene.cell.value.nodes;
+  }
+
+  /** The placed scene node with `nodeId`, or null when there is none. */
+  sceneNode(nodeId: NodeId): ShiftNode | null {
+    return this.scene.node(nodeId);
+  }
+
+  /** Every placed node of `kind`, in scene order. */
+  nodesOfKind<K extends NodeKind>(kind: K): readonly NodeOfKind<K>[] {
+    return this.scene.nodesOfKind(kind);
+  }
+
+  /** The first placed node of `kind` in scene order, or null when there is none. */
+  firstNode<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
+    return this.scene.first(kind);
+  }
+
+  /**
+   * The scene's one node of `kind`, or null with none or several.
+   *
+   * @remarks
+   * Reactive: an effect that calls this reruns when the nodes of `kind` change.
+   */
+  onlyNode<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
+    return this.scene.onlyCell(kind).value;
+  }
+
+  /**
+   * The placed nodes that show a run or a glyph.
+   *
+   * @remarks
+   * Reactive: an effect that calls this reruns when the nodes showing `id` change.
+   */
+  nodesReferencing(id: SceneReference): readonly ShiftNode[] {
+    return this.scene.nodesReferencing(id);
+  }
+
+  /** Places another node in the scene, as opening a glyph beside the current one does. */
+  placeNode(node: NewSceneNode): ShiftNode {
+    return this.scene.createNode(node);
+  }
+
+  /** Replaces every placed node with `nodes`, as restoring a saved canvas does. */
+  replaceSceneNodes(nodes: readonly ShiftNode[]): this {
+    this.scene.setNodes(nodes);
+    return this;
+  }
+
+  /** Moves a placed node to a scene position. */
+  moveNode(nodeId: NodeId, position: Point2D): this {
+    this.scene.updateNode({ id: nodeId, position });
+    return this;
+  }
+
+  /** Removes a placed node from the scene. */
+  removeNode(nodeId: NodeId): this {
+    this.scene.deleteNode(nodeId);
+    return this;
+  }
+
+  /** Removes every placed node, as navigating away from the canvas does. */
+  clearScene(): this {
+    this.scene.clear();
+    return this;
+  }
+
+  /**
+   * Shows another glyph in the open glyph node, keeping the node in place.
+   *
+   * @throws {Error} when no glyph node is open.
+   */
+  showGlyphInNode(glyphId: GlyphId): this {
+    const node = this.glyphNode;
+    if (!node) throw new Error("showGlyphInNode needs an open glyph node");
+
+    this.scene.updateNode({ id: node.id, glyphId });
+    return this;
+  }
+
+  /** The comparison outlines drawn around a glyph node, in draw order. */
+  visibleOutlines(nodeId: NodeId): readonly GlyphOutlineTarget[] {
+    return this.nodeDefinition("glyph").visibleOutlines(nodeId);
+  }
+
+  /** Shows or hides one comparison outline, as clicking its source or instance row does. */
+  toggleOutline(target: GlyphOutlineTarget): this {
+    this.nodeDefinition("glyph").outlines.toggle(target);
+    return this;
+  }
+
+  /**
+   * How the open glyph node draws each of its point handles, keyed by point.
+   *
+   * @throws {Error} when no glyph node is open.
+   */
+  handleStates() {
+    const node = this.glyphNode;
+    if (!node) throw new Error("handleStates needs an open glyph node");
+
+    return this.nodeDefinition("glyph").handleStates(node);
+  }
+
+  /** Flushes pending edits and reads the document's save state (dirty, needs Save As). */
+  documentState(): Promise<WorkspaceDocumentState | null> {
+    return this.font.editCoordinator.state();
+  }
+
+  /**
+   * Sends the workspace an edit it refuses (a second glyph named like the
+   * opened one), as a conflicting model write does.
+   *
+   * @returns the apply, which rejects once the workspace refuses it.
+   */
+  submitRejectedEdit(): Promise<unknown> {
+    const name = this.glyphRecord?.name;
+    if (!name) throw new Error("submitRejectedEdit needs an open glyph");
+
+    return this.font.editCoordinator.apply([
+      { kind: "createGlyph", createGlyph: { glyphId: mintGlyphId(), name, unicodes: [] } },
+    ]);
+  }
+
+  /**
+   * Records `body` as one undoable editor action and returns its result.
+   * A throwing body records nothing.
+   */
+  recordAction<T>(label: string, body: () => T): T {
+    return this.history.capture(label, body);
+  }
+
+  /** Asynchronous {@link recordAction}: a rejecting body records nothing. */
+  recordActionAsync<T>(label: string, body: () => Promise<T>): Promise<T> {
+    return this.history.captureAsync(label, body);
+  }
+
+  /**
+   * Opens one undoable editor action that spans several calls; `finish()` on
+   * the returned capture closes it.
+   */
+  beginAction(label: string): HistoryCapture {
+    return this.history.begin(label);
+  }
+
+  /** Whether an undoable editor action is still open. */
+  get recordingAction(): boolean {
+    return this.history.capturing;
+  }
+
+  /** The font's tracked language ids, or null when the font tracks none. */
+  get trackedLanguageIds(): readonly string[] | null {
+    return this.font.languageIdsCell.peek();
+  }
+
+  /** The axes users set directly, in font order. */
+  get externalAxes(): readonly Axis[] {
+    return this.font.externalAxesCell.peek();
+  }
+
+  /**
+   * Records what a renderer reading `layer` sees: `read` runs now and again
+   * each time the layer publishes a change of the given kind.
+   *
+   * @param change - `"positions"` for coordinate changes, `"structure"` for
+   * contours and point ownership, `"geometry"` for the full published geometry.
+   */
+  watchLayer<T>(
+    layer: GlyphLayer,
+    change: "positions" | "structure" | "geometry",
+    read: (layer: GlyphLayer) => T,
+  ): ReactiveWatch<T> {
+    const values: T[] = [];
+    const subscription = effect(() => {
+      if (change === "positions") track(layer.buffersChangedCell);
+      else if (change === "structure") track(layer.structureCell);
+      else track(layer.geometryCell);
+      values.push(untracked(() => read(layer)));
+    });
+
+    return { values, stop: () => subscription.dispose() };
+  }
+
+  /** Records a render model's advance now and each time it republishes. */
+  watchRenderedAdvance(model: GlyphRenderModel): ReactiveWatch<number> {
+    const values: number[] = [];
+    const subscription = effect(() => {
+      values.push(model.xAdvanceCell.value);
+    });
+
+    return { values, stop: () => subscription.dispose() };
+  }
+
+  /**
+   * Starts a drag through glyph-local coordinates and holds it before release,
+   * so the edit is previewed but not committed.
+   *
+   * @throws {Error} when no glyph node is open.
+   */
+  holdDragLocal(input: DragInput): this {
+    const down = this.localToScreen(input.down);
+    const start = this.localToScreen(input.start);
+    const end = this.localToScreen(input.end);
+
+    this.pointerDown(down.x, down.y, input.options);
+    this.pointerMove(start.x, start.y, input.options);
+    return this.pointerMove(end.x, end.y, input.options);
+  }
+
+  /**
+   * The width a text run lays out to: the sum of its glyph advances and kerning.
+   *
+   * @returns null when the run does not exist.
+   */
+  runAdvance(runId: RunId): number | null {
+    return this.text.layoutCell(runId).peek()?.totalAdvance ?? null;
+  }
+
+  /**
+   * The glyphs a text run lays out, in line and visual order, each with its
+   * resolved glyph, advance box edge and outline origin.
+   *
+   * @returns an empty list when the run does not exist.
+   */
+  runPlacedGlyphs(runId: RunId): PlacedGlyphs {
+    return this.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+  }
+
+  /**
+   * The caret cluster a click at `point` in the open text run lands on.
+   *
+   * @param point - a position in the run's own coordinates.
+   * @returns null when the point is outside every line's advance boxes.
+   * @throws {Error} when no text run is open.
+   */
+  runCaretAt(point: LocalPoint): number | null {
+    const run = this.textRun;
+    if (!run) throw new Error("runCaretAt needs an open text run");
+
+    return this.nodeDefinition("textRun").caretAt(run, point);
+  }
+
+  /**
+   * The spacing gaps between neighbouring glyphs of the open text run, in run
+   * order, as the Spacing tool measures them.
+   *
+   * @throws {Error} when no text run is open.
+   */
+  runSpacingGaps() {
+    const run = this.textRun;
+    if (!run) throw new Error("runSpacingGaps needs an open text run");
+
+    return this.nodeDefinition("textRun").spacingGaps(run);
+  }
+
+  /**
+   * The selection box's rectangle in scene coordinates, where the canvas draws it.
+   *
+   * @returns null when nothing is selected.
+   */
+  selectionSceneRect(): Rect2D | null {
+    const bounds = this.selectionSceneBoundsCell.peek();
+    return bounds ? Bounds.toRect(bounds) : null;
+  }
+
+  /**
+   * The model the canvas draws a glyph from at the editor's current location
+   * and source.
+   *
+   * @returns null when the glyph is not loaded.
+   */
+  renderModelFor(glyphId: GlyphId): GlyphRenderModel | null {
+    return (
+      this.glyphForId(glyphId)?.renderModelAt(this.externalLocationCell, this.activeSourceIdCell) ??
+      null
+    );
   }
 
   #assertWorkspaceSettled(): void {

@@ -8,7 +8,7 @@ describe("Pen in a glyph edited inside scaled text", () => {
     editor = new TestEditor();
     await editor.startSession();
     const run = editor.textRun!;
-    editor.scene.updateNode({ id: run.id, size: run.size / 10 });
+    editor.setTextRunSize(run.size / 10);
   });
 
   it("closes the contour on a click within the on-screen radius of its start", async () => {

@@ -210,7 +210,7 @@ describe("saved variable-font outcomes survive a fresh workspace stack", () => {
 
     const reopened = new TestEditor();
     await reopened.openSession(savePath, "A");
-    await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({ dirty: false });
+    await expect(reopened.documentState()).resolves.toMatchObject({ dirty: false });
     expect(persistedVariableFont(reopened, fixture)).toEqual(expected);
 
     reopened.selectSourceForEditing(fixture.boldSourceId);
@@ -229,11 +229,11 @@ describe("saved variable-font outcomes survive a fresh workspace stack", () => {
       x: savedPosition.x + drag.delta.x,
       y: savedPosition.y + drag.delta.y,
     });
-    await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
+    await expect(reopened.documentState()).resolves.toMatchObject({ dirty: true });
 
     await reopened.undo();
     expect(reopened.pointPosition(boldPoint.id)).toEqual(savedPosition);
-    await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({ dirty: false });
+    await expect(reopened.documentState()).resolves.toMatchObject({ dirty: false });
     await reopened.redo();
     expect(reopened.pointPosition(boldPoint.id)).toEqual(editedPosition);
     await reopened.save();

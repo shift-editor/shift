@@ -29,7 +29,7 @@ describe("GlyphCatalog", () => {
     const boldId = font.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 900 }));
     await editor.settle();
     editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 900 }));
-    expect(editor.activeSourceIdCell.peek()).toBe(boldId);
+    expect(editor.activeSourceId).toBe(boldId);
 
     const catalog = new GlyphCatalog(
       editor,
@@ -40,19 +40,18 @@ describe("GlyphCatalog", () => {
         () => font.getAxisMappingBases(),
       ),
     );
+    // The catalog's own reactive metrics are the subject here, not editor internals.
     const reader = effect(() => {
+      // oxlint-disable-next-line shift/no-editor-internals-in-tests
       catalog.metricsCell.value;
     });
-    const outcomes: string[] = [];
-    const stopListening = font.editCoordinator.onEdit((event) => outcomes.push(event.kind));
 
     font.deleteSource(boldId);
     await editor.settle();
-    stopListening();
     reader.dispose();
 
-    expect(outcomes).toEqual(["accepted", "committed"]);
     expect(font.sources.map(({ id }) => id)).not.toContain(boldId);
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests
     expect(catalog.metricsCell.peek().unitsPerEm).toBe(font.metrics.unitsPerEm);
   });
 });

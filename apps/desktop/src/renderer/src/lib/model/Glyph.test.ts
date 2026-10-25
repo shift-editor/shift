@@ -1,14 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  mintPointId,
-  type ContourId,
-  type GlyphName,
-  type GlyphRecord,
-  type PointId,
-} from "@shift/types";
+import { mintPointId, type GlyphName, type GlyphRecord, type PointId } from "@shift/types";
 import { Point } from "@shift/glyph-state";
 import { Curve } from "@shift/geo";
-import { effect, signal, track } from "@shift/editor/signals";
+import { signal } from "@shift/editor/signals";
 import { emptyExternalAxisLocation } from "@shift/editor/variation";
 import { TestEditor } from "@/testing/TestEditor";
 import type { GlyphLayer } from "@shift/editor/model";
@@ -197,25 +191,18 @@ describe("Glyph", () => {
 
   it("never republishes an older position while rapid edits confirm", async () => {
     const [first] = await addTriangle(editor, layer);
-    const observedX: number[] = [];
-    const subscription = effect(() => {
-      track(layer.buffersChangedCell);
-      observedX.push(layer.point(first!.id)?.x ?? NaN);
-    });
+    const observedX = editor.watchLayer(layer, "positions", (l) => l.point(first!.id)?.x ?? NaN);
 
     layer.movePointTo(first!.id, { x: 10, y: 0 });
     layer.movePointTo(first!.id, { x: 20, y: 0 });
     await editor.settle();
+    observedX.stop();
 
-    expect(observedX).toEqual([0, 10, 20]);
-    subscription.dispose();
+    expect(observedX.values).toEqual([0, 10, 20]);
   });
 
   it("publishes a transaction as one complete structural state", async () => {
-    const pointCounts: number[] = [];
-    const subscription = effect(() => {
-      pointCounts.push(layer.geometryCell.value.allPoints.length);
-    });
+    const pointCounts = editor.watchLayer(layer, "geometry", (l) => l.allPoints.length);
 
     const transactionReads: number[] = [];
     editor.transaction("Create line", () => {
@@ -228,12 +215,12 @@ describe("Glyph", () => {
     });
 
     expect(transactionReads).toEqual([0, 1, 2]);
-    expect(pointCounts).toEqual([0, 2]);
+    expect(pointCounts.values).toEqual([0, 2]);
 
     await editor.settle();
-    expect(pointCounts.every((count) => count === 0 || count === 2)).toBe(true);
-    expect(pointCounts.at(-1)).toBe(2);
-    subscription.dispose();
+    pointCounts.stop();
+    expect(pointCounts.values.every((count) => count === 0 || count === 2)).toBe(true);
+    expect(pointCounts.values.at(-1)).toBe(2);
   });
 
   it("resyncs local geometry when the workspace rejects an edit", async () => {
@@ -246,11 +233,9 @@ describe("Glyph", () => {
     const duplicateContourId = otherLayer.addContour();
     await editor.settle();
 
-    layer.previewPositionPatch([{ kind: "point", id: first!.id, x: 999, y: 999 }]);
-    editor.font.editCoordinator.push({
-      kind: "addContour",
-      addContour: { layerId: layer.layerId, contourId: duplicateContourId, closed: false },
-    });
+    editor.holdDragLocal({ down: first!, start: { x: 4, y: 0 }, end: { x: 999, y: 999 } });
+    expect(layer.point(first!.id)).toMatchObject({ x: 999, y: 999 });
+    layer.addContourSeed(duplicateContourId, false);
     await editor.settle();
 
     const refreshedGlyph = await editor.font.loadGlyph(record.id);
@@ -274,17 +259,12 @@ describe("Glyph", () => {
 
   it("feeds consumers that track source coordinate changes before reading geometry", async () => {
     const [first] = await addTriangle(editor, layer);
-    let pointX = first!.x;
-
-    const subscription = effect(() => {
-      track(layer.buffersChangedCell);
-      pointX = layer.point(first!.id)?.x ?? pointX;
-    });
+    const pointX = editor.watchLayer(layer, "positions", (l) => l.point(first!.id)?.x);
 
     layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 33, y: 44 }]);
+    pointX.stop();
 
-    expect(pointX).toBe(33);
-    subscription.dispose();
+    expect(pointX.values.at(-1)).toBe(33);
   });
 });
 
@@ -379,10 +359,10 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     record = glyphRecord;
   });
 
-  it("previews point patches through every public layer geometry view", async () => {
+  it("previews a dragged point through every public layer geometry view", async () => {
     const [, second] = await addTriangle(editor, layer);
 
-    layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
+    editor.holdDragLocal({ down: second!, start: { x: 104, y: 0 }, end: { x: 25, y: 75 } });
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
     expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
@@ -405,12 +385,10 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     expect(editor.sceneGlyphRenderModel?.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
-  it("commits a preview without double-applying local positions", async () => {
+  it("commits a dragged preview without double-applying local positions", async () => {
     const [, second] = await addTriangle(editor, layer);
 
-    layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
-    layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
-    await editor.settle();
+    await editor.dragLocal({ down: second!, start: { x: 104, y: 0 }, end: { x: 25, y: 75 } });
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
     expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
@@ -418,14 +396,11 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     const committed = layer.positionsFor([{ kind: "point", id: second!.id }])[0];
     if (!committed) throw new Error("Expected committed position");
 
-    layer.previewPositionPatch([
-      {
-        kind: "point",
-        id: second!.id,
-        x: committed.x + 10,
-        y: committed.y + 5,
-      },
-    ]);
+    editor.holdDragLocal({
+      down: committed,
+      start: { x: committed.x + 4, y: committed.y },
+      end: { x: committed.x + 10, y: committed.y + 5 },
+    });
 
     expect(pointPosition(layer, second!.id)).toEqual({ x: 35, y: 80 });
   });
@@ -446,16 +421,13 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     const glyph = editor.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
     const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
-    const observed: number[] = [];
-    const subscription = effect(() => {
-      observed.push(renderModel.xAdvanceCell.value);
-    });
+    const observed = editor.watchRenderedAdvance(renderModel);
 
     layer.setXAdvance(530);
     await editor.settle();
+    observed.stop();
 
-    expect(observed).toEqual([500, 530]);
-    subscription.dispose();
+    expect(observed.values).toEqual([500, 530]);
   });
 
   it("keeps source-backed render contours fresh after position edits", async () => {
@@ -615,19 +587,14 @@ describe("point insertion preserves layer ownership", () => {
   it("publishes active geometry and point ownership together", () => {
     const edit = layer.beginEdit();
     const contourId = edit.addContour(false);
-    const observed: (ContourId | null)[][] = [];
-    const subscription = effect(() => {
-      observed.push(
-        layer.structureCell.value.contours.flatMap((contour) =>
-          contour.points.map((point) => layer.contourIdOfPoint(point.id)),
-        ),
-      );
-    });
+    const observed = editor.watchLayer(layer, "structure", (l) =>
+      l.contours.flatMap((contour) => contour.points.map((point) => l.contourIdOfPoint(point.id))),
+    );
     edit.addPoints(contourId, [Point.onCurve({ x: 0, y: 0 }), Point.onCurve({ x: 10, y: 20 })]);
     edit.cancel();
-    subscription.dispose();
+    observed.stop();
 
-    expect(observed).toEqual([[], [contourId, contourId], []]);
+    expect(observed.values).toEqual([[], [contourId, contourId], []]);
   });
 
   it("drops inserted ownership when a transaction rolls back", () => {
@@ -644,13 +611,17 @@ describe("point insertion preserves layer ownership", () => {
     expect(layer.contour(contourId)?.points).toEqual([]);
   });
 
-  it("rejects a duplicate identity without changing its existing contour", () => {
+  it("rejects a duplicate identity without changing its existing contour", async () => {
     const contourId = layer.addContour();
     const [pointId] = layer.addPoints(contourId, [Point.onCurve({ x: 10, y: 20 })]);
     const otherContourId = layer.addContour();
     const point = layer.point(pointId!)!;
 
-    expect(layer.buffers.addPoints([point], otherContourId)).toBe(false);
+    layer.addPointSeeds(otherContourId, [point]);
+    expect(layer.contourIdOfPoint(pointId!)).toBe(contourId);
+    expect(layer.contour(otherContourId)?.points).toEqual([]);
+
+    await editor.settle();
     expect(layer.contourIdOfPoint(pointId!)).toBe(contourId);
     expect(layer.contour(otherContourId)?.points).toEqual([]);
   });
@@ -661,7 +632,7 @@ describe("point insertion preserves layer ownership", () => {
     const [before] = layer.addPoints(otherContourId, [Point.onCurve({ x: 0, y: 0 })]);
     const point = { id: mintPointId(), ...Point.onCurve({ x: 10, y: 20 }) };
 
-    expect(layer.buffers.addPoints([point], contourId, before)).toBe(false);
+    layer.addPointSeeds(contourId, [point], before);
     expect(layer.contourIdOfPoint(point.id)).toBeNull();
     layer.addPointSeeds(contourId, [point]);
     expect(layer.contourIdOfPoint(point.id)).toBe(contourId);

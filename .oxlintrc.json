@@ -38,6 +38,7 @@
     "shift/no-bridge-import": "error",
     "shift/no-reference-module-outside-tests": "error",
     "shift/no-raw-editor-in-tests": "error",
+    "shift/no-editor-internals-in-tests": "error",
     "shift/no-vi-stub-global-in-tests": "error",
     "shift/no-vitest-mock-primitives": "error",
     "eqeqeq": [

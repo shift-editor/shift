@@ -4,7 +4,7 @@ import { TestEditor } from "@/testing/TestEditor";
 import { NONSPACING_MARK_EDITOR_ADVANCE, Positioner } from "@shift/editor/testing";
 import { characterTextItem as char, glyphTextItem as glyph } from "@shift/editor/text";
 import { layoutTestEditor, ltrRun } from "./testUtils";
-import { effect, signal } from "@shift/editor/signals";
+import { signal } from "@shift/editor/signals";
 import type { GlyphName } from "@shift/types";
 import { kerningValueEdit } from "@shift/editor/model";
 
@@ -126,17 +126,12 @@ describe("Positioner", () => {
 
     it("lays out a character with no glyph as spacing, then as a mark once the glyph exists", async () => {
       const run = editor.text.createRun([char(65), char(0x064e)]);
-      const layoutCell = editor.text.layoutCell(run.id);
-      const advances: number[] = [];
-      const subscription = effect(() => {
-        advances.push(layoutCell.value!.placedGlyphs[1]!.glyph.xAdvance);
-      });
+      const markAdvance = () => editor.runPlacedGlyphs(run.id)[1]!.glyph.xAdvance;
+      expect(markAdvance()).toBe(0);
 
       await addZeroWidthGlyph("fatha-ar", 0x064e);
-      subscription.dispose();
 
-      expect(advances[0]).toBe(0);
-      expect(advances.at(-1)).toBe(NONSPACING_MARK_EDITOR_ADVANCE);
+      expect(markAdvance()).toBe(NONSPACING_MARK_EDITOR_ADVANCE);
     });
   });
 

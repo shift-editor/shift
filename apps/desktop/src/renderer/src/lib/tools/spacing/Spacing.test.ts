@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { characterTextItem } from "@shift/editor/text";
-import type { SpacingTool } from "@shift/editor/tools";
+import { SpacingTool } from "@shift/editor/tools";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("Spacing tool", () => {
@@ -54,7 +54,7 @@ describe("Spacing tool", () => {
     hoverLocal(450, 200);
     const screen = editor.localToScreen({ x: 450, y: 200 });
     editor.click(screen.x, screen.y);
-    const tool = () => editor.toolManager.activeTool as SpacingTool;
+    const tool = () => editor.activeToolAs(SpacingTool);
     expect(tool().currentHalf).not.toBeNull();
 
     // Undo the typing removes the second A, so the gap between the two is gone.
@@ -99,7 +99,7 @@ describe("Spacing tool", () => {
     hoverLocal(450, 200);
     const state = editor.toolIf("spacing")?.state;
     const hit = state?.type === "ready" ? state.hit! : null;
-    const tool = editor.toolManager.activeTool as SpacingTool;
+    const tool = editor.activeToolAs(SpacingTool);
 
     // The first A's RSB; the second A's RSB, at the line end, is the only other.
     expect(hit).toMatchObject({ side: "left" });
@@ -204,7 +204,7 @@ describe("Spacing tool", () => {
   });
 
   describe("typing a value", () => {
-    const spacing = () => editor.toolManager.activeTool as SpacingTool;
+    const spacing = () => editor.activeToolAs(SpacingTool);
     const hoveredGapWhileEditing = () => spacing().editing!.gap;
     const editedSide = () => {
       const state = editor.toolIf("spacing")?.state;
@@ -228,7 +228,7 @@ describe("Spacing tool", () => {
 
       const state = editor.toolIf("spacing")?.state;
       expect(state?.type === "ready" && state.overLabel).toBe(true);
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({
+      expect(editor.toolCursor).toEqual({
         type: "pointer",
       });
     });

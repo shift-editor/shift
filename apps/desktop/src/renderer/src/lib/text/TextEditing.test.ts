@@ -74,33 +74,33 @@ describe("page run text editing", () => {
     const before = editor.toScene(child, localPoint(0, 0));
     editor.textEditing.placeAtCluster(0);
     editor.textEditing.insert([characterTextItem(65)]);
-    const advance = editor.text.layoutCell(run.runId).peek()!.totalAdvance / 2;
+    const advance = editor.runAdvance(run.runId)! / 2;
     expect(editor.toScene(child, localPoint(0, 0))).toEqual({ x: before.x + advance, y: before.y });
   });
 
   it("deleting the edited glyph's item deletes its child; undo restores both", async () => {
     editor.textEditing.deleteBackward();
     expect(items()).toEqual([]);
-    expect(editor.scene.node(child.id)).toBeNull();
+    expect(editor.sceneNode(child.id)).toBeNull();
     await editor.undo();
     expect(items()[0]?.id).toBe(child.itemId);
-    expect(editor.scene.node(child.id)).not.toBeNull();
+    expect(editor.sceneNode(child.id)).not.toBeNull();
   });
 
   it("removing the edited glyph's item by any writer deletes its child in the same undo step", async () => {
     editor.escape();
-    editor.history.capture("Clear run", () => editor.text.setItems(run.runId, []));
-    expect(editor.scene.node(child.id)).toBeNull();
+    editor.recordAction("Clear run", () => editor.text.setItems(run.runId, []));
+    expect(editor.sceneNode(child.id)).toBeNull();
     await editor.undo();
     expect(items()[0]?.id).toBe(child.itemId);
-    expect(editor.scene.node(child.id)).not.toBeNull();
+    expect(editor.sceneNode(child.id)).not.toBeNull();
   });
 
   it("leaving Text mode after deleting the edited glyph edits nothing", () => {
     editor.textEditing.deleteBackward();
     editor.escape();
     expect(editor.editing.nodeIds).toEqual([]);
-    expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
+    expect(editor.nodesOfKind("textRun")).toHaveLength(1);
   });
 
   it("select-all includes linebreaks and undo restores the prior caret", async () => {
@@ -140,15 +140,15 @@ describe("page run text editing", () => {
   });
 
   it("caret movement preserves layout identity while item edits rebuild it", () => {
-    const layoutCell = editor.text.layoutCell(run.runId);
-    const initial = layoutCell.peek();
+    const layout = () => editor.runPlacedGlyphs(run.runId);
+    const initial = layout();
     editor.textEditing.placeAtCluster(0);
-    expect(layoutCell.peek()).toBe(initial);
+    expect(layout()).toBe(initial);
     editor.textEditing.insert([characterTextItem(65)]);
-    const populated = layoutCell.peek();
+    const populated = layout();
     expect(populated).not.toBe(initial);
     editor.textEditing.move(-1, "character");
-    expect(layoutCell.peek()).toBe(populated);
+    expect(layout()).toBe(populated);
   });
 
   it("a caret stays on its item when another item is inserted before it", () => {
@@ -162,17 +162,13 @@ describe("page run text editing", () => {
 
   it("caret placement maps a point in a scaled run to its cluster", () => {
     editor.textEditing.insert([characterTextItem(65)]);
-    editor.scene.updateNode({
-      id: run.id,
-      size: editor.font.metricsCell.peek().unitsPerEm * 2,
-    });
-    const node = editor.scene.nodeOfKind(run.id, "textRun")!;
-    const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance / 2;
-    const definition = editor.nodeDefinition("textRun");
+    editor.setTextRunSize(editor.font.metrics.unitsPerEm * 2);
+    const node = editor.textRun!;
+    const advance = editor.runAdvance(node.runId)! / 2;
 
-    expect(definition.caretAt(node, localPoint(advance * 1.75, 0))).toBe(2);
-    expect(definition.caretAt(node, editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
-    expect(definition.caretAt(node, localPoint(advance * 10, 0))).toBeNull();
+    expect(editor.runCaretAt(localPoint(advance * 1.75, 0))).toBe(2);
+    expect(editor.runCaretAt(editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
+    expect(editor.runCaretAt(localPoint(advance * 10, 0))).toBeNull();
   });
 
   it("arrows step over a base and its combining mark as one character", () => {

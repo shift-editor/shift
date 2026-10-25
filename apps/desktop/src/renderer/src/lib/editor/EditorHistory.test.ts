@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { mintGlyphId, type GlyphName, type PointId, type Unicode } from "@shift/types";
+import type { GlyphName, PointId } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("editor actions share one undo timeline", () => {
@@ -21,18 +21,18 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("changes no document state when undoing and redoing a selection", async () => {
-    const before = await editor.font.editCoordinator.state();
+    const before = await editor.documentState();
 
     await editor.clickLocal(100, 100);
     await editor.undo();
     await editor.redo();
 
-    expect(await editor.font.editCoordinator.state()).toEqual(before);
+    expect(await editor.documentState()).toEqual(before);
     expect(editor.selection.ids).toEqual([firstId]);
   });
 
   it("captures a synchronous action and returns its result", async () => {
-    const result = editor.history.capture("Select", () => {
+    const result = editor.recordAction("Select", () => {
       editor.selection.select([firstId]);
       return firstId;
     });
@@ -44,18 +44,18 @@ describe("editor actions share one undo timeline", () => {
 
   it("cancels a synchronous action that throws", () => {
     expect(() =>
-      editor.history.capture("Rejected selection", () => {
+      editor.recordAction("Rejected selection", () => {
         editor.selection.select([firstId]);
         throw new Error("selection failed");
       }),
     ).toThrow("selection failed");
 
     expect(editor.selection.ids).toEqual([]);
-    expect(editor.history.capturing).toBe(false);
+    expect(editor.recordingAction).toBe(false);
   });
 
   it("captures an asynchronous action and returns its result", async () => {
-    const result = await editor.history.captureAsync("Select", async () => {
+    const result = await editor.recordActionAsync("Select", async () => {
       await Promise.resolve();
       editor.selection.select([firstId]);
       return firstId;
@@ -67,7 +67,7 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("cancels an asynchronous action that rejects", async () => {
-    const action = editor.history.captureAsync("Rejected selection", async () => {
+    const action = editor.recordActionAsync("Rejected selection", async () => {
       editor.selection.select([firstId]);
       await Promise.resolve();
       throw new Error("selection failed");
@@ -75,14 +75,14 @@ describe("editor actions share one undo timeline", () => {
 
     await expect(action).rejects.toThrow("selection failed");
     expect(editor.selection.ids).toEqual([]);
-    expect(editor.history.capturing).toBe(false);
+    expect(editor.recordingAction).toBe(false);
   });
 
   it("drops journaled net-zero writes without clearing redo", async () => {
     await editor.clickLocal(100, 100);
     await editor.undo();
 
-    editor.history.capture("Net-zero selection", () => {
+    editor.recordAction("Net-zero selection", () => {
       editor.selection.select([secondId]);
       editor.selection.clear();
     });
@@ -170,7 +170,7 @@ describe("editor actions share one undo timeline", () => {
     editor.pointerMove(end.x, end.y, { shiftKey: true });
     expect(editor.selection.ids).toEqual([secondId, firstId]);
 
-    editor.toolManager.cancelPointerGesture();
+    editor.cancelGesture();
     expect(editor.selection.ids).toEqual([secondId]);
   });
 
@@ -197,7 +197,7 @@ describe("editor actions share one undo timeline", () => {
 
   it("ignores stale selection identities after scene navigation", async () => {
     await editor.clickLocal(100, 100);
-    editor.scene.clear();
+    editor.clearScene();
     editor.selection.clear();
 
     await editor.undo();
@@ -226,7 +226,7 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("replays multiple workspace operations captured by one action", async () => {
-    const capture = editor.history.begin("Create glyphs");
+    const capture = editor.beginAction("Create glyphs");
     editor.selection.select([firstId]);
     editor.createGlyph("B" as GlyphName);
     editor.createGlyph("C" as GlyphName);
@@ -274,18 +274,9 @@ describe("editor actions share one undo timeline", () => {
   });
 
   it("rebases a later selection when an earlier workspace action fails", async () => {
-    const capture = editor.history.begin("Rejected edit");
+    const capture = editor.beginAction("Rejected edit");
     editor.selection.select([firstId]);
-    const applying = editor.font.editCoordinator.apply([
-      {
-        kind: "createGlyph",
-        createGlyph: {
-          glyphId: mintGlyphId(),
-          name: "A" as GlyphName,
-          unicodes: [66 as Unicode],
-        },
-      },
-    ]);
+    const applying = editor.submitRejectedEdit();
     const rejected = expect(applying).rejects.toThrow();
     capture.finish();
 

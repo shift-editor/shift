@@ -111,7 +111,7 @@ describe("Pen applies Shift direction snapping", () => {
     const start = editor.localToScreen({ x: 380, y: 160 });
     const end = editor.localToScreen({ x: 420, y: 190 });
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y, { shiftKey: true });
-    editor.toolManager.handlePointerMove(end, { shiftKey: true, altKey: false });
+    editor.queuePointerMove(end.x, end.y, { shiftKey: true });
     editor.pointerUp(end.x, end.y);
     await editor.settle();
     const cubic = editor.openContour!.segments()[0]!.asCubic()!;

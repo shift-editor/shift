@@ -25,7 +25,7 @@ function sourceId(font: Font, name: string) {
 }
 
 function location(font: Font, width: number, weight: number) {
-  const axis = (tag: string) => font.axesCell.peek().find((candidate) => candidate.tag === tag)!.id;
+  const axis = (tag: string) => font.getAxes().find((candidate) => candidate.tag === tag)!.id;
   return externalAxisLocationFromRecord({
     [axis("wdth")]: width,
     [axis("wght")]: weight,
@@ -82,8 +82,7 @@ describe("kerning in a text run", () => {
     editor.escape();
     await editor.settle();
     const run = editor.textRun!;
-    const layoutCell = editor.text.layoutCell(run.runId);
-    const placed = () => layoutCell.peek()!.placedGlyphs;
+    const placed = () => editor.runPlacedGlyphs(run.runId);
     return { editor, run, placed };
   }
 
@@ -107,10 +106,10 @@ describe("kerning in a text run", () => {
   });
 
   it("measures each sidebearing to its own advance edge, leaving the kerning between them", async () => {
-    const { editor, run, placed } = await kernedRun();
+    const { editor, placed } = await kernedRun();
     const [t, a] = placed();
 
-    const gap = editor.nodeDefinition("textRun").spacingGaps(run)[1]!;
+    const gap = editor.runSpacingGaps()[1]!;
 
     expect(gap.leftBoundary).toBe(t!.left + t!.glyph.xAdvance);
     expect(gap.rightBoundary).toBe(a!.left);

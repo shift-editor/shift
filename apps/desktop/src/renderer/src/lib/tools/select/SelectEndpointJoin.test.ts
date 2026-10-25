@@ -124,7 +124,7 @@ describe("Select dropping an open end onto another open end", () => {
     const down = editor.localToScreen(editor.pointPosition(lastId!));
     const away = editor.localToScreen({ x: 280, y: 280 });
     const over = editor.localToScreen({ x: 101, y: 101 });
-    const cursor = () => editor.toolManager.activeTool?.cursorCell.value;
+    const cursor = () => editor.toolCursor;
 
     editor.pointerDown(down.x, down.y).pointerMove(away.x, away.y);
     expect(cursor()).toEqual({ type: "move" });

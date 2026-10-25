@@ -36,7 +36,7 @@ describe("multi-source position edits", () => {
     await editor.settle();
     editor.selectSourceForEditing(referenceSourceId);
     editor.selectSourceForEditing(targetSourceId, "toggle");
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    await expect.poll(() => editor.editingLayerMatches.size).toBe(1);
 
     const selection = requirePositionSelection(editor, [firstId, lastId]);
     const targetSelection = selection.additionalLayers[0];
@@ -131,9 +131,7 @@ describe("multi-source position edits", () => {
     if (!node) throw new Error("Expected glyph node");
     const blackLayerId = editor.glyphForId(node.glyphId)?.layerForSource(blackSourceId)?.id;
     if (!blackLayerId) throw new Error("Expected Black source layer");
-    await expect
-      .poll(() => [...editor.editingLayerMatchesCell.peek().keys()])
-      .toEqual([blackLayerId]);
+    await expect.poll(() => [...editor.editingLayerMatches.keys()]).toEqual([blackLayerId]);
   });
 
   it("invalidates complete mappings after a target structure change", async () => {
@@ -144,9 +142,7 @@ describe("multi-source position edits", () => {
     edit.finish("Add point");
     await editor.settle();
 
-    await expect
-      .poll(() => [...editor.editingLayerMatchesCell.peek().values()][0]?.complete)
-      .toBe(false);
+    await expect.poll(() => [...editor.editingLayerMatches.values()][0]?.complete).toBe(false);
     expect(editor.positionSelection([firstId, lastId])).toBeNull();
   });
 });

@@ -238,9 +238,9 @@ describe("Select movement preserves selected geometry", () => {
     await editor.settle();
     editor.selectSourceForEditing(referenceSourceId);
     editor.selectSourceForEditing(targetSourceId, "toggle");
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    await expect.poll(() => editor.editingLayerMatches.size).toBe(1);
 
-    const [layerMatch] = editor.editingLayerMatchesCell.peek().values();
+    const [layerMatch] = editor.editingLayerMatches.values();
     if (!layerMatch) throw new Error("Expected matched target layer");
     const targetPointId = layerMatch.points.find(
       ({ referenceId }) => referenceId === middleId,
@@ -252,7 +252,7 @@ describe("Select movement preserves selected geometry", () => {
     const targetPoint = targetLayer?.point(targetPointId);
     if (!targetLayer || !targetPoint) throw new Error("Expected target layer point");
     const targetBefore = { x: targetPoint.x, y: targetPoint.y };
-    const matchesBefore = editor.editingLayerMatchesCell.peek();
+    const matchesBefore = structuredClone(editor.editingLayerMatches);
     editor.selection.select([middleId]);
     expect(editor.positionSelection([middleId])?.additionalLayers).toHaveLength(1);
 
@@ -268,7 +268,7 @@ describe("Select movement preserves selected geometry", () => {
       x: targetBefore.x + drag.delta.x,
       y: targetBefore.y + drag.delta.y,
     });
-    expect(editor.editingLayerMatchesCell.peek()).toBe(matchesBefore);
+    expect(editor.editingLayerMatches).toEqual(matchesBefore);
 
     await editor.undo();
     expect(editor.pointPosition(middleId)).toEqual({ x: 150, y: 150 });

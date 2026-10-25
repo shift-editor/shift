@@ -655,7 +655,7 @@ describe("Pen tool", () => {
       const otherStart = editor.localToScreen({ x: 100, y: 100 });
       editor.pointerMove(otherStart.x, otherStart.y);
 
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "pen-end" });
+      expect(editor.toolCursor).toEqual({ type: "pen-end" });
     });
 
     it("clicking another contour's end leaves the active contour open", async () => {

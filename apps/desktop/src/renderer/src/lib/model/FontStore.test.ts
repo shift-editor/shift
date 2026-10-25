@@ -1,308 +1,189 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
 import {
-  asAnchorId,
-  asContourId,
-  asPointId,
-  DECOMPOSED_COMPONENT_VALUE_COUNT,
   GLYPH_ADVANCE_VALUE_COUNT,
-  GLYPH_ADVANCE_VALUE_OFFSET,
-  GLYPH_ANCHOR_VALUE_COUNT,
-  GLYPH_POINT_VALUE_COUNT,
-  type AppliedChange,
-  type AnchorId,
-  type ContourId,
   type GlyphId,
   type GlyphName,
   type GlyphSnapshot,
-  type GlyphState,
-  type GlyphStructure,
   type LayerId,
-  type PointId,
   type SourceId,
   type Unicode,
 } from "@shift/types";
-import { segmentIdFor } from "@shift/glyph-state";
+import { Point } from "@shift/glyph-state";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
-import { effect, track } from "@shift/editor/signals";
-import { Font, FontStore } from "@shift/editor/model";
+import { FontStore, type Font } from "@shift/editor/model";
+import { createWorkspaceStack } from "@/testing/workspaceStack";
 
-const GLYPH_ID = "glyph_shared" as GlyphId;
-const SOURCE_ID = "source_regular" as SourceId;
-const LAYER_A_ID = "layer_a" as LayerId;
-const LAYER_B_ID = "layer_b" as LayerId;
-const CONTOUR_ID = asContourId("contour_a");
-const NEXT_CONTOUR_ID = asContourId("contour_b");
-const POINT_1_ID = asPointId("point_1");
-const POINT_2_ID = asPointId("point_2");
-const POINT_3_ID = asPointId("point_3");
-const POINT_4_ID = asPointId("point_4");
-const NEXT_POINT_ID = asPointId("point_next");
-const ANCHOR_ID = asAnchorId("anchor_a");
-const NEXT_ANCHOR_ID = asAnchorId("anchor_b");
-const SEGMENT_ID = segmentIdFor(POINT_1_ID, POINT_4_ID);
-const NEXT_SEGMENT_ID = segmentIdFor(NEXT_POINT_ID, POINT_4_ID);
+const MUTATOR_SANS = resolve(
+  process.cwd(),
+  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
+);
 
-describe("FontStore glyph snapshot application", () => {
-  it("only materializes layer snapshots that match current font records", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
+/** Opens MutatorSans through the real workspace stack: Rust reads the fixture and echoes every edit. */
+async function openMutatorSans(): Promise<Font> {
+  const stack = createWorkspaceStack();
+  await stack.openWorkspace(MUTATOR_SANS);
+  return stack.font;
+}
 
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_B_ID)]);
+function glyphId(font: Font, name: string): GlyphId {
+  const record = font.recordForName(name as GlyphName);
+  if (!record) throw new Error(`fixture has no ${name}`);
+  return record.id;
+}
 
-    expect(store.layerState(LAYER_A_ID)).toBeNull();
-    expect(store.layerState(LAYER_B_ID)).toBeNull();
+function sourceId(font: Font, name: string): SourceId {
+  const source = font.sources.find((candidate) => candidate.name === name);
+  if (!source) throw new Error(`fixture has no ${name} source`);
+  return source.id;
+}
 
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID)]);
+async function defaultLayer(font: Font, name: string) {
+  const glyph = await font.loadGlyph(glyphId(font, name));
+  return glyph.layerForSource(font.defaultSource.id)!;
+}
 
-    expect(store.layerState(LAYER_A_ID)).not.toBeNull();
-  });
+describe("the font directory follows the workspace's glyph records", () => {
+  it("indexes each glyph relation once and follows an identity change", async () => {
+    const font = await openMutatorSans();
+    const aacute = glyphId(font, "Aacute");
 
-  it("removes concrete layer state when the layer record is removed", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
-
-    store.applyWorkspaceChange({
-      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
-      layers: [],
-      dependents: [],
-    });
-
-    expect(store.layerState(LAYER_A_ID)).toBeNull();
-    expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
-  });
-});
-
-describe("FontStore record index", () => {
-  it("indexes every glyph relation once and follows workspace changes", () => {
-    const base = snapshot("document-a", LAYER_A_ID);
-    const acute = {
-      id: "glyph_acute" as GlyphId,
-      name: "acute" as GlyphName,
-      unicodes: [180 as Unicode, 65 as Unicode],
-      componentBaseGlyphIds: [],
-      layers: [],
-    };
-    const aacute = {
-      id: "glyph_aacute" as GlyphId,
-      name: "Aacute" as GlyphName,
-      unicodes: [193 as Unicode],
-      componentBaseGlyphIds: [GLYPH_ID, acute.id],
-      layers: [{ id: LAYER_B_ID, sourceId: SOURCE_ID }],
-    };
-    const store = new FontStore({
-      workspace: { ...base, glyphs: [...base.glyphs, acute, aacute] },
-    });
-    const font = new Font({ store });
-
-    const index = store.recordIndexCell.peek();
-    expect(index.entries.map(({ name }) => name)).toEqual(["A", "acute", "Aacute"]);
-    expect(index.unicodes).toEqual([65, 180, 193]);
-    expect(index.nameByUnicode.get(65 as Unicode)).toBe("A");
-    expect(index.layerByGlyphSource.size).toBe(2);
-    expect(font.recordForName("Aacute" as GlyphName)?.id).toBe(aacute.id);
-    expect(font.componentBaseNamesForName("Aacute" as GlyphName)).toEqual(["A", "acute"]);
+    // Aacute references acute in each of its four masters; the directory lists it once.
+    expect(font.componentBaseNamesForName("Aacute" as GlyphName)).toEqual(["acute", "A"]);
     expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
-    store.applyWorkspaceChange({
-      next: { glyphs: [base.glyphs[0]!, acute] },
-      layers: [],
-      dependents: [],
-    });
+    font.updateGlyphIdentity(aacute, "Aacute.ss01" as GlyphName, []);
+    await font.editCoordinator.settled();
 
-    expect(font.hasGlyph(aacute.id)).toBe(false);
     expect(font.entryForName("Aacute" as GlyphName)).toBeNull();
-    expect(font.dependentNamesForName("acute" as GlyphName)).toEqual([]);
-    expect(font.glyphEntries().map(({ name }) => name)).toEqual(["A", "acute"]);
+    expect(font.entryForUnicode(193 as Unicode)).toBeNull();
+    expect(font.recordForName("Aacute.ss01" as GlyphName)?.id).toBe(aacute);
+    expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute.ss01"]);
   });
 });
 
-describe("FontStore glyph object ownership", () => {
-  it("indexes concrete layer structure ids by owner", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
+describe("the font knows which layer owns each point, contour, anchor and segment", () => {
+  it("indexes a loaded layer's structure by owner", async () => {
+    const font = await openMutatorSans();
+    const o = await defaultLayer(font, "O");
+    const contour = o.contours[0]!;
+    const curve = contour.segments().find((segment) => segment.asCubic())!;
+    const e = await defaultLayer(font, "E");
+    const anchor = e.anchors[0]!;
 
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
+    expect(font.layerIdForPoint(contour.points[0]!.id)).toBe(o.id);
+    expect(font.contourIdForPoint(contour.points[0]!.id)).toBe(contour.id);
+    expect(font.layerIdForContour(contour.id)).toBe(o.id);
+    expect(font.layerIdForAnchor(anchor.id)).toBe(e.id);
+    expect(font.layerIdForSegment(curve.id)).toBe(o.id);
+    expect(font.contourIdForSegment(curve.id)).toBe(contour.id);
+    expect(font.pointIdsForSegment(curve.id)).toEqual(curve.pointIds);
+    expect(curve.pointIds).toHaveLength(4);
+  });
 
-    expect(store.layerIdForPoint(POINT_1_ID)).toBe(LAYER_A_ID);
-    expect(store.contourIdForPoint(POINT_1_ID)).toBe(CONTOUR_ID);
-    expect(store.layerIdForContour(CONTOUR_ID)).toBe(LAYER_A_ID);
-    expect(store.layerIdForAnchor(ANCHOR_ID)).toBe(LAYER_A_ID);
-    expect(store.layerIdForSegment(SEGMENT_ID)).toBe(LAYER_A_ID);
-    expect(store.contourIdForSegment(SEGMENT_ID)).toBe(CONTOUR_ID);
-    expect(store.pointIdsForSegment(SEGMENT_ID)).toEqual([
-      POINT_1_ID,
-      POINT_2_ID,
-      POINT_3_ID,
-      POINT_4_ID,
+  it("re-indexes a layer whose contours and anchors were replaced", async () => {
+    const font = await openMutatorSans();
+    const layer = await defaultLayer(font, "E");
+    const contour = layer.contours[0]!;
+    const segment = contour.segments()[0]!;
+    const anchor = layer.anchors[0]!;
+
+    layer.removePoints(contour.points.map((point) => point.id));
+    layer.removeAnchors([anchor.id]);
+    const nextContour = layer.addContour();
+    const [nextPoint] = layer.addPoints(nextContour, [
+      Point.onCurve({ x: 0, y: 0 }),
+      Point.onCurve({ x: 100, y: 0 }),
     ]);
+    const nextAnchor = layer.addAnchor("top", { x: 50, y: 700 });
+    await font.editCoordinator.settled();
+
+    expect(font.layerIdForPoint(contour.points[0]!.id)).toBeNull();
+    expect(font.layerIdForContour(contour.id)).toBeNull();
+    expect(font.layerIdForAnchor(anchor.id)).toBeNull();
+    expect(font.layerIdForSegment(segment.id)).toBeNull();
+    expect(font.layerIdForPoint(nextPoint!)).toBe(layer.id);
+    expect(font.contourIdForPoint(nextPoint!)).toBe(nextContour);
+    expect(font.layerIdForContour(nextContour)).toBe(layer.id);
+    expect(font.layerIdForAnchor(nextAnchor)).toBe(layer.id);
+    expect(font.layerIdForSegment(layer.contour(nextContour)!.segments()[0]!.id)).toBe(layer.id);
   });
 
-  it("rebuilds after a concrete layer structure replacement", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
+  it("drops a deleted layer's structure, and restores it when the layer comes back", async () => {
+    const font = await openMutatorSans();
+    const acute = glyphId(font, "acute");
+    const glyph = await font.loadGlyph(acute);
+    const boldWide = sourceId(font, "BoldWide");
+    const layer = glyph.layerForSource(boldWide)!;
+    const pointId = layer.allPoints[0]!.id;
 
-    const nextStructure = structure({
-      contourId: NEXT_CONTOUR_ID,
-      pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
-      anchorId: NEXT_ANCHOR_ID,
-    });
-    store.applyWorkspaceChange({
-      layers: [
-        {
-          layerId: LAYER_A_ID,
-          structure: nextStructure,
-          values: valuesFor(nextStructure),
-          changed: {
-            pointIds: [NEXT_POINT_ID],
-            contourIds: [NEXT_CONTOUR_ID],
-            anchorIds: [NEXT_ANCHOR_ID],
-            guidelineIds: [],
-            componentIds: [],
-          },
-        },
-      ],
-      dependents: [],
-    });
+    font.deleteSource(boldWide);
+    await font.editCoordinator.settled();
 
-    expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
-    expect(store.layerIdForContour(CONTOUR_ID)).toBeNull();
-    expect(store.layerIdForAnchor(ANCHOR_ID)).toBeNull();
-    expect(store.layerIdForSegment(SEGMENT_ID)).toBeNull();
-    expect(store.layerIdForPoint(NEXT_POINT_ID)).toBe(LAYER_A_ID);
-    expect(store.contourIdForPoint(NEXT_POINT_ID)).toBe(NEXT_CONTOUR_ID);
-    expect(store.layerIdForContour(NEXT_CONTOUR_ID)).toBe(LAYER_A_ID);
-    expect(store.layerIdForAnchor(NEXT_ANCHOR_ID)).toBe(LAYER_A_ID);
-    expect(store.layerIdForSegment(NEXT_SEGMENT_ID)).toBe(LAYER_A_ID);
+    expect(glyph.layerForSource(boldWide)).toBeNull();
+    expect(font.layerIdForPoint(pointId)).toBeNull();
+
+    // Undo restores the layer record and its structure in one workspace change.
+    await font.editCoordinator.undo();
+    await font.editCoordinator.settled();
+
+    const restored = font.layerIdFor(acute, boldWide);
+    expect(restored).not.toBeNull();
+    expect(font.layerIdForPoint(pointId)).toBe(restored);
+  });
+});
+
+describe("a point move that changes only coordinates", () => {
+  it("advances the font's committed revision", async () => {
+    const font = await openMutatorSans();
+    const layer = await defaultLayer(font, "acute");
+    const before = font.committedRevisionCell.peek();
+
+    layer.movePoints([layer.allPoints[0]!.id], { x: 5, y: 0 });
+    await font.editCoordinator.settled();
+
+    expect(font.committedRevisionCell.peek()).toBeGreaterThan(before);
   });
 
-  it("materializes added layer structure from the same workspace change", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    const nextStructure = structure({
-      contourId: NEXT_CONTOUR_ID,
-      pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
-      anchorId: NEXT_ANCHOR_ID,
-    });
+  it("invalidates the moved glyph and every composite that uses it", async () => {
+    const font = await openMutatorSans();
+    const layer = await defaultLayer(font, "acute");
 
-    store.applyWorkspaceChange({
-      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
-      layers: [
-        {
-          layerId: LAYER_B_ID,
-          structure: nextStructure,
-          values: valuesFor(nextStructure),
-          changed: {
-            pointIds: [NEXT_POINT_ID],
-            contourIds: [NEXT_CONTOUR_ID],
-            anchorIds: [NEXT_ANCHOR_ID],
-            guidelineIds: [],
-            componentIds: [],
-          },
-        },
-      ],
-      dependents: [],
-    });
+    layer.movePoints([layer.allPoints[0]!.id], { x: 5, y: 0 });
+    await font.editCoordinator.settled();
 
-    expect(store.layerState(LAYER_B_ID)).not.toBeNull();
-    expect(store.layerIdForPoint(NEXT_POINT_ID)).toBe(LAYER_B_ID);
-    expect(store.contourIdForPoint(NEXT_POINT_ID)).toBe(NEXT_CONTOUR_ID);
-    expect(store.layerIdForAnchor(NEXT_ANCHOR_ID)).toBe(LAYER_B_ID);
-    expect(store.layerIdForSegment(NEXT_SEGMENT_ID)).toBe(LAYER_B_ID);
-  });
-
-  it("invalidates committed font dependents after a values-only native echo", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    const font = new Font({ store });
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
-    let runs = 0;
-    const subscription = effect(() => {
-      track(font.committedRevisionCell);
-      runs += 1;
-    });
-
-    store.applyWorkspaceChange(valuesOnlyChange());
-
-    expect(runs).toBe(2);
-    subscription.dispose();
-    font.dispose();
-  });
-
-  it("publishes values-only roots and component dependents for atlas invalidation", () => {
-    const dependentGlyphId = "glyph_dependent" as GlyphId;
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    const font = new Font({ store });
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
-    let invalidGlyphIds: readonly GlyphId[] | null = null;
-    const subscription = effect(() => {
-      invalidGlyphIds = font.invalidGlyphsCell.value.glyphIds;
-    });
-
-    store.applyWorkspaceChange({
-      ...valuesOnlyChange(),
-      dependents: [dependentGlyphId],
-    });
-
-    expect(invalidGlyphIds).toEqual([dependentGlyphId, GLYPH_ID]);
-    subscription.dispose();
-    font.dispose();
-  });
-
-  it("forwards ownership queries through Font", () => {
-    const store = new FontStore({
-      workspace: snapshot("document-a", LAYER_A_ID),
-    });
-    const font = new Font({ store });
-    store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
-
-    expect(font.layerIdForPoint(POINT_1_ID)).toBe(LAYER_A_ID);
-    expect(font.contourIdForPoint(POINT_1_ID)).toBe(CONTOUR_ID);
-    expect(font.layerIdForAnchor(ANCHOR_ID)).toBe(LAYER_A_ID);
-    expect(font.layerIdForSegment(SEGMENT_ID)).toBe(LAYER_A_ID);
-    expect(font.contourIdForSegment(SEGMENT_ID)).toBe(CONTOUR_ID);
-    expect(font.pointIdsForSegment(SEGMENT_ID)).toEqual([
-      POINT_1_ID,
-      POINT_2_ID,
-      POINT_3_ID,
-      POINT_4_ID,
+    expect(font.invalidGlyphsCell.peek().glyphIds).toEqual([
+      glyphId(font, "Aacute"),
+      glyphId(font, "acute"),
     ]);
   });
 });
 
-function valuesOnlyChange(): AppliedChange {
-  return {
-    layers: [
-      {
-        layerId: LAYER_A_ID,
-        values: valuesFor(structure()),
-        changed: {
-          pointIds: [POINT_1_ID],
-          contourIds: [],
-          anchorIds: [],
-          guidelineIds: [],
-          componentIds: [],
-        },
-      },
-    ],
-    dependents: [],
-  };
-}
+// Mechanics of the TypeScript layer copy, which #789 deletes; remove with it.
+describe("FontStore glyph snapshot application", () => {
+  it("only materializes layer snapshots that match current font records", () => {
+    const layerA = "layer_a" as LayerId;
+    const layerB = "layer_b" as LayerId;
+    const store = new FontStore({ workspace: workspaceWithLayer(layerA) });
 
-function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
+    store.applyGlyphSnapshots([emptyGlyphSnapshot(layerB)]);
+
+    expect(store.layerState(layerA)).toBeNull();
+    expect(store.layerState(layerB)).toBeNull();
+
+    store.applyGlyphSnapshots([emptyGlyphSnapshot(layerA)]);
+
+    expect(store.layerState(layerA)).not.toBeNull();
+  });
+});
+
+const GLYPH_ID = "glyph_shared" as GlyphId;
+const SOURCE_ID = "source_regular" as SourceId;
+
+function workspaceWithLayer(layerId: LayerId): WorkspaceSnapshot {
   return {
-    workspaceId,
+    workspaceId: "document-a",
     metadata: { familyName: "Untitled Font" },
     metrics: { unitsPerEm: 1000 },
     metricDefinitions: [],
@@ -316,14 +197,7 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
         layers: [{ id: layerId, sourceId: SOURCE_ID }],
       },
     ],
-    sources: [
-      {
-        id: SOURCE_ID,
-        name: "Regular",
-        location: { values: {} },
-        metricValues: [],
-      },
-    ],
+    sources: [{ id: SOURCE_ID, name: "Regular", location: { values: {} }, metricValues: [] }],
     axes: [],
     axisMappings: [],
     axisMappingBases: [],
@@ -333,70 +207,19 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
   };
 }
 
-function glyphSnapshot(
-  layerId: LayerId,
-  glyphStructure: GlyphStructure = emptyStructure(),
-): GlyphSnapshot {
+function emptyGlyphSnapshot(layerId: LayerId): GlyphSnapshot {
   return {
     glyphId: GLYPH_ID,
     layers: [
       {
         glyphId: GLYPH_ID,
         sourceId: SOURCE_ID,
-        state: glyphState(layerId, glyphStructure),
+        state: {
+          layerId,
+          structure: { contours: [], anchors: [], components: [] },
+          values: new Float64Array(GLYPH_ADVANCE_VALUE_COUNT),
+        },
       },
     ],
   };
-}
-
-function glyphState(layerId: LayerId, glyphStructure: GlyphStructure): GlyphState {
-  return {
-    layerId,
-    structure: glyphStructure,
-    values: valuesFor(glyphStructure),
-  };
-}
-
-function emptyStructure(): GlyphStructure {
-  return { contours: [], anchors: [], components: [] };
-}
-
-function structure({
-  contourId = CONTOUR_ID,
-  pointIds = [POINT_1_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
-  anchorId = ANCHOR_ID,
-}: {
-  readonly contourId?: ContourId;
-  readonly pointIds?: readonly PointId[];
-  readonly anchorId?: AnchorId;
-} = {}): GlyphStructure {
-  return {
-    contours: [
-      {
-        id: contourId,
-        points: [
-          { id: pointIds[0]!, pointType: "onCurve", smooth: false },
-          { id: pointIds[1]!, pointType: "offCurve", smooth: false },
-          { id: pointIds[2]!, pointType: "offCurve", smooth: false },
-          { id: pointIds[3]!, pointType: "onCurve", smooth: false },
-        ],
-        closed: false,
-      },
-    ],
-    anchors: [{ id: anchorId }],
-    components: [],
-  };
-}
-
-function valuesFor(glyphStructure: GlyphStructure): Float64Array {
-  let length = GLYPH_ADVANCE_VALUE_COUNT;
-  for (const contour of glyphStructure.contours) {
-    length += contour.points.length * GLYPH_POINT_VALUE_COUNT;
-  }
-  length += glyphStructure.anchors.length * GLYPH_ANCHOR_VALUE_COUNT;
-  length += glyphStructure.components.length * DECOMPOSED_COMPONENT_VALUE_COUNT;
-
-  const values = new Float64Array(length);
-  values[GLYPH_ADVANCE_VALUE_OFFSET] = 600;
-  return values;
 }

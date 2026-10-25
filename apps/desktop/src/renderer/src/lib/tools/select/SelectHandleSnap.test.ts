@@ -113,7 +113,7 @@ describe("Select snaps only a single cubic handle around its owning endpoint", (
     const start = editor.localToScreen({ x: 180, y: 160 });
     const end = editor.localToScreen({ x: 220, y: 190 });
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y, { shiftKey: true });
-    editor.toolManager.handlePointerMove(end, { shiftKey: true, altKey: false });
+    editor.queuePointerMove(end.x, end.y, { shiftKey: true });
     editor.pointerUp(end.x, end.y);
     await editor.settle();
     expect(editor.pointPosition(cubic.controlStart.id).x).toBeCloseTo(100 + 75 * Math.sqrt(3));

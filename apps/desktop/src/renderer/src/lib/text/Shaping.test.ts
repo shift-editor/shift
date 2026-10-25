@@ -16,7 +16,7 @@ describe("proof text is shaped with the font's feature code", () => {
   });
 
   const run = (text: string) => editor.text.createRun(editor.text.itemsFromText(text)).id;
-  const placed = (runId: RunId) => editor.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+  const placed = (runId: RunId) => editor.runPlacedGlyphs(runId);
   const names = (runId: RunId) => placed(runId).map((glyph) => glyph.glyph.glyphName);
 
   it("forms a ligature that covers both typed characters", async () => {
@@ -50,7 +50,7 @@ describe("proof text is shaped with the font's feature code", () => {
       { x: 350, y: 100 },
       { x: 350, y: 300 },
     ]);
-    expect(editor.text.layoutCell(runId).peek()!.totalAdvance).toBe(500);
+    expect(editor.runAdvance(runId)).toBe(500);
   });
 });
 
@@ -71,7 +71,7 @@ describe("proof text shapes in the editor, as the workspace shapes it", () => {
   });
 
   const run = (text: string) => editor.text.createRun(editor.text.itemsFromText(text)).id;
-  const placed = (runId: RunId) => editor.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+  const placed = (runId: RunId) => editor.runPlacedGlyphs(runId);
   const glyphIds = (runId: RunId) => placed(runId).map((glyph) => glyph.glyph.glyphId);
 
   /** The workspace's shaping of the same run, as glyph ids in the order a single-direction line shows them. */
@@ -117,10 +117,7 @@ describe("double-clicking a character the font decomposes", () => {
   });
 
   const placedNamed = (name: string) =>
-    editor.text
-      .layoutCell(runId)
-      .peek()
-      ?.placedGlyphs.find((placed) => placed.glyph.glyphName === name) ?? null;
+    editor.runPlacedGlyphs(runId).find((placed) => placed.glyph.glyphName === name) ?? null;
   const doubleClickRun = async (x: number, y: number) => {
     const screen = editor.localToScreen({ x, y });
     await editor.click(screen.x, screen.y);

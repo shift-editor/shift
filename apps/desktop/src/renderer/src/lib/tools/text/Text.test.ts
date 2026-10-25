@@ -7,7 +7,7 @@ import { Mat } from "@shift/geo";
 import { TestEditor } from "@/testing/TestEditor";
 import { Point } from "@shift/glyph-state";
 import { characterTextItem } from "@shift/editor/text";
-import type { Select } from "@shift/editor/tools";
+import { Select } from "@shift/editor/tools";
 
 describe("Text tool edits the page run", () => {
   let editor: TestEditor;
@@ -19,7 +19,7 @@ describe("Text tool edits the page run", () => {
   });
 
   const run = () => editor.textRun!;
-  const glyphAdvance = () => editor.text.layoutCell(run().runId).peek()!.totalAdvance;
+  const glyphAdvance = () => editor.runAdvance(run().runId)!;
 
   it("starts editing and returns to Select on Escape", () => {
     expect(editor.toolIf("text")?.state.type).toBe("editing");
@@ -31,7 +31,7 @@ describe("Text tool edits the page run", () => {
   it("clicking empty canvas leaves the run and caret alone", async () => {
     const before = editor.textEditing.state;
     await editor.clickLocal(5000, 0);
-    expect(editor.scene.nodesOfKind("textRun")).toHaveLength(1);
+    expect(editor.nodesOfKind("textRun")).toHaveLength(1);
     expect(editor.text.run(run().runId)?.items).toHaveLength(1);
     expect(editor.textEditing.state).toEqual(before);
   });
@@ -87,14 +87,14 @@ describe("typing a glyph not yet loaded this session", () => {
 
     editor.selectTool("text");
     const node = editor.textRun!;
-    const layout = editor.text.layoutCell(node.runId);
-    const before = layout.peek()!.totalAdvance;
+    const advance = () => editor.runAdvance(node.runId);
+    const before = advance()!;
     editor.textEditing.insert([characterTextItem(66)]);
-    expect(layout.peek()?.totalAdvance).toBe(before);
+    expect(advance()).toBe(before);
 
     await editor.font.loadGlyph(bId);
 
-    expect(layout.peek()?.totalAdvance).toBe(before + 600);
+    expect(advance()).toBe(before + 600);
   });
 });
 
@@ -122,7 +122,7 @@ describe("Select over the page run", () => {
 
   const run = () => editor.textRun!;
   const secondItem = () => editor.text.run(run().runId)!.items[1]!;
-  const secondOrigin = () => editor.text.layoutCell(run().runId).peek()!.totalAdvance / 2;
+  const secondOrigin = () => editor.runAdvance(run().runId)! / 2;
   const hoverLocal = (x: number, y: number) => {
     const screen = editor.localToScreen({ x, y });
     editor.pointerMove(screen.x, screen.y);
@@ -149,14 +149,13 @@ describe("Select over the page run", () => {
     editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     editor.selectAll();
-    const bounds = editor.selectionSceneBoundsCell;
-    const before = bounds.value!.min.x;
+    const before = editor.selectionSceneRect()!.left;
 
     const layer = editor.requireGlyphLayer();
     layer.setXAdvance(layer.xAdvance + 100);
     await editor.settle();
 
-    expect(bounds.value!.min.x).toBeCloseTo(before + 100);
+    expect(editor.selectionSceneRect()!.left).toBeCloseTo(before + 100);
   });
 
   it("clicking a run glyph selects its item", async () => {
@@ -181,7 +180,7 @@ describe("Select over the page run", () => {
 
     const child = editor.runGlyph!;
     expect(child).toMatchObject({ itemId: second.id, parentId: run().id });
-    expect(editor.scene.node(previous.id)).toBeNull();
+    expect(editor.sceneNode(previous.id)).toBeNull();
     expect(editor.editing.nodeIds).toEqual([child.id]);
     expect(editor.camera.pan).toEqual(pan);
 
@@ -241,7 +240,7 @@ describe("Select over the page run", () => {
         left: secondOrigin() + 100,
         right: secondOrigin() + 300,
       });
-      const box = (editor.toolManager.activeTool as Select).boundingBox;
+      const box = editor.activeToolAs(Select).boundingBox;
       expect(box.propsSnapshot()?.showHandles).toBe(true);
     });
 

@@ -1,203 +1,143 @@
-import { describe, expect, it } from "vitest";
-import { effect, track } from "@shift/editor/signals";
-import type { AnchorId, ContourId, GlyphState, LayerId, PointId } from "@shift/types";
-import { GlyphLayerState } from "@shift/editor/model";
-
-const contourId = (index: number): ContourId => `contour-${index}` as ContourId;
-const pointId = (index: number): PointId => `point-${index}` as PointId;
-const anchorId = (index: number): AnchorId => `anchor-${index}` as AnchorId;
-const layerId = (index: number): LayerId => `layer-${index}` as LayerId;
-
-function layerState(): GlyphState {
-  return {
-    layerId: layerId(1),
-    structure: {
-      contours: [
-        {
-          id: contourId(1),
-          closed: false,
-          points: [
-            { id: pointId(1), pointType: "onCurve", smooth: false },
-            { id: pointId(2), pointType: "onCurve", smooth: false },
-          ],
-        },
-      ],
-      anchors: [{ id: anchorId(1), name: "top" }],
-      components: [],
-    },
-    values: new Float64Array([500, 10, 20, 30, 40, 300, 400]),
-  };
-}
-
-function curvedLayerState(): GlyphState {
-  return {
-    layerId: layerId(1),
-    structure: {
-      contours: [
-        {
-          id: contourId(1),
-          closed: false,
-          points: [
-            { id: pointId(1), pointType: "onCurve", smooth: false },
-            { id: pointId(2), pointType: "offCurve", smooth: false },
-            { id: pointId(3), pointType: "onCurve", smooth: false },
-          ],
-        },
-      ],
-      anchors: [],
-      components: [],
-    },
-    values: new Float64Array([600, 0, 0, -100, 100, 200, 0]),
-  };
-}
-
-function pointPosition(state: GlyphLayerState, pointId: PointId) {
-  const position = state.positionsFor([{ kind: "point", id: pointId }])[0];
-  const point = state.geometry.point(pointId);
-
-  return {
-    source: position && { x: position.x, y: position.y },
-    geometry: point && { x: point.x, y: point.y },
-  };
-}
+import { beforeEach, describe, expect, it } from "vitest";
+import { Curve } from "@shift/geo";
+import type { PointId } from "@shift/types";
+import type { GlyphLayer } from "@shift/editor/model";
+import { TestEditor } from "@/testing/TestEditor";
 
 describe("glyph layer geometry follows coordinate patches", () => {
-  it("keeps layer positions and geometry lookup in sync after a position patch", () => {
-    const state = new GlyphLayerState(layerState());
+  let editor: TestEditor;
+  let layer: GlyphLayer;
+  let first: PointId;
+  let second: PointId;
 
-    state.patchPositions([{ kind: "point", id: pointId(2), x: 75, y: 125 }]);
+  // An open contour from (10, 20) to (30, 40) in a glyph that advances 500.
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    [first, second] = await editor.drawOpenContour([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+    layer = editor.requireGlyphLayer();
+    editor.selectTool("select");
+  });
 
-    expect(pointPosition(state, pointId(2))).toEqual({
+  /** Holds a Select drag of the second point to (75, 125) without releasing it. */
+  const previewSecondPointMove = () =>
+    editor.holdDragLocal({
+      down: { x: 30, y: 40 },
+      start: { x: 34, y: 40 },
+      end: { x: 75, y: 125 },
+    });
+
+  const position = (pointId: PointId) => {
+    const source = layer.positionsFor([{ kind: "point", id: pointId }])[0];
+    const point = layer.point(pointId);
+    return {
+      source: source && { x: source.x, y: source.y },
+      geometry: point && { x: point.x, y: point.y },
+    };
+  };
+
+  it("keeps layer positions and geometry lookup in sync while a drag previews", () => {
+    previewSecondPointMove();
+
+    expect(position(second)).toEqual({
       source: { x: 75, y: 125 },
       geometry: { x: 75, y: 125 },
     });
   });
 
-  it("invalidates geometry that was read before a position patch", () => {
-    const state = new GlyphLayerState(layerState());
+  it("invalidates geometry that was read before a drag previews", () => {
+    expect(layer.point(second)).toMatchObject({ x: 30, y: 40 });
 
-    expect(state.geometry.point(pointId(2))).toMatchObject({ x: 30, y: 40 });
+    previewSecondPointMove();
 
-    state.patchPositions([{ kind: "point", id: pointId(2), x: 75, y: 125 }]);
-
-    expect(pointPosition(state, pointId(2))).toEqual({
+    expect(position(second)).toEqual({
       source: { x: 75, y: 125 },
       geometry: { x: 75, y: 125 },
     });
   });
 
-  it("keeps contour points and all-points geometry fresh after a position patch", () => {
-    const state = new GlyphLayerState(layerState());
+  it("keeps contour points and all-points geometry fresh while a drag previews", () => {
+    expect(layer.contours[0]?.points[1]).toMatchObject({ id: second, x: 30, y: 40 });
 
-    expect(state.geometry.contours[0]?.points[1]).toMatchObject({
-      id: pointId(2),
-      x: 30,
-      y: 40,
-    });
+    previewSecondPointMove();
 
-    state.patchPositions([{ kind: "point", id: pointId(2), x: 75, y: 125 }]);
-
-    expect(state.geometry.contours[0]?.points[1]).toMatchObject({
-      id: pointId(2),
-      x: 75,
-      y: 125,
-    });
-    expect(state.geometry.allPoints.find((point) => point.id === pointId(2))).toMatchObject({
-      x: 75,
-      y: 125,
-    });
+    expect(layer.contours[0]?.points[1]).toMatchObject({ id: second, x: 75, y: 125 });
+    expect(layer.allPoints.find((point) => point.id === second)).toMatchObject({ x: 75, y: 125 });
   });
 
-  it("keeps anchor positions and geometry lookup in sync after an anchor patch", () => {
-    const state = new GlyphLayerState(layerState());
+  it("keeps anchor positions and geometry lookup in sync while an anchor drag previews", () => {
+    editor.addAnchorAt({ x: 300, y: 400 });
+    const anchorId = layer.anchors[0]!.id;
 
-    state.patchPositions([{ kind: "anchor", id: anchorId(1), x: 330, y: 440 }]);
+    editor.holdDragLocal({
+      down: { x: 300, y: 400 },
+      start: { x: 304, y: 400 },
+      end: { x: 330, y: 440 },
+    });
 
-    expect(state.positionsFor([{ kind: "anchor", id: anchorId(1) }])[0]).toMatchObject({
+    expect(layer.positionsFor([{ kind: "anchor", id: anchorId }])[0]).toMatchObject({
       x: 330,
       y: 440,
     });
-    expect(state.geometry.anchor(anchorId(1))).toMatchObject({
-      x: 330,
-      y: 440,
-    });
+    expect(layer.anchor(anchorId)).toMatchObject({ x: 330, y: 440 });
   });
 
-  it("updates source metrics derived from point coordinates", () => {
-    const state = new GlyphLayerState(layerState());
+  it("updates bounds and sidebearings derived from point coordinates", async () => {
+    await editor.dragLocal({
+      down: { x: 10, y: 20 },
+      start: { x: 6, y: 20 },
+      end: { x: -25, y: 20 },
+    });
+    await editor.dragLocal({
+      down: { x: 30, y: 40 },
+      start: { x: 34, y: 40 },
+      end: { x: 75, y: 125 },
+    });
 
-    state.patchPositions([
-      { kind: "point", id: pointId(1), x: -25, y: 20 },
-      { kind: "point", id: pointId(2), x: 75, y: 125 },
+    expect([editor.pointPosition(first), editor.pointPosition(second)]).toEqual([
+      { x: -25, y: 20 },
+      { x: 75, y: 125 },
     ]);
-
-    expect(state.bounds).toEqual({
-      min: { x: -25, y: 20 },
-      max: { x: 75, y: 125 },
-    });
-    expect(state.sidebearings).toEqual({ lsb: -25, rsb: 425 });
+    expect(layer.bounds).toEqual({ min: { x: -25, y: 20 }, max: { x: 75, y: 125 } });
+    expect(layer.sidebearings).toEqual({ lsb: -25, rsb: 425 });
   });
 
-  it("keeps packed metrics consistent with tight glyph geometry", () => {
-    const state = new GlyphLayerState(curvedLayerState());
+  it("measures sidebearings from a curve's tight bounds, not its control points", async () => {
+    const contourId = layer.addContour();
+    layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+    layer.addCubic(
+      contourId,
+      Curve.cubic({ x: 0, y: 0 }, { x: -100, y: 100 }, { x: -100, y: 100 }, { x: 200, y: 0 }),
+    );
+    await editor.settle();
 
-    expect(state.bounds).toEqual(state.geometry.bounds);
-    expect(state.bounds?.min.x).toBeCloseTo(-25);
-    expect(state.sidebearings.lsb).toBeCloseTo(-25);
-    expect(state.sidebearings.rsb).toBe(400);
+    // The curve's leftmost extreme, at t = (√3 − 1) / 2, lies well inside its controls at x = −100.
+    expect(layer.bounds?.min.x).toBeCloseTo(-59.81, 1);
+    expect(layer.sidebearings.lsb).toBeCloseTo(-59.81, 1);
+    expect(layer.sidebearings.rsb).toBe(300);
   });
 
-  it("serializes patched coordinates into state values", () => {
-    const state = new GlyphLayerState(layerState());
+  it("reports the new advance and right sidebearing after an advance change", async () => {
+    expect(layer.xAdvance).toBe(500);
+    expect(layer.sidebearings).toEqual({ lsb: 10, rsb: 470 });
 
-    state.patchPositions([
-      { kind: "point", id: pointId(2), x: 75, y: 125 },
-      { kind: "anchor", id: anchorId(1), x: 330, y: 440 },
-    ]);
+    layer.setXAdvance(650);
+    await editor.settle();
 
-    expect([...state.state.values]).toEqual([500, 10, 20, 75, 125, 330, 440]);
+    expect(layer.xAdvance).toBe(650);
+    expect(layer.sidebearings).toEqual({ lsb: 10, rsb: 620 });
   });
 
-  it("keeps the xAdvance signal fresh after replacing packed values", () => {
-    const state = new GlyphLayerState(layerState());
-    const xAdvance = state.xAdvanceCell;
-    const sidebearings = state.sidebearingsCell;
+  it("tells a renderer tracking positions when the advance changes", async () => {
+    const advances = editor.watchLayer(layer, "positions", (watched) => watched.xAdvance);
 
-    expect(xAdvance.peek()).toBe(500);
-    expect(sidebearings.peek()).toEqual({ lsb: 10, rsb: 470 });
+    layer.setXAdvance(650);
+    await editor.settle();
+    advances.stop();
 
-    state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));
-
-    expect(xAdvance.peek()).toBe(650);
-    expect(state.xAdvance).toBe(650);
-    expect(sidebearings.peek()).toEqual({ lsb: 10, rsb: 620 });
-    expect(state.sidebearings).toEqual({ lsb: 10, rsb: 620 });
-  });
-
-  it("invalidates the layer-buffer dependency when advance changes", () => {
-    const state = new GlyphLayerState(layerState());
-    const observed: number[] = [];
-    const subscription = effect(() => {
-      track(state.buffersChangedCell);
-      observed.push(state.xAdvance);
-    });
-
-    state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));
-
-    expect(observed).toEqual([500, 650]);
-    subscription.dispose();
-  });
-
-  it("does not invalidate contour coordinates when only advance changes", () => {
-    const state = new GlyphLayerState(layerState());
-    const observed: number[] = [];
-    const subscription = effect(() => {
-      observed.push(state.buffers.contours[0]!.valuesCell.value[0] ?? NaN);
-    });
-
-    state.replaceValues(new Float64Array([650, 10, 20, 30, 40, 300, 400]));
-
-    expect(observed).toEqual([10]);
-    subscription.dispose();
+    expect(advances.values).toEqual([500, 650]);
   });
 });

@@ -27,14 +27,14 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     const down = editor.localToScreen({ x: 150, y: 150 });
     editor.pointerMove(down.x, down.y);
 
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+    expect(editor.toolCursor).toEqual({ type: "move" });
   });
 
   it("offers upgrading on Cmd-hover over a straight segment inside the selection", () => {
     const down = editor.localToScreen({ x: 150, y: 150 });
     editor.pointerMove(down.x, down.y, { metaKey: true });
 
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    expect(editor.toolCursor).toEqual({ type: "bend" });
     expect(layer.contours[0].segments()[0].type).toBe("line");
     expect(editor.selection.ids).toEqual([firstId, secondId]);
   });
@@ -113,9 +113,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("uses layer-local geometry when the scene node has a non-zero position", async () => {
-      const node = editor.glyphNode;
-      if (!node) throw new Error("Expected glyph node");
-      editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
+      editor.placeGlyphNodeAt({ x: 400, y: 300 });
       const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
@@ -327,9 +325,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("switches pivots in glyph-local coordinates when the scene node is translated", async () => {
-      const node = editor.glyphNode;
-      if (!node) throw new Error("Expected glyph node");
-      editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
+      editor.placeGlyphNodeAt({ x: 400, y: 300 });
       const down = editor.localToScreen({ x: 200, y: 150 });
       const move = editor.localToScreen({ x: 225, y: 150 });
       const end = editor.localToScreen({ x: 250, y: 150 });
@@ -434,7 +430,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
         ]) {
           const point = editor.localToScreen({ x: sample.position.x, y: sample.position.y });
           editor.pointerMove(point.x, point.y, { altKey });
-          expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: sample.cursor });
+          expect(editor.toolCursor).toEqual({ type: sample.cursor });
         }
         expect([editor.pointPosition(firstId), editor.pointPosition(secondId)]).toEqual(positions);
         editor.escape();
@@ -451,7 +447,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const move = editor.localToScreen({ x: end.x, y: end.y });
       editor.pointerDown(start.x, start.y, { altKey }).pointerMove(move.x, move.y, { altKey });
 
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: cursor });
+      expect(editor.toolCursor).toEqual({ type: cursor });
       editor.escape();
     });
 
@@ -460,13 +456,13 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
       const crossed = editor.localToScreen({ x: 50, y: 200 });
       const pivot = editor.localToScreen({ x: altKey ? 150 : 100, y: 200 });
       editor.pointerDown(down.x, down.y, { altKey }).pointerMove(crossed.x, crossed.y, { altKey });
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nwse-resize" });
+      expect(editor.toolCursor).toEqual({ type: "nwse-resize" });
       editor.pointerMove(pivot.x, pivot.y, { altKey });
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nesw-resize" });
+      expect(editor.toolCursor).toEqual({ type: "nesw-resize" });
       editor.escape();
       const next = editor.localToScreen({ x: 225, y: 225 });
       editor.pointerDown(down.x, down.y).pointerMove(next.x, next.y);
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "nesw-resize" });
+      expect(editor.toolCursor).toEqual({ type: "nesw-resize" });
       editor.escape();
     });
   });
@@ -522,9 +518,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     });
 
     it("uses glyph-local geometry when the scene node has a non-zero position", async () => {
-      const node = editor.glyphNode;
-      if (!node) throw new Error("Expected glyph node");
-      editor.scene.updateNode({ id: node.id, position: { x: 400, y: 300 } });
+      editor.placeGlyphNodeAt({ x: 400, y: 300 });
 
       await rotateAcrossBottomEdge();
 
@@ -612,41 +606,41 @@ describe("Select curve bending preserves edit lifecycle", () => {
   it("keeps the normal cursor on Cmd-hover over a cubic", () => {
     const down = editor.localToScreen(bendPoint);
     editor.pointerMove(down.x, down.y);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
 
     editor.keyDown("Meta");
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
   });
 
   it("keeps the normal cursor when Alt is pressed over a segment", () => {
     const down = editor.localToScreen(bendPoint);
     editor.pointerMove(down.x, down.y);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
 
     editor.keyDown("Alt", { altKey: true });
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
   });
 
   it("does not offer bending on a point or empty canvas", () => {
     const down = editor.localToScreen({ x: 100, y: 200 });
     editor.pointerMove(down.x, down.y);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
 
     editor.pointerMove(down.x + 300, down.y + 300);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
   });
 
   it("shows the bend cursor for the whole bend drag", async () => {
     const down = editor.localToScreen(bendPoint);
     editor.pointerDown(down.x, down.y);
     editor.pointerMove(down.x + 4, down.y);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    expect(editor.toolCursor).toEqual({ type: "bend" });
 
     editor.pointerMove(down.x + 4, down.y + 40);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    expect(editor.toolCursor).toEqual({ type: "bend" });
     editor.pointerUp(down.x + 4, down.y + 40);
     await editor.settle();
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
   });
 
   it("restores both controls when Escape cancels bending", () => {
@@ -660,10 +654,10 @@ describe("Select curve bending preserves edit lifecycle", () => {
     editor.pointerMove(start.x, start.y);
     editor.pointerMove(end.x, end.y);
     expect(editor.pointPosition(controlOneId)).not.toEqual(oneBefore);
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+    expect(editor.toolCursor).toEqual({ type: "bend" });
     editor.escape();
 
-    expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+    expect(editor.toolCursor).toEqual({ type: "default" });
     expect(editor.pointPosition(controlOneId)).toEqual(oneBefore);
     expect(editor.pointPosition(controlTwoId)).toEqual(twoBefore);
   });

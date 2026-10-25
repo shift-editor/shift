@@ -8,13 +8,6 @@ describe("glyph handles keep source styling apart from interpolated locations", 
   let editor: TestEditor;
   let pointIds: readonly PointId[];
 
-  const handleStates = () => {
-    const node = editor.glyphNode;
-    if (!node) throw new Error("Expected glyph node");
-
-    return editor.nodeDefinition("glyph").handleStates(node);
-  };
-
   beforeEach(async () => {
     editor = new TestEditor();
     await editor.startSession();
@@ -29,7 +22,7 @@ describe("glyph handles keep source styling apart from interpolated locations", 
   it("draws every handle with selection styling at a source location", () => {
     editor.selection.select([pointIds[1]!]);
 
-    expect([...handleStates()]).toEqual([
+    expect([...editor.handleStates()]).toEqual([
       [pointIds[0], "idle"],
       [pointIds[1], "selected"],
       [pointIds[2], "idle"],
@@ -42,7 +35,7 @@ describe("glyph handles keep source styling apart from interpolated locations", 
 
     editor.selection.select([point.contourId]);
 
-    expect([...handleStates().values()]).toEqual(["selected", "selected", "selected"]);
+    expect([...editor.handleStates().values()]).toEqual(["selected", "selected", "selected"]);
   });
 
   it("keeps drawing every handle with interpolated styling between sources", async () => {
@@ -62,9 +55,13 @@ describe("glyph handles keep source styling apart from interpolated locations", 
 
     editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
     expect(editor.activeSourceId).toBeNull();
-    expect([...handleStates().values()]).toEqual(["interpolated", "interpolated", "interpolated"]);
+    expect([...editor.handleStates().values()]).toEqual([
+      "interpolated",
+      "interpolated",
+      "interpolated",
+    ]);
 
     editor.selectSource(editor.font.defaultSource.id);
-    expect(handleStates().get(pointIds[1]!)).toBe("selected");
+    expect(editor.handleStates().get(pointIds[1]!)).toBe("selected");
   });
 });

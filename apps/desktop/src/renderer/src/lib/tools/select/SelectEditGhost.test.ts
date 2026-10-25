@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
-import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("Select edit ghost", () => {
   let editor: TestEditor;
-  let layer: GlyphLayer;
   let pointId: PointId;
 
   beforeEach(async () => {
@@ -16,7 +14,6 @@ describe("Select edit ghost", () => {
       { x: 200, y: 100 },
       { x: 300, y: 100 },
     ]);
-    layer = editor.requireGlyphLayer();
     editor.selectTool("select");
   });
 
@@ -30,12 +27,19 @@ describe("Select edit ghost", () => {
     editor.pointerMove(next.x, next.y);
   }
 
+  const preDragOutline = [
+    [
+      { x: 100, y: 100 },
+      { x: 200, y: 100 },
+      { x: 300, y: 100 },
+    ],
+  ];
+
   it("keeps the pre-drag outline while a point is dragged", () => {
     startPointDrag();
 
     expect(editor.pointPosition(pointId)).not.toEqual({ x: 200, y: 100 });
-    expect(layer.editBaseGeometryCell.peek()?.point(pointId)).toMatchObject({ x: 200, y: 100 });
-    expect(layer.editBaseOutlineCell.peek()).not.toBeNull();
+    expect(editor.editGhostContours).toEqual(preDragOutline);
   });
 
   it("clears the ghost when the drag commits", async () => {
@@ -45,8 +49,7 @@ describe("Select edit ghost", () => {
     await editor.settle();
 
     expect(editor.pointPosition(pointId)).not.toEqual({ x: 200, y: 100 });
-    expect(layer.editBaseGeometryCell.peek()).toBeNull();
-    expect(layer.editBaseOutlineCell.peek()).toBeNull();
+    expect(editor.editGhostContours).toBeNull();
   });
 
   it("clears the ghost when the drag is canceled", () => {
@@ -54,6 +57,6 @@ describe("Select edit ghost", () => {
     editor.escape();
 
     expect(editor.pointPosition(pointId)).toEqual({ x: 200, y: 100 });
-    expect(layer.editBaseGeometryCell.peek()).toBeNull();
+    expect(editor.editGhostContours).toBeNull();
   });
 });

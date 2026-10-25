@@ -39,37 +39,32 @@ describe("glyph nodes draw only resolvable outlines outside hand panning", () =>
     const source = { kind: "source", sourceId: regularSourceId } as const;
     const missing = { kind: "instance", instanceId: asNamedInstanceId("missing") } as const;
 
-    editor.nodeDefinition("glyph").outlines.toggle(missing);
-    editor.nodeDefinition("glyph").outlines.toggle(source);
+    editor.toggleOutline(missing);
+    editor.toggleOutline(source);
 
-    expect(editor.nodeDefinition("glyph").visibleOutlines(nodeId)).toEqual([source]);
+    expect(editor.visibleOutlines(nodeId)).toEqual([source]);
   });
 
   it("hides every outline while the hand tool is active", () => {
     const source = { kind: "source", sourceId: regularSourceId } as const;
-    editor.nodeDefinition("glyph").outlines.toggle(source);
+    editor.toggleOutline(source);
 
     editor.selectTool("hand");
-    expect(editor.nodeDefinition("glyph").visibleOutlines(nodeId)).toEqual([]);
+    expect(editor.visibleOutlines(nodeId)).toEqual([]);
 
     editor.selectTool("select");
-    expect(editor.nodeDefinition("glyph").visibleOutlines(nodeId)).toEqual([source]);
+    expect(editor.visibleOutlines(nodeId)).toEqual([source]);
   });
 
   it("draws a source being edited until it is hidden from its row", () => {
-    const outlines = editor.nodeDefinition("glyph").outlines;
     editor.toggleAllSourcesForEditing();
-    expect(editor.nodeDefinition("glyph").visibleOutlines(nodeId)).toEqual([
-      { kind: "source", sourceId: regularSourceId },
-    ]);
+    expect(editor.visibleOutlines(nodeId)).toEqual([{ kind: "source", sourceId: regularSourceId }]);
 
-    outlines.toggle({ kind: "source", sourceId: regularSourceId });
-    expect(editor.nodeDefinition("glyph").visibleOutlines(nodeId)).toEqual([]);
+    editor.toggleOutline({ kind: "source", sourceId: regularSourceId });
+    expect(editor.visibleOutlines(nodeId)).toEqual([]);
 
     editor.collapseEditingSources();
     editor.toggleAllSourcesForEditing();
-    expect(editor.nodeDefinition("glyph").visibleOutlines(nodeId)).toEqual([
-      { kind: "source", sourceId: regularSourceId },
-    ]);
+    expect(editor.visibleOutlines(nodeId)).toEqual([{ kind: "source", sourceId: regularSourceId }]);
   });
 });

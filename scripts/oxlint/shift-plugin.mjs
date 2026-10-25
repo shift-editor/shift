@@ -1088,6 +1088,69 @@ export default {
     },
 
     /**
+     * Ban reaching into editor internals from TestEditor tests.
+     *
+     * A test that reads the tool manager, the scene store, the edit
+     * coordinator, history internals, layer buffers or a signal breaks when the
+     * editor is restructured even if behaviour is unchanged. Observe through a
+     * TestEditor helper instead, so a refactor updates the harness, not the
+     * tests. Applies to `.test.` files that import TestEditor.
+     */
+    "no-editor-internals-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          internal:
+            "`{{name}}` is an editor internal. Observe it through a TestEditor helper so refactors change the harness, not the test.",
+          signal:
+            "`{{name}}` reads a signal. Assert on the value through a TestEditor helper or the editor's plain getter.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename();
+
+        if (!filename.includes(".test.")) return {};
+        if (filename.includes("testing/")) return {};
+
+        const INTERNALS = new Set([
+          "toolManager",
+          "scene",
+          "editCoordinator",
+          "history",
+          "nodeDefinition",
+          "buffers",
+          "previewPositionPatch",
+        ]);
+        let usesTestEditor = false;
+        const pending = [];
+
+        return {
+          ImportDeclaration(node) {
+            const source = node.source && node.source.value;
+            if (typeof source === "string" && source.endsWith("TestEditor")) usesTestEditor = true;
+          },
+          MemberExpression(node) {
+            if (node.computed || node.property.type !== "Identifier") return;
+            const name = node.property.name;
+
+            if (INTERNALS.has(name)) {
+              pending.push({ node: node.property, messageId: "internal", data: { name } });
+            } else if (name.length > 4 && name.endsWith("Cell")) {
+              pending.push({ node: node.property, messageId: "signal", data: { name } });
+            } else if (name === "peek" && node.parent?.type === "CallExpression") {
+              pending.push({ node: node.property, messageId: "signal", data: { name: "peek()" } });
+            }
+          },
+          "Program:exit"() {
+            if (!usesTestEditor) return;
+            for (const report of pending) context.report(report);
+          },
+        };
+      },
+    },
+
+    /**
      * Ban direct imports from @/bridge in app code.
      *
      * The bridge is internal plumbing. App code should use Font and Glyph.

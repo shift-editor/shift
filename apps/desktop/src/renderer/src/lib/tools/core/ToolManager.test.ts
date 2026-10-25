@@ -179,17 +179,17 @@ describe("runtime tool contributions", () => {
   it("publishes installed, replaced, and removed metadata", () => {
     const registration = editor.registerTool(runtimeManifest(1, "Runtime One", "r"));
 
-    expect(editor.toolRegistryCell.value.get("runtime-test")?.tooltip).toBe("Runtime One");
+    expect(editor.toolRegistry.get("runtime-test")?.tooltip).toBe("Runtime One");
     expect(editor.getToolShortcuts()).toContainEqual({ toolId: "runtime-test", shortcut: "r" });
 
     registration.replace(runtimeManifest(2, "Runtime Two", "u"));
 
-    expect(editor.toolRegistryCell.value.get("runtime-test")?.tooltip).toBe("Runtime Two");
+    expect(editor.toolRegistry.get("runtime-test")?.tooltip).toBe("Runtime Two");
     expect(editor.getToolShortcuts()).toContainEqual({ toolId: "runtime-test", shortcut: "u" });
 
     registration.dispose();
 
-    expect(editor.toolRegistryCell.value.has("runtime-test")).toBe(false);
+    expect(editor.toolRegistry.has("runtime-test")).toBe(false);
   });
 
   it("publishes availability metadata without user shortcuts", () => {
@@ -198,12 +198,12 @@ describe("runtime tool contributions", () => {
       disabled: true,
     });
 
-    expect(editor.toolRegistryCell.value.get("runtime-test")?.disabled).toBe(true);
+    expect(editor.toolRegistry.get("runtime-test")?.disabled).toBe(true);
     expect(editor.getToolShortcuts()).not.toContainEqual({ toolId: "runtime-test", shortcut: "r" });
 
     registration.replace({ ...runtimeManifest(1, "Runtime", "r"), hidden: true });
 
-    expect(editor.toolRegistryCell.value.get("runtime-test")?.hidden).toBe(true);
+    expect(editor.toolRegistry.get("runtime-test")?.hidden).toBe(true);
     expect(editor.getToolShortcuts()).not.toContainEqual({ toolId: "runtime-test", shortcut: "r" });
   });
 
@@ -316,6 +316,6 @@ describe("runtime tool contributions", () => {
 
     previous.dispose();
 
-    expect(editor.toolRegistryCell.value.has("runtime-test")).toBe(true);
+    expect(editor.toolRegistry.has("runtime-test")).toBe(true);
   });
 });

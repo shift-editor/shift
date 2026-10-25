@@ -130,7 +130,7 @@ describe("component references become removable or editable local contours", () 
     const targetLayer = root.layerForSource(targetSourceId)!;
     expect(referenceLayer.components).toHaveLength(1);
     expect(targetLayer.components).toHaveLength(1);
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    await expect.poll(() => editor.editingLayerMatches.size).toBe(1);
 
     await expect(editor.deleteSelection()).resolves.toBe(true);
     expect(referenceLayer.components).toEqual([]);

@@ -38,12 +38,12 @@ describe("Select tool", () => {
       const point = editor.localToScreen({ x: 145, y: 215 });
       editor.pointerMove(point.x, point.y);
       editor.keyDown("Meta", { metaKey: true });
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "bend" });
+      expect(editor.toolCursor).toEqual({ type: "bend" });
       expect(editor.glyphContours[0].segments()[0].type).toBe("line");
       expect(editor.pointCount).toBe(2);
 
       editor.pointerMove(point.x, point.y);
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+      expect(editor.toolCursor).toEqual({ type: "default" });
     });
 
     it("does not upgrade a line on Alt-click", async () => {
@@ -143,45 +143,45 @@ describe("Select tool", () => {
         const point = editor.localToScreen({ x: 200, y: 200 });
         editor.pointerMove(point.x, point.y);
         editor.keyDown("Alt", { altKey: true });
-        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "default" });
+        expect(editor.toolCursor).toEqual({ type: "default" });
       });
 
       it("offers adding an unselected point only while Shift is held", async () => {
         await editor.clickLocal(100, 100);
         const point = editor.localToScreen({ x: 200, y: 200 });
         editor.pointerMove(point.x, point.y);
-        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+        expect(editor.toolCursor).not.toEqual({ type: "add" });
 
         editor.keyDown("Shift", { shiftKey: true });
-        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+        expect(editor.toolCursor).toEqual({ type: "add" });
 
         editor.pointerMove(point.x, point.y);
-        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+        expect(editor.toolCursor).not.toEqual({ type: "add" });
       });
 
       it("does not offer adding while nothing is selected", () => {
         editor.selection.clear();
         const point = editor.localToScreen({ x: 200, y: 200 });
         editor.pointerMove(point.x, point.y, { shiftKey: true });
-        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+        expect(editor.toolCursor).not.toEqual({ type: "add" });
       });
 
       it("stops offering add when Shift-click selects the hovered point", async () => {
         await editor.clickLocal(100, 100);
         const point = editor.localToScreen({ x: 200, y: 200 });
         editor.pointerMove(point.x, point.y, { shiftKey: true });
-        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+        expect(editor.toolCursor).toEqual({ type: "add" });
 
         await editor.clickLocal(200, 200, { shiftKey: true });
         expect(editor.selection.ids).toEqual([firstId, secondId]);
-        expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+        expect(editor.toolCursor).not.toEqual({ type: "add" });
       });
 
       it("offers adding on an unselected segment", () => {
         editor.selection.select([firstId]);
         const segment = editor.localToScreen({ x: 150, y: 150 });
         editor.pointerMove(segment.x, segment.y, { shiftKey: true });
-        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "add" });
+        expect(editor.toolCursor).toEqual({ type: "add" });
       });
 
       it("does not offer adding on selected points or empty canvas", () => {
@@ -192,7 +192,7 @@ describe("Select tool", () => {
         ]) {
           const point = editor.localToScreen({ x: position.x, y: position.y });
           editor.pointerMove(point.x, point.y, { shiftKey: true });
-          expect(editor.toolManager.activeTool?.cursorCell.value).not.toEqual({ type: "add" });
+          expect(editor.toolCursor).not.toEqual({ type: "add" });
         }
       });
 
@@ -201,7 +201,7 @@ describe("Select tool", () => {
         const point = editor.localToScreen({ x: 100, y: 100 });
         editor.pointerDown(point.x, point.y, { shiftKey: true });
         editor.pointerMove(point.x + 40, point.y + 40, { shiftKey: true });
-        expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+        expect(editor.toolCursor).toEqual({ type: "move" });
         editor.escape();
       });
 
@@ -300,14 +300,11 @@ describe("Select tool", () => {
       const down = editor.localToScreen(before);
       const start = editor.localToScreen({ x: before.x + 10, y: before.y });
       const end = editor.localToScreen({ x: before.x + 50, y: before.y + 30 });
-      const modifiers = { shiftKey: false, altKey: false, metaKey: false };
 
       editor.pointerDown(down.x, down.y);
-      editor.toolManager.handlePointerMove(start, modifiers);
-      editor.toolManager.flushPointerMoves();
-      editor.toolManager.handlePointerMove(end, modifiers);
+      editor.pointerMove(start.x, start.y);
+      editor.queuePointerMove(end.x, end.y);
       editor.pointerUp(end.x, end.y);
-      editor.toolManager.flushPointerMoves();
       await editor.settle();
 
       expect(editor.pointPosition(pointId)).toEqual({ x: before.x + 50, y: before.y + 30 });
@@ -326,11 +323,7 @@ describe("Select tool", () => {
       const end = editor.localToScreen({ x: before.x + 50, y: before.y + 30 });
 
       editor.pointerDown(down.x, down.y);
-      editor.toolManager.handlePointerMove(end, {
-        shiftKey: false,
-        altKey: false,
-        metaKey: false,
-      });
+      editor.queuePointerMove(end.x, end.y);
       editor.pointerUp(end.x, end.y);
       await editor.settle();
 
@@ -395,8 +388,7 @@ describe("Select tool", () => {
       editor.selectTool("select");
       await editor.clickLocal(140, 220);
 
-      const select = editor.toolManager.activeTool;
-      if (!(select instanceof Select)) throw new Error("Expected Select tool");
+      const select = editor.activeToolAs(Select);
 
       expect(select.boundingBox.visible).toBe(true);
     });
@@ -409,8 +401,7 @@ describe("Select tool", () => {
       editor.selection.select(pointIds);
       editor.selectTool("select");
 
-      const select = editor.toolManager.activeTool;
-      if (!(select instanceof Select)) throw new Error("Expected Select tool");
+      const select = editor.activeToolAs(Select);
       expect(select.boundingBox.visible).toBe(true);
     });
 
@@ -426,8 +417,7 @@ describe("Select tool", () => {
         editor.selectTool("select");
         await editor.clickLocal(hit.x, hit.y);
 
-        const select = editor.toolManager.activeTool;
-        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        const select = editor.activeToolAs(Select);
         expect(select.boundingBox.visible).toBe(false);
       },
     );
@@ -445,8 +435,7 @@ describe("Select tool", () => {
         editor.selectTool("select");
         await editor.clickLocal(hit.x, hit.y);
 
-        const select = editor.toolManager.activeTool;
-        if (!(select instanceof Select)) throw new Error("Expected Select tool");
+        const select = editor.activeToolAs(Select);
         expect(select.boundingBox.visible).toBe(true);
       },
     );
@@ -462,7 +451,7 @@ describe("Select tool", () => {
       const inside = editor.localToScreen({ x: 120, y: 180 });
       editor.pointerMove(inside.x, inside.y);
 
-      expect(editor.toolManager.activeTool?.cursorCell.value).toEqual({ type: "move" });
+      expect(editor.toolCursor).toEqual({ type: "move" });
     });
 
     it("drags the current selection from inside its bounding box", async () => {
@@ -542,7 +531,7 @@ describe("Select tool", () => {
           const end = editor.localToScreen({ x: 250, y: 225 });
           editor.pointerDown(down.x, down.y, { shiftKey: true });
           editor.pointerMove(end.x, end.y, { shiftKey: true });
-          expect(editor.toolManager.activeTool?.state.type).toBe("resizing");
+          expect(editor.tool?.state.type).toBe("resizing");
 
           const preview = layer.contours[0]!.points.map(({ x, y }) => ({ x, y }));
           expect(preview).toEqual([
@@ -601,7 +590,7 @@ describe("Select tool", () => {
         const down = editor.localToScreen({ x: 200, y: 200 });
         const move = editor.localToScreen({ x: 250, y: 225 });
         editor.pointerDown(down.x, down.y);
-        editor.toolManager.handlePointerMove(move, { shiftKey: true, altKey: false });
+        editor.queuePointerMove(move.x, move.y, { shiftKey: true });
         editor.pointerUp(move.x, move.y);
         await editor.settle();
 
@@ -815,13 +804,8 @@ describe("Select tool", () => {
 
       editor.selectTool("select");
       editor.pointerDown(down.x, down.y);
-      editor.toolManager.handlePointerMove(end, {
-        shiftKey: false,
-        altKey: false,
-        metaKey: false,
-      });
+      editor.queuePointerMove(end.x, end.y);
       editor.pointerUp(end.x, end.y);
-      editor.toolManager.flushPointerMoves();
 
       expect(editor.selection.has(inside.id)).toBe(true);
       expect(editor.selection.has(outside.id)).toBe(false);
@@ -930,7 +914,7 @@ describe("Select tool", () => {
       await editor.clickLocal(50, 50);
       expect(editor.selection.ids).toEqual([directId]);
       expect(editor.selectionLocalRect()).toMatchObject({ x: 0, y: 0, width: 100, height: 100 });
-      expect((editor.toolManager.activeTool as Select).boundingBox.visible).toBe(true);
+      expect(editor.activeToolAs(Select).boundingBox.visible).toBe(true);
     });
 
     it("does not select component fill through an opposite-winding hole", async () => {
@@ -1084,7 +1068,7 @@ describe("Select tool", () => {
       });
 
       it("rotates from the active corner rotation zone", async () => {
-        const tool = editor.toolManager.activeTool as Select;
+        const tool = editor.activeToolAs(Select);
         const rect = tool.boundingBox.screenRect;
         const bounds = editor.selectionLocalRect();
         const node = editor.glyphNode;
@@ -1155,7 +1139,7 @@ describe("Select tool in preview sessions", () => {
       end: { x: 150, y: 150 },
     });
     expect(editor.selection.ids).toEqual([]);
-    expect(editor.toolCell.peek()?.state.type).toBe("ready");
+    expect(editor.tool?.state.type).toBe("ready");
   });
 
   it("treats the preview lock as ordinary empty canvas", async () => {
@@ -1167,13 +1151,13 @@ describe("Select tool in preview sessions", () => {
     const size = editor.camera.screenToSceneDistance(LOCK_SIZE_PX);
     const gap = editor.camera.screenToSceneDistance(LOCK_GAP_PX);
     const lockPoint = scenePoint(
-      node.position.x + view.xAdvanceCell.peek() / 2,
+      node.position.x + view.xAdvance / 2,
       node.position.y + metrics.descender - gap - size / 2,
     );
     expect(editor.getPointerTarget(lockPoint).kind).toBe("canvas");
     await editor.clickLocal(lockPoint.x, lockPoint.y);
 
     expect(editor.selection.ids).toEqual([]);
-    expect(editor.toolCell.peek()?.state.type).toBe("ready");
+    expect(editor.tool?.state.type).toBe("ready");
   });
 });

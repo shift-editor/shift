@@ -51,7 +51,7 @@ describe("multi-source component transform edits", () => {
 
     editor.selectSourceForEditing(referenceSourceId);
     editor.selectSourceForEditing(targetSourceId, "toggle");
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    await expect.poll(() => editor.editingLayerMatches.size).toBe(1);
 
     const selection = requireSelection(editor, referenceComponentId);
     const target = selection.additionalLayers[0];
@@ -163,9 +163,7 @@ describe("multi-source component transform edits", () => {
 
     targetLayer.addComponent(record.id);
     await editor.settle();
-    await expect
-      .poll(() => [...editor.editingLayerMatchesCell.peek().values()][0]?.complete)
-      .toBe(false);
+    await expect.poll(() => [...editor.editingLayerMatches.values()][0]?.complete).toBe(false);
 
     expect(editor.componentTransformSelection([referenceComponentId])).toBeNull();
     expect(componentTransform(referenceLayer, referenceComponentId)).toMatchObject({

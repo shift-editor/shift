@@ -190,7 +190,7 @@ describe("Select translates segment selections in 90-degree directions", () => {
     const start = editor.localToScreen({ x: 180, y: 140 });
     const end = editor.localToScreen({ x: 210, y: 180 });
     editor.pointerDown(down.x, down.y).pointerMove(start.x, start.y, { shiftKey: true });
-    editor.toolManager.handlePointerMove(end, { shiftKey: true, altKey: false });
+    editor.queuePointerMove(end.x, end.y, { shiftKey: true });
     editor.pointerUp(end.x, end.y);
     await editor.settle();
     expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 200 });

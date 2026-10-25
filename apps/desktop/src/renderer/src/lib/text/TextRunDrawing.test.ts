@@ -64,9 +64,7 @@ describe("text run drawing", () => {
 
   const glyphId = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
   const renderModel = (name: string): GlyphRenderModel | null =>
-    editor
-      .glyphForId(glyphId(name))
-      ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell) ?? null;
+    editor.renderModelFor(glyphId(name));
   /** Fills of `model`'s closed contours in the latest scene frame. */
   const fillsOf = (fills: readonly Path2D[], model: GlyphRenderModel | null) =>
     model ? fills.filter((path) => path === model.closedContoursPath).length : 0;
@@ -86,7 +84,7 @@ describe("text run drawing", () => {
     const dieresis = editor.glyphForId(glyphId("dieresiscomb"))!;
     const layer = dieresis.layerForSource(editor.font.defaultSource.id)!;
     const point = layer.allPoints[0]!;
-    layer.previewPositionPatch([{ kind: "point", id: point.id, x: point.x + 25, y: point.y }]);
+    layer.beginEdit().setPositions([{ kind: "point", id: point.id, x: point.x + 25, y: point.y }]);
 
     await expect.poll(() => fillsOf(latestFills(), composite)).toBe(2);
     expect(composite.closedContoursPath).not.toBe(drawnBefore);
@@ -118,10 +116,10 @@ describe("text run drawing", () => {
     const o = renderModel("o")!;
     const strokesOfOpenPath = () =>
       latestFrame().strokes.filter((path) => path === o.openContoursPath).length;
-    // Closed contours only: the run strokes nothing for it.
-    expect(o.hasOpenContoursCell.peek()).toBe(false);
-    expect(strokesOfOpenPath()).toBe(0);
     const layer = editor.glyphForId(glyphId("o"))!.layerForSource(editor.font.defaultSource.id)!;
+    // Closed contours only: the run strokes nothing for it.
+    expect(layer.contours.every((contour) => contour.closed)).toBe(true);
+    expect(strokesOfOpenPath()).toBe(0);
     layer.openContour(layer.contours[0]!.id);
     await editor.settle();
 

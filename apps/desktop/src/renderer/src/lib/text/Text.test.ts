@@ -34,7 +34,7 @@ describe("placed text layout follows font location", () => {
     editor.setSourceToDefault();
 
     const run = editor.text.createRun([editor.text.glyphItem(glyph.id)!]);
-    expect(editor.text.layoutCell(run.id).peek()?.totalAdvance).toBeCloseTo(300);
+    expect(editor.runAdvance(run.id)).toBeCloseTo(300);
 
     const midpoint = withExternalAxisValue(
       defaultExternalAxisLocation(editor.font.getAxes()),
@@ -42,16 +42,13 @@ describe("placed text layout follows font location", () => {
       550,
     );
     editor.setExternalLocation(midpoint);
-    expect(editor.text.layoutCell(run.id).peek()?.totalAdvance).toBeCloseTo(400);
+    expect(editor.runAdvance(run.id)).toBeCloseTo(400);
   });
 });
 
 describe("text items resolve to glyphs", () => {
   const glyphIds = (editor: TestEditor, runId: RunId) =>
-    editor.text
-      .layoutCell(runId)
-      .peek()!
-      .placedGlyphs.map((placed) => placed.glyph.glyphId);
+    editor.runPlacedGlyphs(runId).map((placed) => placed.glyph.glyphId);
 
   it("shows a character through the font's Unicode mapping and follows a remap", async () => {
     const editor = new TestEditor();

@@ -34,7 +34,7 @@ describe("adding, renaming, and deleting anchors", () => {
   const editBothSources = async () => {
     editor.selectSourceForEditing(sources().active);
     editor.selectSourceForEditing(sources().other, "toggle");
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    await expect.poll(() => editor.editingLayerMatches.size).toBe(1);
   };
 
   it("renames an anchor in the source being edited, follows into composites, and undoes", async () => {
@@ -73,7 +73,7 @@ describe("adding, renaming, and deleting anchors", () => {
     expect(anchorNames("a", active)).toContain("new");
     expect(anchorNames("a", other)).toContain("new");
 
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
+    await expect.poll(() => editor.editingLayerMatches.size).toBe(1);
     editor.selection.select([anchorId("a", "ogonek")]);
     expect(await editor.deleteSelection()).toBe(true);
     expect(anchorNames("a", active)).not.toContain("ogonek");

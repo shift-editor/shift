@@ -22,14 +22,14 @@ describe("handle visibility is independent of geometry and selection", () => {
 
   it("hides one Bézier handle without hiding its siblings or changing selection bounds", () => {
     const contour = editor.glyphContours[0];
-    const bounds = editor.selectionBoundsCell.peek();
+    const bounds = editor.selectionBounds();
     const showHandles = editor.hideHandles(contour.points[1].id);
     expect(editor.handlesVisible(contour.points[1].id)).toBe(false);
     expect(editor.handlesVisible(contour.points[0].id)).toBe(true);
     expect(editor.handlesVisible(contour.id)).toBe(true);
     expect(editor.glyphContours[0].points).toEqual(contour.points);
     expect(editor.selection.ids).toEqual([contour.id]);
-    expect(editor.selectionBoundsCell.peek()).toEqual(bounds);
+    expect(editor.selectionBounds()).toEqual(bounds);
     showHandles();
     expect(editor.handlesVisible(contour.points[1].id)).toBe(true);
   });

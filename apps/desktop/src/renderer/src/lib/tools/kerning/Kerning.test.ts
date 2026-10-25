@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import type { GlyphName } from "@shift/types";
 import { characterTextItem } from "@shift/editor/text";
-import { trackRunLayouts, type KerningTool } from "@shift/editor/tools";
+import { trackRunLayouts, KerningTool } from "@shift/editor/tools";
 import { effect } from "@shift/editor/signals";
 import { isGroupSide } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
@@ -17,7 +17,7 @@ const MUTATOR_SANS = resolve(
 describe("Kerning tool", () => {
   let editor: TestEditor;
 
-  const placed = () => editor.text.layoutCell(editor.textRun!.runId).peek()!.placedGlyphs;
+  const placed = () => editor.runPlacedGlyphs(editor.textRun!.runId);
   const kern = () => {
     const [t, a] = placed();
     return a!.left - (t!.left + t!.glyph.xAdvance);
@@ -35,7 +35,7 @@ describe("Kerning tool", () => {
     const state = editor.toolIf("kerning")?.state;
     return state?.type === "ready" ? state.hit : undefined;
   };
-  const tool = () => editor.toolManager.activeTool as KerningTool;
+  const tool = () => editor.activeToolAs(KerningTool);
   const editedPair = () => hovered()!.editablePair(editor)!;
 
   beforeEach(async () => {

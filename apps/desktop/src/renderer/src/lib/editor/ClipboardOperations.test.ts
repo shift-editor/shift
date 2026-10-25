@@ -121,9 +121,8 @@ describe("editor clipboard operations", () => {
     await editor.addGlyph("B", 66);
 
     const destinationRecord = editor.font.recordForName("B");
-    const node = editor.glyphNode;
-    if (!destinationRecord || !node) throw new Error("Expected destination glyph");
-    editor.scene.updateNode({ id: node.id, glyphId: destinationRecord.id });
+    if (!destinationRecord) throw new Error("Expected destination glyph");
+    editor.showGlyphInNode(destinationRecord.id);
 
     expect(await editor.paste()).toBe(true);
 

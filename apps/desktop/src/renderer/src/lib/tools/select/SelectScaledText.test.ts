@@ -20,7 +20,7 @@ describe("a glyph edited inside text takes the text's size", () => {
     editor.selectTool("select");
     editor.selection.clear();
     const run = editor.textRun!;
-    editor.scene.updateNode({ id: run.id, size: run.size / 10 });
+    editor.setTextRunSize(run.size / 10);
   });
 
   it("draws a tenth as large in text set at a tenth of the font's size", () => {

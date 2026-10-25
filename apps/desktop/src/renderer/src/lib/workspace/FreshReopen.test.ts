@@ -37,10 +37,10 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
 
     editor.selectTool("pen");
     await editor.clickLocal(100, 100);
-    await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
+    await expect(editor.documentState()).resolves.toMatchObject({ dirty: true });
 
     await editor.undo();
-    await expect(editor.font.editCoordinator.state()).resolves.toMatchObject({ dirty: false });
+    await expect(editor.documentState()).resolves.toMatchObject({ dirty: false });
     await editor.closeSession();
     rmSync(outputRoot, { recursive: true, force: true });
   });
@@ -108,7 +108,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
       end: { x: 780, y: 180 },
     });
     original.setXAdvance(700);
-    await expect(original.font.editCoordinator.state()).resolves.toMatchObject({
+    await expect(original.documentState()).resolves.toMatchObject({
       dirty: true,
       needsSaveAs: true,
     });
@@ -126,7 +126,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
       end: { x: firstPoint.x + 40, y: firstPoint.y + 30 },
     });
     original.setXAdvance(720);
-    await expect(original.font.editCoordinator.state()).resolves.toMatchObject({ dirty: true });
+    await expect(original.documentState()).resolves.toMatchObject({ dirty: true });
     await expect(original.save()).resolves.toMatchObject({ dirty: false });
     const expected = persistedGlyph(original);
     const expectedPositions = persistedPositions(original);
@@ -139,7 +139,7 @@ describe("saved editor outcomes survive a fresh workspace stack", () => {
 
     const reopened = new TestEditor();
     await reopened.openSession(savePath, "A");
-    await expect(reopened.font.editCoordinator.state()).resolves.toMatchObject({
+    await expect(reopened.documentState()).resolves.toMatchObject({
       dirty: false,
       needsSaveAs: false,
     });

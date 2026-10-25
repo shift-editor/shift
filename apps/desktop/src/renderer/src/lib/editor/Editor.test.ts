@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { mintNodeId } from "@shift/types";
-import type { GlyphNode } from "@shift/editor/types";
 import { TestEditor } from "@/testing/TestEditor";
 import { effect } from "@shift/editor/signals";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
@@ -20,11 +19,11 @@ describe("Editor scene bootstrap", () => {
 
   it("places the opened glyph as the page run's child at the origin", () => {
     const record = editor.font.recordForName("A")!;
-    const [run, child] = editor.scene.nodes();
+    const [run, child] = editor.sceneNodes();
     if (run?.kind !== "textRun") throw new Error("Expected the page run first");
     const item = editor.text.run(run.runId)?.items[0];
 
-    expect(editor.scene.nodes()).toHaveLength(2);
+    expect(editor.sceneNodes()).toHaveLength(2);
     expect(run.position).toEqual({ x: 0, y: 0 });
     expect(child).toMatchObject({
       kind: "glyph",
@@ -38,18 +37,18 @@ describe("Editor scene bootstrap", () => {
   });
 
   it("finds the nodes that depend on a run or a glyph, and follows their removal", () => {
-    const [run, child] = editor.scene.nodes();
+    const [run, child] = editor.sceneNodes();
     if (run?.kind !== "textRun" || child?.kind !== "glyph")
       throw new Error("Expected run and glyph");
     const dependents: number[] = [];
     const reader = effect(() => {
-      dependents.push(editor.scene.nodesReferencing(child.glyphId).length);
+      dependents.push(editor.nodesReferencing(child.glyphId).length);
     });
 
-    expect(editor.scene.nodesReferencing(run.runId)).toEqual([run]);
-    expect(editor.scene.nodesReferencing(child.glyphId)).toEqual([child]);
+    expect(editor.nodesReferencing(run.runId)).toEqual([run]);
+    expect(editor.nodesReferencing(child.glyphId)).toEqual([child]);
 
-    editor.scene.deleteNode(child.id);
+    editor.removeNode(child.id);
     reader.dispose();
 
     expect(dependents).toEqual([1, 0]);
@@ -77,62 +76,69 @@ describe("Editor scene bootstrap", () => {
     });
   });
 
-  it("keeps the scene value when only the selection changes, and updates it when a node moves", async () => {
+  it("leaves scene readers alone when only the selection changes, and reruns them when a node moves", async () => {
     const [pointId] = await editor.drawOpenContour([
       { x: 100, y: 100 },
       { x: 200, y: 100 },
     ]);
-    const scene = editor.scene.cell.peek();
+    // Reader rerun counts are the contract: selection writes share the store
+    // with nodes but must never rebuild the scene that drawing reads.
+    const seenPositions: unknown[] = [];
+    const reader = effect(() => {
+      seenPositions.push(editor.sceneNodes()[0]?.position);
+    });
 
     editor.selection.select([pointId!]);
-    expect(editor.scene.cell.peek()).toBe(scene);
+    expect(seenPositions).toHaveLength(1);
 
-    const [node] = editor.scene.nodes();
-    editor.scene.updateNode({ id: node!.id, position: { x: 40, y: 0 } });
-    expect(editor.scene.cell.peek()).not.toBe(scene);
-    expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
+    const [node] = editor.sceneNodes();
+    editor.moveNode(node!.id, { x: 40, y: 0 });
+    reader.dispose();
+    expect(seenPositions).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+    ]);
   });
 
   it("names the one glyph node only while the scene shows exactly one", () => {
-    const [firstRun, firstChild] = editor.scene.nodes();
+    const [firstRun, firstChild] = editor.sceneNodes();
 
-    expect(editor.scene.only("glyph")).toBe(firstChild);
-    expect(editor.scene.first("textRun")).toBe(firstRun);
+    expect(editor.onlyNode("glyph")).toBe(firstChild);
+    expect(editor.firstNode("textRun")).toBe(firstRun);
 
     const record = editor.font.recordForName("A")!;
-    editor.scene.createNode<GlyphNode>({
+    editor.placeNode({
       kind: "glyph",
       glyphId: record.id,
       sourceId: editor.font.defaultSource.id,
       position: { x: 700, y: 0 },
     });
 
-    expect(editor.scene.nodesOfKind("glyph")).toHaveLength(2);
-    expect(editor.scene.only("glyph")).toBeNull();
-    expect(editor.scene.first("glyph")).toBe(firstChild);
+    expect(editor.nodesOfKind("glyph")).toHaveLength(2);
+    expect(editor.onlyNode("glyph")).toBeNull();
+    expect(editor.firstNode("glyph")).toBe(firstChild);
   });
 
   it("follows the one glyph node reactively as glyph nodes come and go", () => {
-    const [, firstChild] = editor.scene.nodes();
-    const onlyGlyph = editor.scene.onlyCell("glyph");
+    const [, firstChild] = editor.sceneNodes();
     const seen: (string | null)[] = [];
     const reader = effect(() => {
-      seen.push(onlyGlyph.value?.id ?? null);
+      seen.push(editor.onlyNode("glyph")?.id ?? null);
     });
 
     const record = editor.font.recordForName("A")!;
-    const second = editor.scene.createNode<GlyphNode>({
+    const second = editor.placeNode({
       kind: "glyph",
       glyphId: record.id,
       sourceId: editor.font.defaultSource.id,
       position: { x: 700, y: 0 },
     });
-    expect(onlyGlyph.peek()).toBeNull();
+    expect(editor.onlyNode("glyph")).toBeNull();
 
-    editor.scene.deleteNode(firstChild!.id);
+    editor.removeNode(firstChild!.id);
     reader.dispose();
 
-    expect(onlyGlyph.peek()).toBe(editor.scene.node(second.id));
+    expect(editor.onlyNode("glyph")).toBe(editor.sceneNode(second.id));
     expect(seen.at(-1)).toBe(second.id);
     expect(seen).toContain(null);
   });
@@ -142,7 +148,7 @@ describe("Editor scene bootstrap", () => {
     const left = mintNodeId();
     const right = mintNodeId();
 
-    editor.scene.setNodes([
+    editor.replaceSceneNodes([
       {
         id: left,
         type: "node",
@@ -165,8 +171,8 @@ describe("Editor scene bootstrap", () => {
       },
     ]);
 
-    const leftNode = editor.scene.node(left);
-    const rightNode = editor.scene.node(right);
+    const leftNode = editor.sceneNode(left);
+    const rightNode = editor.sceneNode(right);
     if (leftNode?.kind !== "glyph" || rightNode?.kind !== "glyph") {
       throw new Error("Expected two glyph nodes");
     }
@@ -178,12 +184,12 @@ describe("Editor scene bootstrap", () => {
       y: 20,
     });
 
-    editor.scene.updateNode({
-      id: rightNode.id,
-      position: { x: rightNode.position.x + 30, y: rightNode.position.y + 5 },
+    editor.moveNode(rightNode.id, {
+      x: rightNode.position.x + 30,
+      y: rightNode.position.y + 5,
     });
 
-    expect(editor.scene.node(right)?.position).toEqual({ x: 730, y: 5 });
+    expect(editor.sceneNode(right)?.position).toEqual({ x: 730, y: 5 });
   });
 
   it("resolves authored points through the ownership index and keeps their bounds live", async () => {
@@ -334,13 +340,12 @@ describe("Editor scene bootstrap", () => {
   });
 
   it("lists only the axes users set directly as external axes", async () => {
-    const externalAxes = editor.font.externalAxesCell;
     const weightId = editor.font.createAxis(weightAxis());
     editor.font.createAxis({ ...weightAxis(), tag: "opsz", name: "Optical", role: "internal" });
     await editor.settle();
 
     expect(editor.font.getAxes()).toHaveLength(2);
-    expect(externalAxes.peek().map(({ id }) => id)).toEqual([weightId]);
+    expect(editor.externalAxes.map(({ id }) => id)).toEqual([weightId]);
   });
 
   it("materializes the opened glyph when selecting a sparse source", async () => {
@@ -462,31 +467,31 @@ describe("Editor tracked languages", () => {
   });
 
   it("reports no tracked languages for a new font", () => {
-    expect(editor.font.languageIdsCell.peek()).toBeNull();
+    expect(editor.trackedLanguageIds).toBeNull();
   });
 
   it("commits the list as one undoable step that undo and redo restore", async () => {
     editor.setLanguageIds(["eng-latin", "cmn-chinese"]);
     await editor.settle();
 
-    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
+    expect(editor.trackedLanguageIds).toEqual(["eng-latin", "cmn-chinese"]);
 
     editor.setLanguageIds([]);
     await editor.settle();
 
-    expect(editor.font.languageIdsCell.peek()).toEqual([]);
+    expect(editor.trackedLanguageIds).toEqual([]);
 
     await editor.undo();
 
-    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
+    expect(editor.trackedLanguageIds).toEqual(["eng-latin", "cmn-chinese"]);
 
     await editor.undo();
 
-    expect(editor.font.languageIdsCell.peek()).toBeNull();
+    expect(editor.trackedLanguageIds).toBeNull();
 
     await editor.redo();
 
-    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
+    expect(editor.trackedLanguageIds).toEqual(["eng-latin", "cmn-chinese"]);
   });
 
   it("loads the saved list when the document is reopened", async () => {
@@ -499,7 +504,7 @@ describe("Editor tracked languages", () => {
     const reopened = new TestEditor();
     await reopened.openSession(savePath, "A");
 
-    expect(reopened.font.languageIdsCell.peek()).toEqual(["eng-latin", "fra-latin"]);
+    expect(reopened.trackedLanguageIds).toEqual(["eng-latin", "fra-latin"]);
 
     await reopened.closeSession();
     rmSync(outputRoot, { recursive: true, force: true });
