@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use shift_font::{Font, LayerId};
 
@@ -25,7 +25,10 @@ impl LayerResidency {
     }
 
     /// The layers of `layer_ids` that are still placeholders.
-    pub fn requested_unloaded(&self, layer_ids: impl IntoIterator<Item = LayerId>) -> Vec<LayerId> {
+    pub fn requested_unloaded(
+        &self,
+        layer_ids: impl IntoIterator<Item = LayerId>,
+    ) -> BTreeSet<LayerId> {
         layer_ids
             .into_iter()
             .filter(|layer_id| self.is_unloaded(layer_id))

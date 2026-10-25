@@ -281,6 +281,31 @@ impl FontIntent {
         }
     }
 
+    /// Glyphs the components this intent adds or decomposes draw. A
+    /// decomposed component is read from its layer, so load that first.
+    pub fn edited_component_glyph_ids(&self, font: &Font) -> Vec<GlyphId> {
+        match self {
+            Self::AddComponent(AddComponent { base_glyph_id, .. }) => vec![base_glyph_id.clone()],
+            Self::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent { components, .. }) => {
+                components.iter().map(Component::base_glyph_id).collect()
+            }
+            Self::DecomposeComponents(DecomposeComponents {
+                layer_id,
+                component_ids,
+            }) => {
+                let Some(layer) = font.layer(layer_id) else {
+                    return Vec::new();
+                };
+                component_ids
+                    .iter()
+                    .filter_map(|component_id| layer.component(component_id))
+                    .map(Component::base_glyph_id)
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// Whether this intent can change a layer's anchors, so components
     /// attached to them elsewhere may follow.
     pub fn may_move_anchors(&self) -> bool {
@@ -322,9 +347,25 @@ impl FromIterator<FontIntent> for FontIntentSet {
 }
 
 impl FontIntentSet {
+    /// The layers this set names, which must be loaded before it applies.
+    pub fn required_layer_ids(&self, font: &Font) -> BTreeSet<LayerId> {
+        self.intents
+            .iter()
+            .flat_map(|intent| intent.required_layer_ids(font))
+            .collect()
+    }
+
+    /// Glyphs the components this set adds or decomposes draw.
+    pub fn edited_component_glyph_ids(&self, font: &Font) -> BTreeSet<GlyphId> {
+        self.intents
+            .iter()
+            .flat_map(|intent| intent.edited_component_glyph_ids(font))
+            .collect()
+    }
+
     /// Layers whose anchors this set may change; components attached to them
     /// in other glyphs follow.
-    pub fn layers_with_anchor_edits(&self) -> Vec<LayerId> {
+    pub fn layers_with_anchor_edits(&self) -> BTreeSet<LayerId> {
         self.intents
             .iter()
             .filter(|intent| intent.may_move_anchors())

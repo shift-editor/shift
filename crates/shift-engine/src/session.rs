@@ -1,8 +1,8 @@
 use std::collections::{BTreeSet, HashSet};
 
 use shift_font::{
-    AppliedIntents, CoreError, Font, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId,
-    GlyphLayer, LayerId,
+    AppliedIntents, CoreError, Font, FontChange, FontChangeSet, FontIntentSet, GlyphId, GlyphLayer,
+    LayerId,
 };
 
 use crate::{LayerResidency, LayerSource, ReadSet};
@@ -92,13 +92,12 @@ impl EngineSession {
         source: &mut S,
         set: &FontIntentSet,
     ) -> Result<(), LoadError<S::Error>> {
-        self.load_layers(source, ReadSet::named_layers(&self.font, set))?;
+        self.load_layers(source, set.required_layer_ids(&self.font))?;
         // Decomposed components are read from the named layers, so find the
         // rest of the read set only once those are loaded.
         let reads = ReadSet::for_intents(&self.font, set);
-        let anchor_edits: Vec<LayerId> = reads.anchor_edits().cloned().collect();
-        let mut roots: BTreeSet<GlyphId> = reads.component_bases().cloned().collect();
-        roots.extend(self.dependents(source, &anchor_edits)?);
+        let mut roots = reads.component_bases().clone();
+        roots.extend(self.dependents(source, reads.anchor_edits())?);
         self.load_glyph_closure(source, roots)
     }
 
@@ -112,7 +111,7 @@ impl EngineSession {
         source: &mut S,
         change_set: &FontChangeSet,
     ) -> Result<(), LoadError<S::Error>> {
-        self.load_layers(source, ReadSet::change_set_layers(change_set))
+        self.load_layers(source, change_set.changed_layer_ids())
     }
 
     /// Loads every layer of `glyph_ids`.
@@ -125,7 +124,7 @@ impl EngineSession {
         source: &mut S,
         glyph_ids: &[GlyphId],
     ) -> Result<(), LoadError<S::Error>> {
-        let layer_ids = self.layer_ids_of(glyph_ids);
+        let layer_ids = self.font.layer_ids_of_glyphs(glyph_ids);
         self.load_layers(source, layer_ids)
     }
 
@@ -139,26 +138,22 @@ impl EngineSession {
         source: &mut S,
         roots: impl IntoIterator<Item = GlyphId>,
     ) -> Result<(), LoadError<S::Error>> {
-        let mut closure: BTreeSet<GlyphId> = roots.into_iter().collect();
         // The source knows persisted components and the font knows the loaded
-        // ones, which may be ahead; load both until neither adds a glyph.
-        loop {
-            let roots: Vec<GlyphId> = closure.iter().cloned().collect();
-            let mut next: BTreeSet<GlyphId> = source
-                .component_closure(&roots)
-                .map_err(LoadError::Source)?
+        // ones, which may be ahead. Ask both about each glyph once, until
+        // neither finds a glyph not seen yet.
+        let mut closure: BTreeSet<GlyphId> = roots.into_iter().collect();
+        let mut frontier: Vec<GlyphId> = closure.iter().cloned().collect();
+        while !frontier.is_empty() {
+            let persisted = source
+                .component_closure(&frontier)
+                .map_err(LoadError::Source)?;
+            let loaded = self.font.component_glyph_ids_of_glyphs(&frontier);
+            // `insert` is true only for a glyph not seen yet.
+            frontier = persisted
                 .into_iter()
+                .chain(loaded)
+                .filter(|glyph_id| closure.insert(glyph_id.clone()))
                 .collect();
-            next.extend(closure.iter().cloned());
-            next.extend(
-                roots
-                    .iter()
-                    .flat_map(|glyph_id| self.loaded_bases(glyph_id)),
-            );
-            if next == closure {
-                break;
-            }
-            closure = next;
         }
         let glyph_ids: Vec<GlyphId> = closure.into_iter().collect();
         self.load_glyphs(source, &glyph_ids)
@@ -170,7 +165,7 @@ impl EngineSession {
     ///
     /// As [`Self::load_for_intents`].
     pub fn load_all<S: LayerSource>(&mut self, source: &mut S) -> Result<(), LoadError<S::Error>> {
-        let layer_ids = self.residency.unloaded_layer_ids().cloned().collect();
+        let layer_ids: Vec<LayerId> = self.residency.unloaded_layer_ids().cloned().collect();
         self.load_layers(source, layer_ids)
     }
 
@@ -182,11 +177,13 @@ impl EngineSession {
     pub fn load_layers<S: LayerSource>(
         &mut self,
         source: &mut S,
-        layer_ids: Vec<LayerId>,
+        layer_ids: impl IntoIterator<Item = LayerId>,
     ) -> Result<(), LoadError<S::Error>> {
-        let mut missing = self.residency.requested_unloaded(layer_ids);
-        missing.sort();
-        missing.dedup();
+        let missing: Vec<LayerId> = self
+            .residency
+            .requested_unloaded(layer_ids)
+            .into_iter()
+            .collect();
         if missing.is_empty() {
             return Ok(());
         }
@@ -293,45 +290,11 @@ impl EngineSession {
         if layer_ids.is_empty() {
             return Ok(BTreeSet::new());
         }
-        let mut dependents: BTreeSet<GlyphId> = source
-            .dependents(layer_ids)
-            .map_err(LoadError::Source)?
-            .into_iter()
-            .collect();
-        // Loaded composites may use the glyph through edits not persisted yet.
-        for base in layer_ids
-            .iter()
-            .filter_map(|layer_id| self.font.glyph_id_by_layer(layer_id))
-        {
-            dependents.extend(
-                self.font
-                    .layers_using_component_base(&base)
-                    .filter_map(|layer_id| self.font.glyph_id_by_layer(layer_id)),
-            );
-        }
+        let mut dependents = self.font.dependent_glyph_ids(layer_ids);
+        // Loaded composites may use the glyph through edits not persisted
+        // yet, so the source's answer only adds to the font's.
+        dependents.extend(source.dependents(layer_ids).map_err(LoadError::Source)?);
         Ok(dependents)
-    }
-
-    /// Bases of `glyph_id`'s loaded components.
-    fn loaded_bases(&self, glyph_id: &GlyphId) -> Vec<GlyphId> {
-        self.font
-            .glyph(glyph_id)
-            .into_iter()
-            .flat_map(|glyph| glyph.layers().values())
-            .flat_map(|layer| {
-                layer
-                    .components_iter()
-                    .map(shift_font::Component::base_glyph_id)
-            })
-            .collect()
-    }
-
-    fn layer_ids_of(&self, glyph_ids: &[GlyphId]) -> Vec<LayerId> {
-        glyph_ids
-            .iter()
-            .filter_map(|glyph_id| self.font.glyph(glyph_id))
-            .flat_map(Glyph::layer_ids)
-            .collect()
     }
 
     fn staged(&self, font: Font, applied: AppliedIntents) -> Result<StagedEdit, EngineError> {

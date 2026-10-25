@@ -444,6 +444,21 @@ impl FontChangeSet {
             .collect()
     }
 
+    /// Every layer this changeset creates, updates or deletes, in change
+    /// order: what replaying it, for undo or redo, reads.
+    pub fn changed_layer_ids(&self) -> IndexSet<LayerId> {
+        self.entity_changes()
+            .into_iter()
+            .filter_map(|entity| match entity {
+                FontEntityChange::Layer { change, .. } => Some(match change {
+                    EntityChange::Created(layer) | EntityChange::Deleted(layer) => layer.id(),
+                    EntityChange::Updated { after, .. } => after.id(),
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The layers this changeset writes, in change order.
     pub fn written_layers(&self) -> impl Iterator<Item = &GlyphLayer> {
         self.changes.iter().flat_map(FontChange::written_layers)
