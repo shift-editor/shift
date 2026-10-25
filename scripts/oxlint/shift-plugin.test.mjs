@@ -92,6 +92,20 @@ describe("shift/no-editor-internals-in-tests", () => {
     assert.deepEqual(lines, [3, 4, 5, 6, 7, 7]);
   });
 
+  it("recognises TestEditor imported through the testing barrel", () => {
+    const lines = reportedLines(
+      "no-editor-internals-in-tests",
+      [
+        'import { TestEditor } from "@/testing";',
+        "declare const editor: TestEditor;",
+        "editor.scene.nodes();",
+      ].join("\n"),
+      "Zoom.test.ts",
+    );
+
+    assert.deepEqual(lines, [3]);
+  });
+
   it("allows public readers, and files that don't use TestEditor", () => {
     const publicReaders = reportedLines(
       "no-editor-internals-in-tests",
@@ -102,6 +116,8 @@ describe("shift/no-editor-internals-in-tests", () => {
         "editor.selectionBounds();",
         "editor.tool?.state.type;",
         "editor.font.recordForName('A');",
+        "declare const coords: { scene: { x: number } };",
+        "const scene = coords.scene;",
       ].join("\n"),
       "Pen.test.ts",
     );

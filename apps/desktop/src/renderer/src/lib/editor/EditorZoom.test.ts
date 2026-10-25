@@ -23,7 +23,7 @@ describe("viewport zoom actions", () => {
   });
 
   it("centres all scene content when zooming to fit", () => {
-    const nodeBounds = editor.scene.nodes().flatMap((node) => editor.nodeBounds(node) ?? []);
+    const nodeBounds = editor.sceneNodes().flatMap((node) => editor.nodeBounds(node) ?? []);
     const bounds = nodeBounds.reduce<Bounds>(
       (union, next) => Bounds.union(union, next),
       nodeBounds[0]!,

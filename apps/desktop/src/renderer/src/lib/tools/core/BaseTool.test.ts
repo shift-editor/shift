@@ -106,11 +106,14 @@ describe("BaseTool contract", () => {
   it("permanent disposal severs computed dependencies", () => {
     const cursorSourceCell = signal<CursorType>({ type: "default" });
     const disposableTool = new DisposableTestTool(editor, cursorSourceCell);
+    // A tool's computed cursor signal is the contract under test, not an editor internal.
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests
     expect(disposableTool.cursorCell.value).toEqual({ type: "default" });
 
     disposableTool.dispose();
     cursorSourceCell.set({ type: "text" });
 
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests
     expect(disposableTool.cursorCell.value).toEqual({ type: "default" });
   });
 

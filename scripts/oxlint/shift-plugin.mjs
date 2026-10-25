@@ -1095,6 +1095,11 @@ export default {
      * editor is restructured even if behaviour is unchanged. Observe through a
      * TestEditor helper instead, so a refactor updates the harness, not the
      * tests. Applies to `.test.` files that import TestEditor.
+     *
+     * Internal names are flagged only when the test reads through them
+     * (`editor.scene.nodes()`, `editor.nodeDefinition("glyph")`), so a field
+     * that shares a name (`coords.scene`) or a value handed to production
+     * wiring is not.
      */
     "no-editor-internals-in-tests": {
       meta: {
@@ -1127,14 +1132,20 @@ export default {
 
         return {
           ImportDeclaration(node) {
-            const source = node.source && node.source.value;
-            if (typeof source === "string" && source.endsWith("TestEditor")) usesTestEditor = true;
+            for (const specifier of node.specifiers ?? []) {
+              if (specifier.imported?.name === "TestEditor") usesTestEditor = true;
+            }
           },
           MemberExpression(node) {
             if (node.computed || node.property.type !== "Identifier") return;
             const name = node.property.name;
 
+            const readThrough =
+              (node.parent?.type === "MemberExpression" && node.parent.object === node) ||
+              (node.parent?.type === "CallExpression" && node.parent.callee === node);
+
             if (INTERNALS.has(name)) {
+              if (!readThrough) return;
               pending.push({ node: node.property, messageId: "internal", data: { name } });
             } else if (name.length > 4 && name.endsWith("Cell")) {
               pending.push({ node: node.property, messageId: "signal", data: { name } });
