@@ -110,6 +110,16 @@ impl SourceKerning {
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
+
+    /// Returns the first of `candidates` this source authors, with its value.
+    pub(crate) fn first_authored(&self, candidates: &[KerningPair]) -> Option<ResolvedKerning> {
+        candidates.iter().find_map(|pair| {
+            self.value(pair).map(|value| ResolvedKerning {
+                pair: pair.clone(),
+                value,
+            })
+        })
+    }
 }
 
 impl From<Vec<(KerningPair, f64)>> for SourceKerning {
@@ -426,9 +436,8 @@ impl Kerning {
     /// Resolves the kerning between `first` followed by `second` at
     /// `source_id`.
     ///
-    /// The most specific authored pair wins, in UFO order: glyph and glyph,
-    /// then glyph and the second's group, then the first's group and glyph,
-    /// then group and group. Returns `None` when no pair applies, which means
+    /// The most specific authored pair wins, in the order of
+    /// [`Self::candidates`]. Returns `None` when no pair applies, which means
     /// no adjustment at this source.
     pub fn resolve(
         &self,
@@ -437,6 +446,37 @@ impl Kerning {
         second: &GlyphId,
     ) -> Option<ResolvedKerning> {
         let source = self.source(source_id)?;
+        let candidates = self.candidates(first, second);
+        source.first_authored(&candidates)
+    }
+
+    /// Returns the pair an edit to the kerning between `first` followed by
+    /// `second` at `source_id` changes: the one that applies there, or else
+    /// the most general one their groups allow, at zero.
+    pub fn editable_pair(
+        &self,
+        source_id: &SourceId,
+        first: &GlyphId,
+        second: &GlyphId,
+    ) -> ResolvedKerning {
+        let mut candidates = self.candidates(first, second);
+        if let Some(resolved) = self
+            .source(source_id)
+            .and_then(|source| source.first_authored(&candidates))
+        {
+            return resolved;
+        }
+        let pair = candidates
+            .pop()
+            .unwrap_or_else(|| KerningPair::glyphs(first.clone(), second.clone()));
+        ResolvedKerning { pair, value: 0.0 }
+    }
+
+    /// Returns the pairs that could supply the kerning between `first`
+    /// followed by `second`, most specific first, in UFO order: glyph and
+    /// glyph, then glyph and the second's group, then the first's group and
+    /// glyph, then group and group. Groups the glyphs are not in are left out.
+    pub fn candidates(&self, first: &GlyphId, second: &GlyphId) -> Vec<KerningPair> {
         let first_glyph = KerningSide::Glyph(first.clone());
         let second_glyph = KerningSide::Glyph(second.clone());
         let first_group = self
@@ -446,21 +486,18 @@ impl Kerning {
             .group_of(KerningPosition::Second, second)
             .map(|group_id| KerningSide::Group(group_id.clone()));
 
-        let candidates = [
-            Some((first_glyph.clone(), second_glyph.clone())),
-            second_group.clone().map(|group| (first_glyph, group)),
-            first_group.clone().map(|group| (group, second_glyph)),
-            first_group.zip(second_group),
-        ];
+        let mut candidates = Vec::with_capacity(4);
+        candidates.push(KerningPair::new(first_glyph.clone(), second_glyph.clone()));
+        if let Some(group) = &second_group {
+            candidates.push(KerningPair::new(first_glyph, group.clone()));
+        }
+        if let Some(group) = &first_group {
+            candidates.push(KerningPair::new(group.clone(), second_glyph));
+        }
+        if let (Some(first), Some(second)) = (first_group, second_group) {
+            candidates.push(KerningPair::new(first, second));
+        }
         candidates
-            .into_iter()
-            .flatten()
-            .find_map(|(first, second)| {
-                let pair = KerningPair::new(first, second);
-                source
-                    .value(&pair)
-                    .map(|value| ResolvedKerning { pair, value })
-            })
     }
 
     /// Returns `true` when the font has no groups and no pair values.
@@ -616,6 +653,48 @@ mod tests {
         assert_eq!(value("Aacute", "V"), Some(-30.0));
         assert_eq!(value("Aacute", "W"), Some(-40.0));
         assert_eq!(value("V", "A"), None);
+    }
+
+    #[test]
+    fn an_edit_changes_the_pair_that_applies() {
+        let (mut kerning, source_id) = sample();
+        let exception = KerningPair::new(
+            KerningSide::Glyph(glyph("A")),
+            KerningSide::Group(group_id("V")),
+        );
+        kerning.set_value(source_id.clone(), exception.clone(), -20.0);
+
+        let edited = kerning.editable_pair(&source_id, &glyph("A"), &glyph("W"));
+
+        assert_eq!(
+            edited,
+            ResolvedKerning {
+                pair: exception,
+                value: -20.0
+            }
+        );
+    }
+
+    #[test]
+    fn an_edit_where_no_pair_applies_changes_the_most_general_pair_at_zero() {
+        let (kerning, _) = sample();
+        let bold = SourceId::from_raw("bold");
+
+        let grouped = kerning.editable_pair(&bold, &glyph("A"), &glyph("V"));
+        let ungrouped = kerning.editable_pair(&bold, &glyph("A"), &glyph("T"));
+
+        assert_eq!(
+            grouped.pair,
+            KerningPair::groups(group_id("A"), group_id("V"))
+        );
+        assert_eq!(grouped.value, 0.0);
+        assert_eq!(
+            ungrouped.pair,
+            KerningPair::new(
+                KerningSide::Group(group_id("A")),
+                KerningSide::Glyph(glyph("T"))
+            )
+        );
     }
 
     #[test]
