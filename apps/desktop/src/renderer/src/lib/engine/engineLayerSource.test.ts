@@ -19,11 +19,13 @@ import { layerReaderHost } from "../../../../preload/layerReaders";
 import { engineLayerSource } from "./engineLayerSource";
 
 /**
- * The window's engine and the native workspace, given the same intent on the
- * same store, return the same layers: the engine replaces the renderer's own
- * copy of the editing rules without changing what an edit does.
+ * The window's engine edits a real store through the preload's reader: the
+ * directory opens it, layers load on the edit that reads them, and each
+ * touched layer comes back in the echo's shape. The editing rules themselves
+ * are shift-font's, tested there and in shift-engine; this covers the wiring.
+ * The native bridge only writes the store the engine reads.
  */
-describe("the editing engine edits as the native workspace does", () => {
+describe("the window's engine edits from the store", () => {
   let dir: string;
   let bridge: ShiftBridge;
   let engine: EngineSession;
@@ -32,7 +34,7 @@ describe("the editing engine edits as the native workspace does", () => {
   let pointIds: PointId[];
 
   beforeEach(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), "shift-engine-parity-"));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "shift-engine-source-"));
     const storePath = path.join(dir, "working.sqlite");
     bridge = createBridge();
     bridge.createUntitledWorkspace(storePath);
@@ -78,32 +80,36 @@ describe("the editing engine edits as the native workspace does", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  /** Applies `intent` to the engine, then to the workspace, and returns both results. */
-  function both(intent: FontIntent) {
-    const fromEngine = engine.apply([intent]).find((layer) => layer.layerId === layerId);
-    const fromNative = bridge.apply([intent]).layers.find((layer) => layer.layerId === layerId);
-    return { fromEngine, fromNative };
+  /** The layer `intent` leaves `id` as, from the engine. */
+  function applied(intent: FontIntent, id: LayerId = layerId) {
+    return engine.apply([intent]).find((layer) => layer.layerId === id);
   }
 
-  it("moves points to the same values", () => {
-    const { fromEngine, fromNative } = both({
+  /** Whether `values` holds the coordinate pair `x, y`. */
+  function holdsPair(values: Float64Array, x: number, y: number): boolean {
+    return values.some((value, index) => value === x && values[index + 1] === y);
+  }
+
+  it("loads the edited layer and returns its moved values", () => {
+    const layer = applied({
       kind: "movePoints",
       movePoints: { layerId, pointIds: [pointIds[1]!], coords: [175, 260] },
     });
 
-    expect(fromEngine?.structural).toBe(false);
-    expect([...fromEngine!.values]).toEqual([...fromNative!.values]);
+    expect(layer?.structural).toBe(false);
+    expect(holdsPair(layer!.values, 175, 260)).toBe(true);
   });
 
-  it("removes points to the same structure and values", () => {
-    const { fromEngine, fromNative } = both({
+  it("returns a structural change with the new structure", () => {
+    const layer = applied({
       kind: "removePoints",
       removePoints: { layerId, pointIds: [pointIds[0]!] },
     });
 
-    expect(fromEngine?.structural).toBe(true);
-    expect(fromEngine?.structure).toEqual(fromNative?.structure);
-    expect([...fromEngine!.values]).toEqual([...fromNative!.values]);
+    expect(layer?.structural).toBe(true);
+    expect(layer?.structure.contours[0]?.points.map((point) => point.id)).toEqual(
+      pointIds.slice(1),
+    );
   });
 
   it("moves the composites attached to a moved anchor", async () => {
@@ -155,16 +161,16 @@ describe("the editing engine edits as the native workspace does", () => {
     engine.dispose();
     engine = await openEngine();
 
-    const intent: FontIntent = {
-      kind: "moveAnchors",
-      moveAnchors: { layerId: base.layerId, anchorIds: [top], coords: [260, 720] },
-    };
-    const fromEngine = engine.apply([intent]).find((layer) => layer.layerId === composite.layerId);
-    const fromNative = bridge
-      .apply([intent])
-      .layers.find((layer) => layer.layerId === composite.layerId);
+    const layer = applied(
+      {
+        kind: "moveAnchors",
+        moveAnchors: { layerId: base.layerId, anchorIds: [top], coords: [260, 720] },
+      },
+      composite.layerId,
+    );
 
-    expect(fromEngine, "the engine moves the composite").toBeDefined();
-    expect([...fromEngine!.values]).toEqual([...fromNative!.values]);
+    // The mark's `_top` (50, 0) now sits on the base's moved `top` (260, 720).
+    expect(layer, "the engine loads and moves the composite").toBeDefined();
+    expect(holdsPair(layer!.values, 210, 720)).toBe(true);
   });
 });
