@@ -107,13 +107,14 @@ describe("kerning edits", () => {
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-105);
   });
 
-  it("shows an undo queued behind a pending edit once it lands", async () => {
+  it("shows an undo right after an edit at once, before either is persisted", async () => {
     const { stack, font, t, a, lightCondensed } = await openMutatorSans();
     const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
 
     font.setKerningValues([kerningValueEdit(lightCondensed, pair, -90)], "Change kerning");
-    const undone = stack.editCoordinator.undo();
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-90);
+    const undone = stack.editCoordinator.undo();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
 
     await undone;
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);

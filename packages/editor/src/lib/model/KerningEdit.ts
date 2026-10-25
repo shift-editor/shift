@@ -1,19 +1,19 @@
 import type { KerningValueEdit } from "@shift/types";
 import type { WorkspaceEditCoordinator } from "../../types/font";
 import type { Kerning } from "./Kerning";
-import type { PendingState } from "./PendingState";
+import type { PreviewedState } from "./PreviewedState";
 
 /**
  * One reversible preview and commit cycle that sets or removes kerning values.
  *
  * @remarks
  * Like a sidebearing edit: previews show at once through the font's kerning,
- * and committing submits one undoable `setKerningValues` intent whose values
- * stay visible until the workspace confirms them. Construction opens the
- * kerning's single edit slot; finish with {@link commit} or {@link discard}.
+ * and committing pushes one undoable `setKerningValues` intent, which the
+ * window's engine applies in the same frame. Construction opens the kerning's
+ * single edit slot; finish with {@link commit} or {@link discard}.
  */
 export class KerningEdit {
-  readonly #state: PendingState<Kerning, KerningValueEdit>;
+  readonly #state: PreviewedState<Kerning, KerningValueEdit>;
   readonly #coordinator: WorkspaceEditCoordinator;
 
   #edits: readonly KerningValueEdit[] = [];
@@ -21,7 +21,7 @@ export class KerningEdit {
 
   /** @throws {Error} When another kerning edit is open. */
   constructor(
-    state: PendingState<Kerning, KerningValueEdit>,
+    state: PreviewedState<Kerning, KerningValueEdit>,
     coordinator: WorkspaceEditCoordinator,
   ) {
     this.#state = state;
@@ -42,22 +42,16 @@ export class KerningEdit {
     this.#closed = true;
 
     const edits = this.#edits;
-    if (edits.length === 0) {
-      this.#state.cancelEdit();
-      return;
-    }
-
     try {
-      const editId = this.#coordinator.transaction(label, () =>
+      if (edits.length === 0) return;
+      this.#coordinator.transaction(label, () =>
         this.#coordinator.push({
           kind: "setKerningValues",
           setKerningValues: { edits: [...edits] },
         }),
       );
-      this.#state.finishEdit(editId, edits);
-    } catch (error) {
-      this.#state.cancelEdit();
-      throw error;
+    } finally {
+      this.#state.endEdit();
     }
   }
 
@@ -65,6 +59,6 @@ export class KerningEdit {
   discard(): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.#state.cancelEdit();
+    this.#state.endEdit();
   }
 }

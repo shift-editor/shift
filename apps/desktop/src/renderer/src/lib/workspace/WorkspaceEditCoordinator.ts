@@ -191,7 +191,6 @@ export class WorkspaceEditCoordinator {
         // and show each layer as it was.
         this.#transaction = null;
         this.#engine.cancelEdit();
-        this.#store.rollbackEdit(id);
         this.#store.restoreRecords(records);
         this.#store.publishLayers(before.values().toArray());
         throw error;

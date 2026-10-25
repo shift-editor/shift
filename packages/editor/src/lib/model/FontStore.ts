@@ -40,7 +40,7 @@ import type { FontRecordIndex, FontStoreOptions, GlyphSourceKey } from "../../ty
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
 import { GlyphLayerState } from "./GlyphLayerState";
 import { Kerning } from "./Kerning";
-import { PendingState } from "./PendingState";
+import { PreviewedState } from "./PreviewedState";
 import type { Glyph } from "./Glyph";
 import type { EngineEdit } from "../wasm/engine";
 
@@ -63,7 +63,7 @@ export interface GlyphInvalidation {
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #kerning: PendingState<Kerning, KerningValueEdit>;
+  readonly #kerning: PreviewedState<Kerning, KerningValueEdit>;
   readonly #committedRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
@@ -122,16 +122,16 @@ export class FontStore {
     const confirmedKerning = computed(() => Kerning.from(kerningSnapshot.value), {
       name: "fontStore.confirmedKerning",
     });
-    this.#kerning = new PendingState(confirmedKerning, (kerning, edits) =>
+    this.#kerning = new PreviewedState(confirmedKerning, (kerning, edits) =>
       kerning.withEdits(edits),
     );
   }
 
   /**
-   * The font's kerning as the renderer shows it: the workspace's, with value
-   * edits not yet confirmed and an open kerning edit's preview over it.
+   * The font's kerning as the renderer shows it: as the window's engine left
+   * it, with an open kerning edit's preview over it.
    */
-  get kerning(): PendingState<Kerning, KerningValueEdit> {
+  get kerning(): PreviewedState<Kerning, KerningValueEdit> {
     return this.#kerning;
   }
 
@@ -193,7 +193,7 @@ export class FontStore {
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
-      this.#kerning.reset();
+      this.#kerning.endEdit();
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
@@ -208,7 +208,7 @@ export class FontStore {
 
   replaceFont(snapshot: FontSnapshot): void {
     batch(() => {
-      this.#kerning.reset();
+      this.#kerning.endEdit();
       this.#indexCell.set(fontRecordIndex(snapshot));
       this.#font.set(snapshot);
       this.#workspace.set(null);
@@ -273,11 +273,6 @@ export class FontStore {
         this.#projectionCell(projection.glyphId).set(projection);
       }
     });
-  }
-
-  /** Restores the kerning values a throwing renderer transaction edited. */
-  rollbackEdit(editId: PendingEditId): void {
-    this.#kerning.rollback(editId);
   }
 
   /**
@@ -370,8 +365,6 @@ export class FontStore {
       // only glyph records, which it cannot build, come from their echo.
       const records = editId === null ? applied.next : glyphRecordsOf(applied.next);
       if (records) this.#applyRecords(records);
-      // The echo now carries this edit's kerning values, if it had any.
-      if (editId !== null) this.#kerning.confirm(editId);
 
       const index = this.#indexCell.peek();
       for (const layer of applied.layers) {
