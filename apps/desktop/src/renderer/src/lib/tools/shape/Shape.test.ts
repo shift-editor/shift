@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
 import { Ellipse, Rectangle } from "@shift/editor/tools";
 import { Bounds, Mat, Rect } from "@shift/geo";
-import { ContourPath } from "@shift/editor/testing";
+import { ContourPath } from "@shift/editor/rendering";
 import { segmentContour } from "@shift/glyph-state";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^); asserts

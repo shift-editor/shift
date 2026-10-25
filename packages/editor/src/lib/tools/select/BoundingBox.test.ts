@@ -5,7 +5,7 @@ import {
   hitTestResize,
   hitTestRotationZones,
   SELECT_BOUNDING_BOX_STYLE,
-} from "@shift/editor/testing";
+} from "./BoundingBox";
 
 const RECT: Rect2D = {
   x: 100,

@@ -5,11 +5,12 @@
  * glyphs A/B/C with distinct advances, and real triangle geometry on A so
  * outline bounds flow through positioning. No fakes; tests assert against
  * values read back from the workspace, not hardcoded advances.
+ *
+ * The session is a preview, whose text is never shaped, so every layout
+ * places each paragraph literally, without anchor attachment.
  */
-import { signal } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
-import { TextLayout, literalRun } from "@shift/editor/testing";
-import type { ParagraphItem, SegmentedRun, TextItem } from "@shift/editor/text";
+import type { TextItem } from "@shift/editor/text";
 
 const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
   ["A", 65, 500],
@@ -18,7 +19,7 @@ const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
 ];
 
 export async function layoutTestEditor(): Promise<TestEditor> {
-  const editor = new TestEditor();
+  const editor = new TestEditor("preview");
   await editor.startSession();
 
   for (const [name, unicode, advance] of GLYPHS) {
@@ -45,19 +46,10 @@ export async function layoutTestEditor(): Promise<TestEditor> {
   return editor;
 }
 
-export function ltrRun(
-  editor: TestEditor,
-  items: readonly ParagraphItem[],
-  clusterStart = 0,
-): SegmentedRun {
-  return literalRun({ items, clusterStart }, editor.font);
-}
-
-export function makeLayout(items: readonly TextItem[], editor: TestEditor): TextLayout {
-  return new TextLayout({
-    items,
-    origin: { x: 0, y: 0 },
-    editor,
-    externalLocation: signal(editor.font.defaultLocation()),
-  });
+/** Creates a text run of `items` and returns the layout the editor gives it. */
+export function makeLayout(items: readonly TextItem[], editor: TestEditor) {
+  const run = editor.text.createRun(items);
+  const layout = editor.text.layoutCell(run.id).peek();
+  if (!layout) throw new Error("Expected a layout for the new text run");
+  return layout;
 }

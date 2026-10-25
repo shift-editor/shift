@@ -5,9 +5,11 @@ import type { Point2D } from "@shift/geo";
 import { isPointId, type ComponentId, type GlyphName, type PointId } from "@shift/types";
 import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import { SELECT_BOUNDING_BOX_STYLE } from "@shift/editor/testing";
 import { Select } from "@shift/editor/tools";
 import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@shift/editor/rendering";
+
+/** How far diagonally outside a selection corner the user presses to rotate, in screen pixels. */
+const ROTATE_GRAB_OFFSET_PX = 8;
 
 function addClosedContour(layer: GlyphLayer, points: readonly Point2D[]): void {
   const contourId = layer.addContour();
@@ -627,7 +629,7 @@ describe("Select tool", () => {
       const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
 
-      const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
+      const offset = ROTATE_GRAB_OFFSET_PX;
       await editor.dragLocal({
         down: { x: bounds.right + offset, y: bounds.bottom + offset },
         start: { x: bounds.right + offset + 40, y: bounds.bottom + offset + 40 },
@@ -1091,8 +1093,8 @@ describe("Select tool", () => {
         if (!rect || !bounds || !node) throw new Error("Expected component bounding box");
 
         const downScreen = screenPoint(
-          rect.right + SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
-          rect.top - SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx,
+          rect.right + ROTATE_GRAB_OFFSET_PX,
+          rect.top - ROTATE_GRAB_OFFSET_PX,
         );
         const down = editor.toLocal(node, editor.screenToScene(downScreen));
         const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };

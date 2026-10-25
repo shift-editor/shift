@@ -3,7 +3,9 @@ import { Vec2, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import type { GlyphLayer } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import { SELECT_BOUNDING_BOX_STYLE } from "@shift/editor/testing";
+
+/** How far diagonally outside a selection corner the user presses to rotate, in screen pixels. */
+const ROTATE_GRAB_OFFSET_PX = 8;
 
 describe("Select bounding-box transforms preserve geometry outcomes", () => {
   let editor: TestEditor;
@@ -475,7 +477,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     async function rotateAcrossBottomEdge(): Promise<void> {
       const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
-      const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
+      const offset = ROTATE_GRAB_OFFSET_PX;
 
       await editor.dragLocal({
         down: { x: bounds.right + offset, y: bounds.bottom + offset },
@@ -500,7 +502,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
         { x: bounds.left, y: bounds.top },
         { x: bounds.right, y: bounds.bottom },
       );
-      const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
+      const offset = ROTATE_GRAB_OFFSET_PX;
       const down = { x: bounds.right + offset, y: bounds.bottom + offset };
       const end = Vec2.add(center, Vec2.rotate(Vec2.sub(down, center), (20 * Math.PI) / 180));
       const expected = Vec2.add(
@@ -537,7 +539,7 @@ describe("Select bounding-box transforms preserve geometry outcomes", () => {
     it("restores original positions when Escape cancels rotation", () => {
       const bounds = editor.selectionLocalRect();
       if (!bounds) throw new Error("Expected selection bounds");
-      const offset = SELECT_BOUNDING_BOX_STYLE.rotationZoneOffsetPx;
+      const offset = ROTATE_GRAB_OFFSET_PX;
       const down = editor.localToScreen({ x: bounds.right + offset, y: bounds.bottom + offset });
       const start = editor.localToScreen({
         x: bounds.right + offset + 4,

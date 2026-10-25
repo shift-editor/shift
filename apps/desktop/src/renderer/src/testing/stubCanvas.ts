@@ -1,25 +1,13 @@
 /**
- * Minimal CanvasRenderingContext2D + Canvas stub for perf benchmarks.
+ * Minimal CanvasRenderingContext2D stub for render surfaces in tests and perf benchmarks.
  *
  * All draw operations are no-ops — benchmarks measure computation cost,
  * not pixel output. The setup.ts Path2D stub handles path construction.
  */
 
-import { Mat } from "@shift/geo";
-import { Canvas } from "@shift/editor/testing";
-import type { CameraTransform } from "@shift/editor/testing";
-import { spaceTransform } from "@shift/editor/spaces";
-
 const noop = () => {};
 
-const DEFAULT_CAMERA: CameraTransform = {
-  view: spaceTransform<"scene", "screen">(Mat.Identity()),
-  zoom: 1,
-  logicalWidth: 1000,
-  logicalHeight: 800,
-};
-
-function createStubContext(): CanvasRenderingContext2D {
+export function createStubContext(): CanvasRenderingContext2D {
   return {
     canvas: { width: 1000, height: 800 },
     save: noop,
@@ -62,8 +50,4 @@ function createStubContext(): CanvasRenderingContext2D {
     textAlign: "start",
     textBaseline: "alphabetic",
   } as unknown as CanvasRenderingContext2D;
-}
-
-export function createStubCanvas(camera: CameraTransform = DEFAULT_CAMERA): Canvas {
-  return new Canvas(createStubContext(), camera);
 }

@@ -4,7 +4,7 @@ import { asAnchorId, type GlyphName, type TextItemId } from "@shift/types";
 import { PositionEdits } from "@shift/editor/model";
 import type { LocalPoint } from "@shift/editor/spaces";
 import { TestEditor } from "@/testing/TestEditor";
-import { createStubCanvas } from "@/testing/stubCanvas";
+import { createStubContext } from "@/testing/stubCanvas";
 import { proofText } from "@/testing/proofText";
 
 /**
@@ -69,7 +69,7 @@ function stubSurfaces() {
     canvas: element(),
     rect,
     dpr: 1,
-    ctx: createStubCanvas().ctx,
+    ctx: createStubContext(),
     width: 1000,
     height: 800,
   });

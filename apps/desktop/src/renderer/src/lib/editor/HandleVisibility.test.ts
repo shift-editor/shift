@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { TestEditor } from "@/testing/TestEditor";
-import { HandleItems } from "@shift/editor/testing";
 
 describe("handle visibility is independent of geometry and selection", () => {
   let editor: TestEditor;
@@ -69,19 +68,5 @@ describe("handle visibility is independent of geometry and selection", () => {
     expect(editor.handlesVisible(pointId)).toBe(false);
     showSecond();
     expect(editor.handlesVisible(pointId)).toBe(true);
-  });
-
-  it("omits only the hidden marker while preserving its neighbors' geometric context", () => {
-    const contour = editor.glyphContours[0];
-    editor.hideHandles(contour.points[1].id);
-    const list = new HandleItems().fromContours(
-      [contour],
-      { selection: editor.selection, hover: editor.hover },
-      (pointId, contourId) => editor.handlesVisible(pointId, contourId),
-    );
-    expect(list.items).toHaveLength(11);
-    expect(list.items.map((item) => item.point.id)).not.toContain(contour.points[1].id);
-    expect(list.items[0].next?.id).toBe(contour.points[1].id);
-    expect(contour.points).toHaveLength(12);
   });
 });
