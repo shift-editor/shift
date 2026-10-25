@@ -55,32 +55,32 @@ pub(crate) fn load_font_from_conn(
         apply_font_info(&mut font, info)?;
     }
 
-    let metric_definitions = load_metric_definitions(&conn)?;
+    let metric_definitions = load_metric_definitions(conn)?;
     if !metric_definitions.is_empty() {
         font.set_metric_definitions(metric_definitions)?;
     }
 
-    *font.features_mut() = load_feature_data(&conn)?;
-    *font.lib_mut() = load_lib_data(&conn, "font_lib", None)?;
-    *font.fontinfo_remainder_mut() = load_lib_data(&conn, "fontinfo_remainder", None)?;
-    *font.data_files_mut() = load_font_binaries(&conn, "data")?;
-    *font.images_mut() = load_font_binaries(&conn, "image")?;
+    *font.features_mut() = load_feature_data(conn)?;
+    *font.lib_mut() = load_lib_data(conn, "font_lib", None)?;
+    *font.fontinfo_remainder_mut() = load_lib_data(conn, "fontinfo_remainder", None)?;
+    *font.data_files_mut() = load_font_binaries(conn, "data")?;
+    *font.images_mut() = load_font_binaries(conn, "image")?;
 
-    for guideline in load_font_guidelines(&conn)? {
+    for guideline in load_font_guidelines(conn)? {
         font.add_guideline(guideline);
     }
 
-    for axis in load_axes(&conn)? {
+    for axis in load_axes(conn)? {
         font.add_axis(axis)?;
     }
-    font.set_axis_mappings(load_axis_mappings(&conn)?)?;
-    font.set_named_instances(load_named_instances(&conn)?)?;
+    font.set_axis_mappings(load_axis_mappings(conn)?)?;
+    font.set_named_instances(load_named_instances(conn)?)?;
 
-    for source in load_sources(&conn)? {
+    for source in load_sources(conn)? {
         font.add_source(source);
     }
 
-    if let Some(default_source_id) = load_default_source_id(&conn)? {
+    if let Some(default_source_id) = load_default_source_id(conn)? {
         font.set_default_source_id(default_source_id);
     }
 
@@ -88,7 +88,7 @@ pub(crate) fn load_font_from_conn(
         font.insert_glyph(glyph)?;
     }
 
-    *font.kerning_mut() = load_kerning(&conn)?;
+    *font.kerning_mut() = load_kerning(conn)?;
 
     Ok(font)
 }
