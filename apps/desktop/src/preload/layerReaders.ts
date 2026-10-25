@@ -1,6 +1,6 @@
 import type { LayerReader } from "shift-bridge";
 import type { LayerReaderHost } from "../shared/host/ShiftHost";
-import type { LayerStoreLocation } from "../shared/workspace/protocol";
+import type { FontStoreLocation } from "../shared/workspace/protocol";
 
 type LayerReaderClass = typeof LayerReader;
 
@@ -26,7 +26,7 @@ export function layerReaderHost(): LayerReaderHost {
   };
 
   return {
-    open: (location: LayerStoreLocation) => {
+    open: (location: FontStoreLocation) => {
       const LayerReaderClass = native();
       const opened =
         location.kind === "document"

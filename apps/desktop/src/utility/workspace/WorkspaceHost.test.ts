@@ -314,7 +314,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await shell.call("source.open", { path: retainedFontPath });
     const sync = await connectSyncLane();
 
-    expect(await sync.call("workspace.layerStore", undefined)).toBeNull();
+    expect(await sync.call("workspace.storeLocation", undefined)).toBeNull();
   });
 
   it("points a window's layer reader at an untitled workspace's store", async () => {
@@ -326,7 +326,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph",
     });
 
-    const location = await sync.call("workspace.layerStore", undefined);
+    const location = await sync.call("workspace.storeLocation", undefined);
     expect(location?.kind).toBe("working");
     const layers = layerReaderHost();
     const reader = layers.open(location!);
@@ -347,7 +347,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph",
     });
 
-    const location = await sync.call("workspace.layerStore", undefined);
+    const location = await sync.call("workspace.storeLocation", undefined);
     expect(location).toMatchObject({
       kind: "document",
       documentPath: fs.realpathSync(documentPath),

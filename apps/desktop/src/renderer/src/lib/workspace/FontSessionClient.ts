@@ -4,7 +4,7 @@ import type {
   FontSessionMode,
   FontSourceAtlasPageRequest,
   FontSourceSnapshot,
-  LayerStoreLocation,
+  FontStoreLocation,
   SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
@@ -404,10 +404,10 @@ export class FontSessionClient {
    *
    * @returns `null` for a preview, which has no store.
    */
-  async layerStore(): Promise<LayerStoreLocation | null> {
+  async storeLocation(): Promise<FontStoreLocation | null> {
     await this.connect();
 
-    return this.#require().call("workspace.layerStore", undefined);
+    return this.#require().call("workspace.storeLocation", undefined);
   }
 
   /**

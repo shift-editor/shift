@@ -3,7 +3,7 @@ import { documentWorkspaceTest as test, expect } from "./fixtures/electronApp";
 test("the window reads the open document's layers through its preload", async ({ page }) => {
   const read = await page.evaluate(async () => {
     const workspace = window.shift!;
-    const location = await workspace.layerStore();
+    const location = await workspace.storeLocation();
     if (!location) throw new Error("an authored document has a layer store");
     const record = workspace.font.glyphRecords().find((glyph) => glyph.layers.length > 0);
     if (!record) throw new Error("the fixture has a glyph with a layer");

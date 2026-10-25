@@ -1,7 +1,7 @@
 import type { CommandId, RendererCommandId } from "../commands";
 import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
-import type { FontSessionMode, LayerStoreLocation } from "../workspace/protocol";
+import type { FontSessionMode, FontStoreLocation } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AppConfigState, ThemeSetting } from "../config/config";
@@ -247,7 +247,7 @@ export interface LayerReaderHost {
    *
    * @throws {Error} when the store cannot be opened read-only.
    */
-  open: (location: LayerStoreLocation) => number;
+  open: (location: FontStoreLocation) => number;
   /**
    * The font's metadata and its glyph and layer directory, every layer a
    * placeholder, as named MessagePack: what the editing engine opens with.

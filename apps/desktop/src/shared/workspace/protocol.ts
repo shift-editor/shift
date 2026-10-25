@@ -184,18 +184,18 @@ export type ShellEventMap = {
  * renderer catches up by reading `workspace.snapshot`.
  */
 /**
- * Where an open workspace's store lives, so another process can read its
- * layers read-only: a document with its recovery overlay, or the working
- * store behind an untitled or imported workspace.
+ * Where an open workspace's font store lives, so another process can read
+ * it read-only (its directory and layers): a document with its recovery
+ * overlay, or the working store behind an untitled or imported workspace.
  */
-export type LayerStoreLocation =
+export type FontStoreLocation =
   | { kind: "document"; documentPath: string; recoveryPath: string }
   | { kind: "working"; storePath: string };
 
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   /** The open workspace's store, for the window's read-only layer reader; `null` for a preview. */
-  "workspace.layerStore": { request: void; response: LayerStoreLocation | null };
+  "workspace.storeLocation": { request: void; response: FontStoreLocation | null };
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
   "source.glyph": {
     request: { glyphId: GlyphId };
