@@ -58,7 +58,8 @@ impl StoreReader {
     }
 
     /// The content of `layer_ids`, validated against their directory rows as
-    /// [`crate::ShiftStore::load_glyph_layers`] validates them.
+    /// [`crate::ShiftStore::load_glyph_layers`] validates them, all from one
+    /// committed state of the store.
     ///
     /// # Errors
     ///
@@ -67,7 +68,7 @@ impl StoreReader {
         &self,
         layer_ids: &[font::LayerId],
     ) -> Result<Vec<font::GlyphLayer>, StoreError> {
-        load_glyph_layers_from_conn(&self.conn, layer_ids)
+        self.read(|conn| load_glyph_layers_from_conn(conn, layer_ids))
     }
 
     /// As [`crate::ShiftStore::referenced_glyph_closure`].
@@ -79,7 +80,7 @@ impl StoreReader {
         &self,
         roots: impl IntoIterator<Item = font::GlyphId>,
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        referenced_glyph_closure_from_conn(&self.conn, roots)
+        self.read(|conn| referenced_glyph_closure_from_conn(conn, roots))
     }
 
     /// As [`crate::ShiftStore::dependent_glyph_ids_for_layers`].
@@ -91,7 +92,19 @@ impl StoreReader {
         &self,
         layer_ids: &[font::LayerId],
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        dependent_glyph_ids_for_layers_from_conn(&self.conn, layer_ids)
+        self.read(|conn| dependent_glyph_ids_for_layers_from_conn(conn, layer_ids))
+    }
+
+    /// Runs `read` in one read transaction, so every query in it sees the
+    /// same committed state even while the writer commits in between.
+    fn read<T>(
+        &self,
+        read: impl FnOnce(&Connection) -> Result<T, StoreError>,
+    ) -> Result<T, StoreError> {
+        let snapshot = self.conn.unchecked_transaction()?;
+        let value = read(&snapshot)?;
+        snapshot.commit()?;
+        Ok(value)
     }
 }
 
@@ -129,6 +142,46 @@ mod tests {
         assert_eq!(
             store.load_glyph_layers(&layer_ids).unwrap().len(),
             layer_ids.len()
+        );
+    }
+
+    #[test]
+    fn one_read_sees_one_committed_state_while_the_writer_commits() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("working.sqlite");
+        let font = shift_font::test_support::sample_font();
+        let mut store = ShiftStore::open(&path).unwrap();
+        store.replace_font_state(&font).unwrap();
+        let reader = StoreReader::open_working_store(&path).unwrap();
+        let count = |conn: &Connection| -> Result<i64, StoreError> {
+            Ok(conn.query_row("SELECT COUNT(*) FROM glyph_layers", [], |row| row.get(0))?)
+        };
+
+        let (before, during) = reader
+            .read(|conn| {
+                let before = count(conn)?;
+                let mut grown = font.clone();
+                let source_id = grown.default_source_id().unwrap();
+                let glyph_id = grown.insert_glyph(font::Glyph::new("added")).unwrap();
+                grown
+                    .insert_glyph_layer(
+                        glyph_id,
+                        font::GlyphLayer::new(font::LayerId::new(), source_id),
+                    )
+                    .unwrap();
+                store.replace_font_state(&grown).unwrap();
+                Ok((before, count(conn)?))
+            })
+            .unwrap();
+
+        assert_eq!(
+            during, before,
+            "a commit mid-read stays invisible to that read"
+        );
+        assert_eq!(
+            reader.read(count).unwrap(),
+            before + 1,
+            "the next read sees it"
         );
     }
 }
