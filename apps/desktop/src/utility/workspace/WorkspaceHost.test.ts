@@ -23,10 +23,9 @@ import {
   type Unicode,
 } from "@shift/types";
 import {
-  sameFontStoreLocation,
+  FontStoreLocation,
   type ByteStreamControl,
   type ByteStreamMessage,
-  type FontStoreLocation,
   type ShellCallMap,
   type ShellEventMap,
   type SlugAtlasOrigin,
@@ -142,7 +141,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const location = await sync.call("workspace.storeLocation", undefined);
     if (!location) throw new Error("the workspace has no store to edit");
     const held = engines.get(sync);
-    if (held && sameFontStoreLocation(held.location, location)) return held.session;
+    if (held && FontStoreLocation.equals(held.location, location)) return held.session;
     if (held) disposeEngine(held);
 
     const reader = layerReaders.open(location);

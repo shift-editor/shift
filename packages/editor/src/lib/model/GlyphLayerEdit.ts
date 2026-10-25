@@ -42,49 +42,45 @@ export class GlyphLayerEdit {
   }
 
   addContour(closed: boolean): ContourId {
-    this.#assertOpen();
-
-    const contourId = mintContourId();
-    this.#contours.set(contourId, closed);
-    this.#preview();
-    return contourId;
+    return this.#step(() => {
+      const contourId = mintContourId();
+      this.#contours.set(contourId, closed);
+      return contourId;
+    });
   }
 
   addPoints(contourId: ContourId, points: readonly NewPoint[]): readonly PointId[] {
-    this.#assertOpen();
-    if (points.length === 0) return [];
-
-    const seeds = points.map((point) => ({ id: mintPointId(), ...point }));
-    const previous = this.#points.get(contourId) ?? [];
-    this.#points.set(contourId, [...previous, ...seeds]);
-    this.#preview();
-    return seeds.map((point) => point.id);
+    if (points.length === 0) {
+      this.#assertOpen();
+      return [];
+    }
+    return this.#step(() => {
+      const seeds = points.map((point) => ({ id: mintPointId(), ...point }));
+      const previous = this.#points.get(contourId) ?? [];
+      this.#points.set(contourId, [...previous, ...seeds]);
+      return seeds.map((point) => point.id);
+    });
   }
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
-    this.#assertOpen();
-
-    const anchor: AnchorSeed = {
-      id: mintAnchorId(),
-      x: position.x,
-      y: position.y,
-      ...(name === null ? {} : { name }),
-    };
-    this.#anchors.set(anchor.id, anchor);
-    this.#preview();
-    return anchor.id;
+    return this.#step(() => {
+      const anchor: AnchorSeed = {
+        id: mintAnchorId(),
+        x: position.x,
+        y: position.y,
+        ...(name === null ? {} : { name }),
+      };
+      this.#anchors.set(anchor.id, anchor);
+      return anchor.id;
+    });
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
-    this.#assertOpen();
-    this.#smoothPoints.set(pointId, smooth);
-    this.#preview();
+    this.#step(() => this.#smoothPoints.set(pointId, smooth));
   }
 
   closeContour(contourId: ContourId): void {
-    this.#assertOpen();
-    this.#closedContours.add(contourId);
-    this.#preview();
+    this.#step(() => this.#closedContours.add(contourId));
   }
 
   setPositions(positions: GlyphLayerPositions): void {
@@ -118,6 +114,14 @@ export class GlyphLayerEdit {
     if (this.#closed) return;
     this.#closed = true;
     this.#state.cancelEdit();
+  }
+
+  /** Records one structural step of the open edit with `record`, then previews the gesture with it. */
+  #step<T>(record: () => T): T {
+    this.#assertOpen();
+    const result = record();
+    this.#preview();
+    return result;
   }
 
   /**

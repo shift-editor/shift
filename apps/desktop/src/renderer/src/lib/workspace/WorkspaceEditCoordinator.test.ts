@@ -179,7 +179,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     const events: WorkspaceEditEvent[] = [];
     stack.editCoordinator.onEdit((event) => events.push(event));
 
-    stack.failNextApply();
+    stack.failNextPersist();
     await expect(stack.editCoordinator.apply([createGlyph("B", 66)])).rejects.toThrow(
       "refused the write",
     );

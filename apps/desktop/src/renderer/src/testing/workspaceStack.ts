@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { MessageChannel, type MessagePort as NodeMessagePort } from "node:worker_threads";
 import {
   Channel,
+  isRequestEnvelope,
   nodePortTransport,
+  type ResponseEnvelope,
   type Transport,
   type TransportMessage,
 } from "@shared/workspace/channel";
 import { toTransportError } from "@shared/errors";
-import type { ShellCallMap, ShellEventMap } from "@shared/workspace/protocol";
+import type { ShellCallMap, ShellEventMap, SyncCallMap } from "@shared/workspace/protocol";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
 import { Font, FontStore } from "@shift/editor/model";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
@@ -30,7 +32,7 @@ export type WorkspaceStack = {
    * Makes the workspace fail the next edit it is sent, as a write the store
    * refuses would, without applying it.
    */
-  failNextApply(): void;
+  failNextPersist(): void;
   dispose(): void;
 };
 
@@ -57,7 +59,7 @@ export function createWorkspaceStack(): WorkspaceStack {
     transport: async () => {
       const lane = new MessageChannel();
       await shell.call("workspace.connect", undefined, [lane.port1]);
-      return refusingApplies(nodePortTransport(lane.port2), refusals);
+      return refusingPersists(nodePortTransport(lane.port2), refusals);
     },
   });
   const store = new FontStore();
@@ -98,7 +100,7 @@ export function createWorkspaceStack(): WorkspaceStack {
     async closeWorkspace(): Promise<void> {
       await shell.call("workspace.close", { discard: false });
     },
-    failNextApply(): void {
+    failNextPersist(): void {
       refusals.pending += 1;
     },
     dispose(): void {
@@ -111,12 +113,13 @@ export function createWorkspaceStack(): WorkspaceStack {
 }
 
 /**
- * `transport`, answering `refusals.pending` coming `workspace.apply` requests
- * with an error instead of sending them: a workspace failing an edit for a
- * reason the window's engine cannot see, such as a refused write.
+ * `transport`, answering `refusals.pending` coming `workspace.persist`
+ * requests with an error instead of sending them: a workspace failing an edit
+ * for a reason the window's engine cannot see, such as a refused write.
  */
-function refusingApplies(transport: Transport, refusals: { pending: number }): Transport {
+function refusingPersists(transport: Transport, refusals: { pending: number }): Transport {
   const listeners: ((message: TransportMessage) => void)[] = [];
+  const persist: keyof SyncCallMap = "workspace.persist";
   return {
     ...transport,
     onMessage(listener) {
@@ -124,10 +127,14 @@ function refusingApplies(transport: Transport, refusals: { pending: number }): T
       transport.onMessage(listener);
     },
     post(message, transfer) {
-      if (refusals.pending > 0 && isApplyRequest(message)) {
+      if (refusals.pending > 0 && isRequestEnvelope(message) && message.type === persist) {
         refusals.pending -= 1;
-        const error = toTransportError(new Error("the store refused the write"));
-        const response = { kind: "response", id: message.id, ok: false, error };
+        const response: ResponseEnvelope = {
+          kind: "response",
+          id: message.id,
+          ok: false,
+          error: toTransportError(new Error("the store refused the write")),
+        };
         queueMicrotask(() => {
           for (const listener of listeners) listener({ data: response, ports: [] });
         });
@@ -136,17 +143,4 @@ function refusingApplies(transport: Transport, refusals: { pending: number }): T
       transport.post(message, transfer);
     },
   };
-}
-
-function isApplyRequest(message: unknown): message is { id: string } {
-  return (
-    typeof message === "object" &&
-    message !== null &&
-    "kind" in message &&
-    message.kind === "request" &&
-    "type" in message &&
-    message.type === "workspace.persist" &&
-    "id" in message &&
-    typeof message.id === "string"
-  );
 }

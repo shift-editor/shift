@@ -41,9 +41,9 @@ import { signal } from "@shift/editor/signals";
  * Renderer side of the workspace sync lane.
  *
  * @remarks
- * `workspaceCell` is the renderer's latest workspace summary. `FontStore`
- * owns the renderer-local font model state; this client only
- * transports workspace calls and mirrors the summary for catch-up/recovery.
+ * `workspaceCell` is the workspace summary as of the latest connect, for the
+ * font model to open from. `FontStore` owns the renderer-local font model
+ * state after that; this client only transports workspace calls.
  */
 export type FontSessionClientOptions = {
   /**
@@ -111,7 +111,7 @@ export class FontSessionClient {
       saveState,
     });
     this.#setDocumentState(documentState);
-    return this.#fold(applied);
+    return applied;
   }
 
   async snapshot(): Promise<WorkspaceSnapshot | null> {
@@ -417,33 +417,6 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.shaperFont", { knownRevision });
-  }
-
-  #fold(applied: AppliedChange): AppliedChange {
-    const current = this.workspaceCell.peek();
-    if (!current) return applied;
-
-    const next = applied.next;
-    if (!next) return applied;
-
-    this.workspaceCell.set({
-      ...current,
-      metadata: next.metadata ?? current.metadata,
-      glyphs: next.glyphs ?? current.glyphs,
-      axes: next.axes ?? current.axes,
-      axisMappings: next.axisMappings ?? current.axisMappings,
-      axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
-      metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
-      sourceMetricsInterpolation: next.sourceMetricsInterpolation
-        ? (next.sourceMetricsInterpolation.snapshot ?? null)
-        : current.sourceMetricsInterpolation,
-      namedInstances: next.namedInstances ?? current.namedInstances,
-      languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
-      sources: next.sources ?? current.sources,
-      kerning: next.kerning ?? current.kerning,
-    });
-
-    return applied;
   }
 
   async #connect(): Promise<void> {

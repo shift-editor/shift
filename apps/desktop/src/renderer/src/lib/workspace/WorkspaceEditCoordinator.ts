@@ -531,7 +531,7 @@ export class WorkspaceEditCoordinator {
   async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
     this.#applyStatus.set("applying");
     const applied = await this.#session.persist(edit.changeSet, edit.saveState);
-    await this.#applyChange(applied, edit.id);
+    await this.#confirm(applied);
     return applied;
   }
 
@@ -557,8 +557,8 @@ export class WorkspaceEditCoordinator {
     return run;
   }
 
-  async #applyChange(applied: AppliedChange, editId: PendingEditId): Promise<void> {
-    const glyphIds = this.#store.confirmEdit(editId, applied);
+  async #confirm(applied: AppliedChange): Promise<void> {
+    const glyphIds = this.#store.confirmEdit(applied);
     if (glyphIds.length === 0) return;
 
     const projections = await this.#session.glyphProjections(glyphIds);

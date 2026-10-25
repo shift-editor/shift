@@ -1,5 +1,5 @@
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
-import { sameFontStoreLocation, type FontStoreLocation } from "@shared/workspace/protocol";
+import { FontStoreLocation } from "@shared/workspace/protocol";
 import type { FontIntent, GlyphId } from "@shift/types";
 import {
   loadEngine,
@@ -76,7 +76,7 @@ export class WindowEngine {
   async followStore(): Promise<void> {
     const opened = this.#opened;
     const location = await this.#storeLocation();
-    if (!opened || !location || sameFontStoreLocation(location, opened.location)) return;
+    if (!opened || !location || FontStoreLocation.equals(location, opened.location)) return;
 
     const previous = opened.reader;
     opened.reader = this.#layers.open(location);

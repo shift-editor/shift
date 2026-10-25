@@ -123,7 +123,7 @@ export class TestEditor extends Editor {
 
   /** Makes the workspace fail the next edit it is sent, as a refused write would. */
   failNextWorkspaceApply(): void {
-    this.#stack.failNextApply();
+    this.#stack.failNextPersist();
   }
 
   /** Flushes pending edits and saves to the current target. */
