@@ -265,6 +265,22 @@ impl EngineSession {
         staged.applied
     }
 
+    /// What applying `set` would leave, without keeping it: for a preview
+    /// shown while a gesture is under way. Loads what `set` reads, which stays
+    /// loaded; the font is otherwise unchanged.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::apply`].
+    pub fn preview<S: LayerSource>(
+        &mut self,
+        source: &mut S,
+        set: &FontIntentSet,
+    ) -> Result<AppliedIntents, ApplyError<S::Error>> {
+        self.load_for_intents(source, set)?;
+        Ok(self.stage_intents(set)?.applied)
+    }
+
     /// Loads what `set` reads, then stages and commits it.
     ///
     /// # Errors

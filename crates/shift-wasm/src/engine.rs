@@ -179,7 +179,35 @@ pub fn engine_apply(
     handle: u32,
     #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
 ) -> Result<Array, JsError> {
-    let wire: Vec<intents::FontIntent> = serde_wasm_bindgen::from_value(intents)?;
+    run_edit(handle, &intents, Edit::Keep)
+}
+
+/// Returns every layer applying `intents` would touch, as they would be,
+/// without keeping the edit: a preview for a gesture under way. What the
+/// intents read stays loaded.
+///
+/// # Errors
+///
+/// As [`engine_apply`].
+#[wasm_bindgen(js_name = enginePreview, unchecked_return_type = "EngineLayer[]")]
+pub fn engine_preview(
+    handle: u32,
+    #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
+) -> Result<Array, JsError> {
+    run_edit(handle, &intents, Edit::Discard)
+}
+
+/// What becomes of an edit once its touched layers are returned.
+#[derive(Clone, Copy)]
+enum Edit {
+    /// The session keeps it.
+    Keep,
+    /// The session stays as it was, apart from what loading added.
+    Discard,
+}
+
+fn run_edit(handle: u32, intents: &JsValue, edit: Edit) -> Result<Array, JsError> {
+    let wire: Vec<intents::FontIntent> = serde_wasm_bindgen::from_value(plain_arrays(intents)?)?;
     let set = FontIntentSet {
         intents: wire
             .into_iter()
@@ -187,14 +215,33 @@ pub fn engine_apply(
             .collect::<Result<_, _>>()?,
     };
     with_engine(handle, |engine| {
-        let applied = engine
-            .session
-            .apply(&mut HostLayers(&engine.source), &set)
-            .map_err(|error| match error {
-                ApplyError::Load(error) => JsError::new(&error.to_string()),
-                ApplyError::Engine(error) => JsError::new(&error.to_string()),
-            })?;
+        let source = &mut HostLayers(&engine.source);
+        let applied = match edit {
+            Edit::Keep => engine.session.apply(source, &set),
+            Edit::Discard => engine.session.preview(source, &set),
+        }
+        .map_err(|error| match error {
+            ApplyError::Load(error) => JsError::new(&error.to_string()),
+            ApplyError::Engine(error) => JsError::new(&error.to_string()),
+        })?;
         applied.layers.iter().map(engine_layer).collect()
+    })
+}
+
+/// Loads every layer of `glyph_ids` and of the glyphs their components use,
+/// ahead of the edits that will read them.
+///
+/// # Errors
+///
+/// Fails on an unknown handle or glyph id, or when the source fails.
+#[wasm_bindgen(js_name = enginePreload)]
+pub fn engine_preload(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError> {
+    let glyph_ids = intents::parse_id_list::<GlyphId>(&glyph_ids)?;
+    with_engine(handle, |engine| {
+        engine
+            .session
+            .load_glyph_closure(&mut HostLayers(&engine.source), glyph_ids)
+            .map_err(|error| JsError::new(&error.to_string()))
     })
 }
 
@@ -223,6 +270,41 @@ pub fn engine_release(handle: u32) {
     });
 }
 
+/// `intents` with each payload's typed-array fields copied into plain arrays.
+///
+/// The wire intent is internally tagged, so serde reads its payload through
+/// `deserialize_any`, which serde-wasm-bindgen cannot take a typed array to.
+/// The caller's intents stay as they were: the workspace reads them next.
+fn plain_arrays(intents: &JsValue) -> Result<JsValue, JsError> {
+    let copies = Array::new();
+    for intent in Array::from(intents).iter() {
+        let copy = Object::assign(&Object::new(), &Object::from(intent));
+        for entry in Object::entries(&copy).iter() {
+            let entry = Array::from(&entry);
+            let Some(payload) = entry.get(1).dyn_ref::<Object>().cloned() else {
+                continue;
+            };
+            let payload = Object::assign(&Object::new(), &payload);
+            for field in Object::entries(&payload).iter() {
+                let field = Array::from(&field);
+                if let Some(values) = field.get(1).dyn_ref::<Float64Array>() {
+                    set_value(&payload, &field.get(0), &Array::from(values))?;
+                }
+            }
+            set_value(&copy, &entry.get(0), &payload)?;
+        }
+        copies.push(&copy);
+    }
+    Ok(copies.into())
+}
+
+/// Sets `key` on `object`, which fails only on a frozen or proxied object.
+fn set_value(object: &Object, key: &JsValue, value: &JsValue) -> Result<(), JsError> {
+    Reflect::set(object, key, value)
+        .map(|_| ())
+        .map_err(|_| JsError::new(&format!("cannot set {key:?}")))
+}
+
 /// One touched layer as an `EngineLayer` object.
 fn engine_layer(touched: &TouchedLayer) -> Result<JsValue, JsError> {
     let state = GlyphState::from_layer(&touched.layer);
@@ -247,7 +329,5 @@ fn engine_layer(touched: &TouchedLayer) -> Result<JsValue, JsError> {
 }
 
 fn set(object: &Object, key: &str, value: &JsValue) -> Result<(), JsError> {
-    Reflect::set(object, &JsValue::from_str(key), value)
-        .map(|_| ())
-        .map_err(|_| JsError::new(&format!("cannot set {key}")))
+    set_value(object, &JsValue::from_str(key), value)
 }

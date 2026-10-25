@@ -3,6 +3,8 @@ import {
   engineApply,
   engineEvict,
   engineOpen,
+  enginePreload,
+  enginePreview,
   engineRelease,
   type EngineLayer,
   type EngineLayerSource,
@@ -47,6 +49,26 @@ export class EngineSession {
    */
   apply(intents: readonly FontIntent[]): EngineLayer[] {
     return engineApply(this.#handle, [...intents]);
+  }
+
+  /**
+   * Loads every layer of `glyphIds` and of the glyphs their components use,
+   * so the edits that read them load nothing.
+   *
+   * @throws When a glyph is unknown or the source fails.
+   */
+  preload(glyphIds: readonly GlyphId[]): void {
+    enginePreload(this.#handle, [...glyphIds]);
+  }
+
+  /**
+   * Every layer applying `intents` would touch, as it would be, without
+   * keeping the edit: a preview for a gesture under way.
+   *
+   * @throws As {@link EngineSession.apply}.
+   */
+  preview(intents: readonly FontIntent[]): EngineLayer[] {
+    return enginePreview(this.#handle, [...intents]);
   }
 
   /** Drops the loaded layers of `glyphIds`, so the next edit reads them from the store again. */

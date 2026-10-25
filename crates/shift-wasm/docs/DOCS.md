@@ -24,7 +24,7 @@ crates/shift-wasm/src/
   anchors.rs     anchorKind, propagateAnchors, followAnchors
   decomposition.rs   blendDecomposedGlyph: component outlines between masters of a decomposed glyph
   shaping.rs     registerShaper, setShaperGlyphs, shapeParagraphs (the `shaping` feature)
-  engine.rs      engineOpen, engineApply, engineEvict, engineRelease, EngineLayerSource (the `engine` feature)
+  engine.rs      engineOpen, engineApply, enginePreview, enginePreload, engineEvict, engineRelease, EngineLayerSource (the `engine` feature)
   variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
   names.rs       interned anchor names
   layout.rs      Reader, Writer, the Layout trait, and the layout! macros hot calls are declared with
@@ -83,7 +83,7 @@ Rust owns every rule the font compiler or format decides, and the editor and exp
 
 - **Blending** (`interpolateSourceValues`) runs over the live coordinate buffers every frame; it multiplies by weights and has no rule to drift.
 - **Kerning precedence** (`Kerning.resolve`) resolves against the per-frame pending-edit overlay, and syncing that overlay into the module would cost more than the rule. `Kerning.reference.test.ts` checks it against `Kerning::resolve`, with and without pending edits.
-- **Per-frame geometry**: component matrix compose and decompose (`Mat`), segment parsing and bounds (`Contour`, `Segment`), and whole-layer transforms (`LayerBuffers.transformLayer`) run on every drag frame over the live buffers. `Component.reference.test.ts`, `Contour.reference.test.ts`, and `LayerBuffers.reference.test.ts` check them against `DecomposedTransform`, `CurveSegmentIter` with `segment_bounds`, and `GlyphLayer::transform_layer`.
+- **Per-frame geometry**: component matrix compose and decompose (`Mat`), and segment parsing and bounds (`Contour`, `Segment`, layer bounds), run on every drag frame over the live buffers. `Component.reference.test.ts`, `Contour.reference.test.ts`, and `LayerBuffers.reference.test.ts` check them against `DecomposedTransform`, `CurveSegmentIter` with `segment_bounds`, and the bounds of layers `GlyphLayer::transform_layer` produced. Edits themselves, previews included, are not here: the window's engine applies them (`engineApply`, `enginePreview`).
 - **The inverse axis mapping** (`unmapAxisMappings`) searches over the forward mapping, which itself runs here.
 
 ### Reference tests

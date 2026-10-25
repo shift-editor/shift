@@ -19,6 +19,8 @@ export {
   engineApply,
   engineEvict,
   engineOpen,
+  enginePreload,
+  enginePreview,
   engineRelease,
   type EngineLayer,
   type EngineLayerSource,

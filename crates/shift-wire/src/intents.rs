@@ -12,7 +12,6 @@ use napi::bindgen_prelude::Float64Array;
 #[cfg(feature = "napi")]
 use napi_derive::napi;
 use shift_font as font;
-#[cfg(feature = "napi")]
 use shift_font::MaterializeGlyphLayer;
 use shift_font::PointType as IrPointType;
 use shift_font::{
@@ -589,20 +588,45 @@ pub struct CloneGlyphLayerIntent {
     pub from_layer_id: String,
 }
 
+/// A layer's numeric state as a transport carries it: a `Float64Array` over
+/// NAPI, a number sequence through serde (a `Float64Array` from WebAssembly).
 #[cfg(feature = "napi")]
+pub type LayerValues = Float64Array;
+/// A layer's numeric state as a transport carries it: a `Float64Array` over
+/// NAPI, a number sequence through serde (a `Float64Array` from WebAssembly).
+#[cfg(not(feature = "napi"))]
+pub type LayerValues = Vec<f64>;
+
+#[cfg(feature = "napi")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "one signature for both transports; the serde build moves its Vec"
+)]
+fn values_vec(values: LayerValues) -> Vec<f64> {
+    values.to_vec()
+}
+
+#[cfg(not(feature = "napi"))]
+fn values_vec(values: LayerValues) -> Vec<f64> {
+    values
+}
+
 /// Creates one sparse layer from resolved values at a design-space location.
-#[napi(object)]
+#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(not(feature = "napi"), derive(serde::Deserialize))]
+#[cfg_attr(not(feature = "napi"), serde(rename_all = "camelCase"))]
 pub struct MaterializeGlyphLayerIntent {
-    #[napi(ts_type = "LayerId")]
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
     pub layer_id: String,
-    #[napi(ts_type = "GlyphId")]
+    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
     pub glyph_id: String,
-    #[napi(ts_type = "SourceId")]
+    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
     pub source_id: String,
-    #[napi(ts_type = "LayerId")]
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
     pub from_layer_id: String,
     /// Numeric state ordered like `GlyphState.values`.
-    pub values: Float64Array,
+    #[cfg_attr(feature = "napi", napi(ts_type = "Float64Array"))]
+    pub values: LayerValues,
 }
 
 /// A point to create, carrying its caller-minted id (decision 6: ids are
@@ -1006,7 +1030,6 @@ wire_intents! {
     UpdateSource { update_source: UpdateSourceIntent },
     CreateGlyphLayer { create_glyph_layer: CreateGlyphLayerIntent },
     CloneGlyphLayer { clone_glyph_layer: CloneGlyphLayerIntent },
-    #[cfg(feature = "napi")]
     MaterializeGlyphLayer { materialize_glyph_layer: MaterializeGlyphLayerIntent },
 }
 
@@ -1572,18 +1595,17 @@ impl TryFrom<CloneGlyphLayerIntent> for font::FontIntent {
     }
 }
 
-/// Sent only over NAPI: its values are a `Float64Array`, and the engine does
-/// not run it, so serde refuses it.
+/// A NAPI build reads this intent's `Float64Array` only through NAPI; serde
+/// decodes it in builds without NAPI, such as the WebAssembly engine.
 #[cfg(feature = "napi")]
 impl<'de> serde::Deserialize<'de> for MaterializeGlyphLayerIntent {
     fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
         Err(serde::de::Error::custom(
-            "materializeGlyphLayer is only accepted over NAPI",
+            "materializeGlyphLayer is only accepted over NAPI in this build",
         ))
     }
 }
 
-#[cfg(feature = "napi")]
 impl TryFrom<MaterializeGlyphLayerIntent> for font::FontIntent {
     type Error = WireError;
 
@@ -1593,7 +1615,7 @@ impl TryFrom<MaterializeGlyphLayerIntent> for font::FontIntent {
             glyph_id: parse::<GlyphId>(&wire.glyph_id)?,
             source_id: parse::<SourceId>(&wire.source_id)?,
             from_layer_id: parse::<LayerId>(&wire.from_layer_id)?,
-            values: shift_font::GlyphInterpolationValues::new(wire.values.to_vec()),
+            values: shift_font::GlyphInterpolationValues::new(values_vec(wire.values)),
         }
         .into())
     }

@@ -17,7 +17,7 @@ The editing session over a partly loaded font. The native workspace runs it agai
 ```
 crates/shift-engine/src/
   lib.rs        -- public API
-  session.rs    -- `EngineSession`: load, stage, commit, evict
+  session.rs    -- `EngineSession`: load, stage, commit, preview, evict
   read_set.rs   -- `ReadSet`: what an edit reads
   residency.rs  -- `LayerResidency`: which directory layers are placeholders
   source.rs     -- `LayerSource`: where unloaded layers are read from
@@ -42,7 +42,7 @@ crates/shift-engine/tests/
 2. **Stage.** `stage_intents` (or `stage_change_set` for undo and redo) applies to an O(1) copy of the font. A change to a layer that is still a placeholder fails with `EngineError::UnloadedLayerMutation`.
 3. **Commit.** `commit` adopts the staged font. It sweeps residency only when the change can remove layers, because the sweep looks up every unloaded layer.
 
-`apply` runs all three for callers that do not persist. `FontWorkspace` stages, writes to its store, and commits only after the write succeeds. `evict` turns loaded layers back into placeholders that keep their width and height; every edit is persisted before it is committed, so eviction never loses work.
+`apply` runs all three for callers that do not persist; `preview` loads and stages but never commits, for a gesture's preview in the editor. `FontWorkspace` stages, writes to its store, and commits only after the write succeeds. `evict` turns loaded layers back into placeholders that keep their width and height; every edit is persisted before it is committed, so eviction never loses work.
 
 ## Verification
 

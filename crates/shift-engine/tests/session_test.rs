@@ -382,3 +382,28 @@ fn components_not_persisted_yet_still_load_their_bases() {
             .all(|layer_id| !session.residency().is_unloaded(layer_id))
     );
 }
+
+#[test]
+fn a_preview_shows_the_edit_and_keeps_the_font_as_it_was() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
+    let add = FontIntentSet::from(FontIntent::from(AddComponent {
+        layer_id: layer_id.clone(),
+        component_id: ComponentId::from_raw("previewed"),
+        base_glyph_id: GlyphId::from_raw("base1"),
+    }));
+
+    let previewed = session.preview(&mut persisted, &add).unwrap();
+
+    let shown = previewed
+        .layers
+        .iter()
+        .find(|touched| touched.layer.id() == layer_id)
+        .unwrap();
+    let components = |layer: &GlyphLayer| layer.components_iter().count();
+    let kept = session.font().layer(&layer_id).unwrap();
+    assert_eq!(components(&shown.layer), components(kept) + 1);
+    assert_eq!(kept, font.layer(&layer_id).unwrap());
+}
