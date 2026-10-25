@@ -106,6 +106,16 @@ Every ordinary pull request includes `## Issue`. Search open and recently closed
 
 Never use a closing keyword merely because an issue is related. If any accepted outcome remains, use `Refs`.
 
+## One pull request per end state
+
+Review a change once, as it will stay. When work toward one goal takes several steps, such as a new module, then wiring it in, then deleting what it replaces, put the steps in one pull request rather than a stack of pull requests that each depend on the last.
+
+- Open it as a draft once the first step lands, and keep pushing commits to it until the end state is reached. List what remains in its body as a checklist, then mark it ready.
+- Order the commits so the change still reads step by step: each commit builds and passes its tests, and later commits do not rewrite earlier ones without reason.
+- Split out anything that stands on its own: a bug fix found along the way, a safety fix, a performance change that helps today. Each gets its own pull request against the default branch, and the long-running branch merges it in rather than waiting for it.
+- Stop the pull request at a state worth reviewing as a whole, such as a feature working with its old path deleted. A later phase with a different end state, such as moving authority or adding a new capability, is its own pull request.
+- When a stack already exists, fold it: merge the default branch into its tip, open one draft from there, and close the stacked pull requests with a comment pointing at it.
+
 ## Preparation process
 
 1. Read `git status`, staged and unstaged diffs, the branch commits, and the complete diff against `main`.
@@ -139,6 +149,7 @@ When reviewing a pull request:
 ## Hard rules
 
 - Never open an ordinary pull request without searching for relevant issues and including an issue section.
+- Never stack pull requests that each depend on the last for one goal; grow one draft to its end state and split out only what stands on its own.
 - Never open a pull request from a branch with uncommitted intended changes.
 - Never include credentials, signing material, `.env` files, or tokens.
 - Pull request titles, bodies, comments, commits, and release-note wording must describe the change and its validation, not the process used to produce it. Never include incidental execution metadata such as agent identity, handoff mechanics, remote hosts, machine names, tmux sessions, worktree paths, or “finishing work off.” Mention such infrastructure only when it is itself the subject of the change. Platform names are allowed only when materially relevant to behavior or testing evidence.
