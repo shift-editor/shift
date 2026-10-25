@@ -257,12 +257,18 @@ export class WorkspaceEditCoordinator {
     });
   }
 
-  /** Pulls replace-grade glyph snapshots by glyph id, serialized behind pending writes. */
+  /**
+   * Pulls replace-grade glyph snapshots by glyph id, serialized behind pending
+   * writes. A glyph the window loads to show is one it may edit next, so the
+   * engine loads what editing it reads while the window is idle.
+   */
   async readGlyphSnapshots(
     requests: readonly WorkspaceGlyphSnapshotRequest[],
   ): Promise<GlyphSnapshot[]> {
     if (requests.length === 0) return [];
-    return this.#withFlush(() => this.#session.glyphSnapshots(requests));
+    const snapshots = await this.#withFlush(() => this.#session.glyphSnapshots(requests));
+    this.#engine.preloadWhenIdle(requests.map((request) => request.glyphId));
+    return snapshots;
   }
 
   /** Pulls reusable glyph projection models behind pending authored edits. */
