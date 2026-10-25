@@ -16,6 +16,10 @@ on:
 
 permissions: {}
 
+env:
+  # Shrink the shipped WebAssembly modules with wasm-opt (packages/wasm/scripts/build.mjs).
+  SHIFT_WASM_OPT: "1"
+
 concurrency:
   group: release-desktop-${{ inputs.tag }}
   cancel-in-progress: false

@@ -109,7 +109,16 @@ The crossing is cheap; what it carries is not. NAPI conversion measured ≤4 ms 
 - **Keep one request in flight and replace the pending one.** Sending every 835.8 KiB request at 240 Hz queued 78 requests and reached 549.9 ms p95; latest-only coalescing held it to 17.8 ms.
 - **Interactive work never shares a serial queue with persistence or compilation.** 25 ms of competing work every tenth request pushed p95 to ~26 ms even with coalescing.
 
-## 5. Prove it
+## 5. The build and check loop
+
+How long a check takes after one change is a cost too. Aim for 10 s or less. In the [Rust compiler performance survey 2025](https://blog.rust-lang.org/2025/09/10/rust-compiler-performance-survey-2025-results), 55% of respondents waited longer than that after a small change, and it was the top complaint.
+
+- **A check never waits on a release build for generated files.** `typecheck` once depended on the release `shift-bridge` and `@shift/wasm` builds only for their declarations, so any Rust change cost about 97 s before a type was checked. It now depends on `shift-bridge#types` (a `cargo check` that writes `index.d.ts`) and `@shift/wasm#types` (debug builds, no wasm-opt) and takes 11–12 s (#791).
+- **No absolute paths in `RUSTFLAGS`.** `RUSTFLAGS` is part of every crate's fingerprint, so a checkout path in it made each new checkout rebuild all 74 wasm crates. Cargo already passes workspace crates as relative paths.
+- **Run size-only steps only for what ships.** wasm-opt through Node took about 20 s per wasm build and only shrinks the module, so it runs only with `SHIFT_WASM_OPT=1` (Nightly, release, perf, `profile:build`), overlapped with the next variant's compile. The test-only reference module builds only for test tasks. After a change to `shift-font`, the app's wasm build went from 31 s to 14–15 s, and to 5 s with incremental release builds. Separate target directories for parallel compiles made it slower: the shared crates compiled once per directory, all at once.
+- **Time with a unique edit.** Turbo shares its cache across worktrees, so repeating an edit another checkout already made replays that run, and the step looks instant. Append something unique (`// probe $(date +%s)$RANDOM`), check the exit code, and read turbo's `Cached:` line before believing a fast number.
+
+## 6. Prove it
 
 - Rerun the exact same `profile:desktop` command and report before/after numbers in the commit message.
 - A React re-render regression gets a budget in `apps/desktop/e2e/render-budget.spec.ts` (visual project, so it runs in CI without a GPU). It counts mean component renders per commit during a weight scrub and a marquee with the same counter as `profile:desktop` (`e2e/fixtures/renderCounter.mts`); a failure lists what started the renders. Budgets sit about 15% over the measured value, so a new subscription on those paths must raise one on purpose.
