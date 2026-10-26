@@ -95,6 +95,8 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - `NamedInstanceId` identifies an explicit product preset independently of its editable name and location.
 - `MetricId` identifies an authored metric row independently of its editable name, order, and source-local values.
 
+An id is its prefixed random text everywhere it crosses a boundary: the store, the wire, WebAssembly and the bridge. Font-level ids (`GlyphId`, `LayerId`, `SourceId`, the axis, instance, kerning group and metric ids) are interned in memory: each distinct text is held once per process, and every copy of the id points at it, so they compare and hash by address and order by text. Interned text is never freed, which is why the ids minted per contour, point, component, anchor and guideline own their text instead.
+
 ## How it works
 
 - Own font authoring data structures such as `Font`, `Glyph`, `GlyphLayer`, `Contour`, `Point`, `Source`, and `Axis`.
