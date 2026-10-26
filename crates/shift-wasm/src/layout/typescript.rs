@@ -87,12 +87,26 @@ fn calls() -> Vec<Call> {
 }
 
 fn geometry_calls() -> Vec<Call> {
-    vec![Call {
-        name: "contourGeometry",
-        doc: "Segments one contour and bounds each segment and the whole contour, as shift-font segments it.",
-        input: crate::geometry::ContourPoints::kind(),
-        output: crate::geometry::ContourGeometry::kind(),
-    }]
+    vec![
+        Call {
+            name: "contourGeometry",
+            doc: "Segments one contour and bounds each segment and the whole contour, as shift-font segments it.",
+            input: crate::geometry::ContourPoints::kind(),
+            output: crate::geometry::ContourGeometry::kind(),
+        },
+        Call {
+            name: "composeTransform",
+            doc: "A component placement's matrix, as shift-font composes it (`DecomposedTransform::to_matrix`).",
+            input: <shift_font::DecomposedTransform as Layout>::kind(),
+            output: <shift_font::Transform as Layout>::kind(),
+        },
+        Call {
+            name: "decomposeMatrix",
+            doc: "The placement a matrix makes, as shift-font decomposes it (`DecomposedTransform::from_matrix`).",
+            input: <shift_font::Transform as Layout>::kind(),
+            output: <shift_font::DecomposedTransform as Layout>::kind(),
+        },
+    ]
 }
 
 fn shaping_calls() -> Vec<Call> {

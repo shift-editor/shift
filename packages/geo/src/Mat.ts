@@ -201,63 +201,6 @@ export class Mat implements MatModel {
     };
   }
 
-  /**
-   * Recompose a matrix from its decomposed components (translate, rotate,
-   * scale, skew, transform center). Inverse of {@link Mat.toDecomposed}.
-   */
-  static fromDecomposed(d: DecomposedTransform): Mat {
-    const cosR = Math.cos((d.rotation * Math.PI) / 180);
-    const sinR = Math.sin((d.rotation * Math.PI) / 180);
-    const tanSx = Math.tan((d.skewX * Math.PI) / 180);
-    const tanSy = Math.tan((d.skewY * Math.PI) / 180);
-
-    const a = d.scaleX * cosR + d.scaleY * tanSx * sinR;
-    const b = d.scaleX * sinR - d.scaleY * tanSx * cosR;
-    const c = d.scaleY * -sinR + d.scaleX * tanSy * cosR;
-    const dd = d.scaleY * cosR + d.scaleX * tanSy * sinR;
-
-    const centerX = d.tCenterX;
-    const centerY = d.tCenterY;
-    const e = d.translateX + centerX - (a * centerX + c * centerY);
-    const f = d.translateY + centerY - (b * centerX + dd * centerY);
-
-    return new Mat(a, b, c, dd, e, f);
-  }
-
-  /**
-   * Decompose a matrix into translate, rotate, scale, and skew components.
-   * Inverse of {@link Mat.fromDecomposed}.
-   */
-  static toDecomposed(m: MatModel): DecomposedTransform {
-    const scaleX = Math.sqrt(m.a * m.a + m.b * m.b);
-    let scaleY = Math.sqrt(m.c * m.c + m.d * m.d);
-
-    const det = m.a * m.d - m.b * m.c;
-    if (det < 0) {
-      scaleY = -scaleY;
-    }
-
-    const rotation = (Math.atan2(m.b, m.a) * 180) / Math.PI;
-
-    // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.
-    const skewX =
-      Math.abs(scaleX) > Number.EPSILON && Math.abs(scaleY) > Number.EPSILON
-        ? (Math.atan((m.a * m.c + m.b * m.d) / (scaleX * scaleY)) * 180) / Math.PI
-        : 0;
-
-    return {
-      translateX: m.e,
-      translateY: m.f,
-      rotation,
-      scaleX,
-      scaleY,
-      skewX,
-      skewY: 0,
-      tCenterX: 0,
-      tCenterY: 0,
-    };
-  }
-
   clone(): Mat {
     return new Mat(this.a, this.b, this.c, this.d, this.e, this.f);
   }

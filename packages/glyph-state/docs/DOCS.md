@@ -39,6 +39,7 @@ packages/glyph-state/src/
 - **`Contour`** -- reader for one contour's point records and point coordinates. Exposes endpoint/on-curve queries, cubic-control ownership, wrapped `pointAt`, `withNeighbors`, `segments`, `selectionBounds`, and `canClose`.
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
+- **`composeTransform` / `decomposeMatrix`** -- a placement's matrix and a matrix's placement, as shift-font computes them (`DecomposedTransform::to_matrix` / `from_matrix`), through `@shift/wasm`. `Component` uses them; TypeScript keeps no copy.
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hit`.
 - **`Point`** -- id-aware point record (`pointType`, `smooth`, coordinates) with on/off-curve predicates and `NewPoint` factories for authoring flows.
 - **`ContourGeometry<TPoint>`** -- minimal named `points + closed` contract accepted by segment parsing; defaults to authored `Point` but also accepts `NewPoint`.

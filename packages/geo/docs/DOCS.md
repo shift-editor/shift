@@ -44,7 +44,7 @@ src/
 - `CubicCurve` -- `{ type: "cubic"; p0; c0; c1; p1 }`. Two control points.
 - `CurveType` -- discriminated union of `LineCurve | QuadraticCurve | CubicCurve`. Switch on `.type`.
 - `ClosestPoint` -- `{ t, point, distance }`. Returned by `Curve.closestPoint` for hit-testing.
-- `DecomposedTransform` -- degrees-based `{ translateX, translateY, rotation, scaleX, scaleY, skewX, skewY, tCenterX, tCenterY }` record. Defined here in Mat.ts (not in `@shift/types`). `Mat.fromDecomposed` / `Mat.toDecomposed` round-trip only translate/rotate/scale matrices; a matrix with shear does not survive the round trip (see Gotchas).
+- `DecomposedTransform` -- degrees-based `{ translateX, translateY, rotation, scaleX, scaleY, skewX, skewY, tCenterX, tCenterY }` record. Defined here in Mat.ts (not in `@shift/types`). Composing it into a matrix and decomposing a matrix are shift-font's rules: use `composeTransform` / `decomposeMatrix` from `@shift/glyph-state`.
 - `MatModel` -- readonly interface for the six affine matrix coefficients `(a, b, c, d, e, f)`.
 - `Mat` -- mutable class implementing `MatModel`. Maps directly to Canvas2D `transform(a, b, c, d, e, f)`.
 
@@ -64,7 +64,7 @@ src/
 
 **Polygon** uses the shoelace formula for `signedArea` and winding-direction detection (`isClockwise`, `isCounterClockwise`).
 
-**Mat** is a 3x2 affine matrix (implicit bottom row `[0, 0, 1]`). Instance methods mutate and chain; static methods create new matrices. `Mat.fromDecomposed` / `Mat.toDecomposed` round-trip with `DecomposedTransform` for the UI's translate/rotate/scale/skew controls. `Mat.applyToPoint` transforms a `Point2D`.
+**Mat** is a 3x2 affine matrix (implicit bottom row `[0, 0, 1]`). Instance methods mutate and chain; static methods create new matrices. `Mat.applyToPoint` transforms a `Point2D`.
 
 ## Workflow recipes
 
@@ -110,7 +110,6 @@ Do not chain `.translate(cx, cy)…translate(-cx, -cy)` around rotate/scale: `Ma
 - `Bounds.fromPoints` returns `null` for empty arrays, not a zero-size bounds.
 - `Mat.invert()` throws if the matrix is singular (determinant is zero).
 - `Rect.fromXYWH` assumes non-negative dimensions and does not normalize -- negative width/height produce a rect whose `right < left`. Use `Rect.fromPoints` when the corners may be in any order.
-- `Mat.toDecomposed` attributes all shear to `skewX` and always reports `skewY: 0` and `tCenterX`/`tCenterY: 0`. The round trip through `fromDecomposed` reproduces the matrix only for translate/rotate/scale matrices: `fromDecomposed` folds `skewX` into the scale terms with a convention inconsistent with `toDecomposed`'s QR-style extraction, so any matrix with shear comes back numerically different. An authored `skewY` or transform center does not survive decomposition either.
 
 ## Verification
 

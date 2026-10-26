@@ -1,6 +1,7 @@
-//! A contour's segments and bounds, as shift-font segments it.
+//! A contour's segments and bounds, and a component's placement as a
+//! matrix, as shift-font computes them.
 
-use shift_font::{PointType, SegmentIndexIter, SegmentIndices};
+use shift_font::{DecomposedTransform, PointType, SegmentIndexIter, SegmentIndices, Transform};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 use crate::layout::{call, enum_layout, layout};
@@ -11,6 +12,27 @@ use crate::layout::{call, enum_layout, layout};
 #[wasm_bindgen(js_name = contourGeometry)]
 pub fn contour_geometry(input: &[f64]) -> Vec<f64> {
     call(input, |contour: ContourPoints| contour.geometry())
+}
+
+/// A component placement's matrix: `DecomposedTransform::to_matrix`.
+///
+/// Input: [`DecomposedTransform`]. Output: [`Transform`], as the editor's
+/// `MatModel` names it.
+#[wasm_bindgen(js_name = composeTransform)]
+pub fn compose_transform(input: &[f64]) -> Vec<f64> {
+    call(input, |transform: DecomposedTransform| {
+        transform.to_matrix()
+    })
+}
+
+/// The placement a matrix makes: `DecomposedTransform::from_matrix`.
+///
+/// Input: [`Transform`]. Output: [`DecomposedTransform`].
+#[wasm_bindgen(js_name = decomposeMatrix)]
+pub fn decompose_matrix(input: &[f64]) -> Vec<f64> {
+    call(input, |matrix: Transform| {
+        DecomposedTransform::from_matrix(&matrix)
+    })
 }
 
 enum_layout! {

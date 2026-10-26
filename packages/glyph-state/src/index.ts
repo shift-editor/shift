@@ -1,5 +1,6 @@
 export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type Matrix } from "./Component";
+export { composeTransform, decomposeMatrix } from "./generated/geometryLayouts";
 export { Contour } from "./Contour";
 export { IdIndex } from "./IdIndex";
 export { decomposedTransformValues, readDecomposedTransform } from "./valueLayout";

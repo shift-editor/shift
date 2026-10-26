@@ -7,7 +7,8 @@ import {
   type GlyphName,
   type GlyphStructure,
 } from "@shift/types";
-import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
+import type { DecomposedTransform, MatModel } from "@shift/geo";
+import { composeTransform, decomposeMatrix } from "./generated/geometryLayouts";
 import { componentValueCount, componentsValueOffset, readDecomposedTransform } from "./valueLayout";
 
 export type Matrix = MatModel;
@@ -64,7 +65,7 @@ export class Component {
   }
 
   get transform(): DecomposedTransform {
-    if (this.#transformKind === "affine") return Mat.toDecomposed(this.matrix);
+    if (this.#transformKind === "affine") return decomposeMatrix(this.matrix);
 
     return readDecomposedTransform(this.#values, this.#cursor);
   }
@@ -82,6 +83,6 @@ export class Component {
       };
     }
 
-    return Mat.fromDecomposed(this.transform);
+    return composeTransform(this.transform);
   }
 }

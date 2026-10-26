@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { CommandId } from "@shared/commands";
 import { KeyboardRouter } from "./KeyboardRouter";
 import { TestEditor } from "@/testing";
-import { Mat, Polygon, type Rect2D } from "@shift/geo";
-import { Point } from "@shift/glyph-state";
+import { Polygon, type Rect2D } from "@shift/geo";
+import { Point, composeTransform } from "@shift/glyph-state";
 import type { GlyphName } from "@shift/types";
 
 type KeyboardEventOptions = Partial<
@@ -360,7 +360,7 @@ describe("KeyboardRouter", () => {
       expect(handled).toBe(true);
       const component = editor.requireGlyphLayer().components.find(({ id }) => id === componentId);
       if (!component) throw new Error("Expected selected component");
-      const transform = Mat.fromDecomposed(component.transform);
+      const transform = composeTransform(component.transform);
       expect(transform.a).toBeCloseTo(-1);
       expect(transform.d).toBeCloseTo(1);
     });
