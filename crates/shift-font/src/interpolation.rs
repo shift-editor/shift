@@ -404,25 +404,39 @@ impl GlyphInterpolation {
         location: &DesignLocation,
         axes: &[Axis],
     ) -> CoreResult<GlyphInterpolationValues> {
-        let value_count = self
-            .sources
-            .first()
-            .map_or(0, |source| source.values.as_slice().len());
-        let mut values = vec![0.0; value_count];
         let weights = self.basis.weights_at(location, axes)?;
+        let sources: Vec<&[f64]> = self
+            .sources
+            .iter()
+            .map(|source| source.values.as_slice())
+            .collect();
 
-        for (source, weight) in self.sources.iter().zip(weights) {
-            if weight == 0.0 {
-                continue;
-            }
-
-            for (value, source_value) in values.iter_mut().zip(source.values.as_slice()) {
-                *value += weight * source_value;
-            }
-        }
-
-        Ok(GlyphInterpolationValues::new(values))
+        Ok(GlyphInterpolationValues::new(
+            blend_values(&weights, &sources).unwrap_or_default(),
+        ))
     }
+}
+
+/// The weighted sum of `sources`, value by value: each source's values times
+/// its weight in `weights`, in source order, a zero weight skipped. `None`
+/// when there is no source, a source has no values, or two sources differ in
+/// length.
+pub fn blend_values(weights: &[f64], sources: &[&[f64]]) -> Option<Vec<f64>> {
+    let count = sources.first()?.len();
+    if count == 0 || sources.iter().any(|source| source.len() != count) {
+        return None;
+    }
+
+    let mut values = vec![0.0; count];
+    for (source, &weight) in sources.iter().zip(weights) {
+        if weight == 0.0 {
+            continue;
+        }
+        for (value, source_value) in values.iter_mut().zip(*source) {
+            *value += weight * source_value;
+        }
+    }
+    Some(values)
 }
 
 impl Font {
@@ -624,8 +638,23 @@ fn normalized_location(
 
 #[cfg(test)]
 mod tests {
+    use super::blend_values;
     use crate::test_support::sample_variable_font;
     use crate::{DesignLocation, GlyphInterpolationValues};
+
+    #[test]
+    fn values_blend_by_weight_and_need_matching_sources() {
+        let regular = [10.0, 20.0, 30.0];
+        let bold = [30.0, 40.0, 50.0];
+
+        assert_eq!(
+            blend_values(&[0.25, 0.75], &[&regular, &bold]),
+            Some(vec![25.0, 35.0, 45.0])
+        );
+        assert_eq!(blend_values(&[1.0, 0.0], &[&regular, &[1.0]]), None);
+        assert_eq!(blend_values(&[1.0], &[&[]]), None);
+        assert_eq!(blend_values(&[], &[]), None);
+    }
 
     #[test]
     fn layer_values_roundtrip_without_changing_topology() {

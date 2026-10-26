@@ -277,6 +277,23 @@ pub fn interpolation_weights(basis: u32, axes: u32, location: &[f64]) -> Vec<f64
     })
 }
 
+/// The weighted sum of source values: `interpolation::blend_values`.
+///
+/// `values` holds each source's values one after another, `lengths[i]`
+/// of them for source `i`; a source the editor lacks has length 0. None when
+/// there is no source, one has no values, or two differ in length.
+#[wasm_bindgen(js_name = blendSourceValues)]
+pub fn blend_source_values(weights: &[f64], values: &[f64], lengths: &[u32]) -> Option<Vec<f64>> {
+    let mut rest = values;
+    let mut sources = Vec::with_capacity(lengths.len());
+    for &length in lengths {
+        let (source, after) = rest.split_at_checked(usize::try_from(length).ok()?)?;
+        sources.push(source);
+        rest = after;
+    }
+    shift_font::interpolation::blend_values(weights, &sources)
+}
+
 /// A variation basis's values at a location, normalized by each axis's range.
 #[wasm_bindgen(js_name = evaluateVariationBasis)]
 pub fn evaluate_variation_basis(basis: u32, axes: u32, location: &[f64]) -> Vec<f64> {

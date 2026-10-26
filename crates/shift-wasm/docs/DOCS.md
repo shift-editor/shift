@@ -86,7 +86,7 @@ Per-frame geometry now runs here, through glyph-state, with no TypeScript copy a
 
 ### What stays in TypeScript
 
-- **Blending glyph geometry** (`interpolateSourceValues`, in `Glyph`'s geometry at a design location) runs over the live coordinate buffers every frame, drag previews included, which the window's engine does not hold, so the engine cannot answer it. It multiplies by weights and has no rule to drift: which sources blend, their weights, exact source shapes and variation deltas all come from Rust (the native projection, `interpolationWeights`, `evaluateVariationBasis`).
+Nothing at present. Blending glyph geometry (`interpolateSourceValues`) was the last: it runs every frame over the live coordinate buffers, drag previews included, which the window's engine does not hold, so the editor packs them into one array and calls `blendSourceValues` (shift-font's `interpolation::blend_values`, the sum `GlyphInterpolation` resolves with). Measured on the M4 with the packing included, against the TypeScript loop it replaced: 0.0038 against 0.0055 ms for 326 points and two sources, 0.021 against 0.020 ms at 5,000, and 0.161 against 0.160 ms at 50,000 (0.279 against 0.293 ms with four sources).
 
 ### Reference tests
 
