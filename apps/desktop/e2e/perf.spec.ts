@@ -2,8 +2,12 @@
  * Playwright E2E performance tests — real Electron app, GPU-accelerated.
  *
  * Boots the app, loads MutatorSans, generates a 50K-point glyph via
- * pasteContours, then benchmarks operations at scale. Measures actual
- * frame times including React, signals, GPU compositing, and NAPI cost.
+ * pasteContours, then benchmarks operations at scale.
+ *
+ * "position patch" samples time only the layer's preview patch, the model
+ * update a drag frame starts with. "drag" samples move the real pointer and
+ * time the frames that handle each move (hit testing, preview, every render
+ * pass and the browser's paint), which is what a user sees.
  *
  * ## Regression detection
  *
@@ -20,6 +24,9 @@ import * as fs from "fs";
 import * as path from "path";
 import type { PointId } from "@shift/types";
 import type { ExternalAxisLocation } from "@shift/editor/types";
+import type { Page } from "@playwright/test";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import { installFrameProbe, measureMove } from "./fixtures/frameProbe";
 import {
   test,
   expect,
@@ -47,9 +54,14 @@ const UNDO_REDO_SAMPLES = 10;
  * wrong" regressions, not gradual drift.
  */
 const THRESHOLDS: Record<string, number> = {
-  "translate-drag (5 pts)": 5,
-  "translate-drag (1K pts)": 5,
-  "translate-drag (all pts)": 20,
+  "position patch (5 pts)": 5,
+  "position patch (1K pts)": 5,
+  "position patch (all pts)": 20,
+  // Provisional: whole frames on a 50K-point glyph take ~100 ms today; these catch worse.
+  "drag work (1K pts)": 500,
+  "drag frame (1K pts)": 500,
+  "drag work (all pts)": 500,
+  "drag frame (all pts)": 500,
   "nudge (all pts)": 60, // Immediate local interaction path; persistence settles asynchronously.
   "undo (all pts)": 1_000, // Full renderer↔utility ledger replay for a 50K-point patch.
   "redo (all pts)": 1_000,
@@ -74,6 +86,34 @@ function saveBaseline(results: PerfResult[]): void {
     baseline[r.label] = { p50: r.p50, p95: r.p95 };
   }
   fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + "\n");
+}
+
+/**
+ * Inserts the 50K-point glyph, selects its last `count` points (all when
+ * `null`), and fits the view. The last points are in the top row, clear of the
+ * floating tools docked to the canvas's bottom edge, so a drag can start on the last one.
+ */
+async function selectInsertedPoints(
+  page: Page,
+  editor: EditorDriver,
+  count: number | null,
+): Promise<PointId[]> {
+  const pointIds = await page.evaluate(
+    ({ contours, count }) => {
+      const runtime = window.shift!.editor;
+      const inserted = runtime.insertContent({ contours });
+      if (!inserted) throw new Error("contour insertion failed");
+      const ids = (count === null ? inserted : inserted.slice(-count)) as PointId[];
+      runtime.selection.select(ids);
+      runtime.zoomToFit();
+      return ids;
+    },
+    { contours: generateContourData(TARGET_POINTS), count },
+  );
+  await editor.waitForIdle();
+  await editor.waitForCanvasRender();
+  expect(await editor.selectionIds()).toHaveLength(count ?? pointIds.length);
+  return pointIds;
 }
 
 test.describe("Performance — 50K points", () => {
@@ -287,7 +327,7 @@ test.describe("Performance — 50K points", () => {
     );
   });
 
-  test("translate drag — few points selected (5)", async ({ page }) => {
+  test("position patch — few points selected (5)", async ({ page }) => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
@@ -330,12 +370,12 @@ test.describe("Performance — 50K points", () => {
       { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
-    const stats = computeStats("translate-drag (5 pts)", samples);
+    const stats = computeStats("position patch (5 pts)", samples);
     results.push(stats);
     assertPerf(stats);
   });
 
-  test("translate drag — many points selected (~1000)", async ({ page }) => {
+  test("position patch — many points selected (~1000)", async ({ page }) => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
@@ -378,12 +418,12 @@ test.describe("Performance — 50K points", () => {
       { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
-    const stats = computeStats("translate-drag (1K pts)", samples);
+    const stats = computeStats("position patch (1K pts)", samples);
     results.push(stats);
     assertPerf(stats);
   });
 
-  test("translate drag — all points selected", async ({ page }) => {
+  test("position patch — all points selected", async ({ page }) => {
     const contours = generateContourData(TARGET_POINTS);
 
     const samples = await page.evaluate(
@@ -426,10 +466,71 @@ test.describe("Performance — 50K points", () => {
       { contours, frames: DRAG_FRAMES, warmup: WARMUP_FRAMES },
     );
 
-    const stats = computeStats("translate-drag (all pts)", samples);
+    const stats = computeStats("position patch (all pts)", samples);
     results.push(stats);
     assertPerf(stats);
   });
+
+  for (const [label, count] of [
+    ["1K pts", 1_000],
+    ["all pts", null],
+  ] as const) {
+    test(`drag — real pointer frames with ${label} selected`, async ({ page, editor }) => {
+      const pointIds = await selectInsertedPoints(page, editor, count);
+      const grabbed = pointIds.at(-1)!;
+      const other = pointIds[0]!;
+      const before = {
+        grabbed: await editor.pointPosition(grabbed),
+        other: await editor.pointPosition(other),
+      };
+
+      const from = await editor.projectGlyphToPage(before.grabbed);
+      const occluded = await page.evaluate(
+        ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest("[data-floating-toolbar]")),
+        from,
+      );
+      expect(occluded, "the grabbed point is not under the floating tools").toBe(false);
+      await editor.pointerDown(from);
+      await editor.pointerMove({ x: from.x + 6, y: from.y - 3 });
+      await expect.poll(() => editor.toolState()).toBe("translating");
+
+      await installFrameProbe(page);
+      const work: number[] = [];
+      const frame: number[] = [];
+      for (let step = 0; step < WARMUP_FRAMES + DRAG_FRAMES; step++) {
+        const sample = await measureMove(page, {
+          x: from.x + 8 + step * 2,
+          y: from.y - 4 - (step % 7),
+        });
+        if (step < WARMUP_FRAMES) continue;
+        work.push(sample.work);
+        frame.push(sample.frame);
+      }
+
+      await editor.pointerUp();
+      const after = {
+        grabbed: await editor.pointPosition(grabbed),
+        other: await editor.pointPosition(other),
+      };
+      const delta = {
+        x: after.grabbed.x - before.grabbed.x,
+        y: after.grabbed.y - before.grabbed.y,
+      };
+      expect(delta.x, "the drag moved the grabbed point").toBeGreaterThan(0);
+      // The whole selection moved by the grabbed point's delta.
+      expect(after.other).toEqual({ x: before.other.x + delta.x, y: before.other.y + delta.y });
+      await editor.undo();
+      expect(await editor.pointPosition(grabbed)).toEqual(before.grabbed);
+
+      for (const stats of [
+        computeStats(`drag work (${label})`, work),
+        computeStats(`drag frame (${label})`, frame),
+      ]) {
+        results.push(stats);
+        assertPerf(stats);
+      }
+    });
+  }
 
   test("nudge — all points selected (arrow key hold)", async ({ page }) => {
     const contours = generateContourData(TARGET_POINTS);
