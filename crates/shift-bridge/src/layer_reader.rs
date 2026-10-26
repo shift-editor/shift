@@ -14,7 +14,8 @@ use crate::input::parse_id_list;
 /// A read-only view of a workspace's store.
 #[napi]
 pub struct LayerReader {
-  reader: StoreReader,
+  /// `None` once closed: Windows will not delete a file a reader holds open.
+  reader: Option<StoreReader>,
 }
 
 #[napi]
@@ -29,7 +30,9 @@ impl LayerReader {
   pub fn open_document(document_path: String, recovery_path: String) -> napi::Result<Self> {
     let reader =
       StoreReader::open_document(document_path, recovery_path).map_err(BridgeError::from)?;
-    Ok(Self { reader })
+    Ok(Self {
+      reader: Some(reader),
+    })
   }
 
   /// Reads the working store behind an untitled or imported workspace.
@@ -40,7 +43,9 @@ impl LayerReader {
   #[napi(factory)]
   pub fn open_working_store(store_path: String) -> napi::Result<Self> {
     let reader = StoreReader::open_working_store(store_path).map_err(BridgeError::from)?;
-    Ok(Self { reader })
+    Ok(Self {
+      reader: Some(reader),
+    })
   }
 
   /// The font's metadata and its glyph and layer directory, every layer a
@@ -84,32 +89,43 @@ impl LayerReader {
   pub fn dependents(&self, layer_ids: Vec<String>) -> napi::Result<Vec<String>> {
     Ok(self.dependent_glyphs(&layer_ids)?)
   }
+
+  /// Closes the store's files now rather than when the reader is collected,
+  /// so the workspace can delete them. Reads after this fail.
+  #[napi]
+  pub fn close(&mut self) {
+    self.reader = None;
+  }
 }
 
 impl LayerReader {
+  fn reader(&self) -> BridgeResult<&StoreReader> {
+    self.reader.as_ref().ok_or(BridgeError::ReaderClosed)
+  }
+
   fn encoded_directory(&self) -> BridgeResult<Vec<u8>> {
     Ok(rmp_serde::to_vec_named(
-      &self.reader.load_font_directory()?,
+      &self.reader()?.load_font_directory()?,
     )?)
   }
 
   fn encoded_layers(&self, layer_ids: &[String]) -> BridgeResult<Vec<u8>> {
     let layers = self
-      .reader
+      .reader()?
       .load_glyph_layers(&parse_id_list::<LayerId>(layer_ids)?)?;
     Ok(rmp_serde::to_vec_named(&layers)?)
   }
 
   fn closure(&self, glyph_ids: &[String]) -> BridgeResult<Vec<String>> {
     let closure = self
-      .reader
+      .reader()?
       .referenced_glyph_closure(parse_id_list::<GlyphId>(glyph_ids)?)?;
     Ok(closure.iter().map(ToString::to_string).collect())
   }
 
   fn dependent_glyphs(&self, layer_ids: &[String]) -> BridgeResult<Vec<String>> {
     let dependents = self
-      .reader
+      .reader()?
       .dependent_glyph_ids_for_layers(&parse_id_list::<LayerId>(layer_ids)?)?;
     Ok(dependents.iter().map(ToString::to_string).collect())
   }

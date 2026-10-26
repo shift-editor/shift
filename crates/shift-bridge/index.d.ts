@@ -282,6 +282,11 @@ export declare class LayerReader {
    * Fails on a malformed layer id or when the component references cannot be read.
    */
   dependents(layerIds: Array<string>): Array<string>
+  /**
+   * Closes the store's files now rather than when the reader is collected,
+   * so the workspace can delete them. Reads after this fail.
+   */
+  close(): void
 }
 
 /** Reads the settings in a `config.toml` source. */

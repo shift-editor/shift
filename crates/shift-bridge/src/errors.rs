@@ -50,6 +50,10 @@ pub enum BridgeError {
 
   #[error(transparent)]
   Shape(#[from] ShapeError),
+
+  /// A layer reader was read after it was closed.
+  #[error("layer reader is closed")]
+  ReaderClosed,
 }
 
 pub(crate) fn to_napi_error(error: BridgeError) -> Error {
@@ -81,7 +85,8 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::AuthoredSlug(_)
     | BridgeError::Slug(_)
     | BridgeError::ShaperFont(_)
-    | BridgeError::Shape(_) => Status::GenericFailure,
+    | BridgeError::Shape(_)
+    | BridgeError::ReaderClosed => Status::GenericFailure,
   };
 
   Error::new(status, error.to_string())

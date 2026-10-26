@@ -406,6 +406,18 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(() => layers.load(reader, [glyph.layerId])).toThrow(/no layer reader/);
   });
 
+  it("keeps the store Save As moves off until the window's reader follows", async () => {
+    const sync = await connectSyncLane();
+    const { workspaceId } = await createWorkspace(sync);
+    const storePath = path.join(tmpRoot, "workspaces", workspaceId, "document.sqlite");
+
+    await sync.call("workspace.saveAs", { path: path.join(tmpRoot, "Moved.shift") });
+    expect(fs.existsSync(storePath)).toBe(true);
+
+    await sync.call("workspace.releaseRetiredStores", undefined);
+    expect(fs.existsSync(storePath)).toBe(false);
+  });
+
   it("points a window's layer reader at a document and its unsaved edits", async () => {
     const sync = await connectSyncLane();
     const snapshot = await createWorkspace(sync);

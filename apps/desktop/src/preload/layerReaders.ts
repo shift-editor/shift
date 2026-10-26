@@ -42,6 +42,9 @@ export function layerReaderHost(): LayerReaderHost {
     componentClosure: (handle, glyphIds) => reader(handle).componentClosure([...glyphIds]),
     dependents: (handle, layerIds) => reader(handle).dependents([...layerIds]),
     close: (handle) => {
+      // Release the files now: the workspace deletes them on Save As and close,
+      // which Windows refuses while a reader still holds them open.
+      readers.get(handle)?.close();
       readers.delete(handle);
     },
   };

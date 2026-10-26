@@ -261,6 +261,11 @@ export type SyncCallMap = {
     request: { path: string };
     response: WorkspaceDocumentState;
   };
+  /**
+   * Deletes the stores Save As moved the workspace off, once the window's
+   * layer reader has followed it to the new store.
+   */
+  "workspace.releaseRetiredStores": { request: void; response: null };
   /** Captures the committed workspace and compiles it without changing document state. */
   "workspace.export": {
     request: { path: string };

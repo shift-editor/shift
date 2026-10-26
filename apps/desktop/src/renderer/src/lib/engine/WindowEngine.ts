@@ -9,10 +9,13 @@ import {
 } from "@shift/editor/model";
 import { engineLayerSource } from "./engineLayerSource";
 
-/** The open session and the reader it loads layers through, which moves with the store. */
+/**
+ * The open session and the reader it loads layers through, which moves with
+ * the store. `reader` is null while released, and reopens on the next read.
+ */
 interface Opened {
   readonly session: EngineSession;
-  reader: number;
+  reader: number | null;
   location: FontStoreLocation;
 }
 
@@ -59,7 +62,7 @@ export class WindowEngine {
       // its source can follow the current reader.
       const session = EngineSession.open(
         this.#layers.directory(reader),
-        engineLayerSource(this.#layers, () => this.#requireOpened().reader),
+        engineLayerSource(this.#layers, () => this.#reader()),
       );
       this.#close();
       this.#opened = { session, reader, location };
@@ -81,7 +84,18 @@ export class WindowEngine {
     const previous = opened.reader;
     opened.reader = this.#layers.open(location);
     opened.location = location;
-    this.#layers.close(previous);
+    if (previous !== null) this.#layers.close(previous);
+  }
+
+  /**
+   * Closes the reader, keeping the session, so the workspace can delete the
+   * store's files: Windows refuses while they are open. The next read reopens it.
+   */
+  releaseStore(): void {
+    const opened = this.#opened;
+    if (!opened || opened.reader === null) return;
+    this.#layers.close(opened.reader);
+    opened.reader = null;
   }
 
   /** Opens an edit: the applies until {@link endEdit} become one undo step and one change set. */
@@ -197,10 +211,16 @@ export class WindowEngine {
     return this.#opened;
   }
 
+  #reader(): number {
+    const opened = this.#requireOpened();
+    opened.reader ??= this.#layers.open(opened.location);
+    return opened.reader;
+  }
+
   #close(): void {
     if (!this.#opened) return;
     this.#opened.session.dispose();
-    this.#layers.close(this.#opened.reader);
+    this.releaseStore();
     this.#opened = null;
   }
 }

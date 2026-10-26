@@ -408,7 +408,20 @@ export class WorkspaceEditCoordinator {
       this.#engine.markSaved();
       // Saving can move the store the engine reads, as when a working store becomes a document.
       await this.#engine.followStore();
+      // Only once the engine reads the new store can the workspace delete the old one.
+      if (path !== null) await this.#session.releaseRetiredStores();
       return state;
+    });
+  }
+
+  /**
+   * Closes the engine's reader behind every queued and in-flight edit, so the
+   * workspace can delete the store's files as it closes. A later read reopens it.
+   */
+  releaseStore(): Promise<null> {
+    return this.#withFlush(() => {
+      this.#engine.releaseStore();
+      return Promise.resolve(null);
     });
   }
 

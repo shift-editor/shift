@@ -65,6 +65,16 @@ export class DocumentClient implements Document {
     return this.#call("document.export", { path });
   }
 
+  /**
+   * Has the window close its reader of the workspace's store, so closing the
+   * workspace can delete the files. A window that is gone holds nothing open.
+   */
+  async releaseStore(): Promise<void> {
+    if (!this.connected) return;
+
+    await this.#call("document.releaseStore", undefined);
+  }
+
   /** Disconnects the active renderer document lane. */
   dispose(): void {
     if (!this.#channel) {

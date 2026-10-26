@@ -90,6 +90,11 @@ export class WorkspaceHost {
   #preparedSourcePages = new Map<number, number>();
   #atlasBuilds = new Map<string, CachedAtlasBuild>();
   #operations: Promise<void> = Promise.resolve();
+  /**
+   * Deletions of the stores Save As moved off, held until the window's layer
+   * reader follows, since Windows will not delete a file it holds open.
+   */
+  #retiredStores: (() => void)[] = [];
 
   constructor(options: WorkspaceHostOptions) {
     this.#bridge = createBridge();
@@ -168,6 +173,7 @@ export class WorkspaceHost {
       // every persisted edit, so it never writes stale state.
       "workspace.save": () => this.#serialize(() => this.#save()),
       "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
+      "workspace.releaseRetiredStores": () => this.#serialize(() => this.#releaseRetiredStores()),
       "workspace.export": ({ path }) => this.#export(path),
       "workspace.glyphSnapshots": ({ requests }) =>
         this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
@@ -738,12 +744,28 @@ export class WorkspaceHost {
         this.#documents.removeDocumentBinding(previous.binding.address);
       }
       if (previous.allocation.recoveryPath !== recoveryPath) {
-        this.#documents.deleteRecovery(previous.allocation.recoveryPath);
+        const previousRecovery = previous.allocation.recoveryPath;
+        this.#retiredStores.push(() => this.#documents.deleteRecovery(previousRecovery));
       }
     }
-    this.#documents.deleteWorkingStore(workspaceId);
+    this.#retiredStores.push(() => this.#documents.deleteWorkingStore(workspaceId));
 
     return this.#emitDocumentChanged();
+  }
+
+  #releaseRetiredStores(): null {
+    const retired = this.#retiredStores;
+    this.#retiredStores = [];
+    for (const release of retired) {
+      try {
+        release();
+      } catch (error) {
+        // Still held open: try again on the next release, or with the workspace on close.
+        console.warn("failed to delete a retired store", error);
+        this.#retiredStores.push(release);
+      }
+    }
+    return null;
   }
 
   async #export(outputPath: string): Promise<WorkspaceExportResult> {
@@ -805,6 +827,7 @@ export class WorkspaceHost {
       this.#documents.removeDocumentBinding(workspace.binding.address);
     }
     this.#documents.deleteWorkspace(workspaceId);
+    this.#retiredStores = [];
     this.#shell?.emit("document.changed", null);
     this.#sync?.emit("document.changed", null);
 

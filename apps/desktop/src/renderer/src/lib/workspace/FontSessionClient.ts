@@ -206,6 +206,13 @@ export class FontSessionClient {
     return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
   }
 
+  /** Deletes the stores Save As moved off, once this window's reader no longer reads them. */
+  async releaseRetiredStores(): Promise<void> {
+    await this.connect();
+
+    await this.#require().call("workspace.releaseRetiredStores", undefined);
+  }
+
   /**
    * Starts compilation after the export request enters the workspace FIFO.
    *
