@@ -98,12 +98,7 @@ export class WindowEngine {
    */
   apply(intents: readonly FontIntent[]): EngineEdit {
     const session = this.#require();
-    performance.mark("engine.apply.start");
-    try {
-      return session.apply(intents);
-    } finally {
-      performance.measure("engine.apply", "engine.apply.start");
-    }
+    return this.#measured("engine.apply", () => session.apply(intents));
   }
 
   /**
@@ -114,12 +109,7 @@ export class WindowEngine {
    */
   preview(intents: readonly FontIntent[]): EngineLayer[] {
     const session = this.#require();
-    performance.mark("engine.preview.start");
-    try {
-      return session.preview(intents);
-    } finally {
-      performance.measure("engine.preview", "engine.preview.start");
-    }
+    return this.#measured("engine.preview", () => session.preview(intents));
   }
 
   /**
@@ -129,7 +119,8 @@ export class WindowEngine {
    * when it changed nothing.
    */
   endEdit(): Uint8Array | undefined {
-    return this.#require().endEdit();
+    const session = this.#require();
+    return this.#measured("engine.endEdit", () => session.endEdit());
   }
 
   /** Drops the open edit; the engine goes back to where it began. */
@@ -144,12 +135,14 @@ export class WindowEngine {
    * there is nothing to undo.
    */
   undo(): EngineEdit | undefined {
-    return this.#require().undo();
+    const session = this.#require();
+    return this.#measured("engine.undo", () => session.undo());
   }
 
   /** Makes the latest undone edit again; `undefined` when there is nothing to redo. */
   redo(): EngineEdit | undefined {
-    return this.#require().redo();
+    const session = this.#require();
+    return this.#measured("engine.redo", () => session.redo());
   }
 
   /** Forgets every undone edit. */
@@ -171,13 +164,10 @@ export class WindowEngine {
     const preload = () => {
       const session = this.#opened?.session;
       if (!session) return;
-      performance.mark("engine.preload.start");
       try {
-        session.preload(glyphIds);
+        this.#measured("engine.preload", () => session.preload(glyphIds));
       } catch (error) {
         console.warn("engine preload failed", error);
-      } finally {
-        performance.measure("engine.preload", "engine.preload.start");
       }
     };
     if (typeof requestIdleCallback === "function") requestIdleCallback(preload);
@@ -186,6 +176,16 @@ export class WindowEngine {
 
   dispose(): void {
     this.#close();
+  }
+
+  /** Runs `body` as one `performance` measure named `name`, for profiles and perf specs. */
+  #measured<T>(name: string, body: () => T): T {
+    performance.mark(`${name}.start`);
+    try {
+      return body();
+    } finally {
+      performance.measure(name, `${name}.start`);
+    }
   }
 
   #require(): EngineSession {

@@ -2873,6 +2873,53 @@ mod tests {
     }
 
     #[test]
+    fn perf_mark_coalescing_a_drag_costs_what_its_layer_costs() {
+        // A drag applied through the engine on every frame records one change
+        // set per frame; closing the edit coalesces them into one.
+        const FRAMES: u32 = 60;
+        let mark = PerfFontMark {
+            label: "cjk-65k",
+            glyphs: 65_536,
+            contours_per_glyph: 2,
+            points_per_contour: 8,
+        };
+        let mut font = synthetic_point_heavy_font(mark);
+        let glyph_id = font.glyph_id_by_name("g32768").unwrap();
+        let layer_id = font
+            .layer_id_for_glyph_source(glyph_id, font.default_source_id().unwrap())
+            .unwrap();
+        let point_id = font
+            .layer(&layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .points()[0]
+            .id();
+
+        let mut frames = Vec::new();
+        let applied = median_time(|_| {
+            frames = (1..=FRAMES)
+                .map(|frame| {
+                    font.apply_intents(&crate::FontIntentSet::from(crate::MovePoints {
+                        layer_id: layer_id.clone(),
+                        point_ids: vec![point_id.clone()],
+                        coords: vec![f64::from(frame), 0.0],
+                    }))
+                    .unwrap()
+                    .changes
+                })
+                .collect();
+        });
+        let coalesced = median_time(|_| {
+            font.coalesce(&frames).unwrap();
+        });
+
+        print_perf_mark("apply 60 one-point moves", mark, applied);
+        print_perf_mark("coalesce 60 one-point moves", mark, coalesced);
+    }
+
+    #[test]
     fn perf_mark_one_kerning_edit_costs_the_same_with_many_pairs() {
         let mark = PerfFontMark {
             label: "cjk-scale",

@@ -161,6 +161,14 @@ export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImp
 /** Authored `AnchorDragBench`: `a`–`z`, combining marks, and composites on `u`. */
 export const anchorDragTest = createAppTest(ANCHOR_DRAG_FONT_PATH, createAuthoredDocument);
 
+/**
+ * Path of a CJK-sized font (Noto Sans CJK SC, 65.5k glyphs) for engine costs that grow with the
+ * font, or null when `SHIFT_E2E_CJK_FONT_PATH` is unset; the font is not checked in.
+ */
+export const CJK_FONT_PATH = process.env.SHIFT_E2E_CJK_FONT_PATH ?? null;
+/** Authored copy of {@link CJK_FONT_PATH}; tests using it skip when the path is unset. */
+export const cjkTest = createAppTest(CJK_FONT_PATH ?? EDITABLE_FONT_PATH, createAuthoredDocument);
+
 export { expect } from "@playwright/test";
 
 /**

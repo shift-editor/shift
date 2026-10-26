@@ -64,7 +64,12 @@ export const GPU_SPECS = [
 ];
 
 /** Opt-in interaction latency measurements on a hardware GPU. */
-export const PERF_SPECS = ["perf.spec.ts", "multi-source-perf.spec.ts", "text-run-perf.spec.ts"];
+export const PERF_SPECS = [
+  "perf.spec.ts",
+  "multi-source-perf.spec.ts",
+  "text-run-perf.spec.ts",
+  "engine-perf.spec.ts",
+];
 
 export default defineConfig({
   testDir: "./e2e",
