@@ -1418,6 +1418,26 @@ export class GlyphLayer {
 }
 
 const IDENTITY_GLYPH_TRANSFORM_CELL = signal<MatModel>(Mat.Identity());
+
+/*
+ * Both read the whole layer, so they rerun on every point move of a drag.
+ * Comparing by value stops a move that leaves anchors and placements where
+ * they were from reaching text layout and component placement.
+ */
+function samePropagatedAnchors(a: PropagatedAnchors, b: PropagatedAnchors): boolean {
+  return (
+    a.baseGlyphCount === b.baseGlyphCount &&
+    a.anchors.length === b.anchors.length &&
+    a.anchors.every((anchor, index) => {
+      const other = b.anchors[index]!;
+      return anchor.name === other.name && anchor.x === other.x && anchor.y === other.y;
+    })
+  );
+}
+
+function sameMatrices(a: readonly MatModel[], b: readonly MatModel[]): boolean {
+  return a.length === b.length && a.every((matrix, index) => Mat.equals(matrix, b[index]!));
+}
 const NO_PLACED_CONTOURS_CELL = signal<readonly RenderContour[] | null>(null);
 const NO_ACTIVE_SOURCE_CELL = signal<SourceId | null>(null);
 
@@ -1531,6 +1551,7 @@ export class GlyphRenderModel {
       create: (idCell) =>
         computed(() => this.#propagate(idCell.value), {
           name: "glyph.renderModel.propagatedAnchors",
+          equals: samePropagatedAnchors,
         }),
       dispose: (cell) => cell.dispose(),
     });
@@ -1540,6 +1561,7 @@ export class GlyphRenderModel {
       create: (idCell) =>
         computed(() => this.#placements(idCell.value), {
           name: "glyph.renderModel.componentPlacements",
+          equals: sameMatrices,
         }),
       dispose: (cell) => cell.dispose(),
     });

@@ -130,6 +130,11 @@ export class Mat implements MatModel {
     return new Mat(1, 0, 0, 1, 0, 0);
   }
 
+  /** Whether `m` and `n` hold the same six components. */
+  static equals(m: MatModel, n: MatModel): boolean {
+    return m.a === n.a && m.b === n.b && m.c === n.c && m.d === n.d && m.e === n.e && m.f === n.f;
+  }
+
   /** Whether `m` maps every point to itself. */
   static isIdentity(m: MatModel): boolean {
     return m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;

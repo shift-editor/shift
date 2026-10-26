@@ -96,7 +96,6 @@ export class Positioner {
         xOffset: glyph.shaped.xOffset + ownOffset.x,
         yOffset: glyph.shaped.yOffset + ownOffset.y,
         cluster: run.clusterStart + glyph.shaped.cluster,
-        bounds: glyph.model?.bounds ?? null,
       };
       positioned.push(current);
       if (attached) continue;

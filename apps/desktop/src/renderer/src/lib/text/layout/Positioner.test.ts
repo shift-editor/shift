@@ -4,7 +4,7 @@ import { TestEditor } from "@/testing/TestEditor";
 import { NONSPACING_MARK_EDITOR_ADVANCE, Positioner } from "@shift/editor/testing";
 import { characterTextItem as char, glyphTextItem as glyph } from "@shift/editor/text";
 import { layoutTestEditor, ltrRun } from "./testUtils";
-import { effect, signal } from "@shift/editor/signals";
+import { computed, effect, signal } from "@shift/editor/signals";
 import type { GlyphName } from "@shift/types";
 import { kerningValueEdit } from "@shift/editor/model";
 
@@ -37,26 +37,18 @@ describe("Positioner", () => {
     expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
   });
 
-  // Each positioned glyph carries the bounds from its resolved render model.
-  it("bounds pass through from the Glyph render model", () => {
+  it("places a glyph with its id and the items it came from", () => {
     const a = char(65);
-    const run = ltrRun(editor, [a]);
-    const locationCell = signal(editor.font.defaultLocation());
-    const positioner = new Positioner(editor, locationCell);
+    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
 
-    const positioned = positioner.position(run, "literal");
-    const record = editor.font.recordForName("A");
-    const expectedBounds = record
-      ? (editor.glyphForId(record.id)?.renderModelAt(locationCell).bounds ?? null)
-      : null;
+    const positioned = positioner.position(ltrRun(editor, [a]), "literal");
 
-    expect(positioned.glyphs[0].glyphId).toBe(record?.id);
-    expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);
+    expect(positioned.glyphs[0].glyphId).toBe(editor.font.recordForName("A")?.id);
     expect(positioned.glyphs[0].sourceItemIds).toEqual([a.id]);
     expect(positioned.glyphs[0].origin).toEqual({ x: 0, y: 0 });
   });
 
-  // Character the font maps no glyph to → zero advance, null bounds, no throw.
+  // Character the font maps no glyph to → zero advance, no throw.
   it("handles an unmapped character gracefully", () => {
     const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
     const run = ltrRun(editor, [char(0x10fffd)]);
@@ -64,7 +56,6 @@ describe("Positioner", () => {
     const positioned = positioner.position(run, "literal");
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
-    expect(positioned.glyphs[0].bounds).toBeNull();
     expect(positioned.glyphs[0].glyphId).toBeNull();
   });
 
@@ -176,5 +167,41 @@ describe("Positioner mark attachment", () => {
     // acutecomb's `top` (100, 700) moved by its component offset (150, 0), less its `_top` (100, 500).
     expect({ x: mark!.xOffset, y: mark!.yOffset }).toEqual({ x: 150, y: 200 });
     expect(mark!.xAdvance).toBe(0);
+  });
+
+  describe("re-lays out a run when its anchors move, not when only its outline does", () => {
+    function liveLayout() {
+      const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
+      const run = ltrRun(editor, [glyph(id("a")), glyph(id("acutecomb"))]);
+      const layout = computed(() => positioner.position(run, "anchors"));
+      // Subscribed the way the canvas holds a run's layout.
+      return { layout, subscription: effect(() => void layout.value) };
+    }
+
+    it("keeps the layout while a point moves", async () => {
+      const layer = editor.requireGlyphLayer();
+      const contourId = layer.addContour();
+      const pointId = layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+      await editor.settle();
+      const { layout, subscription } = liveLayout();
+      const before = layout.peek();
+
+      layer.previewPositionPatch([{ kind: "point", id: pointId, x: 40, y: 0 }]);
+      subscription.dispose();
+
+      expect(layout.peek()).toBe(before);
+    });
+
+    it("moves the mark with the anchor it sits on", () => {
+      const { layout, subscription } = liveLayout();
+      const before = layout.peek().glyphs[1]!;
+
+      const layer = editor.requireGlyphLayer();
+      const top = layer.anchors.find((anchor) => anchor.name === "top")!;
+      layer.previewPositionPatch([{ kind: "anchor", id: top.id, x: top.x + 40, y: top.y }]);
+      subscription.dispose();
+
+      expect(layout.peek().glyphs[1]!.xOffset).toBe(before.xOffset + 40);
+    });
   });
 });
