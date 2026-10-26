@@ -1,11 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { alphabetical, ascending, byName, comparing, descending, orderBy } from "@shift/types";
+import {
+  alphabetical,
+  ascending,
+  byCodePoint,
+  byName,
+  comparing,
+  descending,
+  orderBy,
+} from "@shift/types";
 
 describe("named orders", () => {
   it("orders numbers either way and strings in locale order", () => {
     expect([3, -1, 2].toSorted(ascending)).toEqual([-1, 2, 3]);
     expect([3, -1, 2].toSorted(descending)).toEqual([3, 2, -1]);
     expect(["b", "a", "c"].toSorted(alphabetical)).toEqual(["a", "b", "c"]);
+  });
+
+  it("orders strings by code point, as Rust orders them", () => {
+    // U+1F600 is one character after U+FFFD but two code units that `<` puts before it.
+    expect(["a\u{1F600}", "a\uFFFD", "a", "B"].toSorted(byCodePoint)).toEqual([
+      "B",
+      "a",
+      "a\uFFFD",
+      "a\u{1F600}",
+    ]);
   });
 
   it("orders named values by name", () => {

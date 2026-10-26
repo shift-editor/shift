@@ -452,6 +452,17 @@ impl FontChangeSet {
             .collect()
     }
 
+    /// Returns the glyphs whose record this changeset changes, in
+    /// first-touched order: glyphs created, deleted or renamed, and glyphs
+    /// given a layer that changes what their record lists.
+    pub fn record_glyph_ids(&self) -> IndexSet<GlyphId> {
+        self.changes
+            .iter()
+            .filter(|change| change.impact().contains(FontChangeImpact::GLYPHS))
+            .flat_map(FontChange::glyph_ids)
+            .collect()
+    }
+
     /// Every layer this changeset creates, updates or deletes, in change
     /// order: what replaying it, for undo or redo, reads.
     pub fn changed_layer_ids(&self) -> IndexSet<LayerId> {

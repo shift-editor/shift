@@ -16,8 +16,8 @@ use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
   AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, FontChangeImpact,
-  FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId,
-  MetricKind, NamedInstanceId, PointId, SourceId,
+  FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation,
+  MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::length::OrOverflow;
 use shift_slug::{
@@ -42,10 +42,10 @@ use shift_wire::{
     NapiAppliedChange, NapiAxisMappingBasis, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
     NapiCatalogAtlasWeights, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
     NapiGlyphLayerSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
-    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningSnapshot,
-    NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas, NapiSlugExactSource,
-    NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet,
-    NapiSource, NapiSourceMetricsInterpolationSnapshot,
+    NapiGlyphRecordChanges, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis,
+    NapiKerningSnapshot, NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas,
+    NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection,
+    NapiSlugWeightSet, NapiSource, NapiSourceMetricsInterpolationSnapshot,
   },
 };
 use shift_workspace::{
@@ -1346,13 +1346,50 @@ impl Bridge {
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
-    let font = workspace.font();
     let mut component_references = workspace.glyph_component_references()?;
-    let categories = shift_backends::record_categories(font.glyphs(), font.lib());
-    let mut records = font
-      .glyphs()
+    let glyphs: Vec<&Glyph> = workspace.font().glyphs().collect();
+    self.glyph_records(&glyphs, |glyph_id| {
+      Ok(component_references.remove(&glyph_id).unwrap_or_default())
+    })
+  }
+
+  /// The records of the glyphs `changes` changed, as they are now, and the
+  /// glyphs it removed: what a reply to the edit carries instead of every
+  /// record, which on a 65K-glyph font took 128 ms to build.
+  fn glyph_record_changes(
+    &self,
+    changes: &FontChangeSet,
+  ) -> errors::Result<NapiGlyphRecordChanges> {
+    let workspace = self.workspace()?;
+    let font = workspace.font();
+    let mut glyphs = Vec::new();
+    let mut removed = Vec::new();
+    for glyph_id in changes.record_glyph_ids() {
+      match font.glyph(glyph_id) {
+        Some(glyph) => glyphs.push(glyph),
+        None => removed.push(glyph_id.to_string()),
+      }
+    }
+
+    let updated = self.glyph_records(&glyphs, |glyph_id| {
+      Ok(workspace.referenced_glyph_ids_for_glyph(glyph_id)?)
+    })?;
+    Ok(NapiGlyphRecordChanges { updated, removed })
+  }
+
+  /// The records of `glyphs` sorted by name, each listing only layers on
+  /// [`Font::masters`] and the component bases `component_bases` reads for it.
+  fn glyph_records(
+    &self,
+    glyphs: &[&Glyph],
+    mut component_bases: impl FnMut(GlyphId) -> errors::Result<Vec<GlyphId>>,
+  ) -> errors::Result<Vec<NapiGlyphRecord>> {
+    let font = self.font()?;
+    let categories = shift_backends::record_categories(glyphs.iter().copied(), font.lib());
+    let mut records = glyphs
+      .iter()
       .map(|glyph| {
-        let mut record = GlyphRecord::from(glyph);
+        let mut record = GlyphRecord::from(*glyph);
         if let Some(category) = categories.get(&glyph.id()) {
           record.mark = category.mark;
           record.nonspacing_mark = category.nonspacing_mark;
@@ -1364,15 +1401,14 @@ impl Bridge {
             .to_string()
           });
         }
-        record.component_base_glyph_ids =
-          component_references.remove(&glyph.id()).unwrap_or_default();
+        record.component_base_glyph_ids = component_bases(glyph.id())?;
         record.layers = font
           .master_layers(glyph)
           .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
           .collect();
-        NapiGlyphRecord::from(record)
+        Ok(NapiGlyphRecord::from(record))
       })
-      .collect::<Vec<_>>();
+      .collect::<errors::Result<Vec<_>>>()?;
     records.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(records)
   }
@@ -1441,8 +1477,10 @@ impl Bridge {
 
     let next = FontReplacement::changed_by(self.font()?, impact)?
       .map(|replacement| -> errors::Result<NapiFontReplacement> {
-        let glyphs = glyphs_changed.then(|| self.get_glyphs()).transpose()?;
-        Ok(NapiFontReplacement::new(replacement, glyphs))
+        let glyph_changes = glyphs_changed
+          .then(|| self.glyph_record_changes(&outcome.changes))
+          .transpose()?;
+        Ok(NapiFontReplacement::new(replacement, glyph_changes))
       })
       .transpose()?;
 
@@ -2352,6 +2390,64 @@ mod tests {
   }
 
   #[test]
+  fn glyph_record_echoes_carry_only_the_glyphs_an_edit_changed() {
+    let mut bridge = bridge_with_workspace();
+    for (id, name, unicode) in [("glyph_a", "A", 65), ("glyph_b", "B", 66)] {
+      bridge
+        .apply(
+          vec![create_glyph_napi_with_id(id, name, vec![unicode])],
+          None,
+        )
+        .unwrap();
+    }
+
+    let renamed = bridge
+      .apply(
+        vec![intents::FontIntent::UpdateGlyph {
+          update_glyph: intents::UpdateGlyphIntent {
+            glyph_id: "glyph_a".to_string(),
+            new_name: "A.alt".to_string(),
+            new_unicodes: vec![],
+          },
+        }],
+        None,
+      )
+      .unwrap()
+      .next
+      .and_then(|next| next.glyph_changes)
+      .expect("a rename must echo its glyph's record");
+    assert!(renamed.removed.is_empty());
+    let [record] = renamed.updated.as_slice() else {
+      panic!("only the renamed glyph's record must cross");
+    };
+    let listed = bridge.get_glyphs().unwrap();
+    let listed = listed.iter().find(|glyph| glyph.id == "glyph_a").unwrap();
+    assert_eq!(
+      (
+        &record.name,
+        &record.unicodes,
+        &record.component_base_glyph_ids
+      ),
+      (
+        &listed.name,
+        &listed.unicodes,
+        &listed.component_base_glyph_ids
+      )
+    );
+    assert_eq!(record.name, "A.alt");
+
+    bridge.undo().unwrap();
+    let uncreated = bridge
+      .undo()
+      .unwrap()
+      .and_then(|undone| undone.next)
+      .and_then(|next| next.glyph_changes)
+      .expect("undoing a creation must echo the removal");
+    assert!(uncreated.updated.is_empty());
+    assert_eq!(uncreated.removed, ["glyph_b"]);
+  }
+
+  #[test]
   fn apply_create_glyph_returns_identity_record_without_layers() {
     let mut bridge = bridge_with_workspace();
 
@@ -2365,8 +2461,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("createGlyph must echo font replacements")
-      .glyphs
-      .expect("createGlyph must echo records");
+      .glyph_changes
+      .expect("createGlyph must echo records")
+      .updated;
     assert_eq!(glyphs.len(), 1);
     assert_eq!(glyphs[0].name, "A");
     assert!(glyphs[0].layers.is_empty());
@@ -2393,8 +2490,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("createGlyphLayer must echo font replacements")
-      .glyphs
-      .expect("createGlyphLayer must echo records");
+      .glyph_changes
+      .expect("createGlyphLayer must echo records")
+      .updated;
     assert_eq!(glyphs[0].layers.len(), 1);
     assert_eq!(glyphs[0].layers[0].id, layer_id);
     assert_eq!(glyphs[0].layers[0].source_id, source_id);
@@ -3378,7 +3476,7 @@ mod tests {
     assert_eq!(axes[0].maximum, Some(900.0));
     // locations may change shape, so sources ride along
     assert!(next.sources.is_some());
-    assert!(next.glyphs.is_none());
+    assert!(next.glyph_changes.is_none());
     assert!(applied.layers.is_empty());
     assert!(bridge.is_variable().unwrap());
   }
@@ -3524,7 +3622,7 @@ mod tests {
     assert_eq!(bold.id, "source_bold");
     assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
     assert!(applied.layers.is_empty());
-    assert!(next.glyphs.is_none());
+    assert!(next.glyph_changes.is_none());
     assert_eq!(bridge.get_glyphs().unwrap()[0].layers.len(), 1);
   }
 
@@ -3648,8 +3746,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("layer membership must echo font replacements")
-      .glyphs
-      .expect("layer membership must echo glyph records");
+      .glyph_changes
+      .expect("layer membership must echo glyph records")
+      .updated;
     assert_eq!(glyphs[0].layers.len(), 2);
   }
 
@@ -3839,8 +3938,9 @@ mod tests {
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].name, "Regular");
     let glyphs = next
-      .glyphs
-      .expect("deleteSource layer removal must echo glyph records");
+      .glyph_changes
+      .expect("deleteSource layer removal must echo glyph records")
+      .updated;
     assert_eq!(glyphs[0].layers.len(), 1);
     assert!(applied.layers.is_empty());
     assert!(glyph_source_state(&mut bridge, &glyph_id, "source_bold").is_none());
@@ -3884,8 +3984,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("createGlyph must echo font replacements")
-      .glyphs
-      .expect("createGlyph must echo records");
+      .glyph_changes
+      .expect("createGlyph must echo records")
+      .updated;
     assert!(glyphs[0].layers.is_empty());
   }
 

@@ -1,4 +1,4 @@
-import { ascending, EntityMap } from "@shift/types";
+import { ascending, byCodePoint, comparing, EntityMap } from "@shift/types";
 import type {
   AppliedChange,
   FontReplacement,
@@ -11,6 +11,8 @@ import type {
   GlyphName,
   GlyphProjection,
   GlyphRecord,
+  GlyphRecordChanges,
+  ReadonlyEntityMap,
   GlyphSnapshot,
   GlyphStructure,
   GlyphState,
@@ -353,8 +355,9 @@ export class FontStore {
     const current = this.#workspace.peek();
     if (!current) return [];
     const next = applied.next;
-    const glyphsWithNewLayers = next?.glyphs
-      ? glyphIdsWithChangedLayers(current.glyphs, next.glyphs)
+    const glyphChanges = next?.glyphChanges;
+    const glyphsWithNewLayers = glyphChanges
+      ? glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges)
       : [];
     const restructured = new Set(glyphsWithNewLayers);
     const invalid = new Set<GlyphId>([...glyphsWithNewLayers, ...applied.dependents]);
@@ -367,7 +370,9 @@ export class FontStore {
     }
 
     batch(() => {
-      if (next?.glyphs) this.#applyRecords({ glyphs: next.glyphs });
+      if (glyphChanges) {
+        this.#applyRecords({}, withGlyphRecordChanges(current.glyphs, glyphChanges));
+      }
       this.#showUnshownLayers(applied.layers);
     });
 
@@ -392,8 +397,11 @@ export class FontStore {
     }
   }
 
-  /** Folds `next`'s font-level records into the workspace and drops what they removed. */
-  #applyRecords(next: FontReplacement): void {
+  /**
+   * Folds `next`'s font-level records into the workspace and drops what they
+   * removed; `glyphs`, when given, is the whole glyph record list.
+   */
+  #applyRecords(next: FontReplacement, glyphs: GlyphRecord[] | null = null): void {
     const current = this.#workspace.peek();
     if (!current) return;
     const interpolation = next.sourceMetricsInterpolation;
@@ -401,7 +409,7 @@ export class FontStore {
     const nextWorkspace: WorkspaceSnapshot = {
       ...current,
       metadata: next.metadata ?? current.metadata,
-      glyphs: next.glyphs ?? current.glyphs,
+      glyphs: glyphs ?? current.glyphs,
       axes: next.axes ?? current.axes,
       axisMappings: next.axisMappings ?? current.axisMappings,
       axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
@@ -763,21 +771,49 @@ function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {
   return `${glyphId}:${sourceId}` as GlyphSourceKey;
 }
 
+/** The glyphs `changes` gave new or different layers, or removed. */
 function glyphIdsWithChangedLayers(
-  before: readonly GlyphRecord[],
-  after: readonly GlyphRecord[],
+  before: ReadonlyEntityMap<GlyphId, GlyphRecord>,
+  changes: GlyphRecordChanges,
 ): GlyphId[] {
-  const beforeById = new Map(before.map((glyph) => [glyph.id, glyph]));
-  const changed: GlyphId[] = [];
+  const changed = changes.updated
+    .filter((glyph) => {
+      const previous = before.get(glyph.id);
+      return !previous || !sameGlyphLayers(previous, glyph);
+    })
+    .map((glyph) => glyph.id);
+  return [...changed, ...changes.removed];
+}
 
-  for (const glyph of after) {
-    const previous = beforeById.get(glyph.id);
-    if (!previous || !sameGlyphLayers(previous, glyph)) changed.push(glyph.id);
-    beforeById.delete(glyph.id);
+/** Glyph records in the workspace's order, by name as Rust orders it. */
+const byRecordName = comparing((record: GlyphRecord) => record.name, byCodePoint);
+
+/**
+ * `records`, in the workspace's name order, with `changes` applied: each
+ * changed record takes its place by name, and removed glyphs leave.
+ */
+function withGlyphRecordChanges(
+  records: readonly GlyphRecord[],
+  changes: GlyphRecordChanges,
+): GlyphRecord[] {
+  const leaving = new Set<GlyphId>([
+    ...changes.removed,
+    ...changes.updated.map((record) => record.id),
+  ]);
+  const kept = records.filter((record) => !leaving.has(record.id));
+  const joining = changes.updated.toSorted(byRecordName);
+
+  // Both lists are in name order, so one pass merges them.
+  const merged: GlyphRecord[] = [];
+  let next = 0;
+  for (const record of kept) {
+    while (next < joining.length && byRecordName(joining[next]!, record) < 0) {
+      merged.push(joining[next++]!);
+    }
+    merged.push(record);
   }
-
-  changed.push(...beforeById.keys());
-  return changed;
+  merged.push(...joining.slice(next));
+  return merged;
 }
 
 function sameGlyphLayers(left: GlyphRecord, right: GlyphRecord): boolean {

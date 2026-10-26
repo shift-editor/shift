@@ -1037,14 +1037,18 @@ export interface NapiFontMetrics {
 /**
  * Selective replacement-grade font collections produced by one apply.
  *
- * Every present collection is complete. An absent collection was untouched;
- * it must be retained from the renderer's current workspace snapshot.
+ * Every present collection is complete, except glyph records, which list
+ * only what changed. An absent collection was untouched; it must be retained
+ * from the renderer's current workspace snapshot.
  */
 export interface NapiFontReplacement {
   /** Complete authored metadata when font metadata changed; absent otherwise. */
   metadata?: FontMetadata
-  /** Full records list when glyph identity changed; absent when untouched. */
-  glyphs?: Array<NapiGlyphRecord>
+  /**
+   * The glyph records the edit changed; absent when it changed none. Only
+   * the changed glyphs cross, since a large font has tens of thousands.
+   */
+  glyphChanges?: NapiGlyphRecordChanges
   /** Full axes list when font-level axis structure changed; absent otherwise. */
   axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
@@ -1165,6 +1169,15 @@ export interface NapiGlyphRecord {
    * once it has an attaching anchor.
    */
   ligature?: "explicit" | "subcategory"
+}
+
+/**
+ * The glyph records one edit changed: the changed glyphs' records as they
+ * are now, and the glyphs it removed. Every other record is unchanged.
+ */
+export interface NapiGlyphRecordChanges {
+  updated: Array<NapiGlyphRecord>
+  removed: Array<GlyphId>
 }
 
 export interface NapiGlyphSnapshot {

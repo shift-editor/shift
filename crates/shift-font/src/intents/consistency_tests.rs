@@ -194,6 +194,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
     );
     assert!(reversed.layers[0].structural);
     assert!(!reversed.changes.impact().contains(FontChangeImpact::GLYPHS));
+    assert!(reversed.changes.record_glyph_ids().is_empty());
 
     let drawn = apply(
         &mut font,
@@ -212,6 +213,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
         .into()],
     );
     assert!(!drawn.changes.impact().contains(FontChangeImpact::GLYPHS));
+    assert!(drawn.changes.record_glyph_ids().is_empty());
 
     // A new component base changes the record's component base glyphs.
     let composed = apply(
@@ -224,6 +226,14 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
         .into()],
     );
     assert!(composed.changes.impact().contains(FontChangeImpact::GLYPHS));
+    let glyph_a = GlyphId::from_raw("A");
+    assert!(
+        composed
+            .changes
+            .record_glyph_ids()
+            .into_iter()
+            .eq([glyph_a])
+    );
 
     let removed = apply(
         &mut font,
@@ -234,6 +244,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
         .into()],
     );
     assert!(removed.changes.impact().contains(FontChangeImpact::GLYPHS));
+    assert!(removed.changes.record_glyph_ids().into_iter().eq([glyph_a]));
 }
 
 #[test]

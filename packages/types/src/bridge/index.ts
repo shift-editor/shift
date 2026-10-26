@@ -107,6 +107,7 @@ export type {
   GlyphPreview,
   GlyphProjection,
   GlyphRecord,
+  GlyphRecordChanges,
   GlyphSourceComponents,
   GlyphSourceShape,
   GlyphSourceValues,

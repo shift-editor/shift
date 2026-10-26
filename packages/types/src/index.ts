@@ -31,6 +31,7 @@ export { removeBy, replaceBy, upsertBy } from "./keyed";
 export {
   alphabetical,
   ascending,
+  byCodePoint,
   byName,
   comparing,
   descending,
@@ -208,6 +209,7 @@ export type {
   GlyphPreview,
   GlyphProjection,
   GlyphRecord,
+  GlyphRecordChanges,
   GlyphSourceComponents,
   GlyphSourceShape,
   GlyphSourceValues,

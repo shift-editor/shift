@@ -271,7 +271,7 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    expect(applied.next?.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
     expect(stack.font.recordForId(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
   });
 
