@@ -57,6 +57,7 @@ import {
   type Signal,
 } from "../signals/signal";
 import type {
+  FontEngine,
   FontOptions,
   FontRecordIndex,
   KerningPlace,
@@ -868,16 +869,27 @@ export class Font {
    * Finds the next unused glyph name for an auto-incrementing base name.
    *
    * @param name - Preferred base name. Blank input falls back to `newGlyph`.
-   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on.
+   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on, as the window's engine names it.
+   * @throws When the window's engine is not open.
    */
   nextAvailableGlyphName(name: GlyphName): GlyphName {
-    const baseName = (name.trim() || "newGlyph") as GlyphName;
-    if (!this.recordForName(baseName)) return baseName;
+    return this.#requireEngine().nextGlyphName(name);
+  }
 
-    for (let index = 1; ; index += 1) {
-      const candidate = `${baseName}.${index}` as GlyphName;
-      if (!this.recordForName(candidate)) return candidate;
-    }
+  /**
+   * The name a new anchor added to every one of `layerIds` takes, as the
+   * window's engine names it.
+   *
+   * @returns `new`, or `new.1`, `new.2`, … when taken in any of the layers.
+   */
+  newAnchorName(layerIds: readonly LayerId[]): string {
+    return this.#requireEngine().newAnchorName(layerIds);
+  }
+
+  #requireEngine(): FontEngine {
+    const engine = this.#store.engine;
+    if (!engine) throw new Error("naming a new glyph or anchor needs the window's editing engine");
+    return engine;
   }
 
   /**

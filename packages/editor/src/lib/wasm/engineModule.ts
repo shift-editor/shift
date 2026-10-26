@@ -1,4 +1,4 @@
-import type { FontIntent, GlyphId, SourceId } from "@shift/types";
+import type { FontIntent, GlyphId, GlyphName, LayerId, SourceId } from "@shift/types";
 import {
   engineApply,
   engineBeginEdit,
@@ -7,6 +7,8 @@ import {
   engineEndEdit,
   engineGlyphNumbers,
   engineMarkSaved,
+  engineNewAnchorName,
+  engineNextGlyphName,
   engineOpen,
   enginePreload,
   enginePreview,
@@ -165,6 +167,23 @@ export class EngineSession {
    */
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
     return engineSourceMetricsAt({ engine: this.#handle, location });
+  }
+
+  /**
+   * The name a new glyph asked to be called `name` takes in the session's
+   * font: `name` trimmed, or `newGlyph` when blank, numbered `.1`, `.2`, …
+   * past any glyph already called that.
+   */
+  nextGlyphName(name: string): GlyphName {
+    return engineNextGlyphName(this.#handle, name) as GlyphName;
+  }
+
+  /**
+   * The name a new anchor added to every one of `layerIds` takes: `new`,
+   * numbered `.1`, `.2`, … past any anchor already called that in any of them.
+   */
+  newAnchorName(layerIds: readonly LayerId[]): string {
+    return engineNewAnchorName(this.#handle, [...layerIds]);
   }
 
   /** Each of `ids` by the number the session interned it as, interning new ones in one call. */

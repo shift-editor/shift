@@ -1,6 +1,6 @@
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
 import { FontStoreLocation } from "@shared/workspace/protocol";
-import type { FontIntent, GlyphId, SourceId } from "@shift/types";
+import type { FontIntent, GlyphId, GlyphName, LayerId, SourceId } from "@shift/types";
 import {
   loadEngine,
   type EditablePair,
@@ -261,6 +261,14 @@ export class WindowEngine implements FontEngine {
 
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
     return this.#opened?.session.sourceMetricsAt(location) ?? null;
+  }
+
+  nextGlyphName(name: string): GlyphName {
+    return this.#require().nextGlyphName(name);
+  }
+
+  newAnchorName(layerIds: readonly LayerId[]): string {
+    return this.#require().newAnchorName(layerIds);
   }
 
   /** Forgets every undone edit. */

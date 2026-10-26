@@ -92,7 +92,8 @@ mod exports {
     use std::collections::HashMap;
     use std::hash::Hash;
 
-    use shift_font::{DesignLocation, Font, GlyphId, Kerning, KerningSide, SourceId};
+    use shift_font::naming::new_anchor_name;
+    use shift_font::{DesignLocation, Font, GlyphId, Kerning, KerningSide, LayerId, SourceId};
     use shift_wire::intents::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
@@ -305,6 +306,40 @@ mod exports {
             line_gap: resolved.line_gap(),
             underline_position: resolved.underline_position(),
             underline_thickness: resolved.underline_thickness(),
+        })
+    }
+
+    /// The name a new glyph asked to be called `name` takes in the session's
+    /// font: `Font::next_available_glyph_name`.
+    ///
+    /// # Errors
+    ///
+    /// Fails on an unknown handle.
+    #[wasm_bindgen(js_name = engineNextGlyphName)]
+    pub fn engine_next_glyph_name(handle: u32, name: &str) -> Result<String, JsError> {
+        with_engine(handle, |engine| {
+            Ok(engine.session.font().next_available_glyph_name(name))
+        })
+    }
+
+    /// The name a new anchor added to every one of `layer_ids` takes:
+    /// `naming::new_anchor_name`, loading the layers first.
+    ///
+    /// # Errors
+    ///
+    /// Fails on an unknown handle or layer id, or when the source fails.
+    #[wasm_bindgen(js_name = engineNewAnchorName)]
+    pub fn engine_new_anchor_name(handle: u32, layer_ids: Vec<String>) -> Result<String, JsError> {
+        let layer_ids = intents::parse_id_list::<LayerId>(&layer_ids)?;
+        with_engine(handle, |engine| {
+            engine.load_layers(layer_ids.clone())?;
+            let font = engine.session.font();
+            let layers = layer_ids
+                .iter()
+                .map(|layer_id| font.require_layer(*layer_id))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| JsError::new(&error.to_string()))?;
+            Ok(new_anchor_name(layers))
         })
     }
 

@@ -46,6 +46,8 @@ export {
   engineKerningPairs,
   engineKerningRun,
   engineMarkSaved,
+  engineNewAnchorName,
+  engineNextGlyphName,
   engineOpen,
   enginePreload,
   enginePreview,

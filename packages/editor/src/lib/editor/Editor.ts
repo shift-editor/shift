@@ -2168,7 +2168,8 @@ export class Editor {
     const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
-    const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, position));
+    const name = this.font.newAnchorName(layers.map((layer) => layer.layerId));
+    const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, name, position));
     const activeAnchorId = added.get(activeSourceId);
     if (activeAnchorId) this.selection.select([activeAnchorId]);
     return true;

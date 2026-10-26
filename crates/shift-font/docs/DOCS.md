@@ -41,6 +41,7 @@ crates/shift-font/src/
   curve_fit.rs     -- one cubic or quadratic fitted to a connected run of segments, for deletion
   point_arrange.rs -- transform, align and distribute selected points; shift a sidebearing
   svg_path.rs      -- contours from SVG path data, for authoring payloads and pasted SVG
+  naming.rs        -- names for new glyphs and anchors: the name, or the name numbered `.1`, `.2`, ...
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening

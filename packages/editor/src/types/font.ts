@@ -118,6 +118,22 @@ export interface FontEngine {
    * @returns null for a font whose masters do not interpolate, or while the engine is not open.
    */
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null;
+
+  /**
+   * The name a new glyph asked to be called `name` takes: `name` trimmed, or
+   * `newGlyph` when blank, numbered `.1`, `.2`, … past any glyph called that.
+   *
+   * @throws When the engine is not open.
+   */
+  nextGlyphName(name: string): GlyphName;
+
+  /**
+   * The name a new anchor added to every one of `layerIds` takes: `new`,
+   * numbered `.1`, `.2`, … past any anchor called that in any of them.
+   *
+   * @throws When the engine is not open.
+   */
+  newAnchorName(layerIds: readonly LayerId[]): string;
 }
 
 /**

@@ -196,6 +196,15 @@ pub(crate) struct Engine {
     pub(crate) ids: InternedIds,
 }
 
+impl Engine {
+    /// Loads `layer_ids` that are still placeholders, from the source.
+    pub(crate) fn load_layers(&mut self, layer_ids: Vec<LayerId>) -> Result<(), JsError> {
+        self.session
+            .load_layers(&mut HostLayers(&self.source), layer_ids)
+            .map_err(|error| JsError::new(&error.to_string()))
+    }
+}
+
 thread_local! {
     static ENGINES: RefCell<Vec<Option<Engine>>> = const { RefCell::new(Vec::new()) };
 }

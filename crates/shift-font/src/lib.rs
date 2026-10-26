@@ -47,6 +47,7 @@ pub mod intents;
 pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
+pub mod naming;
 pub mod placed_blend;
 pub mod point_arrange;
 pub mod projection;
