@@ -30,6 +30,8 @@ const { values: options } = parseArgs({
     seconds: { type: "string", default: "8" },
     app: { type: "string" },
     cpu: { type: "string" },
+    // point-drag only: paste this many points into the glyph first, as circles.
+    points: { type: "string" },
     "keep-open": { type: "boolean", default: false },
   },
 });
@@ -322,6 +324,17 @@ async function openFont(page) {
 async function pointDrag(page) {
   const canvas = await page.locator('[data-shift-capture-target="editor"]').boundingBox();
   if (!canvas) throw new Error("the editor canvas is not visible");
+  if (options.points) {
+    await page.evaluate(
+      async (contours) => {
+        const editor = window.shift.editor;
+        if (!editor.insertContent({ contours })) throw new Error("pasting the points failed");
+        await editor.font.editCoordinator.settled();
+      },
+      circles(Number(options.points)),
+    );
+    await page.waitForTimeout(500);
+  }
   const grab = await page.evaluate(() => {
     const editor = window.shift.editor;
     editor.selectAll();
@@ -354,6 +367,43 @@ async function pointDrag(page) {
     await page.mouse.up();
     await page.evaluate(() => window.shift.editor.font.editCoordinator.settled());
     return { timings: { [`release to settled (${grab.points} points)`]: [Date.now() - released] } };
+  });
+}
+
+/**
+ * `count` points as closed circles of four cubics each (twelve points), in a
+ * grid inside the em, so a drag moves outlines of a known size.
+ */
+function circles(count) {
+  const perCircle = 12;
+  const total = Math.ceil(count / perCircle);
+  const columns = Math.ceil(Math.sqrt(total));
+  const radius = 400 / columns;
+  const handle = radius * 0.5523;
+  return Array.from({ length: total }, (_, index) => {
+    const cx = 100 + (index % columns) * radius * 2.2;
+    const cy = 100 + Math.floor(index / columns) * radius * 2.2;
+    const on = (x, y) => ({ x: cx + x, y: cy + y, pointType: "onCurve", smooth: true });
+    const off = (x, y) => ({ x: cx + x, y: cy + y, pointType: "offCurve", smooth: false });
+    const r = radius;
+    const k = handle;
+    return {
+      closed: true,
+      points: [
+        on(r, 0),
+        off(r, k),
+        off(k, r),
+        on(0, r),
+        off(-k, r),
+        off(-r, k),
+        on(-r, 0),
+        off(-r, -k),
+        off(-k, -r),
+        on(0, -r),
+        off(k, -r),
+        off(r, -k),
+      ],
+    };
   });
 }
 
@@ -538,7 +588,7 @@ function readdirSafe(directory) {
 function usage(problem) {
   console.error(`${problem}
 
-Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|toolbar-drag|point-drag] [--axis Weight]
+Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|toolbar-drag|point-drag] [--points N] [--axis Weight]
                             [--seconds 8] [--cpu out.cpuprofile] [--app <executable>] [--keep-open]`);
   process.exit(1);
 }
