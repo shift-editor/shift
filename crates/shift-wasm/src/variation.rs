@@ -13,6 +13,7 @@ use shift_font::{
     Axis, AxisId, AxisMappingBasis, AxisMappingId, AxisRole, AxisSupport, DesignNormalization,
     ExternalLocation, InterpolationBasis, InterpolationRegion, Location, SourceId, VariationBasis,
     VariationDelta, ir::variation::map_location_with_bases,
+    ir::variation::unmap_location_with_bases,
 };
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -318,34 +319,17 @@ pub fn map_axis_location(mappings: u32, axes: u32, external: &[f64]) -> Vec<f64>
     })
 }
 
-/// Maps a location through one registered mapping; its output axes' values in its output order.
-#[wasm_bindgen(js_name = evaluateAxisMapping)]
-pub fn evaluate_axis_mapping(mappings: u32, index: u32, axes: u32, location: &[f64]) -> Vec<f64> {
+/// The external location a design location's mapping came from, in `axes`
+/// order, NaN on internal axes: `unmap_location_with_bases`.
+#[wasm_bindgen(js_name = unmapAxisLocation)]
+pub fn unmap_axis_location(mappings: u32, axes: u32, design: &[f64]) -> Vec<f64> {
     with_axes(axes, |axes| {
         MAPPINGS.with_borrow(|registry| {
-            let Some(basis) = registry
-                .get(mappings)
-                .and_then(|bases| bases.get(index as usize))
-            else {
-                return Vec::new();
-            };
-            let location = to_location(axes, location);
-            let mapped = basis.evaluate(&location, axes).unwrap_or_default();
-            basis
-                .output_axis_ids()
-                .iter()
-                .map(|axis_id| mapped.get(*axis_id).unwrap_or(f64::NAN))
-                .collect()
+            let design = shift_font::DesignLocation::from_untyped(to_location(axes, design));
+            let bases = registry.get(mappings).map_or(&[][..], Vec::as_slice);
+            let external = unmap_location_with_bases(&design, axes, bases);
+            from_location(axes, external.as_untyped())
         })
-    })
-}
-
-/// Converts a normalized coordinate on one registered axis back to its design value.
-#[wasm_bindgen(js_name = denormalizeAxis)]
-pub fn denormalize_axis(axes: u32, index: u32, value: f64) -> f64 {
-    with_axes(axes, |axes| {
-        axes.get(index as usize)
-            .map_or(value, |axis| axis.denormalize(value))
     })
 }
 

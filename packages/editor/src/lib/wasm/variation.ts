@@ -6,8 +6,6 @@ import type {
   VariationBasis,
 } from "@shift/types";
 import {
-  denormalizeAxis as wasmDenormalizeAxis,
-  evaluateAxisMapping as wasmEvaluateAxisMapping,
   evaluateVariationBasis as wasmEvaluateVariationBasis,
   interpolationWeights as wasmInterpolationWeights,
   mapAxisLocation,
@@ -19,9 +17,10 @@ import {
   releaseAxisMappings,
   releaseInterpolationBasis,
   releaseVariationBasis,
+  unmapAxisLocation,
 } from "@shift/wasm";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
-import { asDesignAxisLocation } from "../variation/location";
+import { asDesignAxisLocation, asExternalAxisLocation } from "../variation/location";
 
 /**
  * Registers Rust-compiled values with the module once per object, and frees
@@ -161,31 +160,19 @@ export function mapAxisMappings(
   return asDesignAxisLocation(locationFromValues(axes, design));
 }
 
-/** Maps a location through one of a font's compiled axis mappings; its output axes only. */
-export function evaluateAxisMapping(
-  bases: readonly AxisMappingBasis[],
-  index: number,
-  location: ReadonlyMap<AxisId, number>,
+/**
+ * The external location a design location's mapping came from, on the
+ * external axes alone: shift-font's `unmap_location_with_bases`.
+ */
+export function unmapAxisMappings(
+  location: DesignAxisLocation,
   axes: readonly Axis[],
-): DesignAxisLocation {
-  const outputs = wasmEvaluateAxisMapping(
+  bases: readonly AxisMappingBasis[],
+): ExternalAxisLocation {
+  const external = unmapAxisLocation(
     mappingHandles.of(bases),
-    index,
     axesHandles.of(axes),
     locationValues(axes, location),
   );
-  const outputIds = bases[index]?.outputAxisIds ?? [];
-  return asDesignAxisLocation(
-    new Map(
-      outputIds.flatMap((axisId, outputIndex) => {
-        const value = outputs[outputIndex];
-        return value === undefined || Number.isNaN(value) ? [] : [[axisId, value] as const];
-      }),
-    ),
-  );
-}
-
-/** Converts a normalized coordinate on an axis back to its design value. */
-export function denormalizeAxis(axes: readonly Axis[], axis: Axis, value: number): number {
-  return wasmDenormalizeAxis(axesHandles.of(axes), axes.indexOf(axis), value);
+  return asExternalAxisLocation(locationFromValues(axes, external));
 }

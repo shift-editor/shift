@@ -29,7 +29,7 @@ crates/shift-wasm/src/
   engine.rs      engineOpen, engineBeginEdit, engineApply, engineRewindEdit, engineStage, engineEndEdit, engineCancelEdit, engineUndo, engineRedo, enginePreview, enginePreload, engineRelease, EngineLayerSource (the `engine` feature)
   engine_reads.rs   engineGlyphNumbers, engineSourceNumbers, engineKerningRun, engineKerningPairs, engineSourceMetricsAt, and their layouts
   geometry.rs    contourGeometry (a contour's segments and bounds), composeTransform and decomposeMatrix (component placements), generated into glyph-state
-  variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, evaluateAxisMapping, denormalizeAxis
+  variation.rs   axis and basis registries, interpolationWeights, mapAxisLocation, unmapAxisLocation
   names.rs       interned anchor names
   layout.rs      Reader, Writer, the Layout trait, and the layout! macros hot calls are declared with
   layout/typescript.rs   generated_file_wasm_layouts: the registry of hot calls and the TypeScript generator
@@ -82,12 +82,11 @@ Rust owns every rule the font compiler or format decides, and the editor and exp
 
 ### Moved from TypeScript, measured
 
-Per-frame geometry now runs here, through glyph-state, with no TypeScript copy and no reference test: segments and tight bounds (`segmentContour` → `contourGeometry`, shift-font's `SegmentIndexIter` and `SegmentIndices::bounds`) and component placements (`composeTransform`, `decomposeMatrix`, shift-font's `DecomposedTransform::to_matrix` and `from_matrix`). Measured on the M4 against the TypeScript they replaced: segments plus bounds of one contour 0.041 against 0.034 ms at 326 points and 2.4 against 1.9 ms at 20,001 (the Rust call alone is 0.47 ms of that); a placement 0.21 against 0.03 µs to compose and 0.30 against 0.01 µs to decompose. Edits themselves, previews included, run in the window's engine (`engineApply`, `enginePreview`). New glyph and anchor names come from the engine too (`engineNextGlyphName`, `engineNewAnchorName`, over shift-font's `naming`). Pasted SVG path data is parsed by shift-font's `svg_path::contours_from_svg_path`, which the command line uses too, through `svgPathContours`. It is exported from the engine module only, which it grows by 38.9 KB (23 KB gzip, 1.3%); in the module every window embeds it would have added 41.7 KB, 19%.
+Per-frame geometry now runs here, through glyph-state, with no TypeScript copy and no reference test: segments and tight bounds (`segmentContour` → `contourGeometry`, shift-font's `SegmentIndexIter` and `SegmentIndices::bounds`) and component placements (`composeTransform`, `decomposeMatrix`, shift-font's `DecomposedTransform::to_matrix` and `from_matrix`). Measured on the M4 against the TypeScript they replaced: segments plus bounds of one contour 0.041 against 0.034 ms at 326 points and 2.4 against 1.9 ms at 20,001 (the Rust call alone is 0.47 ms of that); a placement 0.21 against 0.03 µs to compose and 0.30 against 0.01 µs to decompose. Edits themselves, previews included, run in the window's engine (`engineApply`, `enginePreview`). The inverse axis mapping, from a design location back to the external controls, is shift-font's `unmap_location_with_bases` (`unmapAxisLocation`). New glyph and anchor names come from the engine too (`engineNextGlyphName`, `engineNewAnchorName`, over shift-font's `naming`). Pasted SVG path data is parsed by shift-font's `svg_path::contours_from_svg_path`, which the command line uses too, through `svgPathContours`. It is exported from the engine module only, which it grows by 38.9 KB (23 KB gzip, 1.3%); in the module every window embeds it would have added 41.7 KB, 19%.
 
 ### What stays in TypeScript
 
 - **Blending glyph geometry** (`interpolateSourceValues`, in `Glyph`'s geometry at a design location) runs over the live coordinate buffers every frame, drag previews included, which the window's engine does not hold, so the engine cannot answer it. It multiplies by weights and has no rule to drift: which sources blend, their weights, exact source shapes and variation deltas all come from Rust (the native projection, `interpolationWeights`, `evaluateVariationBasis`).
-- **The inverse axis mapping** (`unmapAxisMappings`) searches over the forward mapping, which itself runs here.
 
 ### Reference tests
 
