@@ -353,6 +353,16 @@ authoredTest(
         }),
       )
       .toBe(candidate.initialCount + 1);
+    // The engine restores the layer at once; the component shows, and can be
+    // selected, once the workspace confirms the undo and its projection returns.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (componentId) => window.shift!.editor.object(componentId)?.kind ?? null,
+          contextTarget.componentId,
+        ),
+      )
+      .toBe("component");
 
     await page.evaluate(
       (componentId) => window.shift!.editor.selection.select([componentId]),
