@@ -241,6 +241,9 @@ export class GlyphContour {
       const contour = this.#contourCell.value;
       contour.trackShape();
       const matrix = this.#matrixCell.value;
+      // Root contours sit unplaced, so their own cached bounds are already in root coordinates.
+      if (Mat.isIdentity(matrix)) return contour.bounds;
+
       const points = contour.points.map((point) => ({
         ...point,
         ...Mat.applyToPoint(matrix, point),
@@ -295,6 +298,9 @@ export class GlyphContour {
 
   /** Returns this occurrence's segments in root-glyph coordinates. */
   segments(): readonly Segment[] {
+    const contour = this.#contourCell.peek();
+    if (Mat.isIdentity(this.#matrixCell.peek())) return contour.segments();
+
     return Segment.parse(this);
   }
 
