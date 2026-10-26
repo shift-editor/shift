@@ -227,7 +227,7 @@ impl IndexEntries {
 }
 
 /// The layer slot a glyph has for one source.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(super) struct GlyphSource {
     glyph_id: GlyphId,
     source_id: SourceId,
