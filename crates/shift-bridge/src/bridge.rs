@@ -3009,7 +3009,8 @@ mod tests {
         },
       )))
       .unwrap();
-    let bytes = rmp_serde::to_vec_named(&moved.changes).unwrap();
+    // Sent compacted, as the window's engine sends it.
+    let bytes = rmp_serde::to_vec_named(&moved.changes.compact()).unwrap();
 
     let echo = bridge
       .persist(bytes.into(), NapiSaveState::Unsaved)
@@ -3020,7 +3021,9 @@ mod tests {
     assert!(
       bridge
         .persist(
-          rmp_serde::to_vec_named(&moved.changes).unwrap().into(),
+          rmp_serde::to_vec_named(&moved.changes.compact())
+            .unwrap()
+            .into(),
           NapiSaveState::Unsaved,
         )
         .is_err()
