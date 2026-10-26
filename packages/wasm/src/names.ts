@@ -1,4 +1,4 @@
-import { internName, nameOf } from "@shift/wasm";
+import { internName, nameOf } from "./index";
 
 // non-reactive: a string table mirrored from the module's, which only ever grows
 const ids = new Map<string, number>();

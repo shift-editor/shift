@@ -19,7 +19,6 @@ initSync({ module: embeddedModule(moduleBase64) });
 export {
   compileAxisMappings,
   composeTransform,
-  contourGeometry,
   decomposeMatrix,
   mapLocation,
   transformLayer,

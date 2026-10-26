@@ -320,6 +320,9 @@ importers:
       '@shift/types':
         specifier: workspace:*
         version: link:../types
+      '@shift/wasm':
+        specifier: workspace:*
+        version: link:../wasm
     devDependencies:
       typescript:
         specifier: ^5.5.4

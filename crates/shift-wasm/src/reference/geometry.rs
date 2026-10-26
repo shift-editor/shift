@@ -1,11 +1,10 @@
-//! Component matrices, contour segments and bounds, and whole-layer transforms.
+//! Component matrices and whole-layer transforms.
 
 use serde::{Deserialize, Serialize, de::IgnoredAny};
-use shift_font::composite::{ResolvedContour, layer_bbox, resolved_contours_bbox};
+use shift_font::composite::layer_bbox;
 use shift_font::{
-    Anchor, AnchorId, Component, ComponentId, Contour, ContourId, CurveSegment, CurveSegmentIter,
-    DecomposedTransform, GlyphId, GlyphInterpolationValues, GlyphLayer, LayerId, Point, PointId,
-    PointType, SourceId, Transform,
+    Anchor, AnchorId, Component, ComponentId, Contour, ContourId, DecomposedTransform, GlyphId,
+    GlyphInterpolationValues, GlyphLayer, LayerId, PointId, PointType, SourceId, Transform,
 };
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -58,44 +57,6 @@ pub enum ReferencePointType {
     OnCurve,
     OffCurve,
     QCurve,
-}
-
-/// One authored contour point.
-#[derive(Deserialize, Tsify)]
-#[serde(rename_all = "camelCase")]
-pub struct ReferenceContourPoint {
-    x: f64,
-    y: f64,
-    point_type: ReferencePointType,
-}
-
-#[derive(Deserialize, Tsify)]
-pub struct ReferenceContour {
-    points: Vec<ReferenceContourPoint>,
-    closed: bool,
-}
-
-#[derive(Serialize, Tsify)]
-#[serde(rename_all = "lowercase")]
-pub enum ReferenceSegmentKind {
-    Line,
-    Quad,
-    Cubic,
-}
-
-/// One parsed segment: its kind, its points as indices into the contour, and its tight box.
-#[derive(Serialize, Tsify)]
-pub struct ReferenceSegment {
-    #[serde(rename = "type")]
-    kind: ReferenceSegmentKind,
-    points: Vec<usize>,
-    bounds: ReferenceBounds,
-}
-
-#[derive(Serialize, Tsify)]
-pub struct ReferenceContourGeometry {
-    segments: Vec<ReferenceSegment>,
-    bounds: Option<ReferenceBounds>,
 }
 
 /// The parts of a contour's structure the layer's values depend on.
@@ -165,58 +126,6 @@ pub fn transform_point(
 pub fn decompose_matrix(matrix: Ts<ReferenceMatrix>) -> Result<Ts<ReferenceDecomposed>, JsError> {
     let matrix = Transform::from(matrix.to_rust()?);
     Ok(ReferenceDecomposed::from(DecomposedTransform::from_matrix(&matrix)).into_ts()?)
-}
-
-/// `CurveSegmentIter`'s segments with `CurveSegment::bounds` each, and the
-/// contour's `resolved_contours_bbox`.
-#[wasm_bindgen(js_name = contourGeometry)]
-pub fn contour_geometry(
-    contour: Ts<ReferenceContour>,
-) -> Result<Ts<ReferenceContourGeometry>, JsError> {
-    let contour = contour.to_rust()?;
-    let points: Vec<Point> = contour
-        .points
-        .into_iter()
-        .enumerate()
-        .map(|(index, point)| {
-            Point::new(
-                PointId::from_raw(index),
-                point.x,
-                point.y,
-                (&point.point_type).into(),
-                false,
-            )
-        })
-        .collect();
-    let index_of = |target: &Point| {
-        points
-            .iter()
-            .position(|candidate| std::ptr::eq(candidate, target))
-            .unwrap_or(usize::MAX)
-    };
-    let segments = CurveSegmentIter::new(&points, contour.closed)
-        .map(|segment| {
-            let (kind, members): (_, Vec<&Point>) = match &segment {
-                CurveSegment::Line(p0, p1) => (ReferenceSegmentKind::Line, vec![p0, p1]),
-                CurveSegment::Quad(p0, c, p1) => (ReferenceSegmentKind::Quad, vec![p0, c, p1]),
-                CurveSegment::Cubic(p0, c0, c1, p1) => {
-                    (ReferenceSegmentKind::Cubic, vec![p0, c0, c1, p1])
-                }
-            };
-            ReferenceSegment {
-                kind,
-                points: members.into_iter().map(index_of).collect(),
-                bounds: segment.bounds().into(),
-            }
-        })
-        .collect();
-    let bounds = resolved_contours_bbox(&[ResolvedContour {
-        points: points.clone(),
-        closed: contour.closed,
-    }])
-    .map(ReferenceBounds::from);
-
-    Ok(ReferenceContourGeometry { segments, bounds }.into_ts()?)
 }
 
 /// `GlyphLayer::transform_layer`, returning the layer's values afterwards and

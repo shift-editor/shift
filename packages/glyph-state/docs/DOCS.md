@@ -25,7 +25,8 @@ packages/glyph-state/src/
   Component.ts          -- component reader and decomposed transform matrix
   valueLayout.ts        -- value-buffer cursor helpers built on the generated layout constants
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
-  parseContourSegments.ts -- shared traversal retaining supplied points, with or without IDs
+  segmentContour.ts     -- segments and bounds from shift-font (`contourGeometry`), retaining supplied points
+  generated/geometryLayouts.ts -- generated call into `@shift/wasm` (do not edit)
   filledContoursContain.ts -- non-zero fill hit testing over segmented contours
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list
@@ -41,7 +42,7 @@ packages/glyph-state/src/
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hit`.
 - **`Point`** -- id-aware point record (`pointType`, `smooth`, coordinates) with on/off-curve predicates and `NewPoint` factories for authoring flows.
 - **`ContourGeometry<TPoint>`** -- minimal named `points + closed` contract accepted by segment parsing; defaults to authored `Point` but also accepts `NewPoint`.
-- **`parseContourSegments`** -- canonical structural traversal returning `SegmentPoints<TPoint>` descriptions without allocating identity. `Segment.parse` wraps these descriptions in ID-aware segment objects.
+- **`segmentContour`** -- a contour's segments and their tight bounds as shift-font segments and bounds them, in one call into `@shift/wasm` (`contourGeometry`), returning `SegmentPoints<TPoint>` over the supplied points without allocating identity. `Segment.parse` wraps them in ID-aware segment objects; `Contour` segments once for its segments and its `bounds`. TypeScript keeps no segment or bounds rule.
 - **`SegmentedContour`** -- contour geometry that exposes domain-owned segment traversal to renderer path derivation.
 - **`filledContoursContain`** -- pure non-zero winding query over a group of closed segmented contours; open contours do not contribute.
 - **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used by `positionsFor`, `movePositions`, and `withPositionUpdates` so transform code stays independent of where the geometry came from.

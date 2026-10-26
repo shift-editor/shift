@@ -147,7 +147,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 - NEVER duplicate package code in app layer
 - If you need functionality from a package, import it; don't copy it
 - Do not synthesize fake point IDs for geometry-only operations
-- Canonical glyph geometry APIs: `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
+- Canonical glyph geometry APIs: `segmentContour` (segments and bounds from shift-font through `@shift/wasm`), `Contour.bounds`, `GlyphGeometry.bounds`
 
 ### Import Conventions
 

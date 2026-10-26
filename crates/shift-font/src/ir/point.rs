@@ -18,6 +18,14 @@ crate::string_enum! {
     parse_error: String = |text| format!("Invalid point type: {text}");
 }
 
+impl PointType {
+    /// Whether a point of this type lies on the curve: an on-curve point or a
+    /// quadratic one, which the contour passes through.
+    pub fn is_on_curve(self) -> bool {
+        matches!(self, Self::OnCurve | Self::QCurve)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     id: PointId,
@@ -104,7 +112,7 @@ impl Point {
     }
 
     pub fn is_on_curve(&self) -> bool {
-        matches!(self.point_type, PointType::OnCurve | PointType::QCurve)
+        self.point_type.is_on_curve()
     }
 
     pub fn distance(&self, x: f64, y: f64) -> f64 {

@@ -30,7 +30,7 @@ struct Module {
     calls: Vec<Call>,
 }
 
-fn modules() -> [Module; 3] {
+fn modules() -> [Module; 4] {
     [
         Module {
             output: "packages/editor/src/lib/wasm/generated/layouts.ts",
@@ -46,6 +46,11 @@ fn modules() -> [Module; 3] {
             output: "packages/editor/src/lib/wasm/generated/engineLayouts.ts",
             import: "@shift/wasm/engine",
             calls: engine_calls(),
+        },
+        Module {
+            output: "packages/glyph-state/src/generated/geometryLayouts.ts",
+            import: "@shift/wasm",
+            calls: geometry_calls(),
         },
     ]
 }
@@ -79,6 +84,15 @@ fn calls() -> Vec<Call> {
             output: Option::<Vec<Vec<shift_font::placed_blend::BlendedPoint>>>::kind(),
         },
     ]
+}
+
+fn geometry_calls() -> Vec<Call> {
+    vec![Call {
+        name: "contourGeometry",
+        doc: "Segments one contour and bounds each segment and the whole contour, as shift-font segments it.",
+        input: crate::geometry::ContourPoints::kind(),
+        output: crate::geometry::ContourGeometry::kind(),
+    }]
 }
 
 fn shaping_calls() -> Vec<Call> {
@@ -203,7 +217,7 @@ fn render(module: &Module) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     writeln!(out, "import {{ {imports} }} from \"{}\";", module.import).unwrap();
-    out.push_str("import { NumberReader, NumberWriter } from \"../numbers\";\n");
+    out.push_str("import { NumberReader, NumberWriter } from \"@shift/wasm/numbers\";\n");
 
     for layout in named.enums.values() {
         render_enum(&mut out, layout);

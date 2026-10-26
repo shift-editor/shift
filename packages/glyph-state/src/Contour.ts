@@ -8,6 +8,7 @@ import {
 } from "@shift/types";
 import { Bounds, wrapIndex, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import { Segment } from "./Segment";
+import { segmentContour, type SegmentedContourGeometry } from "./segmentContour";
 import { Point, type PointWithNeighbors } from "./Point";
 import { CONTOURS_VALUE_OFFSET } from "./valueLayout";
 
@@ -26,7 +27,7 @@ export class Contour {
 
   #points: readonly Point[] | null = null;
   #segments: readonly Segment[] | null = null;
-  #bounds: BoundsType | null | undefined;
+  #geometry: SegmentedContourGeometry<Point> | null = null;
 
   constructor(data: ContourData, values: Float64Array, cursor: number) {
     this.#data = data;
@@ -77,15 +78,9 @@ export class Contour {
     return this.#points;
   }
 
+  /** The tight box around the contour's segments, as shift-font bounds it; `null` with none. */
   get bounds(): BoundsType | null {
-    if (this.#bounds === undefined) {
-      const segments = this.segments();
-      if (segments.length === 0) return null;
-
-      this.#bounds = Bounds.unionAll(segments.map((segment) => segment.bounds));
-    }
-
-    return this.#bounds;
+    return this.#segmented().bounds;
   }
 
   get firstPoint(): Point | null {
@@ -154,10 +149,16 @@ export class Contour {
    */
   segments(): readonly Segment[] {
     if (this.#segments === null) {
-      this.#segments = Segment.parse(this);
+      this.#segments = Segment.fromGeometry(this.#segmented());
     }
 
     return this.#segments;
+  }
+
+  /** The contour segmented once, by shift-font, for its segments and bounds both. */
+  #segmented(): SegmentedContourGeometry<Point> {
+    this.#geometry ??= segmentContour(this);
+    return this.#geometry;
   }
 
   /**
