@@ -155,8 +155,10 @@ class GlyphLayerWriter {
   readonly #editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null;
   readonly #intents: LayerIntents<void> | null;
   readonly #state: GlyphEditState;
-  /** The intents a preview's steps make, collected instead of pushed; null outside a preview. */
-  #previewIntents: FontIntent[] | null = null;
+  /** The intents being collected instead of pushed, for a preview or {@link together}; null otherwise. */
+  #collecting: FontIntent[] | null = null;
+  /** Whether {@link preview} is the one collecting. */
+  #previewing = false;
 
   constructor(
     editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null,
@@ -166,7 +168,7 @@ class GlyphLayerWriter {
     this.#editCoordinator = editCoordinator;
     this.#intents = editCoordinator
       ? new LayerIntents<void>((intent) => {
-          if (this.#previewIntents) this.#previewIntents.push(intent);
+          if (this.#collecting) this.#collecting.push(intent);
           else editCoordinator.push(intent);
         }, layerId)
       : null;
@@ -186,8 +188,29 @@ class GlyphLayerWriter {
   }
 
   transaction<TResult>(label: string, body: () => TResult): TResult {
-    if (this.#previewIntents || !this.#editCoordinator) return body();
+    if (this.#previewing || !this.#editCoordinator) return body();
     return this.#editCoordinator.transaction(label, body);
+  }
+
+  /**
+   * Runs `steps` and applies every intent they make in one engine call once
+   * they return, showing the layer once. `steps` must not read what it
+   * changes: the layer shows none of it until then.
+   */
+  together<TResult>(steps: () => TResult): TResult {
+    const editCoordinator = this.#editCoordinator;
+    if (!editCoordinator || this.#collecting) return steps();
+
+    const intents: FontIntent[] = [];
+    this.#collecting = intents;
+    let result: TResult;
+    try {
+      result = steps();
+    } finally {
+      this.#collecting = null;
+    }
+    if (intents.length > 0) editCoordinator.pushAll(intents);
+    return result;
   }
 
   /**
@@ -201,14 +224,16 @@ class GlyphLayerWriter {
   preview(steps: () => void): void {
     const editCoordinator = this.#editCoordinator;
     if (!editCoordinator) throw new Error("a preview needs the window's editing engine");
-    if (this.#previewIntents) throw new Error("a preview is already being collected");
+    if (this.#collecting) throw new Error("a preview is already being collected");
 
     const intents: FontIntent[] = [];
-    this.#previewIntents = intents;
+    this.#collecting = intents;
+    this.#previewing = true;
     try {
       steps();
     } finally {
-      this.#previewIntents = null;
+      this.#collecting = null;
+      this.#previewing = false;
     }
 
     const state = this.#state.state;
@@ -1210,6 +1235,17 @@ export class GlyphLayer {
    */
   preview(steps: () => void): void {
     this.#writer.preview(steps);
+  }
+
+  /**
+   * Runs `steps`, which call this layer's editing methods, and applies every
+   * intent they make in one engine call once they return, showing the layer
+   * once. For edits that make many intents, such as pasting many contours:
+   * one at a time, each costs the whole layer. `steps` must not read what it
+   * changes, because the layer shows none of it until `steps` returns.
+   */
+  together<TResult>(steps: () => TResult): TResult {
+    return this.#writer.together(steps);
   }
 
   /**

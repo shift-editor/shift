@@ -141,6 +141,11 @@ export interface OpenEdit {
 
 export interface WorkspaceEditCoordinator {
   push(intent: FontIntent): PendingEditId;
+  /**
+   * Applies `intents` as {@link WorkspaceEditCoordinator.push} applies one,
+   * in one engine call that shows each touched layer once.
+   */
+  pushAll(intents: readonly FontIntent[]): PendingEditId;
   /** Every layer `intents` would touch, as they would leave it, without keeping the edit. */
   preview(intents: readonly FontIntent[]): readonly GlyphState[];
   transaction<TResult>(label: string, body: () => TResult): TResult;

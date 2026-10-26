@@ -2038,28 +2038,31 @@ export class Editor {
 
     const inserted: SelectableId[] = [];
 
-    this.transaction("Insert content", () => {
-      for (const contour of content.contours) {
-        if (contour.points.length === 0) continue;
+    // One engine call for every contour: one at a time, each costs the whole layer.
+    this.transaction("Insert content", () =>
+      layer.together(() => {
+        for (const contour of content.contours) {
+          if (contour.points.length === 0) continue;
 
-        const contourId = layer.addContour();
+          const contourId = layer.addContour();
 
-        for (const pointId of layer.addPoints(
-          contourId,
-          contour.points.map((point) => ({
-            ...point,
-            x: point.x + options.offset.x,
-            y: point.y + options.offset.y,
-          })),
-        )) {
-          inserted.push(pointId);
+          for (const pointId of layer.addPoints(
+            contourId,
+            contour.points.map((point) => ({
+              ...point,
+              x: point.x + options.offset.x,
+              y: point.y + options.offset.y,
+            })),
+          )) {
+            inserted.push(pointId);
+          }
+
+          if (contour.closed) {
+            layer.closeContour(contourId);
+          }
         }
-
-        if (contour.closed) {
-          layer.closeContour(contourId);
-        }
-      }
-    });
+      }),
+    );
 
     return inserted.length === 0 ? null : inserted;
   }

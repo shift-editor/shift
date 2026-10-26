@@ -132,10 +132,24 @@ export class WorkspaceEditCoordinator {
    * @throws When the engine rejects the intent; nothing is shown or sent.
    */
   push(intent: FontIntent): PendingEditId {
+    return this.pushAll([intent]);
+  }
+
+  /**
+   * Applies `intents` in the window's engine in one call, shows each layer they
+   * touched once, and queues them for the workspace, as {@link push} does for
+   * one intent. For edits that make many intents: each engine call returns
+   * whole layers, so applying them one at a time costs the layer's size for
+   * every intent.
+   *
+   * @returns The edit's renderer-local pending identity.
+   * @throws When the engine rejects an intent; nothing is shown or sent.
+   */
+  pushAll(intents: readonly FontIntent[]): PendingEditId {
     this.#assertNoOpenEdit("edit");
     const transaction = this.#transaction;
     if (transaction) {
-      this.#applyInEngine([intent], transaction.before);
+      this.#applyInEngine(intents, transaction.before);
       return transaction.id;
     }
 
@@ -143,7 +157,7 @@ export class WorkspaceEditCoordinator {
     // queue on the workspace lane follows this edit rather than overtaking it.
     return batch(() => {
       const id = this.#mintPendingEditId();
-      this.#enqueuePersist(this.#applyEdit([intent]), undefined, id);
+      this.#enqueuePersist(this.#applyEdit(intents), undefined, id);
       return id;
     });
   }
