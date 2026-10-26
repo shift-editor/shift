@@ -130,6 +130,7 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { SelectedPoints } from "./SelectedPoints";
 import { PositionTargets } from "../model/positions/PositionTargets";
 
 interface EditorOptions {
@@ -214,6 +215,8 @@ export class Editor {
   readonly #toolCellsById = new Map<ToolName, Signal<ActiveTool | null>>();
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
+  /** The selection resolved once into one layer's points, when it is only that. */
+  #selectedPoints: Signal<SelectedPoints | null>;
   #selectionBounds: Signal<LocalBounds | null>;
   #selectionSceneBounds: Signal<SceneBounds | null>;
   readonly #handlesCell = signal<ReadonlyMap<symbol, PointId | ContourId>>(new Map(), {
@@ -316,6 +319,10 @@ export class Editor {
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
     this.snapping = new Snapping(this);
+    this.#selectedPoints = computed(
+      () => this.#resolveSelectedPoints(this.selection.stateCell.value.ids),
+      { name: "editor.selection.points" },
+    );
     this.#selectionBounds = computed(
       () => {
         track(this.selection.stateCell);
@@ -1079,6 +1086,30 @@ export class Editor {
     return glyphId ? (this.glyphForId(glyphId)?.layerForId(layerId) ?? null) : null;
   }
 
+  /**
+   * The resolved current selection when `ids` are exactly it, so a per-frame
+   * read of its bounds or node skips resolving an object per id.
+   */
+  #selectedPointsFor(ids: readonly SelectableId[]): SelectedPoints | null {
+    track(this.#selectedPoints);
+    const selected = this.#selectedPoints.peek();
+    return selected?.matches(ids) ? selected : null;
+  }
+
+  /** `ids` as one authored layer's points, or null when they are anything else. */
+  #resolveSelectedPoints(ids: readonly SelectableId[]): SelectedPoints | null {
+    const first = ids[0];
+    if (first === undefined || !isPointId(first)) return null;
+
+    track(this.scene.cell);
+    const layer = this.#layerForPoint(first);
+    const node = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+    if (!layer || !node) return null;
+
+    track(layer.structureCell);
+    return SelectedPoints.resolve(ids, layer, node);
+  }
+
   /** Returns the glyph node showing a layer: one placing the layer's glyph at the layer's source. */
   #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
     const glyphId = this.font.glyphIdForLayer(layer.id);
@@ -1182,6 +1213,12 @@ export class Editor {
    * @returns null when no supplied object has bounds, or when the objects belong to different nodes.
    */
   public selectionBounds(ids: readonly SelectableId[] = this.selection.ids): LocalBounds | null {
+    const selected = this.#selectedPointsFor(ids);
+    if (selected) {
+      const bounds = selected.bounds();
+      return bounds ? localBounds(bounds) : null;
+    }
+
     let nodeId: NodeId | null = null;
     let bounds: BoundsType | null = null;
 
@@ -1207,6 +1244,9 @@ export class Editor {
    * @returns null when nothing resolves or the objects belong to different nodes.
    */
   public selectionNode(ids: readonly SelectableId[] = this.selection.ids): ShiftNode | null {
+    const selected = this.#selectedPointsFor(ids);
+    if (selected) return selected.node;
+
     let node: ShiftNode | null = null;
     for (const id of ids) {
       const object = this.object(id);
@@ -1230,6 +1270,12 @@ export class Editor {
   public selectionSceneBounds(
     ids: readonly SelectableId[] = this.selection.ids,
   ): SceneBounds | null {
+    const selected = this.#selectedPointsFor(ids);
+    if (selected) {
+      const bounds = selected.bounds(this.sceneTransform(selected.node));
+      return bounds ? sceneBounds(bounds) : null;
+    }
+
     let bounds: BoundsType | null = null;
 
     for (const id of ids) {

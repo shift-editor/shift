@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphLayer } from "@shift/editor/model";
+import { effect } from "@shift/editor/signals";
 import { TestEditor } from "@/testing/TestEditor";
 
 describe("Select movement preserves selected geometry", () => {
@@ -38,6 +39,35 @@ describe("Select movement preserves selected geometry", () => {
       y: 150 + drag.delta.y,
     });
     expect(editor.pointPosition(lastId)).toEqual({ x: 200 + drag.delta.x, y: 200 + drag.delta.y });
+  });
+
+  it("keeps live selection bounds on the selected points through a drag and an inserted point", async () => {
+    editor.selection.select([firstId, middleId, lastId]);
+    const bounds = editor.selectionBoundsCell;
+    const seen: unknown[] = [];
+    const subscription = effect(() => void seen.push(bounds.value));
+
+    const drag = await editor.dragLocal({
+      down: editor.pointPosition(middleId),
+      start: { x: 154, y: 150 },
+      end: { x: 180, y: 170 },
+    });
+    const { x: dx, y: dy } = drag.delta;
+    expect(seen.at(-1)).toEqual({
+      min: { x: 100 + dx, y: 100 + dy },
+      max: { x: 200 + dx, y: 200 + dy },
+    });
+
+    // Every selected point moves one place along the contour.
+    layer.insertPointBefore(firstId, { x: 0, y: 0, pointType: "onCurve", smooth: false });
+    layer.movePoints([lastId], { x: 10, y: 0 });
+    await editor.settle();
+    subscription.dispose();
+
+    expect(seen.at(-1)).toEqual({
+      min: { x: 100 + dx, y: 100 + dy },
+      max: { x: 210 + dx, y: 200 + dy },
+    });
   });
 
   it("moves the whole selection when dragging an unselected segment inside its bounding box", async () => {
