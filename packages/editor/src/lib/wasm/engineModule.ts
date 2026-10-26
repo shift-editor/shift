@@ -28,6 +28,8 @@ import {
   type EditablePair,
   type InterpolatedMetrics,
 } from "./generated/engineLayouts";
+
+export { svgPathContours, type ContourPoints } from "./generated/engineLayouts";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 

@@ -141,6 +141,12 @@ fn shaping_calls() -> Vec<Call> {
 fn engine_calls() -> Vec<Call> {
     vec![
         Call {
+            name: "svgPathContours",
+            doc: "The contours SVG path data draws, one per subpath, as shift-font parses it; null when the path data is malformed.",
+            input: crate::svg::SvgPathData::kind(),
+            output: Option::<Vec<crate::geometry::ContourPoints>>::kind(),
+        },
+        Call {
             name: "engineKerningRun",
             doc: "Reads the kerning between glyph pairs in the engine's font, at a source being edited or at a design location; null when the place cannot be read.",
             input: KerningRun::kind(),

@@ -56,6 +56,7 @@ export {
   engineSourceNumbers,
   engineStage,
   engineUndo,
+  svgPathContours,
   type EngineEdit,
   type EngineLayer,
   type EngineStructure,

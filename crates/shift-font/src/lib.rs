@@ -51,6 +51,7 @@ pub mod placed_blend;
 pub mod point_arrange;
 pub mod projection;
 mod string_enum;
+pub mod svg_path;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
