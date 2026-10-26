@@ -817,7 +817,7 @@ export interface JoinContoursIntent {
   layerId: LayerId
   from: ContourEnd
   to: ContourEnd
-  merge: boolean
+  mode: "merge" | "connect"
 }
 
 export declare const enum KerningPosition {

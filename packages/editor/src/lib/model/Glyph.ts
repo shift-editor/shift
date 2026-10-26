@@ -430,7 +430,7 @@ class GlyphLayerWriter {
   }
 
   joinContours(from: ContourEnd, to: ContourEnd, merge: boolean): void {
-    this.#workspaceIntents.joinContours({ from, to, merge });
+    this.#workspaceIntents.joinContours({ from, to, mode: merge ? "merge" : "connect" });
   }
 
   applyBooleanOp(

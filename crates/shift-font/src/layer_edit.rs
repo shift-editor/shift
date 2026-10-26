@@ -177,9 +177,9 @@ impl GlyphLayer {
         contour.get_point_mut(point_id).require(&point_id)
     }
 
-    pub(crate) fn require_point_contour(&self, point_id: PointId) -> CoreResult<ContourId> {
-        self.find_point_contour(&point_id)
-            .ok_or(CoreError::PointInContourNotFound(point_id))
+    pub(crate) fn require_point_contour(&self, point_id: &PointId) -> CoreResult<ContourId> {
+        self.find_point_contour(point_id)
+            .ok_or_else(|| CoreError::PointInContourNotFound(point_id.clone()))
     }
 
     pub(crate) fn require_point_contours(
@@ -189,7 +189,7 @@ impl GlyphLayer {
         point_ids
             .iter()
             .map(|point_id| {
-                self.require_point_contour(point_id.clone())
+                self.require_point_contour(point_id)
                     .map(|contour_id| (point_id.clone(), contour_id))
             })
             .collect()
@@ -197,7 +197,7 @@ impl GlyphLayer {
 
     pub(crate) fn require_points(&self, point_ids: &[PointId]) -> CoreResult<()> {
         for point_id in point_ids {
-            self.require_point_contour(point_id.clone())?;
+            self.require_point_contour(point_id)?;
         }
         Ok(())
     }
@@ -539,7 +539,7 @@ impl GlyphLayer {
         point_type: PointType,
         is_smooth: bool,
     ) -> CoreResult<AddedPoint> {
-        let contour_id = self.require_point_contour(before_id.clone())?;
+        let contour_id = self.require_point_contour(before_id)?;
         let contour = self.require_contour_mut(&contour_id)?;
 
         let point_id = contour
@@ -558,7 +558,7 @@ impl GlyphLayer {
     ///
     /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn remove_point(&mut self, point_id: &PointId) -> CoreResult<()> {
-        let contour_id = self.require_point_contour(point_id.clone())?;
+        let contour_id = self.require_point_contour(point_id)?;
         let contour = self.require_contour_mut(&contour_id)?;
         contour.remove_point(point_id).require(&point_id)?;
         Ok(())
@@ -580,7 +580,7 @@ impl GlyphLayer {
     ///
     /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn set_point_smooth(&mut self, point_id: &PointId, smooth: bool) -> CoreResult<()> {
-        let contour_id = self.require_point_contour(point_id.clone())?;
+        let contour_id = self.require_point_contour(point_id)?;
         self.require_point_mut(&contour_id, point_id)?
             .set_smooth(smooth);
         Ok(())
@@ -591,12 +591,12 @@ impl GlyphLayer {
     /// # Errors
     ///
     /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
-    pub fn contour_of_point(&self, point_id: PointId) -> CoreResult<ContourId> {
+    pub fn contour_of_point(&self, point_id: &PointId) -> CoreResult<ContourId> {
         self.require_point_contour(point_id)
     }
 
     pub fn has_point(&self, point_id: &PointId) -> bool {
-        self.require_point_contour(point_id.clone()).is_ok()
+        self.require_point_contour(point_id).is_ok()
     }
 
     /// Flips whether a point is smooth and returns the new value.
@@ -605,7 +605,7 @@ impl GlyphLayer {
     ///
     /// Returns [`CoreError::PointInContourNotFound`] when no contour holds the point.
     pub fn toggle_smooth(&mut self, point_id: &PointId) -> CoreResult<bool> {
-        let contour_id = self.require_point_contour(point_id.clone())?;
+        let contour_id = self.require_point_contour(point_id)?;
         let point = self.require_point_mut(&contour_id, point_id)?;
 
         point.toggle_smooth();

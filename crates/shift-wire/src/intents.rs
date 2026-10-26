@@ -73,7 +73,7 @@ pub enum WireError {
     UnknownBooleanOp(String),
 
     #[error("{0}")]
-    UnknownName(String),
+    UnknownEditOption(#[from] font::UnknownEditOption),
 
     #[error("a continuous axis needs a minimum and a maximum")]
     ContinuousAxisWithoutBounds,
@@ -1033,7 +1033,8 @@ pub struct JoinContoursIntent {
     pub layer_id: String,
     pub from: ContourEnd,
     pub to: ContourEnd,
-    pub merge: bool,
+    #[cfg_attr(feature = "napi", napi(ts_type = "\"merge\" | \"connect\""))]
+    pub mode: String,
 }
 
 #[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
@@ -1458,7 +1459,7 @@ impl TryFrom<AlignPointsIntent> for font::FontIntent {
         Ok(AlignPoints {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
             point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
-            alignment: wire.alignment.parse().map_err(WireError::UnknownName)?,
+            alignment: wire.alignment.parse()?,
         }
         .into())
     }
@@ -1471,7 +1472,7 @@ impl TryFrom<DistributePointsIntent> for font::FontIntent {
         Ok(DistributePoints {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
             point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
-            axis: wire.axis.parse().map_err(WireError::UnknownName)?,
+            axis: wire.axis.parse()?,
         }
         .into())
     }
@@ -1483,7 +1484,7 @@ impl TryFrom<ShiftSidebearingIntent> for font::FontIntent {
     fn try_from(wire: ShiftSidebearingIntent) -> WireResult<Self> {
         Ok(ShiftSidebearing {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
-            sidebearing: wire.sidebearing.parse().map_err(WireError::UnknownName)?,
+            sidebearing: wire.sidebearing.parse()?,
             delta: wire.delta,
         }
         .into())
@@ -1538,7 +1539,7 @@ impl TryFrom<DeletePointsIntent> for font::FontIntent {
         Ok(DeletePoints {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
             point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
-            mode: wire.mode.parse().map_err(WireError::UnknownName)?,
+            mode: wire.mode.parse()?,
         }
         .into())
     }
@@ -1578,7 +1579,7 @@ impl TryFrom<ContourEnd> for FontContourEnd {
     fn try_from(wire: ContourEnd) -> WireResult<Self> {
         Ok(Self {
             contour_id: parse::<ContourId>(&wire.contour_id)?,
-            side: wire.side.parse().map_err(WireError::UnknownName)?,
+            side: wire.side.parse()?,
         })
     }
 }
@@ -1591,11 +1592,7 @@ impl TryFrom<JoinContoursIntent> for font::FontIntent {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
             from: wire.from.try_into()?,
             to: wire.to.try_into()?,
-            mode: if wire.merge {
-                font::JoinMode::Merge
-            } else {
-                font::JoinMode::Connect
-            },
+            mode: wire.mode.parse()?,
         }
         .into())
     }

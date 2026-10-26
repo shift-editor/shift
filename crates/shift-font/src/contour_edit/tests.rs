@@ -407,3 +407,81 @@ fn ends_of_a_closed_contour_or_the_same_end_do_not_join() {
         Err(CoreError::ContourEdit(ContourEditError::ClosedContour(_)))
     ));
 }
+
+#[test]
+fn deleting_between_quadratics_fits_one_quadratic_control() {
+    let mut layer = layer(vec![contour(
+        "c",
+        false,
+        &[
+            ("a", 0.0, 0.0, true),
+            ("q1", 50.0, 100.0, false),
+            ("m", 100.0, 100.0, true),
+            ("q2", 150.0, 100.0, false),
+            ("b", 200.0, 0.0, true),
+        ],
+    )]);
+
+    layer.delete_points(&[id("m")], DeleteMode::Fit).unwrap();
+
+    let contour = only(&layer);
+    let kept = ids(contour);
+    assert_eq!(kept.len(), 3);
+    assert_eq!((kept[0].as_str(), kept[2].as_str()), ("a", "b"));
+    let control = &contour.points()[1];
+    assert!(!control.is_on_curve());
+    assert!(control.y() > 100.0, "the fitted control lifts the curve");
+}
+
+#[test]
+fn a_fitted_span_through_the_start_of_a_closed_contour_keeps_it_closed() {
+    let mut layer = layer(vec![contour(
+        "c",
+        true,
+        &[
+            ("p0", 0.0, 0.0, true),
+            ("p1", 100.0, 0.0, true),
+            ("p2", 100.0, 100.0, true),
+            ("p3", 0.0, 100.0, true),
+        ],
+    )]);
+
+    layer.delete_points(&[id("p0")], DeleteMode::Fit).unwrap();
+
+    let contour = only(&layer);
+    assert!(contour.is_closed());
+    assert_eq!(ids(contour), ["p1", "p2", "p3"]);
+}
+
+#[test]
+fn splitting_a_closing_segment_keeps_the_start_point() {
+    let mut closed_line = layer(vec![contour(
+        "c",
+        true,
+        &[
+            ("a", 0.0, 0.0, true),
+            ("b", 100.0, 0.0, true),
+            ("c", 100.0, 100.0, true),
+        ],
+    )]);
+    closed_line
+        .split_segment(&id("c"), &id("a"), 0.5, id("new"))
+        .unwrap();
+    assert_eq!(ids(only(&closed_line)), ["a", "b", "c", "new"]);
+
+    let mut closed_quad = layer(vec![contour(
+        "c",
+        true,
+        &[
+            ("a", 0.0, 0.0, true),
+            ("b", 100.0, 0.0, true),
+            ("q", 50.0, 100.0, false),
+        ],
+    )]);
+    closed_quad
+        .split_segment(&id("b"), &id("a"), 0.5, id("new"))
+        .unwrap();
+    let kept = ids(only(&closed_quad));
+    assert_eq!(&kept[..4], ["a", "b", "q", "new"]);
+    assert_eq!(kept.len(), 5);
+}

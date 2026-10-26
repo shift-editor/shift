@@ -27,7 +27,7 @@ pub enum CurveFitError {
 /// Fits from the original geometry without subdividing the result: samples
 /// are fitted by weighted least squares, then reprojected onto the fit by a
 /// safeguarded Newton step that keeps them in order, for up to
-/// [`MAX_ITERATIONS`] rounds; the best fit seen wins. Coordinates are
+/// 80 rounds; the best fit seen wins. Coordinates are
 /// normalized for the solve. Handle lengths stay within twice the run's
 /// sampled length. An endpoint with a zero-length handle takes its direction
 /// from the nearest control-polygon point that differs, and a run with no
@@ -90,10 +90,12 @@ pub fn fit_cubic(segments: &[PathSeg]) -> Result<CubicBez, CurveFitError> {
 
     for _ in 0..MAX_ITERATIONS {
         let (mut aa, mut ab, mut bb, mut ar, mut br) = (0.0, 0.0, 0.0, 0.0, 0.0);
-        for (t, point, weight) in run.interior(&parameters) {
-            let a = start_tangent * (3.0 * (1.0 - t).powi(2) * t);
-            let b = end_tangent * (3.0 * (1.0 - t) * t.powi(2));
-            let base = start.lerp(end, t.powi(3) + 3.0 * (1.0 - t) * t.powi(2));
+        for Sample { t, point, weight } in run.interior(&parameters) {
+            // Products, not `powi`, whose precision differs between platforms.
+            let u = 1.0 - t;
+            let a = start_tangent * (3.0 * u * u * t);
+            let b = end_tangent * (3.0 * u * t * t);
+            let base = start.lerp(end, t * t * t + 3.0 * u * t * t);
             let residual = point - base;
             aa += weight * a.dot(a);
             ab += weight * a.dot(b);
@@ -184,7 +186,7 @@ pub fn fit_quadratic(segments: &[PathSeg]) -> Result<QuadBez, CurveFitError> {
     };
     let end = run.points[run.points.len() - 1].to_vec2();
     let (mut aa, mut ar) = (0.0, Vec2::ZERO);
-    for (t, point, weight) in run.interior(&run.parameters) {
+    for Sample { t, point, weight } in run.interior(&run.parameters) {
         let a = 2.0 * (1.0 - t) * t;
         let residual = point.to_vec2() - end * (t * t);
         aa += weight * a * a;
@@ -197,6 +199,14 @@ pub fn fit_quadratic(segments: &[PathSeg]) -> Result<QuadBez, CurveFitError> {
         return Err(CurveFitError::NotFinite);
     }
     Ok(QuadBez::new(first, fitted, last))
+}
+
+/// One sample of a run: its parameter, its normalized position and its weight.
+#[derive(Clone, Copy)]
+struct Sample {
+    t: f64,
+    point: Point,
+    weight: f64,
 }
 
 /// A run of segments sampled and normalized: translated to start at the
@@ -262,10 +272,7 @@ impl Run {
 
     /// Each sample but the two ends, with its parameter from `parameters` and
     /// its weight.
-    fn interior<'a>(
-        &'a self,
-        parameters: &'a [f64],
-    ) -> impl Iterator<Item = (f64, Point, f64)> + 'a {
+    fn interior<'a>(&'a self, parameters: &'a [f64]) -> impl Iterator<Item = Sample> + 'a {
         let count = self.points.len().saturating_sub(2);
         parameters
             .iter()
@@ -273,7 +280,7 @@ impl Run {
             .zip(&self.weights)
             .skip(1)
             .take(count)
-            .map(|((t, point), weight)| (*t, *point, *weight))
+            .map(|((&t, &point), &weight)| Sample { t, point, weight })
     }
 
     /// The weighted squared distance from each sample to `curve` at its parameter.
@@ -330,7 +337,7 @@ impl Run {
 fn control_polygon(segments: &[PathSeg]) -> Result<Vec<Point>, CurveFitError> {
     let mut polygon = Vec::new();
     for (index, segment) in segments.iter().enumerate() {
-        if index > 0 && segments[index - 1].end() != segment.start() {
+        if index > 0 && !touches(segments[index - 1].end(), segment.start()) {
             return Err(CurveFitError::Disconnected);
         }
         match *segment {
@@ -350,6 +357,12 @@ fn ends(segments: &[PathSeg]) -> Result<(Point, Point), CurveFitError> {
         (Some(first), Some(last)) => Ok((first.start(), last.end())),
         _ => Err(CurveFitError::Empty),
     }
+}
+
+/// Whether one segment's end meets the next one's start, within [`EPSILON`]
+/// on each axis as the editor compares points.
+fn touches(end: Point, start: Point) -> bool {
+    (end.x - start.x).abs() < EPSILON && (end.y - start.y).abs() < EPSILON
 }
 
 /// A vector's length, with the same bits natively and in WebAssembly.

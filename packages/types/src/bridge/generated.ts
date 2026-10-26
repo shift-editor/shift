@@ -730,7 +730,7 @@ export interface JoinContoursIntent {
   layerId: LayerId
   from: ContourEnd
   to: ContourEnd
-  merge: boolean
+  mode: "merge" | "connect"
 }
 
 export type KerningPosition = "first" | "second";

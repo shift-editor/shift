@@ -63,8 +63,18 @@ impl Point {
         }
     }
 
+    /// A point at `position`.
+    pub fn at(id: PointId, position: kurbo::Point, point_type: PointType, smooth: bool) -> Self {
+        Self::new(id, position.x, position.y, point_type, smooth)
+    }
+
     pub fn on_curve(x: f64, y: f64) -> Self {
         Self::new(PointId::new(), x, y, PointType::OnCurve, false)
+    }
+
+    /// A new off-curve corner point at `position`.
+    pub fn off_curve_at(position: kurbo::Point) -> Self {
+        Self::at(PointId::new(), position, PointType::OffCurve, false)
     }
 
     pub fn off_curve(x: f64, y: f64) -> Self {

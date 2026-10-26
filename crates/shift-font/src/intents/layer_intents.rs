@@ -41,7 +41,7 @@ impl LayerIntent for AddPoints {
             let layer = font.require_layer_mut(*layer_id)?;
             let contour_id = match (contour_id, before) {
                 (Some(contour_id), _) => contour_id.clone(),
-                (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
+                (None, Some(before_id)) => layer.contour_of_point(before_id)?,
                 (None, None) => {
                     return Err(CoreError::InvalidContourId(
                         "addPoints requires a contour or a before anchor".to_string(),
@@ -804,7 +804,7 @@ impl LayerIntent for TransformLayer {
             transform,
         } = self;
         transform
-            .values()
+            .to_values()
             .require_finite(Coordinates::LayerTransform)?;
 
         font.require_layer_mut(*layer_id)?
@@ -998,7 +998,7 @@ impl LayerIntent for TransformPoints {
             transform,
         } = self;
         transform
-            .values()
+            .to_values()
             .require_finite(Coordinates::PointTransform)?;
         font.require_layer_mut(*layer_id)?
             .transform_points(point_ids, transform)

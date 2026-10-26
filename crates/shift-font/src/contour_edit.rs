@@ -12,6 +12,48 @@ use crate::{
     Contour, ContourId, GlyphLayer, Point, PointId, PointType, SegmentIndexIter, SegmentIndices,
 };
 
+/// Which of the edit options in this module and `point_arrange` a name
+/// failed to parse as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditOption {
+    DeleteMode,
+    ContourSide,
+    JoinMode,
+    PointAlignment,
+    DistributeAxis,
+    Sidebearing,
+}
+
+impl std::fmt::Display for EditOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::DeleteMode => "delete mode",
+            Self::ContourSide => "contour side",
+            Self::JoinMode => "join mode",
+            Self::PointAlignment => "point alignment",
+            Self::DistributeAxis => "distribute axis",
+            Self::Sidebearing => "sidebearing",
+        })
+    }
+}
+
+/// A name that is none of an edit option's variants.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("unknown {option}: {text:?}")]
+pub struct UnknownEditOption {
+    pub option: EditOption,
+    pub text: String,
+}
+
+impl UnknownEditOption {
+    pub(crate) fn new(option: EditOption, text: &str) -> Self {
+        Self {
+            option,
+            text: text.to_owned(),
+        }
+    }
+}
+
 crate::string_enum! {
     /// How deleting points reconnects the points that survive.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -22,7 +64,7 @@ crate::string_enum! {
         /// Each removed span leaves a gap, opening or splitting the contour.
         Gap => "gap",
     }
-    parse_error: String = |text| format!("Invalid delete mode: {text}");
+    parse_error: UnknownEditOption = |text| UnknownEditOption::new(EditOption::DeleteMode, text);
 }
 
 crate::string_enum! {
@@ -32,17 +74,20 @@ crate::string_enum! {
         Start => "start",
         End => "end",
     }
-    parse_error: String = |text| format!("Invalid contour side: {text}");
+    parse_error: UnknownEditOption = |text| UnknownEditOption::new(EditOption::ContourSide, text);
 }
 
-/// How [`GlyphLayer::join_contours`] connects two ends.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum JoinMode {
-    /// `from`'s end point is dropped and `to`'s takes its place, as dropping
-    /// one end onto another does.
-    Merge,
-    /// A line connects the two end points.
-    Connect,
+crate::string_enum! {
+    /// How [`GlyphLayer::join_contours`] connects two ends.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum JoinMode {
+        /// `from`'s end point is dropped and `to`'s takes its place, as
+        /// dropping one end onto another does.
+        Merge => "merge",
+        /// A line connects the two end points.
+        Connect => "connect",
+    }
+    parse_error: UnknownEditOption = |text| UnknownEditOption::new(EditOption::JoinMode, text);
 }
 
 /// One open end of a contour.
@@ -148,7 +193,7 @@ impl GlyphLayer {
         if self.has_point(&point_id) {
             return Err(CoreError::DuplicatePointId(point_id));
         }
-        let contour_id = self.require_point_contour(start_id.clone())?;
+        let contour_id = self.require_point_contour(start_id)?;
         let contour = self.require_contour_mut(&contour_id)?;
         let segment = contour.segment_between(start_id, end_id)?;
         let points = contour.points().to_vec();
@@ -157,20 +202,21 @@ impl GlyphLayer {
         match segment {
             SegmentIndices::Line([a, b]) => {
                 let position = at(a).position().lerp(at(b).position(), t);
-                contour.insert_before_id(
-                    &at(b).id(),
-                    new_point(point_id, position, PointType::OnCurve, false),
+                contour.insert_before_end(
+                    b,
+                    [Point::at(point_id, position, PointType::OnCurve, false)],
                 )?;
             }
             SegmentIndices::Quad([a, c, b]) => {
                 let curve = QuadBez::new(at(a).position(), at(c).position(), at(b).position());
                 let (left, right) = (curve.subsegment(0.0..t), curve.subsegment(t..1.0));
-                let end = at(b).id();
-                contour.insert_before_id(
-                    &end,
-                    new_point(point_id, left.p2, at(b).point_type(), true),
+                contour.insert_before_end(
+                    b,
+                    [
+                        Point::at(point_id, left.p2, at(b).point_type(), true),
+                        Point::off_curve_at(right.p1),
+                    ],
                 )?;
-                contour.insert_before_id(&end, off_curve(right.p1))?;
                 contour.move_point_to(&at(c).id(), left.p1)?;
             }
             SegmentIndices::Cubic([a, c0, c1, b]) => {
@@ -182,12 +228,12 @@ impl GlyphLayer {
                 );
                 let (left, right) = (curve.subsegment(0.0..t), curve.subsegment(t..1.0));
                 let control_end = at(c1).id();
-                contour.insert_before_id(&control_end, off_curve(left.p2))?;
+                contour.insert_before_id(&control_end, Point::off_curve_at(left.p2))?;
                 contour.insert_before_id(
                     &control_end,
-                    new_point(point_id, left.p3, PointType::OnCurve, true),
+                    Point::at(point_id, left.p3, PointType::OnCurve, true),
                 )?;
-                contour.insert_before_id(&control_end, off_curve(right.p1))?;
+                contour.insert_before_id(&control_end, Point::off_curve_at(right.p1))?;
                 contour.move_point_to(&at(c0).id(), left.p1)?;
                 contour.move_point_to(&control_end, right.p2)?;
             }
@@ -209,7 +255,7 @@ impl GlyphLayer {
         start_id: &PointId,
         end_id: &PointId,
     ) -> CoreResult<()> {
-        let contour_id = self.require_point_contour(start_id.clone())?;
+        let contour_id = self.require_point_contour(start_id)?;
         let contour = self.require_contour_mut(&contour_id)?;
         let SegmentIndices::Line([a, b]) = contour.segment_between(start_id, end_id)? else {
             return Err(ContourEditError::NotALine {
@@ -220,18 +266,13 @@ impl GlyphLayer {
         };
         let start = contour.points()[a].position();
         let end = contour.points()[b].position();
-        let first = off_curve(start.lerp(end, 1.0 / 3.0));
-        let second = off_curve(start.lerp(end, 2.0 / 3.0));
-        // A closed contour's last segment ends at its first point; its
-        // controls go after its last point, so the contour still starts on-curve.
-        if contour.is_closed() && b == 0 {
-            contour.push_point(first);
-            contour.push_point(second);
-        } else {
-            let end_id = contour.points()[b].id();
-            contour.insert_before_id(&end_id, first)?;
-            contour.insert_before_id(&end_id, second)?;
-        }
+        contour.insert_before_end(
+            b,
+            [
+                Point::off_curve_at(start.lerp(end, 1.0 / 3.0)),
+                Point::off_curve_at(start.lerp(end, 2.0 / 3.0)),
+            ],
+        )?;
         Ok(())
     }
 
@@ -355,12 +396,12 @@ impl GlyphLayer {
             .iter()
             .filter(|point| point.is_on_curve())
             .count();
-        let (Some(first), Some(last)) = (contour.first_point(), contour.last_point()) else {
+        // Two on-curve points mean the contour has a first and a last point.
+        let (true, Some(first), Some(last)) =
+            (on_curve >= 2, contour.first_point(), contour.last_point())
+        else {
             return Err(ContourEditError::TooFewOnCurvePoints(contour_id.clone()).into());
         };
-        if on_curve < 2 {
-            return Err(ContourEditError::TooFewOnCurvePoints(contour_id.clone()).into());
-        }
 
         let dropping_start = from.side == ContourSide::Start;
         let (dropped, survivor) = if dropping_start {
@@ -422,6 +463,25 @@ impl Contour {
                 }
                 .into()
             })
+    }
+
+    /// Inserts `points` before the point at index `end`, a segment's end. A
+    /// closed contour's closing segment ends at its first point; its new
+    /// points go after its last point instead, so the start stays the same.
+    fn insert_before_end(
+        &mut self,
+        end: usize,
+        points: impl IntoIterator<Item = Point>,
+    ) -> CoreResult<()> {
+        if self.is_closed() && end == 0 {
+            points.into_iter().for_each(|point| self.push_point(point));
+            return Ok(());
+        }
+        let end_id = self.points()[end].id();
+        for point in points {
+            self.insert_before_id(&end_id, point)?;
+        }
+        Ok(())
     }
 
     fn insert_before_id(&mut self, before: &PointId, point: Point) -> CoreResult<()> {
@@ -573,19 +633,13 @@ fn fitted_controls(points: &[Point], span: &[&SegmentIndices]) -> CoreResult<Vec
         .any(|curve| matches!(curve, PathSeg::Cubic(_)))
     {
         let fitted = fit_quadratic(&curves).map_err(ContourEditError::from)?;
-        return Ok(vec![off_curve(fitted.p1)]);
+        return Ok(vec![Point::off_curve_at(fitted.p1)]);
     }
     let fitted = fit_cubic(&curves).map_err(ContourEditError::from)?;
-    Ok(vec![off_curve(fitted.p1), off_curve(fitted.p2)])
-}
-
-fn new_point(id: PointId, position: KurboPoint, point_type: PointType, smooth: bool) -> Point {
-    Point::new(id, position.x, position.y, point_type, smooth)
-}
-
-/// A new off-curve point at `position`.
-fn off_curve(position: KurboPoint) -> Point {
-    new_point(PointId::new(), position, PointType::OffCurve, false)
+    Ok(vec![
+        Point::off_curve_at(fitted.p1),
+        Point::off_curve_at(fitted.p2),
+    ])
 }
 
 #[cfg(test)]

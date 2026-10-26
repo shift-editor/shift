@@ -57,7 +57,9 @@ pub mod svg_path;
 pub mod test_support;
 
 pub use changes::*;
-pub use contour_edit::{ContourEditError, ContourEnd, ContourSide, DeleteMode, JoinMode};
+pub use contour_edit::{
+    ContourEditError, ContourEnd, ContourSide, DeleteMode, EditOption, JoinMode, UnknownEditOption,
+};
 pub use error::{CoreError, CoreResult, EntityKind, EntityRef, Require};
 pub use intents::*;
 pub use interpolation::*;

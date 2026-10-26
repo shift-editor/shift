@@ -51,6 +51,9 @@ pub enum CoreError {
     #[error("{0}")]
     ContourEdit(#[from] crate::contour_edit::ContourEditError),
 
+    #[error("a glyph's interpolation sources have no values or differ in length")]
+    InterpolationSourcesMismatch,
+
     #[error("boolean operation failed: {0}")]
     BooleanOperationFailed(#[source] linesweeper::Error),
 

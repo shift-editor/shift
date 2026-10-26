@@ -96,7 +96,7 @@ impl InterpolationRegion {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::AxisNotFound`] when a support names an axis that
+    /// Returns [`crate::CoreError::AxisNotFound`] when a support names an axis that
     /// `axes` or `design_normalization` does not have.
     pub fn scalar_at(
         &self,
@@ -411,9 +411,12 @@ impl GlyphInterpolation {
             .map(|source| source.values.as_slice())
             .collect();
 
-        Ok(GlyphInterpolationValues::new(
-            blend_values(&weights, &sources).unwrap_or_default(),
-        ))
+        if sources.is_empty() {
+            return Ok(GlyphInterpolationValues::new(Vec::new()));
+        }
+        let values = blend_values(&weights, &sources)
+            .ok_or(crate::CoreError::InterpolationSourcesMismatch)?;
+        Ok(GlyphInterpolationValues::new(values))
     }
 }
 
