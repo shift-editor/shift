@@ -20,6 +20,7 @@ use crate::ir::{
     Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
+use crate::point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -142,6 +143,10 @@ font_intents! {
         SplitSegment,
         UpgradeLineToCubic,
         JoinContours,
+        TransformPoints,
+        AlignPoints,
+        DistributePoints,
+        ShiftSidebearing,
         ReplaceGlyphLayerContent,
     }
     font {
@@ -202,6 +207,8 @@ enum Coordinates {
     AdvanceWidth,
     ComponentTransforms,
     LayerTransform,
+    PointTransform,
+    SidebearingDelta,
 }
 
 impl Coordinates {
@@ -215,6 +222,8 @@ impl Coordinates {
             Self::AdvanceWidth => "advance width",
             Self::ComponentTransforms => "component transforms",
             Self::LayerTransform => "layer transform",
+            Self::PointTransform => "point transform",
+            Self::SidebearingDelta => "sidebearing delta",
         }
     }
 }

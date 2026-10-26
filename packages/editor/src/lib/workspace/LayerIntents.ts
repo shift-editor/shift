@@ -19,6 +19,10 @@ import type {
   UpgradeLineToCubicIntent,
   DeletePointsIntent,
   JoinContoursIntent,
+  TransformPointsIntent,
+  AlignPointsIntent,
+  DistributePointsIntent,
+  ShiftSidebearingIntent,
   SetContourClosedIntent,
   SetComponentTransformsIntent,
   SetContourStartIntent,
@@ -127,6 +131,34 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "joinContours",
       joinContours: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  transformPoints(payload: Payload<TransformPointsIntent>): TResult {
+    return this.#sink({
+      kind: "transformPoints",
+      transformPoints: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  alignPoints(payload: Payload<AlignPointsIntent>): TResult {
+    return this.#sink({
+      kind: "alignPoints",
+      alignPoints: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  distributePoints(payload: Payload<DistributePointsIntent>): TResult {
+    return this.#sink({
+      kind: "distributePoints",
+      distributePoints: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  shiftSidebearing(payload: Payload<ShiftSidebearingIntent>): TResult {
+    return this.#sink({
+      kind: "shiftSidebearing",
+      shiftSidebearing: { layerId: this.#layerId, ...payload },
     });
   }
 

@@ -48,6 +48,7 @@ pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
 pub mod placed_blend;
+pub mod point_arrange;
 pub mod projection;
 mod string_enum;
 #[cfg(any(test, feature = "test-support"))]
@@ -66,4 +67,5 @@ pub use ir::{
 };
 /// Points, vectors, and affine maps in the font model's signatures.
 pub use kurbo;
+pub use point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 pub use projection::*;

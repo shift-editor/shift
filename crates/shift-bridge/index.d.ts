@@ -562,6 +562,13 @@ export interface AddPointsIntent {
   points: Array<PointSeed>
 }
 
+/** Lines points up on an edge or centre of the box around them. */
+export interface AlignPointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  alignment: "left" | "center-h" | "right" | "top" | "center-v" | "bottom"
+}
+
 /**
  * An anchor to create, carrying its caller-minted id (decision 6: ids are
  * client-minted so verbs return identity synchronously).
@@ -725,6 +732,13 @@ export interface DeleteSourceIntent {
   sourceId: SourceId
 }
 
+/** Spaces points evenly along an axis between the outermost two. */
+export interface DistributePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  axis: "horizontal" | "vertical"
+}
+
 /** One edit as the editor sends it: `{ kind: "addPoints", addPoints: {…} }`. */
 export type FontIntent =
   | { kind: 'addPoints', addPoints: AddPointsIntent }
@@ -753,6 +767,10 @@ export type FontIntent =
   | { kind: 'splitSegment', splitSegment: SplitSegmentIntent }
   | { kind: 'upgradeLineToCubic', upgradeLineToCubic: UpgradeLineToCubicIntent }
   | { kind: 'joinContours', joinContours: JoinContoursIntent }
+  | { kind: 'transformPoints', transformPoints: TransformPointsIntent }
+  | { kind: 'alignPoints', alignPoints: AlignPointsIntent }
+  | { kind: 'distributePoints', distributePoints: DistributePointsIntent }
+  | { kind: 'shiftSidebearing', shiftSidebearing: ShiftSidebearingIntent }
   | { kind: 'createGlyph', createGlyph: CreateGlyphIntent }
   | { kind: 'updateGlyph', updateGlyph: UpdateGlyphIntent }
   | { kind: 'updateFontMetadata', updateFontMetadata: UpdateFontMetadataIntent }
@@ -1566,6 +1584,13 @@ export interface SetXAdvanceIntent {
   width: number
 }
 
+/** Adds `delta` to one sidebearing; the left one moves the whole layer with the advance. */
+export interface ShiftSidebearingIntent {
+  layerId: LayerId
+  sidebearing: "lsb" | "rsb"
+  delta: number
+}
+
 export interface SourceMetricValue {
   metricId: MetricId
   position: number
@@ -1587,6 +1612,14 @@ export interface SplitSegmentIntent {
 /** Affine transform of a whole layer: points, anchors, and component placements. */
 export interface TransformLayerIntent {
   layerId: LayerId
+  /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
+  matrix: Array<number>
+}
+
+/** Moves points by one affine transform. */
+export interface TransformPointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
   /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
   matrix: Array<number>
 }

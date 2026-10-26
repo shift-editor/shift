@@ -195,7 +195,7 @@ impl GlyphLayer {
             .collect()
     }
 
-    fn require_points(&self, point_ids: &[PointId]) -> CoreResult<()> {
+    pub(crate) fn require_points(&self, point_ids: &[PointId]) -> CoreResult<()> {
         for point_id in point_ids {
             self.require_point_contour(point_id.clone())?;
         }
@@ -239,7 +239,7 @@ impl GlyphLayer {
         Ok(())
     }
 
-    fn update_points(
+    pub(crate) fn update_points(
         &mut self,
         point_ids: &[PointId],
         mut update: impl FnMut(&mut Point),

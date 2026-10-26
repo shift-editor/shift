@@ -265,6 +265,11 @@ impl Canonical for DecomposedTransform {
 }
 
 impl Transform {
+    /// The six coefficients in field order: `xx, xy, yx, yy, dx, dy`.
+    pub fn values(&self) -> [f64; 6] {
+        [self.xx, self.xy, self.yx, self.yy, self.dx, self.dy]
+    }
+
     /// Returns whether this transform mirrors, so a decomposed placement
     /// reverses closed contours.
     pub fn mirrors(&self) -> bool {

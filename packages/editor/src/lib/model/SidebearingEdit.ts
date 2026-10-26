@@ -1,4 +1,3 @@
-import { Mat } from "@shift/geo";
 import type { Sidebearing } from "../../types/spacing";
 import type { GlyphLayer } from "./Glyph";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -19,7 +18,6 @@ export class SidebearingEdit {
   readonly #layer: GlyphLayer;
   readonly #state: GlyphLayerState;
   readonly #sidebearing: Sidebearing;
-  readonly #xAdvance: number;
 
   #delta = 0;
   #closed = false;
@@ -32,7 +30,6 @@ export class SidebearingEdit {
     this.#layer = layer;
     this.#state = state;
     this.#sidebearing = sidebearing;
-    this.#xAdvance = state.buffers.xAdvance;
 
     state.beginEdit(() => this.#reapply());
   }
@@ -77,7 +74,6 @@ export class SidebearingEdit {
 
   /** The edit for `delta`, as the commit sends it: the left sidebearing moves the outline. */
   #steps(delta: number): void {
-    if (this.#sidebearing === "lsb") this.#layer.transformLayer(Mat.Translate(delta, 0));
-    this.#layer.setXAdvance(this.#xAdvance + delta);
+    this.#layer.shiftSidebearing(this.#sidebearing, delta);
   }
 }

@@ -803,15 +803,9 @@ impl LayerIntent for TransformLayer {
             layer_id,
             transform,
         } = self;
-        let values = [
-            transform.xx,
-            transform.xy,
-            transform.yx,
-            transform.yy,
-            transform.dx,
-            transform.dy,
-        ];
-        values.require_finite(Coordinates::LayerTransform)?;
+        transform
+            .values()
+            .require_finite(Coordinates::LayerTransform)?;
 
         font.require_layer_mut(*layer_id)?
             .transform_layer(transform);
@@ -977,6 +971,127 @@ impl LayerIntent for JoinContours {
             mode,
         } = self;
         font.edit_layer(*layer_id, |layer| layer.join_contours(from, to, *mode))
+    }
+}
+
+/// Moves points by one affine transform.
+#[derive(Clone, Debug)]
+pub struct TransformPoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub transform: Transform,
+}
+
+impl LayerIntent for TransformPoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            transform,
+        } = self;
+        transform
+            .values()
+            .require_finite(Coordinates::PointTransform)?;
+        font.require_layer_mut(*layer_id)?
+            .transform_points(point_ids, transform)
+    }
+}
+
+/// Lines points up on an edge or centre of their box: see [`GlyphLayer::align_points`].
+#[derive(Clone, Debug)]
+pub struct AlignPoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub alignment: PointAlignment,
+}
+
+impl LayerIntent for AlignPoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            alignment,
+        } = self;
+        font.require_layer_mut(*layer_id)?
+            .align_points(point_ids, *alignment)
+    }
+}
+
+/// Spaces points evenly along an axis: see [`GlyphLayer::distribute_points`].
+#[derive(Clone, Debug)]
+pub struct DistributePoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub axis: DistributeAxis,
+}
+
+impl LayerIntent for DistributePoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            axis,
+        } = self;
+        font.require_layer_mut(*layer_id)?
+            .distribute_points(point_ids, *axis)
+    }
+}
+
+/// Adds to one sidebearing: see [`GlyphLayer::shift_sidebearing`].
+#[derive(Clone, Debug)]
+pub struct ShiftSidebearing {
+    pub layer_id: LayerId,
+    pub sidebearing: Sidebearing,
+    pub delta: f64,
+}
+
+impl LayerIntent for ShiftSidebearing {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn may_move_anchors(&self) -> bool {
+        self.sidebearing == Sidebearing::Left
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            sidebearing,
+            delta,
+        } = self;
+        [*delta].require_finite(Coordinates::SidebearingDelta)?;
+        font.require_layer_mut(*layer_id)?
+            .shift_sidebearing(*sidebearing, *delta);
+        Ok(())
     }
 }
 

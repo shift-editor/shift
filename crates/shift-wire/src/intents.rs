@@ -15,15 +15,16 @@ use shift_font as font;
 use shift_font::MaterializeGlyphLayer;
 use shift_font::PointType as IrPointType;
 use shift_font::{
-    AddAnchors, AddComponent, AddContour, AddPoints, ApplyBooleanOp, CloneGlyphLayer, CreateAxis,
-    CreateGlyph, CreateGlyphLayer, CreateKerningGroup, CreateNamedInstance, CreateSource,
-    DecomposeComponents, DeleteAxis, DeleteKerningGroup, DeleteNamedInstance, DeletePoints,
-    DeleteSource, JoinContours, MoveAnchors, MovePoints, RemoveAnchors, RemoveComponents,
-    RemovePoints, RenameAnchors, RenameKerningGroup, ReverseContour, SetAxisMappings,
-    SetComponentAlignment, SetComponentTransforms, SetContourClosed, SetContourStart,
-    SetKerningGroupMember, SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth,
-    SetPositions, SetXAdvance, SplitSegment, TransformLayer, TranslatePoints, UpdateAxis,
-    UpdateFontMetadata, UpdateGlyph, UpdateNamedInstance, UpdateSource, UpgradeLineToCubic,
+    AddAnchors, AddComponent, AddContour, AddPoints, AlignPoints, ApplyBooleanOp, CloneGlyphLayer,
+    CreateAxis, CreateGlyph, CreateGlyphLayer, CreateKerningGroup, CreateNamedInstance,
+    CreateSource, DecomposeComponents, DeleteAxis, DeleteKerningGroup, DeleteNamedInstance,
+    DeletePoints, DeleteSource, DistributePoints, JoinContours, MoveAnchors, MovePoints,
+    RemoveAnchors, RemoveComponents, RemovePoints, RenameAnchors, RenameKerningGroup,
+    ReverseContour, SetAxisMappings, SetComponentAlignment, SetComponentTransforms,
+    SetContourClosed, SetContourStart, SetKerningGroupMember, SetKerningValues, SetLanguages,
+    SetMetricDefinitions, SetPointSmooth, SetPositions, SetXAdvance, ShiftSidebearing,
+    SplitSegment, TransformLayer, TransformPoints, TranslatePoints, UpdateAxis, UpdateFontMetadata,
+    UpdateGlyph, UpdateNamedInstance, UpdateSource, UpgradeLineToCubic,
 };
 use shift_font::{
     AnchorId, AnchorSeed as FontAnchorSeed, Axis as FontAxis, AxisId, AxisLabel as FontAxisLabel,
@@ -877,6 +878,62 @@ pub struct TransformLayerIntent {
     pub matrix: Vec<f64>,
 }
 
+/// Moves points by one affine transform.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransformPointsIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    pub point_ids: Vec<String>,
+    /// Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+    pub matrix: Vec<f64>,
+}
+
+/// Lines points up on an edge or centre of the box around them.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlignPointsIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    pub point_ids: Vec<String>,
+    #[cfg_attr(
+        feature = "napi",
+        napi(
+            ts_type = "\"left\" | \"center-h\" | \"right\" | \"top\" | \"center-v\" | \"bottom\""
+        )
+    )]
+    pub alignment: String,
+}
+
+/// Spaces points evenly along an axis between the outermost two.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistributePointsIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    pub point_ids: Vec<String>,
+    #[cfg_attr(feature = "napi", napi(ts_type = "\"horizontal\" | \"vertical\""))]
+    pub axis: String,
+}
+
+/// Adds `delta` to one sidebearing; the left one moves the whole layer with the advance.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShiftSidebearingIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "\"lsb\" | \"rsb\""))]
+    pub sidebearing: String,
+    pub delta: f64,
+}
+
 /// Affine move: O(selection-ids) wire instead of O(N) coords.
 #[cfg_attr(feature = "napi", napi(object))]
 #[derive(serde::Deserialize)]
@@ -1093,6 +1150,10 @@ wire_intents! {
     SplitSegment { split_segment: SplitSegmentIntent },
     UpgradeLineToCubic { upgrade_line_to_cubic: UpgradeLineToCubicIntent },
     JoinContours { join_contours: JoinContoursIntent },
+    TransformPoints { transform_points: TransformPointsIntent },
+    AlignPoints { align_points: AlignPointsIntent },
+    DistributePoints { distribute_points: DistributePointsIntent },
+    ShiftSidebearing { shift_sidebearing: ShiftSidebearingIntent },
     CreateGlyph { create_glyph: CreateGlyphIntent },
     UpdateGlyph { update_glyph: UpdateGlyphIntent },
     UpdateFontMetadata { update_font_metadata: UpdateFontMetadataIntent },
@@ -1363,22 +1424,79 @@ impl TryFrom<TranslatePointsIntent> for font::FontIntent {
     }
 }
 
+/// The transform six affine values `[a, b, c, d, e, f]` describe.
+fn affine(matrix: &[f64]) -> WireResult<Transform> {
+    let [xx, xy, yx, yy, dx, dy] =
+        <[f64; 6]>::try_from(matrix).map_err(|_| WireError::TransformLength(matrix.len()))?;
+    Ok(Transform {
+        xx,
+        xy,
+        yx,
+        yy,
+        dx,
+        dy,
+    })
+}
+
+impl TryFrom<TransformPointsIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: TransformPointsIntent) -> WireResult<Self> {
+        Ok(TransformPoints {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
+            transform: affine(&wire.matrix)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<AlignPointsIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: AlignPointsIntent) -> WireResult<Self> {
+        Ok(AlignPoints {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
+            alignment: wire.alignment.parse().map_err(WireError::UnknownName)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<DistributePointsIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: DistributePointsIntent) -> WireResult<Self> {
+        Ok(DistributePoints {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
+            axis: wire.axis.parse().map_err(WireError::UnknownName)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<ShiftSidebearingIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: ShiftSidebearingIntent) -> WireResult<Self> {
+        Ok(ShiftSidebearing {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            sidebearing: wire.sidebearing.parse().map_err(WireError::UnknownName)?,
+            delta: wire.delta,
+        }
+        .into())
+    }
+}
+
 impl TryFrom<TransformLayerIntent> for font::FontIntent {
     type Error = WireError;
 
     fn try_from(wire: TransformLayerIntent) -> WireResult<Self> {
-        let [xx, xy, yx, yy, dx, dy] = <[f64; 6]>::try_from(wire.matrix.as_slice())
-            .map_err(|_| WireError::TransformLength(wire.matrix.len()))?;
         Ok(TransformLayer {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
-            transform: Transform {
-                xx,
-                xy,
-                yx,
-                yy,
-                dx,
-                dy,
-            },
+            transform: affine(&wire.matrix)?,
         }
         .into())
     }

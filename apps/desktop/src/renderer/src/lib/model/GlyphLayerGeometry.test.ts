@@ -49,6 +49,70 @@ describe("GlyphLayer point movement", () => {
   });
 });
 
+describe("GlyphLayer point arrangement", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.startSession();
+    editor.selectTool("pen");
+    await editor.clickLocal(10, 20);
+    await editor.clickLocal(30, 40);
+    await editor.clickLocal(90, 0);
+  });
+
+  const layer = () => editor.glyphLayer!;
+  const positions = () => layer().allPoints.map(({ x, y }) => ({ x, y }));
+  const ids = () => layer().allPoints.map((point) => point.id);
+
+  it("rotates the named points about an origin as one undo step", async () => {
+    layer().rotate(ids().slice(0, 2), Math.PI, { x: 20, y: 30 });
+    await editor.settle();
+
+    expect(positions().map(({ x, y }) => ({ x: Math.round(x), y: Math.round(y) }))).toEqual([
+      { x: 30, y: 40 },
+      { x: 10, y: 20 },
+      { x: 90, y: 0 },
+    ]);
+
+    await editor.undo();
+    expect(positions()).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+      { x: 90, y: 0 },
+    ]);
+  });
+
+  it("reflects the named points across an axis through an origin", async () => {
+    layer().reflect(ids(), "vertical", { x: 50, y: 0 });
+    await editor.settle();
+
+    expect(positions()).toEqual([
+      { x: 90, y: 20 },
+      { x: 70, y: 40 },
+      { x: 10, y: 0 },
+    ]);
+  });
+
+  it("aligns the named points to an edge of their box", async () => {
+    layer().align(ids().slice(0, 2), "top");
+    await editor.settle();
+
+    expect(positions()).toEqual([
+      { x: 10, y: 40 },
+      { x: 30, y: 40 },
+      { x: 90, y: 0 },
+    ]);
+  });
+
+  it("spaces the named points evenly between the outermost", async () => {
+    layer().distribute(ids(), "horizontal");
+    await editor.settle();
+
+    expect(positions().map(({ x }) => x)).toEqual([10, 50, 90]);
+  });
+});
+
 describe("GlyphLayer.toggleSmooth", () => {
   let editor: TestEditor;
 

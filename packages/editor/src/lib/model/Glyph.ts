@@ -56,7 +56,6 @@ import { interpolateSourceValues, interpolationWeights } from "../interpolation/
 import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
-import { Alignment } from "../transform/Alignment";
 import type { FontOptions } from "../../types/font";
 import type { AlignmentType, DistributeType, ReflectAxis } from "../../types/transform";
 import {
@@ -319,6 +318,29 @@ class GlyphLayerWriter {
 
   translateLayer(dx: number, dy: number): void {
     this.transformLayer(Mat.Translate(dx, dy));
+  }
+
+  transformPoints(pointIds: readonly PointId[], matrix: MatModel): void {
+    if (pointIds.length === 0) return;
+    const { a, b, c, d, e, f } = matrix;
+    this.#workspaceIntents.transformPoints({
+      pointIds: [...pointIds],
+      matrix: [a, b, c, d, e, f],
+    });
+  }
+
+  alignPoints(pointIds: readonly PointId[], alignment: AlignmentType): void {
+    if (pointIds.length === 0) return;
+    this.#workspaceIntents.alignPoints({ pointIds: [...pointIds], alignment });
+  }
+
+  distributePoints(pointIds: readonly PointId[], axis: DistributeType): void {
+    if (pointIds.length === 0) return;
+    this.#workspaceIntents.distributePoints({ pointIds: [...pointIds], axis });
+  }
+
+  shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
+    this.#workspaceIntents.shiftSidebearing({ sidebearing, delta });
   }
 
   addContour(): ContourId {
@@ -763,13 +785,10 @@ export class GlyphLayer {
    * @param value - Desired distance from outline right edge to advance width.
    */
   setRightSidebearing(value: number): void {
-    const bounds = this.bounds;
-    if (!bounds) return;
+    const current = this.sidebearings.rsb;
+    if (current === null || value === current) return;
 
-    const width = bounds.max.x + value;
-    if (width === this.xAdvance) return;
-
-    this.setXAdvance(width);
+    this.shiftSidebearing("rsb", value - current);
   }
 
   /**
@@ -785,13 +804,21 @@ export class GlyphLayer {
     const current = this.sidebearings.lsb;
     if (current === null) return;
 
-    const deltaX = value - current;
-    if (deltaX === 0) return;
+    if (value === current) return;
 
     this.#writer.transaction("Set left sidebearing", () => {
-      this.translateLayer(deltaX, 0);
-      this.setXAdvance(this.xAdvance + deltaX);
+      this.shiftSidebearing("lsb", value - current);
     });
+  }
+
+  /**
+   * Adds `delta` units to one sidebearing in one intent.
+   *
+   * @param sidebearing - `"lsb"` moves the whole layer with the advance; `"rsb"` moves only the advance.
+   * @param delta - Units to add; positive adds space.
+   */
+  shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
+    this.#writer.shiftSidebearing(sidebearing, delta);
   }
 
   /**
@@ -1340,13 +1367,7 @@ export class GlyphLayer {
    * @param origin - Rotation origin in glyph-local UPM units.
    */
   rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
-    this.applyPositionPatch(
-      Transform.rotatePoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        angle,
-        origin,
-      ),
-    );
+    this.#writer.transformPoints(pointIds, Transform.about(Mat.Rotate(angle), origin));
   }
 
   /**
@@ -1358,14 +1379,7 @@ export class GlyphLayer {
    * @param origin - Scale origin in glyph-local UPM units.
    */
   scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
-    this.applyPositionPatch(
-      Transform.scalePoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        sx,
-        sy,
-        origin,
-      ),
-    );
+    this.#writer.transformPoints(pointIds, Transform.about(Mat.Scale(sx, sy), origin));
   }
 
   /**
@@ -1376,42 +1390,30 @@ export class GlyphLayer {
    * @param origin - Axis origin in glyph-local UPM units.
    */
   reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
-    this.applyPositionPatch(
-      Transform.reflectPoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        axis,
-        origin,
-      ),
+    this.#writer.transformPoints(
+      pointIds,
+      Transform.about(Transform.reflectionMatrix(axis), origin),
     );
   }
 
   /**
-   * Aligns points using a geometric alignment rule.
+   * Lines points up on an edge or centre of the box around them.
    *
    * @param pointIds - Points to align.
    * @param alignment - Alignment operation to apply.
    */
   align(pointIds: readonly PointId[], alignment: AlignmentType): void {
-    const points = this.positionsFor(pointIds.map((id) => ({ kind: "point", id })));
-    const bounds = Bounds.fromPoints(points);
-    if (!bounds) return;
-
-    this.applyPositionPatch(Alignment.alignPoints(points, alignment, bounds));
+    this.#writer.alignPoints(pointIds, alignment);
   }
 
   /**
-   * Distributes points according to a spacing rule.
+   * Spaces points evenly between the outermost two along an axis.
    *
    * @param pointIds - Points to distribute.
    * @param type - Distribution operation to apply.
    */
   distribute(pointIds: readonly PointId[], type: DistributeType): void {
-    this.applyPositionPatch(
-      Alignment.distributePoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        type,
-      ),
-    );
+    this.#writer.distributePoints(pointIds, type);
   }
 }
 

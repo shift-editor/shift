@@ -34,6 +34,17 @@ function reflectionMatrix(axis: ReflectAxis): Mat {
 }
 
 export const Transform = {
+  /** `matrix` applied about `origin` rather than about (0, 0). */
+  about(matrix: MatModel, origin: Point2D): MatModel {
+    // Matrix multiplication order (right to left): fromOrigin × matrix × toOrigin
+    const toOrigin = Mat.Translate(-origin.x, -origin.y);
+    const fromOrigin = Mat.Translate(origin.x, origin.y);
+    return Mat.Compose(Mat.Compose(fromOrigin, matrix), toOrigin);
+  },
+
+  /** The reflection across `axis` through (0, 0). */
+  reflectionMatrix,
+
   /**
    * Rotate points around an origin.
    *
@@ -94,11 +105,7 @@ export const Transform = {
     matrix: MatModel,
     origin: Point2D = { x: 0, y: 0 },
   ): T[] {
-    // Build composite: Translate(-origin) → Matrix → Translate(origin)
-    // Matrix multiplication order (right to left): fromOrigin × matrix × toOrigin
-    const toOrigin = Mat.Translate(-origin.x, -origin.y);
-    const fromOrigin = Mat.Translate(origin.x, origin.y);
-    const composite = Mat.Compose(Mat.Compose(fromOrigin, matrix), toOrigin);
+    const composite = Transform.about(matrix, origin);
 
     return points.map((p) => {
       const transformed = Mat.applyToPoint(composite, p);

@@ -39,6 +39,7 @@ crates/shift-font/src/
   layer_edit.rs    -- glyph-layer geometry mutations
   contour_edit.rs  -- whole-contour edits: delete points and reconnect (fit or gap), split a segment, line to cubic, close or join by ends
   curve_fit.rs     -- one cubic or quadratic fitted to a connected run of segments, for deletion
+  point_arrange.rs -- transform, align and distribute selected points; shift a sidebearing
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
