@@ -74,38 +74,7 @@ impl ShiftStore {
         &self,
         glyph_ids: &[font::GlyphId],
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        let mut result = HashSet::new();
-        for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-            #[cfg(test)]
-            COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(count.get() + 1));
-
-            let placeholders = (0..count_batch.len())
-                .map(|_| "?")
-                .collect::<Vec<_>>()
-                .join(",");
-            // Keys go through IN subqueries, not joins: a recovered document reads
-            // through merged UNION ALL views, and SQLite pushes WHERE terms into
-            // them but not join terms, so a join scans every component row.
-            let sql = format!(
-                "SELECT DISTINCT c.base_glyph_id
-                 FROM glyph_components AS c
-                 WHERE c.layer_id IN (
-                     SELECT l.id FROM glyph_layers AS l WHERE l.glyph_id IN ({placeholders})
-                 )"
-            );
-            let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-                |row| row.get::<_, font::GlyphId>(0),
-            )?;
-            for row in rows {
-                result.insert(row?);
-            }
-        }
-
-        let mut result = result.into_iter().collect::<Vec<_>>();
-        result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        Ok(result)
+        referenced_glyph_ids_for_glyphs_from_conn(&self.conn, glyph_ids)
     }
 
     /// Computes the transitive component closure without scanning payloads.
@@ -121,22 +90,7 @@ impl ShiftStore {
         &self,
         roots: impl IntoIterator<Item = font::GlyphId>,
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        let mut pending = roots.into_iter().collect::<Vec<_>>();
-        let mut seen = HashSet::new();
-        let mut result = Vec::new();
-        while !pending.is_empty() {
-            let glyph_ids = pending
-                .drain(..)
-                .filter(|glyph_id| seen.insert(glyph_id.clone()))
-                .inspect(|glyph_id| result.push(glyph_id.clone()))
-                .collect::<Vec<_>>();
-            if glyph_ids.is_empty() {
-                continue;
-            }
-
-            pending.extend(self.referenced_glyph_ids_for_glyphs(&glyph_ids)?);
-        }
-        Ok(result)
+        referenced_glyph_closure_from_conn(&self.conn, roots)
     }
 
     /// Reverse-reference lookup used for dependent invalidation.
@@ -148,40 +102,7 @@ impl ShiftStore {
         &self,
         layer_ids: &[font::LayerId],
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        if layer_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut result = HashSet::new();
-        for count_batch in layer_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-            let placeholders = (0..count_batch.len())
-                .map(|_| "?")
-                .collect::<Vec<_>>()
-                .join(",");
-            // IN subqueries rather than joins, for the merged views; see
-            // `referenced_glyph_ids_for_glyphs`.
-            let sql = format!(
-                "SELECT DISTINCT owner.glyph_id
-                 FROM glyph_layers AS owner
-                 WHERE owner.id IN (
-                     SELECT c.layer_id FROM glyph_components AS c
-                     WHERE c.base_glyph_id IN (
-                         SELECT target.glyph_id FROM glyph_layers AS target
-                         WHERE target.id IN ({placeholders})
-                     )
-                 )"
-            );
-            let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-                |row| row.get::<_, font::GlyphId>(0),
-            )?;
-            for row in rows {
-                result.insert(row?);
-            }
-        }
-        let mut result: Vec<_> = result.into_iter().collect();
-        result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        Ok(result)
+        dependent_glyph_ids_for_layers_from_conn(&self.conn, layer_ids)
     }
 }
 
@@ -230,4 +151,104 @@ pub(super) fn validate_component_rows(
         });
     }
     Ok(())
+}
+
+pub(crate) fn referenced_glyph_ids_for_glyphs_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    let mut result = HashSet::new();
+    for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        #[cfg(test)]
+        COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(count.get() + 1));
+
+        let placeholders = (0..count_batch.len())
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        // Keys go through IN subqueries, not joins: a recovered document reads
+        // through merged UNION ALL views, and SQLite pushes WHERE terms into
+        // them but not join terms, so a join scans every component row.
+        let sql = format!(
+            "SELECT DISTINCT c.base_glyph_id
+             FROM glyph_components AS c
+             WHERE c.layer_id IN (
+                 SELECT l.id FROM glyph_layers AS l WHERE l.glyph_id IN ({placeholders})
+             )"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
+            |row| row.get::<_, font::GlyphId>(0),
+        )?;
+        for row in rows {
+            result.insert(row?);
+        }
+    }
+
+    let mut result = result.into_iter().collect::<Vec<_>>();
+    result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    Ok(result)
+}
+
+pub(crate) fn referenced_glyph_closure_from_conn(
+    conn: &Connection,
+    roots: impl IntoIterator<Item = font::GlyphId>,
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    let mut pending = roots.into_iter().collect::<Vec<_>>();
+    let mut seen = HashSet::new();
+    let mut result = Vec::new();
+    while !pending.is_empty() {
+        let glyph_ids = pending
+            .drain(..)
+            .filter(|glyph_id| seen.insert(glyph_id.clone()))
+            .inspect(|glyph_id| result.push(glyph_id.clone()))
+            .collect::<Vec<_>>();
+        if glyph_ids.is_empty() {
+            continue;
+        }
+
+        pending.extend(referenced_glyph_ids_for_glyphs_from_conn(conn, &glyph_ids)?);
+    }
+    Ok(result)
+}
+
+pub(crate) fn dependent_glyph_ids_for_layers_from_conn(
+    conn: &Connection,
+    layer_ids: &[font::LayerId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    if layer_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut result = HashSet::new();
+    for count_batch in layer_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        let placeholders = (0..count_batch.len())
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        // IN subqueries rather than joins, for the merged views; see
+        // `referenced_glyph_ids_for_glyphs`.
+        let sql = format!(
+            "SELECT DISTINCT owner.glyph_id
+             FROM glyph_layers AS owner
+             WHERE owner.id IN (
+                 SELECT c.layer_id FROM glyph_components AS c
+                 WHERE c.base_glyph_id IN (
+                     SELECT target.glyph_id FROM glyph_layers AS target
+                     WHERE target.id IN ({placeholders})
+                 )
+             )"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
+            |row| row.get::<_, font::GlyphId>(0),
+        )?;
+        for row in rows {
+            result.insert(row?);
+        }
+    }
+    let mut result: Vec<_> = result.into_iter().collect();
+    result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    Ok(result)
 }

@@ -15,11 +15,13 @@ import type { GlyphLayer, GlyphLayerPosition, GlyphLayerPositions } from "./Glyp
 import type { GlyphLayerState } from "./GlyphLayerState";
 
 /**
- * One reversible edit applied directly to the reactive glyph layer.
+ * One reversible edit to a glyph layer, previewed as it is made.
  *
- * Local mutations are immediately visible to every geometry consumer. Finishing
- * restores the latest accepted base and replays the final operations through the
- * workspace intent path in one reactive batch; canceling restores that base.
+ * Structural steps (contours, points, anchors, smoothness, closing) are shown
+ * as the window's engine applies them to the base, without keeping them;
+ * moved positions are patched on top. Finishing restores the base and commits
+ * the final steps through the workspace intent path in one reactive batch;
+ * canceling restores that base.
  */
 export class GlyphLayerEdit {
   readonly #glyphLayer: GlyphLayer;
@@ -36,68 +38,49 @@ export class GlyphLayerEdit {
   constructor(glyphLayer: GlyphLayer, state: GlyphLayerState) {
     this.#glyphLayer = glyphLayer;
     this.#state = state;
-    this.#state.beginEdit(() => this.#reapply());
+    this.#state.beginEdit(() => this.#preview());
   }
 
   addContour(closed: boolean): ContourId {
-    this.#assertOpen();
-
-    const contourId = mintContourId();
-    if (!this.#state.buffers.addContour(contourId, closed)) {
-      throw new Error("cannot add contour to the active glyph layer edit");
-    }
-
-    this.#contours.set(contourId, closed);
-    return contourId;
+    return this.#step(() => {
+      const contourId = mintContourId();
+      this.#contours.set(contourId, closed);
+      return contourId;
+    });
   }
 
   addPoints(contourId: ContourId, points: readonly NewPoint[]): readonly PointId[] {
-    this.#assertOpen();
-    if (points.length === 0) return [];
-
-    const seeds = points.map((point) => ({ id: mintPointId(), ...point }));
-    if (!this.#state.buffers.addPoints(seeds, contourId)) {
-      throw new Error(`cannot add points to contour ${contourId}`);
+    if (points.length === 0) {
+      this.#assertOpen();
+      return [];
     }
-
-    const previous = this.#points.get(contourId) ?? [];
-    this.#points.set(contourId, [...previous, ...seeds]);
-    return seeds.map((point) => point.id);
+    return this.#step(() => {
+      const seeds = points.map((point) => ({ id: mintPointId(), ...point }));
+      const previous = this.#points.get(contourId) ?? [];
+      this.#points.set(contourId, [...previous, ...seeds]);
+      return seeds.map((point) => point.id);
+    });
   }
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
-    this.#assertOpen();
-
-    const anchor: AnchorSeed = {
-      id: mintAnchorId(),
-      x: position.x,
-      y: position.y,
-      ...(name === null ? {} : { name }),
-    };
-    if (!this.#state.buffers.addAnchors([anchor])) {
-      throw new Error("cannot add anchor to the active glyph layer edit");
-    }
-
-    this.#anchors.set(anchor.id, anchor);
-    return anchor.id;
+    return this.#step(() => {
+      const anchor: AnchorSeed = {
+        id: mintAnchorId(),
+        x: position.x,
+        y: position.y,
+        ...(name === null ? {} : { name }),
+      };
+      this.#anchors.set(anchor.id, anchor);
+      return anchor.id;
+    });
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
-    this.#assertOpen();
-    if (!this.#state.buffers.setPointSmooth(pointId, smooth)) {
-      throw new Error(`cannot set smoothness: point ${pointId} is not in the layer`);
-    }
-
-    this.#smoothPoints.set(pointId, smooth);
+    this.#step(() => this.#smoothPoints.set(pointId, smooth));
   }
 
   closeContour(contourId: ContourId): void {
-    this.#assertOpen();
-    if (!this.#state.buffers.setContourClosed(contourId, true)) {
-      throw new Error(`cannot close contour ${contourId}: it is not in the layer`);
-    }
-
-    this.#closedContours.add(contourId);
+    this.#step(() => this.#closedContours.add(contourId));
   }
 
   setPositions(positions: GlyphLayerPositions): void {
@@ -120,24 +103,7 @@ export class GlyphLayerEdit {
 
     this.#glyphLayer.transaction(label, () => {
       this.#state.finishEdit(() => {
-        for (const [contourId, closed] of this.#contours) {
-          this.#glyphLayer.addContourSeed(contourId, closed);
-        }
-
-        for (const [contourId, points] of this.#points) {
-          this.#glyphLayer.addPointSeeds(contourId, points);
-        }
-
-        this.#glyphLayer.addAnchorSeeds([...this.#anchors.values()]);
-
-        for (const [pointId, smooth] of this.#smoothPoints) {
-          this.#glyphLayer.setPointSmooth(pointId, smooth);
-        }
-
-        for (const contourId of this.#closedContours) {
-          this.#glyphLayer.closeContour(contourId);
-        }
-
+        this.#structuralSteps();
         const positions = [...this.#positions.values()];
         if (positions.length > 0) this.#glyphLayer.applyPositionPatch(positions);
       });
@@ -150,39 +116,40 @@ export class GlyphLayerEdit {
     this.#state.cancelEdit();
   }
 
-  #reapply(): void {
+  /** Records one structural step of the open edit with `record`, then previews the gesture with it. */
+  #step<T>(record: () => T): T {
+    this.#assertOpen();
+    const result = record();
+    this.#preview();
+    return result;
+  }
+
+  /**
+   * Shows the gesture so far: its structural steps as the window's engine
+   * applies them to the base, then the positions it has moved on top.
+   */
+  #preview(): void {
     batch(() => {
-      for (const [contourId, closed] of this.#contours) {
-        if (!this.#state.buffers.addContour(contourId, closed)) {
-          throw new Error(`cannot reapply contour ${contourId}`);
-        }
-      }
-
-      for (const [contourId, points] of this.#points) {
-        if (!this.#state.buffers.addPoints(points, contourId)) {
-          throw new Error(`cannot reapply points in contour ${contourId}`);
-        }
-      }
-
-      const anchors = [...this.#anchors.values()];
-      if (anchors.length > 0 && !this.#state.buffers.addAnchors(anchors)) {
-        throw new Error("cannot reapply anchors");
-      }
-
-      for (const [pointId, smooth] of this.#smoothPoints) {
-        if (!this.#state.buffers.setPointSmooth(pointId, smooth)) {
-          throw new Error(`cannot reapply smoothness for point ${pointId}`);
-        }
-      }
-
-      for (const contourId of this.#closedContours) {
-        if (!this.#state.buffers.setContourClosed(contourId, true)) {
-          throw new Error(`cannot reapply closure for contour ${contourId}`);
-        }
-      }
-
+      this.#glyphLayer.preview(() => this.#structuralSteps());
       this.#state.patchPositions([...this.#positions.values()]);
     });
+  }
+
+  /** The gesture's contours, points, anchors, smoothness and closings, as the commit sends them. */
+  #structuralSteps(): void {
+    for (const [contourId, closed] of this.#contours) {
+      this.#glyphLayer.addContourSeed(contourId, closed);
+    }
+    for (const [contourId, points] of this.#points) {
+      this.#glyphLayer.addPointSeeds(contourId, points);
+    }
+    this.#glyphLayer.addAnchorSeeds([...this.#anchors.values()]);
+    for (const [pointId, smooth] of this.#smoothPoints) {
+      this.#glyphLayer.setPointSmooth(pointId, smooth);
+    }
+    for (const contourId of this.#closedContours) {
+      this.#glyphLayer.closeContour(contourId);
+    }
   }
 
   #assertOpen(): void {

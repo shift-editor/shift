@@ -21,6 +21,8 @@ export type DocumentCallMap = {
     request: { path: string };
     response: WorkspaceExportResult;
   };
+  /** Closes the window's reader of the store, before the workspace deletes its files on close. */
+  "document.releaseStore": { request: void; response: null };
 };
 
 export type DocumentEventMap = Record<string, never>;

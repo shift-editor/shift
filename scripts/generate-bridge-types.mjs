@@ -73,12 +73,17 @@ const bridgeApi = `export interface BridgeApi {${withoutNapiPrefix(bridgeMethods
 body = body.replace(classMatch[0], bridgeApi);
 
 body = body.replace(
-  /export declare const enum (Napi[A-Za-z0-9_]+) \{([\s\S]*?)\n\}/g,
+  /export declare const enum ([A-Za-z0-9_]+) \{([\s\S]*?)\n\}/g,
   (_match, name, enumBody) => enumToUnion(name, enumBody),
 );
-// Free functions, such as config.toml parsing, are imported from shift-bridge
+// Free functions, such as config.toml parsing, and classes other than Bridge,
+// such as the preload's read-only LayerReader, are imported from shift-bridge
 // directly by the process that calls them; they are not part of BridgeApi.
 body = body.replace(/(?:\/\*\*(?:(?!\*\/)[\s\S])*\*\/\n)?export declare function [^\n]*\n\n?/g, "");
+body = body.replace(
+  /(?:\/\*\*(?:(?!\*\/)[\s\S])*\*\/\n)?export declare class \w+ \{[\s\S]*?\n\}\n\n?/g,
+  "",
+);
 body = withoutNapiPrefix(body);
 body = body.replace(/\bexport declare /g, "export ");
 body = body.replace(/\bReadableStream<Buffer>/g, "NativeReadableStream<Uint8Array>");

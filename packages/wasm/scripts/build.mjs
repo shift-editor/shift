@@ -56,6 +56,7 @@ if (locked !== cli) {
  * other variants' compiles.
  */
 const allVariants = [
+  { folder: "generated-engine", features: ["engine"], testOnly: false },
   { folder: "generated-shaping", features: ["shaping"], testOnly: false },
   { folder: "generated-reference", features: ["reference"], testOnly: true },
   { folder: "generated", features: [], testOnly: false },

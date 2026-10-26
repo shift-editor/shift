@@ -342,7 +342,7 @@ describe("mapped weights retain design-space interpolation", () => {
       stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
     ).toBeCloseTo(234);
     expect(
-      stack.client.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+      stack.store.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
         .maximum,
     ).toBeCloseTo(234);
     await stack.editCoordinator.undo();
@@ -350,7 +350,7 @@ describe("mapped weights retain design-space interpolation", () => {
       stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
     ).toBe(160);
     expect(
-      stack.client.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+      stack.store.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
         .maximum,
     ).toBe(160);
   });

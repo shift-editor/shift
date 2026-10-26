@@ -1,0 +1,17 @@
+[package]
+name = "shift-engine"
+version = "0.1.0"
+license.workspace = true
+edition = "2024"
+description = "Shift's editing session over a partly loaded font, shared by the native workspace and the renderer."
+
+[dependencies]
+shift-font = { workspace = true }
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

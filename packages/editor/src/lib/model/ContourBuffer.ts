@@ -1,14 +1,7 @@
 import { Bounds, type Bounds as BoundsType } from "@shift/geo";
+import { type ContourData, type PointId, type SegmentId } from "@shift/types";
+import { Contour, type GlyphPosition, type Point, type Segment } from "@shift/glyph-state";
 import {
-  replaceBy,
-  type ContourData,
-  type PointId,
-  type PointSeed,
-  type SegmentId,
-} from "@shift/types";
-import { Contour, type GlyphPosition, Point, type Segment } from "@shift/glyph-state";
-import {
-  batch,
   computed,
   signal,
   type ComputedSignal,
@@ -126,108 +119,6 @@ export class ContourBuffer {
       x: coordinates.getComponent(index, 0),
       y: coordinates.getComponent(index, 1),
     };
-  }
-
-  insertPoints(points: readonly PointSeed[], before?: PointId): boolean {
-    const data = this.#dataCell.peek();
-    const pointIndex = before
-      ? data.points.findIndex((point) => point.id === before)
-      : data.points.length;
-    if (pointIndex < 0) return false;
-
-    const additions = points.map((point) => ({
-      id: point.id,
-      pointType: point.pointType,
-      smooth: point.smooth,
-    }));
-    const next: ContourData = {
-      ...data,
-      points: [...data.points.slice(0, pointIndex), ...additions, ...data.points.slice(pointIndex)],
-    };
-
-    batch(() => {
-      const coordinates = this.#coordinates;
-      coordinates.splice(
-        pointIndex,
-        0,
-        points.flatMap((point) => [point.x, point.y]),
-      );
-      this.#dataCell.set(next);
-      this.#markChanged();
-    });
-    return true;
-  }
-
-  removePoints(pointIds: ReadonlySet<PointId>): void {
-    const data = this.#dataCell.peek();
-    const indexes: number[] = [];
-    for (let index = 0; index < data.points.length; index++) {
-      if (pointIds.has(data.points[index].id)) indexes.push(index);
-    }
-    if (indexes.length === 0) return;
-
-    const points = data.points.filter((point) => !pointIds.has(point.id));
-    batch(() => {
-      const coordinates = this.#coordinates;
-      for (let index = indexes.length - 1; index >= 0; index--) {
-        coordinates.splice(indexes[index], 1);
-      }
-      this.#dataCell.set({ ...data, points });
-      this.#markChanged();
-    });
-  }
-
-  setClosed(closed: boolean): void {
-    const data = this.#dataCell.peek();
-    this.#dataCell.set({ ...data, closed });
-  }
-
-  setPointSmooth(pointId: PointId, smooth: boolean): boolean {
-    const data = this.#dataCell.peek();
-    if (!data.points.some((point) => point.id === pointId)) return false;
-
-    const points = replaceBy(
-      data.points,
-      pointId,
-      (point) => ({ ...point, smooth }),
-      (point) => point.id,
-    );
-    this.#dataCell.set({ ...data, points });
-    return true;
-  }
-
-  reverse(): void {
-    const data = this.#dataCell.peek();
-
-    batch(() => {
-      const coordinates = this.#coordinates;
-      coordinates.reverse();
-      this.#dataCell.set({ ...data, points: [...data.points].reverse() });
-      this.#markChanged();
-    });
-  }
-
-  setContourStart(pointId: PointId): boolean {
-    const data = this.#dataCell.peek();
-    if (!data.closed) return false;
-
-    const index = this.pointIndex(pointId);
-    if (index <= 0 || !Point.isOnCurve(data.points[index])) return false;
-
-    const points = [...data.points.slice(index), ...data.points.slice(0, index)];
-    const coordinates = this.#coordinates;
-    const values: number[] = [];
-    for (let offset = 0; offset < points.length; offset++) {
-      const next = (index + offset) % points.length;
-      values.push(coordinates.getComponent(next, 0), coordinates.getComponent(next, 1));
-    }
-
-    batch(() => {
-      coordinates.replace(new Float64Array(values));
-      this.#dataCell.set({ ...data, points });
-      this.#markChanged();
-    });
-    return true;
   }
 
   patchPositions(updates: readonly GlyphPosition[]): void {

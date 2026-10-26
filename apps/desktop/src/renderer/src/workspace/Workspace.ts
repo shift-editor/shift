@@ -1,6 +1,6 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { FontStoreLocation, WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { Editor } from "@shift/editor";
 import { Font, FontStore } from "@shift/editor/model";
@@ -11,6 +11,7 @@ import {
   type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { Signal } from "@shift/editor/signals";
+import { WindowEngine } from "@/lib/engine/WindowEngine";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {
@@ -23,6 +24,7 @@ export interface WorkspaceOptions {
 export class Workspace {
   readonly #client: FontSessionClient;
   readonly #store: FontStore;
+  readonly #engine: WindowEngine;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #documentBridge: WorkspaceDocumentBridge;
   #connection: Promise<void> | null = null;
@@ -35,7 +37,8 @@ export class Workspace {
   constructor(options: WorkspaceOptions) {
     this.#client = options.client;
     this.#store = new FontStore();
-    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
+    this.#engine = new WindowEngine(options.host.layers, () => this.#client.storeLocation());
+    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store, this.#engine);
     this.#documentBridge = new WorkspaceDocumentBridge({
       host: options.host,
       edits: this.#edits,
@@ -63,6 +66,14 @@ export class Workspace {
     return this.#edits;
   }
 
+  /**
+   * Where this workspace's store lives, so the window's editing engine can
+   * read layers from it synchronously through `shiftHost.layers`.
+   */
+  storeLocation(): Promise<FontStoreLocation | null> {
+    return this.#client.storeLocation();
+  }
+
   connect(): Promise<void> {
     if (!this.#connection) {
       this.#connection = this.#connect();
@@ -74,6 +85,7 @@ export class Workspace {
   dispose(): void {
     this.font.dispose();
     this.#documentBridge.dispose();
+    this.#engine.dispose();
   }
 
   async #connect(): Promise<void> {
@@ -86,6 +98,7 @@ export class Workspace {
       }
 
       this.#store.replaceWorkspace(snapshot);
+      await this.#edits.reopenEngine();
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

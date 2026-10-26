@@ -1,20 +1,22 @@
 # Preload
 
-<!-- reviewed: 2026-10-02 review-every: 90d -->
+<!-- reviewed: 2026-10-24 review-every: 90d -->
 
 Electron preload script that exposes the typed Shift host API and relays session, document, and agent ports to the renderer.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Preload exposes only `window.shiftHost`; the native bridge lives in the utility process behind the typed font-session lane. **WHY:** renderer isolation must not expose native font methods directly.
-- **Architecture Invariant:** Every `shiftHost` method delegates through typed IPC helpers and contains only context-bridge-compatible functions and values.
+- **Architecture Invariant:** Preload exposes only `window.shiftHost`. The native bridge and every write live in the utility process behind the typed font-session lane; the one native capability in preload is `shiftHost.layers`, a read-only `LayerReader` over the window's own workspace store. **WHY:** the editing engine runs in the renderer and loads layers within an edit, which needs a synchronous read; writes still have one owner. Editor windows already run with `sandbox: false`, so the reader adds no new privilege.
+- **Architecture Invariant:** Every `shiftHost` method delegates through typed IPC helpers, except `layers`, and contains only context-bridge-compatible functions and values. `layers` keeps native readers behind numeric handles because class instances cannot cross the bridge, and loads the addon on first use.
+- **Architecture Invariant:** `layers.close` closes the native reader's files at once, and the window closes its reader before the workspace deletes the store it reads: after Save As (`workspace.releaseRetiredStores`, once the engine follows the new store) and on close (`document.releaseStore`, before `workspace.close`). **WHY:** Windows refuses to delete a file another process holds open, so the utility process cannot delete a working store or recovery overlay while the renderer reads it.
 - **Architecture Invariant:** Session, document, and agent `MessagePort`s are relayed with `window.postMessage` because ports cannot cross Electron's context bridge. Renderer listeners authenticate the same window and expected message type before accepting a port.
 
 ## Codemap
 
 ```
 preload/
-  preload.ts -- exposes shiftHost and relays session/document MessagePorts
+  preload.ts      -- exposes shiftHost and relays session/document MessagePorts
+  layerReaders.ts -- read-only native layer readers behind handles (`shiftHost.layers`)
 ```
 
 ## Key Types
@@ -51,7 +53,8 @@ The preload runs once before the renderer loads:
 ## Gotchas
 
 - `contextBridge` values must remain plain data and functions.
-- Native font access belongs to `WorkspaceHost` in the utility process, not preload.
+- Native font access belongs to `WorkspaceHost` in the utility process, not preload. The only exception is the read-only `LayerReader`; never expose a writing native call here.
+- `vite.preload.config.ts` keeps `shift-bridge` external: the addon cannot be bundled.
 - Port relays use `"*"` only as the `postMessage` delivery target required by opaque `file://` origins. Renderer listeners must retain the same-window source and message-type checks before accepting transferred ports.
 
 ## Verification

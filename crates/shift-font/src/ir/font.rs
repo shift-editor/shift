@@ -21,7 +21,7 @@ use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::{Source, SourceList};
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 mod change_set;
@@ -1112,11 +1112,66 @@ impl Font {
     }
 
     /// Layers with at least one component whose base is `base_glyph_id`.
-    pub(crate) fn layers_using_component_base(
+    ///
+    /// Only layers whose content is loaded are indexed; a directory
+    /// placeholder carries no components.
+    pub fn layers_using_component_base(
         &self,
         base_glyph_id: &GlyphId,
     ) -> impl Iterator<Item = &LayerId> {
         self.index().composites_of(base_glyph_id)
+    }
+
+    /// Glyphs with a loaded layer that has a component of a glyph owning one
+    /// of `layer_ids`: the composites that follow those layers' anchors.
+    pub fn dependent_glyph_ids<'a>(
+        &self,
+        layer_ids: impl IntoIterator<Item = &'a LayerId>,
+    ) -> BTreeSet<GlyphId> {
+        let index = self.index();
+        let base_glyph_ids = layer_ids
+            .into_iter()
+            .filter_map(|layer_id| index.owner(layer_id));
+        base_glyph_ids
+            .flat_map(|base_glyph_id| index.composite_glyphs_of(base_glyph_id))
+            .cloned()
+            .collect()
+    }
+
+    /// Glyphs the components of the loaded layers among `layer_ids` draw.
+    pub fn component_glyph_ids_of_layers<'a>(
+        &self,
+        layer_ids: impl IntoIterator<Item = &'a LayerId>,
+    ) -> BTreeSet<GlyphId> {
+        layer_ids
+            .into_iter()
+            .filter_map(|layer_id| self.layer(layer_id))
+            .flat_map(GlyphLayer::component_glyph_ids)
+            .collect()
+    }
+
+    /// Glyphs the components of `glyph_ids`' loaded layers draw.
+    pub fn component_glyph_ids_of_glyphs<'a>(
+        &self,
+        glyph_ids: impl IntoIterator<Item = &'a GlyphId>,
+    ) -> BTreeSet<GlyphId> {
+        glyph_ids
+            .into_iter()
+            .filter_map(|glyph_id| self.glyph(glyph_id))
+            .flat_map(Glyph::component_glyph_ids)
+            .collect()
+    }
+
+    /// Every layer of `glyph_ids`.
+    pub fn layer_ids_of_glyphs<'a>(
+        &self,
+        glyph_ids: impl IntoIterator<Item = &'a GlyphId>,
+    ) -> BTreeSet<LayerId> {
+        glyph_ids
+            .into_iter()
+            .filter_map(|glyph_id| self.glyph(glyph_id))
+            .flat_map(Glyph::layer_ids)
+            .collect()
     }
 
     /// The shared copy of one layer, kept to re-index it after an in-place edit.
@@ -2085,6 +2140,50 @@ mod tests {
         .unwrap();
         assert_eq!(font.layer(&first_layer_id).unwrap().width(), 700.0);
         assert_eq!(font.layer(&second_layer_id).unwrap().width(), 800.0);
+    }
+
+    #[test]
+    fn component_queries_follow_loaded_components_both_ways() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let glyph_with = |name: &str, bases: &[&Glyph]| {
+            let mut layer = GlyphLayer::with_width(LayerId::new(), source_id.clone(), 500.0);
+            for base in bases {
+                layer.add_component(Component::with_id(
+                    ComponentId::new(),
+                    base.id(),
+                    base.name(),
+                    crate::DecomposedTransform::default(),
+                ));
+            }
+            let mut glyph = Glyph::new(name);
+            glyph.set_layer(layer);
+            glyph
+        };
+        let base = glyph_with("a", &[]);
+        let mark = glyph_with("acute", &[]);
+        let composite = glyph_with("aacute", &[&base, &mark]);
+        let base_layer = base.layer_ids().next().unwrap();
+        let composite_layer = composite.layer_ids().next().unwrap();
+        let (base_id, mark_id, composite_id) = (base.id(), mark.id(), composite.id());
+        for glyph in [base, mark, composite] {
+            font.insert_glyph(glyph).unwrap();
+        }
+
+        assert_eq!(
+            font.dependent_glyph_ids([&base_layer]),
+            BTreeSet::from([composite_id.clone()])
+        );
+        let drawn = BTreeSet::from([base_id, mark_id]);
+        assert_eq!(
+            font.component_glyph_ids_of_layers([&composite_layer]),
+            drawn
+        );
+        assert_eq!(font.component_glyph_ids_of_glyphs([&composite_id]), drawn);
+        assert_eq!(
+            font.layer_ids_of_glyphs([&composite_id]),
+            BTreeSet::from([composite_layer])
+        );
     }
 
     #[test]

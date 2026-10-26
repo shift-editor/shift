@@ -127,9 +127,8 @@ export class ComponentTransformEdit {
     const transforms = this.#transforms[index];
     if (!layer || !state || !transforms) return;
 
-    if (!state.buffers.setComponentTransforms(layer.componentIds, transforms)) {
-      throw new Error("cannot reapply component transforms");
-    }
+    // The same edit the commit sends, shown as the window's engine applies it.
+    layer.layer.preview(() => layer.layer.setComponentTransforms(layer.componentIds, transforms));
   }
 
   #assertOpen(): void {

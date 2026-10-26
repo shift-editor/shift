@@ -49,6 +49,7 @@ runs:
           packages/wasm/src/generated
           packages/wasm/src/generated-reference
           packages/wasm/src/generated-shaping
+          packages/wasm/src/generated-engine
         key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
     # A cache saved on a pull request or merge-queue ref can be restored only by
@@ -74,6 +75,7 @@ runs:
           packages/wasm/src/generated
           packages/wasm/src/generated-reference
           packages/wasm/src/generated-shaping
+          packages/wasm/src/generated-engine
         key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
     - name: Generate glyph info

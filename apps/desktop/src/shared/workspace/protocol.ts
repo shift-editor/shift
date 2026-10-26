@@ -2,8 +2,8 @@ import type {
   AppliedChange,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  FontIntent,
   FontSnapshot,
+  SaveState,
   GlyphId,
   GlyphLayerSnapshot,
   GlyphPreview,
@@ -183,8 +183,36 @@ export type ShellEventMap = {
  * states, not acks. Create/open are main-owned shell-lane operations; the
  * renderer catches up by reading `workspace.snapshot`.
  */
+/**
+ * Where an open workspace's font store lives, so another process can read
+ * it read-only (its directory and layers): a document with its recovery
+ * overlay, or the working store behind an untitled or imported workspace.
+ */
+export type FontStoreLocation =
+  | { kind: "document"; documentPath: string; recoveryPath: string }
+  | { kind: "working"; storePath: string };
+
+export const FontStoreLocation = {
+  /** Whether `a` and `b` name the same store files. */
+  equals(a: FontStoreLocation, b: FontStoreLocation | null): boolean {
+    if (!b) return false;
+    switch (a.kind) {
+      case "document":
+        return (
+          b.kind === "document" &&
+          a.documentPath === b.documentPath &&
+          a.recoveryPath === b.recoveryPath
+        );
+      case "working":
+        return b.kind === "working" && a.storePath === b.storePath;
+    }
+  },
+};
+
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
+  /** The open workspace's store, for the window's read-only layer reader; `null` for a preview. */
+  "workspace.storeLocation": { request: void; response: FontStoreLocation | null };
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
   "source.glyph": {
     request: { glyphId: GlyphId };
@@ -208,31 +236,20 @@ export type SyncCallMap = {
   };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
-   * The one mutation verb. Requests carry intents; the response is pure
-   * replace-grade state (never change records — the renderer substitutes,
-   * it does not interpret).
+   * The one mutation verb: persists a change set the window's engine already
+   * applied, as named MessagePack. The window keeps the undo history; the
+   * response is a receipt plus what only the workspace can build (glyph
+   * records, dependent composites).
    */
-  "workspace.apply": {
-    request: { intents: FontIntent[]; label?: string };
+  "workspace.persist": {
+    /**
+     * `saveState` claims where the change leaves the font; the workspace
+     * verifies a claim to match the saved document before discarding unsaved
+     * edits.
+     */
+    request: { changeSet: Uint8Array; saveState: SaveState };
     response: { applied: AppliedChange; documentState: WorkspaceDocumentState };
   };
-  /** Replays the most recent ledger entry; null when the stack is empty. */
-  "workspace.undo": {
-    request: void;
-    response: {
-      applied: AppliedChange | null;
-      documentState: WorkspaceDocumentState | null;
-    };
-  };
-  "workspace.redo": {
-    request: void;
-    response: {
-      applied: AppliedChange | null;
-      documentState: WorkspaceDocumentState | null;
-    };
-  };
-  /** Permanently removes the current redo branch without changing document state. */
-  "workspace.discardRedo": { request: void; response: null };
   /**
    * Saves to the current canonical document, or rejects when the workspace still
    * needs a path. Rides the edit lane so the utility serializes it behind every
@@ -244,6 +261,11 @@ export type SyncCallMap = {
     request: { path: string };
     response: WorkspaceDocumentState;
   };
+  /**
+   * Deletes the stores Save As moved the workspace off, once the window's
+   * layer reader has followed it to the new store.
+   */
+  "workspace.releaseRetiredStores": { request: void; response: null };
   /** Captures the committed workspace and compiles it without changing document state. */
   "workspace.export": {
     request: { path: string };

@@ -19,6 +19,10 @@
     "./shaping": {
       "types": "./src/shaping.ts",
       "import": "./src/shaping.ts"
+    },
+    "./engine": {
+      "types": "./src/engine.ts",
+      "import": "./src/engine.ts"
     }
   },
   "scripts": {
@@ -29,6 +33,9 @@
     "types": "node scripts/build.mjs --types",
     "lint": "oxlint --fix src/",
     "lint:check": "oxlint --deny-warnings src/"
+  },
+  "dependencies": {
+    "@shift/types": "workspace:*"
   },
   "devDependencies": {
     "binaryen": "132.0.0"

@@ -70,6 +70,16 @@ impl FontIndex {
         self.by_component_base.get(base_glyph_id)
     }
 
+    /// Glyphs owning a layer with a component of `base_glyph_id`; a glyph
+    /// with several such layers repeats.
+    pub(super) fn composite_glyphs_of(
+        &self,
+        base_glyph_id: &GlyphId,
+    ) -> impl Iterator<Item = &GlyphId> {
+        self.composites_of(base_glyph_id)
+            .filter_map(|layer_id| self.owner(layer_id))
+    }
+
     /// Files `entries` under every index.
     ///
     /// # Errors

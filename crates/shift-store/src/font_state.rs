@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use rusqlite::OptionalExtension;
 use shift_font as font;
 
+use crate::font::font_info_from_conn;
 use crate::{
     FontInfo, ShiftStore, StoreError,
     columns::{AxisRoleColumn, KerningPositionColumn, KerningSideColumns, MetricKindColumn},
@@ -20,7 +21,7 @@ impl ShiftStore {
     /// [`StoreError::LayerDecoding`] when a layer payload is invalid, and [`StoreError::Font`] when
     /// the records do not form a valid font.
     pub fn load_font_state(&self) -> Result<font::Font, StoreError> {
-        self.load_font(true)
+        load_font_from_conn(&self.conn, FontRead::WithLayerPayloads)
     }
 
     /// Loads eager font metadata and the glyph/layer directory without
@@ -31,53 +32,65 @@ impl ShiftStore {
     /// Returns [`StoreError::Sqlite`] when a record cannot be read, and [`StoreError::Font`] when
     /// the records do not form a valid font.
     pub fn load_font_directory(&self) -> Result<font::Font, StoreError> {
-        self.load_font(false)
+        load_font_from_conn(&self.conn, FontRead::Directory)
+    }
+}
+
+/// How much of the font a load reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FontRead {
+    /// Metadata and the glyph and layer directory, with placeholder layers.
+    Directory,
+    /// Everything, including every layer's content.
+    WithLayerPayloads,
+}
+
+pub(crate) fn load_font_from_conn(
+    conn: &rusqlite::Connection,
+    read: FontRead,
+) -> Result<font::Font, StoreError> {
+    let mut font = font::Font::empty();
+
+    if let Some(info) = font_info_from_conn(conn)? {
+        apply_font_info(&mut font, info)?;
     }
 
-    fn load_font(&self, include_layer_payloads: bool) -> Result<font::Font, StoreError> {
-        let mut font = font::Font::empty();
-
-        if let Some(info) = self.get_font_info()? {
-            apply_font_info(&mut font, info)?;
-        }
-
-        let metric_definitions = load_metric_definitions(&self.conn)?;
-        if !metric_definitions.is_empty() {
-            font.set_metric_definitions(metric_definitions)?;
-        }
-
-        *font.features_mut() = load_feature_data(&self.conn)?;
-        *font.lib_mut() = load_lib_data(&self.conn, "font_lib", None)?;
-        *font.fontinfo_remainder_mut() = load_lib_data(&self.conn, "fontinfo_remainder", None)?;
-        *font.data_files_mut() = load_font_binaries(&self.conn, "data")?;
-        *font.images_mut() = load_font_binaries(&self.conn, "image")?;
-
-        for guideline in load_font_guidelines(&self.conn)? {
-            font.add_guideline(guideline);
-        }
-
-        for axis in load_axes(&self.conn)? {
-            font.add_axis(axis)?;
-        }
-        font.set_axis_mappings(load_axis_mappings(&self.conn)?)?;
-        font.set_named_instances(load_named_instances(&self.conn)?)?;
-
-        for source in load_sources(&self.conn)? {
-            font.add_source(source);
-        }
-
-        if let Some(default_source_id) = load_default_source_id(&self.conn)? {
-            font.set_default_source_id(default_source_id);
-        }
-
-        for glyph in load_glyphs(&self.conn, include_layer_payloads)? {
-            font.insert_glyph(glyph)?;
-        }
-
-        *font.kerning_mut() = load_kerning(&self.conn)?;
-
-        Ok(font)
+    let metric_definitions = load_metric_definitions(conn)?;
+    if !metric_definitions.is_empty() {
+        font.set_metric_definitions(metric_definitions)?;
     }
+
+    *font.features_mut() = load_feature_data(conn)?;
+    *font.lib_mut() = load_lib_data(conn, "font_lib", None)?;
+    *font.fontinfo_remainder_mut() = load_lib_data(conn, "fontinfo_remainder", None)?;
+    *font.data_files_mut() = load_font_binaries(conn, "data")?;
+    *font.images_mut() = load_font_binaries(conn, "image")?;
+
+    for guideline in load_font_guidelines(conn)? {
+        font.add_guideline(guideline);
+    }
+
+    for axis in load_axes(conn)? {
+        font.add_axis(axis)?;
+    }
+    font.set_axis_mappings(load_axis_mappings(conn)?)?;
+    font.set_named_instances(load_named_instances(conn)?)?;
+
+    for source in load_sources(conn)? {
+        font.add_source(source);
+    }
+
+    if let Some(default_source_id) = load_default_source_id(conn)? {
+        font.set_default_source_id(default_source_id);
+    }
+
+    for glyph in load_glyphs(conn, read)? {
+        font.insert_glyph(glyph)?;
+    }
+
+    *font.kerning_mut() = load_kerning(conn)?;
+
+    Ok(font)
 }
 
 fn apply_font_info(font: &mut font::Font, info: FontInfo) -> Result<(), StoreError> {
@@ -310,7 +323,7 @@ fn load_source_location(
 
 fn load_glyphs(
     conn: &rusqlite::Connection,
-    include_layer_payloads: bool,
+    read: FontRead,
 ) -> Result<Vec<font::Glyph>, StoreError> {
     let glyph_rows = {
         let mut stmt = conn.prepare(
@@ -386,7 +399,7 @@ fn load_glyphs(
         .collect::<Result<Vec<_>, _>>()?
     };
     let mut loaded_layers = HashMap::new();
-    if include_layer_payloads {
+    if read == FontRead::WithLayerPayloads {
         let layer_ids = layer_rows
             .iter()
             .map(|(layer_id, _, _, _, _)| layer_id.clone())
@@ -398,7 +411,7 @@ fn load_glyphs(
 
     let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
     for (layer_id, glyph_id, source_id, width, height) in layer_rows {
-        let layer = if include_layer_payloads {
+        let layer = if read == FontRead::WithLayerPayloads {
             loaded_layers
                 .remove(&layer_id)
                 .or_missing(StoreEntity::GlyphLayerPayload, &layer_id)?

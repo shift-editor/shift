@@ -276,13 +276,14 @@ describe("editor actions share one undo timeline", () => {
   it("rebases a later selection when an earlier workspace action fails", async () => {
     const capture = editor.history.begin("Rejected edit");
     editor.selection.select([firstId]);
+    editor.failNextWorkspaceApply();
     const applying = editor.font.editCoordinator.apply([
       {
         kind: "createGlyph",
         createGlyph: {
           glyphId: mintGlyphId(),
-          name: "A" as GlyphName,
-          unicodes: [66 as Unicode],
+          name: "Z" as GlyphName,
+          unicodes: [90 as Unicode],
         },
       },
     ]);

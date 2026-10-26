@@ -25,6 +25,7 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `crates/shift-shape/**`     | [`crates/shift-shape/docs/DOCS.md`](../../crates/shift-shape/docs/DOCS.md)         | Text shaping for every host: script itemization, HarfRust, line-break opportunities         |
 | `crates/shift-slug/**`      | [`crates/shift-slug/docs/DOCS.md`](../../crates/shift-slug/docs/DOCS.md)           | GPU-independent Slug curves, retained compilation, and packing                              |
 | `crates/shift-store/**`     | [`crates/shift-store/README.md`](../../crates/shift-store/README.md)               | Canonical SQLite `.shift`, sparse recovery overlays, compressed layer payloads, and indexes |
+| `crates/shift-engine/**`    | [`crates/shift-engine/docs/DOCS.md`](../../crates/shift-engine/docs/DOCS.md)       | Editing session over a partly loaded font, shared by native and the renderer                |
 | `crates/shift-workspace/**` | [`crates/shift-workspace/docs/DOCS.md`](../../crates/shift-workspace/docs/DOCS.md) | Open font workspace runtime over source, store, and font                                    |
 | `crates/shift-bridge/**`    | [`crates/shift-bridge/docs/DOCS.md`](../../crates/shift-bridge/docs/DOCS.md)       | NAPI bridge exposing Rust to Node.js/Electron                                               |
 | `crates/shift-wasm/**`      | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)           | shift-font rules compiled to WebAssembly for the editor                                     |

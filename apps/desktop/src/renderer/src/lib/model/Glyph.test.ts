@@ -236,7 +236,7 @@ describe("Glyph", () => {
     subscription.dispose();
   });
 
-  it("resyncs local geometry when the workspace rejects an edit", async () => {
+  it("refuses an edit the engine rejects, leaving the layer and the store as they were", async () => {
     const [first] = await addTriangle(editor, layer);
     await editor.addGlyph("B", 66);
     const otherRecord = editor.font.recordForName("B" as GlyphName);
@@ -245,19 +245,66 @@ describe("Glyph", () => {
     if (!otherLayer) throw new Error("Expected second glyph layer");
     const duplicateContourId = otherLayer.addContour();
     await editor.settle();
+    const contours = layer.contours.length;
 
-    layer.previewPositionPatch([{ kind: "point", id: first!.id, x: 999, y: 999 }]);
-    editor.font.editCoordinator.push({
-      kind: "addContour",
-      addContour: { layerId: layer.layerId, contourId: duplicateContourId, closed: false },
-    });
+    expect(() =>
+      editor.font.editCoordinator.push({
+        kind: "addContour",
+        addContour: { layerId: layer.layerId, contourId: duplicateContourId, closed: false },
+      }),
+    ).toThrow("already exists");
     await editor.settle();
 
+    expect(layer.contours).toHaveLength(contours);
     const refreshedGlyph = await editor.font.loadGlyph(record.id);
+    expect(refreshedGlyph.layerForSource(layer.source.id)?.contours).toHaveLength(contours);
     expect(refreshedGlyph.layerForSource(layer.source.id)?.point(first!.id)).toMatchObject({
       x: 0,
       y: 0,
     });
+  });
+
+  it("moves the point it names after points are inserted before it", async () => {
+    const [first, second, third] = await addTriangle(editor, layer);
+    const inserted = layer.insertPointBefore(second!.id, {
+      x: 40,
+      y: 0,
+      pointType: "onCurve",
+      smooth: false,
+    });
+    layer.movePointTo(second!.id, { x: 110, y: 0 });
+    await editor.settle();
+
+    expect(layer.contours[0]?.points.map((point) => point.id)).toEqual([
+      first!.id,
+      inserted,
+      second!.id,
+      third!.id,
+    ]);
+    expect(pointPosition(layer, inserted)).toEqual({ x: 40, y: 0 });
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 110, y: 0 });
+  });
+
+  it("moves the point it names after earlier points are removed", async () => {
+    const [first, second, third] = await addTriangle(editor, layer);
+    layer.removePoints([first!.id]);
+    layer.movePointTo(third!.id, { x: 60, y: 120 });
+    await editor.settle();
+
+    expect(layer.point(first!.id)).toBeNull();
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 100, y: 0 });
+    expect(pointPosition(layer, third!.id)).toEqual({ x: 60, y: 120 });
+  });
+
+  it("moves the point it names after the contour is reversed", async () => {
+    const [first, second] = await addTriangle(editor, layer);
+    const contourId = layer.contours[0]!.id;
+    layer.reverseContour(contourId);
+    layer.movePointTo(first!.id, { x: -10, y: 0 });
+    await editor.settle();
+
+    expect(pointPosition(layer, first!.id)).toEqual({ x: -10, y: 0 });
+    expect(pointPosition(layer, second!.id)).toEqual({ x: 100, y: 0 });
   });
 
   it("discards every transaction intent when its body throws", async () => {
@@ -650,7 +697,7 @@ describe("point insertion preserves layer ownership", () => {
     const otherContourId = layer.addContour();
     const point = layer.point(pointId!)!;
 
-    expect(layer.buffers.addPoints([point], otherContourId)).toBe(false);
+    expect(() => layer.addPointSeeds(otherContourId, [point])).toThrow();
     expect(layer.contourIdOfPoint(pointId!)).toBe(contourId);
     expect(layer.contour(otherContourId)?.points).toEqual([]);
   });
@@ -661,7 +708,7 @@ describe("point insertion preserves layer ownership", () => {
     const [before] = layer.addPoints(otherContourId, [Point.onCurve({ x: 0, y: 0 })]);
     const point = { id: mintPointId(), ...Point.onCurve({ x: 10, y: 20 }) };
 
-    expect(layer.buffers.addPoints([point], contourId, before)).toBe(false);
+    expect(() => layer.addPointSeeds(contourId, [point], before)).toThrow();
     expect(layer.contourIdOfPoint(point.id)).toBeNull();
     layer.addPointSeeds(contourId, [point]);
     expect(layer.contourIdOfPoint(point.id)).toBe(contourId);

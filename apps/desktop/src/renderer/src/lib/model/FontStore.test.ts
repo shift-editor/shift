@@ -64,7 +64,7 @@ describe("FontStore glyph snapshot application", () => {
     });
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
-    store.applyWorkspaceChange({
+    store.confirmEdit({
       next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
       layers: [],
       dependents: [],
@@ -76,7 +76,7 @@ describe("FontStore glyph snapshot application", () => {
 });
 
 describe("FontStore record index", () => {
-  it("indexes every glyph relation once and follows workspace changes", () => {
+  it("indexes every glyph relation once and follows glyph record changes", () => {
     const base = snapshot("document-a", LAYER_A_ID);
     const acute = {
       id: "glyph_acute" as GlyphId,
@@ -107,7 +107,7 @@ describe("FontStore record index", () => {
     expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
-    store.applyWorkspaceChange({
+    store.confirmEdit({
       next: { glyphs: [base.glyphs[0]!, acute] },
       layers: [],
       dependents: [],
@@ -154,22 +154,15 @@ describe("FontStore glyph object ownership", () => {
       pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
       anchorId: NEXT_ANCHOR_ID,
     });
-    store.applyWorkspaceChange({
+    store.applyEngineEdit({
       layers: [
         {
           layerId: LAYER_A_ID,
           structure: nextStructure,
           values: valuesFor(nextStructure),
-          changed: {
-            pointIds: [NEXT_POINT_ID],
-            contourIds: [NEXT_CONTOUR_ID],
-            anchorIds: [NEXT_ANCHOR_ID],
-            guidelineIds: [],
-            componentIds: [],
-          },
+          structural: true,
         },
       ],
-      dependents: [],
     });
 
     expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
@@ -193,7 +186,7 @@ describe("FontStore glyph object ownership", () => {
       anchorId: NEXT_ANCHOR_ID,
     });
 
-    store.applyWorkspaceChange({
+    store.confirmEdit({
       next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
       layers: [
         {
@@ -231,7 +224,7 @@ describe("FontStore glyph object ownership", () => {
       runs += 1;
     });
 
-    store.applyWorkspaceChange(valuesOnlyChange());
+    store.confirmEdit(valuesOnlyChange());
 
     expect(runs).toBe(2);
     subscription.dispose();
@@ -250,7 +243,7 @@ describe("FontStore glyph object ownership", () => {
       invalidGlyphIds = font.invalidGlyphsCell.value.glyphIds;
     });
 
-    store.applyWorkspaceChange({
+    store.confirmEdit({
       ...valuesOnlyChange(),
       dependents: [dependentGlyphId],
     });

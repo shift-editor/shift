@@ -1,4 +1,5 @@
 import type {
+  FontIntent,
   AnchorId,
   AnchorSeed,
   ComponentGlyph as ComponentGlyphDefinition,
@@ -152,8 +153,10 @@ interface GlyphRenderGeometry {
 
 class GlyphLayerWriter {
   readonly #editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null;
-  readonly #intents: LayerIntents | null;
+  readonly #intents: LayerIntents<void> | null;
   readonly #state: GlyphEditState;
+  /** The intents a preview's steps make, collected instead of pushed; null outside a preview. */
+  #previewIntents: FontIntent[] | null = null;
 
   constructor(
     editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null,
@@ -161,7 +164,12 @@ class GlyphLayerWriter {
     state: GlyphEditState,
   ) {
     this.#editCoordinator = editCoordinator;
-    this.#intents = editCoordinator ? new LayerIntents(editCoordinator, layerId) : null;
+    this.#intents = editCoordinator
+      ? new LayerIntents<void>((intent) => {
+          if (this.#previewIntents) this.#previewIntents.push(intent);
+          else editCoordinator.push(intent);
+        }, layerId)
+      : null;
     this.#state = state;
   }
 
@@ -178,12 +186,42 @@ class GlyphLayerWriter {
   }
 
   transaction<TResult>(label: string, body: () => TResult): TResult {
-    return this.#editCoordinator ? this.#editCoordinator.transaction(label, body) : body();
+    if (this.#previewIntents || !this.#editCoordinator) return body();
+    return this.#editCoordinator.transaction(label, body);
+  }
+
+  /**
+   * Shows the layer as `steps` would leave it, without keeping them: a
+   * gesture's preview, worked out by the window's engine. `steps` calls the
+   * same layer methods the gesture's commit does; their intents are collected
+   * instead of sent. With no intents, shows the layer as the gesture began.
+   *
+   * @throws When there is no engine to ask, or it rejects the intents.
+   */
+  preview(steps: () => void): void {
+    const editCoordinator = this.#editCoordinator;
+    if (!editCoordinator) throw new Error("a preview needs the window's editing engine");
+    if (this.#previewIntents) throw new Error("a preview is already being collected");
+
+    const intents: FontIntent[] = [];
+    this.#previewIntents = intents;
+    try {
+      steps();
+    } finally {
+      this.#previewIntents = null;
+    }
+
+    const state = this.#state.state;
+    if (intents.length === 0) {
+      state.showPreview(null);
+      return;
+    }
+    const shown = editCoordinator.preview(intents).find((layer) => layer.layerId === state.layerId);
+    state.showPreview(shown ?? null);
   }
 
   setXAdvance(width: number): void {
-    const editId = this.#workspaceIntents.setXAdvance({ width });
-    this.#state.state.setXAdvance(editId, width);
+    this.#workspaceIntents.setXAdvance({ width });
   }
 
   applyPositionPatch(updates: GlyphLayerPositions): void {
@@ -211,19 +249,17 @@ class GlyphLayerWriter {
 
     const commit = () => {
       if (pointIds.length > 0) {
-        const editId = this.#workspaceIntents.movePoints({
+        this.#workspaceIntents.movePoints({
           pointIds,
           coords: pointCoords,
         });
-        this.#state.state.movePoints(editId, pointIds, pointCoords);
       }
 
       if (anchorIds.length > 0) {
-        const editId = this.#workspaceIntents.moveAnchors({
+        this.#workspaceIntents.moveAnchors({
           anchorIds,
           coords: anchorCoords,
         });
-        this.#state.state.moveAnchors(editId, anchorIds, anchorCoords);
       }
     };
 
@@ -238,10 +274,9 @@ class GlyphLayerWriter {
   transformLayer(matrix: MatModel): void {
     // Six numbers on the wire whatever the layer's size; Rust does the authoritative math.
     const { a, b, c, d, e, f } = matrix;
-    const editId = this.#workspaceIntents.transformLayer({
+    this.#workspaceIntents.transformLayer({
       matrix: [a, b, c, d, e, f],
     });
-    this.#state.state.transformLayer(editId, matrix);
   }
 
   translateLayer(dx: number, dy: number): void {
@@ -255,8 +290,7 @@ class GlyphLayerWriter {
   }
 
   addContourSeed(contourId: ContourId, closed: boolean): void {
-    const editId = this.#workspaceIntents.addContour({ contourId, closed });
-    this.#state.state.addContour(editId, contourId, closed);
+    this.#workspaceIntents.addContour({ contourId, closed });
   }
 
   addPoint(contourId: ContourId, edit: NewPoint): PointId {
@@ -277,12 +311,11 @@ class GlyphLayerWriter {
   addPointSeeds(contourId: ContourId, points: readonly PointSeed[], before?: PointId): void {
     if (points.length === 0) return;
 
-    const editId = this.#workspaceIntents.addPoints({
+    this.#workspaceIntents.addPoints({
       contourId,
       points: [...points],
       ...(before === undefined ? {} : { before }),
     });
-    this.#state.state.addPoints(editId, points, contourId, before);
   }
 
   insertPointBefore(beforePointId: PointId, edit: NewPoint): PointId {
@@ -291,42 +324,37 @@ class GlyphLayerWriter {
     // No contourId: Rust derives the contour from the anchor point — the
     // renderer never bookkeeps pending point→contour maps.
     const points = [this.#seed(pointId, edit)];
-    const editId = this.#workspaceIntents.addPoints({
+    this.#workspaceIntents.addPoints({
       before: beforePointId,
       points,
     });
-    this.#state.state.addPoints(editId, points, undefined, beforePointId);
 
     return pointId;
   }
 
   openContour(contourId: ContourId): void {
-    const editId = this.#workspaceIntents.setContourClosed({
+    this.#workspaceIntents.setContourClosed({
       contourId,
       closed: false,
     });
-    this.#state.state.setContourClosed(editId, contourId, false);
   }
 
   closeContour(contourId: ContourId): void {
-    const editId = this.#workspaceIntents.setContourClosed({
+    this.#workspaceIntents.setContourClosed({
       contourId,
       closed: true,
     });
-    this.#state.state.setContourClosed(editId, contourId, true);
   }
 
   reverseContour(contourId: ContourId): void {
-    const editId = this.#workspaceIntents.reverseContour({ contourId });
-    this.#state.state.reverseContour(editId, contourId);
+    this.#workspaceIntents.reverseContour({ contourId });
   }
 
   setContourStart(contourId: ContourId, pointId: PointId): void {
-    const editId = this.#workspaceIntents.setContourStart({
+    this.#workspaceIntents.setContourStart({
       contourId,
       pointId,
     });
-    this.#state.state.setContourStart(editId, contourId, pointId);
   }
 
   applyBooleanOp(
@@ -346,8 +374,7 @@ class GlyphLayerWriter {
     if (pointIds.length === 0) return;
 
     const ids = [...pointIds];
-    const editId = this.#workspaceIntents.removePoints({ pointIds: ids });
-    this.#state.state.removePoints(editId, ids);
+    this.#workspaceIntents.removePoints({ pointIds: ids });
   }
 
   addAnchor(name: string | null, position: Point2D): AnchorId {
@@ -366,16 +393,14 @@ class GlyphLayerWriter {
   addAnchorSeeds(anchors: readonly AnchorSeed[]): void {
     if (anchors.length === 0) return;
 
-    const editId = this.#workspaceIntents.addAnchors({ anchors: [...anchors] });
-    this.#state.state.addAnchors(editId, anchors);
+    this.#workspaceIntents.addAnchors({ anchors: [...anchors] });
   }
 
   removeAnchors(anchorIds: readonly AnchorId[]): void {
     if (anchorIds.length === 0) return;
 
     const ids = [...anchorIds];
-    const editId = this.#workspaceIntents.removeAnchors({ anchorIds: ids });
-    this.#state.state.removeAnchors(editId, ids);
+    this.#workspaceIntents.removeAnchors({ anchorIds: ids });
   }
 
   renameAnchors(names: ReadonlyMap<AnchorId, string>): void {
@@ -383,8 +408,7 @@ class GlyphLayerWriter {
 
     const anchorIds = [...names.keys()];
     const renamed = [...names.values()];
-    const editId = this.#workspaceIntents.renameAnchors({ anchorIds, names: renamed });
-    this.#state.state.renameAnchors(editId, anchorIds, renamed);
+    this.#workspaceIntents.renameAnchors({ anchorIds, names: renamed });
   }
 
   addComponent(baseGlyphId: GlyphId): ComponentId {
@@ -409,11 +433,10 @@ class GlyphLayerWriter {
     if (componentIds.length === 0) return;
 
     const values = transforms.flatMap((transform) => [...decomposedTransformValues(transform)]);
-    const editId = this.#workspaceIntents.setComponentTransforms({
+    this.#workspaceIntents.setComponentTransforms({
       componentIds: [...componentIds],
       transforms: values,
     });
-    this.#state.state.setComponentTransforms(editId, componentIds, transforms);
   }
 
   removeComponents(componentIds: readonly ComponentId[]): void {
@@ -433,8 +456,7 @@ class GlyphLayerWriter {
   }
 
   setPointSmooth(pointId: PointId, smooth: boolean): void {
-    const editId = this.#workspaceIntents.setPointSmooth({ pointId, smooth });
-    this.#state.state.setPointSmooth(editId, pointId, smooth);
+    this.#workspaceIntents.setPointSmooth({ pointId, smooth });
   }
 
   toggleSmooth(pointId: PointId): void {
@@ -446,7 +468,7 @@ class GlyphLayerWriter {
     this.setPointSmooth(pointId, !point.smooth);
   }
 
-  get #workspaceIntents(): LayerIntents {
+  get #workspaceIntents(): LayerIntents<void> {
     if (!this.#intents) throw new Error("glyph layer operation requires a workspace");
     return this.#intents;
   }
@@ -1179,6 +1201,15 @@ export class GlyphLayer {
    */
   addComponent(baseGlyphId: GlyphId): ComponentId {
     return this.#writer.addComponent(baseGlyphId);
+  }
+
+  /**
+   * Shows this layer as `steps` would leave it, without keeping them. For a
+   * gesture's preview, between `beginEdit` and its finish: `steps` calls the
+   * same methods of this layer the commit will.
+   */
+  preview(steps: () => void): void {
+    this.#writer.preview(steps);
   }
 
   /**

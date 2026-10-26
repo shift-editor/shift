@@ -1,15 +1,14 @@
-use std::collections::HashMap;
-
 use napi::bindgen_prelude::Float64Array;
 use napi_derive::napi;
 use shift_font::{
-    ComponentAlignment, GlyphId, PointType as IrPointType, Transform,
+    ComponentAlignment, GlyphId, Transform,
     composite::{
         ResolvedComponentGeometry, ResolvedContour, ResolvedLayerGeometry, resolved_contours_bbox,
         resolved_contours_to_svg_path,
     },
 };
 
+use crate::intents;
 use crate::{
     AnchorData, AnchorMatch, Axis, AxisLabel, AxisMapping, AxisMappingBasis, AxisMappingPoint,
     ComponentData, ComponentGlyph, ComponentMatch, ComponentTransformKind, ContourData,
@@ -20,7 +19,7 @@ use crate::{
     GlyphStructure, GlyphVariation, InterpolationBasis, InterpolationSupport, KerningGroup,
     KerningPairValue, KerningPosition, KerningSide, KerningSideKind, KerningSnapshot,
     LayerDifference, LayerDifferenceKind, LayerMatch, Location, MetricDefinition, MetricKind,
-    NamedInstance, PointData, PointMatch, PointType, Source, SourceKerningPairs, SourceMetricField,
+    NamedInstance, PointData, PointMatch, Source, SourceKerningPairs, SourceMetricField,
     SourceMetricValue, SourceMetricValues, SourceMetricsInterpolationSnapshot, VariationBasis,
     VariationDelta,
 };
@@ -139,64 +138,7 @@ pub struct NapiCatalogAtlasWeights {
     pub weights: Vec<f64>,
 }
 
-#[napi(string_enum = "camelCase")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(
-    clippy::enum_variant_names,
-    reason = "the font-format names for point types"
-)]
-pub enum NapiPointType {
-    OnCurve,
-    OffCurve,
-    QCurve,
-}
-
-impl From<PointType> for NapiPointType {
-    fn from(point_type: PointType) -> Self {
-        match point_type {
-            PointType::OnCurve => Self::OnCurve,
-            PointType::OffCurve => Self::OffCurve,
-            PointType::QCurve => Self::QCurve,
-        }
-    }
-}
-
-impl From<NapiPointType> for PointType {
-    fn from(point_type: NapiPointType) -> Self {
-        match point_type {
-            NapiPointType::OnCurve => Self::OnCurve,
-            NapiPointType::OffCurve => Self::OffCurve,
-            NapiPointType::QCurve => Self::QCurve,
-        }
-    }
-}
-
-impl From<NapiPointType> for IrPointType {
-    fn from(point_type: NapiPointType) -> Self {
-        let point_type: PointType = point_type.into();
-        point_type.into()
-    }
-}
-
-#[napi(object)]
-pub struct NapiFontMetadata {
-    pub family_name: Option<String>,
-    pub style_name: Option<String>,
-    pub version_major: Option<i32>,
-    pub version_minor: Option<i32>,
-    pub copyright: Option<String>,
-    pub trademark: Option<String>,
-    pub designer: Option<String>,
-    pub designer_url: Option<String>,
-    pub manufacturer: Option<String>,
-    pub manufacturer_url: Option<String>,
-    pub license: Option<String>,
-    pub license_url: Option<String>,
-    pub description: Option<String>,
-    pub note: Option<String>,
-}
-
-impl From<FontMetadata> for NapiFontMetadata {
+impl From<FontMetadata> for intents::FontMetadata {
     fn from(metadata: FontMetadata) -> Self {
         Self {
             family_name: metadata.family_name,
@@ -230,59 +172,19 @@ impl From<FontMetrics> for NapiFontMetrics {
     }
 }
 
-#[napi(object)]
-pub struct NapiAxis {
-    #[napi(ts_type = "AxisId")]
-    pub id: String,
-    pub tag: String,
-    pub name: String,
-    pub role: NapiAxisRole,
-    pub axis_type: NapiAxisType,
-    pub minimum: Option<f64>,
-    pub default: f64,
-    pub maximum: Option<f64>,
-    pub values: Option<Vec<f64>>,
-    pub labels: Vec<NapiAxisLabel>,
-    pub hidden: bool,
-}
-
-#[napi(string_enum = "camelCase")]
-pub enum NapiAxisRole {
-    External,
-    Internal,
-}
-
-#[napi(string_enum = "camelCase")]
-pub enum NapiAxisType {
-    Continuous,
-    Discrete,
-}
-
-#[napi(object)]
-pub struct NapiAxisLabel {
-    #[napi(ts_type = "AxisLabelId")]
-    pub id: String,
-    pub name: String,
-    pub value: f64,
-    pub minimum: Option<f64>,
-    pub maximum: Option<f64>,
-    pub linked_value: Option<f64>,
-    pub elidable: bool,
-}
-
-impl From<Axis> for NapiAxis {
+impl From<Axis> for intents::Axis {
     fn from(axis: Axis) -> Self {
         Self {
             id: axis.id.to_string(),
             tag: axis.tag,
             name: axis.name,
             role: match axis.role.as_str() {
-                "internal" => NapiAxisRole::Internal,
-                _ => NapiAxisRole::External,
+                "internal" => intents::AxisRole::Internal,
+                _ => intents::AxisRole::External,
             },
             axis_type: match axis.axis_type.as_str() {
-                "discrete" => NapiAxisType::Discrete,
-                _ => NapiAxisType::Continuous,
+                "discrete" => intents::AxisType::Discrete,
+                _ => intents::AxisType::Continuous,
             },
             minimum: axis.minimum,
             default: axis.default,
@@ -294,7 +196,7 @@ impl From<Axis> for NapiAxis {
     }
 }
 
-impl From<AxisLabel> for NapiAxisLabel {
+impl From<AxisLabel> for intents::AxisLabel {
     fn from(label: AxisLabel) -> Self {
         Self {
             id: label.id.to_string(),
@@ -308,17 +210,7 @@ impl From<AxisLabel> for NapiAxisLabel {
     }
 }
 
-#[napi(object)]
-/// NAPI projection of one explicit named product preset.
-pub struct NapiNamedInstance {
-    #[napi(ts_type = "NamedInstanceId")]
-    pub id: String,
-    pub name: String,
-    pub location: NapiLocation,
-    pub postscript_name: Option<String>,
-}
-
-impl From<NamedInstance> for NapiNamedInstance {
+impl From<NamedInstance> for intents::NamedInstance {
     fn from(instance: NamedInstance) -> Self {
         Self {
             id: instance.id.to_string(),
@@ -329,27 +221,7 @@ impl From<NamedInstance> for NapiNamedInstance {
     }
 }
 
-#[napi(object)]
-pub struct NapiAxisMappingPoint {
-    pub description: Option<String>,
-    pub input: NapiLocation,
-    pub output: NapiLocation,
-}
-
-#[napi(object)]
-pub struct NapiAxisMapping {
-    #[napi(ts_type = "AxisMappingId")]
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    #[napi(ts_type = "Array<AxisId>")]
-    pub inputs: Vec<String>,
-    #[napi(ts_type = "Array<AxisId>")]
-    pub outputs: Vec<String>,
-    pub points: Vec<NapiAxisMappingPoint>,
-}
-
-impl From<AxisMappingPoint> for NapiAxisMappingPoint {
+impl From<AxisMappingPoint> for intents::AxisMappingPoint {
     fn from(point: AxisMappingPoint) -> Self {
         Self {
             description: point.description,
@@ -359,7 +231,7 @@ impl From<AxisMappingPoint> for NapiAxisMappingPoint {
     }
 }
 
-impl From<AxisMapping> for NapiAxisMapping {
+impl From<AxisMapping> for intents::AxisMapping {
     fn from(mapping: AxisMapping) -> Self {
         Self {
             id: mapping.id.to_string(),
@@ -399,24 +271,16 @@ pub struct NapiSource {
     #[napi(ts_type = "SourceId")]
     pub id: String,
     pub name: String,
-    pub location: NapiLocation,
+    pub location: intents::Location,
     pub filename: Option<String>,
-    pub metric_values: Vec<NapiSourceMetricValue>,
+    pub metric_values: Vec<intents::SourceMetricValue>,
     pub italic_angle: Option<f64>,
     pub line_gap: Option<f64>,
     pub underline_position: Option<f64>,
     pub underline_thickness: Option<f64>,
 }
 
-#[napi(object)]
-pub struct NapiSourceMetricValue {
-    #[napi(ts_type = "MetricId")]
-    pub metric_id: String,
-    pub position: f64,
-    pub overshoot: f64,
-}
-
-impl From<SourceMetricValue> for NapiSourceMetricValue {
+impl From<SourceMetricValue> for intents::SourceMetricValue {
     fn from(value: SourceMetricValue) -> Self {
         Self {
             metric_id: value.metric_id.to_string(),
@@ -426,35 +290,17 @@ impl From<SourceMetricValue> for NapiSourceMetricValue {
     }
 }
 
-#[napi(object)]
-pub struct NapiMetricDefinition {
-    #[napi(ts_type = "MetricId")]
-    pub id: String,
-    pub kind: NapiMetricKind,
-    pub name: String,
-}
-
-#[napi(string_enum = "camelCase")]
-pub enum NapiMetricKind {
-    Ascender,
-    CapHeight,
-    XHeight,
-    Baseline,
-    Descender,
-    Custom,
-}
-
-impl From<MetricDefinition> for NapiMetricDefinition {
+impl From<MetricDefinition> for intents::MetricDefinition {
     fn from(definition: MetricDefinition) -> Self {
         Self {
             id: definition.id.to_string(),
             kind: match definition.kind {
-                MetricKind::Ascender => NapiMetricKind::Ascender,
-                MetricKind::CapHeight => NapiMetricKind::CapHeight,
-                MetricKind::XHeight => NapiMetricKind::XHeight,
-                MetricKind::Baseline => NapiMetricKind::Baseline,
-                MetricKind::Descender => NapiMetricKind::Descender,
-                MetricKind::Custom => NapiMetricKind::Custom,
+                MetricKind::Ascender => intents::MetricKind::Ascender,
+                MetricKind::CapHeight => intents::MetricKind::CapHeight,
+                MetricKind::XHeight => intents::MetricKind::XHeight,
+                MetricKind::Baseline => intents::MetricKind::Baseline,
+                MetricKind::Descender => intents::MetricKind::Descender,
+                MetricKind::Custom => intents::MetricKind::Custom,
             },
             name: definition.name,
         }
@@ -633,8 +479,8 @@ pub struct NapiLayerDifference {
     pub target_count: Option<u32>,
     pub reference_closed: Option<bool>,
     pub target_closed: Option<bool>,
-    pub reference_point_type: Option<NapiPointType>,
-    pub target_point_type: Option<NapiPointType>,
+    pub reference_point_type: Option<intents::PointType>,
+    pub target_point_type: Option<intents::PointType>,
     pub reference_anchor_names: Option<Vec<Option<String>>>,
     pub target_anchor_names: Option<Vec<Option<String>>>,
     #[napi(ts_type = "Array<GlyphId> | undefined")]
@@ -782,16 +628,16 @@ impl From<GlyphEntry> for NapiGlyphEntry {
 
 #[napi(object)]
 pub struct NapiFontSnapshot {
-    pub metadata: NapiFontMetadata,
+    pub metadata: intents::FontMetadata,
     pub metrics: NapiFontMetrics,
-    pub metric_definitions: Vec<NapiMetricDefinition>,
+    pub metric_definitions: Vec<intents::MetricDefinition>,
     pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationSnapshot>,
     pub glyphs: Vec<NapiGlyphEntry>,
     pub sources: Vec<NapiSource>,
-    pub axes: Vec<NapiAxis>,
-    pub axis_mappings: Vec<NapiAxisMapping>,
+    pub axes: Vec<intents::Axis>,
+    pub axis_mappings: Vec<intents::AxisMapping>,
     pub axis_mapping_bases: Vec<NapiAxisMappingBasis>,
-    pub named_instances: Vec<NapiNamedInstance>,
+    pub named_instances: Vec<intents::NamedInstance>,
     /// Tracked Hyperglot language ids; absent when the font stores no list.
     pub language_ids: Option<Vec<String>>,
     pub kerning: NapiKerningSnapshot,
@@ -1139,7 +985,7 @@ impl From<NapiContourData> for ContourData {
 pub struct NapiPointData {
     #[napi(ts_type = "PointId")]
     pub id: String,
-    pub point_type: NapiPointType,
+    pub point_type: intents::PointType,
     pub smooth: bool,
 }
 
@@ -1235,22 +1081,13 @@ pub fn alignment_name(alignment: ComponentAlignment) -> &'static str {
     }
 }
 
-/// Reads a wire component alignment; anything else is `Unset`.
-pub fn parse_alignment(name: Option<&str>) -> ComponentAlignment {
-    match name {
-        Some("anchored") => ComponentAlignment::Anchored,
-        Some("free") => ComponentAlignment::Free,
-        _ => ComponentAlignment::Unset,
-    }
-}
-
 impl From<NapiComponentData> for ComponentData {
     fn from(component: NapiComponentData) -> Self {
         Self {
             id: component.id,
             base_glyph_id: GlyphId::from_raw(component.base_glyph_id),
             base_glyph_name: component.base_glyph_name.into(),
-            alignment: parse_alignment(component.alignment.as_deref()),
+            alignment: intents::parse_alignment(component.alignment.as_deref()),
         }
     }
 }
@@ -1395,13 +1232,7 @@ pub struct NapiLayerRead {
     pub resolved: NapiResolvedLayerGeometry,
 }
 
-#[napi(object)]
-pub struct NapiLocation {
-    #[napi(ts_type = "Record<AxisId, number>")]
-    pub values: HashMap<String, f64>,
-}
-
-impl From<Location> for NapiLocation {
+impl From<Location> for intents::Location {
     fn from(location: Location) -> Self {
         Self {
             values: location
@@ -1484,280 +1315,6 @@ pub struct NapiLanguagesReplacement {
     pub language_ids: Option<Vec<String>>,
 }
 
-/// CS0 walking-skeleton intent. A stringly union covering exactly the two
-/// skeleton kinds; CS1 replaces this with per-variant intent structs.
-#[napi(object)]
-pub struct NapiFontIntent {
-    /// Discriminator naming the populated payload field. Editing kinds:
-    /// "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-    /// "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-    /// "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
-    /// "removeComponents" | "decomposeComponents" |
-    /// "reverseContour" | "setContourStart" | "translatePoints" |
-    /// "transformLayer" | "setXAdvance" | "applyBooleanOp".
-    /// Font-level kinds additionally include metadata replacement, tracked
-    /// language replacement, axis create/update/delete, mapping replacement,
-    /// named-instance create/update/delete, source create/delete, glyph
-    /// or layer creation, "setKerningValues", and the kerning group kinds
-    /// "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
-    /// | "deleteKerningGroup".
-    /// Every kind shares the same apply path; one set is one undo step.
-    pub kind: String,
-    pub add_points: Option<NapiAddPointsIntent>,
-    pub add_contour: Option<NapiAddContourIntent>,
-    pub set_contour_closed: Option<NapiSetContourClosedIntent>,
-    pub move_points: Option<NapiMovePointsIntent>,
-    pub set_point_smooth: Option<NapiSetPointSmoothIntent>,
-    pub remove_points: Option<NapiRemovePointsIntent>,
-    pub add_anchors: Option<NapiAddAnchorsIntent>,
-    pub move_anchors: Option<NapiMoveAnchorsIntent>,
-    pub remove_anchors: Option<NapiRemoveAnchorsIntent>,
-    pub rename_anchors: Option<NapiRenameAnchorsIntent>,
-    pub add_component: Option<NapiAddComponentIntent>,
-    pub set_component_transforms: Option<NapiSetComponentTransformsIntent>,
-    pub set_component_alignment: Option<NapiSetComponentAlignmentIntent>,
-    pub remove_components: Option<NapiRemoveComponentsIntent>,
-    pub decompose_components: Option<NapiDecomposeComponentsIntent>,
-    pub reverse_contour: Option<NapiReverseContourIntent>,
-    pub set_contour_start: Option<NapiSetContourStartIntent>,
-    pub translate_points: Option<NapiTranslatePointsIntent>,
-    pub transform_layer: Option<NapiTransformLayerIntent>,
-    pub set_x_advance: Option<NapiSetXAdvanceIntent>,
-    pub apply_boolean_op: Option<NapiBooleanOpIntent>,
-    pub create_glyph: Option<NapiCreateGlyphIntent>,
-    pub update_glyph: Option<NapiUpdateGlyphIntent>,
-    pub update_font_metadata: Option<NapiUpdateFontMetadataIntent>,
-    pub set_languages: Option<NapiSetLanguagesIntent>,
-    pub create_axis: Option<NapiCreateAxisIntent>,
-    pub update_axis: Option<NapiUpdateAxisIntent>,
-    pub delete_axis: Option<NapiDeleteAxisIntent>,
-    pub set_axis_mappings: Option<NapiSetAxisMappingsIntent>,
-    pub set_metric_definitions: Option<NapiSetMetricDefinitionsIntent>,
-    pub create_named_instance: Option<NapiCreateNamedInstanceIntent>,
-    pub update_named_instance: Option<NapiUpdateNamedInstanceIntent>,
-    pub delete_named_instance: Option<NapiDeleteNamedInstanceIntent>,
-    pub create_source: Option<NapiCreateSourceIntent>,
-    pub update_source: Option<NapiUpdateSourceIntent>,
-    pub delete_source: Option<NapiDeleteSourceIntent>,
-    pub create_glyph_layer: Option<NapiCreateGlyphLayerIntent>,
-    pub clone_glyph_layer: Option<NapiCloneGlyphLayerIntent>,
-    pub materialize_glyph_layer: Option<NapiMaterializeGlyphLayerIntent>,
-    pub set_kerning_values: Option<NapiSetKerningValuesIntent>,
-    pub create_kerning_group: Option<NapiCreateKerningGroupIntent>,
-    pub set_kerning_group_member: Option<NapiSetKerningGroupMemberIntent>,
-    pub rename_kerning_group: Option<NapiRenameKerningGroupIntent>,
-    pub delete_kerning_group: Option<NapiDeleteKerningGroupIntent>,
-}
-
-/// One kerning pair value to set or remove at one source.
-#[napi(object)]
-pub struct NapiKerningValueEdit {
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-    pub first: NapiKerningSide,
-    pub second: NapiKerningSide,
-    /// New value in font units; absent removes the pair at this source.
-    pub amount: Option<f64>,
-}
-
-/// Sets or removes kerning pair values at sources as one undoable edit.
-#[napi(object)]
-pub struct NapiSetKerningValuesIntent {
-    pub edits: Vec<NapiKerningValueEdit>,
-}
-
-/// Creates an empty kerning group under an id the client mints.
-#[napi(object)]
-pub struct NapiCreateKerningGroupIntent {
-    #[napi(ts_type = "KerningGroupId")]
-    pub group_id: String,
-    pub position: NapiKerningPosition,
-    pub name: String,
-}
-
-/// Moves a glyph into a group, or out of its group at `position` without one.
-#[napi(object)]
-pub struct NapiSetKerningGroupMemberIntent {
-    pub position: NapiKerningPosition,
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "KerningGroupId")]
-    pub group_id: Option<String>,
-}
-
-/// Renames a kerning group; its pairs keep referencing it by id.
-#[napi(object)]
-pub struct NapiRenameKerningGroupIntent {
-    #[napi(ts_type = "KerningGroupId")]
-    pub group_id: String,
-    pub name: String,
-}
-
-/// Deletes a kerning group; its pairs stay and resolve again on undo.
-#[napi(object)]
-pub struct NapiDeleteKerningGroupIntent {
-    #[napi(ts_type = "KerningGroupId")]
-    pub group_id: String,
-}
-
-/// Replaces the complete authored metadata snapshot without changing metrics.
-#[napi(object)]
-pub struct NapiUpdateFontMetadataIntent {
-    /// Complete replacement snapshot; omitted optional fields are cleared.
-    pub metadata: NapiFontMetadata,
-}
-
-/// Replaces the font's tracked language list as one undoable edit.
-#[napi(object)]
-pub struct NapiSetLanguagesIntent {
-    /// Hyperglot language ids in display order. Blank ids are dropped and
-    /// duplicates keep their first position; an empty list is stored as-is.
-    pub language_ids: Vec<String>,
-}
-
-/// Font-level glyph creation. The glyph id is client-minted (decision 6:
-/// verbs return identity synchronously); Rust honors it and rejects
-/// duplicates.
-#[napi(object)]
-pub struct NapiCreateGlyphIntent {
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "GlyphName")]
-    pub name: String,
-    #[napi(ts_type = "Array<Unicode>")]
-    pub unicodes: Vec<u32>,
-}
-
-/// Font-level glyph update. The glyph id targets an existing committed glyph;
-/// names are user-editable labels and are not stable identity.
-#[napi(object)]
-pub struct NapiUpdateGlyphIntent {
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "GlyphName")]
-    pub new_name: String,
-    #[napi(ts_type = "Array<Unicode>")]
-    pub new_unicodes: Vec<u32>,
-}
-
-#[napi(object)]
-pub struct NapiUpdateAxisIntent {
-    pub axis: NapiAxis,
-}
-
-#[napi(object)]
-pub struct NapiSetAxisMappingsIntent {
-    pub mappings: Vec<NapiAxisMapping>,
-}
-
-#[napi(object)]
-pub struct NapiSetMetricDefinitionsIntent {
-    pub definitions: Vec<NapiMetricDefinition>,
-}
-
-#[napi(object)]
-/// Creates an authored named instance with client-minted stable identity.
-pub struct NapiCreateNamedInstanceIntent {
-    pub instance: NapiNamedInstance,
-}
-
-#[napi(object)]
-/// Replaces an authored named instance while retaining its identity.
-pub struct NapiUpdateNamedInstanceIntent {
-    pub instance: NapiNamedInstance,
-}
-
-#[napi(object)]
-/// Deletes an authored named instance without changing sources or geometry.
-pub struct NapiDeleteNamedInstanceIntent {
-    #[napi(ts_type = "NamedInstanceId")]
-    pub instance_id: String,
-}
-
-/// Font-level axis creation. The axis id is client-minted; the tag is an
-/// OpenType label and must be unique within the font.
-#[napi(object)]
-pub struct NapiCreateAxisIntent {
-    pub axis: NapiAxis,
-}
-
-/// Font-level axis deletion. Removing an axis also reshapes source locations.
-#[napi(object)]
-pub struct NapiDeleteAxisIntent {
-    #[napi(ts_type = "AxisId")]
-    pub axis_id: String,
-}
-
-/// Font-level source deletion. Removing a source also removes its glyph layers.
-#[napi(object)]
-pub struct NapiDeleteSourceIntent {
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-}
-
-/// Font-level source creation. The source id is client-minted so verbs can
-/// return identity synchronously; Rust honors it and rejects duplicates.
-#[napi(object)]
-pub struct NapiCreateSourceIntent {
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-    pub name: String,
-    /// Axis id → design-space value for the new source.
-    pub location: NapiLocation,
-}
-
-#[napi(object)]
-pub struct NapiUpdateSourceIntent {
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-    pub name: String,
-    pub location: NapiLocation,
-    pub metric_values: Vec<NapiSourceMetricValue>,
-    pub italic_angle: Option<f64>,
-    pub line_gap: Option<f64>,
-    pub underline_position: Option<f64>,
-    pub underline_thickness: Option<f64>,
-}
-
-/// Creates one sparse glyph layer at an existing source for an existing glyph.
-#[napi(object)]
-pub struct NapiCreateGlyphLayerIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-}
-
-/// Creates one glyph layer by copying another layer's shape with fresh internal ids.
-#[napi(object)]
-pub struct NapiCloneGlyphLayerIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-    #[napi(ts_type = "LayerId")]
-    pub from_layer_id: String,
-}
-
-/// Creates one sparse layer from resolved values at a design-space location.
-#[napi(object)]
-pub struct NapiMaterializeGlyphLayerIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "GlyphId")]
-    pub glyph_id: String,
-    #[napi(ts_type = "SourceId")]
-    pub source_id: String,
-    #[napi(ts_type = "LayerId")]
-    pub from_layer_id: String,
-    /// Numeric state ordered like `GlyphState.values`.
-    pub values: Float64Array,
-}
-
 /// Replace-grade state for one touched layer; the renderer folds by
 /// substitution, never by interpreting changes.
 #[napi(object)]
@@ -1778,21 +1335,21 @@ pub struct NapiLayerReplaced {
 #[napi(object)]
 pub struct NapiFontReplacement {
     /// Complete authored metadata when font metadata changed; absent otherwise.
-    pub metadata: Option<NapiFontMetadata>,
+    pub metadata: Option<intents::FontMetadata>,
     /// Full records list when glyph identity changed; absent when untouched.
     pub glyphs: Option<Vec<NapiGlyphRecord>>,
     /// Full axes list when font-level axis structure changed; absent otherwise.
-    pub axes: Option<Vec<NapiAxis>>,
+    pub axes: Option<Vec<intents::Axis>>,
     /// Full mapping list when font-level axis mappings changed; absent otherwise.
-    pub axis_mappings: Option<Vec<NapiAxisMapping>>,
+    pub axis_mappings: Option<Vec<intents::AxisMapping>>,
     /// Rust-compiled mapping bases when axes or mappings changed; absent otherwise.
     pub axis_mapping_bases: Option<Vec<NapiAxisMappingBasis>>,
     /// Full font-owned metric definitions when their identity or order changed.
-    pub metric_definitions: Option<Vec<NapiMetricDefinition>>,
+    pub metric_definitions: Option<Vec<intents::MetricDefinition>>,
     /// Refreshed source-metric interpolation model when any of its inputs changed.
     pub source_metrics_interpolation: Option<NapiSourceMetricsInterpolationReplacement>,
     /// Full authored product-preset list when named instances changed.
-    pub named_instances: Option<Vec<NapiNamedInstance>>,
+    pub named_instances: Option<Vec<intents::NamedInstance>>,
     /// Tracked language list when it changed; absent otherwise.
     pub languages: Option<NapiLanguagesReplacement>,
     /// Full sources list when font-level source structure changed (createAxis
@@ -1800,6 +1357,37 @@ pub struct NapiFontReplacement {
     pub sources: Option<Vec<NapiSource>>,
     /// Complete kerning when its values or interpolation basis changed.
     pub kerning: Option<NapiKerningSnapshot>,
+}
+
+impl NapiFontReplacement {
+    /// The shared font-level records with the workspace's glyph records,
+    /// present when the edit changed them.
+    pub fn new(
+        replacement: crate::replacement::FontReplacement,
+        glyphs: Option<Vec<NapiGlyphRecord>>,
+    ) -> Self {
+        Self {
+            metadata: replacement.metadata.map(Into::into),
+            glyphs,
+            axes: replacement.axes.map(IntoEach::into_each),
+            axis_mappings: replacement.axis_mappings.map(IntoEach::into_each),
+            axis_mapping_bases: replacement.axis_mapping_bases.map(IntoEach::into_each),
+            metric_definitions: replacement.metric_definitions.map(IntoEach::into_each),
+            source_metrics_interpolation: replacement.source_metrics_interpolation.map(
+                |interpolation| NapiSourceMetricsInterpolationReplacement {
+                    snapshot: interpolation.snapshot.map(Into::into),
+                },
+            ),
+            named_instances: replacement.named_instances.map(IntoEach::into_each),
+            languages: replacement
+                .languages
+                .map(|languages| NapiLanguagesReplacement {
+                    language_ids: languages.language_ids,
+                }),
+            sources: replacement.sources.map(IntoEach::into_each),
+            kerning: replacement.kerning.map(Into::into),
+        }
+    }
 }
 
 /// Pure-state response to `apply`: no change records cross to the renderer.
@@ -1813,234 +1401,7 @@ pub struct NapiAppliedChange {
     pub dependents: Vec<String>,
 }
 
-/// A point to create, carrying its caller-minted id (decision 6: ids are
-/// client-minted so verbs return identity synchronously).
-#[napi(object)]
-pub struct NapiPointSeed {
-    #[napi(ts_type = "PointId")]
-    pub id: String,
-    pub x: f64,
-    pub y: f64,
-    pub point_type: NapiPointType,
-    pub smooth: bool,
-}
-
-#[napi(object)]
-pub struct NapiAddPointsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    /// Absent when `before` carries the anchor; Rust derives the contour.
-    #[napi(ts_type = "ContourId")]
-    pub contour_id: Option<String>,
-    /// Insert before this point; append when absent.
-    #[napi(ts_type = "PointId")]
-    pub before: Option<String>,
-    pub points: Vec<NapiPointSeed>,
-}
-
-#[napi(object)]
-pub struct NapiAddContourIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "ContourId")]
-    pub contour_id: String,
-    pub closed: bool,
-}
-
-#[napi(object)]
-pub struct NapiSetContourClosedIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "ContourId")]
-    pub contour_id: String,
-    pub closed: bool,
-}
-
-#[napi(object)]
-pub struct NapiMovePointsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<PointId>")]
-    pub point_ids: Vec<String>,
-    /// Interleaved absolute coordinates: x0, y0, x1, y1, …
-    pub coords: Vec<f64>,
-}
-
-#[napi(object)]
-pub struct NapiSetPointSmoothIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "PointId")]
-    pub point_id: String,
-    pub smooth: bool,
-}
-
-#[napi(object)]
-pub struct NapiRemovePointsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<PointId>")]
-    pub point_ids: Vec<String>,
-}
-
-/// An anchor to create, carrying its caller-minted id (decision 6: ids are
-/// client-minted so verbs return identity synchronously).
-#[napi(object)]
-pub struct NapiAnchorSeed {
-    #[napi(ts_type = "AnchorId")]
-    pub id: String,
-    pub name: Option<String>,
-    pub x: f64,
-    pub y: f64,
-}
-
-#[napi(object)]
-pub struct NapiAddAnchorsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    pub anchors: Vec<NapiAnchorSeed>,
-}
-
-#[napi(object)]
-pub struct NapiMoveAnchorsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<AnchorId>")]
-    pub anchor_ids: Vec<String>,
-    /// Interleaved absolute coordinates: x0, y0, x1, y1, …
-    pub coords: Vec<f64>,
-}
-
-#[napi(object)]
-pub struct NapiRemoveAnchorsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<AnchorId>")]
-    pub anchor_ids: Vec<String>,
-}
-
-/// Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`.
-#[napi(object)]
-pub struct NapiRenameAnchorsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<AnchorId>")]
-    pub anchor_ids: Vec<String>,
-    pub names: Vec<String>,
-}
-
-#[napi(object)]
-pub struct NapiAddComponentIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "ComponentId")]
-    pub component_id: String,
-    #[napi(ts_type = "GlyphId")]
-    pub base_glyph_id: String,
-}
-
-#[napi(object)]
-pub struct NapiSetComponentTransformsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<ComponentId>")]
-    pub component_ids: Vec<String>,
-    pub transforms: Vec<f64>,
-}
-
-/// Records whether components are placed by their anchors; anchoring one also
-/// places it on its anchors now.
-#[napi(object)]
-pub struct NapiSetComponentAlignmentIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<ComponentId>")]
-    pub component_ids: Vec<String>,
-    #[napi(ts_type = "\"anchored\" | \"free\" | \"unset\"")]
-    pub alignment: String,
-}
-
-#[napi(object)]
-pub struct NapiRemoveComponentsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<ComponentId>")]
-    pub component_ids: Vec<String>,
-}
-
-#[napi(object)]
-pub struct NapiDecomposeComponentsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<ComponentId>")]
-    pub component_ids: Vec<String>,
-}
-
-#[napi(object)]
-pub struct NapiReverseContourIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "ContourId")]
-    pub contour_id: String,
-}
-
-/// Selects an existing on-curve start for a closed contour; does not move or convert points.
-#[napi(object)]
-pub struct NapiSetContourStartIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "ContourId")]
-    pub contour_id: String,
-    #[napi(ts_type = "PointId")]
-    pub point_id: String,
-}
-
-/// Affine transform of a whole layer: points, anchors, and component placements.
-#[napi(object)]
-pub struct NapiTransformLayerIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    /// Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
-    pub matrix: Vec<f64>,
-}
-
-/// Affine move: O(selection-ids) wire instead of O(N) coords.
-#[napi(object)]
-pub struct NapiTranslatePointsIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "Array<PointId>")]
-    pub point_ids: Vec<String>,
-    pub dx: f64,
-    pub dy: f64,
-}
-
-#[napi(object)]
-pub struct NapiSetXAdvanceIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    pub width: f64,
-}
-
-#[napi(object)]
-pub struct NapiBooleanOpIntent {
-    #[napi(ts_type = "LayerId")]
-    pub layer_id: String,
-    #[napi(ts_type = "ContourId")]
-    pub contour_id_a: String,
-    #[napi(ts_type = "ContourId")]
-    pub contour_id_b: String,
-    /// "union" | "subtract" | "intersect" | "difference"
-    pub operation: String,
-}
-
-#[napi(string_enum = "camelCase")]
-pub enum NapiKerningPosition {
-    First,
-    Second,
-}
-
-impl From<KerningPosition> for NapiKerningPosition {
+impl From<KerningPosition> for intents::KerningPosition {
     fn from(position: KerningPosition) -> Self {
         match position {
             KerningPosition::First => Self::First,
@@ -2049,25 +1410,12 @@ impl From<KerningPosition> for NapiKerningPosition {
     }
 }
 
-#[napi(string_enum = "camelCase")]
-pub enum NapiKerningSideKind {
-    Glyph,
-    Group,
-}
-
-#[napi(object)]
-/// One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id.
-pub struct NapiKerningSide {
-    pub kind: NapiKerningSideKind,
-    pub id: String,
-}
-
-impl From<KerningSide> for NapiKerningSide {
+impl From<KerningSide> for intents::KerningSide {
     fn from(side: KerningSide) -> Self {
         Self {
             kind: match side.kind {
-                KerningSideKind::Glyph => NapiKerningSideKind::Glyph,
-                KerningSideKind::Group => NapiKerningSideKind::Group,
+                KerningSideKind::Glyph => intents::KerningSideKind::Glyph,
+                KerningSideKind::Group => intents::KerningSideKind::Group,
             },
             id: side.id,
         }
@@ -2078,7 +1426,7 @@ impl From<KerningSide> for NapiKerningSide {
 pub struct NapiKerningGroup {
     #[napi(ts_type = "KerningGroupId")]
     pub id: String,
-    pub position: NapiKerningPosition,
+    pub position: intents::KerningPosition,
     pub name: String,
     #[napi(ts_type = "Array<GlyphId>")]
     pub glyph_ids: Vec<String>,
@@ -2097,8 +1445,8 @@ impl From<KerningGroup> for NapiKerningGroup {
 
 #[napi(object)]
 pub struct NapiKerningPairValue {
-    pub first: NapiKerningSide,
-    pub second: NapiKerningSide,
+    pub first: intents::KerningSide,
+    pub second: intents::KerningSide,
     pub amount: f64,
 }
 

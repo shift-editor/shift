@@ -73,7 +73,11 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         )
         .unwrap();
 
-    assert_eq!(workspace.loaded_layer_count(), 2);
+    // The two edited layers, `acute`, which `A`'s components are built from
+    // (an edit loads them so new components attach to their anchors), and the
+    // rest of `A`: the edit replaces the glyph whole, so it is recorded with
+    // every layer loaded.
+    assert_eq!(workspace.loaded_layer_count(), 4);
     let after = workspace.store().load_font_state().unwrap();
     let layer = after.layer(&layer_id).unwrap();
     let original = before.layer(&layer_id).unwrap();

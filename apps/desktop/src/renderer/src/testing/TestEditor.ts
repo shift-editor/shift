@@ -121,6 +121,11 @@ export class TestEditor extends Editor {
     return this.#stack.editCoordinator.save(sourcePath);
   }
 
+  /** Makes the workspace fail the next edit it is sent, as a refused write would. */
+  failNextWorkspaceApply(): void {
+    this.#stack.failNextPersist();
+  }
+
   /** Flushes pending edits and saves to the current target. */
   save(): Promise<WorkspaceDocumentState> {
     return this.#stack.editCoordinator.save(null);

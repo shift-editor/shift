@@ -577,19 +577,21 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.Bridge = nativeBinding.Bridge
+module.exports.LayerReader = nativeBinding.LayerReader
 module.exports.configRead = nativeBinding.configRead
 module.exports.configSetTheme = nativeBinding.configSetTheme
 module.exports.configSetThemeSlots = nativeBinding.configSetThemeSlots
 module.exports.NapiConfigSeverity = nativeBinding.NapiConfigSeverity
+module.exports.NapiSaveState = nativeBinding.NapiSaveState
 module.exports.NapiThemeAppearance = nativeBinding.NapiThemeAppearance
 module.exports.NapiThemeMode = nativeBinding.NapiThemeMode
 module.exports.themeRead = nativeBinding.themeRead
-module.exports.NapiAxisRole = nativeBinding.NapiAxisRole
-module.exports.NapiAxisType = nativeBinding.NapiAxisType
+module.exports.AxisRole = nativeBinding.AxisRole
+module.exports.AxisType = nativeBinding.AxisType
+module.exports.KerningPosition = nativeBinding.KerningPosition
+module.exports.KerningSideKind = nativeBinding.KerningSideKind
+module.exports.MetricKind = nativeBinding.MetricKind
 module.exports.NapiComponentTransformKind = nativeBinding.NapiComponentTransformKind
-module.exports.NapiKerningPosition = nativeBinding.NapiKerningPosition
-module.exports.NapiKerningSideKind = nativeBinding.NapiKerningSideKind
 module.exports.NapiLayerDifferenceKind = nativeBinding.NapiLayerDifferenceKind
-module.exports.NapiMetricKind = nativeBinding.NapiMetricKind
-module.exports.NapiPointType = nativeBinding.NapiPointType
 module.exports.NapiSourceMetricField = nativeBinding.NapiSourceMetricField
+module.exports.PointType = nativeBinding.PointType

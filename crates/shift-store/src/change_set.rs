@@ -32,9 +32,10 @@ impl ShiftStore {
     /// committed post-edit font. This preserves complete clone/materialize
     /// results even when a compact change record only carries directory facts.
     ///
-    /// In a document, [`SaveState::MatchesSaved`] discards the recovery
-    /// overlay instead of writing the change: the document is back to what is
-    /// saved, so there is no unsaved work left to keep.
+    /// In a document, [`SaveState::MatchesSaved`] asks for the recovery
+    /// overlay to be discarded once the change is written. The store checks
+    /// the overlay against the saved document first and discards only when
+    /// they match, so a wrong claim keeps the unsaved work.
     ///
     /// # Errors
     ///
@@ -56,11 +57,6 @@ impl ShiftStore {
         post_font: Option<&font::Font>,
         save_state: SaveState,
     ) -> Result<(), StoreError> {
-        if self.recovery.is_some() && save_state == SaveState::MatchesSaved {
-            self.discard_recovery()?;
-            return Ok(());
-        }
-
         let changes_font_info = change_set.changes.iter().any(|change| {
             matches!(
                 change,
@@ -78,7 +74,13 @@ impl ShiftStore {
 
         if let Some(recovery) = self.recovery.as_mut() {
             let post_font = post_font.ok_or(StoreError::RecoveryRequiresPostFont)?;
-            return recovery.apply_change_set(change_set, post_font, preserved_font_info.as_ref());
+            recovery.apply_change_set(change_set, post_font, preserved_font_info.as_ref())?;
+            // A claim to match the saved document is checked, never trusted:
+            // discarding on a wrong claim would lose every unsaved edit.
+            if save_state == SaveState::MatchesSaved && self.recovery_matches_saved()? {
+                self.discard_recovery()?;
+            }
+            return Ok(());
         }
         if self.kind == crate::store::StoreKind::Document {
             return Err(StoreError::DocumentRequiresRecoveryOverlay);

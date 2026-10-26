@@ -78,7 +78,7 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-shaping/**"],
+      "outputs": ["src/generated/**", "src/generated-shaping/**", "src/generated-engine/**"],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:debug": {
@@ -92,7 +92,7 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-shaping/**"],
+      "outputs": ["src/generated/**", "src/generated-shaping/**", "src/generated-engine/**"],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:e2e": {
@@ -106,7 +106,7 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-shaping/**"],
+      "outputs": ["src/generated/**", "src/generated-shaping/**", "src/generated-engine/**"],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:reference": {

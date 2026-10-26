@@ -1,5 +1,5 @@
 use crate::errors::{self, BridgeError, BridgeResult};
-use crate::input::{BridgeParse, parse};
+use crate::input::{parse, parse_id_list};
 use crate::shaping::{NapiParagraphRequest, NapiShapedRun, ParsedParagraphRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -14,24 +14,10 @@ use shift_backends::{
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
-  AddAnchors, AddComponent, AddContour, AddPoints, ApplyBooleanOp, CloneGlyphLayer, CreateAxis,
-  CreateGlyph, CreateGlyphLayer, CreateKerningGroup, CreateNamedInstance, CreateSource,
-  DecomposeComponents, DeleteAxis, DeleteKerningGroup, DeleteNamedInstance, DeleteSource,
-  MaterializeGlyphLayer, MoveAnchors, MovePoints, RemoveAnchors, RemoveComponents, RemovePoints,
-  RenameAnchors, RenameKerningGroup, ReverseContour, SetAxisMappings, SetComponentAlignment,
-  SetComponentTransforms, SetContourClosed, SetContourStart, SetKerningGroupMember,
-  SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth, SetXAdvance,
-  TransformLayer, TranslatePoints, UpdateAxis, UpdateFontMetadata, UpdateGlyph,
-  UpdateNamedInstance, UpdateSource,
-};
-use shift_font::{
-  AnchorId, AnchorSeed, Axis as FontAxis, AxisId, AxisLabel, AxisLabelId, AxisLabelRange,
-  AxisMapping as FontAxisMapping, AxisMappingId, AxisMappingPoint as FontAxisMappingPoint,
-  AxisRole, ComponentId, ContourId, Font, FontChangeImpact, FontIntent, FontIntentSet,
-  FontMetadata as FontMetadataModel, Glyph, GlyphId, GlyphLayer, KerningGroupId, KerningPair,
-  KerningPosition, KerningSide, KerningValueEdit, LayerId, Location as FontLocation,
-  MetricDefinition as FontMetricDefinition, MetricId, MetricKind, MetricValue,
-  NamedInstance as FontNamedInstance, NamedInstanceId, PointId, PointSeed, SourceId, Transform,
+  AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
+  AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, FontChangeImpact,
+  FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId,
+  MetricKind, NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::length::OrOverflow;
 use shift_slug::{
@@ -40,22 +26,8 @@ use shift_slug::{
   retained::compile_page as compile_retained_page,
 };
 use shift_wire::bridges::napi::IntoEach;
-use shift_wire::bridges::napi::{
-  NapiAddAnchorsIntent, NapiAddComponentIntent, NapiAddContourIntent, NapiAddPointsIntent,
-  NapiBooleanOpIntent, NapiCloneGlyphLayerIntent, NapiCreateAxisIntent, NapiCreateGlyphIntent,
-  NapiCreateGlyphLayerIntent, NapiCreateKerningGroupIntent, NapiCreateNamedInstanceIntent,
-  NapiCreateSourceIntent, NapiDecomposeComponentsIntent, NapiDeleteAxisIntent,
-  NapiDeleteKerningGroupIntent, NapiDeleteNamedInstanceIntent, NapiDeleteSourceIntent,
-  NapiMaterializeGlyphLayerIntent, NapiMoveAnchorsIntent, NapiMovePointsIntent,
-  NapiRemoveAnchorsIntent, NapiRemoveComponentsIntent, NapiRemovePointsIntent,
-  NapiRenameAnchorsIntent, NapiRenameKerningGroupIntent, NapiReverseContourIntent,
-  NapiSetAxisMappingsIntent, NapiSetComponentAlignmentIntent, NapiSetComponentTransformsIntent,
-  NapiSetContourClosedIntent, NapiSetContourStartIntent, NapiSetKerningGroupMemberIntent,
-  NapiSetKerningValuesIntent, NapiSetLanguagesIntent, NapiSetMetricDefinitionsIntent,
-  NapiSetPointSmoothIntent, NapiSetXAdvanceIntent, NapiTransformLayerIntent,
-  NapiTranslatePointsIntent, NapiUpdateAxisIntent, NapiUpdateFontMetadataIntent,
-  NapiUpdateGlyphIntent, NapiUpdateNamedInstanceIntent, NapiUpdateSourceIntent,
-};
+use shift_wire::intents;
+use shift_wire::replacement::FontReplacement;
 use shift_wire::{
   AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
   ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
@@ -67,17 +39,13 @@ use shift_wire::{
   PointData, PointType, Source, SourceMetricValue, SourceMetricsInterpolationSnapshot,
   VariationBasis, VariationDelta,
   bridges::napi::{
-    NapiAnchorSeed, NapiAppliedChange, NapiAxis, NapiAxisMapping, NapiAxisMappingBasis,
-    NapiAxisRole, NapiAxisType, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
-    NapiCatalogAtlasWeights, NapiFontIntent, NapiFontMetadata, NapiFontMetrics,
-    NapiFontReplacement, NapiFontSnapshot, NapiGlyphLayerSnapshot, NapiGlyphPreview,
-    NapiGlyphProjection, NapiGlyphRecord, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiInterpolationBasis, NapiKerningPosition, NapiKerningSide, NapiKerningSideKind,
-    NapiKerningSnapshot, NapiKerningValueEdit, NapiLanguagesReplacement, NapiLayerMatch,
-    NapiLayerRead, NapiLayerReplaced, NapiLocation, NapiMetricDefinition, NapiMetricKind,
-    NapiNamedInstance, NapiPointSeed, NapiSlugAtlas, NapiSlugExactSource, NapiSlugGlyph,
-    NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet, NapiSource,
-    NapiSourceMetricsInterpolationReplacement, NapiSourceMetricsInterpolationSnapshot,
+    NapiAppliedChange, NapiAxisMappingBasis, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
+    NapiCatalogAtlasWeights, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
+    NapiGlyphLayerSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
+    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningSnapshot,
+    NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas, NapiSlugExactSource,
+    NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet,
+    NapiSource, NapiSourceMetricsInterpolationSnapshot,
   },
 };
 use shift_workspace::{
@@ -1169,6 +1137,26 @@ pub struct Bridge {
   shaper: Option<LiveShaper>,
 }
 
+/// Where a persisted change leaves the font, as the session that made it
+/// claims.
+#[napi(string_enum = "camelCase")]
+pub enum NapiSaveState {
+  /// The font now differs from the saved document.
+  Unsaved,
+  /// The font is back to the saved document, as an undo or redo onto the
+  /// saved position leaves it; the store verifies this before trusting it.
+  MatchesSaved,
+}
+
+impl From<NapiSaveState> for shift_store::SaveState {
+  fn from(state: NapiSaveState) -> Self {
+    match state {
+      NapiSaveState::Unsaved => Self::Unsaved,
+      NapiSaveState::MatchesSaved => Self::MatchesSaved,
+    }
+  }
+}
+
 #[napi]
 impl Bridge {
   #[napi(constructor)]
@@ -1335,7 +1323,7 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_metadata(&self) -> errors::Result<NapiFontMetadata> {
+  pub fn get_metadata(&self) -> errors::Result<intents::FontMetadata> {
     Ok(FontMetadata::from(self.font()?.metadata()).into())
   }
 
@@ -1387,7 +1375,7 @@ impl Bridge {
   #[napi]
   pub fn apply(
     &mut self,
-    intents: Vec<NapiFontIntent>,
+    intents: Vec<intents::FontIntent>,
     label: Option<String>,
   ) -> errors::Result<NapiAppliedChange> {
     if intents.is_empty() {
@@ -1400,7 +1388,7 @@ impl Bridge {
 
     let mut set = FontIntentSet::default();
     for intent in intents {
-      set.intents.push(intent.into_domain()?);
+      set.intents.push(shift_font::FontIntent::try_from(intent)?);
     }
 
     let outcome = self.workspace_mut()?.apply(&set, label)?;
@@ -1415,17 +1403,7 @@ impl Bridge {
   /// change set touched that structure.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
     let impact = outcome.changes.impact();
-    let metadata_changed = impact.contains(FontChangeImpact::METADATA);
-    let languages_changed = impact.contains(FontChangeImpact::LANGUAGES);
     let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
-    let axes_changed = impact.contains(FontChangeImpact::AXES);
-    let axis_mappings_changed = impact.contains(FontChangeImpact::AXIS_MAPPINGS);
-    let axis_mapping_bases_changed = impact.contains(FontChangeImpact::AXIS_MAPPING_BASES);
-    let metric_definitions_changed = impact.contains(FontChangeImpact::METRIC_DEFINITIONS);
-    let source_metrics_changed = impact.contains(FontChangeImpact::SOURCE_METRICS);
-    let named_instances_changed = impact.contains(FontChangeImpact::NAMED_INSTANCES);
-    let sources_changed = impact.contains(FontChangeImpact::SOURCES);
-    let kerning_changed = impact.contains(FontChangeImpact::KERNING);
 
     let touched_layer_ids: Vec<LayerId> = outcome
       .layers
@@ -1452,43 +1430,10 @@ impl Bridge {
       })
       .collect();
 
-    let next = (!impact.is_empty())
-      .then(|| -> errors::Result<NapiFontReplacement> {
-        Ok(NapiFontReplacement {
-          metadata: metadata_changed.then(|| self.get_metadata()).transpose()?,
-          glyphs: glyphs_changed.then(|| self.get_glyphs()).transpose()?,
-          axes: axes_changed.then(|| self.get_axes()).transpose()?,
-          axis_mappings: axis_mappings_changed
-            .then(|| self.get_axis_mappings())
-            .transpose()?,
-          axis_mapping_bases: axis_mapping_bases_changed
-            .then(|| self.get_axis_mapping_bases())
-            .transpose()?,
-          metric_definitions: metric_definitions_changed
-            .then(|| self.get_metric_definitions())
-            .transpose()?,
-          source_metrics_interpolation: source_metrics_changed
-            .then(
-              || -> errors::Result<NapiSourceMetricsInterpolationReplacement> {
-                Ok(NapiSourceMetricsInterpolationReplacement {
-                  snapshot: self.get_source_metrics_interpolation()?,
-                })
-              },
-            )
-            .transpose()?,
-          named_instances: named_instances_changed
-            .then(|| self.get_named_instances())
-            .transpose()?,
-          languages: languages_changed
-            .then(|| -> errors::Result<NapiLanguagesReplacement> {
-              Ok(NapiLanguagesReplacement {
-                language_ids: self.get_language_ids()?,
-              })
-            })
-            .transpose()?,
-          sources: sources_changed.then(|| self.get_sources()).transpose()?,
-          kerning: kerning_changed.then(|| self.get_kerning()).transpose()?,
-        })
+    let next = FontReplacement::changed_by(self.font()?, impact)?
+      .map(|replacement| -> errors::Result<NapiFontReplacement> {
+        let glyphs = glyphs_changed.then(|| self.get_glyphs()).transpose()?;
+        Ok(NapiFontReplacement::new(replacement, glyphs))
       })
       .transpose()?;
 
@@ -1521,6 +1466,32 @@ impl Bridge {
 
     self.mark_font_changed();
     Ok(Some(self.applied_echo(outcome)?))
+  }
+
+  /// Persists a change set, as named MessagePack, that a session over this
+  /// font already applied, and returns its echo: the layers it touched, the
+  /// font-level and glyph records it changed, and the composites that depend
+  /// on them. Nothing is added to this workspace's undo ledger. `save_state`
+  /// claims where the change leaves the font; the store verifies a claim to
+  /// match the saved document before discarding unsaved edits.
+  ///
+  /// # Errors
+  ///
+  /// Fails when the bytes do not decode to a change set, when a `before` in it
+  /// does not match this font, or when the write fails; the font is then
+  /// unchanged.
+  #[napi]
+  pub fn persist(
+    &mut self,
+    change_set: Uint8Array,
+    save_state: NapiSaveState,
+  ) -> errors::Result<NapiAppliedChange> {
+    let change_set: shift_font::FontChangeSet = rmp_serde::from_slice(&change_set)?;
+    let outcome = self
+      .workspace_mut()?
+      .persist_change_set(change_set, save_state.into())?;
+    self.mark_font_changed();
+    self.applied_echo(outcome)
   }
 
   /// Permanently removes every redo entry without changing font or dirty state.
@@ -1716,14 +1687,15 @@ impl Bridge {
   /// Missing glyph identities are omitted. No editable structure crosses the
   /// boundary, so the payload stays orders of magnitude lighter than
   /// `get_glyph_snapshots`.
-  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: NapiLocation")]
+  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: Location")]
   pub fn get_glyph_previews(
     &mut self,
     glyph_ids: Vec<String>,
-    location: NapiLocation,
+    location: intents::Location,
   ) -> errors::Result<Vec<NapiGlyphPreview>> {
     let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
-    let location = shift_font::DesignLocation::from_untyped(location.into_domain()?);
+    let location =
+      shift_font::DesignLocation::from_untyped(shift_font::Location::try_from(location)?);
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let mut projection = font.projection(&location);
     let previews = projection
@@ -2019,7 +1991,7 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_axes(&self) -> errors::Result<Vec<NapiAxis>> {
+  pub fn get_axes(&self) -> errors::Result<Vec<intents::Axis>> {
     Ok(
       self
         .font()?
@@ -2032,7 +2004,7 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_axis_mappings(&self) -> errors::Result<Vec<NapiAxisMapping>> {
+  pub fn get_axis_mappings(&self) -> errors::Result<Vec<intents::AxisMapping>> {
     Ok(
       self
         .font()?
@@ -2058,7 +2030,7 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_metric_definitions(&self) -> errors::Result<Vec<NapiMetricDefinition>> {
+  pub fn get_metric_definitions(&self) -> errors::Result<Vec<intents::MetricDefinition>> {
     Ok(
       self
         .font()?
@@ -2087,7 +2059,7 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn get_named_instances(&self) -> errors::Result<Vec<NapiNamedInstance>> {
+  pub fn get_named_instances(&self) -> errors::Result<Vec<intents::NamedInstance>> {
     Ok(
       self
         .font()?
@@ -2152,42 +2124,16 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn map_location(&self, location: NapiLocation) -> errors::Result<NapiLocation> {
-    let external = shift_font::ExternalLocation::from_untyped(location.into_domain()?);
+  pub fn map_location(&self, location: intents::Location) -> errors::Result<intents::Location> {
+    let external =
+      shift_font::ExternalLocation::from_untyped(shift_font::Location::try_from(location)?);
     let mapped = self.font()?.mapped_location(&external)?;
     Ok(shift_wire::Location::from(mapped.as_untyped()).into())
   }
 
   #[napi]
   pub fn get_sources(&self) -> errors::Result<Vec<NapiSource>> {
-    let font = self.font()?;
-    let metric_order = font
-      .metric_definitions()
-      .iter()
-      .enumerate()
-      .map(|(index, definition)| (definition.id().to_string(), index))
-      .collect::<HashMap<_, _>>();
-    let mut sources = font
-      .masters()
-      .map(Source::from)
-      .map(NapiSource::from)
-      .collect::<Vec<_>>();
-    for source in &mut sources {
-      source.metric_values.sort_by(|left, right| {
-        metric_order
-          .get(&left.metric_id)
-          .copied()
-          .unwrap_or(usize::MAX)
-          .cmp(
-            &metric_order
-              .get(&right.metric_id)
-              .copied()
-              .unwrap_or(usize::MAX),
-          )
-          .then_with(|| left.metric_id.cmp(&right.metric_id))
-      });
-    }
-    Ok(sources)
+    Ok(Source::masters_of(self.font()?).into_each())
   }
 
   /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
@@ -2326,1018 +2272,6 @@ fn path_to_string(path: &Path) -> BridgeResult<String> {
     .ok_or_else(|| WorkspaceError::InvalidPathUtf8(path.to_path_buf()).into())
 }
 
-fn parse_id_list<T: BridgeParse>(ids: &[String]) -> BridgeResult<Vec<T>> {
-  ids.iter().map(|id| parse::<T>(id)).collect()
-}
-
-/// Converts a value the editor sent over NAPI into the domain value it
-/// describes.
-pub(crate) trait IntoDomain {
-  type Domain;
-
-  /// # Errors
-  ///
-  /// Returns [`BridgeError::InvalidInput`] when an id or field the domain
-  /// value needs does not parse.
-  fn into_domain(self) -> BridgeResult<Self::Domain>;
-}
-
-impl IntoDomain for NapiKerningValueEdit {
-  type Domain = KerningValueEdit;
-
-  fn into_domain(self) -> BridgeResult<KerningValueEdit> {
-    Ok(KerningValueEdit {
-      source_id: parse::<SourceId>(&self.source_id)?,
-      pair: KerningPair::new(self.first.into_domain()?, self.second.into_domain()?),
-      value: self.amount,
-    })
-  }
-}
-
-impl IntoDomain for NapiKerningPosition {
-  type Domain = KerningPosition;
-
-  fn into_domain(self) -> BridgeResult<KerningPosition> {
-    Ok(match self {
-      Self::First => KerningPosition::First,
-      Self::Second => KerningPosition::Second,
-    })
-  }
-}
-
-impl IntoDomain for NapiKerningSide {
-  type Domain = KerningSide;
-
-  fn into_domain(self) -> BridgeResult<KerningSide> {
-    Ok(match self.kind {
-      NapiKerningSideKind::Glyph => KerningSide::Glyph(parse::<GlyphId>(&self.id)?),
-      NapiKerningSideKind::Group => KerningSide::Group(parse::<KerningGroupId>(&self.id)?),
-    })
-  }
-}
-
-impl IntoDomain for NapiFontIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    let kind = self.kind.as_str();
-    let missing = || BridgeError::InvalidInput {
-      kind: "intent",
-      value: format!("{kind} requires its payload field"),
-    };
-
-    match kind {
-      "addPoints" => self.add_points.ok_or_else(missing)?.into_domain(),
-      "addContour" => self.add_contour.ok_or_else(missing)?.into_domain(),
-      "setContourClosed" => self.set_contour_closed.ok_or_else(missing)?.into_domain(),
-      "movePoints" => self.move_points.ok_or_else(missing)?.into_domain(),
-      "setPointSmooth" => self.set_point_smooth.ok_or_else(missing)?.into_domain(),
-      "removePoints" => self.remove_points.ok_or_else(missing)?.into_domain(),
-      "addAnchors" => self.add_anchors.ok_or_else(missing)?.into_domain(),
-      "moveAnchors" => self.move_anchors.ok_or_else(missing)?.into_domain(),
-      "removeAnchors" => self.remove_anchors.ok_or_else(missing)?.into_domain(),
-      "renameAnchors" => self.rename_anchors.ok_or_else(missing)?.into_domain(),
-      "addComponent" => self.add_component.ok_or_else(missing)?.into_domain(),
-      "setComponentTransforms" => self
-        .set_component_transforms
-        .ok_or_else(missing)?
-        .into_domain(),
-      "setComponentAlignment" => self
-        .set_component_alignment
-        .ok_or_else(missing)?
-        .into_domain(),
-      "removeComponents" => self.remove_components.ok_or_else(missing)?.into_domain(),
-      "decomposeComponents" => self.decompose_components.ok_or_else(missing)?.into_domain(),
-      "reverseContour" => self.reverse_contour.ok_or_else(missing)?.into_domain(),
-      "setContourStart" => self.set_contour_start.ok_or_else(missing)?.into_domain(),
-      "translatePoints" => self.translate_points.ok_or_else(missing)?.into_domain(),
-      "transformLayer" => self.transform_layer.ok_or_else(missing)?.into_domain(),
-      "setXAdvance" => self.set_x_advance.ok_or_else(missing)?.into_domain(),
-      "applyBooleanOp" => self.apply_boolean_op.ok_or_else(missing)?.into_domain(),
-      "createGlyph" => self.create_glyph.ok_or_else(missing)?.into_domain(),
-      "updateGlyph" => self.update_glyph.ok_or_else(missing)?.into_domain(),
-      "updateFontMetadata" => self.update_font_metadata.ok_or_else(missing)?.into_domain(),
-      "setKerningValues" => self.set_kerning_values.ok_or_else(missing)?.into_domain(),
-      "createKerningGroup" => self.create_kerning_group.ok_or_else(missing)?.into_domain(),
-      "setKerningGroupMember" => self
-        .set_kerning_group_member
-        .ok_or_else(missing)?
-        .into_domain(),
-      "renameKerningGroup" => self.rename_kerning_group.ok_or_else(missing)?.into_domain(),
-      "deleteKerningGroup" => self.delete_kerning_group.ok_or_else(missing)?.into_domain(),
-      "setLanguages" => self.set_languages.ok_or_else(missing)?.into_domain(),
-      "createAxis" => self.create_axis.ok_or_else(missing)?.into_domain(),
-      "updateAxis" => self.update_axis.ok_or_else(missing)?.into_domain(),
-      "deleteAxis" => self.delete_axis.ok_or_else(missing)?.into_domain(),
-      "setAxisMappings" => self.set_axis_mappings.ok_or_else(missing)?.into_domain(),
-      "setMetricDefinitions" => self
-        .set_metric_definitions
-        .ok_or_else(missing)?
-        .into_domain(),
-      "createNamedInstance" => self
-        .create_named_instance
-        .ok_or_else(missing)?
-        .into_domain(),
-      "updateNamedInstance" => self
-        .update_named_instance
-        .ok_or_else(missing)?
-        .into_domain(),
-      "deleteNamedInstance" => self
-        .delete_named_instance
-        .ok_or_else(missing)?
-        .into_domain(),
-      "deleteSource" => self.delete_source.ok_or_else(missing)?.into_domain(),
-      "createSource" => self.create_source.ok_or_else(missing)?.into_domain(),
-      "updateSource" => self.update_source.ok_or_else(missing)?.into_domain(),
-      "createGlyphLayer" => self.create_glyph_layer.ok_or_else(missing)?.into_domain(),
-      "cloneGlyphLayer" => self.clone_glyph_layer.ok_or_else(missing)?.into_domain(),
-      "materializeGlyphLayer" => self
-        .materialize_glyph_layer
-        .ok_or_else(missing)?
-        .into_domain(),
-      other => Err(BridgeError::InvalidInput {
-        kind: "intent",
-        value: format!("unknown intent kind \"{other}\""),
-      }),
-    }
-  }
-}
-
-impl IntoDomain for NapiAddPointsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      AddPoints {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        contour_id: self
-          .contour_id
-          .map(|id| parse::<ContourId>(&id))
-          .transpose()?,
-        before: self.before.map(|id| parse::<PointId>(&id)).transpose()?,
-        points: self
-          .points
-          .into_iter()
-          .map(IntoDomain::into_domain)
-          .collect::<errors::Result<Vec<_>>>()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiAddContourIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      AddContour {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        contour_id: parse::<ContourId>(&self.contour_id)?,
-        closed: self.closed,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetContourClosedIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetContourClosed {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        contour_id: parse::<ContourId>(&self.contour_id)?,
-        closed: self.closed,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiMovePointsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      MovePoints {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        point_ids: parse_id_list::<PointId>(&self.point_ids)?,
-        coords: self.coords,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetPointSmoothIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetPointSmooth {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        point_id: parse::<PointId>(&self.point_id)?,
-        smooth: self.smooth,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiRemovePointsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      RemovePoints {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        point_ids: parse_id_list::<PointId>(&self.point_ids)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiAddAnchorsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      AddAnchors {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        anchors: self
-          .anchors
-          .into_iter()
-          .map(IntoDomain::into_domain)
-          .collect::<errors::Result<Vec<_>>>()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiMoveAnchorsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      MoveAnchors {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
-        coords: self.coords,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiRemoveAnchorsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      RemoveAnchors {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiRenameAnchorsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      RenameAnchors {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        anchor_ids: parse_id_list::<AnchorId>(&self.anchor_ids)?,
-        names: self.names,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiAddComponentIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      AddComponent {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        component_id: parse::<ComponentId>(&self.component_id)?,
-        base_glyph_id: parse::<GlyphId>(&self.base_glyph_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetComponentTransformsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetComponentTransforms {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-        transforms: self.transforms,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetComponentAlignmentIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetComponentAlignment {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-        alignment: shift_wire::bridges::napi::parse_alignment(Some(&self.alignment)),
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiRemoveComponentsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      RemoveComponents {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiDecomposeComponentsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      DecomposeComponents {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        component_ids: parse_id_list::<ComponentId>(&self.component_ids)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiReverseContourIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      ReverseContour {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        contour_id: parse::<ContourId>(&self.contour_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetContourStartIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetContourStart {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        contour_id: parse::<ContourId>(&self.contour_id)?,
-        point_id: parse::<PointId>(&self.point_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiTranslatePointsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      TranslatePoints {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        point_ids: parse_id_list::<PointId>(&self.point_ids)?,
-        dx: self.dx,
-        dy: self.dy,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiTransformLayerIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    let [xx, xy, yx, yy, dx, dy] =
-      <[f64; 6]>::try_from(self.matrix.as_slice()).map_err(|_| BridgeError::InvalidInput {
-        kind: "transformLayer matrix value count",
-        value: self.matrix.len().to_string(),
-      })?;
-    Ok(
-      TransformLayer {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        transform: Transform {
-          xx,
-          xy,
-          yx,
-          yy,
-          dx,
-          dy,
-        },
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetXAdvanceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetXAdvance {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        width: self.width,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiBooleanOpIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      ApplyBooleanOp {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        contour_id_a: parse::<ContourId>(&self.contour_id_a)?,
-        contour_id_b: parse::<ContourId>(&self.contour_id_b)?,
-        operation: self
-          .operation
-          .parse()
-          .map_err(|value| BridgeError::InvalidInput {
-            kind: "intent",
-            value,
-          })?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCreateGlyphIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CreateGlyph {
-        glyph_id: Some(parse::<GlyphId>(&self.glyph_id)?),
-        name: self.name,
-        unicodes: self.unicodes,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiUpdateGlyphIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      UpdateGlyph {
-        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-        new_name: self.new_name.into(),
-        new_unicodes: self.new_unicodes,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiUpdateFontMetadataIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      UpdateFontMetadata {
-        metadata: self.metadata.into_domain()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetKerningValuesIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetKerningValues {
-        edits: self
-          .edits
-          .into_iter()
-          .map(IntoDomain::into_domain)
-          .collect::<errors::Result<Vec<_>>>()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCreateKerningGroupIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CreateKerningGroup {
-        group_id: parse::<KerningGroupId>(&self.group_id)?,
-        position: self.position.into_domain()?,
-        name: self.name,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetKerningGroupMemberIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetKerningGroupMember {
-        position: self.position.into_domain()?,
-        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-        group_id: self
-          .group_id
-          .as_deref()
-          .map(parse::<KerningGroupId>)
-          .transpose()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiRenameKerningGroupIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      RenameKerningGroup {
-        group_id: parse::<KerningGroupId>(&self.group_id)?,
-        name: self.name,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiDeleteKerningGroupIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      DeleteKerningGroup {
-        group_id: parse::<KerningGroupId>(&self.group_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetLanguagesIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetLanguages {
-        language_ids: self.language_ids,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCreateAxisIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CreateAxis {
-        axis: self.axis.into_domain()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiUpdateAxisIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      UpdateAxis {
-        axis: self.axis.into_domain()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiDeleteAxisIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      DeleteAxis {
-        axis_id: parse::<AxisId>(&self.axis_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetAxisMappingsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetAxisMappings {
-        mappings: self
-          .mappings
-          .into_iter()
-          .map(IntoDomain::into_domain)
-          .collect::<errors::Result<Vec<_>>>()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiSetMetricDefinitionsIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      SetMetricDefinitions {
-        definitions: self
-          .definitions
-          .into_iter()
-          .map(IntoDomain::into_domain)
-          .collect::<errors::Result<Vec<_>>>()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCreateNamedInstanceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CreateNamedInstance {
-        instance: self.instance.into_domain()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiUpdateNamedInstanceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      UpdateNamedInstance {
-        instance: self.instance.into_domain()?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiDeleteNamedInstanceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      DeleteNamedInstance {
-        instance_id: parse::<NamedInstanceId>(&self.instance_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiDeleteSourceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      DeleteSource {
-        source_id: parse::<SourceId>(&self.source_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCreateSourceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CreateSource {
-        source_id: parse::<SourceId>(&self.source_id)?,
-        name: self.name,
-        location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiUpdateSourceIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    let metric_values = self
-      .metric_values
-      .into_iter()
-      .map(|value| {
-        Ok((
-          parse::<MetricId>(&value.metric_id)?,
-          MetricValue::new(value.position, value.overshoot),
-        ))
-      })
-      .collect::<errors::Result<_>>()?;
-    Ok(
-      UpdateSource {
-        source_id: parse::<SourceId>(&self.source_id)?,
-        name: self.name,
-        location: shift_font::DesignLocation::from_untyped(self.location.into_domain()?),
-        metric_values,
-        italic_angle: self.italic_angle,
-        line_gap: self.line_gap,
-        underline_position: self.underline_position,
-        underline_thickness: self.underline_thickness,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCreateGlyphLayerIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CreateGlyphLayer {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-        source_id: parse::<SourceId>(&self.source_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiCloneGlyphLayerIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      CloneGlyphLayer {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-        source_id: parse::<SourceId>(&self.source_id)?,
-        from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiMaterializeGlyphLayerIntent {
-  type Domain = FontIntent;
-
-  fn into_domain(self) -> BridgeResult<FontIntent> {
-    Ok(
-      MaterializeGlyphLayer {
-        layer_id: parse::<LayerId>(&self.layer_id)?,
-        glyph_id: parse::<GlyphId>(&self.glyph_id)?,
-        source_id: parse::<SourceId>(&self.source_id)?,
-        from_layer_id: parse::<LayerId>(&self.from_layer_id)?,
-        values: shift_font::GlyphInterpolationValues::new(self.values.to_vec()),
-      }
-      .into(),
-    )
-  }
-}
-
-impl IntoDomain for NapiPointSeed {
-  type Domain = PointSeed;
-
-  fn into_domain(self) -> BridgeResult<PointSeed> {
-    Ok(PointSeed {
-      id: parse::<PointId>(&self.id)?,
-      x: self.x,
-      y: self.y,
-      point_type: self.point_type.into(),
-      smooth: self.smooth,
-    })
-  }
-}
-
-impl IntoDomain for NapiAnchorSeed {
-  type Domain = AnchorSeed;
-
-  fn into_domain(self) -> BridgeResult<AnchorSeed> {
-    Ok(AnchorSeed {
-      id: parse::<AnchorId>(&self.id)?,
-      name: self.name,
-      x: self.x,
-      y: self.y,
-    })
-  }
-}
-
-impl IntoDomain for NapiLocation {
-  type Domain = FontLocation;
-
-  fn into_domain(self) -> BridgeResult<FontLocation> {
-    self
-      .values
-      .into_iter()
-      .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
-      .collect()
-  }
-}
-
-impl IntoDomain for NapiFontMetadata {
-  type Domain = FontMetadataModel;
-
-  fn into_domain(self) -> BridgeResult<FontMetadataModel> {
-    Ok(FontMetadataModel {
-      family_name: self.family_name,
-      style_name: self.style_name,
-      version_major: self.version_major,
-      version_minor: self.version_minor,
-      copyright: self.copyright,
-      trademark: self.trademark,
-      designer: self.designer,
-      designer_url: self.designer_url,
-      manufacturer: self.manufacturer,
-      manufacturer_url: self.manufacturer_url,
-      license: self.license,
-      license_url: self.license_url,
-      description: self.description,
-      note: self.note,
-    })
-  }
-}
-
-impl IntoDomain for NapiMetricDefinition {
-  type Domain = FontMetricDefinition;
-
-  fn into_domain(self) -> BridgeResult<FontMetricDefinition> {
-    let kind = match self.kind {
-      NapiMetricKind::Ascender => MetricKind::Ascender,
-      NapiMetricKind::CapHeight => MetricKind::CapHeight,
-      NapiMetricKind::XHeight => MetricKind::XHeight,
-      NapiMetricKind::Baseline => MetricKind::Baseline,
-      NapiMetricKind::Descender => MetricKind::Descender,
-      NapiMetricKind::Custom => MetricKind::Custom,
-    };
-    Ok(FontMetricDefinition::with_id(
-      parse::<MetricId>(&self.id)?,
-      kind,
-      self.name,
-    ))
-  }
-}
-
-impl IntoDomain for NapiAxis {
-  type Domain = FontAxis;
-
-  fn into_domain(self) -> BridgeResult<FontAxis> {
-    let axis_id = parse::<AxisId>(&self.id)?;
-    let mut mapped = match self.axis_type {
-      NapiAxisType::Continuous => FontAxis::continuous_with_id(
-        axis_id,
-        self.tag,
-        self.name,
-        self.minimum.ok_or_else(|| BridgeError::InvalidInput {
-          kind: "continuous axis minimum",
-          value: "missing".to_string(),
-        })?,
-        self.default,
-        self.maximum.ok_or_else(|| BridgeError::InvalidInput {
-          kind: "continuous axis maximum",
-          value: "missing".to_string(),
-        })?,
-      ),
-      NapiAxisType::Discrete => FontAxis::discrete_with_id(
-        axis_id,
-        self.tag,
-        self.name,
-        self.values.ok_or_else(|| BridgeError::InvalidInput {
-          kind: "discrete axis values",
-          value: "missing".to_string(),
-        })?,
-        self.default,
-      ),
-    };
-    mapped.set_role(match self.role {
-      NapiAxisRole::External => AxisRole::External,
-      NapiAxisRole::Internal => AxisRole::Internal,
-    });
-    let mut labels = Vec::new();
-    for label in self.labels {
-      let range = match (label.minimum, label.maximum) {
-        (None, None) => None,
-        (Some(minimum), Some(maximum)) => Some(AxisLabelRange { minimum, maximum }),
-        _ => {
-          return Err(BridgeError::InvalidInput {
-            kind: "axis label range",
-            value: "minimum and maximum must be provided together".to_string(),
-          });
-        }
-      };
-      labels.push(AxisLabel::with_id(
-        parse::<AxisLabelId>(&label.id)?,
-        label.name,
-        label.value,
-        range,
-        label.linked_value,
-        label.elidable,
-      ));
-    }
-    mapped.set_labels(labels);
-    mapped.set_hidden(self.hidden);
-    mapped.validate()?;
-    Ok(mapped)
-  }
-}
-
-impl IntoDomain for NapiNamedInstance {
-  type Domain = FontNamedInstance;
-
-  fn into_domain(self) -> BridgeResult<FontNamedInstance> {
-    Ok(FontNamedInstance::with_id(
-      parse::<NamedInstanceId>(&self.id)?,
-      self.name,
-      shift_font::ExternalLocation::from_untyped(self.location.into_domain()?),
-      self.postscript_name,
-    ))
-  }
-}
-
-impl IntoDomain for NapiAxisMapping {
-  type Domain = FontAxisMapping;
-
-  fn into_domain(self) -> BridgeResult<FontAxisMapping> {
-    let mut mapped = FontAxisMapping::with_id(
-      parse::<AxisMappingId>(&self.id)?,
-      self.name,
-      parse_id_list::<AxisId>(&self.inputs)?,
-      parse_id_list::<AxisId>(&self.outputs)?,
-      self
-        .points
-        .into_iter()
-        .map(|point| {
-          Ok(FontAxisMappingPoint {
-            description: point.description,
-            input: point.input.into_domain()?,
-            output: point.output.into_domain()?,
-          })
-        })
-        .collect::<errors::Result<Vec<_>>>()?,
-    );
-    mapped.set_description(self.description);
-    Ok(mapped)
-  }
-}
-
 fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
   GlyphLayerSnapshot {
     glyph_id,
@@ -3349,102 +2283,46 @@ fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use shift_wire::bridges::napi::{
-    NapiAddAnchorsIntent, NapiAddContourIntent, NapiAddPointsIntent, NapiAxis, NapiAxisRole,
-    NapiAxisType, NapiCloneGlyphLayerIntent, NapiCreateAxisIntent, NapiCreateGlyphIntent,
-    NapiCreateGlyphLayerIntent, NapiCreateNamedInstanceIntent, NapiCreateSourceIntent,
-    NapiDeleteAxisIntent, NapiDeleteNamedInstanceIntent, NapiDeleteSourceIntent,
-    NapiGlyphSnapshotRequest, NapiGlyphState, NapiLocation, NapiMoveAnchorsIntent,
-    NapiMovePointsIntent, NapiNamedInstance, NapiPointSeed, NapiPointType, NapiRemoveAnchorsIntent,
-    NapiRemovePointsIntent, NapiReverseContourIntent, NapiSetContourClosedIntent,
-    NapiSetKerningValuesIntent, NapiSetLanguagesIntent, NapiSetPointSmoothIntent,
-    NapiSetXAdvanceIntent, NapiTransformLayerIntent, NapiTranslatePointsIntent,
-    NapiUpdateNamedInstanceIntent,
-  };
+  use shift_wire::bridges::napi::{NapiGlyphSnapshotRequest, NapiGlyphState};
   use std::sync::atomic::{AtomicUsize, Ordering};
 
   static TEST_ID: AtomicUsize = AtomicUsize::new(0);
 
-  fn skeleton_intent(kind: &str) -> NapiFontIntent {
-    NapiFontIntent {
-      kind: kind.to_string(),
-      add_points: None,
-      add_contour: None,
-      set_contour_closed: None,
-      move_points: None,
-      set_point_smooth: None,
-      remove_points: None,
-      add_anchors: None,
-      move_anchors: None,
-      remove_anchors: None,
-      rename_anchors: None,
-      add_component: None,
-      set_component_transforms: None,
-      set_component_alignment: None,
-      remove_components: None,
-      decompose_components: None,
-      reverse_contour: None,
-      set_contour_start: None,
-      translate_points: None,
-      transform_layer: None,
-      set_x_advance: None,
-      apply_boolean_op: None,
-      create_glyph: None,
-      update_glyph: None,
-      update_font_metadata: None,
-      set_languages: None,
-      create_axis: None,
-      update_axis: None,
-      delete_axis: None,
-      set_axis_mappings: None,
-      set_metric_definitions: None,
-      create_named_instance: None,
-      update_named_instance: None,
-      delete_named_instance: None,
-      create_source: None,
-      update_source: None,
-      delete_source: None,
-      create_glyph_layer: None,
-      clone_glyph_layer: None,
-      materialize_glyph_layer: None,
-      set_kerning_values: None,
-      create_kerning_group: None,
-      set_kerning_group_member: None,
-      rename_kerning_group: None,
-      delete_kerning_group: None,
-    }
-  }
-
-  fn create_glyph_napi(name: &str, unicodes: Vec<u32>) -> NapiFontIntent {
-    NapiFontIntent {
-      create_glyph: Some(NapiCreateGlyphIntent {
+  fn create_glyph_napi(name: &str, unicodes: Vec<u32>) -> intents::FontIntent {
+    intents::FontIntent::CreateGlyph {
+      create_glyph: intents::CreateGlyphIntent {
         glyph_id: GlyphId::new().to_string(),
         name: name.to_string(),
         unicodes,
-      }),
-      ..skeleton_intent("createGlyph")
+      },
     }
   }
 
-  fn create_glyph_napi_with_id(glyph_id: &str, name: &str, unicodes: Vec<u32>) -> NapiFontIntent {
-    NapiFontIntent {
-      create_glyph: Some(NapiCreateGlyphIntent {
+  fn create_glyph_napi_with_id(
+    glyph_id: &str,
+    name: &str,
+    unicodes: Vec<u32>,
+  ) -> intents::FontIntent {
+    intents::FontIntent::CreateGlyph {
+      create_glyph: intents::CreateGlyphIntent {
         glyph_id: glyph_id.to_string(),
         name: name.to_string(),
         unicodes,
-      }),
-      ..skeleton_intent("createGlyph")
+      },
     }
   }
 
-  fn create_glyph_layer_intent(layer_id: &str, glyph_id: &str, source_id: &str) -> NapiFontIntent {
-    NapiFontIntent {
-      create_glyph_layer: Some(NapiCreateGlyphLayerIntent {
+  fn create_glyph_layer_intent(
+    layer_id: &str,
+    glyph_id: &str,
+    source_id: &str,
+  ) -> intents::FontIntent {
+    intents::FontIntent::CreateGlyphLayer {
+      create_glyph_layer: intents::CreateGlyphLayerIntent {
         layer_id: layer_id.to_string(),
         glyph_id: glyph_id.to_string(),
         source_id: source_id.to_string(),
-      }),
-      ..skeleton_intent("createGlyphLayer")
+      },
     }
   }
 
@@ -3453,15 +2331,14 @@ mod tests {
     glyph_id: &str,
     source_id: &str,
     from_layer_id: &str,
-  ) -> NapiFontIntent {
-    NapiFontIntent {
-      clone_glyph_layer: Some(NapiCloneGlyphLayerIntent {
+  ) -> intents::FontIntent {
+    intents::FontIntent::CloneGlyphLayer {
+      clone_glyph_layer: intents::CloneGlyphLayerIntent {
         layer_id: layer_id.to_string(),
         glyph_id: glyph_id.to_string(),
         source_id: source_id.to_string(),
         from_layer_id: from_layer_id.to_string(),
-      }),
-      ..skeleton_intent("cloneGlyphLayer")
+      },
     }
   }
 
@@ -3524,12 +2401,11 @@ mod tests {
 
     let applied = bridge
       .apply(
-        vec![NapiFontIntent {
-          set_x_advance: Some(NapiSetXAdvanceIntent {
+        vec![intents::FontIntent::SetXAdvance {
+          set_x_advance: intents::SetXAdvanceIntent {
             layer_id: layer_id.clone(),
             width: 642.0,
-          }),
-          ..skeleton_intent("setXAdvance")
+          },
         }],
         None,
       )
@@ -3540,17 +2416,6 @@ mod tests {
     assert!(applied.layers[0].structure.is_none());
     // canonical values layout: x advance is slot 0
     assert_eq!(applied.layers[0].values[0], 642.0);
-  }
-
-  #[test]
-  fn apply_rejects_unknown_intent_kinds() {
-    let mut bridge = bridge_with_workspace();
-
-    assert!(
-      bridge
-        .apply(vec![skeleton_intent("explodeFont")], None)
-        .is_err()
-    );
   }
 
   fn pen_setup(bridge: &mut Bridge) -> (String, String) {
@@ -3571,13 +2436,12 @@ mod tests {
     let contour_id = ContourId::new().to_string();
     bridge
       .apply(
-        vec![NapiFontIntent {
-          add_contour: Some(NapiAddContourIntent {
+        vec![intents::FontIntent::AddContour {
+          add_contour: intents::AddContourIntent {
             layer_id: layer_id.clone(),
             contour_id: contour_id.clone(),
             closed: false,
-          }),
-          ..skeleton_intent("addContour")
+          },
         }],
         None,
       )
@@ -3586,12 +2450,12 @@ mod tests {
     (layer_id, contour_id)
   }
 
-  fn seed(id: &str, x: f64, y: f64) -> NapiPointSeed {
-    NapiPointSeed {
+  fn seed(id: &str, x: f64, y: f64) -> intents::PointSeed {
+    intents::PointSeed {
       id: id.to_string(),
       x,
       y,
-      point_type: NapiPointType::OnCurve,
+      point_type: intents::PointType::OnCurve,
       smooth: false,
     }
   }
@@ -3600,16 +2464,15 @@ mod tests {
     layer_id: &str,
     contour_id: &str,
     before: Option<String>,
-    points: Vec<NapiPointSeed>,
-  ) -> NapiFontIntent {
-    NapiFontIntent {
-      add_points: Some(NapiAddPointsIntent {
+    points: Vec<intents::PointSeed>,
+  ) -> intents::FontIntent {
+    intents::FontIntent::AddPoints {
+      add_points: intents::AddPointsIntent {
         layer_id: layer_id.to_string(),
         contour_id: Some(contour_id.to_string()),
         before,
         points,
-      }),
-      ..skeleton_intent("addPoints")
+      },
     }
   }
 
@@ -3707,29 +2570,26 @@ mod tests {
     let applied = bridge
       .apply(
         vec![
-          NapiFontIntent {
-            move_points: Some(NapiMovePointsIntent {
+          intents::FontIntent::MovePoints {
+            move_points: intents::MovePointsIntent {
               layer_id: layer_id.clone(),
               point_ids: vec![p1.clone()],
               coords: vec![77.0, 88.0],
-            }),
-            ..skeleton_intent("movePoints")
+            },
           },
-          NapiFontIntent {
-            set_point_smooth: Some(NapiSetPointSmoothIntent {
+          intents::FontIntent::SetPointSmooth {
+            set_point_smooth: intents::SetPointSmoothIntent {
               layer_id: layer_id.clone(),
               point_id: p1,
               smooth: true,
-            }),
-            ..skeleton_intent("setPointSmooth")
+            },
           },
-          NapiFontIntent {
-            set_contour_closed: Some(NapiSetContourClosedIntent {
+          intents::FontIntent::SetContourClosed {
+            set_contour_closed: intents::SetContourClosedIntent {
               layer_id,
               contour_id,
               closed: true,
-            }),
-            ..skeleton_intent("setContourClosed")
+            },
           },
         ],
         Some("Close Contour".to_string()),
@@ -3781,8 +2641,8 @@ mod tests {
     assert_eq!(state.structure.contours[0].points.len(), 1);
   }
 
-  fn anchor_seed(id: &str, name: Option<&str>, x: f64, y: f64) -> NapiAnchorSeed {
-    NapiAnchorSeed {
+  fn anchor_seed(id: &str, name: Option<&str>, x: f64, y: f64) -> intents::AnchorSeed {
+    intents::AnchorSeed {
       id: id.to_string(),
       name: name.map(str::to_owned),
       x,
@@ -3790,13 +2650,12 @@ mod tests {
     }
   }
 
-  fn add_anchors_intent(layer_id: &str, anchors: Vec<NapiAnchorSeed>) -> NapiFontIntent {
-    NapiFontIntent {
-      add_anchors: Some(NapiAddAnchorsIntent {
+  fn add_anchors_intent(layer_id: &str, anchors: Vec<intents::AnchorSeed>) -> intents::FontIntent {
+    intents::FontIntent::AddAnchors {
+      add_anchors: intents::AddAnchorsIntent {
         layer_id: layer_id.to_string(),
         anchors,
-      }),
-      ..skeleton_intent("addAnchors")
+      },
     }
   }
 
@@ -3852,13 +2711,12 @@ mod tests {
 
     let applied = bridge
       .apply(
-        vec![NapiFontIntent {
-          move_anchors: Some(NapiMoveAnchorsIntent {
+        vec![intents::FontIntent::MoveAnchors {
+          move_anchors: intents::MoveAnchorsIntent {
             layer_id,
             anchor_ids: vec![a1],
             coords: vec![300.0, 650.0],
-          }),
-          ..skeleton_intent("moveAnchors")
+          },
         }],
         None,
       )
@@ -3893,19 +2751,17 @@ mod tests {
     let missing = AnchorId::new().to_string();
     let result = bridge.apply(
       vec![
-        NapiFontIntent {
-          remove_points: Some(NapiRemovePointsIntent {
+        intents::FontIntent::RemovePoints {
+          remove_points: intents::RemovePointsIntent {
             layer_id: layer_id.clone(),
             point_ids: vec![p1.clone()],
-          }),
-          ..skeleton_intent("removePoints")
+          },
         },
-        NapiFontIntent {
-          remove_anchors: Some(NapiRemoveAnchorsIntent {
+        intents::FontIntent::RemoveAnchors {
+          remove_anchors: intents::RemoveAnchorsIntent {
             layer_id: layer_id.clone(),
             anchor_ids: vec![missing],
-          }),
-          ..skeleton_intent("removeAnchors")
+          },
         },
       ],
       None,
@@ -3919,19 +2775,17 @@ mod tests {
     let removed = bridge
       .apply(
         vec![
-          NapiFontIntent {
-            remove_points: Some(NapiRemovePointsIntent {
+          intents::FontIntent::RemovePoints {
+            remove_points: intents::RemovePointsIntent {
               layer_id: layer_id.clone(),
               point_ids: vec![p1],
-            }),
-            ..skeleton_intent("removePoints")
+            },
           },
-          NapiFontIntent {
-            remove_anchors: Some(NapiRemoveAnchorsIntent {
+          intents::FontIntent::RemoveAnchors {
+            remove_anchors: intents::RemoveAnchorsIntent {
               layer_id,
               anchor_ids: vec![a1],
-            }),
-            ..skeleton_intent("removeAnchors")
+            },
           },
         ],
         None,
@@ -4097,13 +2951,12 @@ mod tests {
       .unwrap();
     bridge
       .apply(
-        vec![NapiFontIntent {
-          move_points: Some(NapiMovePointsIntent {
+        vec![intents::FontIntent::MovePoints {
+          move_points: intents::MovePointsIntent {
             layer_id,
             point_ids: vec![point_id],
             coords: vec![30.0, 40.0],
-          }),
-          ..skeleton_intent("movePoints")
+          },
         }],
         None,
       )
@@ -4118,6 +2971,51 @@ mod tests {
     assert!(redone.layers[0].structure.is_none());
     assert_eq!(&redone.layers[0].values[1..3], &[30.0, 40.0]);
     assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
+  }
+
+  #[test]
+  fn persist_writes_a_change_set_applied_to_another_copy_of_the_font() {
+    let mut bridge = bridge_with_workspace();
+    let (layer_id, contour_id) = pen_setup(&mut bridge);
+    let point_id = PointId::new().to_string();
+    bridge
+      .apply(
+        vec![add_points_intent(
+          &layer_id,
+          &contour_id,
+          None,
+          vec![seed(&point_id, 10.0, 20.0)],
+        )],
+        None,
+      )
+      .unwrap();
+
+    let mut elsewhere = bridge.workspace().unwrap().font().clone();
+    let moved = elsewhere
+      .apply_intents(&FontIntentSet::from(shift_font::FontIntent::from(
+        shift_font::MovePoints {
+          layer_id: LayerId::from_raw(&layer_id),
+          point_ids: vec![PointId::from_raw(&point_id)],
+          coords: vec![30.0, 40.0],
+        },
+      )))
+      .unwrap();
+    let bytes = rmp_serde::to_vec_named(&moved.changes).unwrap();
+
+    let echo = bridge
+      .persist(bytes.into(), NapiSaveState::Unsaved)
+      .unwrap();
+    assert_eq!(&echo.layers[0].values[1..3], &[30.0, 40.0]);
+    assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
+    // A second persist of the same change set no longer matches the font.
+    assert!(
+      bridge
+        .persist(
+          rmp_serde::to_vec_named(&moved.changes).unwrap().into(),
+          NapiSaveState::Unsaved,
+        )
+        .is_err()
+    );
   }
 
   #[test]
@@ -4192,14 +3090,13 @@ mod tests {
     // translate two of three points by an affine delta (O(ids) wire)
     let translated = bridge
       .apply(
-        vec![NapiFontIntent {
-          translate_points: Some(NapiTranslatePointsIntent {
+        vec![intents::FontIntent::TranslatePoints {
+          translate_points: intents::TranslatePointsIntent {
             layer_id: layer_id.clone(),
             point_ids: vec![p1.clone(), p2.clone()],
             dx: 10.0,
             dy: 5.0,
-          }),
-          ..skeleton_intent("translatePoints")
+          },
         }],
         None,
       )
@@ -4211,12 +3108,11 @@ mod tests {
     // transform the whole layer: a value-only echo with every point moved
     let transformed = bridge
       .apply(
-        vec![NapiFontIntent {
-          transform_layer: Some(NapiTransformLayerIntent {
+        vec![intents::FontIntent::TransformLayer {
+          transform_layer: intents::TransformLayerIntent {
             layer_id: layer_id.clone(),
             matrix: vec![1.0, 0.0, 0.0, 1.0, 100.0, 0.0],
-          }),
-          ..skeleton_intent("transformLayer")
+          },
         }],
         None,
       )
@@ -4227,12 +3123,11 @@ mod tests {
     // reverse the contour: same point ids, reversed order, structural echo
     let reversed = bridge
       .apply(
-        vec![NapiFontIntent {
-          reverse_contour: Some(NapiReverseContourIntent {
+        vec![intents::FontIntent::ReverseContour {
+          reverse_contour: intents::ReverseContourIntent {
             layer_id: layer_id.clone(),
             contour_id,
-          }),
-          ..skeleton_intent("reverseContour")
+          },
         }],
         None,
       )
@@ -4247,12 +3142,11 @@ mod tests {
     // remove one point; undo restores it (ledger covers the new kinds)
     bridge
       .apply(
-        vec![NapiFontIntent {
-          remove_points: Some(NapiRemovePointsIntent {
+        vec![intents::FontIntent::RemovePoints {
+          remove_points: intents::RemovePointsIntent {
             layer_id,
             point_ids: vec![p2],
-          }),
-          ..skeleton_intent("removePoints")
+          },
         }],
         None,
       )
@@ -4384,15 +3278,15 @@ mod tests {
     min: f64,
     default: f64,
     max: f64,
-  ) -> NapiFontIntent {
-    NapiFontIntent {
-      create_axis: Some(NapiCreateAxisIntent {
-        axis: NapiAxis {
+  ) -> intents::FontIntent {
+    intents::FontIntent::CreateAxis {
+      create_axis: intents::CreateAxisIntent {
+        axis: intents::Axis {
           id: axis_id.to_string(),
           tag: tag.to_string(),
           name: name.to_string(),
-          role: NapiAxisRole::External,
-          axis_type: NapiAxisType::Continuous,
+          role: intents::AxisRole::External,
+          axis_type: intents::AxisType::Continuous,
           minimum: Some(min),
           default,
           maximum: Some(max),
@@ -4400,54 +3294,54 @@ mod tests {
           labels: Vec::new(),
           hidden: false,
         },
-      }),
-      ..skeleton_intent("createAxis")
+      },
     }
   }
 
-  fn delete_axis_intent(axis_id: &str) -> NapiFontIntent {
-    NapiFontIntent {
-      delete_axis: Some(NapiDeleteAxisIntent {
+  fn delete_axis_intent(axis_id: &str) -> intents::FontIntent {
+    intents::FontIntent::DeleteAxis {
+      delete_axis: intents::DeleteAxisIntent {
         axis_id: axis_id.to_string(),
-      }),
-      ..skeleton_intent("deleteAxis")
+      },
     }
   }
 
-  fn delete_source_intent(source_id: &str) -> NapiFontIntent {
-    NapiFontIntent {
-      delete_source: Some(NapiDeleteSourceIntent {
+  fn delete_source_intent(source_id: &str) -> intents::FontIntent {
+    intents::FontIntent::DeleteSource {
+      delete_source: intents::DeleteSourceIntent {
         source_id: source_id.to_string(),
-      }),
-      ..skeleton_intent("deleteSource")
+      },
     }
   }
 
-  fn create_source_intent(source_id: &str, name: &str, location: &[(&str, f64)]) -> NapiFontIntent {
-    NapiFontIntent {
-      create_source: Some(NapiCreateSourceIntent {
+  fn create_source_intent(
+    source_id: &str,
+    name: &str,
+    location: &[(&str, f64)],
+  ) -> intents::FontIntent {
+    intents::FontIntent::CreateSource {
+      create_source: intents::CreateSourceIntent {
         source_id: source_id.to_string(),
         name: name.to_string(),
-        location: NapiLocation {
+        location: intents::Location {
           values: location
             .iter()
             .map(|(tag, value)| (tag.to_string(), *value))
             .collect(),
         },
-      }),
-      ..skeleton_intent("createSource")
+      },
     }
   }
 
-  fn weight_axis_intent() -> NapiFontIntent {
+  fn weight_axis_intent() -> intents::FontIntent {
     create_axis_intent("axis_weight", "wght", "Weight", 100.0, 400.0, 900.0)
   }
 
-  fn named_instance(id: &str, name: &str, value: f64) -> NapiNamedInstance {
-    NapiNamedInstance {
+  fn named_instance(id: &str, name: &str, value: f64) -> intents::NamedInstance {
+    intents::NamedInstance {
       id: id.to_string(),
       name: name.to_string(),
-      location: NapiLocation {
+      location: intents::Location {
         values: [("axis_weight".to_string(), value)].into_iter().collect(),
       },
       postscript_name: Some(format!("TestFont-{name}")),
@@ -4505,11 +3399,10 @@ mod tests {
 
     let created = bridge
       .apply(
-        vec![NapiFontIntent {
-          create_named_instance: Some(NapiCreateNamedInstanceIntent {
+        vec![intents::FontIntent::CreateNamedInstance {
+          create_named_instance: intents::CreateNamedInstanceIntent {
             instance: named_instance("namedInstance_bold", "Bold", 700.0),
-          }),
-          ..skeleton_intent("createNamedInstance")
+          },
         }],
         None,
       )
@@ -4528,11 +3421,10 @@ mod tests {
 
     let updated = bridge
       .apply(
-        vec![NapiFontIntent {
-          update_named_instance: Some(NapiUpdateNamedInstanceIntent {
+        vec![intents::FontIntent::UpdateNamedInstance {
+          update_named_instance: intents::UpdateNamedInstanceIntent {
             instance: named_instance("namedInstance_bold", "DisplayBold", 750.0),
-          }),
-          ..skeleton_intent("updateNamedInstance")
+          },
         }],
         None,
       )
@@ -4550,11 +3442,10 @@ mod tests {
 
     let deleted = bridge
       .apply(
-        vec![NapiFontIntent {
-          delete_named_instance: Some(NapiDeleteNamedInstanceIntent {
+        vec![intents::FontIntent::DeleteNamedInstance {
+          delete_named_instance: intents::DeleteNamedInstanceIntent {
             instance_id: "namedInstance_bold".to_string(),
-          }),
-          ..skeleton_intent("deleteNamedInstance")
+          },
         }],
         None,
       )
@@ -4632,11 +3523,10 @@ mod tests {
 
     let applied = bridge
       .apply(
-        vec![NapiFontIntent {
-          set_languages: Some(NapiSetLanguagesIntent {
+        vec![intents::FontIntent::SetLanguages {
+          set_languages: intents::SetLanguagesIntent {
             language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
-          }),
-          ..skeleton_intent("setLanguages")
+          },
         }],
         None,
       )
@@ -4668,23 +3558,22 @@ mod tests {
     create_default_glyph_layer(&mut bridge, "A", Some(65));
     let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
     let source_id = default_source_id(&bridge);
-    let side = || NapiKerningSide {
-      kind: NapiKerningSideKind::Glyph,
+    let side = || intents::KerningSide {
+      kind: intents::KerningSideKind::Glyph,
       id: glyph_id.clone(),
     };
 
     let applied = bridge
       .apply(
-        vec![NapiFontIntent {
-          set_kerning_values: Some(NapiSetKerningValuesIntent {
-            edits: vec![NapiKerningValueEdit {
+        vec![intents::FontIntent::SetKerningValues {
+          set_kerning_values: intents::SetKerningValuesIntent {
+            edits: vec![intents::KerningValueEdit {
               source_id: source_id.clone(),
               first: side(),
               second: side(),
               amount: Some(-30.0),
             }],
-          }),
-          ..skeleton_intent("setKerningValues")
+          },
         }],
         None,
       )
@@ -4997,12 +3886,11 @@ mod tests {
       .apply(
         vec![
           weight_axis_intent(),
-          NapiFontIntent {
-            set_x_advance: Some(NapiSetXAdvanceIntent {
+          intents::FontIntent::SetXAdvance {
+            set_x_advance: intents::SetXAdvanceIntent {
               layer_id: layer_id.clone(),
               width: 600.0,
-            }),
-            ..skeleton_intent("setXAdvance")
+            },
           },
         ],
         Some("Add Weight".to_string()),
@@ -5353,7 +4241,7 @@ mod tests {
     let previews = bridge
       .get_glyph_previews(
         vec![glyph.id.clone(), missing_glyph_id],
-        NapiLocation {
+        intents::Location {
           values: HashMap::new(),
         },
       )
@@ -5370,23 +4258,22 @@ mod tests {
     let mut bridge = bridge_with_workspace();
 
     let result = bridge.apply(
-      vec![NapiFontIntent {
-        add_contour: Some(NapiAddContourIntent {
+      vec![intents::FontIntent::AddContour {
+        add_contour: intents::AddContourIntent {
           layer_id: "not-a-layer-id".to_string(),
           contour_id: ContourId::new().to_string(),
           closed: false,
-        }),
-        ..skeleton_intent("addContour")
+        },
       }],
       None,
     );
 
     assert!(matches!(
       result.err().unwrap(),
-      BridgeError::InvalidInput {
-        kind: "layer ID",
+      BridgeError::Wire(intents::WireError::InvalidId {
+        kind: intents::IdKind::Layer,
         ..
-      }
+      })
     ));
   }
 }

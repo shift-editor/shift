@@ -1,4 +1,5 @@
 use indexmap::IndexSet;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use bitflags::bitflags;
@@ -33,7 +34,7 @@ bitflags! {
 }
 
 /// Original and replacement values for one authored scope.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Replacement<T> {
     pub before: T,
     pub after: T,
@@ -173,7 +174,7 @@ impl Replacement<SourceCollection> {
 }
 
 /// Ordered sources and the identity of their authored default.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SourceCollection {
     pub sources: Vec<Source>,
     pub default_source_id: Option<SourceId>,
@@ -207,7 +208,7 @@ pub enum FontEntityChange<'a> {
 /// Collection variants retain authored order. A changeset installs every
 /// replacement as one target, so references between variants are never
 /// validated in an intermediate state.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FontChange {
     Metadata(Box<Replacement<FontMetadata>>),
     LibValue {
@@ -417,7 +418,10 @@ impl FontChange {
 }
 
 /// Reversible authored replacements produced by one atomic edit.
-#[derive(Clone, Debug, Default, PartialEq)]
+///
+/// Serializable so a process that applied it can hand it to another session
+/// over the same font to replay, as undo and redo do for the editor's engine.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FontChangeSet {
     pub changes: Vec<FontChange>,
 }
@@ -442,6 +446,30 @@ impl FontChangeSet {
             .iter()
             .flat_map(FontChange::glyph_ids)
             .collect()
+    }
+
+    /// Every layer this changeset creates, updates or deletes, in change
+    /// order: what replaying it, for undo or redo, reads.
+    pub fn changed_layer_ids(&self) -> IndexSet<LayerId> {
+        self.entity_changes()
+            .into_iter()
+            .filter_map(|entity| match entity {
+                FontEntityChange::Layer { change, .. } => Some(match change {
+                    EntityChange::Created(layer) | EntityChange::Deleted(layer) => layer.id(),
+                    EntityChange::Updated { after, .. } => after.id(),
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Glyphs this changeset replaces whole: created, deleted or renamed
+    /// with all their layers.
+    pub fn replaced_glyph_ids(&self) -> impl Iterator<Item = GlyphId> {
+        self.changes.iter().filter_map(|change| match change {
+            FontChange::Glyph(glyph) => glyph.sides().next().map(Glyph::id),
+            _ => None,
+        })
     }
 
     /// The layers this changeset writes, in change order.

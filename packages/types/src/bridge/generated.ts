@@ -86,6 +86,21 @@ export interface BridgeApi {
    * stack is empty.
    */
   redo(): AppliedChange | null
+  /**
+   * Persists a change set, as named MessagePack, that a session over this
+   * font already applied, and returns its echo: the layers it touched, the
+   * font-level and glyph records it changed, and the composites that depend
+   * on them. Nothing is added to this workspace's undo ledger. `save_state`
+   * claims where the change leaves the font; the store verifies a claim to
+   * match the saved document before discarding unsaved edits.
+   *
+   * # Errors
+   *
+   * Fails when the bytes do not decode to a change set, when a `before` in it
+   * does not match this font, or when the write fails; the font is then
+   * unchanged.
+   */
+  persist(changeSet: Uint8Array, saveState: SaveState): AppliedChange
   /** Permanently removes every redo entry without changing font or dirty state. */
   discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
@@ -301,6 +316,12 @@ export interface ParagraphRequest {
 }
 
 /**
+ * Where a persisted change leaves the font, as the session that made it
+ * claims.
+ */
+export type SaveState = "unsaved" | "matchesSaved";
+
+/**
  * One shaped glyph. Advances and offsets hold only what the font's feature
  * code positions; glyph advances, kerning, and mark attachment are the
  * caller's to add.
@@ -450,16 +471,6 @@ export interface AddPointsIntent {
   points: Array<PointSeed>
 }
 
-export interface AnchorData {
-  id: AnchorId
-  name?: string
-}
-
-export interface AnchorMatch {
-  referenceId: AnchorId
-  targetId: AnchorId
-}
-
 /**
  * An anchor to create, carrying its caller-minted id (decision 6: ids are
  * client-minted so verbs return identity synchronously).
@@ -469,15 +480,6 @@ export interface AnchorSeed {
   name?: string
   x: number
   y: number
-}
-
-/** Pure-state response to `apply`: no change records cross to the renderer. */
-export interface AppliedChange {
-  layers: Array<LayerReplaced>
-  /** Present when the apply produced any font-level replacement collections. */
-  next?: FontReplacement
-  /** Stable ids: references survive renames without re-indexing. */
-  dependents: Array<GlyphId>
 }
 
 export interface Axis {
@@ -513,13 +515,6 @@ export interface AxisMapping {
   points: Array<AxisMappingPoint>
 }
 
-export interface AxisMappingBasis {
-  mappingId: AxisMappingId
-  inputAxisIds: Array<AxisId>
-  outputAxisIds: Array<AxisId>
-  basis: VariationBasis
-}
-
 export interface AxisMappingPoint {
   description?: string
   input: Location
@@ -538,110 +533,12 @@ export interface BooleanOpIntent {
   operation: string
 }
 
-/** One corner of outline bounds in font units. */
-export interface BoundsCorner {
-  x: number
-  y: number
-}
-
-export interface CatalogAtlasGlyph {
-  glyphId: GlyphId
-  defaultGlyph: number
-  exactSources: Array<SlugExactSource>
-}
-
-export interface CatalogAtlasPage {
-  generation: number
-  pageIndex: number
-  bandCount: number
-  weightCount: number
-  layout: SlugLayout
-  previewExtents: SlugPreviewExtents
-  glyphs: Array<CatalogAtlasGlyph>
-  weights: Array<number>
-  atlasGlyphCount: number
-  curveCount: number
-  componentCount: number
-}
-
-export interface CatalogAtlasWeights {
-  pageIndex: number
-  weights: Array<number>
-}
-
-export interface CatalogAxis {
-  index: number
-  tag: string
-  name: string
-  hidden: boolean
-  axisType: string
-  minimum?: number
-  default: number
-  maximum?: number
-  values: Array<number>
-}
-
-export interface CatalogMetrics {
-  unitsPerEm: number
-  ascender: number
-  descender: number
-  lineGap: number
-}
-
 /** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
 export interface CloneGlyphLayerIntent {
   layerId: LayerId
   glyphId: GlyphId
   sourceId: SourceId
   fromLayerId: LayerId
-}
-
-export interface ComponentData {
-  id: ComponentId
-  baseGlyphId: GlyphId
-  baseGlyphName: GlyphName
-  /**
-   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
-   * counts as anchored while the component sits exactly on its anchors.
-   */
-  alignment?: "anchored" | "free" | "unset"
-}
-
-export interface ComponentGlyph {
-  parentGlyphId: GlyphId
-  componentId: ComponentId
-  componentIndex: number
-  baseGlyphId: GlyphId
-  parentPath: Array<ComponentId>
-  componentPath: Array<ComponentId>
-}
-
-export interface ComponentMatch {
-  referenceId: ComponentId
-  targetId: ComponentId
-}
-
-/** Six-value affine placement of a component in its parent layer. */
-export interface ComponentTransform {
-  xx: number
-  xy: number
-  yx: number
-  yy: number
-  dx: number
-  dy: number
-}
-
-export type ComponentTransformKind = "decomposed" | "affine";
-
-export interface ContourData {
-  id: ContourId
-  points: Array<PointData>
-  closed: boolean
-}
-
-export interface ContourMatch {
-  referenceId: ContourId
-  targetId: ContourId
 }
 
 /**
@@ -718,80 +615,52 @@ export interface DeleteSourceIntent {
   sourceId: SourceId
 }
 
-export interface DesignNormalization {
-  axisId: AxisId
-  minimum: number
-  default: number
-  maximum: number
-}
-
-/**
- * CS0 walking-skeleton intent. A stringly union covering exactly the two
- * skeleton kinds; CS1 replaces this with per-variant intent structs.
- */
-export interface FontIntent {
-  /**
-   * Discriminator naming the populated payload field. Editing kinds:
-   * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-   * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
-   * "removeComponents" | "decomposeComponents" |
-   * "reverseContour" | "setContourStart" | "translatePoints" |
-   * "transformLayer" | "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include metadata replacement, tracked
-   * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, glyph
-   * or layer creation, "setKerningValues", and the kerning group kinds
-   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
-   * | "deleteKerningGroup".
-   * Every kind shares the same apply path; one set is one undo step.
-   */
-  kind: string
-  addPoints?: AddPointsIntent
-  addContour?: AddContourIntent
-  setContourClosed?: SetContourClosedIntent
-  movePoints?: MovePointsIntent
-  setPointSmooth?: SetPointSmoothIntent
-  removePoints?: RemovePointsIntent
-  addAnchors?: AddAnchorsIntent
-  moveAnchors?: MoveAnchorsIntent
-  removeAnchors?: RemoveAnchorsIntent
-  renameAnchors?: RenameAnchorsIntent
-  addComponent?: AddComponentIntent
-  setComponentTransforms?: SetComponentTransformsIntent
-  setComponentAlignment?: SetComponentAlignmentIntent
-  removeComponents?: RemoveComponentsIntent
-  decomposeComponents?: DecomposeComponentsIntent
-  reverseContour?: ReverseContourIntent
-  setContourStart?: SetContourStartIntent
-  translatePoints?: TranslatePointsIntent
-  transformLayer?: TransformLayerIntent
-  setXAdvance?: SetXAdvanceIntent
-  applyBooleanOp?: BooleanOpIntent
-  createGlyph?: CreateGlyphIntent
-  updateGlyph?: UpdateGlyphIntent
-  updateFontMetadata?: UpdateFontMetadataIntent
-  setLanguages?: SetLanguagesIntent
-  createAxis?: CreateAxisIntent
-  updateAxis?: UpdateAxisIntent
-  deleteAxis?: DeleteAxisIntent
-  setAxisMappings?: SetAxisMappingsIntent
-  setMetricDefinitions?: SetMetricDefinitionsIntent
-  createNamedInstance?: CreateNamedInstanceIntent
-  updateNamedInstance?: UpdateNamedInstanceIntent
-  deleteNamedInstance?: DeleteNamedInstanceIntent
-  createSource?: CreateSourceIntent
-  updateSource?: UpdateSourceIntent
-  deleteSource?: DeleteSourceIntent
-  createGlyphLayer?: CreateGlyphLayerIntent
-  cloneGlyphLayer?: CloneGlyphLayerIntent
-  materializeGlyphLayer?: MaterializeGlyphLayerIntent
-  setKerningValues?: SetKerningValuesIntent
-  createKerningGroup?: CreateKerningGroupIntent
-  setKerningGroupMember?: SetKerningGroupMemberIntent
-  renameKerningGroup?: RenameKerningGroupIntent
-  deleteKerningGroup?: DeleteKerningGroupIntent
-}
+/** One edit as the editor sends it: `{ kind: "addPoints", addPoints: {…} }`. */
+export type FontIntent =
+  | { kind: 'addPoints', addPoints: AddPointsIntent }
+  | { kind: 'addContour', addContour: AddContourIntent }
+  | { kind: 'setContourClosed', setContourClosed: SetContourClosedIntent }
+  | { kind: 'movePoints', movePoints: MovePointsIntent }
+  | { kind: 'setPointSmooth', setPointSmooth: SetPointSmoothIntent }
+  | { kind: 'removePoints', removePoints: RemovePointsIntent }
+  | { kind: 'addAnchors', addAnchors: AddAnchorsIntent }
+  | { kind: 'moveAnchors', moveAnchors: MoveAnchorsIntent }
+  | { kind: 'removeAnchors', removeAnchors: RemoveAnchorsIntent }
+  | { kind: 'renameAnchors', renameAnchors: RenameAnchorsIntent }
+  | { kind: 'addComponent', addComponent: AddComponentIntent }
+  | { kind: 'setComponentTransforms', setComponentTransforms: SetComponentTransformsIntent }
+  | { kind: 'setComponentAlignment', setComponentAlignment: SetComponentAlignmentIntent }
+  | { kind: 'removeComponents', removeComponents: RemoveComponentsIntent }
+  | { kind: 'decomposeComponents', decomposeComponents: DecomposeComponentsIntent }
+  | { kind: 'reverseContour', reverseContour: ReverseContourIntent }
+  | { kind: 'setContourStart', setContourStart: SetContourStartIntent }
+  | { kind: 'translatePoints', translatePoints: TranslatePointsIntent }
+  | { kind: 'transformLayer', transformLayer: TransformLayerIntent }
+  | { kind: 'setXAdvance', setXAdvance: SetXAdvanceIntent }
+  | { kind: 'applyBooleanOp', applyBooleanOp: BooleanOpIntent }
+  | { kind: 'createGlyph', createGlyph: CreateGlyphIntent }
+  | { kind: 'updateGlyph', updateGlyph: UpdateGlyphIntent }
+  | { kind: 'updateFontMetadata', updateFontMetadata: UpdateFontMetadataIntent }
+  | { kind: 'setKerningValues', setKerningValues: SetKerningValuesIntent }
+  | { kind: 'createKerningGroup', createKerningGroup: CreateKerningGroupIntent }
+  | { kind: 'setKerningGroupMember', setKerningGroupMember: SetKerningGroupMemberIntent }
+  | { kind: 'renameKerningGroup', renameKerningGroup: RenameKerningGroupIntent }
+  | { kind: 'deleteKerningGroup', deleteKerningGroup: DeleteKerningGroupIntent }
+  | { kind: 'setLanguages', setLanguages: SetLanguagesIntent }
+  | { kind: 'createAxis', createAxis: CreateAxisIntent }
+  | { kind: 'updateAxis', updateAxis: UpdateAxisIntent }
+  | { kind: 'deleteAxis', deleteAxis: DeleteAxisIntent }
+  | { kind: 'setAxisMappings', setAxisMappings: SetAxisMappingsIntent }
+  | { kind: 'setMetricDefinitions', setMetricDefinitions: SetMetricDefinitionsIntent }
+  | { kind: 'createNamedInstance', createNamedInstance: CreateNamedInstanceIntent }
+  | { kind: 'updateNamedInstance', updateNamedInstance: UpdateNamedInstanceIntent }
+  | { kind: 'deleteNamedInstance', deleteNamedInstance: DeleteNamedInstanceIntent }
+  | { kind: 'deleteSource', deleteSource: DeleteSourceIntent }
+  | { kind: 'createSource', createSource: CreateSourceIntent }
+  | { kind: 'updateSource', updateSource: UpdateSourceIntent }
+  | { kind: 'createGlyphLayer', createGlyphLayer: CreateGlyphLayerIntent }
+  | { kind: 'cloneGlyphLayer', cloneGlyphLayer: CloneGlyphLayerIntent }
+  | { kind: 'materializeGlyphLayer', materializeGlyphLayer: MaterializeGlyphLayerIntent }
 
 export interface FontMetadata {
   familyName?: string
@@ -808,6 +677,200 @@ export interface FontMetadata {
   licenseUrl?: string
   description?: string
   note?: string
+}
+
+export type KerningPosition = "first" | "second";
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface KerningSide {
+  kind: KerningSideKind
+  id: string
+}
+
+export type KerningSideKind = "glyph" | "group";
+
+/** One kerning pair value to set or remove at one source. */
+export interface KerningValueEdit {
+  sourceId: SourceId
+  first: KerningSide
+  second: KerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
+}
+
+export interface Location {
+  values: Record<AxisId, number>
+}
+
+/** Creates one sparse layer from resolved values at a design-space location. */
+export interface MaterializeGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+  /** Numeric state ordered like `GlyphState.values`. */
+  values: Float64Array
+}
+
+export interface MetricDefinition {
+  id: MetricId
+  kind: MetricKind
+  name: string
+}
+
+export type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
+
+export interface MoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
+export interface MovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
+/** NAPI projection of one explicit named product preset. */
+export interface NamedInstance {
+  id: NamedInstanceId
+  name: string
+  location: Location
+  postscriptName?: string
+}
+
+export interface AnchorData {
+  id: AnchorId
+  name?: string
+}
+
+export interface AnchorMatch {
+  referenceId: AnchorId
+  targetId: AnchorId
+}
+
+/** Pure-state response to `apply`: no change records cross to the renderer. */
+export interface AppliedChange {
+  layers: Array<LayerReplaced>
+  /** Present when the apply produced any font-level replacement collections. */
+  next?: FontReplacement
+  /** Stable ids: references survive renames without re-indexing. */
+  dependents: Array<GlyphId>
+}
+
+export interface AxisMappingBasis {
+  mappingId: AxisMappingId
+  inputAxisIds: Array<AxisId>
+  outputAxisIds: Array<AxisId>
+  basis: VariationBasis
+}
+
+/** One corner of outline bounds in font units. */
+export interface BoundsCorner {
+  x: number
+  y: number
+}
+
+export interface CatalogAtlasGlyph {
+  glyphId: GlyphId
+  defaultGlyph: number
+  exactSources: Array<SlugExactSource>
+}
+
+export interface CatalogAtlasPage {
+  generation: number
+  pageIndex: number
+  bandCount: number
+  weightCount: number
+  layout: SlugLayout
+  previewExtents: SlugPreviewExtents
+  glyphs: Array<CatalogAtlasGlyph>
+  weights: Array<number>
+  atlasGlyphCount: number
+  curveCount: number
+  componentCount: number
+}
+
+export interface CatalogAtlasWeights {
+  pageIndex: number
+  weights: Array<number>
+}
+
+export interface CatalogAxis {
+  index: number
+  tag: string
+  name: string
+  hidden: boolean
+  axisType: string
+  minimum?: number
+  default: number
+  maximum?: number
+  values: Array<number>
+}
+
+export interface CatalogMetrics {
+  unitsPerEm: number
+  ascender: number
+  descender: number
+  lineGap: number
+}
+
+export interface ComponentData {
+  id: ComponentId
+  baseGlyphId: GlyphId
+  baseGlyphName: GlyphName
+  /**
+   * Placed by its anchors (`anchored`) or by hand (`free`); `unset` or absent
+   * counts as anchored while the component sits exactly on its anchors.
+   */
+  alignment?: "anchored" | "free" | "unset"
+}
+
+export interface ComponentGlyph {
+  parentGlyphId: GlyphId
+  componentId: ComponentId
+  componentIndex: number
+  baseGlyphId: GlyphId
+  parentPath: Array<ComponentId>
+  componentPath: Array<ComponentId>
+}
+
+export interface ComponentMatch {
+  referenceId: ComponentId
+  targetId: ComponentId
+}
+
+/** Six-value affine placement of a component in its parent layer. */
+export interface ComponentTransform {
+  xx: number
+  xy: number
+  yx: number
+  yy: number
+  dx: number
+  dy: number
+}
+
+export type ComponentTransformKind = "decomposed" | "affine";
+
+export interface ContourData {
+  id: ContourId
+  points: Array<PointData>
+  closed: boolean
+}
+
+export interface ContourMatch {
+  referenceId: ContourId
+  targetId: ContourId
+}
+
+export interface DesignNormalization {
+  axisId: AxisId
+  minimum: number
+  default: number
+  maximum: number
 }
 
 export interface FontMetrics {
@@ -1015,16 +1078,6 @@ export interface KerningPairValue {
   amount: number
 }
 
-export type KerningPosition = "first" | "second";
-
-/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
-export interface KerningSide {
-  kind: KerningSideKind
-  id: string
-}
-
-export type KerningSideKind = "glyph" | "group";
-
 /**
  * Font kerning: groups, per-source pairs, and the interpolation basis over
  * the default source and every master with pairs (absent for static fonts).
@@ -1033,15 +1086,6 @@ export interface KerningSnapshot {
   groups: Array<KerningGroup>
   sources: Array<SourceKerningPairs>
   basis?: InterpolationBasis
-}
-
-/** One kerning pair value to set or remove at one source. */
-export interface KerningValueEdit {
-  sourceId: SourceId
-  first: KerningSide
-  second: KerningSide
-  /** New value in font units; absent removes the pair at this source. */
-  amount?: number
 }
 
 /**
@@ -1103,50 +1147,6 @@ export interface LayerReplaced {
   changed: GlyphChangedEntities
 }
 
-export interface Location {
-  values: Record<AxisId, number>
-}
-
-/** Creates one sparse layer from resolved values at a design-space location. */
-export interface MaterializeGlyphLayerIntent {
-  layerId: LayerId
-  glyphId: GlyphId
-  sourceId: SourceId
-  fromLayerId: LayerId
-  /** Numeric state ordered like `GlyphState.values`. */
-  values: Float64Array
-}
-
-export interface MetricDefinition {
-  id: MetricId
-  kind: MetricKind
-  name: string
-}
-
-export type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
-
-export interface MoveAnchorsIntent {
-  layerId: LayerId
-  anchorIds: Array<AnchorId>
-  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
-  coords: Array<number>
-}
-
-export interface MovePointsIntent {
-  layerId: LayerId
-  pointIds: Array<PointId>
-  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
-  coords: Array<number>
-}
-
-/** NAPI projection of one explicit named product preset. */
-export interface NamedInstance {
-  id: NamedInstanceId
-  name: string
-  location: Location
-  postscriptName?: string
-}
-
 /** Tight axis-aligned outline bounds in font units, y-up. */
 export interface OutlineBounds {
   min: BoundsCorner
@@ -1162,48 +1162,6 @@ export interface PointData {
 export interface PointMatch {
   referenceId: PointId
   targetId: PointId
-}
-
-/**
- * A point to create, carrying its caller-minted id (decision 6: ids are
- * client-minted so verbs return identity synchronously).
- */
-export interface PointSeed {
-  id: PointId
-  x: number
-  y: number
-  pointType: PointType
-  smooth: boolean
-}
-
-export type PointType = "onCurve" | "offCurve" | "qCurve";
-
-export interface RemoveAnchorsIntent {
-  layerId: LayerId
-  anchorIds: Array<AnchorId>
-}
-
-export interface RemoveComponentsIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-}
-
-export interface RemovePointsIntent {
-  layerId: LayerId
-  pointIds: Array<PointId>
-}
-
-/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
-export interface RenameAnchorsIntent {
-  layerId: LayerId
-  anchorIds: Array<AnchorId>
-  names: Array<string>
-}
-
-/** Renames a kerning group; its pairs keep referencing it by id. */
-export interface RenameKerningGroupIntent {
-  groupId: KerningGroupId
-  name: string
 }
 
 /** One direct component whose outline includes its resolved descendants. */
@@ -1224,80 +1182,6 @@ export interface ResolvedLayerGeometry {
 export interface ResolvedOutline {
   svgPath: string
   bounds?: OutlineBounds
-}
-
-export interface ReverseContourIntent {
-  layerId: LayerId
-  contourId: ContourId
-}
-
-export interface SetAxisMappingsIntent {
-  mappings: Array<AxisMapping>
-}
-
-/**
- * Records whether components are placed by their anchors; anchoring one also
- * places it on its anchors now.
- */
-export interface SetComponentAlignmentIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-  alignment: "anchored" | "free" | "unset"
-}
-
-export interface SetComponentTransformsIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-  transforms: Array<number>
-}
-
-export interface SetContourClosedIntent {
-  layerId: LayerId
-  contourId: ContourId
-  closed: boolean
-}
-
-/** Selects an existing on-curve start for a closed contour; does not move or convert points. */
-export interface SetContourStartIntent {
-  layerId: LayerId
-  contourId: ContourId
-  pointId: PointId
-}
-
-/** Moves a glyph into a group, or out of its group at `position` without one. */
-export interface SetKerningGroupMemberIntent {
-  position: KerningPosition
-  glyphId: GlyphId
-  groupId?: KerningGroupId
-}
-
-/** Sets or removes kerning pair values at sources as one undoable edit. */
-export interface SetKerningValuesIntent {
-  edits: Array<KerningValueEdit>
-}
-
-/** Replaces the font's tracked language list as one undoable edit. */
-export interface SetLanguagesIntent {
-  /**
-   * Hyperglot language ids in display order. Blank ids are dropped and
-   * duplicates keep their first position; an empty list is stored as-is.
-   */
-  languageIds: Array<string>
-}
-
-export interface SetMetricDefinitionsIntent {
-  definitions: Array<MetricDefinition>
-}
-
-export interface SetPointSmoothIntent {
-  layerId: LayerId
-  pointId: PointId
-  smooth: boolean
-}
-
-export interface SetXAdvanceIntent {
-  layerId: LayerId
-  width: number
 }
 
 export interface SlugAtlas {
@@ -1389,15 +1273,140 @@ export interface SourceMetricsInterpolationSnapshot {
   sources: Array<SourceMetricValues>
 }
 
+export interface SourceMetricValues {
+  sourceId: SourceId
+  values: Float64Array
+}
+
+export interface VariationBasis {
+  deltas: Array<VariationDelta>
+}
+
+export interface VariationDelta {
+  region: Array<InterpolationSupport>
+  values: Float64Array
+}
+
+/**
+ * A point to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface PointSeed {
+  id: PointId
+  x: number
+  y: number
+  pointType: PointType
+  smooth: boolean
+}
+
+export type PointType = "onCurve" | "offCurve" | "qCurve";
+
+export interface RemoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+}
+
+export interface RemoveComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
+export interface RemovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+}
+
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface RenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
+}
+
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface RenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
+export interface ReverseContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+}
+
+export interface SetAxisMappingsIntent {
+  mappings: Array<AxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface SetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
+}
+
+export interface SetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
+}
+
+export interface SetContourClosedIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+/** Selects an existing on-curve start for a closed contour; does not move or convert points. */
+export interface SetContourStartIntent {
+  layerId: LayerId
+  contourId: ContourId
+  pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface SetKerningGroupMemberIntent {
+  position: KerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface SetKerningValuesIntent {
+  edits: Array<KerningValueEdit>
+}
+
+/** Replaces the font's tracked language list as one undoable edit. */
+export interface SetLanguagesIntent {
+  /**
+   * Hyperglot language ids in display order. Blank ids are dropped and
+   * duplicates keep their first position; an empty list is stored as-is.
+   */
+  languageIds: Array<string>
+}
+
+export interface SetMetricDefinitionsIntent {
+  definitions: Array<MetricDefinition>
+}
+
+export interface SetPointSmoothIntent {
+  layerId: LayerId
+  pointId: PointId
+  smooth: boolean
+}
+
+export interface SetXAdvanceIntent {
+  layerId: LayerId
+  width: number
+}
+
 export interface SourceMetricValue {
   metricId: MetricId
   position: number
   overshoot: number
-}
-
-export interface SourceMetricValues {
-  sourceId: SourceId
-  values: Float64Array
 }
 
 /** Affine transform of a whole layer: points, anchors, and component placements. */
@@ -1449,13 +1458,4 @@ export interface UpdateSourceIntent {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
-}
-
-export interface VariationBasis {
-  deltas: Array<VariationDelta>
-}
-
-export interface VariationDelta {
-  region: Array<InterpolationSupport>
-  values: Float64Array
 }

@@ -233,9 +233,6 @@ interface FontMetadata {
   description?: string;
   note?: string;
 }
-interface FontMetrics {
-  unitsPerEm: number;
-}
 type KerningPosition = "first" | "second";
 interface Location {
   values: Record<AxisId, number>;
@@ -253,7 +250,9 @@ interface NamedInstance {
   location: Location;
   postscriptName?: string;
 }
-type PointType = "onCurve" | "offCurve" | "qCurve";
+interface FontMetrics {
+  unitsPerEm: number;
+}
 interface Source {
   id: SourceId;
   name: string;
@@ -265,6 +264,7 @@ interface Source {
   underlinePosition?: number;
   underlineThickness?: number;
 }
+type PointType = "onCurve" | "offCurve" | "qCurve";
 interface SourceMetricValue {
   metricId: MetricId;
   position: number;

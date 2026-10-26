@@ -1,7 +1,7 @@
 import type { CommandId, RendererCommandId } from "../commands";
 import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
-import type { FontSessionMode } from "../workspace/protocol";
+import type { FontSessionMode, FontStoreLocation } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AppConfigState, ThemeSetting } from "../config/config";
@@ -229,4 +229,42 @@ export interface ShiftHost {
     writeText: (text: string) => Promise<void>;
     readText: () => Promise<string>;
   };
+  /**
+   * Synchronous, read-only access to the open workspace's stored layers, so
+   * the window's editing engine can load what an edit reads within the edit.
+   *
+   * @remarks
+   * Every call blocks on SQLite and returns committed state, including unsaved
+   * edits in a document's recovery overlay. Writes stay in the utility process.
+   */
+  layers: LayerReaderHost;
+}
+
+/** Handle-based read-only layer access; handles are opaque numbers. */
+export interface LayerReaderHost {
+  /**
+   * Opens a reader for the store at `location`.
+   *
+   * @throws {Error} when the store cannot be opened read-only.
+   */
+  open: (location: FontStoreLocation) => number;
+  /**
+   * The font's metadata and its glyph and layer directory, every layer a
+   * placeholder, as named MessagePack: what the editing engine opens with.
+   *
+   * @throws {Error} for an unknown reader, or when the directory cannot be read.
+   */
+  directory: (reader: number) => Uint8Array;
+  /**
+   * The content of `layerIds` as one MessagePack array of named-field layers.
+   *
+   * @throws {Error} for an unknown reader, an unknown layer, or a layer that cannot be decoded.
+   */
+  load: (reader: number, layerIds: readonly string[]) => Uint8Array;
+  /** `glyphIds` plus every glyph their components use, transitively. */
+  componentClosure: (reader: number, glyphIds: readonly string[]) => string[];
+  /** Glyphs with a component of a glyph that owns one of `layerIds`. */
+  dependents: (reader: number, layerIds: readonly string[]) => string[];
+  /** Releases a reader; unknown handles are ignored. */
+  close: (reader: number) => void;
 }

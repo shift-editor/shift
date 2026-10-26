@@ -42,14 +42,14 @@ export type ChannelServer<Events extends EventMap> = {
   dispose(): void;
 };
 
-type RequestEnvelope = {
+export type RequestEnvelope = {
   kind: "request";
   id: string;
   type: string;
   payload: unknown;
 };
 
-type ResponseEnvelope =
+export type ResponseEnvelope =
   | { kind: "response"; id: string; ok: true; result: unknown }
   | { kind: "response"; id: string; ok: false; error: TransportError };
 
@@ -268,7 +268,7 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
   };
 }
 
-function isRequestEnvelope(data: unknown): data is RequestEnvelope {
+export function isRequestEnvelope(data: unknown): data is RequestEnvelope {
   const candidate = data as RequestEnvelope | null;
 
   return (

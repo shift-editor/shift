@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { layerReaderHost } from "../../preload/layerReaders";
 import { Channel, nodePortTransport, type Transport } from "../../shared/workspace/channel";
 import {
   mintContourId,
@@ -21,17 +22,20 @@ import {
   type SourceId,
   type Unicode,
 } from "@shift/types";
-import type {
-  ByteStreamControl,
-  ByteStreamMessage,
-  ShellCallMap,
-  ShellEventMap,
-  SlugAtlasOrigin,
-  SyncCallMap,
-  SyncEventMap,
-  WorkspaceDocumentState,
-  WorkspaceSnapshot,
+import {
+  FontStoreLocation,
+  type ByteStreamControl,
+  type ByteStreamMessage,
+  type ShellCallMap,
+  type ShellEventMap,
+  type SlugAtlasOrigin,
+  type SyncCallMap,
+  type SyncEventMap,
+  type WorkspaceDocumentState,
+  type WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
+import { loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
+import { engineLayerSource } from "../../renderer/src/lib/engine/engineLayerSource";
 import { WorkspaceHost } from "./WorkspaceHost";
 
 type ShellChannel = Channel<ShellCallMap, ShellEventMap>;
@@ -84,11 +88,21 @@ function createGlyphALayer(sourceId: SourceId): {
   };
 }
 type SyncChannel = Channel<SyncCallMap, SyncEventMap>;
+type WorkspacePersisted = SyncCallMap["workspace.persist"]["response"];
+
+/** The engine a test's window holds over one lane's store, and the reader it loads through. */
+interface HeldEngine {
+  readonly session: EngineSession;
+  readonly reader: number;
+  readonly location: FontStoreLocation;
+}
 
 describe("WorkspaceHost serves the workspace over transferred ports", () => {
   let tmpRoot: string;
   let shell: ShellChannel;
   const channels: Array<ShellChannel | SyncChannel> = [];
+  const layerReaders = layerReaderHost();
+  const engines = new Map<SyncChannel, HeldEngine>();
 
   function startHost(shellTransport: Transport): void {
     new WorkspaceHost({
@@ -119,23 +133,78 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     return { shell: additionalShell, sync: await connectSyncLane(additionalShell) };
   }
 
+  /**
+   * The editing engine a window holds over `sync`'s store: opened on first
+   * use, and again when the store moves, with its own undo history.
+   */
+  async function engineFor(sync: SyncChannel): Promise<EngineSession> {
+    const location = await sync.call("workspace.storeLocation", undefined);
+    if (!location) throw new Error("the workspace has no store to edit");
+    const held = engines.get(sync);
+    if (held && FontStoreLocation.equals(held.location, location)) return held.session;
+    if (held) disposeEngine(held);
+
+    const reader = layerReaders.open(location);
+    const { EngineSession } = await loadEngine();
+    const session = EngineSession.open(
+      layerReaders.directory(reader),
+      engineLayerSource(layerReaders, () => reader),
+    );
+    engines.set(sync, { session, reader, location });
+    return session;
+  }
+
+  function disposeEngine(held: HeldEngine): void {
+    held.session.dispose();
+    layerReaders.close(held.reader);
+  }
+
+  /** What a window does for an edit: applies it in its engine, then persists the change set. */
   async function applyWorkspace(
     sync: SyncChannel,
-    request: SyncCallMap["workspace.apply"]["request"],
-  ): Promise<SyncCallMap["workspace.apply"]["response"]["applied"]> {
-    return (await sync.call("workspace.apply", request)).applied;
+    request: { intents: FontIntent[]; label?: string },
+  ): Promise<WorkspacePersisted["applied"]> {
+    const persisted = await editWorkspace(sync, request);
+    return persisted?.applied ?? { layers: [], dependents: [] };
   }
 
-  async function undoWorkspace(
+  /** Persists what `intents` change; null when they change nothing, as a window sends nothing then. */
+  async function editWorkspace(
     sync: SyncChannel,
-  ): Promise<SyncCallMap["workspace.undo"]["response"]["applied"]> {
-    return (await sync.call("workspace.undo", undefined)).applied;
+    { intents }: { intents: FontIntent[]; label?: string },
+  ): Promise<WorkspacePersisted | null> {
+    const changeSet = changeSetOf(await engineFor(sync), intents);
+    return changeSet ? sync.call("workspace.persist", { changeSet, saveState: "unsaved" }) : null;
   }
 
-  async function redoWorkspace(
+  /** The change set `intents` make in `engine`, as one edit. */
+  function changeSetOf(engine: EngineSession, intents: FontIntent[]): Uint8Array | undefined {
+    engine.beginEdit();
+    try {
+      engine.apply(intents);
+    } catch (error) {
+      engine.cancelEdit();
+      throw error;
+    }
+    return engine.endEdit();
+  }
+
+  async function undoWorkspace(sync: SyncChannel): Promise<WorkspacePersisted["applied"] | null> {
+    return persistReplay(sync, (await engineFor(sync)).undo());
+  }
+
+  async function redoWorkspace(sync: SyncChannel): Promise<WorkspacePersisted["applied"] | null> {
+    return persistReplay(sync, (await engineFor(sync)).redo());
+  }
+
+  async function persistReplay(
     sync: SyncChannel,
-  ): Promise<SyncCallMap["workspace.redo"]["response"]["applied"]> {
-    return (await sync.call("workspace.redo", undefined)).applied;
+    replayed: EngineEdit | undefined,
+  ): Promise<WorkspacePersisted["applied"] | null> {
+    if (!replayed?.changeSet) return null;
+    const saveState = replayed.matchesSaved ? "matchesSaved" : "unsaved";
+    return (await sync.call("workspace.persist", { changeSet: replayed.changeSet, saveState }))
+      .applied;
   }
 
   async function streamSlugAtlas(
@@ -249,14 +318,14 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     fileName: string,
   ): Promise<{ path: string; workspaceId: string }> {
     const { workspaceId } = await createWorkspace(sync);
-    await sync.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    await applyWorkspace(sync, { intents: [createGlyphA()], label: "Add Glyph" });
     const documentPath = path.join(tmpRoot, fileName);
     await sync.call("workspace.saveAs", { path: documentPath });
     return { path: documentPath, workspaceId };
   }
 
   async function addGlyphB(sync: SyncChannel): Promise<void> {
-    await sync.call("workspace.apply", {
+    await applyWorkspace(sync, {
       intents: [createGlyph("B" as GlyphName, 66 as Unicode)],
       label: "Add Glyph",
     });
@@ -291,6 +360,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   });
 
   afterEach(() => {
+    for (const held of engines.values()) disposeEngine(held);
+    engines.clear();
     for (const channel of channels.splice(0)) channel.dispose();
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   });
@@ -307,6 +378,67 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(await sync.call("document.state", undefined)).toBeNull();
     expect(fs.existsSync(path.join(tmpRoot, "workspaces"))).toBe(false);
     expect(fs.existsSync(path.join(tmpRoot, "atlas-cache"))).toBe(false);
+  });
+
+  it("has no layer store for a retained source", async () => {
+    await shell.call("source.open", { path: retainedFontPath });
+    const sync = await connectSyncLane();
+
+    expect(await sync.call("workspace.storeLocation", undefined)).toBeNull();
+  });
+
+  it("points a window's layer reader at an untitled workspace's store", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await applyWorkspace(sync, {
+      intents: glyph.intents,
+      label: "Add Glyph",
+    });
+
+    const location = await sync.call("workspace.storeLocation", undefined);
+    expect(location?.kind).toBe("working");
+    const layers = layerReaderHost();
+    const reader = layers.open(location!);
+    expect(new TextDecoder().decode(layers.load(reader, [glyph.layerId]))).toContain(glyph.layerId);
+
+    layers.close(reader);
+    expect(() => layers.load(reader, [glyph.layerId])).toThrow(/no layer reader/);
+  });
+
+  it("keeps the store Save As moves off until the window's reader follows", async () => {
+    const sync = await connectSyncLane();
+    const { workspaceId } = await createWorkspace(sync);
+    const storePath = path.join(tmpRoot, "workspaces", workspaceId, "document.sqlite");
+
+    await sync.call("workspace.saveAs", { path: path.join(tmpRoot, "Moved.shift") });
+    expect(fs.existsSync(storePath)).toBe(true);
+
+    await sync.call("workspace.releaseRetiredStores", undefined);
+    expect(fs.existsSync(storePath)).toBe(false);
+  });
+
+  it("points a window's layer reader at a document and its unsaved edits", async () => {
+    const sync = await connectSyncLane();
+    const snapshot = await createWorkspace(sync);
+    const documentPath = path.join(tmpRoot, "Reader.shift");
+    await sync.call("workspace.saveAs", { path: documentPath });
+    const unsaved = createGlyphALayer(snapshot.sources[0]!.id);
+    await applyWorkspace(sync, {
+      intents: unsaved.intents,
+      label: "Add Glyph",
+    });
+
+    const location = await sync.call("workspace.storeLocation", undefined);
+    expect(location).toMatchObject({
+      kind: "document",
+      documentPath: fs.realpathSync(documentPath),
+    });
+    const layers = layerReaderHost();
+    const reader = layers.open(location!);
+    expect(new TextDecoder().decode(layers.load(reader, [unsaved.layerId]))).toContain(
+      unsaved.layerId,
+    );
   });
 
   it("reads selected retained glyph geometry without authored state", async () => {
@@ -916,11 +1048,11 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       needsSaveAs: true,
     });
 
-    const applied = await sync.call("workspace.apply", {
+    const applied = await editWorkspace(sync, {
       intents: [createGlyphA()],
       label: "Add Glyph",
     });
-    expect(applied.documentState).toMatchObject({
+    expect(applied?.documentState).toMatchObject({
       dirty: true,
       needsSaveAs: true,
     });
@@ -954,7 +1086,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   it("workspace.close requires discard for dirty documents", async () => {
     const sync = await connectSyncLane();
     const created = await createWorkspace(sync);
-    await sync.call("workspace.apply", { intents: [createGlyphA()], label: "Add Glyph" });
+    await applyWorkspace(sync, { intents: [createGlyphA()], label: "Add Glyph" });
     const storePath = path.join(tmpRoot, "workspaces", created.workspaceId, "document.sqlite");
 
     await expect(shell.call("workspace.close", { discard: false })).rejects.toThrow(
@@ -1080,12 +1212,15 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await createWorkspace(sync);
     const savePath = path.join(tmpRoot, "Ordered.shift");
 
-    // Issue the apply and the save back-to-back without awaiting the apply. The
-    // host serializes both on one queue, so the save observes the glyph — if it
-    // had raced ahead, the doc would read dirty once the apply landed.
-    const apply = applyWorkspace(sync, { intents: [createGlyphA()], label: "Add Glyph" });
+    // Issue the persist and the save back-to-back without awaiting the persist,
+    // as a window does once its engine has applied the edit. The host
+    // serializes both on one queue, so the save observes the glyph — if it had
+    // raced ahead, the doc would read dirty once the persist landed.
+    const changeSet = changeSetOf(await engineFor(sync), [createGlyphA()]);
+    if (!changeSet) throw new Error("creating a glyph changes the font");
+    const persist = sync.call("workspace.persist", { changeSet, saveState: "unsaved" });
     const saved = await sync.call("workspace.saveAs", { path: savePath });
-    await apply;
+    await persist;
 
     expect(saved).toMatchObject({ dirty: false, needsSaveAs: false });
     await expect(shell.call("document.state", undefined)).resolves.toMatchObject({
@@ -1139,13 +1274,16 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(applied.layers[0].values[0]).toBe(642);
   });
 
-  it("apply rejects unknown intent kinds with a channel error", async () => {
+  it("persist rejects bytes that are not a change set with a channel error", async () => {
     const sync = await connectSyncLane();
     await createWorkspace(sync);
 
-    await expect(applyWorkspace(sync, { intents: [{ kind: "explodeFont" }] })).rejects.toThrow(
-      "explodeFont",
-    );
+    await expect(
+      sync.call("workspace.persist", {
+        changeSet: new Uint8Array([1, 2, 3]),
+        saveState: "unsaved",
+      }),
+    ).rejects.toThrow("cannot decode");
   });
 
   it("pen intents apply atomically with client-minted ids through the channel", async () => {
@@ -1274,7 +1412,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await undoWorkspace(sync);
     const before = await sync.call("document.state", undefined);
 
-    await sync.call("workspace.discardRedo", undefined);
+    (await engineFor(sync)).discardRedo();
 
     await expect(redoWorkspace(sync)).resolves.toBeNull();
     await expect(sync.call("document.state", undefined)).resolves.toEqual(before);

@@ -281,6 +281,31 @@ impl FontIntent {
         }
     }
 
+    /// Glyphs the components this intent adds or decomposes draw. A
+    /// decomposed component is read from its layer, so load that first.
+    pub fn edited_component_glyph_ids(&self, font: &Font) -> Vec<GlyphId> {
+        match self {
+            Self::AddComponent(AddComponent { base_glyph_id, .. }) => vec![base_glyph_id.clone()],
+            Self::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent { components, .. }) => {
+                components.iter().map(Component::base_glyph_id).collect()
+            }
+            Self::DecomposeComponents(DecomposeComponents {
+                layer_id,
+                component_ids,
+            }) => {
+                let Some(layer) = font.layer(layer_id) else {
+                    return Vec::new();
+                };
+                component_ids
+                    .iter()
+                    .filter_map(|component_id| layer.component(component_id))
+                    .map(Component::base_glyph_id)
+                    .collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
     /// Whether this intent can change a layer's anchors, so components
     /// attached to them elsewhere may follow.
     pub fn may_move_anchors(&self) -> bool {
@@ -322,9 +347,45 @@ impl FromIterator<FontIntent> for FontIntentSet {
 }
 
 impl FontIntentSet {
+    /// The layers this set names, which must be loaded before it applies.
+    pub fn required_layer_ids(&self, font: &Font) -> BTreeSet<LayerId> {
+        self.intents
+            .iter()
+            .flat_map(|intent| intent.required_layer_ids(font))
+            .collect()
+    }
+
+    /// Glyphs applying this set reads components from: those its new or
+    /// decomposed components draw, and those the edited layers' existing
+    /// components draw, since new components attach to their anchors. A
+    /// decomposed component is read from its layer, so load the layers this
+    /// set names first.
+    pub fn component_bases(&self, font: &Font) -> BTreeSet<GlyphId> {
+        let mut glyph_ids: BTreeSet<GlyphId> = self
+            .intents
+            .iter()
+            .flat_map(|intent| intent.edited_component_glyph_ids(font))
+            .collect();
+        glyph_ids.extend(font.component_glyph_ids_of_layers(&self.required_layer_ids(font)));
+        glyph_ids
+    }
+
+    /// The kerning values this set writes, by source and pair.
+    fn kerning_keys(&self) -> BTreeSet<(SourceId, KerningPair)> {
+        let mut keys = BTreeSet::new();
+        for intent in &self.intents {
+            if let FontIntent::SetKerningValues(intent) = intent {
+                for edit in &intent.edits {
+                    keys.insert((edit.source_id.clone(), edit.pair.clone()));
+                }
+            }
+        }
+        keys
+    }
+
     /// Layers whose anchors this set may change; components attached to them
     /// in other glyphs follow.
-    pub fn layers_with_anchor_edits(&self) -> Vec<LayerId> {
+    pub fn layers_with_anchor_edits(&self) -> BTreeSet<LayerId> {
         self.intents
             .iter()
             .filter(|intent| intent.may_move_anchors())
@@ -334,25 +395,88 @@ impl FontIntentSet {
     }
 }
 
-/// Layers an intent set touched, in first-touch order, with whether any
-/// touch changed structure.
+/// What an edit touched, which bounds the scopes its change set compares:
+/// glyphs it replaced whole, layers in first-touch order with whether any
+/// touch changed structure, kerning values, and whether it edited groups.
 #[derive(Default)]
-struct TouchedLayers(Vec<(LayerId, bool)>);
+struct EditScopes {
+    glyph_ids: Vec<GlyphId>,
+    layers: Vec<(LayerId, bool)>,
+    kerning_keys: BTreeSet<(SourceId, KerningPair)>,
+    edits_groups: bool,
+}
 
-impl TouchedLayers {
-    fn touch(&mut self, layer_id: LayerId, structural: bool) {
-        match self.0.iter_mut().find(|(id, _)| *id == layer_id) {
+impl EditScopes {
+    fn touch_layer(&mut self, layer_id: LayerId, structural: bool) {
+        match self.layers.iter_mut().find(|(id, _)| *id == layer_id) {
             Some((_, flag)) => *flag |= structural,
-            None => self.0.push((layer_id, structural)),
+            None => self.layers.push((layer_id, structural)),
         }
     }
 
-    fn ids(&self) -> impl Iterator<Item = &LayerId> {
-        self.0.iter().map(|(layer_id, _)| layer_id)
+    fn touch_glyph(&mut self, glyph_id: GlyphId) {
+        if !self.glyph_ids.contains(&glyph_id) {
+            self.glyph_ids.push(glyph_id);
+        }
+    }
+
+    fn layer_ids(&self) -> impl Iterator<Item = &LayerId> {
+        self.layers.iter().map(|(layer_id, _)| layer_id)
+    }
+
+    /// The change set taking `before` to `after` within these scopes.
+    fn diff(self, before: &Font, after: &Font) -> CoreResult<AppliedIntents> {
+        let diff = FontDiff { before, after };
+        let mut changes = diff.records();
+        changes.extend(diff.kerning(self.kerning_keys, self.edits_groups));
+        changes.extend(diff.glyphs(&self.glyph_ids));
+        let (layer_changes, layers) = diff.layers(self.layers, &self.glyph_ids)?;
+        changes.extend(layer_changes);
+        Ok(AppliedIntents {
+            changes: FontChangeSet::new(changes),
+            layers,
+        })
+    }
+}
+
+/// A change set's scopes, read back from its changes.
+impl<'a> FromIterator<&'a FontChange> for EditScopes {
+    fn from_iter<I: IntoIterator<Item = &'a FontChange>>(changes: I) -> Self {
+        let mut scopes = Self::default();
+        for change in changes {
+            match change {
+                FontChange::Glyph(glyph) => {
+                    for side in glyph.sides() {
+                        scopes.touch_glyph(side.id());
+                        for layer in side.layers().values() {
+                            scopes.touch_layer(layer.id(), true);
+                        }
+                    }
+                }
+                FontChange::Layer {
+                    layer, structural, ..
+                } => {
+                    if let Some(side) = layer.after.as_ref().or(layer.before.as_ref()) {
+                        scopes.touch_layer(side.id(), *structural);
+                    }
+                }
+                FontChange::KerningValue {
+                    source_id, pair, ..
+                } => {
+                    scopes
+                        .kerning_keys
+                        .insert((source_id.clone(), pair.clone()));
+                }
+                FontChange::KerningGroup { .. } => scopes.edits_groups = true,
+                _ => {}
+            }
+        }
+        scopes
     }
 }
 
 /// One touched layer after an intent set applied.
+#[derive(Debug)]
 pub struct TouchedLayer {
     pub layer: Arc<GlyphLayer>,
     pub structural: bool,
@@ -370,6 +494,7 @@ impl TouchedLayer {
 
 /// Outcome of applying an intent set: one reversible changeset plus
 /// replace-grade layer state for echo assembly.
+#[derive(Debug)]
 pub struct AppliedIntents {
     pub changes: FontChangeSet,
     /// Unique touched layers in first-touch order; `structural` is OR-ed
@@ -415,24 +540,25 @@ impl Font {
     pub fn apply_intents(&mut self, set: &FontIntentSet) -> CoreResult<AppliedIntents> {
         let before = self.clone();
         let mut after = self.clone();
-        let mut touched = TouchedLayers::default();
-        let mut glyph_ids = Vec::new();
+        let mut scopes = EditScopes {
+            kerning_keys: set.kerning_keys(),
+            edits_groups: set.intents.iter().any(FontIntent::edits_kerning_groups),
+            ..EditScopes::default()
+        };
 
         for intent in &set.intents {
             match intent.kind() {
                 IntentKind::Layer(intent) => {
                     intent.apply(&mut after)?;
-                    touched.touch(intent.layer_id().clone(), intent.structural());
+                    scopes.touch_layer(intent.layer_id().clone(), intent.structural());
                 }
                 IntentKind::Font(intent) => {
                     let (layer_ids, glyph_id) = intent.apply(&mut after)?;
                     for layer_id in layer_ids {
-                        touched.touch(layer_id, true);
+                        scopes.touch_layer(layer_id, true);
                     }
-                    if let Some(glyph_id) = glyph_id
-                        && !glyph_ids.contains(&glyph_id)
-                    {
-                        glyph_ids.push(glyph_id);
+                    if let Some(glyph_id) = glyph_id {
+                        scopes.touch_glyph(glyph_id);
                     }
                 }
             }
@@ -440,22 +566,33 @@ impl Font {
 
         // Components sitting on anchors this set moved follow them, in the same undo step.
         for (layer_id, structural) in
-            realign_attached_components(&before, &mut after, touched.ids())
+            realign_attached_components(&before, &mut after, scopes.layer_ids())
         {
-            touched.touch(layer_id, structural);
+            scopes.touch_layer(layer_id, structural);
         }
 
-        let mut changes = font_record_changes(&before, &after);
-        changes.extend(kerning_changes(set, &before, &after));
-        changes.extend(glyph_changes(&glyph_ids, &before, &after));
-        let (layer_changes, layers) = layer_changes(touched, &glyph_ids, &before, &after)?;
-        changes.extend(layer_changes);
-
+        let applied = scopes.diff(&before, &after)?;
         *self = after;
-        Ok(AppliedIntents {
-            changes: FontChangeSet::new(changes),
-            layers,
-        })
+        Ok(applied)
+    }
+
+    /// One change set for several that were applied in turn and left this
+    /// font: each scope they touched, from its value before the first to its
+    /// value now, as [`Self::apply_intents`] coalesces repeated writes within
+    /// one set. The values before come from the change sets themselves, so
+    /// layers loaded only partway through are still right.
+    ///
+    /// # Errors
+    ///
+    /// Returns the font's error when the change sets do not undo from this
+    /// font, or a touched layer moved between glyphs.
+    pub fn coalesce(&self, change_sets: &[FontChangeSet]) -> CoreResult<AppliedIntents> {
+        let mut before = self.clone();
+        for change_set in change_sets.iter().rev() {
+            before.apply_change_set(&change_set.inverted())?;
+        }
+        let scopes: EditScopes = change_sets.iter().flat_map(|set| &set.changes).collect();
+        scopes.diff(&before, self)
     }
 
     fn apply_create_glyph(
@@ -790,177 +927,185 @@ impl Font {
     }
 }
 
-/// Changes to font-level records: metadata, lib values, axes, mappings,
-/// metric definitions, named instances, and sources.
-fn font_record_changes(before: &Font, after: &Font) -> Vec<FontChange> {
-    let mut changes = Vec::new();
-    if before.metadata() != after.metadata() {
-        changes.push(FontChange::Metadata(Box::new(Replacement::new(
-            before.metadata().clone(),
-            after.metadata().clone(),
-        ))));
-    }
-
-    let lib_keys = before
-        .lib()
-        .keys()
-        .chain(after.lib().keys())
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    for key in lib_keys {
-        let original = before.lib().get(&key).cloned();
-        let replacement = after.lib().get(&key).cloned();
-        if original != replacement {
-            changes.push(FontChange::LibValue {
-                key,
-                value: Replacement::new(original, replacement),
-            });
-        }
-    }
-
-    if before.axes() != after.axes() {
-        changes.push(FontChange::Axes(Replacement::new(
-            before.axes().to_vec(),
-            after.axes().to_vec(),
-        )));
-    }
-    if before.axis_mappings() != after.axis_mappings() {
-        changes.push(FontChange::AxisMappings(Replacement::new(
-            before.axis_mappings().to_vec(),
-            after.axis_mappings().to_vec(),
-        )));
-    }
-    if before.metric_definitions() != after.metric_definitions() {
-        changes.push(FontChange::MetricDefinitions(Replacement::new(
-            before.metric_definitions().to_vec(),
-            after.metric_definitions().to_vec(),
-        )));
-    }
-    if before.named_instances() != after.named_instances() {
-        changes.push(FontChange::NamedInstances(Replacement::new(
-            before.named_instances().to_vec(),
-            after.named_instances().to_vec(),
-        )));
-    }
-
-    let before_sources = SourceCollection {
-        sources: before.sources().to_vec(),
-        default_source_id: before.default_source_id(),
-    };
-    let after_sources = SourceCollection {
-        sources: after.sources().to_vec(),
-        default_source_id: after.default_source_id(),
-    };
-    if before_sources != after_sources {
-        changes.push(FontChange::Sources(Replacement::new(
-            before_sources,
-            after_sources,
-        )));
-    }
-    changes
+/// The changes taking one font to another, compared one scope at a time.
+struct FontDiff<'a> {
+    before: &'a Font,
+    after: &'a Font,
 }
 
-/// Kerning values the set edited and groups it created, renamed, filled, or deleted.
-fn kerning_changes(set: &FontIntentSet, before: &Font, after: &Font) -> Vec<FontChange> {
-    let mut changes = Vec::new();
-    let kerning_keys = set
-        .intents
-        .iter()
-        .filter_map(|intent| match intent {
-            FontIntent::SetKerningValues(intent) => Some(&intent.edits),
-            _ => None,
-        })
-        .flatten()
-        .map(|edit| (edit.source_id.clone(), edit.pair.clone()))
-        .collect::<BTreeSet<_>>();
-    for (source_id, pair) in kerning_keys {
-        let original = before.kerning().value(&source_id, &pair);
-        let replacement = after.kerning().value(&source_id, &pair);
-        if original != replacement {
-            changes.push(FontChange::KerningValue {
-                source_id,
-                pair,
-                value: Replacement::new(original, replacement),
-            });
-        }
-    }
-
-    if set.intents.iter().any(FontIntent::edits_kerning_groups) {
-        for (group_id, original, replacement) in before.kerning().changed_groups(after.kerning()) {
-            changes.push(FontChange::KerningGroup {
-                group_id: group_id.clone(),
-                group: Replacement::new(original.cloned(), replacement.cloned()),
-            });
-        }
-    }
-    changes
-}
-
-/// Whole-glyph replacements for glyphs the set created or changed.
-fn glyph_changes(glyph_ids: &[GlyphId], before: &Font, after: &Font) -> Vec<FontChange> {
-    let mut changes = Vec::new();
-    for glyph_id in glyph_ids {
-        let original = before.glyph(glyph_id).cloned();
-        let replacement = after.glyph(glyph_id).cloned();
-        if original != replacement {
-            changes.push(FontChange::Glyph(Box::new(Replacement::new(
-                original,
-                replacement,
+impl FontDiff<'_> {
+    /// Changes to font-level records: metadata, lib values, axes, mappings,
+    /// metric definitions, named instances, and sources.
+    fn records(&self) -> Vec<FontChange> {
+        let Self { before, after } = *self;
+        let mut changes = Vec::new();
+        if before.metadata() != after.metadata() {
+            changes.push(FontChange::Metadata(Box::new(Replacement::new(
+                before.metadata().clone(),
+                after.metadata().clone(),
             ))));
         }
-    }
-    changes
-}
 
-/// Layer replacements for touched layers, with the replace-grade layers for
-/// the echo. Layers inside a replaced glyph only report their new state.
-fn layer_changes(
-    touched: TouchedLayers,
-    glyph_ids: &[GlyphId],
-    before: &Font,
-    after: &Font,
-) -> CoreResult<(Vec<FontChange>, Vec<TouchedLayer>)> {
-    let mut changes = Vec::new();
-    let mut layers = Vec::new();
-    for (layer_id, structural) in touched.0 {
-        let original_owner = before.glyph_id_by_layer(&layer_id);
-        let replacement_owner = after.glyph_id_by_layer(&layer_id);
-        let glyph_id = match (&original_owner, &replacement_owner) {
-            (Some(original), Some(replacement)) if original != replacement => {
-                return Err(CoreError::LayerGlyphMismatch {
-                    layer_id,
-                    glyph_id: original.clone(),
-                    actual_glyph_id: replacement.clone(),
+        let lib_keys = before
+            .lib()
+            .keys()
+            .chain(after.lib().keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        for key in lib_keys {
+            let original = before.lib().get(&key).cloned();
+            let replacement = after.lib().get(&key).cloned();
+            if original != replacement {
+                changes.push(FontChange::LibValue {
+                    key,
+                    value: Replacement::new(original, replacement),
                 });
             }
-            (Some(glyph_id), _) | (_, Some(glyph_id)) => glyph_id.clone(),
-            (None, None) => return Err(CoreError::LayerNotFound(layer_id)),
+        }
+
+        if before.axes() != after.axes() {
+            changes.push(FontChange::Axes(Replacement::new(
+                before.axes().to_vec(),
+                after.axes().to_vec(),
+            )));
+        }
+        if before.axis_mappings() != after.axis_mappings() {
+            changes.push(FontChange::AxisMappings(Replacement::new(
+                before.axis_mappings().to_vec(),
+                after.axis_mappings().to_vec(),
+            )));
+        }
+        if before.metric_definitions() != after.metric_definitions() {
+            changes.push(FontChange::MetricDefinitions(Replacement::new(
+                before.metric_definitions().to_vec(),
+                after.metric_definitions().to_vec(),
+            )));
+        }
+        if before.named_instances() != after.named_instances() {
+            changes.push(FontChange::NamedInstances(Replacement::new(
+                before.named_instances().to_vec(),
+                after.named_instances().to_vec(),
+            )));
+        }
+
+        let before_sources = SourceCollection {
+            sources: before.sources().to_vec(),
+            default_source_id: before.default_source_id(),
         };
-
-        let original = before
-            .glyph(&glyph_id)
-            .and_then(|glyph| glyph.layers().get(&layer_id))
-            .cloned();
-        let replacement = after
-            .glyph(&glyph_id)
-            .and_then(|glyph| glyph.layers().get(&layer_id))
-            .cloned();
-        if original == replacement {
-            continue;
+        let after_sources = SourceCollection {
+            sources: after.sources().to_vec(),
+            default_source_id: after.default_source_id(),
+        };
+        if before_sources != after_sources {
+            changes.push(FontChange::Sources(Replacement::new(
+                before_sources,
+                after_sources,
+            )));
         }
-
-        if !glyph_ids.contains(&glyph_id) {
-            changes.push(FontChange::Layer {
-                glyph_id,
-                layer: Replacement::new(original, replacement.clone()),
-                structural,
-            });
-        }
-        if let Some(layer) = replacement {
-            layers.push(TouchedLayer { layer, structural });
-        }
+        changes
     }
-    Ok((changes, layers))
+
+    /// Kerning value replacements for `kerning_keys`, and every changed group
+    /// when the edit touched groups.
+    fn kerning(
+        &self,
+        kerning_keys: BTreeSet<(SourceId, KerningPair)>,
+        edits_groups: bool,
+    ) -> Vec<FontChange> {
+        let Self { before, after } = *self;
+        let mut changes = Vec::new();
+        for (source_id, pair) in kerning_keys {
+            let original = before.kerning().value(&source_id, &pair);
+            let replacement = after.kerning().value(&source_id, &pair);
+            if original != replacement {
+                changes.push(FontChange::KerningValue {
+                    source_id,
+                    pair,
+                    value: Replacement::new(original, replacement),
+                });
+            }
+        }
+
+        if edits_groups {
+            for (group_id, original, replacement) in
+                before.kerning().changed_groups(after.kerning())
+            {
+                changes.push(FontChange::KerningGroup {
+                    group_id: group_id.clone(),
+                    group: Replacement::new(original.cloned(), replacement.cloned()),
+                });
+            }
+        }
+        changes
+    }
+
+    /// Whole-glyph replacements for glyphs the set created or changed.
+    fn glyphs(&self, glyph_ids: &[GlyphId]) -> Vec<FontChange> {
+        let Self { before, after } = *self;
+        let mut changes = Vec::new();
+        for glyph_id in glyph_ids {
+            let original = before.glyph(glyph_id).cloned();
+            let replacement = after.glyph(glyph_id).cloned();
+            if original != replacement {
+                changes.push(FontChange::Glyph(Box::new(Replacement::new(
+                    original,
+                    replacement,
+                ))));
+            }
+        }
+        changes
+    }
+
+    /// Layer replacements for touched layers, with the replace-grade layers for
+    /// the echo. Layers inside a replaced glyph only report their new state.
+    fn layers(
+        &self,
+        touched: Vec<(LayerId, bool)>,
+        glyph_ids: &[GlyphId],
+    ) -> CoreResult<(Vec<FontChange>, Vec<TouchedLayer>)> {
+        let Self { before, after } = *self;
+        let mut changes = Vec::new();
+        let mut layers = Vec::new();
+        for (layer_id, structural) in touched {
+            let original_owner = before.glyph_id_by_layer(&layer_id);
+            let replacement_owner = after.glyph_id_by_layer(&layer_id);
+            let glyph_id = match (&original_owner, &replacement_owner) {
+                (Some(original), Some(replacement)) if original != replacement => {
+                    return Err(CoreError::LayerGlyphMismatch {
+                        layer_id,
+                        glyph_id: original.clone(),
+                        actual_glyph_id: replacement.clone(),
+                    });
+                }
+                (Some(glyph_id), _) | (_, Some(glyph_id)) => glyph_id.clone(),
+                (None, None) => return Err(CoreError::LayerNotFound(layer_id)),
+            };
+
+            let original = before
+                .glyph(&glyph_id)
+                .and_then(|glyph| glyph.layers().get(&layer_id))
+                .cloned();
+            let replacement = after
+                .glyph(&glyph_id)
+                .and_then(|glyph| glyph.layers().get(&layer_id))
+                .cloned();
+            if original == replacement {
+                continue;
+            }
+
+            if !glyph_ids.contains(&glyph_id) {
+                changes.push(FontChange::Layer {
+                    glyph_id,
+                    layer: Replacement::new(original, replacement.clone()),
+                    structural,
+                });
+            }
+            if let Some(layer) = replacement {
+                layers.push(TouchedLayer { layer, structural });
+            }
+        }
+        Ok((changes, layers))
+    }
 }
 
 #[cfg(test)]
@@ -1429,6 +1574,53 @@ mod tests {
         let point = &layer.contours_iter().next().unwrap().points()[0];
         assert!(layer.components().is_empty());
         assert_eq!((point.x(), point.y()), (40.0, 25.0));
+    }
+
+    #[test]
+    fn decompose_components_draws_the_base_on_every_master() {
+        // Each master's components have their own ids, so decomposing on a
+        // master other than the default must read that master's components.
+        let mut font = crate::test_support::sample_font();
+        let sources: Vec<SourceId> = font.sources().iter().map(Source::id).collect();
+        let mut base = Glyph::with_id(GlyphId::from_raw("base"), "base");
+        let mut composite = Glyph::with_id(GlyphId::from_raw("composite"), "composite");
+        for source_id in &sources {
+            let mut layer = GlyphLayer::with_width(
+                LayerId::from_raw(format!("base_{source_id}")),
+                source_id.clone(),
+                500.0,
+            );
+            layer.add_contour(crate::contour![(0, 0), (400, 0), (400, 700)]);
+            base.set_layer(layer);
+            let mut layer = GlyphLayer::with_width(
+                LayerId::from_raw(format!("composite_{source_id}")),
+                source_id.clone(),
+                500.0,
+            );
+            layer.add_component(Component::with_id(
+                ComponentId::from_raw(format!("component_{source_id}")),
+                GlyphId::from_raw("base"),
+                "base",
+                DecomposedTransform::identity(),
+            ));
+            composite.set_layer(layer);
+        }
+        font.insert_glyph(base).unwrap();
+        font.insert_glyph(composite).unwrap();
+
+        for source_id in &sources {
+            let mut font = font.clone();
+            let layer_id = LayerId::from_raw(format!("composite_{source_id}"));
+            font.apply_intents(&FontIntentSet::from(DecomposeComponents {
+                layer_id: layer_id.clone(),
+                component_ids: vec![ComponentId::from_raw(format!("component_{source_id}"))],
+            }))
+            .unwrap();
+
+            let layer = font.layer(&layer_id).unwrap();
+            assert!(layer.components().is_empty(), "{source_id}");
+            assert_eq!(layer.contours_iter().count(), 1, "{source_id}");
+        }
     }
 
     #[test]

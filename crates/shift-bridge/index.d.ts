@@ -47,7 +47,7 @@ export declare class Bridge {
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAsDocument(path: string, recoveryPath: string): NapiDocumentState
   discardWorkspaceChanges(): NapiDocumentState
-  getMetadata(): NapiFontMetadata
+  getMetadata(): FontMetadata
   getMetrics(): NapiFontMetrics
   /**
    * Lists glyph records whose layers are only those on [`Font::masters`], so every listed
@@ -60,7 +60,7 @@ export declare class Bridge {
    * `FontWorkspace::apply` call. One call = one SQLite transaction = one
    * undo step, however many intents the set batches.
    */
-  apply(intents: Array<NapiFontIntent>, label?: string | undefined | null): NapiAppliedChange
+  apply(intents: Array<FontIntent>, label?: string | undefined | null): NapiAppliedChange
   /**
    * Applies the most recent ledger entry's inverse changeset; `null` when
    * the undo stack is empty.
@@ -71,6 +71,21 @@ export declare class Bridge {
    * stack is empty.
    */
   redo(): NapiAppliedChange | null
+  /**
+   * Persists a change set, as named MessagePack, that a session over this
+   * font already applied, and returns its echo: the layers it touched, the
+   * font-level and glyph records it changed, and the composites that depend
+   * on them. Nothing is added to this workspace's undo ledger. `save_state`
+   * claims where the change leaves the font; the store verifies a claim to
+   * match the saved document before discarding unsaved edits.
+   *
+   * # Errors
+   *
+   * Fails when the bytes do not decode to a change set, when a `before` in it
+   * does not match this font, or when the write fails; the font is then
+   * unchanged.
+   */
+  persist(changeSet: Uint8Array, saveState: NapiSaveState): NapiAppliedChange
   /** Permanently removes every redo entry without changing font or dirty state. */
   discardRedo(): void
   /** Glyph-addressed snapshots for renderer-local synchronous font state. */
@@ -128,7 +143,7 @@ export declare class Bridge {
    * boundary, so the payload stays orders of magnitude lighter than
    * `get_glyph_snapshots`.
    */
-  getGlyphPreviews(glyphIds: Array<GlyphId>, location: NapiLocation): Array<NapiGlyphPreview>
+  getGlyphPreviews(glyphIds: Array<GlyphId>, location: Location): Array<NapiGlyphPreview>
   /**
    * Builds one complete authored Slug generation without resolving a location.
    *
@@ -170,10 +185,10 @@ export declare class Bridge {
   /** Evaluates every resident page's small weight buffer at one source location. */
   sourceAtlasWeights(coordinates: Array<number>): Array<NapiCatalogAtlasWeights>
   isVariable(): boolean
-  getAxes(): Array<NapiAxis>
-  getAxisMappings(): Array<NapiAxisMapping>
+  getAxes(): Array<Axis>
+  getAxisMappings(): Array<AxisMapping>
   getAxisMappingBases(): Array<NapiAxisMappingBasis>
-  getMetricDefinitions(): Array<NapiMetricDefinition>
+  getMetricDefinitions(): Array<MetricDefinition>
   /**
    * Returns the font's tracked Hyperglot language ids in authored order.
    *
@@ -186,7 +201,7 @@ export declare class Bridge {
    * kerning interpolates over.
    */
   getKerning(): NapiKerningSnapshot
-  getNamedInstances(): Array<NapiNamedInstance>
+  getNamedInstances(): Array<NamedInstance>
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   /**
@@ -210,8 +225,68 @@ export declare class Bridge {
    * glyph categories, feature code, or axes.
    */
   shaperFont(knownRevision?: number | undefined | null): NapiShaperFont | null
-  mapLocation(location: NapiLocation): NapiLocation
+  mapLocation(location: Location): Location
   getSources(): Array<NapiSource>
+}
+
+/** A read-only view of a workspace's store. */
+export declare class LayerReader {
+  /**
+   * Reads a document together with its recovery overlay.
+   *
+   * # Errors
+   *
+   * Fails when either file cannot be opened read-only or the document is not a supported
+   * Shift document.
+   */
+  static openDocument(documentPath: string, recoveryPath: string): LayerReader
+  /**
+   * Reads the working store behind an untitled or imported workspace.
+   *
+   * # Errors
+   *
+   * Fails when the store cannot be opened read-only.
+   */
+  static openWorkingStore(storePath: string): LayerReader
+  /**
+   * The font's metadata and its glyph and layer directory, every layer a
+   * placeholder, as named MessagePack: what an engine session opens with.
+   *
+   * # Errors
+   *
+   * Fails when the directory cannot be read or encoded.
+   */
+  loadDirectory(): Buffer
+  /**
+   * The content of `layer_ids` as one MessagePack array of named-field
+   * layers, the encoding the engine decodes.
+   *
+   * # Errors
+   *
+   * Fails on a malformed or unknown layer id, and when a layer cannot be read or decoded.
+   */
+  loadLayers(layerIds: Array<string>): Buffer
+  /**
+   * `glyph_ids` plus every glyph their components use, transitively.
+   *
+   * # Errors
+   *
+   * Fails on a malformed glyph id or when the component references cannot be read.
+   */
+  componentClosure(glyphIds: Array<string>): Array<string>
+  /**
+   * Glyphs with a component of a glyph that owns one of `layer_ids`.
+   *
+   * # Errors
+   *
+   * Fails on a malformed layer id or when the component references cannot be read.
+   */
+  dependents(layerIds: Array<string>): Array<string>
+  /**
+   * Closes the store's files now rather than when the reader is collected,
+   * so the workspace can delete them. Reads after this fail.
+   */
+  close(): void
 }
 
 /** Reads the settings in a `config.toml` source. */
@@ -306,11 +381,25 @@ export interface NapiNewWorkspace {
 export interface NapiParagraphRequest {
   units: Array<NapiShapeUnit>
   /** User-space location to shape at; omitted axes are at their default. */
-  location: NapiLocation
+  location: Location
   /** BCP 47 language tag; the default language system when omitted. */
   language?: string
   /** Settings over the features applied by default. */
   features?: Array<NapiFeatureSetting>
+}
+
+/**
+ * Where a persisted change leaves the font, as the session that made it
+ * claims.
+ */
+export declare const enum NapiSaveState {
+  /** The font now differs from the saved document. */
+  Unsaved = 'unsaved',
+  /**
+   * The font is back to the saved document, as an undo or redo onto the
+   * saved position leaves it; the store verifies this before trusting it.
+   */
+  MatchesSaved = 'matchesSaved'
 }
 
 /**
@@ -446,30 +535,320 @@ export interface NapiThemeSlots {
 
 /** Reads a `themes/<id>.toml` file. */
 export declare function themeRead(source: string): NapiThemeRead
-export interface NapiAddAnchorsIntent {
+export interface AddAnchorsIntent {
   layerId: LayerId
-  anchors: Array<NapiAnchorSeed>
+  anchors: Array<AnchorSeed>
 }
 
-export interface NapiAddComponentIntent {
+export interface AddComponentIntent {
   layerId: LayerId
   componentId: ComponentId
   baseGlyphId: GlyphId
 }
 
-export interface NapiAddContourIntent {
+export interface AddContourIntent {
   layerId: LayerId
   contourId: ContourId
   closed: boolean
 }
 
-export interface NapiAddPointsIntent {
+export interface AddPointsIntent {
   layerId: LayerId
   /** Absent when `before` carries the anchor; Rust derives the contour. */
   contourId?: ContourId
   /** Insert before this point; append when absent. */
   before?: PointId
-  points: Array<NapiPointSeed>
+  points: Array<PointSeed>
+}
+
+/**
+ * An anchor to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface AnchorSeed {
+  id: AnchorId
+  name?: string
+  x: number
+  y: number
+}
+
+export interface Axis {
+  id: AxisId
+  tag: string
+  name: string
+  role: AxisRole
+  axisType: AxisType
+  minimum?: number
+  default: number
+  maximum?: number
+  values?: Array<number>
+  labels: Array<AxisLabel>
+  hidden: boolean
+}
+
+export interface AxisLabel {
+  id: AxisLabelId
+  name: string
+  value: number
+  minimum?: number
+  maximum?: number
+  linkedValue?: number
+  elidable: boolean
+}
+
+export interface AxisMapping {
+  id: AxisMappingId
+  name: string
+  description?: string
+  inputs: Array<AxisId>
+  outputs: Array<AxisId>
+  points: Array<AxisMappingPoint>
+}
+
+export interface AxisMappingPoint {
+  description?: string
+  input: Location
+  output: Location
+}
+
+export declare const enum AxisRole {
+  External = 'external',
+  Internal = 'internal'
+}
+
+export declare const enum AxisType {
+  Continuous = 'continuous',
+  Discrete = 'discrete'
+}
+
+export interface BooleanOpIntent {
+  layerId: LayerId
+  contourIdA: ContourId
+  contourIdB: ContourId
+  /** "union" | "subtract" | "intersect" | "difference" */
+  operation: string
+}
+
+/** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
+export interface CloneGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+}
+
+/**
+ * Font-level axis creation. The axis id is client-minted; the tag is an
+ * OpenType label and must be unique within the font.
+ */
+export interface CreateAxisIntent {
+  axis: Axis
+}
+
+/**
+ * Font-level glyph creation. The glyph id is client-minted (decision 6:
+ * verbs return identity synchronously); Rust honors it and rejects
+ * duplicates.
+ */
+export interface CreateGlyphIntent {
+  glyphId: GlyphId
+  name: GlyphName
+  unicodes: Array<Unicode>
+}
+
+/** Creates one sparse glyph layer at an existing source for an existing glyph. */
+export interface CreateGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+}
+
+/** Creates an empty kerning group under an id the client mints. */
+export interface CreateKerningGroupIntent {
+  groupId: KerningGroupId
+  position: KerningPosition
+  name: string
+}
+
+/** Creates an authored named instance with client-minted stable identity. */
+export interface CreateNamedInstanceIntent {
+  instance: NamedInstance
+}
+
+/**
+ * Font-level source creation. The source id is client-minted so verbs can
+ * return identity synchronously; Rust honors it and rejects duplicates.
+ */
+export interface CreateSourceIntent {
+  sourceId: SourceId
+  name: string
+  /** Axis id → design-space value for the new source. */
+  location: Location
+}
+
+export interface DecomposeComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
+/** Font-level axis deletion. Removing an axis also reshapes source locations. */
+export interface DeleteAxisIntent {
+  axisId: AxisId
+}
+
+/** Deletes a kerning group; its pairs stay and resolve again on undo. */
+export interface DeleteKerningGroupIntent {
+  groupId: KerningGroupId
+}
+
+/** Deletes an authored named instance without changing sources or geometry. */
+export interface DeleteNamedInstanceIntent {
+  instanceId: NamedInstanceId
+}
+
+/** Font-level source deletion. Removing a source also removes its glyph layers. */
+export interface DeleteSourceIntent {
+  sourceId: SourceId
+}
+
+/** One edit as the editor sends it: `{ kind: "addPoints", addPoints: {…} }`. */
+export type FontIntent =
+  | { kind: 'addPoints', addPoints: AddPointsIntent }
+  | { kind: 'addContour', addContour: AddContourIntent }
+  | { kind: 'setContourClosed', setContourClosed: SetContourClosedIntent }
+  | { kind: 'movePoints', movePoints: MovePointsIntent }
+  | { kind: 'setPointSmooth', setPointSmooth: SetPointSmoothIntent }
+  | { kind: 'removePoints', removePoints: RemovePointsIntent }
+  | { kind: 'addAnchors', addAnchors: AddAnchorsIntent }
+  | { kind: 'moveAnchors', moveAnchors: MoveAnchorsIntent }
+  | { kind: 'removeAnchors', removeAnchors: RemoveAnchorsIntent }
+  | { kind: 'renameAnchors', renameAnchors: RenameAnchorsIntent }
+  | { kind: 'addComponent', addComponent: AddComponentIntent }
+  | { kind: 'setComponentTransforms', setComponentTransforms: SetComponentTransformsIntent }
+  | { kind: 'setComponentAlignment', setComponentAlignment: SetComponentAlignmentIntent }
+  | { kind: 'removeComponents', removeComponents: RemoveComponentsIntent }
+  | { kind: 'decomposeComponents', decomposeComponents: DecomposeComponentsIntent }
+  | { kind: 'reverseContour', reverseContour: ReverseContourIntent }
+  | { kind: 'setContourStart', setContourStart: SetContourStartIntent }
+  | { kind: 'translatePoints', translatePoints: TranslatePointsIntent }
+  | { kind: 'transformLayer', transformLayer: TransformLayerIntent }
+  | { kind: 'setXAdvance', setXAdvance: SetXAdvanceIntent }
+  | { kind: 'applyBooleanOp', applyBooleanOp: BooleanOpIntent }
+  | { kind: 'createGlyph', createGlyph: CreateGlyphIntent }
+  | { kind: 'updateGlyph', updateGlyph: UpdateGlyphIntent }
+  | { kind: 'updateFontMetadata', updateFontMetadata: UpdateFontMetadataIntent }
+  | { kind: 'setKerningValues', setKerningValues: SetKerningValuesIntent }
+  | { kind: 'createKerningGroup', createKerningGroup: CreateKerningGroupIntent }
+  | { kind: 'setKerningGroupMember', setKerningGroupMember: SetKerningGroupMemberIntent }
+  | { kind: 'renameKerningGroup', renameKerningGroup: RenameKerningGroupIntent }
+  | { kind: 'deleteKerningGroup', deleteKerningGroup: DeleteKerningGroupIntent }
+  | { kind: 'setLanguages', setLanguages: SetLanguagesIntent }
+  | { kind: 'createAxis', createAxis: CreateAxisIntent }
+  | { kind: 'updateAxis', updateAxis: UpdateAxisIntent }
+  | { kind: 'deleteAxis', deleteAxis: DeleteAxisIntent }
+  | { kind: 'setAxisMappings', setAxisMappings: SetAxisMappingsIntent }
+  | { kind: 'setMetricDefinitions', setMetricDefinitions: SetMetricDefinitionsIntent }
+  | { kind: 'createNamedInstance', createNamedInstance: CreateNamedInstanceIntent }
+  | { kind: 'updateNamedInstance', updateNamedInstance: UpdateNamedInstanceIntent }
+  | { kind: 'deleteNamedInstance', deleteNamedInstance: DeleteNamedInstanceIntent }
+  | { kind: 'deleteSource', deleteSource: DeleteSourceIntent }
+  | { kind: 'createSource', createSource: CreateSourceIntent }
+  | { kind: 'updateSource', updateSource: UpdateSourceIntent }
+  | { kind: 'createGlyphLayer', createGlyphLayer: CreateGlyphLayerIntent }
+  | { kind: 'cloneGlyphLayer', cloneGlyphLayer: CloneGlyphLayerIntent }
+  | { kind: 'materializeGlyphLayer', materializeGlyphLayer: MaterializeGlyphLayerIntent }
+
+export interface FontMetadata {
+  familyName?: string
+  styleName?: string
+  versionMajor?: number
+  versionMinor?: number
+  copyright?: string
+  trademark?: string
+  designer?: string
+  designerUrl?: string
+  manufacturer?: string
+  manufacturerUrl?: string
+  license?: string
+  licenseUrl?: string
+  description?: string
+  note?: string
+}
+
+export declare const enum KerningPosition {
+  First = 'first',
+  Second = 'second'
+}
+
+/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
+export interface KerningSide {
+  kind: KerningSideKind
+  id: string
+}
+
+export declare const enum KerningSideKind {
+  Glyph = 'glyph',
+  Group = 'group'
+}
+
+/** One kerning pair value to set or remove at one source. */
+export interface KerningValueEdit {
+  sourceId: SourceId
+  first: KerningSide
+  second: KerningSide
+  /** New value in font units; absent removes the pair at this source. */
+  amount?: number
+}
+
+export interface Location {
+  values: Record<AxisId, number>
+}
+
+/** Creates one sparse layer from resolved values at a design-space location. */
+export interface MaterializeGlyphLayerIntent {
+  layerId: LayerId
+  glyphId: GlyphId
+  sourceId: SourceId
+  fromLayerId: LayerId
+  /** Numeric state ordered like `GlyphState.values`. */
+  values: Float64Array
+}
+
+export interface MetricDefinition {
+  id: MetricId
+  kind: MetricKind
+  name: string
+}
+
+export declare const enum MetricKind {
+  Ascender = 'ascender',
+  CapHeight = 'capHeight',
+  XHeight = 'xHeight',
+  Baseline = 'baseline',
+  Descender = 'descender',
+  Custom = 'custom'
+}
+
+export interface MoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
+export interface MovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
+  coords: Array<number>
+}
+
+/** NAPI projection of one explicit named product preset. */
+export interface NamedInstance {
+  id: NamedInstanceId
+  name: string
+  location: Location
+  postscriptName?: string
 }
 
 export interface NapiAnchorData {
@@ -482,17 +861,6 @@ export interface NapiAnchorMatch {
   targetId: AnchorId
 }
 
-/**
- * An anchor to create, carrying its caller-minted id (decision 6: ids are
- * client-minted so verbs return identity synchronously).
- */
-export interface NapiAnchorSeed {
-  id: AnchorId
-  name?: string
-  x: number
-  y: number
-}
-
 /** Pure-state response to `apply`: no change records cross to the renderer. */
 export interface NapiAppliedChange {
   layers: Array<NapiLayerReplaced>
@@ -502,68 +870,11 @@ export interface NapiAppliedChange {
   dependents: Array<GlyphId>
 }
 
-export interface NapiAxis {
-  id: AxisId
-  tag: string
-  name: string
-  role: NapiAxisRole
-  axisType: NapiAxisType
-  minimum?: number
-  default: number
-  maximum?: number
-  values?: Array<number>
-  labels: Array<NapiAxisLabel>
-  hidden: boolean
-}
-
-export interface NapiAxisLabel {
-  id: AxisLabelId
-  name: string
-  value: number
-  minimum?: number
-  maximum?: number
-  linkedValue?: number
-  elidable: boolean
-}
-
-export interface NapiAxisMapping {
-  id: AxisMappingId
-  name: string
-  description?: string
-  inputs: Array<AxisId>
-  outputs: Array<AxisId>
-  points: Array<NapiAxisMappingPoint>
-}
-
 export interface NapiAxisMappingBasis {
   mappingId: AxisMappingId
   inputAxisIds: Array<AxisId>
   outputAxisIds: Array<AxisId>
   basis: NapiVariationBasis
-}
-
-export interface NapiAxisMappingPoint {
-  description?: string
-  input: NapiLocation
-  output: NapiLocation
-}
-
-export declare const enum NapiAxisRole {
-  External = 'external',
-  Internal = 'internal'
-}
-
-export declare const enum NapiAxisType {
-  Continuous = 'continuous',
-  Discrete = 'discrete'
-}
-
-export interface NapiBooleanOpIntent {
-  layerId: LayerId
-  contourIdA: ContourId
-  contourIdB: ContourId
-  /** "union" | "subtract" | "intersect" | "difference" */
-  operation: string
 }
 
 /** One corner of outline bounds in font units. */
@@ -614,14 +925,6 @@ export interface NapiCatalogMetrics {
   ascender: number
   descender: number
   lineGap: number
-}
-
-/** Creates one glyph layer by copying another layer's shape with fresh internal ids. */
-export interface NapiCloneGlyphLayerIntent {
-  layerId: LayerId
-  glyphId: GlyphId
-  sourceId: SourceId
-  fromLayerId: LayerId
 }
 
 export interface NapiComponentData {
@@ -675,170 +978,11 @@ export interface NapiContourMatch {
   targetId: ContourId
 }
 
-/**
- * Font-level axis creation. The axis id is client-minted; the tag is an
- * OpenType label and must be unique within the font.
- */
-export interface NapiCreateAxisIntent {
-  axis: NapiAxis
-}
-
-/**
- * Font-level glyph creation. The glyph id is client-minted (decision 6:
- * verbs return identity synchronously); Rust honors it and rejects
- * duplicates.
- */
-export interface NapiCreateGlyphIntent {
-  glyphId: GlyphId
-  name: GlyphName
-  unicodes: Array<Unicode>
-}
-
-/** Creates one sparse glyph layer at an existing source for an existing glyph. */
-export interface NapiCreateGlyphLayerIntent {
-  layerId: LayerId
-  glyphId: GlyphId
-  sourceId: SourceId
-}
-
-/** Creates an empty kerning group under an id the client mints. */
-export interface NapiCreateKerningGroupIntent {
-  groupId: KerningGroupId
-  position: NapiKerningPosition
-  name: string
-}
-
-/** Creates an authored named instance with client-minted stable identity. */
-export interface NapiCreateNamedInstanceIntent {
-  instance: NapiNamedInstance
-}
-
-/**
- * Font-level source creation. The source id is client-minted so verbs can
- * return identity synchronously; Rust honors it and rejects duplicates.
- */
-export interface NapiCreateSourceIntent {
-  sourceId: SourceId
-  name: string
-  /** Axis id → design-space value for the new source. */
-  location: NapiLocation
-}
-
-export interface NapiDecomposeComponentsIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-}
-
-/** Font-level axis deletion. Removing an axis also reshapes source locations. */
-export interface NapiDeleteAxisIntent {
-  axisId: AxisId
-}
-
-/** Deletes a kerning group; its pairs stay and resolve again on undo. */
-export interface NapiDeleteKerningGroupIntent {
-  groupId: KerningGroupId
-}
-
-/** Deletes an authored named instance without changing sources or geometry. */
-export interface NapiDeleteNamedInstanceIntent {
-  instanceId: NamedInstanceId
-}
-
-/** Font-level source deletion. Removing a source also removes its glyph layers. */
-export interface NapiDeleteSourceIntent {
-  sourceId: SourceId
-}
-
 export interface NapiDesignNormalization {
   axisId: AxisId
   minimum: number
   default: number
   maximum: number
-}
-
-/**
- * CS0 walking-skeleton intent. A stringly union covering exactly the two
- * skeleton kinds; CS1 replaces this with per-variant intent structs.
- */
-export interface NapiFontIntent {
-  /**
-   * Discriminator naming the populated payload field. Editing kinds:
-   * "addPoints" | "addContour" | "setContourClosed" | "movePoints" |
-   * "setPointSmooth" | "removePoints" | "addAnchors" | "moveAnchors" |
-   * "removeAnchors" | "renameAnchors" | "addComponent" | "setComponentAlignment" | "setComponentTransforms" |
-   * "removeComponents" | "decomposeComponents" |
-   * "reverseContour" | "setContourStart" | "translatePoints" |
-   * "transformLayer" | "setXAdvance" | "applyBooleanOp".
-   * Font-level kinds additionally include metadata replacement, tracked
-   * language replacement, axis create/update/delete, mapping replacement,
-   * named-instance create/update/delete, source create/delete, glyph
-   * or layer creation, "setKerningValues", and the kerning group kinds
-   * "createKerningGroup" | "setKerningGroupMember" | "renameKerningGroup"
-   * | "deleteKerningGroup".
-   * Every kind shares the same apply path; one set is one undo step.
-   */
-  kind: string
-  addPoints?: NapiAddPointsIntent
-  addContour?: NapiAddContourIntent
-  setContourClosed?: NapiSetContourClosedIntent
-  movePoints?: NapiMovePointsIntent
-  setPointSmooth?: NapiSetPointSmoothIntent
-  removePoints?: NapiRemovePointsIntent
-  addAnchors?: NapiAddAnchorsIntent
-  moveAnchors?: NapiMoveAnchorsIntent
-  removeAnchors?: NapiRemoveAnchorsIntent
-  renameAnchors?: NapiRenameAnchorsIntent
-  addComponent?: NapiAddComponentIntent
-  setComponentTransforms?: NapiSetComponentTransformsIntent
-  setComponentAlignment?: NapiSetComponentAlignmentIntent
-  removeComponents?: NapiRemoveComponentsIntent
-  decomposeComponents?: NapiDecomposeComponentsIntent
-  reverseContour?: NapiReverseContourIntent
-  setContourStart?: NapiSetContourStartIntent
-  translatePoints?: NapiTranslatePointsIntent
-  transformLayer?: NapiTransformLayerIntent
-  setXAdvance?: NapiSetXAdvanceIntent
-  applyBooleanOp?: NapiBooleanOpIntent
-  createGlyph?: NapiCreateGlyphIntent
-  updateGlyph?: NapiUpdateGlyphIntent
-  updateFontMetadata?: NapiUpdateFontMetadataIntent
-  setLanguages?: NapiSetLanguagesIntent
-  createAxis?: NapiCreateAxisIntent
-  updateAxis?: NapiUpdateAxisIntent
-  deleteAxis?: NapiDeleteAxisIntent
-  setAxisMappings?: NapiSetAxisMappingsIntent
-  setMetricDefinitions?: NapiSetMetricDefinitionsIntent
-  createNamedInstance?: NapiCreateNamedInstanceIntent
-  updateNamedInstance?: NapiUpdateNamedInstanceIntent
-  deleteNamedInstance?: NapiDeleteNamedInstanceIntent
-  createSource?: NapiCreateSourceIntent
-  updateSource?: NapiUpdateSourceIntent
-  deleteSource?: NapiDeleteSourceIntent
-  createGlyphLayer?: NapiCreateGlyphLayerIntent
-  cloneGlyphLayer?: NapiCloneGlyphLayerIntent
-  materializeGlyphLayer?: NapiMaterializeGlyphLayerIntent
-  setKerningValues?: NapiSetKerningValuesIntent
-  createKerningGroup?: NapiCreateKerningGroupIntent
-  setKerningGroupMember?: NapiSetKerningGroupMemberIntent
-  renameKerningGroup?: NapiRenameKerningGroupIntent
-  deleteKerningGroup?: NapiDeleteKerningGroupIntent
-}
-
-export interface NapiFontMetadata {
-  familyName?: string
-  styleName?: string
-  versionMajor?: number
-  versionMinor?: number
-  copyright?: string
-  trademark?: string
-  designer?: string
-  designerUrl?: string
-  manufacturer?: string
-  manufacturerUrl?: string
-  license?: string
-  licenseUrl?: string
-  description?: string
-  note?: string
 }
 
 export interface NapiFontMetrics {
@@ -853,21 +997,21 @@ export interface NapiFontMetrics {
  */
 export interface NapiFontReplacement {
   /** Complete authored metadata when font metadata changed; absent otherwise. */
-  metadata?: NapiFontMetadata
+  metadata?: FontMetadata
   /** Full records list when glyph identity changed; absent when untouched. */
   glyphs?: Array<NapiGlyphRecord>
   /** Full axes list when font-level axis structure changed; absent otherwise. */
-  axes?: Array<NapiAxis>
+  axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
-  axisMappings?: Array<NapiAxisMapping>
+  axisMappings?: Array<AxisMapping>
   /** Rust-compiled mapping bases when axes or mappings changed; absent otherwise. */
   axisMappingBases?: Array<NapiAxisMappingBasis>
   /** Full font-owned metric definitions when their identity or order changed. */
-  metricDefinitions?: Array<NapiMetricDefinition>
+  metricDefinitions?: Array<MetricDefinition>
   /** Refreshed source-metric interpolation model when any of its inputs changed. */
   sourceMetricsInterpolation?: NapiSourceMetricsInterpolationReplacement
   /** Full authored product-preset list when named instances changed. */
-  namedInstances?: Array<NapiNamedInstance>
+  namedInstances?: Array<NamedInstance>
   /** Tracked language list when it changed; absent otherwise. */
   languages?: NapiLanguagesReplacement
   /**
@@ -880,16 +1024,16 @@ export interface NapiFontReplacement {
 }
 
 export interface NapiFontSnapshot {
-  metadata: NapiFontMetadata
+  metadata: FontMetadata
   metrics: NapiFontMetrics
-  metricDefinitions: Array<NapiMetricDefinition>
+  metricDefinitions: Array<MetricDefinition>
   sourceMetricsInterpolation?: NapiSourceMetricsInterpolationSnapshot
   glyphs: Array<NapiGlyphEntry>
   sources: Array<NapiSource>
-  axes: Array<NapiAxis>
-  axisMappings: Array<NapiAxisMapping>
+  axes: Array<Axis>
+  axisMappings: Array<AxisMapping>
   axisMappingBases: Array<NapiAxisMappingBasis>
-  namedInstances: Array<NapiNamedInstance>
+  namedInstances: Array<NamedInstance>
   /** Tracked Hyperglot language ids; absent when the font stores no list. */
   languageIds?: Array<string>
   kerning: NapiKerningSnapshot
@@ -1035,31 +1179,15 @@ export interface NapiInterpolationSupport {
 
 export interface NapiKerningGroup {
   id: KerningGroupId
-  position: NapiKerningPosition
+  position: KerningPosition
   name: string
   glyphIds: Array<GlyphId>
 }
 
 export interface NapiKerningPairValue {
-  first: NapiKerningSide
-  second: NapiKerningSide
+  first: KerningSide
+  second: KerningSide
   amount: number
-}
-
-export declare const enum NapiKerningPosition {
-  First = 'first',
-  Second = 'second'
-}
-
-/** One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id. */
-export interface NapiKerningSide {
-  kind: NapiKerningSideKind
-  id: string
-}
-
-export declare const enum NapiKerningSideKind {
-  Glyph = 'glyph',
-  Group = 'group'
 }
 
 /**
@@ -1070,15 +1198,6 @@ export interface NapiKerningSnapshot {
   groups: Array<NapiKerningGroup>
   sources: Array<NapiSourceKerningPairs>
   basis?: NapiInterpolationBasis
-}
-
-/** One kerning pair value to set or remove at one source. */
-export interface NapiKerningValueEdit {
-  sourceId: SourceId
-  first: NapiKerningSide
-  second: NapiKerningSide
-  /** New value in font units; absent removes the pair at this source. */
-  amount?: number
 }
 
 /**
@@ -1101,8 +1220,8 @@ export interface NapiLayerDifference {
   targetCount?: number
   referenceClosed?: boolean
   targetClosed?: boolean
-  referencePointType?: NapiPointType
-  targetPointType?: NapiPointType
+  referencePointType?: PointType
+  targetPointType?: PointType
   referenceAnchorNames?: Array<string | undefined | null>
   targetAnchorNames?: Array<string | undefined | null>
   referenceComponentIds?: Array<GlyphId> | undefined
@@ -1148,57 +1267,6 @@ export interface NapiLayerReplaced {
   changed: NapiGlyphChangedEntities
 }
 
-export interface NapiLocation {
-  values: Record<AxisId, number>
-}
-
-/** Creates one sparse layer from resolved values at a design-space location. */
-export interface NapiMaterializeGlyphLayerIntent {
-  layerId: LayerId
-  glyphId: GlyphId
-  sourceId: SourceId
-  fromLayerId: LayerId
-  /** Numeric state ordered like `GlyphState.values`. */
-  values: Float64Array
-}
-
-export interface NapiMetricDefinition {
-  id: MetricId
-  kind: NapiMetricKind
-  name: string
-}
-
-export declare const enum NapiMetricKind {
-  Ascender = 'ascender',
-  CapHeight = 'capHeight',
-  XHeight = 'xHeight',
-  Baseline = 'baseline',
-  Descender = 'descender',
-  Custom = 'custom'
-}
-
-export interface NapiMoveAnchorsIntent {
-  layerId: LayerId
-  anchorIds: Array<AnchorId>
-  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
-  coords: Array<number>
-}
-
-export interface NapiMovePointsIntent {
-  layerId: LayerId
-  pointIds: Array<PointId>
-  /** Interleaved absolute coordinates: x0, y0, x1, y1, … */
-  coords: Array<number>
-}
-
-/** NAPI projection of one explicit named product preset. */
-export interface NapiNamedInstance {
-  id: NamedInstanceId
-  name: string
-  location: NapiLocation
-  postscriptName?: string
-}
-
 /** Tight axis-aligned outline bounds in font units, y-up. */
 export interface NapiOutlineBounds {
   min: NapiBoundsCorner
@@ -1207,59 +1275,13 @@ export interface NapiOutlineBounds {
 
 export interface NapiPointData {
   id: PointId
-  pointType: NapiPointType
+  pointType: PointType
   smooth: boolean
 }
 
 export interface NapiPointMatch {
   referenceId: PointId
   targetId: PointId
-}
-
-/**
- * A point to create, carrying its caller-minted id (decision 6: ids are
- * client-minted so verbs return identity synchronously).
- */
-export interface NapiPointSeed {
-  id: PointId
-  x: number
-  y: number
-  pointType: NapiPointType
-  smooth: boolean
-}
-
-export declare const enum NapiPointType {
-  OnCurve = 'onCurve',
-  OffCurve = 'offCurve',
-  QCurve = 'qCurve'
-}
-
-export interface NapiRemoveAnchorsIntent {
-  layerId: LayerId
-  anchorIds: Array<AnchorId>
-}
-
-export interface NapiRemoveComponentsIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-}
-
-export interface NapiRemovePointsIntent {
-  layerId: LayerId
-  pointIds: Array<PointId>
-}
-
-/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
-export interface NapiRenameAnchorsIntent {
-  layerId: LayerId
-  anchorIds: Array<AnchorId>
-  names: Array<string>
-}
-
-/** Renames a kerning group; its pairs keep referencing it by id. */
-export interface NapiRenameKerningGroupIntent {
-  groupId: KerningGroupId
-  name: string
 }
 
 /** One direct component whose outline includes its resolved descendants. */
@@ -1280,80 +1302,6 @@ export interface NapiResolvedLayerGeometry {
 export interface NapiResolvedOutline {
   svgPath: string
   bounds?: NapiOutlineBounds
-}
-
-export interface NapiReverseContourIntent {
-  layerId: LayerId
-  contourId: ContourId
-}
-
-export interface NapiSetAxisMappingsIntent {
-  mappings: Array<NapiAxisMapping>
-}
-
-/**
- * Records whether components are placed by their anchors; anchoring one also
- * places it on its anchors now.
- */
-export interface NapiSetComponentAlignmentIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-  alignment: "anchored" | "free" | "unset"
-}
-
-export interface NapiSetComponentTransformsIntent {
-  layerId: LayerId
-  componentIds: Array<ComponentId>
-  transforms: Array<number>
-}
-
-export interface NapiSetContourClosedIntent {
-  layerId: LayerId
-  contourId: ContourId
-  closed: boolean
-}
-
-/** Selects an existing on-curve start for a closed contour; does not move or convert points. */
-export interface NapiSetContourStartIntent {
-  layerId: LayerId
-  contourId: ContourId
-  pointId: PointId
-}
-
-/** Moves a glyph into a group, or out of its group at `position` without one. */
-export interface NapiSetKerningGroupMemberIntent {
-  position: NapiKerningPosition
-  glyphId: GlyphId
-  groupId?: KerningGroupId
-}
-
-/** Sets or removes kerning pair values at sources as one undoable edit. */
-export interface NapiSetKerningValuesIntent {
-  edits: Array<NapiKerningValueEdit>
-}
-
-/** Replaces the font's tracked language list as one undoable edit. */
-export interface NapiSetLanguagesIntent {
-  /**
-   * Hyperglot language ids in display order. Blank ids are dropped and
-   * duplicates keep their first position; an empty list is stored as-is.
-   */
-  languageIds: Array<string>
-}
-
-export interface NapiSetMetricDefinitionsIntent {
-  definitions: Array<NapiMetricDefinition>
-}
-
-export interface NapiSetPointSmoothIntent {
-  layerId: LayerId
-  pointId: PointId
-  smooth: boolean
-}
-
-export interface NapiSetXAdvanceIntent {
-  layerId: LayerId
-  width: number
 }
 
 export interface NapiSlugAtlas {
@@ -1414,9 +1362,9 @@ export interface NapiSlugWeightSet {
 export interface NapiSource {
   id: SourceId
   name: string
-  location: NapiLocation
+  location: Location
   filename?: string
-  metricValues: Array<NapiSourceMetricValue>
+  metricValues: Array<SourceMetricValue>
   italicAngle?: number
   lineGap?: number
   underlinePosition?: number
@@ -1450,66 +1398,9 @@ export interface NapiSourceMetricsInterpolationSnapshot {
   sources: Array<NapiSourceMetricValues>
 }
 
-export interface NapiSourceMetricValue {
-  metricId: MetricId
-  position: number
-  overshoot: number
-}
-
 export interface NapiSourceMetricValues {
   sourceId: SourceId
   values: Float64Array
-}
-
-/** Affine transform of a whole layer: points, anchors, and component placements. */
-export interface NapiTransformLayerIntent {
-  layerId: LayerId
-  /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
-  matrix: Array<number>
-}
-
-/** Affine move: O(selection-ids) wire instead of O(N) coords. */
-export interface NapiTranslatePointsIntent {
-  layerId: LayerId
-  pointIds: Array<PointId>
-  dx: number
-  dy: number
-}
-
-export interface NapiUpdateAxisIntent {
-  axis: NapiAxis
-}
-
-/** Replaces the complete authored metadata snapshot without changing metrics. */
-export interface NapiUpdateFontMetadataIntent {
-  /** Complete replacement snapshot; omitted optional fields are cleared. */
-  metadata: NapiFontMetadata
-}
-
-/**
- * Font-level glyph update. The glyph id targets an existing committed glyph;
- * names are user-editable labels and are not stable identity.
- */
-export interface NapiUpdateGlyphIntent {
-  glyphId: GlyphId
-  newName: GlyphName
-  newUnicodes: Array<Unicode>
-}
-
-/** Replaces an authored named instance while retaining its identity. */
-export interface NapiUpdateNamedInstanceIntent {
-  instance: NapiNamedInstance
-}
-
-export interface NapiUpdateSourceIntent {
-  sourceId: SourceId
-  name: string
-  location: NapiLocation
-  metricValues: Array<NapiSourceMetricValue>
-  italicAngle?: number
-  lineGap?: number
-  underlinePosition?: number
-  underlineThickness?: number
 }
 
 export interface NapiVariationBasis {
@@ -1519,4 +1410,181 @@ export interface NapiVariationBasis {
 export interface NapiVariationDelta {
   region: Array<NapiInterpolationSupport>
   values: Float64Array
+}
+
+/**
+ * A point to create, carrying its caller-minted id (decision 6: ids are
+ * client-minted so verbs return identity synchronously).
+ */
+export interface PointSeed {
+  id: PointId
+  x: number
+  y: number
+  pointType: PointType
+  smooth: boolean
+}
+
+export declare const enum PointType {
+  OnCurve = 'onCurve',
+  OffCurve = 'offCurve',
+  QCurve = 'qCurve'
+}
+
+export interface RemoveAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+}
+
+export interface RemoveComponentsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+}
+
+export interface RemovePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+}
+
+/** Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`. */
+export interface RenameAnchorsIntent {
+  layerId: LayerId
+  anchorIds: Array<AnchorId>
+  names: Array<string>
+}
+
+/** Renames a kerning group; its pairs keep referencing it by id. */
+export interface RenameKerningGroupIntent {
+  groupId: KerningGroupId
+  name: string
+}
+
+export interface ReverseContourIntent {
+  layerId: LayerId
+  contourId: ContourId
+}
+
+export interface SetAxisMappingsIntent {
+  mappings: Array<AxisMapping>
+}
+
+/**
+ * Records whether components are placed by their anchors; anchoring one also
+ * places it on its anchors now.
+ */
+export interface SetComponentAlignmentIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  alignment: "anchored" | "free" | "unset"
+}
+
+export interface SetComponentTransformsIntent {
+  layerId: LayerId
+  componentIds: Array<ComponentId>
+  transforms: Array<number>
+}
+
+export interface SetContourClosedIntent {
+  layerId: LayerId
+  contourId: ContourId
+  closed: boolean
+}
+
+/** Selects an existing on-curve start for a closed contour; does not move or convert points. */
+export interface SetContourStartIntent {
+  layerId: LayerId
+  contourId: ContourId
+  pointId: PointId
+}
+
+/** Moves a glyph into a group, or out of its group at `position` without one. */
+export interface SetKerningGroupMemberIntent {
+  position: KerningPosition
+  glyphId: GlyphId
+  groupId?: KerningGroupId
+}
+
+/** Sets or removes kerning pair values at sources as one undoable edit. */
+export interface SetKerningValuesIntent {
+  edits: Array<KerningValueEdit>
+}
+
+/** Replaces the font's tracked language list as one undoable edit. */
+export interface SetLanguagesIntent {
+  /**
+   * Hyperglot language ids in display order. Blank ids are dropped and
+   * duplicates keep their first position; an empty list is stored as-is.
+   */
+  languageIds: Array<string>
+}
+
+export interface SetMetricDefinitionsIntent {
+  definitions: Array<MetricDefinition>
+}
+
+export interface SetPointSmoothIntent {
+  layerId: LayerId
+  pointId: PointId
+  smooth: boolean
+}
+
+export interface SetXAdvanceIntent {
+  layerId: LayerId
+  width: number
+}
+
+export interface SourceMetricValue {
+  metricId: MetricId
+  position: number
+  overshoot: number
+}
+
+/** Affine transform of a whole layer: points, anchors, and component placements. */
+export interface TransformLayerIntent {
+  layerId: LayerId
+  /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
+  matrix: Array<number>
+}
+
+/** Affine move: O(selection-ids) wire instead of O(N) coords. */
+export interface TranslatePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  dx: number
+  dy: number
+}
+
+export interface UpdateAxisIntent {
+  axis: Axis
+}
+
+/** Replaces the complete authored metadata snapshot without changing metrics. */
+export interface UpdateFontMetadataIntent {
+  /** Complete replacement snapshot; omitted optional fields are cleared. */
+  metadata: FontMetadata
+}
+
+/**
+ * Font-level glyph update. The glyph id targets an existing committed glyph;
+ * names are user-editable labels and are not stable identity.
+ */
+export interface UpdateGlyphIntent {
+  glyphId: GlyphId
+  newName: GlyphName
+  newUnicodes: Array<Unicode>
+}
+
+/** Replaces an authored named instance while retaining its identity. */
+export interface UpdateNamedInstanceIntent {
+  instance: NamedInstance
+}
+
+export interface UpdateSourceIntent {
+  sourceId: SourceId
+  name: string
+  location: Location
+  metricValues: Array<SourceMetricValue>
+  italicAngle?: number
+  lineGap?: number
+  underlinePosition?: number
+  underlineThickness?: number
 }

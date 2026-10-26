@@ -1,6 +1,5 @@
-use shift_font::{AddComponent, DecomposeComponents, ReplaceGlyphLayerContent};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io,
     path::{Path, PathBuf},
     time::Instant,
@@ -9,9 +8,9 @@ use std::{
 use shift_backends::{
     FontExportRequest, FontExportResult, FontExporter, ImportBatchLimit, font_loader::FontLoader,
 };
+use shift_engine::{ApplyError, EngineError, EngineSession, LayerSource, LoadError, StagedEdit};
 use shift_font::{
-    AppliedIntents, FontChange, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId,
-    GlyphLayer, LayerId, error::CoreError,
+    AppliedIntents, FontChangeSet, FontIntentSet, GlyphId, GlyphLayer, LayerId, error::CoreError,
 };
 use shift_store::{
     DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
@@ -19,7 +18,6 @@ use shift_store::{
 
 use crate::document_identity::{DocumentIdentity, document_identity};
 use crate::import_staging::{create_import_staging_path, install_import_store};
-use crate::layer_residency::LayerResidency;
 use crate::ledger::{Ledger, LedgerEntry};
 use crate::{NewWorkspace, stream_into};
 
@@ -70,27 +68,24 @@ pub enum AcquireScope {
 }
 
 pub struct FontWorkspace {
-    font: shift_font::Font,
+    session: EngineSession,
     source: WorkspaceSource,
     store: ShiftStore,
     ledger: Ledger,
-    residency: LayerResidency,
 }
 
 impl FontWorkspace {
     fn from_store(
-        font: shift_font::Font,
+        session: EngineSession,
         source: WorkspaceSource,
         store: ShiftStore,
-        residency: LayerResidency,
         save_state: SaveState,
     ) -> Self {
         Self {
-            font,
+            session,
             source,
             store,
             ledger: Ledger::new(save_state),
-            residency,
         }
     }
 
@@ -112,10 +107,9 @@ impl FontWorkspace {
         store.set_workspace_state(&WorkspaceState::untitled(None))?;
 
         Ok(Self::from_store(
-            font,
+            EngineSession::open_loaded(font),
             WorkspaceSource::Untitled,
             store,
-            LayerResidency::default(),
             SaveState::MatchesSaved,
         ))
     }
@@ -163,16 +157,14 @@ impl FontWorkspace {
             Some(RecoveryState::Clean) => SaveState::MatchesSaved,
             _ => SaveState::Unsaved,
         };
-        let font = store.load_font_directory()?;
-        let residency = LayerResidency::with_unloaded(font.layer_ids());
+        let session = EngineSession::open_directory(store.load_font_directory()?);
 
         Ok(Self::from_store(
-            font,
+            session,
             WorkspaceSource::Document {
                 path: document_path.to_path_buf(),
             },
             store,
-            residency,
             save_state,
         ))
     }
@@ -239,9 +231,7 @@ impl FontWorkspace {
     /// font cannot be loaded.
     pub fn discard_recovery(&mut self) -> Result<(), WorkspaceError> {
         self.store.discard_recovery()?;
-        let font = self.store.load_font_directory()?;
-        self.residency = LayerResidency::with_unloaded(font.layer_ids());
-        self.font = font;
+        self.session = EngineSession::open_directory(self.store.load_font_directory()?);
         self.ledger = Ledger::default();
         Ok(())
     }
@@ -270,15 +260,13 @@ impl FontWorkspace {
         let state = store
             .workspace_state()?
             .ok_or_else(|| WorkspaceError::CorruptWorkingStore("missing workspace_state".into()))?;
-        let font = store.load_font_directory()?;
-        let residency = LayerResidency::with_unloaded(font.layer_ids());
+        let session = EngineSession::open_directory(store.load_font_directory()?);
         let source = source_from_workspace_state(&state)?;
 
         Ok(Self::from_store(
-            font,
+            session,
             source,
             store,
-            residency,
             if state.dirty {
                 SaveState::Unsaved
             } else {
@@ -299,7 +287,7 @@ impl FontWorkspace {
     ) -> Result<FontExportResult, WorkspaceError> {
         self.acquire_all_layers()?;
         FontExporter::new()
-            .export(&self.font, request)
+            .export(self.session.font(), request)
             .map_err(WorkspaceError::from)
     }
 
@@ -319,60 +307,40 @@ impl FontWorkspace {
         set: &FontIntentSet,
         label: Option<String>,
     ) -> Result<AppliedIntents, WorkspaceError> {
-        let required_layers = set
-            .intents
-            .iter()
-            .flat_map(|intent| intent.required_layer_ids(&self.font))
-            .collect::<Vec<_>>();
-        self.acquire_layers(required_layers)?;
-
-        let mut component_roots = Vec::new();
-        for intent in &set.intents {
-            match intent {
-                FontIntent::AddComponent(AddComponent { base_glyph_id, .. }) => {
-                    component_roots.push(base_glyph_id.clone());
-                }
-                FontIntent::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent {
-                    components,
-                    ..
-                }) => {
-                    component_roots
-                        .extend(components.iter().map(shift_font::Component::base_glyph_id));
-                }
-                FontIntent::DecomposeComponents(DecomposeComponents {
-                    layer_id,
-                    component_ids,
-                }) => {
-                    let Some(layer) = self.font.layer(layer_id) else {
-                        continue;
-                    };
-                    component_roots.extend(component_ids.iter().filter_map(|component_id| {
-                        layer
-                            .component(component_id)
-                            .map(shift_font::Component::base_glyph_id)
-                    }));
-                }
-                _ => {}
-            }
-        }
-        if !component_roots.is_empty() {
-            self.acquire_glyphs(&component_roots, AcquireScope::ComponentClosure)?;
-        }
-        // Components attached to anchors this set moves follow them: load
-        // every composite built on an edited glyph, with its other components.
-        let dependents = self.dependent_glyph_ids_for_layers(&set.layers_with_anchor_edits())?;
-        if !dependents.is_empty() {
-            self.acquire_glyphs(&dependents, AcquireScope::ComponentClosure)?;
-        }
-
-        let outcome = self.commit_edit(SaveState::Unsaved, |font| {
-            let outcome = font.apply_intents(set)?;
-            let changes = outcome.changes.clone();
-            Ok((outcome, changes))
-        })?;
+        let staged = self
+            .session
+            .stage_loaded(&mut StoreLayers(&self.store), set)
+            .map_err(WorkspaceError::from_apply)?;
+        let outcome = self.commit(staged, SaveState::Unsaved)?;
 
         self.ledger.push(label, outcome.changes.clone());
         Ok(outcome)
+    }
+
+    /// Persists a change set already applied to a session over this font,
+    /// without replaying intents or adding a ledger entry: the session that
+    /// made it keeps its undo history. Every `before` must match this font, so a
+    /// change set made from a stale font is refused.
+    ///
+    /// `save_state` is the caller's claim about where the change leaves the
+    /// font; the store verifies a [`SaveState::MatchesSaved`] claim against the
+    /// saved document before discarding any unsaved edit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when what it touches cannot be loaded
+    /// or the write fails, and [`WorkspaceError::Font`] when it does not apply
+    /// to this font. The live font is unchanged on failure.
+    pub fn persist_change_set(
+        &mut self,
+        change_set: FontChangeSet,
+        save_state: SaveState,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        self.session
+            .load_changed(&mut StoreLayers(&self.store), &change_set)
+            .map_err(WorkspaceError::from_load)?;
+        let staged = self.session.stage_change_set(change_set)?;
+        self.commit(staged, save_state)
     }
 
     /// Applies the inverse of the most recent reversible changeset.
@@ -439,58 +407,27 @@ impl FontWorkspace {
         side: ReplaySide,
         save_state: SaveState,
     ) -> Result<AppliedIntents, WorkspaceError> {
-        self.acquire_layers(entry.layer_ids())?;
-
         let change_set = match side {
             ReplaySide::Pre => entry.change_set.inverted(),
             ReplaySide::Post => entry.change_set.clone(),
         };
-        self.commit_edit(save_state, move |font| {
-            font.apply_change_set(&change_set)?;
-            let layers = change_set.touched_layers();
-            let outcome = AppliedIntents {
-                changes: change_set.clone(),
-                layers,
-            };
-            Ok((outcome, change_set))
-        })
+        self.session
+            .load_changed(&mut StoreLayers(&self.store), &change_set)
+            .map_err(WorkspaceError::from_load)?;
+        let staged = self.session.stage_change_set(change_set)?;
+        self.commit(staged, save_state)
     }
 
-    fn commit_font(
+    /// Persists a staged edit, then makes it part of the session, so a failed
+    /// write leaves the live font unchanged.
+    fn commit(
         &mut self,
-        next_font: shift_font::Font,
-        change_set: &FontChangeSet,
+        staged: StagedEdit,
         save_state: SaveState,
-    ) -> Result<(), WorkspaceError> {
-        if let Some(layer_id) = change_set
-            .changes
-            .iter()
-            .filter_map(FontChange::layer_id)
-            .find(|layer_id| self.residency.is_unloaded(layer_id))
-        {
-            return Err(WorkspaceError::UnloadedLayerMutation(layer_id));
-        }
-
+    ) -> Result<AppliedIntents, WorkspaceError> {
         self.store
-            .apply_change_set_with_font(change_set, &next_font, save_state)?;
-        self.font = next_font;
-        // Sweeping residency looks up every unloaded layer, so do it only when
-        // a change could have removed layers from the directory.
-        if change_set.can_remove_layers() {
-            self.residency.retain_directory_layers(&self.font);
-        }
-        Ok(())
-    }
-
-    fn commit_edit<R, F>(&mut self, save_state: SaveState, edit: F) -> Result<R, WorkspaceError>
-    where
-        F: FnOnce(&mut shift_font::Font) -> Result<(R, FontChangeSet), WorkspaceError>,
-    {
-        let mut next_font = self.font.clone();
-        let (result, change_set) = edit(&mut next_font)?;
-        self.commit_font(next_font, &change_set, save_state)?;
-
-        Ok(result)
+            .apply_change_set_with_font(staged.changes(), staged.font(), save_state)?;
+        Ok(self.session.commit(staged))
     }
 
     fn import_font(
@@ -522,19 +459,17 @@ impl FontWorkspace {
                 writer.finish()?;
                 store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
                 store.finish_import()?;
-                let font = store.load_font_directory()?;
-                let residency = LayerResidency::with_unloaded(font.layer_ids());
+                let session = EngineSession::open_directory(store.load_font_directory()?);
                 drop(store);
                 install_import_store(staged_path, store_path)?;
                 let store = ShiftStore::open(store_path)?;
 
                 return Ok(Self::from_store(
-                    font,
+                    session,
                     WorkspaceSource::Imported {
                         original_path: import_path.to_path_buf(),
                     },
                     store,
-                    residency,
                     SaveState::MatchesSaved,
                 ));
             }
@@ -549,12 +484,11 @@ impl FontWorkspace {
         store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
 
         Ok(Self::from_store(
-            font,
+            EngineSession::open_loaded(font),
             WorkspaceSource::Imported {
                 original_path: import_path.to_path_buf(),
             },
             store,
-            LayerResidency::default(),
             SaveState::MatchesSaved,
         ))
     }
@@ -571,31 +505,14 @@ impl FontWorkspace {
         glyph_ids: &[GlyphId],
         scope: AcquireScope,
     ) -> Result<(), WorkspaceError> {
-        let started = Instant::now();
-        let glyph_ids = if scope == AcquireScope::ComponentClosure {
-            self.store
-                .referenced_glyph_closure(glyph_ids.iter().cloned())?
-        } else {
-            glyph_ids.to_vec()
-        };
-        if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
-            eprintln!(
-                "[slug-atlas-acquisition] phase=component-closure duration_ms={:.3}",
-                started.elapsed().as_secs_f64() * 1_000.0
-            );
+        let mut source = StoreLayers(&self.store);
+        match scope {
+            AcquireScope::Glyphs => self.session.load_glyphs(&mut source, glyph_ids),
+            AcquireScope::ComponentClosure => self
+                .session
+                .load_glyph_closure(&mut source, glyph_ids.iter().cloned()),
         }
-
-        let layer_ids = glyph_ids
-            .into_iter()
-            .flat_map(|glyph_id| {
-                self.font
-                    .glyph(&glyph_id)
-                    .into_iter()
-                    .flat_map(Glyph::layer_ids)
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        self.acquire_layers(layer_ids)
+        .map_err(WorkspaceError::from_load)
     }
 
     /// Loads every layer that is still a directory placeholder.
@@ -605,47 +522,9 @@ impl FontWorkspace {
     /// Returns [`WorkspaceError::Store`] when a layer payload cannot be read, and
     /// [`WorkspaceError::Font`] when a loaded layer cannot replace its placeholder.
     pub fn acquire_all_layers(&mut self) -> Result<(), WorkspaceError> {
-        let layer_ids = self
-            .residency
-            .unloaded_layer_ids()
-            .cloned()
-            .collect::<Vec<_>>();
-        self.acquire_layers(layer_ids)
-    }
-
-    fn acquire_layers(
-        &mut self,
-        layer_ids: impl IntoIterator<Item = LayerId>,
-    ) -> Result<(), WorkspaceError> {
-        let mut layer_ids = self.residency.requested_unloaded(layer_ids);
-        layer_ids.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        layer_ids.dedup();
-        if layer_ids.is_empty() {
-            return Ok(());
-        }
-
-        // Decode through bounded SQLite reads. Font validates the complete
-        // replacement batch before mutating, so malformed input leaves the
-        // live cache unchanged without copying the complete directory.
-        let started = Instant::now();
-        let layers = self.store.load_glyph_layers(&layer_ids)?;
-        if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
-            eprintln!(
-                "[slug-atlas-acquisition] phase=merged-view-read-decode duration_ms={:.3}",
-                started.elapsed().as_secs_f64() * 1_000.0
-            );
-        }
-
-        let started = Instant::now();
-        self.font.replace_glyph_layers(layers)?;
-        self.residency.mark_loaded(layer_ids);
-        if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
-            eprintln!(
-                "[slug-atlas-acquisition] phase=font-install duration_ms={:.3}",
-                started.elapsed().as_secs_f64() * 1_000.0
-            );
-        }
-        Ok(())
+        self.session
+            .load_all(&mut StoreLayers(&self.store))
+            .map_err(WorkspaceError::from_load)
     }
 
     /// Drops clean in-memory payloads back to directory placeholders. Every
@@ -659,34 +538,13 @@ impl FontWorkspace {
     ///
     /// Returns [`WorkspaceError::Font`] when a placeholder cannot replace its layer.
     pub fn evict_glyphs(&mut self, glyph_ids: &[GlyphId]) -> Result<(), WorkspaceError> {
-        let mut placeholders = Vec::new();
-        let mut evicted = Vec::new();
-        let mut seen_layer_ids = HashSet::new();
-        for glyph_id in glyph_ids {
-            let Some(glyph) = self.font.glyph(glyph_id) else {
-                continue;
-            };
-            for layer in glyph.layers().values().map(AsRef::as_ref) {
-                if self.residency.is_unloaded(&layer.id()) || !seen_layer_ids.insert(layer.id()) {
-                    continue;
-                }
-                let mut placeholder =
-                    GlyphLayer::with_width(layer.id(), layer.source_id(), layer.width());
-                placeholder.set_height(layer.height());
-                placeholders.push(placeholder);
-                evicted.push(layer.id());
-            }
-        }
-
-        self.font.replace_glyph_layers(placeholders)?;
-        self.residency.mark_unloaded(evicted);
-        Ok(())
+        Ok(self.session.evict(glyph_ids)?)
     }
 
     /// Residency instrumentation for tests and import profiling.
     pub fn loaded_layer_count(&self) -> usize {
-        let directory_layer_count = self.font.layer_count();
-        self.residency.loaded_count(directory_layer_count)
+        let directory_layer_count = self.session.font().layer_count();
+        self.session.residency().loaded_count(directory_layer_count)
     }
 
     /// Returns, for each glyph, the glyphs its components reference.
@@ -731,7 +589,7 @@ impl FontWorkspace {
     /// Metadata and directory are always present. Layer payloads are present
     /// only after explicit acquisition.
     pub fn font(&self) -> &shift_font::Font {
-        &self.font
+        self.session.font()
     }
 
     pub fn source(&self) -> &WorkspaceSource {
@@ -825,6 +683,65 @@ impl FontWorkspace {
 }
 
 /// Selects the inverted changeset for undo or the original for redo.
+/// The store as the session's [`LayerSource`]: what is saved and persisted.
+struct StoreLayers<'a>(&'a ShiftStore);
+
+impl LayerSource for StoreLayers<'_> {
+    type Error = shift_store::StoreError;
+
+    fn load_layers(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphLayer>, Self::Error> {
+        let started = Instant::now();
+        let layers = self.0.load_glyph_layers(layer_ids)?;
+        profile_acquisition("merged-view-read-decode", started);
+        Ok(layers)
+    }
+
+    fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error> {
+        let started = Instant::now();
+        let closure = self.0.referenced_glyph_closure(roots.iter().cloned())?;
+        profile_acquisition("component-closure", started);
+        Ok(closure)
+    }
+
+    fn dependents(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphId>, Self::Error> {
+        self.0.dependent_glyph_ids_for_layers(layer_ids)
+    }
+}
+
+fn profile_acquisition(phase: &str, started: Instant) {
+    if std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0") {
+        eprintln!(
+            "[slug-atlas-acquisition] phase={phase} duration_ms={:.3}",
+            started.elapsed().as_secs_f64() * 1_000.0
+        );
+    }
+}
+
+impl WorkspaceError {
+    fn from_load(error: LoadError<shift_store::StoreError>) -> Self {
+        match error {
+            LoadError::Source(error) => Self::Store(error),
+            LoadError::Font(error) => Self::Font(error),
+        }
+    }
+
+    fn from_apply(error: ApplyError<shift_store::StoreError>) -> Self {
+        match error {
+            ApplyError::Load(error) => Self::from_load(error),
+            ApplyError::Engine(error) => error.into(),
+        }
+    }
+}
+
+impl From<EngineError> for WorkspaceError {
+    fn from(error: EngineError) -> Self {
+        match error {
+            EngineError::Font(error) => Self::Font(error),
+            EngineError::UnloadedLayerMutation(layer_id) => Self::UnloadedLayerMutation(layer_id),
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ReplaySide {
     Pre,

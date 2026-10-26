@@ -152,7 +152,7 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Implement the staged mutation branch in `Font::apply_intents`, delegating the actual edit to the owning model object (`GlyphLayer`, `Font`, or `Source`). Existing metadata, collection, glyph, and layer scopes are compared and coalesced automatically.
 3. If the intent introduces a new authored scope, add one coarse reversible `FontChange` variant, include it in `Font::apply_change_set`, and teach `shift-store` to persist that replacement. Do not add workspace-specific inverse state or replay logic.
 4. If the renderer needs identity synchronously, accept caller-minted IDs through a seed struct such as `PointSeed` rather than returning Rust-minted IDs after the fact.
-5. Add the transport payload and `map_intent` branch in `shift-bridge`; intents all flow through the single `apply` entry point.
+5. Add the transport payload and its `TryFrom` in `shift-wire::intents` (one line in `wire_intents!`); intents all flow through the single `apply` entry point, natively and in the WebAssembly engine.
 6. Verify apply/invert round trips and stale-origin atomicity in `shift-font`, persistence in `shift-store`, and undo/redo in `shift-workspace`.
 
 ### Adding a glyph-layer geometry mutation

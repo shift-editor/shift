@@ -637,18 +637,6 @@ impl FontProjection<'_> {
     ///
     /// Returns the same resolution errors as [`Self::glyph`] when the root or
     /// any selected component branch cannot be resolved.
-    pub(crate) fn component_contours(
-        &mut self,
-        glyph_id: &GlyphId,
-        component_ids: &HashSet<ComponentId>,
-    ) -> CoreResult<Vec<ResolvedContour>> {
-        if !self.prepare_layer_tree(glyph_id)? {
-            return Err(CoreError::GlyphNotFound(glyph_id.clone()));
-        }
-
-        flatten_selected_component_contours_from_layers(glyph_id, &self.layers, component_ids)
-    }
-
     /// Resolves existing glyphs in request order with shared component work.
     ///
     /// Missing glyph IDs are omitted. Duplicate existing IDs produce duplicate
@@ -726,6 +714,33 @@ impl Font {
         projection.prepare_layer_tree_from(&glyph_id, layer.clone())?;
 
         resolved_layer_geometry_from_layers(&glyph_id, &projection.layers)
+    }
+
+    /// The outlines `component_ids` of one exact authored layer draw, at that
+    /// layer's source.
+    ///
+    /// The components are the layer's own, not an interpolated layer's: each
+    /// master's components have their own ids.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::resolve_layer`].
+    pub(crate) fn layer_component_contours(
+        &self,
+        layer_id: &LayerId,
+        component_ids: &HashSet<ComponentId>,
+    ) -> CoreResult<Vec<ResolvedContour>> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        let layer = self.require_layer(layer_id)?;
+        let location = self.require_source(&layer.source_id())?.location().clone();
+        let mut projection = self.projection(&location);
+        projection.prepare_layer_tree_from(&glyph_id, layer.clone())?;
+
+        flatten_selected_component_contours_from_layers(
+            &glyph_id,
+            &projection.layers,
+            component_ids,
+        )
     }
 }
 

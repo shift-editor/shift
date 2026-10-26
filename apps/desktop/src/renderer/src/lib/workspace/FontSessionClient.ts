@@ -4,6 +4,7 @@ import type {
   FontSessionMode,
   FontSourceAtlasPageRequest,
   FontSourceSnapshot,
+  FontStoreLocation,
   SlugAtlasOrigin,
   SyncCallMap,
   SyncEventMap,
@@ -17,9 +18,9 @@ import type {
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type {
   AppliedChange,
+  SaveState,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  FontIntent,
   GlyphId,
   GlyphPreview,
   GlyphLayerSnapshot,
@@ -40,9 +41,9 @@ import { signal } from "@shift/editor/signals";
  * Renderer side of the workspace sync lane.
  *
  * @remarks
- * `workspaceCell` is the renderer's latest workspace summary. `FontStore`
- * owns the renderer-local font model state; this client only
- * transports workspace calls and mirrors the summary for catch-up/recovery.
+ * `workspaceCell` is the workspace summary as of the latest connect, for the
+ * font model to open from. `FontStore` owns the renderer-local font model
+ * state after that; this client only transports workspace calls.
  */
 export type FontSessionClientOptions = {
   /**
@@ -95,46 +96,22 @@ export class FontSessionClient {
   }
 
   /**
-   * Applies an intent set; the response is pure replace-grade state.
+   * Persists a change set the window's engine applied, as named MessagePack.
    *
-   * @param intents - Complete set of edits to commit as one undo operation.
-   * @param label - Optional human-readable name for the undo operation.
-   * @returns The committed replacement state echoed by the workspace.
-   * @throws {Error} when the workspace rejects or cannot persist the edit.
+   * @returns The workspace's receipt: what it wrote, with the glyph records
+   * and dependent composites only it can build.
+   * @throws {Error} when the change set does not match the workspace's font or
+   * cannot be written.
    */
-  async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
+  async persist(changeSet: Uint8Array, saveState: SaveState): Promise<AppliedChange> {
     await this.connect();
 
-    const { applied, documentState } = await this.#require().call("workspace.apply", {
-      intents,
-      label,
+    const { applied, documentState } = await this.#require().call("workspace.persist", {
+      changeSet,
+      saveState,
     });
     this.#setDocumentState(documentState);
-    return this.#fold(applied);
-  }
-
-  /** Replays the latest ledger entry; null when nothing is undoable. */
-  async undo(): Promise<AppliedChange | null> {
-    await this.connect();
-
-    const { applied, documentState } = await this.#require().call("workspace.undo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
-  }
-
-  /** Replays the latest undone entry; null when nothing is redoable. */
-  async redo(): Promise<AppliedChange | null> {
-    await this.connect();
-
-    const { applied, documentState } = await this.#require().call("workspace.redo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
-  }
-
-  /** Permanently removes the current redo branch without changing document state. */
-  async discardRedo(): Promise<void> {
-    await this.connect();
-    await this.#require().call("workspace.discardRedo", undefined);
+    return applied;
   }
 
   async snapshot(): Promise<WorkspaceSnapshot | null> {
@@ -227,6 +204,13 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
+  }
+
+  /** Deletes the stores Save As moved off, once this window's reader no longer reads them. */
+  async releaseRetiredStores(): Promise<void> {
+    await this.connect();
+
+    await this.#require().call("workspace.releaseRetiredStores", undefined);
   }
 
   /**
@@ -398,6 +382,18 @@ export class FontSessionClient {
   }
 
   /**
+   * Where the open workspace's store lives, for this window's read-only layer
+   * reader.
+   *
+   * @returns `null` for a preview, which has no store.
+   */
+  async storeLocation(): Promise<FontStoreLocation | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.storeLocation", undefined);
+  }
+
+  /**
    * Evaluates the current font's axis mappings in the utility process.
    *
    * @param location - External location keyed by stable axis id.
@@ -428,33 +424,6 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#require().call("workspace.shaperFont", { knownRevision });
-  }
-
-  #fold(applied: AppliedChange): AppliedChange {
-    const current = this.workspaceCell.peek();
-    if (!current) return applied;
-
-    const next = applied.next;
-    if (!next) return applied;
-
-    this.workspaceCell.set({
-      ...current,
-      metadata: next.metadata ?? current.metadata,
-      glyphs: next.glyphs ?? current.glyphs,
-      axes: next.axes ?? current.axes,
-      axisMappings: next.axisMappings ?? current.axisMappings,
-      axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
-      metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
-      sourceMetricsInterpolation: next.sourceMetricsInterpolation
-        ? (next.sourceMetricsInterpolation.snapshot ?? null)
-        : current.sourceMetricsInterpolation,
-      namedInstances: next.namedInstances ?? current.namedInstances,
-      languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
-      sources: next.sources ?? current.sources,
-      kerning: next.kerning ?? current.kerning,
-    });
-
-    return applied;
   }
 
   async #connect(): Promise<void> {

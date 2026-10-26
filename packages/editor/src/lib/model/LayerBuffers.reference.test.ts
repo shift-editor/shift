@@ -13,7 +13,6 @@ import {
 import {
   between,
   expectBoundsClose,
-  expectNumbersClose,
   REFERENCE_SEED,
   seededRandom,
   type Random,
@@ -201,36 +200,6 @@ function layerCases(sweep = 150): LayerCase[] {
   return cases;
 }
 
-const COMPONENT_FIELDS = [
-  "translateX",
-  "translateY",
-  "rotation",
-  "scaleX",
-  "scaleY",
-  "skewX",
-  "skewY",
-  "tCenterX",
-  "tCenterY",
-];
-
-/** A name for each of a layer's values, in interpolation order. */
-function valueLabels(state: GlyphState): string[] {
-  const { contours, anchors, components } = state.structure;
-  return [
-    "advance",
-    ...contours.flatMap((contour, index) =>
-      contour.points.flatMap((_, point) => [
-        `contour ${index} point ${point} x`,
-        `contour ${index} point ${point} y`,
-      ]),
-    ),
-    ...anchors.flatMap((_, index) => [`anchor ${index} x`, `anchor ${index} y`]),
-    ...components.flatMap((_, index) =>
-      COMPONENT_FIELDS.map((field) => `component ${index} ${field}`),
-    ),
-  ];
-}
-
 /** The case as a failure message shows it: point types, closure, and values, without ids. */
 function described({ name, state, matrix }: LayerCase) {
   return {
@@ -244,25 +213,14 @@ function described({ name, state, matrix }: LayerCase) {
   };
 }
 
-describe("whole-layer transforms match shift-font's transform_layer", () => {
-  it.each(layerCases())("transforms points, anchors, and components for $name", (testCase) => {
+describe("layer bounds match shift-font's for a transformed layer", () => {
+  it.each(layerCases())("bounds points, anchors, and components for $name", (testCase) => {
+    const expected = transformLayer(testCase.state, testCase.matrix);
     const layer = LayerBuffers.fromState({
       ...testCase.state,
-      values: testCase.state.values.slice(),
+      values: Float64Array.from(expected.values),
     });
-    const expected = transformLayer(testCase.state, testCase.matrix);
 
-    layer.transformLayer(testCase.matrix);
-
-    const labels = valueLabels(testCase.state);
-    const angles = new Set(
-      labels.flatMap((label, index) => (label.endsWith(" rotation") ? [index] : [])),
-    );
-
-    expectNumbersClose([...layer.snapshot], expected.values, described(testCase), {
-      labels,
-      angles,
-    });
     expectBoundsClose(layer.bounds, expected.bounds, described(testCase));
   });
 });

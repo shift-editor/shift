@@ -11,5 +11,7 @@ mod bridge;
 pub mod config;
 mod errors;
 mod input;
+// Public so the compiler sees the napi exports as the crate's interface; nothing else calls them.
+pub mod layer_reader;
 mod shaping;
 mod specimen;

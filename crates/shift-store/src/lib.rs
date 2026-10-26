@@ -13,6 +13,7 @@ mod glyph;
 mod import_writer;
 mod layer;
 mod numeric;
+mod reader;
 mod recovery;
 mod schema;
 mod source;
@@ -31,6 +32,7 @@ pub use layer::{
     GLYPH_LAYER_FORMAT, GlyphLayerDirectoryEntry, MAX_LAYER_READ_BATCH_COUNT,
     MAX_LAYER_READ_BATCH_DECODED_BYTES,
 };
+pub use reader::StoreReader;
 pub use recovery::{RecoveryOverlay, RecoveryState};
 pub use schema::{SHIFT_APPLICATION_ID, SHIFT_DOCUMENT_SCHEMA_VERSION};
 pub use source::{AxisRecord, NewAxis, NewSource, SourceAxisLocation, SourceKind, SourceRecord};

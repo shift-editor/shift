@@ -10,6 +10,13 @@ export type {
 export { FontStore, type GlyphInvalidation } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
+export {
+  loadEngine,
+  type EngineEdit,
+  type EngineLayer,
+  type EngineLayerSource,
+  type EngineSession,
+} from "./lib/wasm/engine";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
 export { OutlineTargets } from "./lib/nodes/OutlineTargets";
