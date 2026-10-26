@@ -28,8 +28,6 @@ import type { Point2D, Rect2D } from "./types";
 import { Rect } from "./Rect";
 import type { Bounds } from "./Bounds";
 import { Vec2 } from "./Vec2";
-import { fitCubic } from "./fitCubic";
-import { fitQuadratic } from "./fitQuadratic";
 
 // Types
 
@@ -91,9 +89,6 @@ const RECT_INTERSECTION_MAX_DEPTH = 32;
 // Curve Namespace
 
 export const Curve = {
-  fitCubic,
-  fitQuadratic,
-
   // Construction
 
   line(p0: Point2D, p1: Point2D): LineCurve {

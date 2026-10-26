@@ -17,20 +17,20 @@ use shift_font::PointType as IrPointType;
 use shift_font::{
     AddAnchors, AddComponent, AddContour, AddPoints, ApplyBooleanOp, CloneGlyphLayer, CreateAxis,
     CreateGlyph, CreateGlyphLayer, CreateKerningGroup, CreateNamedInstance, CreateSource,
-    DecomposeComponents, DeleteAxis, DeleteKerningGroup, DeleteNamedInstance, DeleteSource,
-    MoveAnchors, MovePoints, RemoveAnchors, RemoveComponents, RemovePoints, RenameAnchors,
-    RenameKerningGroup, ReverseContour, SetAxisMappings, SetComponentAlignment,
-    SetComponentTransforms, SetContourClosed, SetContourStart, SetKerningGroupMember,
-    SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth, SetPositions,
-    SetXAdvance, TransformLayer, TranslatePoints, UpdateAxis, UpdateFontMetadata, UpdateGlyph,
-    UpdateNamedInstance, UpdateSource,
+    DecomposeComponents, DeleteAxis, DeleteKerningGroup, DeleteNamedInstance, DeletePoints,
+    DeleteSource, JoinContours, MoveAnchors, MovePoints, RemoveAnchors, RemoveComponents,
+    RemovePoints, RenameAnchors, RenameKerningGroup, ReverseContour, SetAxisMappings,
+    SetComponentAlignment, SetComponentTransforms, SetContourClosed, SetContourStart,
+    SetKerningGroupMember, SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth,
+    SetPositions, SetXAdvance, SplitSegment, TransformLayer, TranslatePoints, UpdateAxis,
+    UpdateFontMetadata, UpdateGlyph, UpdateNamedInstance, UpdateSource, UpgradeLineToCubic,
 };
 use shift_font::{
     AnchorId, AnchorSeed as FontAnchorSeed, Axis as FontAxis, AxisId, AxisLabel as FontAxisLabel,
     AxisLabelId, AxisLabelRange, AxisMapping as FontAxisMapping, AxisMappingId,
     AxisMappingPoint as FontAxisMappingPoint, AxisRole as FontAxisRole, ComponentAlignment,
-    ComponentId, ContourId, FontMetadata as FontMetadataModel, GlyphId, GuidelineId,
-    KerningGroupId, KerningPair, KerningPosition as FontKerningPosition,
+    ComponentId, ContourEnd as FontContourEnd, ContourId, FontMetadata as FontMetadataModel,
+    GlyphId, GuidelineId, KerningGroupId, KerningPair, KerningPosition as FontKerningPosition,
     KerningSide as FontKerningSide, KerningValueEdit as FontKerningValueEdit, LayerId,
     Location as FontLocation, MetricDefinition as FontMetricDefinition, MetricId,
     MetricKind as FontMetricKind, MetricValue, NamedInstance as FontNamedInstance, NamedInstanceId,
@@ -70,6 +70,9 @@ pub enum WireError {
 
     #[error("unknown boolean operation: {0}")]
     UnknownBooleanOp(String),
+
+    #[error("{0}")]
+    UnknownName(String),
 
     #[error("a continuous axis needs a minimum and a maximum")]
     ContinuousAxisWithoutBounds,
@@ -910,6 +913,72 @@ pub struct BooleanOpIntent {
     pub operation: String,
 }
 
+/// Deletes points and reconnects what survives, fitting or leaving gaps.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePointsIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    pub point_ids: Vec<String>,
+    #[cfg_attr(feature = "napi", napi(ts_type = "\"fit\" | \"gap\""))]
+    pub mode: String,
+}
+
+/// Splits the segment between two on-curve points at `t`; the caller mints
+/// the new on-curve point's id.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SplitSegmentIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    pub start_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    pub end_id: String,
+    pub t: f64,
+    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    pub point_id: String,
+}
+
+/// Raises the line between two on-curve points to a cubic of the same shape.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpgradeLineToCubicIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    pub start_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    pub end_id: String,
+}
+
+/// One open end of a contour.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContourEnd {
+    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    pub contour_id: String,
+    #[cfg_attr(feature = "napi", napi(ts_type = "\"start\" | \"end\""))]
+    pub side: String,
+}
+
+/// Closes a contour by its two ends, or joins two contours into `from`.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinContoursIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    pub from: ContourEnd,
+    pub to: ContourEnd,
+    pub merge: bool,
+}
+
 #[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1020,6 +1089,10 @@ wire_intents! {
     TransformLayer { transform_layer: TransformLayerIntent },
     SetXAdvance { set_x_advance: SetXAdvanceIntent },
     ApplyBooleanOp { apply_boolean_op: BooleanOpIntent },
+    DeletePoints { delete_points: DeletePointsIntent },
+    SplitSegment { split_segment: SplitSegmentIntent },
+    UpgradeLineToCubic { upgrade_line_to_cubic: UpgradeLineToCubicIntent },
+    JoinContours { join_contours: JoinContoursIntent },
     CreateGlyph { create_glyph: CreateGlyphIntent },
     UpdateGlyph { update_glyph: UpdateGlyphIntent },
     UpdateFontMetadata { update_font_metadata: UpdateFontMetadataIntent },
@@ -1335,6 +1408,76 @@ impl TryFrom<BooleanOpIntent> for font::FontIntent {
                 .operation
                 .parse()
                 .map_err(WireError::UnknownBooleanOp)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<DeletePointsIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: DeletePointsIntent) -> WireResult<Self> {
+        Ok(DeletePoints {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            point_ids: parse_id_list::<PointId>(&wire.point_ids)?,
+            mode: wire.mode.parse().map_err(WireError::UnknownName)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<SplitSegmentIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: SplitSegmentIntent) -> WireResult<Self> {
+        Ok(SplitSegment {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            start_id: parse::<PointId>(&wire.start_id)?,
+            end_id: parse::<PointId>(&wire.end_id)?,
+            t: wire.t,
+            point_id: parse::<PointId>(&wire.point_id)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<UpgradeLineToCubicIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: UpgradeLineToCubicIntent) -> WireResult<Self> {
+        Ok(UpgradeLineToCubic {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            start_id: parse::<PointId>(&wire.start_id)?,
+            end_id: parse::<PointId>(&wire.end_id)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<ContourEnd> for FontContourEnd {
+    type Error = WireError;
+
+    fn try_from(wire: ContourEnd) -> WireResult<Self> {
+        Ok(Self {
+            contour_id: parse::<ContourId>(&wire.contour_id)?,
+            side: wire.side.parse().map_err(WireError::UnknownName)?,
+        })
+    }
+}
+
+impl TryFrom<JoinContoursIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: JoinContoursIntent) -> WireResult<Self> {
+        Ok(JoinContours {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            from: wire.from.try_into()?,
+            to: wire.to.try_into()?,
+            mode: if wire.merge {
+                font::JoinMode::Merge
+            } else {
+                font::JoinMode::Connect
+            },
         }
         .into())
     }

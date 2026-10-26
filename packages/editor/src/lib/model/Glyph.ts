@@ -4,6 +4,7 @@ import type {
   AnchorSeed,
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
+  ContourEnd,
   ContourId,
   GlyphComponents,
   GlyphHandle,
@@ -67,7 +68,6 @@ import {
   type DecomposedTransform,
   type MatModel,
   type Point2D,
-  type QuadraticCurve,
 } from "@shift/geo";
 import {
   type Anchor,
@@ -106,8 +106,6 @@ import { ComponentTransformEdit } from "./ComponentTransformEdit";
 import { SidebearingEdit } from "./SidebearingEdit";
 import type { Sidebearing } from "../../types/spacing";
 import { GlyphTransformEdit, type GlyphTransformOptions } from "./GlyphTransformEdit";
-import { DeletePoints } from "./DeletePoints";
-import { JoinContours, type ContourEnd } from "./JoinContours";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers, LayerChangeToken } from "./LayerBuffers";
@@ -395,6 +393,22 @@ class GlyphLayerWriter {
       contourId,
       pointId,
     });
+  }
+
+  deletePoints(pointIds: readonly PointId[], mode: DeleteMode): void {
+    this.#workspaceIntents.deletePoints({ pointIds: [...pointIds], mode });
+  }
+
+  splitSegment(startId: PointId, endId: PointId, t: number, pointId: PointId): void {
+    this.#workspaceIntents.splitSegment({ startId, endId, t, pointId });
+  }
+
+  upgradeLineToCubic(startId: PointId, endId: PointId): void {
+    this.#workspaceIntents.upgradeLineToCubic({ startId, endId });
+  }
+
+  joinContours(from: ContourEnd, to: ContourEnd, merge: boolean): void {
+    this.#workspaceIntents.joinContours({ from, to, merge });
   }
 
   applyBooleanOp(
@@ -1051,23 +1065,18 @@ export class GlyphLayer {
    * Splits a current segment and preserves its shape.
    *
    * @param segmentId - Segment in this layer's current geometry to split.
-   * @param t - Parametric split position from 0 to 1.
+   * @param t - Parametric split position, strictly between 0 and 1.
    * @returns The inserted on-curve point id, or `null` when the segment is unavailable.
    */
   splitSegment(segmentId: SegmentId, t: number): PointId | null {
     const segment = this.geometry.segment(segmentId);
-    if (!segment) return null;
+    if (!segment || !(t > 0 && t < 1)) return null;
 
-    return this.#writer.transaction("Split segment", () => {
-      switch (segment.type) {
-        case "line":
-          return this.#splitLineSegment(segment, t);
-        case "quad":
-          return this.#splitQuadraticSegment(segment, t);
-        case "cubic":
-          return this.#splitCubicSegment(segment, t);
-      }
+    const pointId = mintPointId();
+    this.#writer.transaction("Split segment", () => {
+      this.#writer.splitSegment(segment.startId, segment.endId, t, pointId);
     });
+    return pointId;
   }
 
   /**
@@ -1080,67 +1089,10 @@ export class GlyphLayer {
     const segment = this.geometry.segment(segmentId);
     if (!segment || segment.type !== "line") return false;
 
-    const points = segment.asLine();
-    if (!points) return false;
-
-    const contourId = this.contourIdOfPoint(points.end.id);
-    const contour = contourId ? this.contour(contourId) : null;
-    if (!contour) return false;
-
     this.#writer.transaction("Upgrade line to cubic", () => {
-      const control1Pos = {
-        x: points.start.x + (points.end.x - points.start.x) / 3,
-        y: points.start.y + (points.end.y - points.start.y) / 3,
-      };
-      const control2Pos = {
-        x: points.start.x + ((points.end.x - points.start.x) * 2) / 3,
-        y: points.start.y + ((points.end.y - points.start.y) * 2) / 3,
-      };
-
-      if (contour.closed && contour.points[0]?.id === points.end.id) {
-        this.#writer.addPoints(contour.id, [
-          Point.offCurve(control1Pos),
-          Point.offCurve(control2Pos),
-        ]);
-        return;
-      }
-
-      const control2Id = this.insertPointBefore(points.end.id, Point.offCurve(control2Pos));
-      this.insertPointBefore(control2Id, Point.offCurve(control1Pos));
+      this.#writer.upgradeLineToCubic(segment.startId, segment.endId);
     });
-
     return true;
-  }
-
-  #splitLineSegment(segment: Segment, t: number): PointId {
-    return this.insertPointBefore(segment.endId, Point.onCurve(segment.pointAt(t)));
-  }
-
-  #splitQuadraticSegment(segment: Segment, t: number): PointId {
-    const points = segment.asQuad()!;
-    const [curveA, curveB] = segment.splitAt(t) as [QuadraticCurve, QuadraticCurve];
-
-    const splitPointId = this.insertPointBefore(
-      points.end.id,
-      Point.create(curveA.p1, points.end.pointType, true),
-    );
-    this.insertPointBefore(points.end.id, Point.offCurve(curveB.c));
-    this.movePointTo(points.control.id, curveA.c);
-
-    return splitPointId;
-  }
-
-  #splitCubicSegment(segment: Segment, t: number): PointId {
-    const points = segment.asCubic()!;
-    const [curveA, curveB] = segment.splitAt(t) as [CubicCurve, CubicCurve];
-
-    this.insertPointBefore(points.controlEnd.id, Point.offCurve(curveA.c1));
-    const splitPointId = this.insertPointBefore(points.controlEnd.id, Point.smooth(curveA.p1));
-    this.insertPointBefore(points.controlEnd.id, Point.offCurve(curveB.c0));
-    this.movePointTo(points.controlStart.id, curveA.c0);
-    this.movePointTo(points.controlEnd.id, curveB.c1);
-
-    return splitPointId;
   }
 
   /**
@@ -1172,7 +1124,12 @@ export class GlyphLayer {
    * @throws {Error} When an affected contour span cannot be traversed; the edit is rolled back.
    */
   deletePoints(pointIds: readonly PointId[], mode: DeleteMode = "fit"): boolean {
-    return new DeletePoints(this, pointIds, mode).apply();
+    if (pointIds.length === 0 || pointIds.some((id) => !this.point(id))) return false;
+
+    this.#writer.transaction("Delete selection", () => {
+      this.#writer.deletePoints(pointIds, mode);
+    });
+    return true;
   }
 
   /**
@@ -1180,7 +1137,7 @@ export class GlyphLayer {
    *
    * @remarks
    * Two ends of one contour close it. Ends of different contours join into the
-   * `from` contour; the `to` contour's points get new identities.
+   * `from` contour, and every point keeps its identity.
    *
    * @param from - End whose contour survives a join; dropped when merging.
    * @param to - End connected to `from`.
@@ -1188,7 +1145,18 @@ export class GlyphLayer {
    * @returns Whether both ends were open and were connected.
    */
   joinContours(from: ContourEnd, to: ContourEnd, merge: boolean): boolean {
-    return new JoinContours(this, from, to, merge).apply();
+    const fromContour = this.contour(from.contourId);
+    const toContour = this.contour(to.contourId);
+    if (!fromContour || !toContour || fromContour.closed || toContour.closed) return false;
+    if (fromContour === toContour) {
+      const onCurve = fromContour.points.filter(Point.isOnCurve).length;
+      if (from.side === to.side || onCurve < 2) return false;
+    }
+
+    this.#writer.transaction(fromContour === toContour ? "Close contour" : "Join contours", () => {
+      this.#writer.joinContours(from, to, merge);
+    });
+    return true;
   }
 
   /**

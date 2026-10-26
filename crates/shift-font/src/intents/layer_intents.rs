@@ -877,6 +877,122 @@ impl LayerIntent for ApplyBooleanOp {
     }
 }
 
+/// Deletes points and reconnects what survives: see [`GlyphLayer::delete_points`].
+#[derive(Clone, Debug)]
+pub struct DeletePoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub mode: DeleteMode,
+}
+
+impl LayerIntent for DeletePoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            mode,
+        } = self;
+        font.edit_layer(*layer_id, |layer| layer.delete_points(point_ids, *mode))
+    }
+}
+
+/// Splits a segment at `t`, keeping its shape: see [`GlyphLayer::split_segment`].
+#[derive(Clone, Debug)]
+pub struct SplitSegment {
+    pub layer_id: LayerId,
+    pub start_id: PointId,
+    pub end_id: PointId,
+    pub t: f64,
+    /// The new on-curve point, minted by the caller so it can keep drawing from it.
+    pub point_id: PointId,
+}
+
+impl LayerIntent for SplitSegment {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            start_id,
+            end_id,
+            t,
+            point_id,
+        } = self;
+        font.edit_layer(*layer_id, |layer| {
+            layer.split_segment(start_id, end_id, *t, point_id.clone())
+        })
+    }
+}
+
+/// Raises a line to a cubic of the same shape: see [`GlyphLayer::upgrade_line_to_cubic`].
+#[derive(Clone, Debug)]
+pub struct UpgradeLineToCubic {
+    pub layer_id: LayerId,
+    pub start_id: PointId,
+    pub end_id: PointId,
+}
+
+impl LayerIntent for UpgradeLineToCubic {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            start_id,
+            end_id,
+        } = self;
+        font.edit_layer(*layer_id, |layer| {
+            layer.upgrade_line_to_cubic(start_id, end_id)
+        })
+    }
+}
+
+/// Closes a contour or joins two by their ends: see [`GlyphLayer::join_contours`].
+#[derive(Clone, Debug)]
+pub struct JoinContours {
+    pub layer_id: LayerId,
+    pub from: ContourEnd,
+    pub to: ContourEnd,
+    pub mode: JoinMode,
+}
+
+impl LayerIntent for JoinContours {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            from,
+            to,
+            mode,
+        } = self;
+        font.edit_layer(*layer_id, |layer| layer.join_contours(from, to, *mode))
+    }
+}
+
+impl Font {
+    /// Runs `edit` on a layer and reindexes it against the layer as it was.
+    fn edit_layer(
+        &mut self,
+        layer_id: LayerId,
+        edit: impl FnOnce(&mut GlyphLayer) -> CoreResult<()>,
+    ) -> CoreResult<()> {
+        let before = self.layer_snapshot(layer_id)?;
+        edit(self.require_layer_mut(layer_id)?)?;
+        self.reindex_layer(layer_id, &before)
+    }
+}
+
 /// Replaces drawing content while preserving layer identity, source, height, guidelines, and lib.
 ///
 /// Values use font units and supplied entity identities. The complete replacement

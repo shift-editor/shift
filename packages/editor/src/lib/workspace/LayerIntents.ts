@@ -15,6 +15,10 @@ import type {
   RemoveComponentsIntent,
   RemovePointsIntent,
   ReverseContourIntent,
+  SplitSegmentIntent,
+  UpgradeLineToCubicIntent,
+  DeletePointsIntent,
+  JoinContoursIntent,
   SetContourClosedIntent,
   SetComponentTransformsIntent,
   SetContourStartIntent,
@@ -95,6 +99,34 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "reverseContour",
       reverseContour: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  deletePoints(payload: Payload<DeletePointsIntent>): TResult {
+    return this.#sink({
+      kind: "deletePoints",
+      deletePoints: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  splitSegment(payload: Payload<SplitSegmentIntent>): TResult {
+    return this.#sink({
+      kind: "splitSegment",
+      splitSegment: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  upgradeLineToCubic(payload: Payload<UpgradeLineToCubicIntent>): TResult {
+    return this.#sink({
+      kind: "upgradeLineToCubic",
+      upgradeLineToCubic: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  joinContours(payload: Payload<JoinContoursIntent>): TResult {
+    return this.#sink({
+      kind: "joinContours",
+      joinContours: { layerId: this.#layerId, ...payload },
     });
   }
 

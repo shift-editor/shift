@@ -551,6 +551,12 @@ export interface CloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
+/** One open end of a contour. */
+export interface ContourEnd {
+  contourId: ContourId
+  side: "start" | "end"
+}
+
 /**
  * Font-level axis creation. The axis id is client-minted; the tag is an
  * OpenType label and must be unique within the font.
@@ -620,6 +626,13 @@ export interface DeleteNamedInstanceIntent {
   instanceId: NamedInstanceId
 }
 
+/** Deletes points and reconnects what survives, fitting or leaving gaps. */
+export interface DeletePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  mode: "fit" | "gap"
+}
+
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
 export interface DeleteSourceIntent {
   sourceId: SourceId
@@ -649,6 +662,10 @@ export type FontIntent =
   | { kind: 'transformLayer', transformLayer: TransformLayerIntent }
   | { kind: 'setXAdvance', setXAdvance: SetXAdvanceIntent }
   | { kind: 'applyBooleanOp', applyBooleanOp: BooleanOpIntent }
+  | { kind: 'deletePoints', deletePoints: DeletePointsIntent }
+  | { kind: 'splitSegment', splitSegment: SplitSegmentIntent }
+  | { kind: 'upgradeLineToCubic', upgradeLineToCubic: UpgradeLineToCubicIntent }
+  | { kind: 'joinContours', joinContours: JoinContoursIntent }
   | { kind: 'createGlyph', createGlyph: CreateGlyphIntent }
   | { kind: 'updateGlyph', updateGlyph: UpdateGlyphIntent }
   | { kind: 'updateFontMetadata', updateFontMetadata: UpdateFontMetadataIntent }
@@ -688,6 +705,14 @@ export interface FontMetadata {
   licenseUrl?: string
   description?: string
   note?: string
+}
+
+/** Closes a contour by its two ends, or joins two contours into `from`. */
+export interface JoinContoursIntent {
+  layerId: LayerId
+  from: ContourEnd
+  to: ContourEnd
+  merge: boolean
 }
 
 export type KerningPosition = "first" | "second";
@@ -1427,6 +1452,18 @@ export interface SourceMetricValue {
   overshoot: number
 }
 
+/**
+ * Splits the segment between two on-curve points at `t`; the caller mints
+ * the new on-curve point's id.
+ */
+export interface SplitSegmentIntent {
+  layerId: LayerId
+  startId: PointId
+  endId: PointId
+  t: number
+  pointId: PointId
+}
+
 /** Affine transform of a whole layer: points, anchors, and component placements. */
 export interface TransformLayerIntent {
   layerId: LayerId
@@ -1476,4 +1513,11 @@ export interface UpdateSourceIntent {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+/** Raises the line between two on-curve points to a cubic of the same shape. */
+export interface UpgradeLineToCubicIntent {
+  layerId: LayerId
+  startId: PointId
+  endId: PointId
 }

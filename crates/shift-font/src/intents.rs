@@ -9,6 +9,7 @@ use crate::Require;
 use crate::anchor_attachment::realign_attached_components;
 use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
 use crate::composite::anchor_aligned_offset;
+use crate::contour_edit::{ContourEnd, DeleteMode, JoinMode};
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
@@ -137,6 +138,10 @@ font_intents! {
         TransformLayer,
         SetXAdvance,
         ApplyBooleanOp,
+        DeletePoints,
+        SplitSegment,
+        UpgradeLineToCubic,
+        JoinContours,
         ReplaceGlyphLayerContent,
     }
     font {

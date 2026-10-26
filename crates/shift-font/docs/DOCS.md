@@ -37,6 +37,8 @@ crates/shift-font/src/
   changes.rs       -- reversible replacements, impacts, and entity lifecycle views
   changes/compact.rs -- `CompactChangeSet`: a change set for sending, values-only layer changes as values (`FontChangeSet::compact`, `CompactChangeSet::expand`)
   layer_edit.rs    -- glyph-layer geometry mutations
+  contour_edit.rs  -- whole-contour edits: delete points and reconnect (fit or gap), split a segment, line to cubic, close or join by ends
+  curve_fit.rs     -- one cubic or quadratic fitted to a connected run of segments, for deletion
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening

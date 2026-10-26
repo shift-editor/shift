@@ -162,7 +162,7 @@ fn invalid_position_update_input(kind: &'static str, message: impl Into<String>)
 }
 
 impl GlyphLayer {
-    fn require_contour_mut(&mut self, id: &ContourId) -> CoreResult<&mut Contour> {
+    pub(crate) fn require_contour_mut(&mut self, id: &ContourId) -> CoreResult<&mut Contour> {
         let contour = self.contour_mut(id).require(&id)?;
 
         Ok(contour)
@@ -177,12 +177,12 @@ impl GlyphLayer {
         contour.get_point_mut(point_id).require(&point_id)
     }
 
-    fn require_point_contour(&self, point_id: PointId) -> CoreResult<ContourId> {
+    pub(crate) fn require_point_contour(&self, point_id: PointId) -> CoreResult<ContourId> {
         self.find_point_contour(&point_id)
             .ok_or(CoreError::PointInContourNotFound(point_id))
     }
 
-    fn require_point_contours(
+    pub(crate) fn require_point_contours(
         &self,
         point_ids: &[PointId],
     ) -> CoreResult<Vec<(PointId, ContourId)>> {

@@ -38,7 +38,9 @@ pub mod anchor_propagation;
 pub mod changes;
 pub mod check;
 pub mod composite;
+pub mod contour_edit;
 pub mod curve;
+pub mod curve_fit;
 pub mod drag_rules;
 pub mod error;
 pub mod intents;
@@ -52,6 +54,7 @@ mod string_enum;
 pub mod test_support;
 
 pub use changes::*;
+pub use contour_edit::{ContourEditError, ContourEnd, ContourSide, DeleteMode, JoinMode};
 pub use error::{CoreError, CoreResult, EntityKind, EntityRef, Require};
 pub use intents::*;
 pub use interpolation::*;
