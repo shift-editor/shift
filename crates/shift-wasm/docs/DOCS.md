@@ -24,6 +24,7 @@ crates/shift-wasm/src/
   lib.rs         module list
   anchors.rs     anchorKind, propagateAnchors, followAnchors
   decomposition.rs   blendDecomposedGlyph: component outlines between masters of a decomposed glyph
+  drag.rs        prepareDrag, dragMoves, releaseDrag: shift-font's drag rules, matched once per drag behind a handle, one call per frame
   shaping.rs     registerShaper, setShaperGlyphs, shapeParagraphs (the `shaping` feature)
   engine.rs      engineOpen, engineBeginEdit, engineApply, engineRewindEdit, engineStage, engineEndEdit, engineCancelEdit, engineUndo, engineRedo, enginePreview, enginePreload, engineRelease, EngineLayerSource (the `engine` feature)
   engine_reads.rs   engineGlyphNumbers, engineSourceNumbers, engineKerningRun, engineKerningPairs, engineSourceMetricsAt, and their layouts

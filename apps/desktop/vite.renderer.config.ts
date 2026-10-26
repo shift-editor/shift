@@ -65,7 +65,6 @@ export default defineConfig(async () => {
         "@shift/types",
         "@shift/glyph-state",
         "@shift/glyph-info",
-        "@shift/rules",
         "@shift/validation",
       ],
     },

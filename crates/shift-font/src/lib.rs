@@ -39,6 +39,7 @@ pub mod changes;
 pub mod check;
 pub mod composite;
 pub mod curve;
+pub mod drag_rules;
 pub mod error;
 pub mod intents;
 pub mod interpolation;

@@ -41,6 +41,7 @@ crates/shift-font/src/
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
   anchor_attachment.rs  -- which components follow their anchors after an edit, and where to
   anchor_propagation.rs -- fontc's anchor propagation into composites, over plain data
+  drag_rules.rs    -- point-neighbourhood drag rules (handles follow anchors, smooth points stay smooth): pattern table, matching once per drag, positions per frame
   check.rs         -- read-only font checks: findings, codes, severities, options
   check/           -- designspace, outline (interpolation), health, kerning, coverage rules
   placed_blend.rs  -- decomposed component placement (mirror reversal, point pairing) and blending, over plain numbers

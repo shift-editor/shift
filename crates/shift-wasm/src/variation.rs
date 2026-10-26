@@ -113,20 +113,20 @@ pub struct AxisMappingBasisData {
 }
 
 /// Registered values by handle; a released handle is reused.
-struct Registry<T> {
+pub(crate) struct Registry<T> {
     entries: Vec<Option<T>>,
     free: Vec<u32>,
 }
 
 impl<T> Registry<T> {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             entries: Vec::new(),
             free: Vec::new(),
         }
     }
 
-    fn insert(&mut self, value: T) -> u32 {
+    pub(crate) fn insert(&mut self, value: T) -> u32 {
         if let Some(handle) = self.free.pop() {
             self.entries[handle as usize] = Some(value);
             return handle;
@@ -140,11 +140,11 @@ impl<T> Registry<T> {
         handle
     }
 
-    fn get(&self, handle: u32) -> Option<&T> {
+    pub(crate) fn get(&self, handle: u32) -> Option<&T> {
         self.entries.get(handle as usize)?.as_ref()
     }
 
-    fn remove(&mut self, handle: u32) {
+    pub(crate) fn remove(&mut self, handle: u32) {
         if let Some(entry) = self.entries.get_mut(handle as usize)
             && entry.take().is_some()
         {

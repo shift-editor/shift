@@ -78,6 +78,18 @@ fn calls() -> Vec<Call> {
             output: Vec::<shift_font::anchor_attachment::Following>::kind(),
         },
         Call {
+            name: "prepareDrag",
+            doc: "Matches shift-font's drag rules for dragging the selected points, keeping the points as the drag found them until `releaseDrag`.",
+            input: crate::drag::DragSelection::kind(),
+            output: crate::drag::PreparedDragHandle::kind(),
+        },
+        Call {
+            name: "dragMoves",
+            doc: "Positions for one frame of a prepared drag: the selected points moved by the delta and the points its rules move. Empty for a released handle.",
+            input: crate::drag::DragFrame::kind(),
+            output: Vec::<crate::drag::DragMove>::kind(),
+        },
+        Call {
             name: "blendDecomposedGlyph",
             doc: "Blends every component occurrence of a decomposed glyph as each master places it, or null when any occurrence's masters don't line up point for point.",
             input: DecomposedGlyph::kind(),

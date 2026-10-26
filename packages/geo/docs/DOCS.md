@@ -122,5 +122,4 @@ pnpm --filter @shift/geo typecheck   # TypeScript type checking
 
 - `@shift/types` -- defines shared branded IDs and bridge DTOs used by consumers
 - `@shift/glyph-state` -- uses `Vec2`, `Curve`, and `Bounds` for glyph geometry and contour operations
-- `@shift/rules` -- uses `Vec2` and `Point2D` for constraint evaluation
 - `Transform` (in `apps/desktop`) -- uses `Mat` for selection transforms (rotate, scale, reflect)
