@@ -6,6 +6,7 @@ export {
 export { FrameHandler, type FrameClock } from "./lib/editor/rendering/FrameHandler";
 export { ContourPath } from "./lib/graphics/ContourPath";
 export { renderLayerSvg } from "./lib/editor/rendering/renderLayerSvg";
+export { snapFeedback, type SnapFeedback } from "./lib/editor/rendering/overlays/SnapLines";
 export {
   LOCK_GAP_PX,
   LOCK_PATH_DATA,
