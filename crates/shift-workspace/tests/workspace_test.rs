@@ -2655,3 +2655,40 @@ fn ledger_trims_oldest_entries_beyond_max() {
     assert_eq!(workspace.font().glyph_count(), 1);
     assert!(workspace.font().glyph_id_by_name("g0").is_some());
 }
+
+#[test]
+fn a_move_sent_compacted_persists_against_an_unloaded_layer() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
+    add_square_contour(&mut workspace, layer_id, (10.0, 20.0), 100.0);
+    drop(workspace);
+
+    // The window's engine moves every point and sends the change compacted.
+    let mut window = ShiftStore::open(&store_path)
+        .unwrap()
+        .load_font_state()
+        .unwrap();
+    let moved: Vec<f64> = [(15.0, 20.0), (115.0, 20.0), (115.0, 120.0), (15.0, 120.0)]
+        .into_iter()
+        .flat_map(<[f64; 2]>::from)
+        .collect();
+    let applied = window
+        .apply_intents(&FontIntentSet::from(shift_font::SetPositions {
+            layer_id,
+            positions: moved,
+        }))
+        .unwrap();
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .persist_compact_change_set(applied.changes.compact(), shift_store::SaveState::Unsaved)
+        .unwrap();
+
+    assert_eq!(workspace.font().layer(layer_id), window.layer(layer_id));
+    assert_persisted_font_matches_workspace(&mut workspace);
+}

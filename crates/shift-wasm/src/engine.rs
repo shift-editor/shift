@@ -13,7 +13,7 @@ use serde::Serialize;
 use shift_engine::{ApplyError, EditHistory, EngineSession, LayerSource};
 use shift_font::{
     AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
-    GlyphLayer, LayerId, TouchedLayer,
+    GlyphLayer, LayerId, SetPositions, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{AnchorData, ComponentData, ContourData, intents};
@@ -362,7 +362,7 @@ pub fn engine_end_edit(handle: u32) -> Result<Option<Uint8Array>, JsError> {
             return Ok(None);
         };
         Ok(Some(Uint8Array::from(
-            &rmp_serde::to_vec_named(&change_set)?[..],
+            &rmp_serde::to_vec_named(&change_set.compact())?[..],
         )))
     })
 }
@@ -444,7 +444,7 @@ fn replayed(
         return Ok(JsValue::UNDEFINED);
     };
     let edit = edit_object(engine.session.font(), before, &applied)?;
-    let change_set = rmp_serde::to_vec_named(&applied.changes)?;
+    let change_set = rmp_serde::to_vec_named(&applied.changes.compact())?;
     set(&edit, "changeSet", &Uint8Array::from(&change_set[..]))?;
     set(
         &edit,
@@ -510,13 +510,46 @@ pub fn engine_preview(
 
 /// `intents`, in the shape the workspace takes, as one set.
 fn intent_set(intents: &JsValue) -> Result<FontIntentSet, JsError> {
-    let wire: Vec<intents::FontIntent> = serde_wasm_bindgen::from_value(plain_arrays(intents)?)?;
-    Ok(FontIntentSet {
-        intents: wire
-            .into_iter()
-            .map(FontIntent::try_from)
-            .collect::<Result<_, _>>()?,
-    })
+    let intents = Array::from(intents)
+        .iter()
+        .map(|intent| {
+            if let Some(intent) = positions_intent(&intent)? {
+                return Ok(intent);
+            }
+            let wire: intents::FontIntent = serde_wasm_bindgen::from_value(plain_arrays(&intent)?)?;
+            Ok(FontIntent::try_from(wire)?)
+        })
+        .collect::<Result<_, JsError>>()?;
+    Ok(FontIntentSet { intents })
+}
+
+/// A `setPositions` intent read straight from its object, or `None` for any
+/// other kind. Its positions, a hundred thousand numbers on a large glyph,
+/// cross as one copied block; through serde they were read one at a time,
+/// which cost ten times the edit.
+fn positions_intent(intent: &JsValue) -> Result<Option<FontIntent>, JsError> {
+    let field = |object: &JsValue, key: &str| Reflect::get(object, &JsValue::from_str(key)).ok();
+    if field(intent, "kind")
+        .and_then(|kind| kind.as_string())
+        .as_deref()
+        != Some("setPositions")
+    {
+        return Ok(None);
+    }
+    let payload =
+        field(intent, "setPositions").ok_or_else(|| JsError::new("setPositions has no payload"))?;
+    let layer_id = field(&payload, "layerId")
+        .and_then(|id| id.as_string())
+        .ok_or_else(|| JsError::new("setPositions has no layer id"))?;
+    let positions = field(&payload, "positions")
+        .ok_or_else(|| JsError::new("setPositions has no positions"))?;
+    Ok(Some(
+        SetPositions {
+            layer_id: intents::parse::<LayerId>(&layer_id)?,
+            positions: Float64Array::new(&positions).to_vec(),
+        }
+        .into(),
+    ))
 }
 
 fn apply_error(error: ApplyError<HostError>) -> JsError {
@@ -556,32 +589,28 @@ pub fn engine_release(handle: u32) {
     });
 }
 
-/// `intents` with each payload's typed-array fields copied into plain arrays.
+/// `intent` with its payload's typed-array fields copied into plain arrays.
 ///
 /// The wire intent is internally tagged, so serde reads its payload through
 /// `deserialize_any`, which serde-wasm-bindgen cannot take a typed array to.
-/// The caller's intents stay as they were: the workspace reads them next.
-fn plain_arrays(intents: &JsValue) -> Result<JsValue, JsError> {
-    let copies = Array::new();
-    for intent in Array::from(intents).iter() {
-        let copy = Object::assign(&Object::new(), &Object::from(intent));
-        for entry in Object::entries(&copy).iter() {
-            let entry = Array::from(&entry);
-            let Some(payload) = entry.get(1).dyn_ref::<Object>().cloned() else {
-                continue;
-            };
-            let payload = Object::assign(&Object::new(), &payload);
-            for field in Object::entries(&payload).iter() {
-                let field = Array::from(&field);
-                if let Some(values) = field.get(1).dyn_ref::<Float64Array>() {
-                    set_value(&payload, &field.get(0), &Array::from(values))?;
-                }
+/// The caller's intent stays as it was: the workspace reads it next.
+fn plain_arrays(intent: &JsValue) -> Result<JsValue, JsError> {
+    let copy = Object::assign(&Object::new(), &Object::from(intent.clone()));
+    for entry in Object::entries(&copy).iter() {
+        let entry = Array::from(&entry);
+        let Some(payload) = entry.get(1).dyn_ref::<Object>().cloned() else {
+            continue;
+        };
+        let payload = Object::assign(&Object::new(), &payload);
+        for field in Object::entries(&payload).iter() {
+            let field = Array::from(&field);
+            if let Some(values) = field.get(1).dyn_ref::<Float64Array>() {
+                set_value(&payload, &field.get(0), &Array::from(values))?;
             }
-            set_value(&copy, &entry.get(0), &payload)?;
         }
-        copies.push(&copy);
+        set_value(&copy, &entry.get(0), &payload)?;
     }
-    Ok(copies.into())
+    Ok(copy.into())
 }
 
 /// Sets `key` on `object`, which fails only on a frozen or proxied object.

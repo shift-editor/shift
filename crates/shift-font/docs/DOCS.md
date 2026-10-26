@@ -35,6 +35,7 @@ crates/shift-font/src/
     variation.rs   -- external-to-design mapping evaluation
   intents.rs       -- atomic authoring intents and changeset derivation
   changes.rs       -- reversible replacements, impacts, and entity lifecycle views
+  changes/compact.rs -- `CompactChangeSet`: a change set for sending, values-only layer changes as values (`FontChangeSet::compact`, `CompactChangeSet::expand`)
   layer_edit.rs    -- glyph-layer geometry mutations
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views

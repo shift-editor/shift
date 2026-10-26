@@ -1495,10 +1495,10 @@ impl Bridge {
     change_set: Uint8Array,
     save_state: NapiSaveState,
   ) -> errors::Result<NapiAppliedChange> {
-    let change_set: shift_font::FontChangeSet = rmp_serde::from_slice(&change_set)?;
+    let change_set: shift_font::CompactChangeSet = rmp_serde::from_slice(&change_set)?;
     let outcome = self
       .workspace_mut()?
-      .persist_change_set(change_set, save_state.into())?;
+      .persist_compact_change_set(change_set, save_state.into())?;
     self.mark_font_changed();
     self.applied_echo(outcome)
   }

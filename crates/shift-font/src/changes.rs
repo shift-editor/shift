@@ -1,3 +1,7 @@
+mod compact;
+
+pub use compact::CompactChangeSet;
+
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

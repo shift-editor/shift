@@ -317,6 +317,25 @@ impl FontWorkspace {
         Ok(outcome)
     }
 
+    /// Persists a change set another process sent compacted, loading the
+    /// layers it sent as values and rebuilding them from this font first.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::persist_change_set`], and [`WorkspaceError::Font`] when a
+    /// layer sent as values no longer has the change's before values.
+    pub fn persist_compact_change_set(
+        &mut self,
+        change_set: shift_font::CompactChangeSet,
+        save_state: SaveState,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        self.session
+            .load_layers(&mut StoreLayers(&self.store), change_set.value_layer_ids())
+            .map_err(WorkspaceError::from_load)?;
+        let change_set = change_set.expand(self.session.font())?;
+        self.persist_change_set(change_set, save_state)
+    }
+
     /// Persists a change set already applied to a session over this font,
     /// without replaying intents or adding a ledger entry: the session that
     /// made it keeps its undo history. Every `before` must match this font, so a
