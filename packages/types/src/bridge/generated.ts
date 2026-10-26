@@ -635,6 +635,7 @@ export type FontIntent =
   | { kind: 'removePoints', removePoints: RemovePointsIntent }
   | { kind: 'addAnchors', addAnchors: AddAnchorsIntent }
   | { kind: 'moveAnchors', moveAnchors: MoveAnchorsIntent }
+  | { kind: 'setPositions', setPositions: SetPositionsIntent }
   | { kind: 'removeAnchors', removeAnchors: RemoveAnchorsIntent }
   | { kind: 'renameAnchors', renameAnchors: RenameAnchorsIntent }
   | { kind: 'addComponent', addComponent: AddComponentIntent }
@@ -1406,6 +1407,13 @@ export interface SetPointSmoothIntent {
   layerId: LayerId
   pointId: PointId
   smooth: boolean
+}
+
+/** Every point and anchor position of a layer, naming none of them. */
+export interface SetPositionsIntent {
+  layerId: LayerId
+  /** Every contour point, contour after contour, then every anchor, each as `x, y`. */
+  positions: Array<number>
 }
 
 export interface SetXAdvanceIntent {

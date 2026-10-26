@@ -19,6 +19,7 @@ import type {
   SetComponentTransformsIntent,
   SetContourStartIntent,
   SetPointSmoothIntent,
+  SetPositionsIntent,
   SetXAdvanceIntent,
   TransformLayerIntent,
 } from "@shift/types";
@@ -44,6 +45,14 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "addPoints",
       addPoints: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  /** Every point and anchor position at once, naming none: see {@link SetPositionsIntent}. */
+  setPositions(payload: Payload<SetPositionsIntent>): TResult {
+    return this.#sink({
+      kind: "setPositions",
+      setPositions: { layerId: this.#layerId, ...payload },
     });
   }
 

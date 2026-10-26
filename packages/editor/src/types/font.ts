@@ -8,7 +8,6 @@ import type {
   GlyphPreview,
   GlyphRecord,
   GlyphSnapshot,
-  GlyphState,
   GlyphSnapshotRequest,
   LayerId,
   LayerMatch,
@@ -25,6 +24,7 @@ import type {
   SourceId,
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
+import type { LayerUpdate } from "../lib/model/GlyphLayerState";
 import type { Signal } from "../lib/signals/signal";
 import type { EditablePair, InterpolatedMetrics } from "../lib/wasm/engine";
 import type { PendingEditId } from "./editing";
@@ -146,8 +146,11 @@ export interface WorkspaceEditCoordinator {
    * in one engine call that shows each touched layer once.
    */
   pushAll(intents: readonly FontIntent[]): PendingEditId;
-  /** Every layer `intents` would touch, as they would leave it, without keeping the edit. */
-  preview(intents: readonly FontIntent[]): readonly GlyphState[];
+  /**
+   * Every layer `intents` would touch, as they would leave it, without keeping
+   * the edit; a layer whose structure they keep comes with values only.
+   */
+  preview(intents: readonly FontIntent[]): readonly LayerUpdate[];
   transaction<TResult>(label: string, body: () => TResult): TResult;
   /**
    * Opens an edit that stays open across frames until committed or cancelled.

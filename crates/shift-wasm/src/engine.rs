@@ -12,18 +12,25 @@ use js_sys::{Array, Float64Array, Object, Reflect, Uint8Array};
 use serde::Serialize;
 use shift_engine::{ApplyError, EditHistory, EngineSession, LayerSource};
 use shift_font::{
-    AppliedIntents, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId, GlyphLayer,
-    LayerId, TouchedLayer,
+    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
+    GlyphLayer, LayerId, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
-use shift_wire::{GlyphState, intents};
+use shift_wire::{AnchorData, ComponentData, ContourData, intents};
 use wasm_bindgen::prelude::*;
 
 use crate::engine_reads::InternedIds;
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
-import type { FontIntent, FontReplacement, GlyphStructure, LayerId } from "@shift/types";
+import type {
+  ContourData,
+  ContourId,
+  FontIntent,
+  FontReplacement,
+  GlyphStructure,
+  LayerId,
+} from "@shift/types";
 
 /**
  * Where an engine session reads layers it has not loaded: the saved and
@@ -65,10 +72,29 @@ export interface EngineStage {
   sourceMetrics: boolean;
 }
 
-/** One layer an edit touched, as the workspace's echo carries it. */
+/** A contour an edit kept as it was: the one with this id in the structure the edit started from. */
+export interface KeptContour {
+  id: ContourId;
+  kept: true;
+}
+
+/** A layer's structure after a structural edit; the contours it kept come by id alone. */
+export interface EngineStructure extends Omit<GlyphStructure, "contours"> {
+  contours: (ContourData | KeptContour)[];
+}
+
+/**
+ * One layer an edit touched: its values, and its structure when the edit
+ * changed it.
+ */
 export interface EngineLayer {
   layerId: LayerId;
-  structure: GlyphStructure;
+  /**
+   * The layer's structure, or null when the edit changed only its values: the
+   * structure is then the one the edit started from. Contours the edit kept
+   * come by id alone, as they are in that structure.
+   */
+  structure: EngineStructure | null;
   values: Float64Array;
   /** Whether the edit changed the layer's structure, not only its values. */
   structural: boolean;
@@ -247,11 +273,12 @@ pub fn engine_apply(
         if !engine.history.is_open() {
             return Err(JsError::new("no edit is open; begin one first"));
         }
+        let before = engine.session.font().clone();
         let applied = engine
             .session
             .apply(&mut HostLayers(&engine.source), &intents)
             .map_err(apply_error)?;
-        let edit = edit_object(engine.session.font(), &applied)?;
+        let edit = edit_object(engine.session.font(), &before, &applied)?;
         engine.history.record(applied.changes);
         Ok(edit.into())
     })
@@ -295,15 +322,12 @@ pub fn engine_stage(
         if !engine.history.is_open() {
             return Err(JsError::new("no edit is open; begin one first"));
         }
+        let before = engine.session.font().clone();
         let applied = engine
             .session
             .apply(&mut HostLayers(&engine.source), &intents)
             .map_err(apply_error)?;
-        let layers: Array = applied
-            .layers
-            .iter()
-            .map(engine_layer)
-            .collect::<Result<_, _>>()?;
+        let layers = engine_layers(&before, &applied.layers)?;
         let impact = applied.changes.impact();
         engine.history.record(applied.changes);
 
@@ -369,11 +393,12 @@ pub fn engine_cancel_edit(handle: u32) -> Result<(), JsError> {
 #[wasm_bindgen(js_name = engineUndo, unchecked_return_type = "EngineEdit | undefined")]
 pub fn engine_undo(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
+        let before = engine.session.font().clone();
         let undone = engine
             .history
             .undo(&mut engine.session, &mut HostLayers(&engine.source))
             .map_err(apply_error)?;
-        replayed(engine, undone)
+        replayed(engine, &before, undone)
     })
 }
 
@@ -386,11 +411,12 @@ pub fn engine_undo(handle: u32) -> Result<JsValue, JsError> {
 #[wasm_bindgen(js_name = engineRedo, unchecked_return_type = "EngineEdit | undefined")]
 pub fn engine_redo(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
+        let before = engine.session.font().clone();
         let redone = engine
             .history
             .redo(&mut engine.session, &mut HostLayers(&engine.source))
             .map_err(apply_error)?;
-        replayed(engine, redone)
+        replayed(engine, &before, redone)
     })
 }
 
@@ -409,11 +435,15 @@ pub fn engine_discard_redo(handle: u32) -> Result<(), JsError> {
 
 /// An undo or redo as an `EngineEdit` carrying its change set and whether it
 /// left the font as last saved, or `undefined`.
-fn replayed(engine: &Engine, applied: Option<AppliedIntents>) -> Result<JsValue, JsError> {
+fn replayed(
+    engine: &Engine,
+    before: &Font,
+    applied: Option<AppliedIntents>,
+) -> Result<JsValue, JsError> {
     let Some(applied) = applied else {
         return Ok(JsValue::UNDEFINED);
     };
-    let edit = edit_object(engine.session.font(), &applied)?;
+    let edit = edit_object(engine.session.font(), before, &applied)?;
     let change_set = rmp_serde::to_vec_named(&applied.changes)?;
     set(&edit, "changeSet", &Uint8Array::from(&change_set[..]))?;
     set(
@@ -440,12 +470,8 @@ pub fn engine_mark_saved(handle: u32) -> Result<(), JsError> {
 
 /// What an edit did as an `EngineEdit`: its touched layers and the font-level
 /// records it changed. Glyph records are left to the workspace's echo.
-fn edit_object(font: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
-    let layers: Array = applied
-        .layers
-        .iter()
-        .map(engine_layer)
-        .collect::<Result<_, _>>()?;
+fn edit_object(font: &Font, before: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
+    let layers = engine_layers(before, &applied.layers)?;
     let edit = Object::new();
     set(&edit, "layers", &layers)?;
     let impact = applied
@@ -477,7 +503,8 @@ pub fn engine_preview(
             .session
             .preview(&mut HostLayers(&engine.source), &set)
             .map_err(apply_error)?;
-        previewed.layers.iter().map(engine_layer).collect()
+        // A preview keeps nothing, so the session's font is what it started from.
+        engine_layers(engine.session.font(), &previewed.layers)
     })
 }
 
@@ -564,27 +591,95 @@ fn set_value(object: &Object, key: &JsValue, value: &JsValue) -> Result<(), JsEr
         .map_err(|_| JsError::new(&format!("cannot set {key:?}")))
 }
 
-/// One touched layer as an `EngineLayer` object.
-fn engine_layer(touched: &TouchedLayer) -> Result<JsValue, JsError> {
-    let state = GlyphState::from_layer(&touched.layer);
+/// Each touched layer as an `EngineLayer` object, against the font as it was
+/// before the edit.
+fn engine_layers(before: &Font, touched: &[TouchedLayer]) -> Result<Array, JsError> {
+    touched
+        .iter()
+        .map(|touched| engine_layer(before, touched))
+        .collect()
+}
+
+/// One touched layer as an `EngineLayer` object. A layer whose structure the
+/// edit left alone crosses as its values only, and a structural edit sends in
+/// full only the contours it changed: building a large glyph's structure as
+/// objects cost more than the edit.
+fn engine_layer(before: &Font, touched: &TouchedLayer) -> Result<JsValue, JsError> {
+    let source = &touched.layer;
     let layer = Object::new();
-    set(
-        &layer,
-        "layerId",
-        &JsValue::from_str(state.layer_id.as_str()),
-    )?;
-    set(
-        &layer,
-        "structure",
-        &serde_wasm_bindgen::to_value(&state.structure)?,
-    )?;
-    set(&layer, "values", &Float64Array::from(&state.values[..]))?;
+    set(&layer, "layerId", &JsValue::from_str(source.id().as_str()))?;
+    let structure = if touched.structural {
+        EditedStructure::new(before.layer(source.id()), source)
+            .serialize(&serde_wasm_bindgen::Serializer::new())?
+    } else {
+        JsValue::NULL
+    };
+    set(&layer, "structure", &structure)?;
+    let values = shift_wire::values_from_layer(source);
+    set(&layer, "values", &Float64Array::from(&values[..]))?;
     set(
         &layer,
         "structural",
         &JsValue::from_bool(touched.structural),
     )?;
     Ok(layer.into())
+}
+
+/// A layer's structure after a structural edit, each contour the edit kept
+/// as it was sent by id alone.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditedStructure {
+    contours: Vec<EditedContour>,
+    anchors: Vec<AnchorData>,
+    components: Vec<ComponentData>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum EditedContour {
+    Changed(ContourData),
+    /// The contour with this id in the structure the edit started from.
+    Kept {
+        id: String,
+        kept: bool,
+    },
+}
+
+impl EditedStructure {
+    fn new(before: Option<&GlyphLayer>, after: &GlyphLayer) -> Self {
+        let contours = after
+            .contours_iter()
+            .map(|contour| {
+                let kept = before
+                    .and_then(|layer| layer.contour(&contour.id()))
+                    .is_some_and(|previous| same_structure(previous, contour));
+                if kept {
+                    EditedContour::Kept {
+                        id: contour.id().to_string(),
+                        kept: true,
+                    }
+                } else {
+                    EditedContour::Changed(ContourData::from(contour))
+                }
+            })
+            .collect();
+        Self {
+            contours,
+            anchors: after.anchors_iter().map(AnchorData::from).collect(),
+            components: after.components_iter().map(ComponentData::from).collect(),
+        }
+    }
+}
+
+/// Whether two contours have the same points, types, smoothness and closure,
+/// whatever their positions.
+fn same_structure(left: &Contour, right: &Contour) -> bool {
+    left.is_closed() == right.is_closed()
+        && left.points().len() == right.points().len()
+        && left.points().iter().zip(right.points()).all(|(a, b)| {
+            a.id() == b.id() && a.point_type() == b.point_type() && a.is_smooth() == b.is_smooth()
+        })
 }
 
 fn set(object: &Object, key: &str, value: &JsValue) -> Result<(), JsError> {

@@ -123,6 +123,7 @@ font_intents! {
         RemovePoints,
         AddAnchors,
         MoveAnchors,
+        SetPositions,
         RemoveAnchors,
         RenameAnchors,
         AddComponent,

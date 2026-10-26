@@ -74,6 +74,42 @@ impl GlyphLayer {
         GlyphInterpolationValues::from_layer(self)
     }
 
+    /// Replaces every contour point position, contour after contour, then
+    /// every anchor position, each as `x, y`, keeping the advance and the
+    /// component transforms.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::MissingGlyphValue`] or
+    /// [`CoreError::TrailingGlyphValues`] when `positions` does not hold one
+    /// pair per point and anchor, and the errors of
+    /// [`Self::apply_interpolation_values`] for a value that is not finite.
+    pub fn set_positions(&mut self, positions: &[f64]) -> CoreResult<()> {
+        let count = self
+            .contours_iter()
+            .map(|contour| contour.points().len() * GLYPH_POINT_VALUE_COUNT)
+            .sum::<usize>()
+            + self.anchors().len() * GLYPH_ANCHOR_VALUE_COUNT;
+        if positions.len() < count {
+            return Err(CoreError::MissingGlyphValue {
+                index: GLYPH_ADVANCE_VALUE_COUNT + positions.len(),
+            });
+        }
+        if positions.len() > count {
+            return Err(CoreError::TrailingGlyphValues {
+                expected: count,
+                actual: positions.len(),
+            });
+        }
+        let mut values = self.interpolation_values().into_vec();
+        if let Some(target) =
+            values.get_mut(GLYPH_ADVANCE_VALUE_COUNT..GLYPH_ADVANCE_VALUE_COUNT + count)
+        {
+            target.copy_from_slice(positions);
+        }
+        self.apply_interpolation_values(&GlyphInterpolationValues::new(values))
+    }
+
     /// Replaces every interpolating value without changing layer topology.
     ///
     /// # Errors

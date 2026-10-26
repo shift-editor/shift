@@ -58,6 +58,8 @@ export {
   engineUndo,
   type EngineEdit,
   type EngineLayer,
+  type EngineStructure,
+  type KeptContour,
   type EngineLayerSource,
   type EngineStage,
 } from "./generated-engine/shift_wasm.js";

@@ -123,6 +123,7 @@ export type {
   SetContourClosedIntent,
   SetContourStartIntent,
   SetPointSmoothIntent,
+  SetPositionsIntent,
   SetXAdvanceIntent,
   SlugAtlas,
   SlugExactSource,

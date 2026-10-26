@@ -1,11 +1,11 @@
 use crate::test_support::sample_font;
 use crate::{
-    AddAnchors, AddComponent, AddPoints, AnchorId, AnchorSeed, AppliedIntents, ComponentAlignment,
-    ComponentId, ContourId, CoreError, CreateGlyph, CreateGlyphLayer, Font, FontChangeImpact,
-    FontIntent, FontIntentSet, GlyphId, GlyphInterpolationValues, LayerId, MoveAnchors, MovePoints,
-    PointId, PointSeed, PointType, RemoveComponents, ReverseContour, SetComponentAlignment,
-    SetComponentTransforms, SetXAdvance, Source, SourceId, Transform, TransformLayer,
-    TranslatePoints,
+    AddAnchors, AddComponent, AddPoints, Anchor, AnchorId, AnchorSeed, AppliedIntents,
+    ComponentAlignment, ComponentId, ContourId, CoreError, CreateGlyph, CreateGlyphLayer, Font,
+    FontChangeImpact, FontIntent, FontIntentSet, GlyphId, GlyphInterpolationValues, LayerId,
+    MoveAnchors, MovePoints, Point, PointId, PointSeed, PointType, RemoveComponents,
+    ReverseContour, SetComponentAlignment, SetComponentTransforms, SetPositions, SetXAdvance,
+    Source, SourceId, Transform, TransformLayer, TranslatePoints,
 };
 
 fn apply(font: &mut Font, intents: impl IntoIterator<Item = FontIntent>) -> AppliedIntents {
@@ -389,4 +389,70 @@ fn negative_zero_is_stored_as_zero() {
         .apply_interpolation_values(&GlyphInterpolationValues::new(values))
         .unwrap();
     assert_eq!(reloaded, *layer);
+}
+
+#[test]
+fn setting_every_position_moves_points_and_anchors_like_naming_them() {
+    let layer_id = LayerId::from_raw("A_regular");
+    let mut named = sample_font();
+    let mut by_position = sample_font();
+    let layer = named.layer(layer_id).unwrap();
+    let point_ids: Vec<PointId> = layer.points().map(Point::id).collect();
+    let anchor_ids: Vec<AnchorId> = layer.anchors_iter().map(Anchor::id).collect();
+    let moved = |index: usize| [index as f64 * 3.0, -(index as f64)];
+    let point_coords: Vec<f64> = (0..point_ids.len()).flat_map(moved).collect();
+    let anchor_coords: Vec<f64> = (0..anchor_ids.len()).flat_map(|i| moved(100 + i)).collect();
+
+    let by_id = apply(
+        &mut named,
+        [
+            MovePoints {
+                layer_id,
+                point_ids,
+                coords: point_coords.clone(),
+            }
+            .into(),
+            MoveAnchors {
+                layer_id,
+                anchor_ids,
+                coords: anchor_coords.clone(),
+            }
+            .into(),
+        ],
+    );
+    let set = apply(
+        &mut by_position,
+        [SetPositions {
+            layer_id,
+            positions: [point_coords, anchor_coords].concat(),
+        }
+        .into()],
+    );
+
+    assert_eq!(by_position.layer(layer_id), named.layer(layer_id));
+    assert_eq!(set.layers.len(), by_id.layers.len());
+    assert!(set.layers.iter().all(|touched| !touched.structural));
+}
+
+#[test]
+fn setting_positions_needs_one_pair_per_point_and_anchor() {
+    let layer_id = LayerId::from_raw("A_regular");
+    let mut font = sample_font();
+    let original = font.clone();
+    let count = {
+        let layer = font.layer(layer_id).unwrap();
+        (layer.points().count() + layer.anchors().len()) * 2
+    };
+
+    for positions in [vec![0.0; count - 2], vec![0.0; count + 2]] {
+        let rejected = font.apply_intents(&FontIntentSet::from(SetPositions {
+            layer_id,
+            positions,
+        }));
+        assert!(matches!(
+            rejected,
+            Err(CoreError::MissingGlyphValue { .. } | CoreError::TrailingGlyphValues { .. })
+        ));
+    }
+    assert_eq!(font, original);
 }

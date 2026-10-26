@@ -351,6 +351,42 @@ impl LayerIntent for MoveAnchors {
     }
 }
 
+/// Sets every point and anchor position of a layer at once: a move of many
+/// points that names none of them, so it costs numbers, not ids.
+#[derive(Clone, Debug)]
+pub struct SetPositions {
+    pub layer_id: LayerId,
+    /// Every contour point, contour after contour, then every anchor, each as
+    /// `x, y`.
+    pub positions: Vec<f64>,
+}
+
+impl LayerIntent for SetPositions {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn may_move_anchors(&self) -> bool {
+        true
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            positions,
+        } = self;
+        positions
+            .iter()
+            .copied()
+            .require_finite(Coordinates::PointPositions)?;
+        font.require_layer_mut(*layer_id)?.set_positions(positions)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct RemoveAnchors {
     pub layer_id: LayerId,

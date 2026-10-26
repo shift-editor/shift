@@ -151,6 +151,13 @@ interface GlyphRenderGeometry {
   hitAt(pos: Point2D, radius: number): GlyphHit | null;
 }
 
+/**
+ * How many layer positions cost about as much to send as one moved position
+ * named by id: a move naming more than this share of the layer sends every
+ * position instead (`setPositions`).
+ */
+const POSITIONS_PER_NAMED_MOVE = 16;
+
 class GlyphLayerWriter {
   readonly #editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null;
   readonly #intents: LayerIntents<void> | null;
@@ -270,6 +277,14 @@ class GlyphLayerWriter {
         anchorIds.push(position.id);
         anchorCoords.push(position.x, position.y);
       }
+    }
+
+    const state = this.#state.state;
+    // Naming a moved point costs far more than sending a number, so a move of
+    // a large share of the layer sends every position, naming none.
+    if (patch.positions.length * POSITIONS_PER_NAMED_MOVE > state.positionCount) {
+      this.#workspaceIntents.setPositions({ positions: state.positionsWith(patch.positions) });
+      return;
     }
 
     const commit = () => {

@@ -21,8 +21,8 @@ use shift_font::{
     MoveAnchors, MovePoints, RemoveAnchors, RemoveComponents, RemovePoints, RenameAnchors,
     RenameKerningGroup, ReverseContour, SetAxisMappings, SetComponentAlignment,
     SetComponentTransforms, SetContourClosed, SetContourStart, SetKerningGroupMember,
-    SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth, SetXAdvance,
-    TransformLayer, TranslatePoints, UpdateAxis, UpdateFontMetadata, UpdateGlyph,
+    SetKerningValues, SetLanguages, SetMetricDefinitions, SetPointSmooth, SetPositions,
+    SetXAdvance, TransformLayer, TranslatePoints, UpdateAxis, UpdateFontMetadata, UpdateGlyph,
     UpdateNamedInstance, UpdateSource,
 };
 use shift_font::{
@@ -747,6 +747,17 @@ pub struct MoveAnchorsIntent {
     pub coords: Vec<f64>,
 }
 
+/// Every point and anchor position of a layer, naming none of them.
+#[cfg_attr(feature = "napi", napi(object))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPositionsIntent {
+    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    pub layer_id: String,
+    /// Every contour point, contour after contour, then every anchor, each as `x, y`.
+    pub positions: Vec<f64>,
+}
+
 #[cfg_attr(feature = "napi", napi(object))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -995,6 +1006,7 @@ wire_intents! {
     RemovePoints { remove_points: RemovePointsIntent },
     AddAnchors { add_anchors: AddAnchorsIntent },
     MoveAnchors { move_anchors: MoveAnchorsIntent },
+    SetPositions { set_positions: SetPositionsIntent },
     RemoveAnchors { remove_anchors: RemoveAnchorsIntent },
     RenameAnchors { rename_anchors: RenameAnchorsIntent },
     AddComponent { add_component: AddComponentIntent },
@@ -1121,6 +1133,18 @@ impl TryFrom<AddAnchorsIntent> for font::FontIntent {
         Ok(AddAnchors {
             layer_id: parse::<LayerId>(&wire.layer_id)?,
             anchors: convert_all(wire.anchors)?,
+        }
+        .into())
+    }
+}
+
+impl TryFrom<SetPositionsIntent> for font::FontIntent {
+    type Error = WireError;
+
+    fn try_from(wire: SetPositionsIntent) -> WireResult<Self> {
+        Ok(SetPositions {
+            layer_id: parse::<LayerId>(&wire.layer_id)?,
+            positions: wire.positions,
         }
         .into())
     }

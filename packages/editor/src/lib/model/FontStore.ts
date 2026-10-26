@@ -42,7 +42,7 @@ import type {
   GlyphSourceKey,
 } from "../../types/font";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
-import { GlyphLayerState } from "./GlyphLayerState";
+import { GlyphLayerState, type LayerUpdate } from "./GlyphLayerState";
 import { Kerning, KerningRecords } from "./Kerning";
 import type { Glyph } from "./Glyph";
 import type { EngineEdit } from "../wasm/engine";
@@ -322,7 +322,13 @@ export class FontStore {
     });
   }
 
-  publishLayers(states: readonly GlyphState[]): GlyphState[] {
+  /**
+   * Shows each resident layer as `states` leave it; a state with no structure
+   * changed only values.
+   *
+   * @returns Each shown layer's state before, for taking the edit back.
+   */
+  publishLayers(states: readonly LayerUpdate[]): GlyphState[] {
     const before: GlyphState[] = [];
     batch(() => {
       for (const state of states) {

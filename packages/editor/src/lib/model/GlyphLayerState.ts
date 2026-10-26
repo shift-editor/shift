@@ -1,4 +1,11 @@
-import type { ContourId, GlyphState, GlyphStructure, LayerId, PointId } from "@shift/types";
+import type {
+  ContourData,
+  ContourId,
+  GlyphState,
+  GlyphStructure,
+  LayerId,
+  PointId,
+} from "@shift/types";
 import {
   GlyphGeometry,
   type GlyphPosition,
@@ -16,6 +23,33 @@ import {
   type WritableSignal,
 } from "../signals/signal";
 import { LayerBuffers, type LayerChangeToken } from "./LayerBuffers";
+
+/** A contour an edit kept as it was: the one with this id in the structure it started from. */
+export interface KeptContour {
+  readonly id: ContourId;
+  readonly kept: true;
+}
+
+/** A layer's structure after an edit; the contours it kept may come by id alone. */
+export interface EditedStructure extends Omit<GlyphStructure, "contours"> {
+  readonly contours: readonly (ContourData | KeptContour)[];
+}
+
+/**
+ * A layer as an edit left it: its values, and its structure unless the edit
+ * kept it.
+ */
+export interface LayerUpdate {
+  readonly layerId: LayerId;
+  /**
+   * The layer's structure, or null when the edit changed only values. Either
+   * way it is read against the structure the edit started from (the active
+   * drag's base, else the one shown): null keeps it whole, and a kept contour
+   * is the one with its id there.
+   */
+  readonly structure: EditedStructure | null;
+  readonly values: Float64Array;
+}
 
 /**
  * Reactive state for one authored layer, as the window's editing engine last
@@ -161,6 +195,16 @@ export class GlyphLayerState {
     };
   }
 
+  /** How many positions the layer holds: every contour point and every anchor. */
+  get positionCount(): number {
+    return this.#buffers.peek().positionCount;
+  }
+
+  /** The layer's positions in `setPositions` order with `updates` applied. */
+  positionsWith(updates: GlyphPositions): number[] {
+    return this.#buffers.peek().positionsWith(updates);
+  }
+
   positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
     return this.#buffers.peek().positionsFor(targets);
   }
@@ -169,17 +213,13 @@ export class GlyphLayerState {
     return this.#buffers.peek().contourIdOfPoint(pointId);
   }
 
-  /** Shows `state`, as the window's engine or the workspace's echo left the layer. */
-  replace(state: GlyphState): void {
-    this.#publish(state);
+  /** Shows `update`, as the window's engine or the workspace's echo left the layer. */
+  replace(update: LayerUpdate): void {
+    this.#publish(update);
   }
 
   replaceValues(values: Float64Array): void {
-    this.replace({
-      layerId: this.#layerId,
-      structure: this.#editBaseState.peek()?.structure ?? this.#structure.peek(),
-      values,
-    });
+    this.replace({ layerId: this.#layerId, structure: null, values });
   }
 
   patchPositions(updates: GlyphPositions): void {
@@ -224,13 +264,13 @@ export class GlyphLayerState {
    * Shows the layer as a gesture under way would leave it, keeping the base
    * the gesture began from; null shows that base again.
    */
-  showPreview(state: GlyphState | null): void {
+  showPreview(state: LayerUpdate | null): void {
     const shown = state ?? this.#editBaseState.peek();
     if (!shown) throw new Error("glyph layer has no active edit to preview");
     this.#show(shown);
   }
 
-  #publish(state: GlyphState): void {
+  #publish(state: LayerUpdate): void {
     batch(() => {
       this.#show(state);
       if (!this.#reapplyEdit) return;
@@ -240,20 +280,60 @@ export class GlyphLayerState {
     });
   }
 
-  #show(state: GlyphState): void {
+  #show(update: LayerUpdate): void {
     batch(() => {
       const buffers = this.#buffers.peek();
-      if (GlyphGeometry.structuresEqual(buffers.structure, state.structure)) {
+      const base = this.#editBaseState.peek()?.structure ?? buffers.structure;
+      const structure = update.structure ? withKeptContours(update.structure, base) : base;
+      if (
+        structure === buffers.structure ||
+        GlyphGeometry.structuresEqual(buffers.structure, structure)
+      ) {
         const values = buffers.snapshot;
         if (
-          values.length !== state.values.length ||
-          !values.every((value, index) => Object.is(value, state.values[index]))
+          values.length !== update.values.length ||
+          !values.every((value, index) => Object.is(value, update.values[index]))
         ) {
-          buffers.replaceValues(state.values);
+          buffers.replaceValues(update.values);
         }
       } else {
-        this.#buffers.set(LayerBuffers.fromState(state));
+        this.#buffers.set(
+          LayerBuffers.fromState(
+            { layerId: this.#layerId, structure, values: update.values },
+            buffers,
+          ),
+        );
       }
     });
   }
+}
+
+/**
+ * `edited` with each kept contour replaced by the contour with its id in
+ * `base`, the same object, so buffers built for it can be reused.
+ *
+ * @throws When `base` has no contour a kept one names: the engine and this
+ * window disagree about the layer.
+ */
+function withKeptContours(edited: EditedStructure, base: GlyphStructure): GlyphStructure {
+  if (isWhole(edited)) return edited;
+
+  const byId = new Map(base.contours.map((contour) => [contour.id, contour]));
+  return {
+    ...edited,
+    contours: edited.contours.map((contour) => {
+      if (!isKept(contour)) return contour;
+      const kept = byId.get(contour.id);
+      if (!kept) throw new Error(`an edit kept contour ${contour.id}, which this layer lacks`);
+      return kept;
+    }),
+  };
+}
+
+function isWhole(structure: EditedStructure): structure is GlyphStructure {
+  return !structure.contours.some(isKept);
+}
+
+function isKept(contour: ContourData | KeptContour): contour is KeptContour {
+  return "kept" in contour;
 }
