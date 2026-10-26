@@ -1443,9 +1443,9 @@ impl Bridge {
   }
 
   /// Assembles the pure-state echo for an applied outcome: replace-grade
-  /// layers plus dependent composites. Shared by apply/undo/redo. The
-  /// records grain (glyphs/axes/sources lists) rides along whenever the
-  /// change set touched that structure.
+  /// layers plus dependent composites. Shared by apply/undo/redo. Font-level
+  /// lists (axes, sources, …) ride along whole whenever the change set
+  /// touched them; glyph records only for the glyphs it changed.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
     let impact = outcome.changes.impact();
     let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
