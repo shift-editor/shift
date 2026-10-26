@@ -33,6 +33,14 @@ interface Opened {
   location: FontStoreLocation;
 }
 
+/** Where a {@link WindowEngine} opens from: the workspace serving this window. */
+export interface EngineWorkspace {
+  /** The workspace's store, for the window's layer reader; `null` for a preview. */
+  storeLocation(): Promise<FontStoreLocation | null>;
+  /** The font's directory as the engine opens it; `null` for a preview. */
+  directory(): Promise<Uint8Array | null>;
+}
+
 /**
  * The window's editing engine: shift-engine over the workspace's font store,
  * reading layers synchronously through the window's read-only reader.
@@ -51,7 +59,7 @@ interface Opened {
  */
 export class WindowEngine implements FontEngine {
   readonly #layers: LayerReaderHost;
-  readonly #storeLocation: () => Promise<FontStoreLocation | null>;
+  readonly #workspace: EngineWorkspace;
   readonly #kerningRevision: WritableSignal<number> = signal(0, {
     name: "windowEngine.kerningRevision",
   });
@@ -62,9 +70,9 @@ export class WindowEngine implements FontEngine {
   /** Which reads the open edit changed so far, to show again when it is rewound or cancelled. */
   #inEdit: ChangedReads = UNCHANGED;
 
-  constructor(layers: LayerReaderHost, storeLocation: () => Promise<FontStoreLocation | null>) {
+  constructor(layers: LayerReaderHost, workspace: EngineWorkspace) {
     this.#layers = layers;
-    this.#storeLocation = storeLocation;
+    this.#workspace = workspace;
   }
 
   get kerningRevisionCell(): Signal<number> {
@@ -86,8 +94,11 @@ export class WindowEngine implements FontEngine {
    * @throws When the workspace has no store to read, as in a preview.
    */
   async reopen(): Promise<void> {
-    const location = await this.#storeLocation();
-    if (!location) throw new Error("the workspace has no font store to edit");
+    const [location, directory] = await Promise.all([
+      this.#workspace.storeLocation(),
+      this.#workspace.directory(),
+    ]);
+    if (!location || !directory) throw new Error("the workspace has no font store to edit");
     const { EngineSession } = await loadEngine();
 
     const reader = this.#layers.open(location);
@@ -95,7 +106,7 @@ export class WindowEngine implements FontEngine {
       // The session reads layers only while an edit runs, after this open, so
       // its source can follow the current reader.
       const session = EngineSession.open(
-        this.#layers.directory(reader),
+        directory,
         engineLayerSource(this.#layers, () => this.#reader()),
       );
       this.#close();
@@ -113,7 +124,7 @@ export class WindowEngine implements FontEngine {
    */
   async followStore(): Promise<void> {
     const opened = this.#opened;
-    const location = await this.#storeLocation();
+    const location = await this.#workspace.storeLocation();
     if (!opened || !location || FontStoreLocation.equals(location, opened.location)) return;
 
     const previous = opened.reader;

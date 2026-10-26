@@ -42,7 +42,7 @@ crates/shift-engine/tests/
 
 The editor's reads of the font are shift-font queries on `EngineSession::font`, the font as the session's edits left it, an open edit included: kerning between glyphs (`Font::kerning_blend_at`, `Font::kerning_blend_at_source`, `Kerning::editable_pair`) and source metrics between masters (`Font::source_metric_interpolation`). The session adds no read rules of its own; `shift-wasm` exports them (`engine_reads.rs`).
 
-`apply` runs all three for callers that do not persist; `preview` loads and stages but never commits, for a gesture's preview in the editor. `FontWorkspace` stages, writes to its store, and commits only after the write succeeds. `evict` turns loaded layers back into placeholders that keep their width and height; every edit is persisted before it is committed, so eviction never loses work.
+`apply` runs all three for callers that do not persist; `preview` loads and stages but never commits, for a gesture's preview in the editor. `FontWorkspace` stages, writes to its store, and commits only after the write succeeds. `evict` turns loaded layers back into placeholders that keep their width and height; every edit is persisted before it is committed, so eviction never loses work. `directory` returns the font with every layer a placeholder, what another session over the same store opens with; it replaces only the loaded layers, so the workspace hands a window its directory without reading the store again.
 
 ## Verification
 

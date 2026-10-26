@@ -1,8 +1,8 @@
 use std::collections::{BTreeSet, HashSet};
 
 use shift_font::{
-    AppliedIntents, CoreError, Font, FontChange, FontChangeSet, FontIntentSet, GlyphId, GlyphLayer,
-    LayerId,
+    AppliedIntents, CoreError, Font, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId,
+    GlyphLayer, LayerId,
 };
 
 use crate::{LayerResidency, LayerSource};
@@ -228,6 +228,33 @@ impl EngineSession {
         self.font.replace_glyph_layers(placeholders)?;
         self.residency.mark_unloaded(evicted);
         Ok(())
+    }
+
+    /// The font with every layer a placeholder that keeps its width and
+    /// height: what another session over the same persisted state opens with
+    /// ([`EngineSession::open_directory`]).
+    ///
+    /// Copies the font in O(1) and replaces only the loaded layers, so it costs
+    /// what those layers cost, plus one residency lookup per layer.
+    ///
+    /// # Errors
+    ///
+    /// As [`EngineSession::evict`].
+    pub fn directory(&self) -> Result<Font, CoreError> {
+        let loaded: Vec<GlyphId> = self
+            .font
+            .glyphs()
+            .filter(|glyph| {
+                glyph
+                    .layers()
+                    .values()
+                    .any(|layer| !self.residency.is_unloaded(layer.id()))
+            })
+            .map(Glyph::id)
+            .collect();
+        let mut directory = self.clone();
+        directory.evict(&loaded)?;
+        Ok(directory.font)
     }
 
     /// Applies `set` to a copy of the font. Load what it reads first.

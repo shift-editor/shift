@@ -409,6 +409,24 @@ fn a_preview_shows_the_edit_and_keeps_the_font_as_it_was() {
 }
 
 #[test]
+fn a_partly_loaded_session_hands_out_the_directory_the_store_would() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    session
+        .load_glyphs(&mut persisted, &[GlyphId::from_raw("composite0")])
+        .unwrap();
+
+    let directory = session.directory().unwrap();
+
+    assert!(directory == placeholders(&font));
+    assert!(
+        session.font() != &directory,
+        "the session keeps what it loaded"
+    );
+}
+
+#[test]
 fn a_replayed_change_set_leaves_the_font_as_the_session_that_made_it() {
     let font = composite_font();
     let mut persisted = Persisted(font.clone());

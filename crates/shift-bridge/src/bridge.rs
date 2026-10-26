@@ -1316,6 +1316,21 @@ impl Bridge {
     self.document_state_snapshot()
   }
 
+  /// The open font's metadata and its glyph and layer directory, every
+  /// layer a placeholder, as named MessagePack: what a window's engine session
+  /// opens with.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no workspace is open or the directory cannot be encoded.
+  #[napi]
+  pub fn encoded_directory(&self) -> errors::Result<Uint8Array> {
+    let directory = self.workspace()?.directory()?;
+    Ok(Uint8Array::new(
+      rmp_serde::to_vec_named(&directory).map_err(BridgeError::from)?,
+    ))
+  }
+
   #[napi]
   pub fn get_metadata(&self) -> errors::Result<intents::FontMetadata> {
     Ok(FontMetadata::from(self.font()?.metadata()).into())

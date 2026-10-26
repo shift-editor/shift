@@ -394,6 +394,20 @@ export class FontSessionClient {
   }
 
   /**
+   * The open font's directory, every layer a placeholder, as named
+   * MessagePack: what this window's engine opens with. The workspace builds it
+   * from the font it already holds, so the window never reads the whole
+   * directory from the store itself.
+   *
+   * @returns `null` for a preview, which has no store.
+   */
+  async directory(): Promise<Uint8Array | null> {
+    await this.connect();
+
+    return this.#require().call("workspace.directory", undefined);
+  }
+
+  /**
    * Evaluates the current font's axis mappings in the utility process.
    *
    * @param location - External location keyed by stable axis id.

@@ -56,7 +56,7 @@ export class EngineSession {
   }
 
   /**
-   * Opens a session over a font directory, as `LayerReader.loadDirectory`
+   * Opens a session over a font directory, as the workspace's `encodedDirectory`
    * returns it.
    *
    * @throws When `directory` does not decode to a font.

@@ -586,6 +586,17 @@ impl FontWorkspace {
             .map_err(Into::into)
     }
 
+    /// The font as the store holds it, with every layer a placeholder: what
+    /// an engine session in another process opens with, built from this
+    /// session instead of from a second read of the store.
+    ///
+    /// # Errors
+    ///
+    /// Fails when a placeholder cannot replace a loaded layer.
+    pub fn directory(&self) -> Result<shift_font::Font, WorkspaceError> {
+        self.session.directory().map_err(Into::into)
+    }
+
     /// Metadata and directory are always present. Layer payloads are present
     /// only after explicit acquisition.
     pub fn font(&self) -> &shift_font::Font {

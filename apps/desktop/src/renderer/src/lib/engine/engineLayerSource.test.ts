@@ -70,7 +70,7 @@ describe("the window's engine edits from the store", () => {
     openEngine = async () => {
       const { EngineSession } = await loadEngine();
       return EngineSession.open(
-        layers.directory(reader),
+        bridge.encodedDirectory(),
         engineLayerSource(layers, () => reader),
       );
     };

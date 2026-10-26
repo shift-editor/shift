@@ -37,7 +37,6 @@ export function layerReaderHost(): LayerReaderHost {
       readers.set(handle, openAt(location));
       return handle;
     },
-    directory: (handle) => plainView(reader(handle).loadDirectory()),
     load: (handle, layerIds) => plainView(reader(handle).loadLayers([...layerIds])),
     componentClosure: (handle, glyphIds) => reader(handle).componentClosure([...glyphIds]),
     dependents: (handle, layerIds) => reader(handle).dependents([...layerIds]),

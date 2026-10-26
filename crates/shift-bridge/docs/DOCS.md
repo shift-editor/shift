@@ -8,7 +8,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** The bridge does not own hidden edit sessions or durable font state directly. It owns an optional `FontWorkspace` and forwards mutation transactions into `shift-workspace`. **WHY:** Renderer selection state stays in TypeScript, transport stays in `shift-bridge`, and workspace/store synchronization has one Rust owner.
 
-**Architecture Invariant:** `LayerReader` only reads. It opens a store read-only through `shift-store`'s `StoreReader`, beside the utility process that writes it, and returns layers as one MessagePack array of named-field layers for the engine to decode.
+**Architecture Invariant:** `LayerReader` only reads. It opens a store read-only through `shift-store`'s `StoreReader`, beside the utility process that writes it, and returns layers as one MessagePack array of named-field layers for the engine to decode. It never reads the whole directory: the window's engine opens from `ShiftBridge::encoded_directory`, which the workspace builds from the font it already holds (`EngineSession::directory`), so a window keeps no second native copy of the font. **WHY:** building the directory in the preload cost each CJK window about 220 MB of resident memory that never came back.
 
 **Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 

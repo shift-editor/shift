@@ -47,6 +47,16 @@ export declare class Bridge {
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAsDocument(path: string, recoveryPath: string): NapiDocumentState
   discardWorkspaceChanges(): NapiDocumentState
+  /**
+   * The open font's metadata and its glyph and layer directory, every
+   * layer a placeholder, as named MessagePack: what a window's engine session
+   * opens with.
+   *
+   * # Errors
+   *
+   * Fails when no workspace is open or the directory cannot be encoded.
+   */
+  encodedDirectory(): Uint8Array
   getMetadata(): FontMetadata
   getMetrics(): NapiFontMetrics
   /**
@@ -248,15 +258,6 @@ export declare class LayerReader {
    * Fails when the store cannot be opened read-only.
    */
   static openWorkingStore(storePath: string): LayerReader
-  /**
-   * The font's metadata and its glyph and layer directory, every layer a
-   * placeholder, as named MessagePack: what an engine session opens with.
-   *
-   * # Errors
-   *
-   * Fails when the directory cannot be read or encoded.
-   */
-  loadDirectory(): Buffer
   /**
    * The content of `layer_ids` as one MessagePack array of named-field
    * layers, the encoding the engine decodes.

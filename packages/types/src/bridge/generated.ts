@@ -62,6 +62,16 @@ export interface BridgeApi {
   saveWorkspace(): DocumentState
   saveWorkspaceAsDocument(path: string, recoveryPath: string): DocumentState
   discardWorkspaceChanges(): DocumentState
+  /**
+   * The open font's metadata and its glyph and layer directory, every
+   * layer a placeholder, as named MessagePack: what a window's engine session
+   * opens with.
+   *
+   * # Errors
+   *
+   * Fails when no workspace is open or the directory cannot be encoded.
+   */
+  encodedDirectory(): Uint8Array
   getMetadata(): FontMetadata
   getMetrics(): FontMetrics
   /**

@@ -144,10 +144,12 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     if (held && FontStoreLocation.equals(held.location, location)) return held.session;
     if (held) disposeEngine(held);
 
+    const directory = await sync.call("workspace.directory", undefined);
+    if (!directory) throw new Error("the workspace has no directory to edit");
     const reader = layerReaders.open(location);
     const { EngineSession } = await loadEngine();
     const session = EngineSession.open(
-      layerReaders.directory(reader),
+      directory,
       engineLayerSource(layerReaders, () => reader),
     );
     engines.set(sync, { session, reader, location });

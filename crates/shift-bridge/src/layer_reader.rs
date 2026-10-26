@@ -48,17 +48,6 @@ impl LayerReader {
     })
   }
 
-  /// The font's metadata and its glyph and layer directory, every layer a
-  /// placeholder, as named MessagePack: what an engine session opens with.
-  ///
-  /// # Errors
-  ///
-  /// Fails when the directory cannot be read or encoded.
-  #[napi]
-  pub fn load_directory(&self) -> napi::Result<Buffer> {
-    Ok(self.encoded_directory()?.into())
-  }
-
   /// The content of `layer_ids` as one MessagePack array of named-field
   /// layers, the encoding the engine decodes.
   ///
@@ -101,12 +90,6 @@ impl LayerReader {
 impl LayerReader {
   fn reader(&self) -> BridgeResult<&StoreReader> {
     self.reader.as_ref().ok_or(BridgeError::ReaderClosed)
-  }
-
-  fn encoded_directory(&self) -> BridgeResult<Vec<u8>> {
-    Ok(rmp_serde::to_vec_named(
-      &self.reader()?.load_font_directory()?,
-    )?)
   }
 
   fn encoded_layers(&self, layer_ids: &[String]) -> BridgeResult<Vec<u8>> {
