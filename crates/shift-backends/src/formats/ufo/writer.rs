@@ -421,7 +421,7 @@ impl UfoWriter {
         let default_layer = norad_font.layers.default_layer_mut();
         if let Some(default_source) = font.default_source() {
             for glyph in font.glyphs() {
-                if let Some(layer_data) = glyph.layer_for_source(&default_source.id()) {
+                if let Some(layer_data) = glyph.layer_for_source(default_source.id()) {
                     default_layer.insert_glyph(Self::convert_glyph(glyph, layer_data)?);
                 }
             }
@@ -443,7 +443,7 @@ impl UfoWriter {
             Self::apply_layer_metadata(source, norad_layer)?;
 
             for glyph in font.glyphs() {
-                if let Some(layer_data) = glyph.layer_for_source(&source.id()) {
+                if let Some(layer_data) = glyph.layer_for_source(source.id()) {
                     let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }

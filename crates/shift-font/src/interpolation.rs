@@ -55,7 +55,7 @@ impl AxisSupport {
 
     /// Returns the stable authoring-axis identity for this support.
     pub fn axis_id(&self) -> AxisId {
-        self.axis_id.clone()
+        self.axis_id
     }
 
     /// Returns the normalized lower support boundary.
@@ -114,13 +114,13 @@ impl InterpolationRegion {
                 continue;
             }
 
-            let axis = axes.axis(&support.axis_id).require(&support.axis_id)?;
+            let axis = axes.axis(support.axis_id).require(&support.axis_id)?;
             let normalized = if let Some(design_normalization) = design_normalization {
                 let normalization = design_normalization
                     .iter()
                     .find(|normalization| normalization.axis_id == axis.id())
                     .require(&support.axis_id)?;
-                normalization.normalize(location.get(&axis.id()).unwrap_or(normalization.default))
+                normalization.normalize(location.get(axis.id()).unwrap_or(normalization.default))
             } else {
                 axis.normalize(location.value_on(axis))
             }
@@ -196,7 +196,7 @@ impl VariationBasis {
                             .filter_map(|(tag, support)| {
                                 let axis_id = axis_ids_by_tag.get(tag)?;
                                 Some(AxisSupport {
-                                    axis_id: axis_id.clone(),
+                                    axis_id: *axis_id,
                                     minimum: support.min.into_inner().into_inner(),
                                     peak: support.peak.into_inner().into_inner(),
                                     maximum: support.max.into_inner().into_inner(),
@@ -295,7 +295,7 @@ impl InterpolationBasis {
             .iter()
             .map(|(source_id, location)| {
                 (
-                    source_id.clone(),
+                    *source_id,
                     normalized_location(location, axes, &design_normalization),
                 )
             })
@@ -348,7 +348,7 @@ pub struct GlyphInterpolationSource {
 impl GlyphInterpolationSource {
     /// Returns the stable identity of the compatible authored source.
     pub fn source_id(&self) -> SourceId {
-        self.source_id.clone()
+        self.source_id
     }
 
     /// Returns the source's initial structure-ordered numeric values.
@@ -438,16 +438,13 @@ impl Font {
     /// # Errors
     ///
     /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the font.
-    pub fn glyph_interpolation(
-        &self,
-        glyph_id: &GlyphId,
-    ) -> CoreResult<Option<GlyphInterpolation>> {
+    pub fn glyph_interpolation(&self, glyph_id: GlyphId) -> CoreResult<Option<GlyphInterpolation>> {
         self.glyph_interpolation_with_bases(glyph_id, &mut HashMap::new())
     }
 
     pub(crate) fn glyph_interpolation_with_bases(
         &self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
         bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<GlyphInterpolation>> {
         let glyph = self.require_glyph(glyph_id)?;
@@ -475,11 +472,11 @@ impl Font {
 
         let source_locations = compatible_sources
             .iter()
-            .map(|(source_id, location, _)| (source_id.clone(), location.clone()))
+            .map(|(source_id, location, _)| (*source_id, location.clone()))
             .collect::<Vec<_>>();
         let basis_key = source_locations
             .iter()
-            .map(|(source_id, _)| source_id.clone())
+            .map(|(source_id, _)| *source_id)
             .collect::<Vec<_>>();
         let basis = if let Some(basis) = bases.get(&basis_key) {
             Arc::clone(basis)
@@ -553,10 +550,7 @@ fn interpolation_basis(
         .deltas_with_rounding::<f64, f64>(&points, RoundingBehaviour::None)
         .ok()?;
     Some(InterpolationBasis {
-        source_ids: sources
-            .iter()
-            .map(|(source_id, _)| source_id.clone())
-            .collect(),
+        source_ids: sources.iter().map(|(source_id, _)| *source_id).collect(),
         design_normalization,
         basis: VariationBasis::from_fontdrasil(model_coefficients, &axis_ids_by_tag),
     })
@@ -638,7 +632,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let layer = glyph
-            .layer_for_source(&font.default_source_id().unwrap())
+            .layer_for_source(font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -655,7 +649,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(&font.default_source_id().unwrap())
+            .layer_for_source(font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
 
@@ -673,7 +667,7 @@ mod tests {
         let layer = font
             .glyph_by_name("A")
             .unwrap()
-            .layer_for_source(&font.default_source_id().unwrap())
+            .layer_for_source(font.default_source_id().unwrap())
             .unwrap();
         let mut restored = layer.clone();
         let mut values = GlyphInterpolationValues::from_layer(layer).into_vec();
@@ -695,7 +689,7 @@ mod tests {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
         let reference_layer = glyph
-            .layer_for_source(&font.default_source_id().unwrap())
+            .layer_for_source(font.default_source_id().unwrap())
             .unwrap();
         let mut candidate = reference_layer.clone();
         let point = candidate
@@ -718,7 +712,7 @@ mod tests {
         let location = DesignLocation::from([(axis_id, 600.0)]);
 
         let layer = font
-            .glyph_interpolation(&glyph.id())
+            .glyph_interpolation(glyph.id())
             .unwrap()
             .unwrap()
             .resolve(&location, font.axes())
@@ -732,10 +726,10 @@ mod tests {
     fn interpolation_basis_recovers_each_authored_source() {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
-        let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
+        let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
 
         for (expected_index, source_id) in interpolation.basis().source_ids().iter().enumerate() {
-            let source = font.source(source_id).unwrap();
+            let source = font.source(*source_id).unwrap();
             let weights = interpolation
                 .basis()
                 .weights_at(source.location(), font.axes())
@@ -756,7 +750,7 @@ mod tests {
     fn glyph_interpolation_rejects_missing_axis_definitions() {
         let font = sample_variable_font();
         let glyph = font.glyph_by_name("A").unwrap();
-        let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
+        let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
 
         let error = interpolation
             .resolve(&DesignLocation::new(), &[])

@@ -60,7 +60,7 @@ impl<'a> UfoFileView<'a> {
             font,
             metadata,
             sources: &group.sources,
-            default_source_id: group.file_default.clone(),
+            default_source_id: group.file_default,
         }
     }
 }
@@ -95,7 +95,7 @@ impl FontView for UfoFileView<'_> {
     }
 
     fn default_source_id(&self) -> Option<SourceId> {
-        self.default_source_id.clone()
+        self.default_source_id
     }
 
     fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
@@ -231,7 +231,7 @@ impl DesignspaceWriter {
         if let Some(id) = font_default
             && sources.iter().any(|source| source.id() == *id)
         {
-            return Some(id.clone());
+            return Some(*id);
         }
 
         sources
@@ -262,8 +262,8 @@ impl DesignspaceWriter {
                     .iter()
                     .filter_map(|point| {
                         Some(DsAxisMapping {
-                            input: lossy_f32(point.input.get(&axis.id())?),
-                            output: lossy_f32(point.output.get(&axis.id())?),
+                            input: lossy_f32(point.input.get(axis.id())?),
+                            output: lossy_f32(point.output.get(axis.id())?),
                         })
                     })
                     .collect()
@@ -297,7 +297,7 @@ impl DesignspaceWriter {
         location
             .iter()
             .filter_map(|(axis_id, value)| {
-                let axis = axes.axis(axis_id)?;
+                let axis = axes.axis(*axis_id)?;
                 Some(Dimension {
                     name: axis.name().to_string(),
                     xvalue: Some(lossy_f32(*value)),

@@ -62,7 +62,7 @@ fn a_reader_sees_the_workspaces_unsaved_edits_as_they_are_written() {
             None,
         )
         .unwrap();
-    let edited = workspace.font().layer(&layer.id()).unwrap().clone();
+    let edited = workspace.font().layer(layer.id()).unwrap().clone();
     assert_ne!(edited, layer);
     assert_eq!(read(&reader, &layer), edited, "unsaved edit");
 
@@ -90,7 +90,7 @@ fn a_reader_answers_component_questions_as_the_writer_does() {
     let roots: Vec<GlyphId> = composites.iter().map(|glyph| glyph.id()).collect();
     assert_eq!(
         reader
-            .referenced_glyph_closure(roots.iter().cloned())
+            .referenced_glyph_closure(roots.iter().copied())
             .unwrap(),
         workspace.store().referenced_glyph_closure(roots).unwrap()
     );
@@ -103,7 +103,7 @@ fn a_reader_answers_component_questions_as_the_writer_does() {
                 .components_iter()
                 .map(shift_font::Component::base_glyph_id)
         })
-        .filter_map(|base| workspace.font().glyph(&base))
+        .filter_map(|base| workspace.font().glyph(base))
         .flat_map(Glyph::layer_ids)
         .collect();
     assert_eq!(

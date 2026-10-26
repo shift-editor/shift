@@ -18,7 +18,7 @@ fn loaded_independently(font: &Font) -> Font {
     serde_json::from_str(&serde_json::to_string(font).unwrap()).unwrap()
 }
 
-fn layer_at(font: &Font, glyph: &str, source_id: &SourceId) -> LayerId {
+fn layer_at(font: &Font, glyph: &str, source_id: SourceId) -> LayerId {
     font.glyph_by_name(glyph)
         .unwrap()
         .layer_for_source(source_id)
@@ -35,23 +35,23 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
     let base = GlyphId::from_raw("A");
 
     for (index, source_id) in sources.iter().enumerate() {
-        let acute_layer = match font.glyph(&acute).unwrap().layer_for_source(source_id) {
+        let acute_layer = match font.glyph(acute).unwrap().layer_for_source(*source_id) {
             Some(layer) => layer.id(),
             None => {
                 let layer_id = LayerId::from_raw(format!("acute_{index}"));
                 apply(
                     &mut font,
                     [CreateGlyphLayer {
-                        layer_id: layer_id.clone(),
-                        glyph_id: acute.clone(),
-                        source_id: source_id.clone(),
+                        layer_id,
+                        glyph_id: acute,
+                        source_id: *source_id,
                     }
                     .into()],
                 );
                 layer_id
             }
         };
-        let base_layer = layer_at(&font, "A", source_id);
+        let base_layer = layer_at(&font, "A", *source_id);
         let mut anchors: Vec<FontIntent> = vec![
             AddAnchors {
                 layer_id: acute_layer,
@@ -65,7 +65,7 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
             .into(),
         ];
         if !font
-            .layer(&base_layer)
+            .layer(base_layer)
             .unwrap()
             .anchors_iter()
             .any(|anchor| anchor.name() == Some("top"))
@@ -91,7 +91,7 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
         apply(
             &mut font,
             [CreateGlyph {
-                glyph_id: Some(glyph_id.clone()),
+                glyph_id: Some(glyph_id),
                 name: format!("stacked{composite}"),
                 unicodes: Vec::new(),
             }
@@ -104,23 +104,23 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
                 &mut font,
                 [
                     CreateGlyphLayer {
-                        layer_id: layer_id.clone(),
-                        glyph_id: glyph_id.clone(),
-                        source_id: source_id.clone(),
+                        layer_id,
+                        glyph_id,
+                        source_id: *source_id,
                     }
                     .into(),
                     AddComponent {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         component_id: ComponentId::from_raw(format!(
                             "stacked{composite}_{index}_base"
                         )),
-                        base_glyph_id: base.clone(),
+                        base_glyph_id: base,
                     }
                     .into(),
                     AddComponent {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         component_id: mark.clone(),
-                        base_glyph_id: acute.clone(),
+                        base_glyph_id: acute,
                     }
                     .into(),
                     SetComponentAlignment {
@@ -144,9 +144,9 @@ fn independently_loaded_fonts_produce_identical_changesets() {
     let mut second = loaded_independently(&font);
 
     for (step, source_id) in sources.iter().cycle().take(8).enumerate() {
-        let layer_id = layer_at(&first, "A", source_id);
+        let layer_id = layer_at(&first, "A", *source_id);
         let top = first
-            .layer(&layer_id)
+            .layer(layer_id)
             .unwrap()
             .anchors_iter()
             .find(|anchor| anchor.name() == Some("top"))
@@ -187,7 +187,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
     let reversed = apply(
         &mut font,
         [ReverseContour {
-            layer_id: layer_id.clone(),
+            layer_id,
             contour_id: ContourId::from_raw("A_outer"),
         }
         .into()],
@@ -198,7 +198,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
     let drawn = apply(
         &mut font,
         [AddPoints {
-            layer_id: layer_id.clone(),
+            layer_id,
             contour_id: Some(ContourId::from_raw("A_outer")),
             before: None,
             points: vec![PointSeed {
@@ -217,7 +217,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
     let composed = apply(
         &mut font,
         [AddComponent {
-            layer_id: layer_id.clone(),
+            layer_id,
             component_id: ComponentId::from_raw("added"),
             base_glyph_id: GlyphId::from_raw("acute"),
         }
@@ -246,20 +246,20 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         let intents: [FontIntent; 7] = [
             MovePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![point.clone()],
                 coords: vec![bad, 0.0],
             }
             .into(),
             TranslatePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![point.clone()],
                 dx: 0.0,
                 dy: bad,
             }
             .into(),
             AddPoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: Some(ContourId::from_raw("A_outer")),
                 before: None,
                 points: vec![PointSeed {
@@ -272,7 +272,7 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
             }
             .into(),
             AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: vec![AnchorSeed {
                     id: AnchorId::from_raw("bad"),
                     name: Some("bottom".to_string()),
@@ -282,18 +282,18 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
             }
             .into(),
             MoveAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchor_ids: vec![anchor.clone()],
                 coords: vec![bad, 0.0],
             }
             .into(),
             SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: bad,
             }
             .into(),
             TransformLayer {
-                layer_id: layer_id.clone(),
+                layer_id,
                 transform: Transform {
                     xx: bad,
                     ..Transform::translate(0.0, 0.0)
@@ -324,13 +324,13 @@ fn negative_zero_is_stored_as_zero() {
         &mut font,
         [
             MovePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![PointId::from_raw("A_0")],
                 coords: vec![-0.0, -0.0],
             }
             .into(),
             AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: vec![AnchorSeed {
                     id: AnchorId::from_raw("zero"),
                     name: Some("bottom".to_string()),
@@ -340,12 +340,12 @@ fn negative_zero_is_stored_as_zero() {
             }
             .into(),
             SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: -0.0,
             }
             .into(),
             SetComponentTransforms {
-                layer_id: layer_id.clone(),
+                layer_id,
                 component_ids: vec![ComponentId::from_raw("a_second")],
                 transforms: vec![-0.0, -0.0, -0.0, 1.0, 1.0, -0.0, -0.0, -0.0, -0.0],
             }
@@ -353,7 +353,7 @@ fn negative_zero_is_stored_as_zero() {
         ],
     );
 
-    let layer = font.layer(&layer_id).unwrap();
+    let layer = font.layer(layer_id).unwrap();
     let point = layer
         .points()
         .find(|point| point.id() == PointId::from_raw("A_0"))

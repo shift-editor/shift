@@ -74,7 +74,7 @@ fn exported_glyphs_set_into_a_new_document_export_back_unchanged() {
     let font = load_font(document);
     let aacute = font.glyph_by_name("Aacute").unwrap();
     let layer = aacute
-        .layer_for_source(&font.default_source_id().unwrap())
+        .layer_for_source(font.default_source_id().unwrap())
         .unwrap();
     assert_eq!(layer.components().len(), 2);
 

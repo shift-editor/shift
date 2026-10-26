@@ -510,7 +510,7 @@ impl FontWorkspace {
             AcquireScope::Glyphs => self.session.load_glyphs(&mut source, glyph_ids),
             AcquireScope::ComponentClosure => self
                 .session
-                .load_glyph_closure(&mut source, glyph_ids.iter().cloned()),
+                .load_glyph_closure(&mut source, glyph_ids.iter().copied()),
         }
         .map_err(WorkspaceError::from_load)
     }
@@ -565,7 +565,7 @@ impl FontWorkspace {
     /// Returns [`WorkspaceError::Store`] when the references cannot be read.
     pub fn referenced_glyph_ids_for_glyph(
         &self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
     ) -> Result<Vec<GlyphId>, WorkspaceError> {
         self.store
             .referenced_glyph_ids_for_glyph(glyph_id)
@@ -698,7 +698,7 @@ impl LayerSource for StoreLayers<'_> {
 
     fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error> {
         let started = Instant::now();
-        let closure = self.0.referenced_glyph_closure(roots.iter().cloned())?;
+        let closure = self.0.referenced_glyph_closure(roots.iter().copied())?;
         profile_acquisition("component-closure", started);
         Ok(closure)
     }

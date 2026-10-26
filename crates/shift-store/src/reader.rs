@@ -144,7 +144,7 @@ mod tests {
         layers.sort_by_key(font::GlyphLayer::id);
         let mut expected: Vec<font::GlyphLayer> = layer_ids
             .iter()
-            .map(|layer_id| font.layer(layer_id).unwrap().clone())
+            .map(|layer_id| font.layer(*layer_id).unwrap().clone())
             .collect();
         expected.sort_by_key(font::GlyphLayer::id);
         assert_eq!(layers, expected);

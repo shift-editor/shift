@@ -18,7 +18,7 @@ fn recovery_overlay_reopens_unsaved_layer_edits_and_save_commits_only_the_overla
         .document_metadata()
         .expect("document metadata");
     let unrelated_layer_id = shift_font::LayerId::from_raw("acute_regular");
-    let unrelated_before = stored_payload(&document_path, &unrelated_layer_id);
+    let unrelated_before = stored_payload(&document_path, unrelated_layer_id);
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
@@ -27,7 +27,7 @@ fn recovery_overlay_reopens_unsaved_layer_edits_and_save_commits_only_the_overla
         Some(RecoveryState::Clean)
     );
     let mut changed = document
-        .load_glyph_layer(&layer_id)
+        .load_glyph_layer(layer_id)
         .expect("load layer")
         .expect("layer exists");
     changed.set_width(777.0);
@@ -43,7 +43,7 @@ fn recovery_overlay_reopens_unsaved_layer_edits_and_save_commits_only_the_overla
     let canonical = ShiftStore::open_document(&document_path).expect("open canonical document");
     assert_eq!(
         canonical
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -78,7 +78,7 @@ fn recovery_overlay_reopens_unsaved_layer_edits_and_save_commits_only_the_overla
     );
     assert_eq!(
         reopened
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -105,12 +105,12 @@ fn recovery_overlay_reopens_unsaved_layer_edits_and_save_commits_only_the_overla
     let saved = ShiftStore::open_document(&document_path).expect("open saved document");
     assert_eq!(saved.document_metadata().unwrap(), saved_metadata);
     assert_eq!(
-        stored_payload(&document_path, &unrelated_layer_id),
+        stored_payload(&document_path, unrelated_layer_id),
         unrelated_before,
         "Save must not rewrite an unrelated layer payload"
     );
     assert_eq!(
-        saved.load_glyph_layer(&layer_id).unwrap().unwrap().width(),
+        saved.load_glyph_layer(layer_id).unwrap().unwrap().width(),
         777.0
     );
     drop(saved);
@@ -142,7 +142,7 @@ fn save_as_document_includes_recovery_without_mutating_its_source() {
 
     let mut source = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
-    let mut changed = source.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut changed = source.load_glyph_layer(layer_id).unwrap().unwrap();
     changed.set_width(777.0);
     source.replace_glyph_layer(&changed).unwrap();
 
@@ -158,7 +158,7 @@ fn save_as_document_includes_recovery_without_mutating_its_source() {
     let canonical_source = ShiftStore::open_document(&document_path).expect("open source");
     assert_eq!(
         canonical_source
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -168,7 +168,7 @@ fn save_as_document_includes_recovery_without_mutating_its_source() {
     assert_eq!(saved_as.document_metadata().unwrap(), saved_as_metadata);
     assert_eq!(
         saved_as
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -227,12 +227,12 @@ fn save_rechecks_the_canonical_commit_while_the_document_is_open() {
 
     let mut first = ShiftStore::open_document_with_recovery(&document_path, &first_recovery_path)
         .expect("open first editor");
-    let mut first_layer = first.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut first_layer = first.load_glyph_layer(layer_id).unwrap().unwrap();
     first_layer.set_width(700.0);
     first.replace_glyph_layer(&first_layer).unwrap();
     let mut second = ShiftStore::open_document_with_recovery(&document_path, &second_recovery_path)
         .expect("open second editor");
-    let mut second_layer = second.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut second_layer = second.load_glyph_layer(layer_id).unwrap().unwrap();
     second_layer.set_width(800.0);
     second.replace_glyph_layer(&second_layer).unwrap();
     second.save_document().expect("save second editor");
@@ -255,7 +255,7 @@ fn save_rechecks_the_canonical_commit_while_the_document_is_open() {
     let canonical = ShiftStore::open_document(&document_path).expect("open canonical");
     assert_eq!(
         canonical
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -274,14 +274,14 @@ fn recovery_overlay_detects_a_changed_canonical_base_before_save() {
 
     let mut first = ShiftStore::open_document_with_recovery(&document_path, &first_recovery_path)
         .expect("open first editor");
-    let mut first_layer = first.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut first_layer = first.load_glyph_layer(layer_id).unwrap().unwrap();
     first_layer.set_width(700.0);
     first.replace_glyph_layer(&first_layer).unwrap();
     drop(first);
 
     let mut second = ShiftStore::open_document_with_recovery(&document_path, &second_recovery_path)
         .expect("open second editor");
-    let mut second_layer = second.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut second_layer = second.load_glyph_layer(layer_id).unwrap().unwrap();
     second_layer.set_width(800.0);
     second.replace_glyph_layer(&second_layer).unwrap();
     second.save_document().expect("save second editor");
@@ -296,7 +296,7 @@ fn recovery_overlay_detects_a_changed_canonical_base_before_save() {
     );
     assert_eq!(
         conflicted
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -314,7 +314,7 @@ fn recovery_overlay_detects_a_changed_canonical_base_before_save() {
     );
     assert_eq!(
         conflicted
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -332,12 +332,12 @@ fn discarding_recovery_restores_the_canonical_layer_without_reopening() {
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
-    let mut changed = document.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut changed = document.load_glyph_layer(layer_id).unwrap().unwrap();
     changed.set_width(888.0);
     document.replace_glyph_layer(&changed).unwrap();
     assert_eq!(
         document
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -352,7 +352,7 @@ fn discarding_recovery_restores_the_canonical_layer_without_reopening() {
     );
     assert_eq!(
         document
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -360,7 +360,7 @@ fn discarding_recovery_restores_the_canonical_layer_without_reopening() {
     );
 }
 
-fn stored_payload(path: &Path, layer_id: &shift_font::LayerId) -> Vec<u8> {
+fn stored_payload(path: &Path, layer_id: shift_font::LayerId) -> Vec<u8> {
     let conn = rusqlite::Connection::open(path).expect("open raw document");
     conn.query_row(
         "SELECT payload FROM glyph_layer_payloads WHERE layer_id = ?1",

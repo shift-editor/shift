@@ -149,7 +149,7 @@ impl EngineSession {
         // ones, which may be ahead. Ask both about each glyph once, until
         // neither finds a glyph not seen yet.
         let mut closure: BTreeSet<GlyphId> = roots.into_iter().collect();
-        let mut frontier: Vec<GlyphId> = closure.iter().cloned().collect();
+        let mut frontier: Vec<GlyphId> = closure.iter().copied().collect();
         while !frontier.is_empty() {
             let persisted = source
                 .component_closure(&frontier)
@@ -159,7 +159,7 @@ impl EngineSession {
             frontier = persisted
                 .into_iter()
                 .chain(loaded)
-                .filter(|glyph_id| closure.insert(glyph_id.clone()))
+                .filter(|glyph_id| closure.insert(*glyph_id))
                 .collect();
         }
         let glyph_ids: Vec<GlyphId> = closure.into_iter().collect();
@@ -172,7 +172,7 @@ impl EngineSession {
     ///
     /// As [`Self::load_reads`].
     pub fn load_all<S: LayerSource>(&mut self, source: &mut S) -> Result<(), LoadError<S::Error>> {
-        let layer_ids: Vec<LayerId> = self.residency.unloaded_layer_ids().cloned().collect();
+        let layer_ids: Vec<LayerId> = self.residency.unloaded_layer_ids().copied().collect();
         self.load_layers(source, layer_ids)
     }
 
@@ -212,10 +212,10 @@ impl EngineSession {
         let mut seen = HashSet::new();
         for glyph in glyph_ids
             .iter()
-            .filter_map(|glyph_id| self.font.glyph(glyph_id))
+            .filter_map(|glyph_id| self.font.glyph(*glyph_id))
         {
             for layer in glyph.layers().values() {
-                if self.residency.is_unloaded(&layer.id()) || !seen.insert(layer.id()) {
+                if self.residency.is_unloaded(layer.id()) || !seen.insert(layer.id()) {
                     continue;
                 }
                 let mut placeholder =
@@ -320,7 +320,7 @@ impl EngineSession {
         let partly_loaded: Vec<GlyphId> = staged
             .changes()
             .replaced_glyph_ids()
-            .filter(|glyph_id| self.is_partly_loaded(glyph_id))
+            .filter(|glyph_id| self.is_partly_loaded(*glyph_id))
             .collect();
         if partly_loaded.is_empty() {
             return Ok(staged);
@@ -347,11 +347,11 @@ impl EngineSession {
     }
 
     /// Whether any layer of `glyph_id` is still a placeholder.
-    fn is_partly_loaded(&self, glyph_id: &GlyphId) -> bool {
+    fn is_partly_loaded(&self, glyph_id: GlyphId) -> bool {
         self.font
-            .layer_ids_of_glyphs([glyph_id])
+            .layer_ids_of_glyphs([&glyph_id])
             .iter()
-            .any(|layer_id| self.residency.is_unloaded(layer_id))
+            .any(|layer_id| self.residency.is_unloaded(*layer_id))
     }
 
     /// Glyphs with a component of a glyph owning one of `layer_ids`.
@@ -376,7 +376,7 @@ impl EngineSession {
             .changes
             .iter()
             .filter_map(FontChange::layer_id)
-            .find(|layer_id| self.residency.is_unloaded(layer_id))
+            .find(|layer_id| self.residency.is_unloaded(*layer_id))
         {
             return Err(EngineError::UnloadedLayerMutation(layer_id));
         }

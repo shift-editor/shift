@@ -72,8 +72,8 @@ pub(crate) fn remove_kerning(args: &RemoveKerningArgs) -> Result<AuthoringReport
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let pair = resolve_pair(&font, &args.first, &args.second)?;
-    if font.kerning().value(&source_id, &pair).is_none() {
-        let source = font.source(&source_id).map_or("", |source| source.name());
+    if font.kerning().value(source_id, &pair).is_none() {
+        let source = font.source(source_id).map_or("", |source| source.name());
         bail!(
             "{} {} has no value at source {source:?}",
             args.first,
@@ -104,7 +104,7 @@ pub(crate) fn create_kerning_group(args: CreateKerningGroupArgs) -> Result<Autho
     let position = KerningPosition::from(args.position);
     let group_id = KerningGroupId::new();
     let mut intents = vec![FontIntent::from(CreateKerningGroup {
-        group_id: group_id.clone(),
+        group_id,
         position,
         name: args.name,
     })];
@@ -236,14 +236,14 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             bail!("{}: group appears more than once", context());
         }
 
-        let existing = font.kerning().group_id(position, &name).cloned();
-        let group_id = match existing.clone() {
+        let existing = font.kerning().group_id(position, &name).copied();
+        let group_id = match existing {
             Some(group_id) => group_id,
             None => {
                 let group_id = KerningGroupId::new();
                 intents.push(
                     CreateKerningGroup {
-                        group_id: group_id.clone(),
+                        group_id,
                         position,
                         name: group.name.clone(),
                     }
@@ -252,14 +252,14 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
                 group_id
             }
         };
-        planned.insert(key, group_id.clone());
+        planned.insert(key, group_id);
 
         let Some(members) = group.members else {
             continue;
         };
         let member_ids = resolve_members(font, &members).wrap_err_with(context)?;
         for glyph_id in &member_ids {
-            if !claimed.insert((position, glyph_id.clone())) {
+            if !claimed.insert((position, *glyph_id)) {
                 bail!(
                     "{}: glyph {glyph_id} is listed in two {} groups",
                     context(),
@@ -269,7 +269,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
         }
         let current = existing
             .as_ref()
-            .and_then(|group_id| font.kerning().group(group_id))
+            .and_then(|group_id| font.kerning().group(*group_id))
             .map(|group| group.members.clone())
             .unwrap_or_default();
         intents.extend(
@@ -289,7 +289,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
             SetKerningGroupMember {
                 position,
                 glyph_id,
-                group_id: Some(group_id.clone()),
+                group_id: Some(group_id),
             }
             .into()
         }));
@@ -312,7 +312,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
                 .strip_prefix(GROUP_PREFIX)
                 .and_then(|name| planned.get(&(position, name.to_string())));
             match planned_group {
-                Some(group_id) => Ok(KerningSide::Group(group_id.clone())),
+                Some(group_id) => Ok(KerningSide::Group(*group_id)),
                 None => resolve_side(font, position, selector),
             }
         };
@@ -323,7 +323,7 @@ fn plan_batch(font: &Font, batch: KerningBatchInput) -> Result<Vec<FontIntent>> 
         if let Some(value) = input.value {
             require_finite(value, "kerning value").wrap_err_with(context)?;
         }
-        if !seen.insert((source_id.clone(), pair.clone())) {
+        if !seen.insert((source_id, pair.clone())) {
             bail!("{}: pair appears more than once at this source", context());
         }
         edits.push(KerningValueEdit {
@@ -352,7 +352,7 @@ fn resolve_members(font: &Font, selectors: &[String]) -> Result<Vec<GlyphId>> {
         .iter()
         .map(|selector| {
             let glyph_id = font.glyph_id_for(selector)?;
-            if !seen.insert(glyph_id.clone()) {
+            if !seen.insert(glyph_id) {
                 return Err(miette!("glyph {selector:?} is repeated"));
             }
             Ok(glyph_id)
@@ -372,7 +372,7 @@ fn member_intents(
             SetKerningGroupMember {
                 position,
                 glyph_id,
-                group_id: group_id.cloned(),
+                group_id: group_id.copied(),
             }
             .into()
         })

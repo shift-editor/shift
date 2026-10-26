@@ -159,7 +159,7 @@ macro_rules! typed_id {
 /// freed, so ids minted per point or contour stay [`typed_id!`] ids.
 macro_rules! interned_id {
     ($name:ident, $prefix:literal) => {
-        #[derive(Clone, PartialEq, Eq, Hash)]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
         pub struct $name(IdText);
 
         impl std::fmt::Debug for $name {
@@ -169,7 +169,7 @@ macro_rules! interned_id {
         }
 
         impl $name {
-            pub fn as_str(&self) -> &'static str {
+            pub fn as_str(self) -> &'static str {
                 self.0.as_str()
             }
 
@@ -458,7 +458,7 @@ mod tests {
         let earlier = GlyphId::from_raw("aa_interned_second");
 
         assert!(earlier < later);
-        let ordered: std::collections::BTreeSet<GlyphId> = [later.clone(), earlier.clone()].into();
+        let ordered: std::collections::BTreeSet<GlyphId> = [later, earlier].into();
         assert_eq!(ordered.into_iter().collect::<Vec<_>>(), [earlier, later]);
     }
 

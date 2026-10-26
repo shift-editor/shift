@@ -268,7 +268,7 @@ impl Font {
         let thresholds = OutlineThresholds::default();
         for glyph in self.glyphs() {
             findings.extend(health::check(self, glyph));
-            findings.extend(outline::check(self, &glyph.id(), &thresholds)?);
+            findings.extend(outline::check(self, glyph.id(), &thresholds)?);
         }
         findings.extend(kerning::check(self));
         if let Some(charset) = &options.charset {
@@ -288,7 +288,7 @@ impl Font {
     ///
     /// Returns [`crate::CoreError::GlyphNotFound`] when `glyph_id` is not in the
     /// font, or an axis-mapping error when an authored mapping cannot compile.
-    pub fn check_glyph(&self, glyph_id: &GlyphId) -> CoreResult<Vec<Finding>> {
+    pub fn check_glyph(&self, glyph_id: GlyphId) -> CoreResult<Vec<Finding>> {
         let glyph = self.require_glyph(glyph_id)?;
         let mut findings = health::check(self, glyph);
         findings.extend(outline::check(

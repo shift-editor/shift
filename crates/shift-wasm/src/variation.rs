@@ -334,7 +334,7 @@ pub fn evaluate_axis_mapping(mappings: u32, index: u32, axes: u32, location: &[f
             basis
                 .output_axis_ids()
                 .iter()
-                .map(|axis_id| mapped.get(axis_id).unwrap_or(f64::NAN))
+                .map(|axis_id| mapped.get(*axis_id).unwrap_or(f64::NAN))
                 .collect()
         })
     })
@@ -418,6 +418,6 @@ pub(crate) fn to_location(axes: &[Axis], values: &[f64]) -> Location {
 
 fn from_location(axes: &[Axis], location: &Location) -> Vec<f64> {
     axes.iter()
-        .map(|axis| location.get(&axis.id()).unwrap_or(f64::NAN))
+        .map(|axis| location.get(axis.id()).unwrap_or(f64::NAN))
         .collect()
 }

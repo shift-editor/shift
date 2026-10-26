@@ -33,7 +33,7 @@ impl ShiftStore {
     /// decode to the layer its directory row describes.
     pub fn load_glyph_layer(
         &self,
-        layer_id: &font::LayerId,
+        layer_id: font::LayerId,
     ) -> Result<Option<font::GlyphLayer>, StoreError> {
         load_glyph_layer_from_conn(&self.conn, layer_id)
     }
@@ -55,7 +55,7 @@ impl ShiftStore {
 
 pub(crate) fn load_glyph_layer_from_conn(
     conn: &Connection,
-    layer_id: &font::LayerId,
+    layer_id: font::LayerId,
 ) -> Result<Option<font::GlyphLayer>, StoreError> {
     let mut directory_stmt = conn.prepare_cached(
         "
@@ -320,7 +320,7 @@ fn load_glyph_layer_batch_with_directory(
             let layer = decode_layer(&decoded)?;
             let expected_id = font::LayerId::from_raw(layer_id.clone());
             validate_directory_facts(
-                &expected_id,
+                expected_id,
                 &facts.source_id,
                 facts.width,
                 facts.height,

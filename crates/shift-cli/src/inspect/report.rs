@@ -384,7 +384,7 @@ impl SourceSummary {
                 .iter()
                 .filter_map(|definition| {
                     source
-                        .metric_value(&definition.id())
+                        .metric_value(definition.id())
                         .map(|value| MetricValueSummary {
                             metric_id: definition.id().to_string(),
                             name: definition.name().to_string(),

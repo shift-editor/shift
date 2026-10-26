@@ -247,7 +247,7 @@ impl FontChange {
             _ => None,
         };
         let owner = match self {
-            Self::Layer { glyph_id, .. } => Some(glyph_id.clone()),
+            Self::Layer { glyph_id, .. } => Some(*glyph_id),
             _ => None,
         };
         replaced.into_iter().flatten().chain(owner)
@@ -369,12 +369,12 @@ impl FontChange {
                 layer,
                 structural,
             } => Self::Layer {
-                glyph_id: glyph_id.clone(),
+                glyph_id: *glyph_id,
                 layer: Replacement::new(layer.after.clone(), layer.before.clone()),
                 structural: *structural,
             },
             Self::KerningGroup { group_id, group } => Self::KerningGroup {
-                group_id: group_id.clone(),
+                group_id: *group_id,
                 group: Replacement::new(group.after.clone(), group.before.clone()),
             },
             Self::KerningValue {
@@ -382,7 +382,7 @@ impl FontChange {
                 pair,
                 value,
             } => Self::KerningValue {
-                source_id: source_id.clone(),
+                source_id: *source_id,
                 pair: pair.clone(),
                 value: Replacement::new(value.after, value.before),
             },
@@ -411,7 +411,7 @@ impl FontChange {
                 .chain(value.after.iter())
                 .next()
                 .map(Glyph::id),
-            Self::Layer { glyph_id, .. } => Some(glyph_id.clone()),
+            Self::Layer { glyph_id, .. } => Some(*glyph_id),
             _ => None,
         }
     }
@@ -560,7 +560,7 @@ impl FontChangeSet {
                     )
                     .into_iter()
                     .map(|change| FontEntityChange::Layer {
-                        glyph_id: glyph_id.clone(),
+                        glyph_id: *glyph_id,
                         change,
                     }),
                 ),
@@ -635,7 +635,7 @@ fn glyph_layer_entity_changes<'a>(
         for (layer_id, original_layer) in original.layers() {
             match after.and_then(|glyph| glyph.layers().get(layer_id)) {
                 Some(replacement) if replacement != original_layer => changes.push((
-                    glyph_id.clone().expect("a glyph exists"),
+                    glyph_id.expect("a glyph exists"),
                     EntityChange::Updated {
                         before: original_layer.as_ref(),
                         after: replacement.as_ref(),

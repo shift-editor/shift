@@ -56,7 +56,7 @@ impl Font {
                 }
                 FontChange::Glyph(value) => {
                     let glyph_id = value.glyph_id()?;
-                    let current = self.glyph(&glyph_id).cloned();
+                    let current = self.glyph(glyph_id).cloned();
                     value.require_before(&current, "glyph")?;
                 }
                 FontChange::Layer {
@@ -64,7 +64,7 @@ impl Font {
                 } => {
                     let layer_id = layer.layer_id()?;
                     let current = self
-                        .glyph(glyph_id)
+                        .glyph(*glyph_id)
                         .and_then(|glyph| glyph.layers().get(&layer_id))
                         .cloned();
                     // A recorded changeset usually holds the very layer the font
@@ -78,7 +78,7 @@ impl Font {
                     }
                 }
                 FontChange::KerningGroup { group_id, group } => {
-                    let current = self.kerning().group(group_id).cloned();
+                    let current = self.kerning().group(*group_id).cloned();
                     group.require_before(&current, "kerning group")?;
                 }
                 FontChange::KerningValue {
@@ -86,7 +86,7 @@ impl Font {
                     pair,
                     value,
                 } => {
-                    let current = self.kerning().value(source_id, pair);
+                    let current = self.kerning().value(*source_id, pair);
                     value.require_before(&current, "kerning value")?;
                 }
             }
@@ -112,8 +112,8 @@ impl Font {
             if let Some(glyph) = state.data.glyphs.get(glyph_id) {
                 state
                     .index
-                    .remove(&IndexEntries::records_of_glyph(glyph_id, glyph));
-                before_glyphs.insert(glyph_id.clone(), Arc::clone(glyph));
+                    .remove(&IndexEntries::records_of_glyph(*glyph_id, glyph));
+                before_glyphs.insert(*glyph_id, Arc::clone(glyph));
             }
         }
 
@@ -141,10 +141,10 @@ impl Font {
                 FontChange::Sources(value) => {
                     let data = self.data_mut();
                     data.sources = value.after.sources.clone();
-                    data.default_source_id = value.after.default_source_id.clone();
+                    data.default_source_id = value.after.default_source_id;
                 }
                 FontChange::KerningGroup { group_id, group } => {
-                    self.kerning_mut().put_group(group_id, group.after.clone());
+                    self.kerning_mut().put_group(*group_id, group.after.clone());
                 }
                 FontChange::KerningValue {
                     source_id,
@@ -153,10 +153,10 @@ impl Font {
                 } => match value.after {
                     Some(after) => {
                         self.kerning_mut()
-                            .set_value(source_id.clone(), pair.clone(), after);
+                            .set_value(*source_id, pair.clone(), after);
                     }
                     None => {
-                        self.kerning_mut().remove_value(source_id, pair);
+                        self.kerning_mut().remove_value(*source_id, pair);
                     }
                 },
                 FontChange::Glyph(_) | FontChange::Layer { .. } => {}
@@ -173,7 +173,7 @@ impl Font {
             if layer.before.is_some() && layer.after.is_none() {
                 let layer_id = layer.layer_id()?;
                 let glyph = self.data_mut().glyphs.get_mut(glyph_id).require(glyph_id)?;
-                Arc::make_mut(glyph).remove_layer(&layer_id);
+                Arc::make_mut(glyph).remove_layer(layer_id);
             }
         }
 
@@ -250,7 +250,7 @@ impl Font {
 
         match self.default_source_id() {
             Some(source_id) => {
-                let source = self.require_source(&source_id)?;
+                let source = self.require_source(source_id)?;
                 if !source.is_master() {
                     return Err(CoreError::DefaultSourceNotMaster);
                 }
@@ -282,13 +282,13 @@ impl Font {
         change_set
             .touched_glyph_ids()
             .iter()
-            .filter_map(|glyph_id| self.glyph(glyph_id))
+            .filter_map(|glyph_id| self.glyph(*glyph_id))
             .try_for_each(|glyph| self.require_layer_sources(glyph))
     }
 
     fn require_layer_sources(&self, glyph: &Glyph) -> CoreResult<()> {
         for layer in glyph.layers().values() {
-            self.require_source(&layer.source_id())?;
+            self.require_source(layer.source_id())?;
         }
         Ok(())
     }
@@ -334,7 +334,7 @@ mod tests {
             .collect();
         let intents = vec![
             AddContour {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: contour_id.clone(),
                 closed: true,
             }
@@ -361,7 +361,7 @@ mod tests {
             squares,
             vec![
                 AddComponent {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     component_id: ComponentId::from_raw("added"),
                     base_glyph_id: GlyphId::from_raw("acute"),
                 }
@@ -369,21 +369,21 @@ mod tests {
             ],
             vec![
                 RemoveComponents {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     component_ids: vec![ComponentId::from_raw("z_first")],
                 }
                 .into(),
             ],
             vec![
                 DecomposeComponents {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     component_ids: vec![ComponentId::from_raw("a_second")],
                 }
                 .into(),
             ],
             vec![
                 ApplyBooleanOp {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     contour_id_a: left,
                     contour_id_b: right,
                     operation: BooleanOp::Union,
@@ -484,8 +484,8 @@ mod tests {
                 .iter()
                 .map(|(layer_id, edit)| {
                     let layer_id = LayerId::from_raw(*layer_id);
-                    let glyph_id = font.glyph_id_by_layer(&layer_id).unwrap();
-                    let before = font.layer_snapshot(&layer_id).unwrap();
+                    let glyph_id = font.glyph_id_by_layer(layer_id).unwrap();
+                    let before = font.layer_snapshot(layer_id).unwrap();
                     let mut after = (*before).clone();
                     edit(&mut after);
                     FontChange::Layer {
@@ -557,7 +557,7 @@ mod tests {
     fn changesets_move_ids_between_touched_glyphs_as_a_full_rebuild_would() {
         let mut font = crate::test_support::sample_font();
         let outer = font
-            .layer(&LayerId::from_raw("A_regular"))
+            .layer(LayerId::from_raw("A_regular"))
             .unwrap()
             .contour(&ContourId::from_raw("A_outer"))
             .unwrap()
@@ -623,13 +623,13 @@ mod tests {
             .apply_intents(&FontIntentSet {
                 intents: vec![
                     CreateGlyph {
-                        glyph_id: Some(glyph_id.clone()),
+                        glyph_id: Some(glyph_id),
                         name: "created".to_string(),
                         unicodes: vec![0x63],
                     }
                     .into(),
                     CreateGlyphLayer {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         glyph_id,
                         source_id,
                     }

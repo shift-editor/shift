@@ -264,15 +264,15 @@ pub(crate) fn font_header(
             .map(|((axis_id, mapping), axis)| {
                 AxisMapping::new(
                     format!("{} mapping", axis.name),
-                    vec![axis_id.clone()],
-                    vec![axis_id.clone()],
+                    vec![*axis_id],
+                    vec![*axis_id],
                     mapping
                         .user_to_design
                         .iter()
                         .map(|(user, design)| AxisMappingPoint {
                             description: None,
-                            input: Location::from([(axis_id.clone(), *user)]),
-                            output: Location::from([(axis_id.clone(), *design)]),
+                            input: Location::from([(*axis_id, *user)]),
+                            output: Location::from([(*axis_id, *design)]),
                         })
                         .collect(),
                 )
@@ -288,12 +288,12 @@ pub(crate) fn font_header(
             .zip(master.location_values(axis_ids_by_index.len()))
         {
             if let Some(value) = value {
-                location.set(axis_id.clone(), value);
+                location.set(*axis_id, value);
             }
         }
         let source_id = font.add_source(Source::new(master.name.clone(), location));
         font.set_standard_metrics(
-            &source_id,
+            source_id,
             StandardMetrics {
                 ascender: master.ascender(),
                 descender: master.descender(),
@@ -303,10 +303,10 @@ pub(crate) fn font_header(
             },
         )?;
         let source = font
-            .source_mut(&source_id)
+            .source_mut(source_id)
             .expect("a newly added source should exist");
         source.set_italic_angle(master.italic_angle());
-        source_ids_by_master_id.insert(master.id.clone(), source_id.clone());
+        source_ids_by_master_id.insert(master.id.clone(), source_id);
         if master_index == glyphs_font.default_master_idx {
             font.set_default_source_id(source_id);
         }
@@ -333,7 +333,7 @@ pub(crate) fn font_header(
                                     || font.axes()[index].default(),
                                     |value| mapping.unmap(value.into_inner()),
                                 );
-                                (axis_id.clone(), value)
+                                (*axis_id, value)
                             }),
                     ),
                     None,
@@ -363,13 +363,13 @@ pub(super) struct GlyphsLayerSources {
 impl GlyphsLayerSources {
     fn source_id(&self, layer: &GlyphsLayer) -> Option<SourceId> {
         if layer.is_master() {
-            return self.masters.get(layer.master_id()).cloned();
+            return self.masters.get(layer.master_id()).copied();
         }
         if layer.is_intermediate() {
             return self
                 .intermediates
                 .get(&layer.attributes.coordinates)
-                .cloned();
+                .copied();
         }
         None
     }
@@ -447,10 +447,9 @@ pub(super) fn convert_glyph(
     glyph_ids: &HashMap<String, GlyphId>,
     sources: &GlyphsLayerSources,
 ) -> FormatBackendResult<Glyph> {
-    let glyph_id = glyph_ids
+    let glyph_id = *glyph_ids
         .get(glyph.name.as_str())
-        .expect("every Glyphs glyph should have a published identity")
-        .clone();
+        .expect("every Glyphs glyph should have a published identity");
     let mut result = Glyph::with_id(glyph_id, glyph.name.to_string());
     result.set_unicodes(glyph.unicode.iter().copied().collect());
     // glyphs-reader fills unset categories from glyph data; keep only the
@@ -499,7 +498,7 @@ pub(super) fn convert_glyph(
                             ))
                         })?;
                     result_layer.add_component(Component::with_matrix(
-                        base_glyph_id.clone(),
+                        *base_glyph_id,
                         component.name.to_string(),
                         &Transform::from_values(component.transform.as_coeffs()),
                     ));
@@ -577,7 +576,7 @@ pub(super) fn convert_kerning(
         };
         for ((first, second), value) in pairs {
             import.add_pair(
-                source_id,
+                *source_id,
                 named_kerning_side(first),
                 named_kerning_side(second),
                 value.into_inner(),
@@ -643,7 +642,7 @@ mod tests {
         let sources = add_intermediate_sources(
             &mut font,
             &glyphs_font,
-            HashMap::from([("m01".to_string(), master_source_id.clone())]),
+            HashMap::from([("m01".to_string(), master_source_id)]),
         );
         let glyph_ids = HashMap::from([
             ("a".to_string(), GlyphId::new()),
@@ -663,8 +662,8 @@ mod tests {
         assert_eq!(imported_layer_count(&glyphs_font.glyphs["a"], &sources), 2);
         for glyph in [&a, &b] {
             assert_eq!(glyph.layers().len(), 2);
-            assert!(glyph.layer_for_source(&master_source_id).is_some());
-            assert!(glyph.layer_for_source(&brace.id()).is_some());
+            assert!(glyph.layer_for_source(master_source_id).is_some());
+            assert!(glyph.layer_for_source(brace.id()).is_some());
         }
     }
 

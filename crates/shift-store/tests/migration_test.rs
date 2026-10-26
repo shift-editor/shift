@@ -76,29 +76,26 @@ fn assert_migrated_kerning(font: &shift_font::Font) {
     let members = |position, name| {
         let group_id = kerning.group_id(position, name).expect("group migrated");
         kerning
-            .group(group_id)
+            .group(*group_id)
             .expect("group exists")
             .members
             .clone()
     };
-    assert_eq!(members(KerningPosition::First, "A"), vec![a.clone()]);
+    assert_eq!(members(KerningPosition::First, "A"), vec![a]);
     assert!(members(KerningPosition::First, "Ghost").is_empty());
     let first_a = kerning.group_id(KerningPosition::First, "A").unwrap();
     let second_a = kerning.group_id(KerningPosition::Second, "A").unwrap();
     assert_ne!(first_a, second_a);
     assert_eq!(
-        kerning.value(
-            &regular,
-            &KerningPair::groups(first_a.clone(), second_a.clone())
-        ),
+        kerning.value(regular, &KerningPair::groups(*first_a, *second_a)),
         Some(-80.0)
     );
     assert_eq!(
-        kerning.value(&regular, &KerningPair::glyphs(a, acute)),
+        kerning.value(regular, &KerningPair::glyphs(a, acute)),
         Some(-15.0)
     );
     assert_eq!(
-        kerning.source(&regular).map(shift_font::SourceKerning::len),
+        kerning.source(regular).map(shift_font::SourceKerning::len),
         Some(2)
     );
     assert_eq!(kerning.sources().count(), 1);
@@ -135,7 +132,7 @@ fn a_version_1_recovery_overlay_reopens_against_the_migrated_document() {
     let mut document =
         ShiftStore::open_document_with_recovery(&path, &recovery_path).expect("open with recovery");
     let mut changed = document
-        .load_glyph_layer(&layer_id)
+        .load_glyph_layer(layer_id)
         .expect("load layer")
         .expect("layer exists");
     changed.set_width(777.0);
@@ -155,7 +152,7 @@ fn a_version_1_recovery_overlay_reopens_against_the_migrated_document() {
     let document = ShiftStore::open_document_with_recovery(&path, &recovery_path)
         .expect("reopen version 1 document and recovery");
     let recovered = document
-        .load_glyph_layer(&layer_id)
+        .load_glyph_layer(layer_id)
         .expect("load recovered layer")
         .expect("layer exists");
     assert_eq!(recovered.width(), 777.0);

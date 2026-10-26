@@ -38,7 +38,7 @@ impl LayerIntent for AddPoints {
         }
 
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             let contour_id = match (contour_id, before) {
                 (Some(contour_id), _) => contour_id.clone(),
                 (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
@@ -106,7 +106,7 @@ impl LayerIntent for AddContour {
         }
 
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             let mut contour = Contour::with_id(contour_id.clone());
             if *closed {
                 contour.close();
@@ -138,7 +138,7 @@ impl LayerIntent for SetContourClosed {
             contour_id,
             closed,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         if *closed {
             layer.close_contour(contour_id)?;
         } else {
@@ -185,7 +185,7 @@ impl LayerIntent for MovePoints {
             )));
         }
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.apply_bulk_node_positions(BulkNodePositionUpdates {
             point_ids: Some(point_ids),
             point_coords: Some(coords),
@@ -215,7 +215,7 @@ impl LayerIntent for SetPointSmooth {
             point_id,
             smooth,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.set_point_smooth(point_id, *smooth)?;
 
         Ok(())
@@ -238,16 +238,16 @@ impl LayerIntent for RemovePoints {
             layer_id,
             point_ids,
         } = self;
-        let before = font.layer_snapshot(layer_id)?;
+        let before = font.layer_snapshot(*layer_id)?;
         let empty_contours = {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             layer.remove_points(point_ids)?
         };
 
         if empty_contours.is_empty() {
             font.forget_point_ids(point_ids);
         } else {
-            font.reindex_layer(layer_id, &before)?;
+            font.reindex_layer(*layer_id, &before)?;
         }
 
         Ok(())
@@ -283,7 +283,7 @@ impl LayerIntent for AddAnchors {
         }
 
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             for seed in anchors {
                 layer.add_anchor(Anchor::with_id(
                     seed.id.clone(),
@@ -339,7 +339,7 @@ impl LayerIntent for MoveAnchors {
             )));
         }
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.apply_bulk_node_positions(BulkNodePositionUpdates {
             point_ids: None,
             point_coords: None,
@@ -372,7 +372,7 @@ impl LayerIntent for RemoveAnchors {
             anchor_ids,
         } = self;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             layer.remove_anchors(anchor_ids)?;
         }
 
@@ -413,7 +413,7 @@ impl LayerIntent for RenameAnchors {
             )));
         }
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         for anchor_id in anchor_ids {
             if layer.anchor(anchor_id).is_none() {
                 return Err(CoreError::AnchorNotFound(anchor_id.clone()));
@@ -451,22 +451,22 @@ impl LayerIntent for AddComponent {
         if font.has_component_id(component_id) {
             return Err(CoreError::DuplicateComponentId(component_id.clone()));
         }
-        let glyph_id = font.require_layer_owner(layer_id)?;
-        let base_glyph_name = font.require_glyph(base_glyph_id)?.glyph_name().clone();
-        if font.component_reference_would_cycle(&glyph_id, base_glyph_id) {
+        let glyph_id = font.require_layer_owner(*layer_id)?;
+        let base_glyph_name = font.require_glyph(*base_glyph_id)?.glyph_name().clone();
+        if font.component_reference_would_cycle(glyph_id, *base_glyph_id) {
             return Err(CoreError::CyclicComponentReference {
                 glyph_id,
-                base_glyph_id: base_glyph_id.clone(),
+                base_glyph_id: *base_glyph_id,
             });
         }
 
-        let aligned = font.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
-        let before = font.layer_snapshot(layer_id)?;
+        let aligned = font.anchor_aligned_component_transform(*layer_id, *base_glyph_id)?;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             let mut component = Component::with_id(
                 component_id.clone(),
-                base_glyph_id.clone(),
+                *base_glyph_id,
                 base_glyph_name,
                 aligned.unwrap_or_default(),
             );
@@ -478,7 +478,7 @@ impl LayerIntent for AddComponent {
             layer.add_component(component);
         }
 
-        font.reindex_layer(layer_id, &before)?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
@@ -524,7 +524,7 @@ impl LayerIntent for SetComponentTransforms {
             .copied()
             .require_finite(Coordinates::ComponentTransforms)?;
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
             if layer.component(component_id).is_none() {
                 return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -560,7 +560,7 @@ impl LayerIntent for SetComponentAlignment {
             component_ids,
             alignment,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
             if layer.component(component_id).is_none() {
                 return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -591,9 +591,9 @@ impl LayerIntent for RemoveComponents {
             layer_id,
             component_ids,
         } = self;
-        let before = font.layer_snapshot(layer_id)?;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             for component_id in component_ids {
                 if layer.component(component_id).is_none() {
                     return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -604,7 +604,7 @@ impl LayerIntent for RemoveComponents {
             }
         }
 
-        font.reindex_layer(layer_id, &before)?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
@@ -625,20 +625,20 @@ impl LayerIntent for DecomposeComponents {
             layer_id,
             component_ids,
         } = self;
-        let layer = font.require_layer(layer_id)?;
+        let layer = font.require_layer(*layer_id)?;
         for component_id in component_ids {
             if layer.component(component_id).is_none() {
                 return Err(CoreError::InvalidComponentId(component_id.to_string()));
             }
         }
         let resolved_contours = font.layer_component_contours(
-            layer_id,
+            *layer_id,
             &component_ids.iter().cloned().collect::<HashSet<_>>(),
         )?;
 
-        let before = font.layer_snapshot(layer_id)?;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             for component_id in component_ids {
                 layer.remove_component(component_id);
             }
@@ -654,7 +654,7 @@ impl LayerIntent for DecomposeComponents {
             }
         }
 
-        font.reindex_layer(layer_id, &before)?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
@@ -675,7 +675,7 @@ impl LayerIntent for ReverseContour {
             layer_id,
             contour_id,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.reverse_contour(contour_id)?;
 
         Ok(())
@@ -701,7 +701,7 @@ impl LayerIntent for SetContourStart {
             contour_id,
             point_id,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.set_contour_start(contour_id, point_id)?;
 
         Ok(())
@@ -734,7 +734,7 @@ impl LayerIntent for TranslatePoints {
             dy,
         } = self;
         [*dx, *dy].require_finite(Coordinates::PointTranslation)?;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.move_points(point_ids, *dx, *dy)?;
 
         Ok(())
@@ -777,7 +777,8 @@ impl LayerIntent for TransformLayer {
         ];
         values.require_finite(Coordinates::LayerTransform)?;
 
-        font.require_layer_mut(layer_id)?.transform_layer(transform);
+        font.require_layer_mut(*layer_id)?
+            .transform_layer(transform);
         Ok(())
     }
 }
@@ -800,7 +801,7 @@ impl LayerIntent for SetXAdvance {
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, width } = self;
         [*width].require_finite(Coordinates::AdvanceWidth)?;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.set_x_advance(*width);
 
         Ok(())
@@ -829,13 +830,13 @@ impl LayerIntent for ApplyBooleanOp {
             contour_id_b,
             operation,
         } = self;
-        let before = font.layer_snapshot(layer_id)?;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             layer.apply_boolean_op(contour_id_a, contour_id_b, *operation)?;
         }
 
-        font.reindex_layer(layer_id, &before)?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
@@ -871,14 +872,14 @@ impl LayerIntent for ReplaceGlyphLayerContent {
             components,
         } = self;
         let glyph_id = font
-            .glyph_id_by_layer(layer_id)
-            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+            .glyph_id_by_layer(*layer_id)
+            .ok_or(CoreError::LayerNotFound(*layer_id))?;
         for component in components {
             let base_glyph_id = component.base_glyph_id();
-            if font.glyph(&base_glyph_id).is_none() {
+            if font.glyph(base_glyph_id).is_none() {
                 return Err(CoreError::GlyphNotFound(base_glyph_id));
             }
-            if font.component_reference_would_cycle(&glyph_id, &base_glyph_id) {
+            if font.component_reference_would_cycle(glyph_id, base_glyph_id) {
                 return Err(CoreError::CyclicComponentReference {
                     glyph_id,
                     base_glyph_id,
@@ -886,8 +887,8 @@ impl LayerIntent for ReplaceGlyphLayerContent {
             }
         }
         let mut layer = font
-            .layer(layer_id)
-            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?
+            .layer(*layer_id)
+            .ok_or(CoreError::LayerNotFound(*layer_id))?
             .clone();
         layer.replace_content(
             *width,

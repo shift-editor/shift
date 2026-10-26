@@ -272,7 +272,7 @@ impl RetainedSource {
   }
 
   /// Projects one source glyph and its complete component closure.
-  fn glyph(&self, glyph_id: &GlyphId) -> BridgeResult<Vec<GlyphSnapshot>> {
+  fn glyph(&self, glyph_id: GlyphId) -> BridgeResult<Vec<GlyphSnapshot>> {
     let identity = &self.identity;
     let projected = self.font.glyph(identity.glyph_index(glyph_id)?)?;
     let mut projections = Vec::with_capacity(projected.components.len() + 1);
@@ -296,7 +296,7 @@ impl RetainedSource {
       .iter()
       .map(|projection| {
         let glyph_id = identity.glyph_id(projection.glyph)?;
-        let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id.clone()))?;
+        let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id))?;
         let variation = projection
           .variation
           .as_ref()
@@ -337,10 +337,7 @@ impl RetainedSource {
             let source_id = identity.source_id(exact.source)?;
             Ok(GlyphSourceShape {
               source_id,
-              shape: self.shape(
-                &exact.shape,
-                &ShapeIds::exact(glyph_id.clone(), exact.source),
-              )?,
+              shape: self.shape(&exact.shape, &ShapeIds::exact(glyph_id, exact.source))?,
             })
           })
           .collect::<BridgeResult<Vec<_>>>()?;
@@ -356,7 +353,7 @@ impl RetainedSource {
           })
           .collect::<BridgeResult<Vec<_>>>()?;
         Ok(GlyphSnapshot {
-          glyph_id: glyph_id.clone(),
+          glyph_id,
           projection: Some(GlyphProjection {
             glyph_id,
             fallback,
@@ -510,18 +507,15 @@ impl ComponentWalker<'_> {
         .map(|shape| (source, &shape.shape))
     });
     let (ids, shape) = match exact {
-      Some((source, shape)) => (ShapeIds::exact(parent_glyph_id.clone(), source), shape),
-      None => (
-        ShapeIds::fallback(parent_glyph_id.clone()),
-        &projection.fallback,
-      ),
+      Some((source, shape)) => (ShapeIds::exact(parent_glyph_id, source), shape),
+      None => (ShapeIds::fallback(parent_glyph_id), &projection.fallback),
     };
     for (index, component) in shape.components.iter().enumerate() {
       let component_id = ids.component(index);
       let mut component_path = parent_path.clone();
       component_path.push(component_id.clone());
       self.output.push(ComponentGlyph {
-        parent_glyph_id: parent_glyph_id.clone(),
+        parent_glyph_id,
         component_id,
         component_index: index,
         base_glyph_id: self.identity.glyph_id(component.glyph)?,
@@ -839,7 +833,7 @@ impl ToWire for MetricKind {
 
   fn to_wire(&self, id: &MetricId, _identity: &SourceIdentity) -> MetricDefinition {
     MetricDefinition {
-      id: id.clone(),
+      id: *id,
       kind: (*self).into(),
       name: self.default_name().into(),
     }
@@ -852,7 +846,7 @@ impl ToWire for DirectoryGlyph {
 
   fn to_wire(&self, id: &GlyphId, _identity: &SourceIdentity) -> GlyphEntry {
     GlyphEntry {
-      id: id.clone(),
+      id: *id,
       name: self.name.clone().into(),
       unicodes: self.unicodes.to_vec(),
     }
@@ -866,7 +860,7 @@ impl ToWire for DirectorySource {
   fn to_wire(&self, id: &SourceId, identity: &SourceIdentity) -> Source {
     let metrics = &self.metrics;
     Source {
-      id: id.clone(),
+      id: *id,
       name: self.name.clone(),
       location: identity.location(&self.location),
       filename: self.filename.clone(),
@@ -876,7 +870,7 @@ impl ToWire for DirectorySource {
         .zip(MetricKind::STANDARD)
         .filter_map(|(metric_id, kind)| {
           Some(SourceMetricValue {
-            metric_id: metric_id.clone(),
+            metric_id: *metric_id,
             position: metrics.position(kind)?,
             overshoot: 0.0,
           })
@@ -896,7 +890,7 @@ impl ToWire for DirectoryInstance {
 
   fn to_wire(&self, id: &NamedInstanceId, identity: &SourceIdentity) -> NamedInstance {
     NamedInstance {
-      id: id.clone(),
+      id: *id,
       name: self.name.clone(),
       location: identity.location(&self.location),
       postscript_name: self.postscript_name.clone(),
@@ -926,7 +920,7 @@ impl SourceIdentity {
       .into_boxed_slice();
     let glyph_indices = glyph_ids
       .iter()
-      .cloned()
+      .copied()
       .enumerate()
       .map(|(index, glyph_id)| (glyph_id, GlyphIndex::at(index)))
       .collect();
@@ -974,7 +968,7 @@ impl SourceIdentity {
             default,
             maximum,
           } => FontAxis::continuous_with_id(
-            id.clone(),
+            *id,
             axis.tag.clone(),
             axis.name.clone(),
             *minimum,
@@ -982,7 +976,7 @@ impl SourceIdentity {
             *maximum,
           ),
           VariationAxisKind::Discrete { values, default } => FontAxis::discrete_with_id(
-            id.clone(),
+            *id,
             axis.tag.clone(),
             axis.name.clone(),
             values.to_vec(),
@@ -1020,19 +1014,19 @@ impl SourceIdentity {
             input: FontLocation::from_map(
               input_axis_ids
                 .iter()
-                .cloned()
+                .copied()
                 .zip(point.input.iter().copied()),
             ),
             output: FontLocation::from_map(
               output_axis_ids
                 .iter()
-                .cloned()
+                .copied()
                 .zip(point.output.iter().copied()),
             ),
           })
           .collect();
         let mut mapped = FontAxisMapping::with_id(
-          mapping_id.clone(),
+          *mapping_id,
           mapping.name.clone(),
           input_axis_ids,
           output_axis_ids,
@@ -1049,7 +1043,7 @@ impl SourceIdentity {
     &self,
     values: impl IntoIterator<Item = f64>,
   ) -> impl Iterator<Item = (AxisId, f64)> {
-    self.axis_ids.iter().cloned().zip(values)
+    self.axis_ids.iter().copied().zip(values)
   }
 
   /// A location from positional values in source axis order.
@@ -1072,7 +1066,7 @@ impl SourceIdentity {
     self
       .glyph_ids
       .get(index.to_usize())
-      .cloned()
+      .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source glyph index",
         value: index.to_u32().to_string(),
@@ -1088,7 +1082,7 @@ impl SourceIdentity {
     self
       .axis_ids
       .get(axis.to_usize())
-      .cloned()
+      .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source axis index",
         value: axis.to_u32().to_string(),
@@ -1104,17 +1098,17 @@ impl SourceIdentity {
     self
       .source_ids
       .get(source.to_usize())
-      .cloned()
+      .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source index",
         value: source.to_u32().to_string(),
       })
   }
 
-  fn glyph_index(&self, glyph_id: &GlyphId) -> BridgeResult<GlyphIndex> {
+  fn glyph_index(&self, glyph_id: GlyphId) -> BridgeResult<GlyphIndex> {
     self
       .glyph_indices
-      .get(glyph_id)
+      .get(&glyph_id)
       .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source glyph id",
@@ -1513,22 +1507,22 @@ impl Bridge {
       .collect::<Vec<_>>();
     let glyph_ids = requests
       .iter()
-      .map(|request| request.glyph_id.clone())
+      .map(|request| request.glyph_id)
       .collect::<Vec<_>>();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
     let mut snapshots = Vec::new();
     for request in requests {
       let glyph_id = request.glyph_id;
-      let Some(glyph) = font.glyph(&glyph_id) else {
+      let Some(glyph) = font.glyph(glyph_id) else {
         continue;
       };
 
-      let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
+      let projection = font.glyph_projection(glyph_id)?.as_ref().map(Into::into);
 
       let layers = font
         .master_layers(glyph)
         .map(|layer| GlyphLayerSnapshot {
-          glyph_id: glyph_id.clone(),
+          glyph_id,
           source_id: layer.source_id(),
           state: GlyphState::from_layer(layer),
         })
@@ -1565,7 +1559,7 @@ impl Bridge {
       .iter()
       .zip(glyph_ids)
       .map(|(layer_id, glyph_id)| {
-        Ok(layer_snapshot(glyph_id, font.require_layer(layer_id)?).into())
+        Ok(layer_snapshot(glyph_id, font.require_layer(*layer_id)?).into())
       })
       .collect()
   }
@@ -1591,8 +1585,8 @@ impl Bridge {
       .zip(glyph_ids)
       .map(|(layer_id, glyph_id)| {
         Ok(NapiLayerRead {
-          authored: layer_snapshot(glyph_id, font.require_layer(layer_id)?).into(),
-          resolved: (&font.resolve_layer(layer_id)?).into(),
+          authored: layer_snapshot(glyph_id, font.require_layer(*layer_id)?).into(),
+          resolved: (&font.resolve_layer(*layer_id)?).into(),
         })
       })
       .collect()
@@ -1604,7 +1598,7 @@ impl Bridge {
     let layer_ids = parse_id_list::<LayerId>(layer_ids)?;
     let glyph_ids = layer_ids
       .iter()
-      .map(|layer_id| Ok(font.require_layer_owner(layer_id)?))
+      .map(|layer_id| Ok(font.require_layer_owner(*layer_id)?))
       .collect::<errors::Result<Vec<_>>>()?;
     Ok((layer_ids, glyph_ids))
   }
@@ -1625,8 +1619,8 @@ impl Bridge {
     let target_layer_id = parse::<LayerId>(&target_layer_id)?;
     let (reference_glyph_id, target_glyph_id) = {
       let font = self.font()?;
-      let reference_glyph_id = font.require_layer_owner(&reference_layer_id)?;
-      let target_glyph_id = font.require_layer_owner(&target_layer_id)?;
+      let reference_glyph_id = font.require_layer_owner(reference_layer_id)?;
+      let target_glyph_id = font.require_layer_owner(target_layer_id)?;
       (reference_glyph_id, target_glyph_id)
     };
     if reference_glyph_id != target_glyph_id {
@@ -1639,8 +1633,8 @@ impl Bridge {
     }
 
     let font = self.acquire_and_font(&[reference_glyph_id], AcquireScope::Glyphs)?;
-    let reference = font.require_layer(&reference_layer_id)?;
-    let target = font.require_layer(&target_layer_id)?;
+    let reference = font.require_layer(reference_layer_id)?;
+    let target = font.require_layer(target_layer_id)?;
 
     Ok(WireLayerMatch::from_layers(reference, target).into())
   }
@@ -1662,17 +1656,17 @@ impl Bridge {
     let mut seen = HashSet::new();
 
     while let Some(glyph_id) = pending.pop_front() {
-      if !seen.insert(glyph_id.clone()) {
+      if !seen.insert(glyph_id) {
         continue;
       }
-      if font.glyph(&glyph_id).is_none() {
+      if font.glyph(glyph_id).is_none() {
         continue;
       }
 
-      let Some(projection) = font.glyph_projection(&glyph_id)? else {
+      let Some(projection) = font.glyph_projection(glyph_id)? else {
         continue;
       };
-      pending.extend(projection.component_glyph_ids().iter().cloned());
+      pending.extend(projection.component_glyph_ids().iter().copied());
       projections.push(GlyphProjection::from(&projection).into());
     }
 
@@ -1885,7 +1879,7 @@ impl Bridge {
   #[napi(ts_args_type = "glyphId: GlyphId")]
   pub fn read_font_source_glyph(&self, glyph_id: String) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let glyph_id = parse::<GlyphId>(&glyph_id)?;
-    Ok(self.retained_source()?.glyph(&glyph_id)?.into_each())
+    Ok(self.retained_source()?.glyph(glyph_id)?.into_each())
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
@@ -1906,7 +1900,7 @@ impl Bridge {
       let location = source.location(coordinates)?;
       let roots = parse_id_list::<GlyphId>(&glyph_ids)?
         .iter()
-        .map(|glyph_id| source.identity.glyph_index(glyph_id))
+        .map(|glyph_id| source.identity.glyph_index(*glyph_id))
         .collect::<BridgeResult<Vec<_>>>()?;
       let page = match &source.font {
         OpenedFont::OpenType(font) => {
@@ -3990,7 +3984,7 @@ mod tests {
       .glyph("A")
       .expect("snapshot should include edited A");
     let layer = glyph
-      .layer_for_source(&snapshot.default_source_id().unwrap())
+      .layer_for_source(snapshot.default_source_id().unwrap())
       .expect("edited glyph should include default layer");
 
     assert_eq!(bridge.get_glyphs().unwrap().len(), 1);

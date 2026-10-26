@@ -121,7 +121,7 @@ impl StaticMetadataWork {
     fn default_source(&self) -> Result<&Source, Error> {
         self.snapshot
             .sources
-            .source(&self.snapshot.default_source_id)
+            .source(self.snapshot.default_source_id)
             .ok_or_else(|| {
                 Error::InvalidEntry(
                     "Shift default source",

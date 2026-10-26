@@ -43,13 +43,13 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
     workspace
         .acquire_glyphs(&[glyph.id()], AcquireScope::Glyphs)
         .unwrap();
-    let layer_id = glyph.layers().keys().next().unwrap().clone();
-    let before = workspace.font().layer(&layer_id).unwrap().anchors().len();
+    let layer_id = *glyph.layers().keys().next().unwrap();
+    let before = workspace.font().layer(layer_id).unwrap().anchors().len();
 
     apply(
         &mut workspace,
         AddAnchors {
-            layer_id: layer_id.clone(),
+            layer_id,
             anchors: vec![AnchorSeed {
                 id: AnchorId::new(),
                 name: Some("top".into()),
@@ -96,12 +96,12 @@ fn undo_source_edits_after_an_anchor(evict_before_undo: bool) -> (usize, usize, 
     workspace
         .acquire_glyphs(&[glyph.id()], AcquireScope::Glyphs)
         .unwrap();
-    let live = workspace.font().layer(&layer_id).unwrap().anchors().len();
+    let live = workspace.font().layer(layer_id).unwrap().anchors().len();
     drop(workspace);
 
     let mut reopened = FontWorkspace::open_document(&path, &recovery).unwrap();
     reopened.acquire_all_layers().unwrap();
-    let on_disk = reopened.font().layer(&layer_id).unwrap().anchors().len();
+    let on_disk = reopened.font().layer(layer_id).unwrap().anchors().len();
     (before, live, on_disk)
 }
 
@@ -245,5 +245,5 @@ fn a_wrong_claim_to_match_the_saved_document_keeps_unsaved_edits() {
     assert_eq!(reopened.font().sources()[0].name(), "Claimed clean");
     let font = reopened.font();
     let pair = KerningPair::glyphs(first_glyph(font), drawn_layer(font).0);
-    assert_eq!(font.kerning().value(&source.id(), &pair), Some(-40.0));
+    assert_eq!(font.kerning().value(source.id(), &pair), Some(-40.0));
 }

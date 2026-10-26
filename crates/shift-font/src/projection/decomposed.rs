@@ -62,7 +62,7 @@ impl FontProjection<'_> {
     /// no part, as in every other composite read.
     pub(super) fn outline_parts(
         &mut self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
         visiting: &mut HashSet<GlyphId>,
         placement: Placement,
     ) -> CoreResult<Option<OutlineParts>> {
@@ -79,7 +79,7 @@ impl FontProjection<'_> {
     /// Places each component's base by this location's component transforms.
     fn composed_parts(
         &mut self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
         visiting: &mut HashSet<GlyphId>,
         placement: Placement,
     ) -> CoreResult<Option<OutlineParts>> {
@@ -88,7 +88,7 @@ impl FontProjection<'_> {
         }
         let layer = self
             .layers
-            .get(glyph_id)
+            .get(&glyph_id)
             .expect("prepared glyph layers contain the requested root")
             .clone();
         let own = layer
@@ -100,17 +100,17 @@ impl FontProjection<'_> {
             .collect::<Vec<_>>();
         let mut parts = vec![own];
 
-        visiting.insert(glyph_id.clone());
+        visiting.insert(glyph_id);
         for component in layer.components_iter() {
             let base_glyph_id = component.base_glyph_id();
             if visiting.contains(&base_glyph_id) {
                 continue;
             }
             let base = self
-                .outline_parts(&base_glyph_id, visiting, placement)?
+                .outline_parts(base_glyph_id, visiting, placement)?
                 .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
                     component_id: component.id(),
-                    base_glyph_id: base_glyph_id.clone(),
+                    base_glyph_id,
                 })?;
             let transform = component.matrix();
             parts.extend(base.iter().map(|part| {
@@ -119,7 +119,7 @@ impl FontProjection<'_> {
                     .collect()
             }));
         }
-        visiting.remove(glyph_id);
+        visiting.remove(&glyph_id);
 
         Ok(Some(parts))
     }
@@ -127,7 +127,7 @@ impl FontProjection<'_> {
     /// Blends the glyph's outline parts at its decomposition masters when this
     /// location lies between them; `None` for a composite glyph or at one of
     /// those masters, where placing components directly is exact.
-    fn decomposed(&mut self, glyph_id: &GlyphId) -> CoreResult<Option<OutlineParts>> {
+    fn decomposed(&mut self, glyph_id: GlyphId) -> CoreResult<Option<OutlineParts>> {
         let font = self.font;
         let Some(basis) = self.decomposition_basis(glyph_id)? else {
             return Ok(None);
@@ -148,14 +148,14 @@ impl FontProjection<'_> {
     /// Returns the glyph's decomposition basis, read once per glyph.
     fn decomposition_basis(
         &mut self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
     ) -> CoreResult<Option<Arc<InterpolationBasis>>> {
-        if let Some(basis) = self.decompositions.get(glyph_id) {
+        if let Some(basis) = self.decompositions.get(&glyph_id) {
             return Ok(basis.clone());
         }
         let has_components = self
             .layers
-            .get(glyph_id)
+            .get(&glyph_id)
             .is_some_and(|layer| layer.components_iter().next().is_some());
         let basis = match has_components {
             true => self
@@ -164,14 +164,14 @@ impl FontProjection<'_> {
                 .and_then(|projection| projection.decomposition.clone()),
             false => None,
         };
-        self.decompositions.insert(glyph_id.clone(), basis.clone());
+        self.decompositions.insert(glyph_id, basis.clone());
         Ok(basis)
     }
 }
 
 fn at_a_source(font: &Font, basis: &InterpolationBasis, location: &DesignLocation) -> bool {
     basis.source_ids().iter().any(|source_id| {
-        font.source(source_id)
+        font.source(*source_id)
             .is_some_and(|source| source.location().is_equivalent_to(location, font.axes()))
     })
 }
@@ -190,7 +190,7 @@ impl Font {
     ///
     /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph, or a
     /// resolution error from a component.
-    pub fn decomposition(&self, glyph_id: &GlyphId) -> CoreResult<Option<Decomposition>> {
+    pub fn decomposition(&self, glyph_id: GlyphId) -> CoreResult<Option<Decomposition>> {
         self.require_glyph(glyph_id)?;
         let Some(projection) =
             self.glyph_layer_projection_with_bases(glyph_id, &mut HashMap::new())?
@@ -210,12 +210,12 @@ impl Font {
     /// sample a decomposed glyph.
     fn decomposition_outlines(
         &self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
         basis: &InterpolationBasis,
     ) -> CoreResult<Option<Vec<OutlineParts>>> {
         let mut outlines = Vec::with_capacity(basis.source_ids().len());
         for source_id in basis.source_ids() {
-            let location = self.require_source(source_id)?.location();
+            let location = self.require_source(*source_id)?.location();
             let Some(parts) = self.projection(location).composed_parts(
                 glyph_id,
                 &mut HashSet::new(),
@@ -247,7 +247,7 @@ impl Font {
         }
         let mut layers = Vec::with_capacity(source_ids.len());
         for source_id in source_ids {
-            let Some(layer) = glyph.layer_for_source(source_id) else {
+            let Some(layer) = glyph.layer_for_source(*source_id) else {
                 return Ok(None);
             };
             layers.push(layer);
@@ -256,20 +256,20 @@ impl Font {
             return Ok(None);
         }
 
-        let mut masters = source_ids.iter().cloned().collect::<HashSet<_>>();
+        let mut masters = source_ids.iter().copied().collect::<HashSet<_>>();
         let mut visited = HashSet::from([glyph.id()]);
         let mut pending = glyph.component_glyph_ids().collect::<Vec<_>>();
         while let Some(component_id) = pending.pop() {
-            if !visited.insert(component_id.clone()) {
+            if !visited.insert(component_id) {
                 continue;
             }
-            let Some(component) = self.glyph(&component_id) else {
+            let Some(component) = self.glyph(component_id) else {
                 continue;
             };
             if let Some(component_interpolation) =
-                self.glyph_interpolation_with_bases(&component_id, interpolation_bases)?
+                self.glyph_interpolation_with_bases(component_id, interpolation_bases)?
             {
-                masters.extend(component_interpolation.basis().source_ids().iter().cloned());
+                masters.extend(component_interpolation.basis().source_ids().iter().copied());
             }
             pending.extend(component.component_glyph_ids());
         }
@@ -281,7 +281,7 @@ impl Font {
             .collect::<Vec<_>>();
         let key = locations
             .iter()
-            .map(|(source_id, _)| source_id.clone())
+            .map(|(source_id, _)| *source_id)
             .collect::<Vec<_>>();
         if let Some(basis) = interpolation_bases.get(&key) {
             return Ok(Some(Arc::clone(basis)));

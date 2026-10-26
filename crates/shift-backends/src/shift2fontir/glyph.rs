@@ -56,7 +56,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
 
     fn exec(&self, context: &Context) -> Result<(), Error> {
         self.glyph
-            .layer_for_source(&self.snapshot.default_source_id)
+            .layer_for_source(self.snapshot.default_source_id)
             .ok_or_else(|| {
                 Error::InvalidEntry(
                     "Shift glyph",
@@ -76,7 +76,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
 
         for (source, location) in self.snapshot.glyph_masters(&metadata)? {
-            let Some(layer) = self.glyph.layer_for_source(&source.id()) else {
+            let Some(layer) = self.glyph.layer_for_source(source.id()) else {
                 continue;
             };
             let mut instance = to_glyph_instance(layer);

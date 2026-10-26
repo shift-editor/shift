@@ -120,7 +120,7 @@ impl AxisLabel {
 
     /// Returns the identity retained across label renames and reordering.
     pub fn id(&self) -> AxisLabelId {
-        self.id.clone()
+        self.id
     }
 
     fn invalid(&self, message: impl Into<String>) -> CoreError {
@@ -146,17 +146,17 @@ pub struct Axis {
 /// Looks up axes by id in a list of axes.
 pub trait AxisList {
     /// Returns the axis with `axis_id`.
-    fn axis(&self, axis_id: &AxisId) -> Option<&Axis>;
+    fn axis(&self, axis_id: AxisId) -> Option<&Axis>;
 
     /// Returns whether the list has an axis with `axis_id`.
-    fn contains_axis(&self, axis_id: &AxisId) -> bool {
+    fn contains_axis(&self, axis_id: AxisId) -> bool {
         self.axis(axis_id).is_some()
     }
 }
 
 impl AxisList for [Axis] {
-    fn axis(&self, axis_id: &AxisId) -> Option<&Axis> {
-        self.iter().find(|axis| axis.id() == *axis_id)
+    fn axis(&self, axis_id: AxisId) -> Option<&Axis> {
+        self.iter().find(|axis| axis.id() == axis_id)
     }
 }
 
@@ -243,7 +243,7 @@ impl Axis {
     }
 
     pub fn id(&self) -> AxisId {
-        self.id.clone()
+        self.id
     }
 
     pub fn tag(&self) -> &str {
@@ -504,7 +504,7 @@ impl AxisMapping {
     }
 
     pub fn id(&self) -> AxisMappingId {
-        self.id.clone()
+        self.id
     }
 
     pub fn name(&self) -> &str {
@@ -560,13 +560,13 @@ impl AxisMapping {
         }
 
         for axis_id in self.inputs.iter().chain(&self.outputs) {
-            if !axes.contains_axis(axis_id) {
+            if !axes.contains_axis(*axis_id) {
                 return Err(self.invalid(format!("references unknown axis {axis_id}")));
             }
         }
         for input_id in &self.inputs {
             let axis = axes
-                .axis(input_id)
+                .axis(*input_id)
                 .expect("mapping axes were checked above");
             if self.is_independent() && axis.role() != AxisRole::External {
                 return Err(self.invalid(format!("input axis {input_id} is not external")));
@@ -578,8 +578,8 @@ impl AxisMapping {
                 return Err(self.invalid("mapping points require input and output locations"));
             }
             if self.is_independent()
-                && (point.input.get(&self.inputs[0]).is_none()
-                    || point.output.get(&self.outputs[0]).is_none())
+                && (point.input.get(self.inputs[0]).is_none()
+                    || point.output.get(self.outputs[0]).is_none())
             {
                 return Err(self.invalid(
                     "independent mapping points require explicit input and output values",
@@ -646,22 +646,22 @@ impl Location {
             .collect()
     }
 
-    pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
-        self.values.get(axis_id).copied()
+    pub fn get(&self, axis_id: AxisId) -> Option<f64> {
+        self.values.get(&axis_id).copied()
     }
 
     /// Returns this location's value on `axis`, or the axis default when the
     /// location has none.
     pub fn value_on(&self, axis: &Axis) -> f64 {
-        self.get(&axis.id()).unwrap_or_else(|| axis.default())
+        self.get(axis.id()).unwrap_or_else(|| axis.default())
     }
 
     pub fn set(&mut self, axis_id: AxisId, value: f64) {
         self.values.insert(axis_id, value);
     }
 
-    pub fn remove(&mut self, axis_id: &AxisId) -> Option<f64> {
-        self.values.remove(axis_id)
+    pub fn remove(&mut self, axis_id: AxisId) -> Option<f64> {
+        self.values.remove(&axis_id)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -757,7 +757,7 @@ macro_rules! typed_location {
             }
 
             pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
-                self.0.get(axis_id)
+                self.0.get(*axis_id)
             }
 
             /// Returns this location's value on `axis`, or the axis default
@@ -771,7 +771,7 @@ macro_rules! typed_location {
             }
 
             pub fn remove(&mut self, axis_id: &AxisId) -> Option<f64> {
-                self.0.remove(axis_id)
+                self.0.remove(*axis_id)
             }
 
             pub fn is_empty(&self) -> bool {
@@ -888,14 +888,7 @@ mod tests {
     #[test]
     fn axis_label_identity_is_stable_and_unique() {
         let label_id = AxisLabelId::from_raw("regular");
-        let label = AxisLabel::with_id(
-            label_id.clone(),
-            "Regular".to_string(),
-            400.0,
-            None,
-            None,
-            true,
-        );
+        let label = AxisLabel::with_id(label_id, "Regular".to_string(), 400.0, None, None, true);
         let mut axis = Axis::weight();
         axis.set_labels(vec![label.clone()]);
 
@@ -914,7 +907,7 @@ mod tests {
         let label_id = AxisLabelId::from_raw("regular");
         let mut axis = Axis::weight();
         axis.set_labels(vec![AxisLabel::with_id(
-            label_id.clone(),
+            label_id,
             "Regular".to_string(),
             400.0,
             Some(AxisLabelRange {
@@ -939,7 +932,7 @@ mod tests {
         let label_id = AxisLabelId::from_raw("black");
         let mut axis = Axis::weight();
         axis.set_labels(vec![AxisLabel::with_id(
-            label_id.clone(),
+            label_id,
             "Black".to_string(),
             950.0,
             None,
@@ -1000,11 +993,11 @@ mod tests {
         let weight = AxisId::from_raw("wght");
         let width = AxisId::from_raw("wdth");
         let slant = AxisId::from_raw("slnt");
-        let loc = Location::from([(weight.clone(), 700.0), (width.clone(), 100.0)]);
+        let loc = Location::from([(weight, 700.0), (width, 100.0)]);
 
-        assert_eq!(loc.get(&weight), Some(700.0));
-        assert_eq!(loc.get(&width), Some(100.0));
-        assert_eq!(loc.get(&slant), None);
+        assert_eq!(loc.get(weight), Some(700.0));
+        assert_eq!(loc.get(width), Some(100.0));
+        assert_eq!(loc.get(slant), None);
     }
 
     #[test]
@@ -1036,9 +1029,9 @@ mod tests {
         let weight = Axis::weight();
         let axes = [weight.clone()];
 
-        assert_eq!(axes.axis(&weight.id()), Some(&weight));
-        assert!(axes.contains_axis(&weight.id()));
-        assert!(!axes.contains_axis(&Axis::width().id()));
+        assert_eq!(axes.axis(weight.id()), Some(&weight));
+        assert!(axes.contains_axis(weight.id()));
+        assert!(!axes.contains_axis(Axis::width().id()));
     }
 
     #[test]

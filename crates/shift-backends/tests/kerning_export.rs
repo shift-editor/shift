@@ -101,11 +101,10 @@ fn an_exception_at_one_master_changes_only_that_pair_at_that_master() {
     let a = font.glyph_id_by_name("A").unwrap();
     let b = font.glyph_id_by_name("B").unwrap();
     let bold_wide = master(&font, "MutatorSansBoldWide.ufo");
-    let a_group = font
+    let a_group = *font
         .kerning()
-        .group_of(KerningPosition::Second, &a)
-        .expect("A kerns through a group")
-        .clone();
+        .group_of(KerningPosition::Second, a)
+        .expect("A kerns through a group");
 
     // B joins A's group, so T kerns against both through it.
     edit(
@@ -141,11 +140,10 @@ fn an_exception_at_one_master_changes_only_that_pair_at_that_master() {
 fn renaming_a_group_keeps_every_masters_kern() {
     let mut font = mutatorsans();
     let a = font.glyph_id_by_name("A").unwrap();
-    let a_group = font
+    let a_group = *font
         .kerning()
-        .group_of(KerningPosition::Second, &a)
-        .expect("A kerns through a group")
-        .clone();
+        .group_of(KerningPosition::Second, a)
+        .expect("A kerns through a group");
 
     edit(
         &mut font,
@@ -186,7 +184,7 @@ fn remove_t_a_at(font: &mut Font, filename: &str) {
     let t = font.glyph_id_by_name("T").unwrap();
     let a = font.glyph_id_by_name("A").unwrap();
     let source_id = master(font, filename);
-    let pair = font.kerning().resolve(&source_id, &t, &a).unwrap().pair;
+    let pair = font.kerning().resolve(source_id, t, a).unwrap().pair;
     edit(
         font,
         SetKerningValues {

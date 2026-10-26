@@ -151,7 +151,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
             .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
     };
     let coordinate = |location: &Location, axis_id: &AxisId| {
-        font.axis(axis_id)
+        font.axis(*axis_id)
             .map(|axis| location.value_on(axis))
             .ok_or_else(|| invalid(&format!("mapping references unknown axis {axis_id}")))
     };
@@ -174,7 +174,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
                         .map(|axis_id| {
                             point
                                 .output
-                                .get(axis_id)
+                                .get(*axis_id)
                                 .map_or_else(|| coordinate(&point.input, axis_id), Ok)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
@@ -210,7 +210,7 @@ fn directory_mappings(font: &Font) -> Result<Vec<DirectoryMapping>, FontReadErro
 fn directory_metrics(font: &Font, source: &FontSource) -> FontMetrics {
     let metric = |kind| {
         font.metric_definition_for_kind(kind)
-            .and_then(|definition| source.metric_value(&definition.id()))
+            .and_then(|definition| source.metric_value(definition.id()))
             .map(|value| value.position)
     };
     let units_per_em = font.metrics().units_per_em;
@@ -665,8 +665,7 @@ mod tests {
         let italic_id = italic.id();
         font.add_axis(italic).unwrap();
 
-        let regular_location =
-            DesignLocation::from([(weight_id.clone(), 400.0), (italic_id.clone(), 0.0)]);
+        let regular_location = DesignLocation::from([(weight_id, 400.0), (italic_id, 0.0)]);
         let mut regular = Source::with_filename(
             "Regular".to_string(),
             regular_location,
@@ -679,8 +678,7 @@ mod tests {
         regular.set_underline_thickness(Some(60.0));
         let regular_id = font.add_source(regular);
 
-        let bold_location =
-            DesignLocation::from([(weight_id.clone(), 800.0), (italic_id.clone(), 1.0)]);
+        let bold_location = DesignLocation::from([(weight_id, 800.0), (italic_id, 1.0)]);
         let mut bold =
             Source::with_filename("Bold".to_string(), bold_location, "Bold.ufo".to_string());
         set_metrics(&font, &mut bold, [1600.0, -550.0, 1450.0, 1050.0]);
@@ -693,21 +691,21 @@ mod tests {
 
         let independent = AxisMapping::new(
             "Weight curve".to_string(),
-            vec![weight_id.clone()],
-            vec![weight_id.clone()],
+            vec![weight_id],
+            vec![weight_id],
             vec![
-                mapping_point(&[(weight_id.clone(), 100.0)], &[(weight_id.clone(), 100.0)]),
-                mapping_point(&[(weight_id.clone(), 400.0)], &[(weight_id.clone(), 400.0)]),
-                mapping_point(&[(weight_id.clone(), 900.0)], &[(weight_id.clone(), 800.0)]),
+                mapping_point(&[(weight_id, 100.0)], &[(weight_id, 100.0)]),
+                mapping_point(&[(weight_id, 400.0)], &[(weight_id, 400.0)]),
+                mapping_point(&[(weight_id, 900.0)], &[(weight_id, 800.0)]),
             ],
         );
         let mut cross = AxisMapping::new(
             "Italic compensation".to_string(),
-            vec![weight_id.clone(), italic_id.clone()],
-            vec![weight_id.clone()],
+            vec![weight_id, italic_id],
+            vec![weight_id],
             vec![mapping_point(
-                &[(weight_id.clone(), 800.0), (italic_id.clone(), 1.0)],
-                &[(weight_id.clone(), 750.0)],
+                &[(weight_id, 800.0), (italic_id, 1.0)],
+                &[(weight_id, 750.0)],
             )],
         );
         cross.set_description(Some("Reduce italic weight".to_string()));
@@ -866,10 +864,10 @@ mod tests {
         font.set_default_source_id(source_id);
         font.set_axis_mappings(vec![AxisMapping::new(
             "Sparse mapping".to_string(),
-            vec![weight_id.clone(), italic_id.clone()],
-            vec![weight_id.clone(), italic_id.clone()],
+            vec![weight_id, italic_id],
+            vec![weight_id, italic_id],
             vec![
-                mapping_point(&[(italic_id.clone(), 1.0)], &[(weight_id.clone(), 450.0)]),
+                mapping_point(&[(italic_id, 1.0)], &[(weight_id, 450.0)]),
                 mapping_point(&[(weight_id, 700.0)], &[(italic_id, 1.0)]),
             ],
         )])
@@ -955,8 +953,8 @@ mod tests {
     fn mapping_point(input: &[(AxisId, f64)], output: &[(AxisId, f64)]) -> AxisMappingPoint {
         AxisMappingPoint {
             description: None,
-            input: input.iter().cloned().collect(),
-            output: output.iter().cloned().collect(),
+            input: input.iter().copied().collect(),
+            output: output.iter().copied().collect(),
         }
     }
 

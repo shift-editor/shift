@@ -39,7 +39,7 @@ pub(crate) fn resolve_group_id(
 ) -> Result<KerningGroupId> {
     let kerning = font.kerning();
     if let Ok(group_id) = selector.parse::<KerningGroupId>()
-        && let Some(group) = kerning.group(&group_id)
+        && let Some(group) = kerning.group(group_id)
     {
         if group.position != position {
             bail!(
@@ -53,7 +53,7 @@ pub(crate) fn resolve_group_id(
 
     kerning
         .group_id(position, selector)
-        .cloned()
+        .copied()
         .ok_or_else(|| {
             miette!(
                 "{} group {selector:?} does not exist; use its name or full kerningGroup_ id",
@@ -77,7 +77,7 @@ pub(crate) fn resolve_side(
         return Ok(KerningSide::Group(resolve_group_id(font, position, name)?));
     }
     if let Ok(group_id) = selector.parse::<KerningGroupId>()
-        && font.kerning().group(&group_id).is_some()
+        && font.kerning().group(group_id).is_some()
     {
         return Ok(KerningSide::Group(resolve_group_id(
             font, position, selector,

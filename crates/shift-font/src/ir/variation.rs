@@ -84,7 +84,7 @@ impl Font {
                     let location = Location::from([(axis.id(), default)]);
                     default = basis
                         .evaluate(&location, self.axes())?
-                        .get(&axis.id())
+                        .get(axis.id())
                         .unwrap_or(default);
                     for delta in basis.basis().deltas() {
                         for support in delta.region().supports() {
@@ -104,7 +104,7 @@ impl Font {
                         let location = Location::from([(axis.id(), *value)]);
                         *value = basis
                             .evaluate(&location, self.axes())?
-                            .get(&axis.id())
+                            .get(axis.id())
                             .unwrap_or(*value);
                     }
                 }
@@ -147,7 +147,7 @@ impl AxisMappingBasis {
 
     /// Returns the authored mapping identity that produced this basis.
     pub fn mapping_id(&self) -> AxisMappingId {
-        self.mapping_id.clone()
+        self.mapping_id
     }
 
     /// Returns the mapping's ordered input axes.
@@ -181,9 +181,9 @@ impl AxisMappingBasis {
         let mut result = Location::new();
 
         for (axis_id, adjustment) in self.output_axis_ids.iter().zip(adjustments) {
-            let axis = axes.axis(axis_id).require(&axis_id)?;
+            let axis = axes.axis(*axis_id).require(&axis_id)?;
             let base = location.value_on(axis);
-            result.set(axis_id.clone(), base + adjustment);
+            result.set(*axis_id, base + adjustment);
         }
 
         Ok(result)
@@ -211,7 +211,7 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
                 .iter()
                 .map(|axis| {
                     let base = point.input.value_on(axis);
-                    let output = point.output.get(&axis.id()).unwrap_or(base);
+                    let output = point.output.get(axis.id()).unwrap_or(base);
                     output - base
                 })
                 .collect();
@@ -292,7 +292,7 @@ pub fn map_location_with_bases(
     for basis in bases.iter().filter(|basis| basis.is_independent()) {
         let outputs = basis.evaluate(external.as_untyped(), axes)?;
         for (axis_id, value) in outputs.iter() {
-            mapped.set(axis_id.clone(), *value);
+            mapped.set(*axis_id, *value);
         }
     }
 
@@ -300,7 +300,7 @@ pub fn map_location_with_bases(
     for basis in bases.iter().filter(|basis| !basis.is_independent()) {
         let outputs = basis.evaluate(independently_mapped.as_untyped(), axes)?;
         for (axis_id, value) in outputs.iter() {
-            mapped.set(axis_id.clone(), *value);
+            mapped.set(*axis_id, *value);
         }
     }
 
@@ -314,7 +314,7 @@ fn resolve_axes<'a>(
 ) -> CoreResult<Vec<&'a Axis>> {
     ids.iter()
         .map(|axis_id| {
-            axes.axis(axis_id)
+            axes.axis(*axis_id)
                 .ok_or_else(|| invalid_mapping(mapping, format!("unknown axis {axis_id}")))
         })
         .collect()
@@ -513,7 +513,7 @@ mod tests {
     fn location(values: &[(AxisId, f64)]) -> Location {
         let location: Location = values
             .iter()
-            .map(|(axis_id, value)| (axis_id.clone(), *value))
+            .map(|(axis_id, value)| (*axis_id, *value))
             .collect();
         location
     }

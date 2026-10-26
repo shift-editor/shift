@@ -19,7 +19,7 @@ impl Font {
         let source_locations = self
             .masters()
             .filter(|source| {
-                source.id() == default_source_id || self.kerning().source(&source.id()).is_some()
+                source.id() == default_source_id || self.kerning().source(source.id()).is_some()
             })
             .map(|source| (source.id(), source.location().clone()))
             .collect::<Vec<_>>();
@@ -51,8 +51,8 @@ impl Font {
     pub fn kerning_at(
         &self,
         location: &DesignLocation,
-        first: &GlyphId,
-        second: &GlyphId,
+        first: GlyphId,
+        second: GlyphId,
     ) -> CoreResult<f64> {
         Ok(self
             .kerning_blend_at(location)?
@@ -77,7 +77,7 @@ impl Font {
                 .iter()
                 .zip(weights)
                 .filter(|(_, weight)| *weight != 0.0)
-                .map(|(source_id, weight)| (source_id.clone(), weight))
+                .map(|(source_id, weight)| (*source_id, weight))
                 .collect(),
         })
     }
@@ -91,12 +91,12 @@ impl Font {
     ///
     /// Returns [`crate::CoreError::SourceNotFound`] for a source the font does
     /// not have, and otherwise as [`Self::kerning_at`].
-    pub fn kerning_blend_at_source(&self, source_id: &SourceId) -> CoreResult<KerningBlend> {
+    pub fn kerning_blend_at_source(&self, source_id: SourceId) -> CoreResult<KerningBlend> {
         let source = self.require_source(source_id)?;
         if self.kerning().source(source_id).is_some()
             || self.kerning_interpolation_basis().is_none()
         {
-            return Ok(KerningBlend::only(Some(source_id.clone())));
+            return Ok(KerningBlend::only(Some(source_id)));
         }
         self.kerning_blend_at(source.location())
     }
@@ -123,7 +123,7 @@ impl KerningBlend {
 
     /// Returns the kerning between `first` followed by `second`: each
     /// source's resolved value, zero where no pair applies, times its weight.
-    pub fn value(&self, kerning: &Kerning, first: &GlyphId, second: &GlyphId) -> f64 {
+    pub fn value(&self, kerning: &Kerning, first: GlyphId, second: GlyphId) -> f64 {
         self.values(kerning, [(first, second)])
             .pop()
             .unwrap_or_default()
@@ -131,15 +131,15 @@ impl KerningBlend {
 
     /// Returns [`Self::value`] for each of `pairs`, in order, looking each
     /// source up once for the whole run.
-    pub fn values<'a>(
+    pub fn values(
         &self,
         kerning: &Kerning,
-        pairs: impl IntoIterator<Item = (&'a GlyphId, &'a GlyphId)>,
+        pairs: impl IntoIterator<Item = (GlyphId, GlyphId)>,
     ) -> Vec<f64> {
         let sources: Vec<_> = self
             .sources
             .iter()
-            .filter_map(|(source_id, weight)| Some((kerning.source(source_id)?, *weight)))
+            .filter_map(|(source_id, weight)| Some((kerning.source(*source_id)?, *weight)))
             .collect();
         pairs
             .into_iter()
@@ -176,7 +176,7 @@ mod tests {
         let a = font.glyph_id_by_name("A").unwrap();
 
         let at = |value| {
-            font.kerning_at(&weight_location(&font, value), &a, &a)
+            font.kerning_at(&weight_location(&font, value), a, a)
                 .unwrap()
         };
 
@@ -194,15 +194,15 @@ mod tests {
             crate::KerningGroupId::from_raw("first_A"),
             crate::KerningGroupId::from_raw("second_A"),
         );
-        font.kerning_mut().remove_value(&bold_id, &pair);
+        font.kerning_mut().remove_value(bold_id, &pair);
         font.kerning_mut().set_value(
             bold_id,
-            crate::KerningPair::glyphs(crate::GlyphId::from_raw("other"), a.clone()),
+            crate::KerningPair::glyphs(crate::GlyphId::from_raw("other"), a),
             -10.0,
         );
 
         let mid = font
-            .kerning_at(&weight_location(&font, 600.0), &a, &a)
+            .kerning_at(&weight_location(&font, 600.0), a, a)
             .unwrap();
 
         assert_eq!(mid, -25.0);
@@ -214,9 +214,9 @@ mod tests {
         let a = font.glyph_id_by_name("A").unwrap();
         let bold_id = font.sources()[2].id();
 
-        let blend = font.kerning_blend_at_source(&bold_id).unwrap();
+        let blend = font.kerning_blend_at_source(bold_id).unwrap();
 
-        assert_eq!(blend.value(font.kerning(), &a, &a), -90.0);
+        assert_eq!(blend.value(font.kerning(), a, a), -90.0);
     }
 
     #[test]
@@ -230,9 +230,9 @@ mod tests {
             .map(Source::id)
             .unwrap();
 
-        let blend = font.kerning_blend_at_source(&medium_id).unwrap();
+        let blend = font.kerning_blend_at_source(medium_id).unwrap();
 
-        assert_eq!(blend.value(font.kerning(), &a, &a), -70.0);
+        assert_eq!(blend.value(font.kerning(), a, a), -70.0);
     }
 
     #[test]
@@ -253,7 +253,7 @@ mod tests {
         assert!(!basis.source_ids().contains(&medium_id));
         let default_source_id = font.default_source_id().unwrap();
         font.kerning_mut().remove_value(
-            &default_source_id,
+            default_source_id,
             &crate::KerningPair::groups(
                 crate::KerningGroupId::from_raw("first_A"),
                 crate::KerningGroupId::from_raw("second_A"),

@@ -101,7 +101,7 @@ impl MetricDefinition {
     }
 
     pub fn id(&self) -> MetricId {
-        self.id.clone()
+        self.id
     }
 
     pub fn kind(&self) -> MetricKind {
@@ -183,17 +183,17 @@ mod tests {
     fn standard_metrics_write_present_roles_and_keep_overshoot() {
         let mut font = crate::Font::new();
         let source_id = font.default_source_id().unwrap();
-        let before = font.standard_metrics(&source_id).unwrap();
+        let before = font.standard_metrics(source_id).unwrap();
         let x_height_id = font
             .metric_definition_for_kind(MetricKind::XHeight)
             .unwrap()
             .id();
-        font.source_mut(&source_id)
+        font.source_mut(source_id)
             .unwrap()
-            .set_metric_value(x_height_id.clone(), MetricValue::new(500.0, 12.0));
+            .set_metric_value(x_height_id, MetricValue::new(500.0, 12.0));
 
         font.set_standard_metrics(
-            &source_id,
+            source_id,
             StandardMetrics {
                 ascender: Some(780.0),
                 x_height: Some(520.0),
@@ -202,14 +202,14 @@ mod tests {
         )
         .unwrap();
 
-        let after = font.standard_metrics(&source_id).unwrap();
+        let after = font.standard_metrics(source_id).unwrap();
         assert_eq!(after.ascender, Some(780.0));
         assert_eq!(after.x_height, Some(520.0));
         assert_eq!(after.descender, before.descender);
         let x_height = font
-            .source(&source_id)
+            .source(source_id)
             .unwrap()
-            .metric_value(&x_height_id)
+            .metric_value(x_height_id)
             .unwrap();
         assert_eq!(x_height.overshoot, 12.0);
     }
@@ -222,23 +222,23 @@ mod tests {
             .definition_for_kind(MetricKind::Ascender)
             .expect("a new font defines an ascender");
 
-        assert_eq!(definitions.definition(&ascender.id()), Some(ascender));
-        assert!(definitions.definition(&MetricId::new()).is_none());
+        assert_eq!(definitions.definition(ascender.id()), Some(ascender));
+        assert!(definitions.definition(MetricId::new()).is_none());
     }
 }
 
 /// Looks up metric definitions in a list of definitions.
 pub trait MetricDefinitionList {
     /// Returns the definition with `metric_id`.
-    fn definition(&self, metric_id: &MetricId) -> Option<&MetricDefinition>;
+    fn definition(&self, metric_id: MetricId) -> Option<&MetricDefinition>;
 
     /// Returns the definition for a standard role, or the first custom one.
     fn definition_for_kind(&self, kind: MetricKind) -> Option<&MetricDefinition>;
 }
 
 impl MetricDefinitionList for [MetricDefinition] {
-    fn definition(&self, metric_id: &MetricId) -> Option<&MetricDefinition> {
-        self.iter().find(|definition| definition.id() == *metric_id)
+    fn definition(&self, metric_id: MetricId) -> Option<&MetricDefinition> {
+        self.iter().find(|definition| definition.id() == metric_id)
     }
 
     fn definition_for_kind(&self, kind: MetricKind) -> Option<&MetricDefinition> {
@@ -263,7 +263,7 @@ impl StandardMetrics {
         let position = |kind| {
             let definition = definitions.definition_for_kind(kind)?;
             source
-                .metric_value(&definition.id())
+                .metric_value(definition.id())
                 .map(|value| value.position)
         };
         Self {
@@ -286,7 +286,7 @@ impl StandardMetrics {
                 continue;
             };
             let overshoot = source
-                .metric_value(&definition.id())
+                .metric_value(definition.id())
                 .map(|value| value.overshoot)
                 .unwrap_or_default();
             source.set_metric_value(definition.id(), MetricValue::new(position, overshoot));

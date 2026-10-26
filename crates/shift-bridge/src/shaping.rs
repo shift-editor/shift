@@ -205,7 +205,7 @@ impl NapiShaperFont {
       axes: font
         .axis_normalizations()
         .into_iter()
-        .map(|(axis_id, normalization)| NapiShaperAxis::new(&axis_id, normalization.points()))
+        .map(|(axis_id, normalization)| NapiShaperAxis::new(axis_id, normalization.points()))
         .collect(),
     }
   }
@@ -213,7 +213,7 @@ impl NapiShaperFont {
 
 impl NapiShaperAxis {
   /// The axis's normalization from its `(user, normalized)` mapping points.
-  fn new(axis_id: &shift_font::AxisId, points: &[(f64, f64)]) -> Self {
+  fn new(axis_id: shift_font::AxisId, points: &[(f64, f64)]) -> Self {
     let (user, normalized) = points.iter().copied().unzip();
     Self {
       axis_id: axis_id.to_string(),

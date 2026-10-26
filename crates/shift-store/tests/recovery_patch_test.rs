@@ -70,7 +70,7 @@ fn recovery_preserves_store_only_font_and_source_fields() {
     let mut post = original.clone();
     post.metadata_mut().family_name = Some("Recovered Sans".to_string());
     let source_id = shift_font::SourceId::from_raw("regular");
-    post.source_mut(&source_id)
+    post.source_mut(source_id)
         .expect("regular source")
         .set_line_gap(Some(99.0));
     let change = shift_font::FontChangeSet::new(vec![
@@ -131,7 +131,7 @@ fn recovery_overlay_reopens_and_saves_semantic_directory_changes() {
     post.replace_axis(weight.clone())
         .expect("replace weight axis");
     let regular_source_id = shift_font::SourceId::from_raw("regular");
-    post.source_mut(&regular_source_id)
+    post.source_mut(regular_source_id)
         .expect("regular source")
         .set_line_gap(Some(99.0));
     post.set_axis_mappings(Vec::new()).expect("clear mappings");
@@ -281,7 +281,7 @@ fn recovery_save_replaces_reordered_component_collections() {
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
-    let mut layer = document.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut layer = document.load_glyph_layer(layer_id).unwrap().unwrap();
     let first_id = layer.components_iter().next().unwrap().id();
     let first = layer.remove_component(&first_id).unwrap();
     layer.add_component(first);
@@ -294,7 +294,7 @@ fn recovery_save_replaces_reordered_component_collections() {
     drop(document);
 
     let saved = ShiftStore::open_document(&document_path).expect("open saved document");
-    let saved_layer = saved.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let saved_layer = saved.load_glyph_layer(layer_id).unwrap().unwrap();
     assert_eq!(
         saved_layer
             .components_iter()
@@ -314,7 +314,7 @@ fn recovered_directory_open_remains_payload_lazy() {
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
-    let mut layer = document.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut layer = document.load_glyph_layer(layer_id).unwrap().unwrap();
     layer.set_width(777.0);
     document.replace_glyph_layer(&layer).unwrap();
     drop(document);
@@ -335,7 +335,7 @@ fn recovered_directory_open_remains_payload_lazy() {
             .glyph_count(),
         sample_font().glyph_count()
     );
-    recovered.load_glyph_layer(&layer_id).unwrap_err();
+    recovered.load_glyph_layer(layer_id).unwrap_err();
 }
 
 #[test]
@@ -348,10 +348,10 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
 
     let glyph_id = shift_font::GlyphId::from_raw("B");
     let layer_id = shift_font::LayerId::from_raw("B_regular");
-    let mut glyph = shift_font::Glyph::with_id(glyph_id.clone(), "B");
+    let mut glyph = shift_font::Glyph::with_id(glyph_id, "B");
     glyph.set_unicodes(vec![0x42]);
     let layer = shift_font::GlyphLayer::with_width(
-        layer_id.clone(),
+        layer_id,
         shift_font::SourceId::from_raw("regular"),
         620.0,
     );
@@ -387,7 +387,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     assert_eq!(directory.glyph_count(), post.glyph_count());
     assert_eq!(
         directory
-            .glyph(&glyph_id)
+            .glyph(glyph_id)
             .expect("new glyph in merged directory")
             .layers()
             .get(&layer_id)
@@ -397,7 +397,7 @@ fn recovery_overlay_adds_a_new_glyph_and_layer_without_copying_the_directory() {
     );
     assert_eq!(
         document
-            .load_glyph_layer(&layer_id)
+            .load_glyph_layer(layer_id)
             .unwrap()
             .unwrap()
             .width(),
@@ -503,13 +503,13 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
 
     let mut document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
         .expect("open with recovery");
-    let mut layer = document.load_glyph_layer(&layer_id).unwrap().unwrap();
+    let mut layer = document.load_glyph_layer(layer_id).unwrap().unwrap();
     layer.set_width(777.0);
     document.replace_glyph_layer(&layer).unwrap();
 
     let mut post = original.clone();
     let removed_layer = post
-        .remove_glyph_layer(&layer_id)
+        .remove_glyph_layer(layer_id)
         .expect("remove glyph layer");
     post.remove_source(source_id).expect("remove source");
     let changes = shift_font::FontChangeSet::new(vec![
@@ -522,7 +522,7 @@ fn parent_deletion_does_not_reinsert_an_earlier_layer_override() {
     document
         .apply_change_set_with_font(&changes, &post, SaveState::Unsaved)
         .unwrap();
-    assert!(document.load_glyph_layer(&layer_id).unwrap().is_none());
+    assert!(document.load_glyph_layer(layer_id).unwrap().is_none());
 
     document.save_document().expect("save deletion");
     drop(document);
@@ -552,7 +552,7 @@ fn kerning_edit(
 
 fn stored_kerning(store: &ShiftStore, source_id: &str) -> Option<f64> {
     store.load_font_state().unwrap().kerning().value(
-        &shift_font::SourceId::from_raw(source_id),
+        shift_font::SourceId::from_raw(source_id),
         &shift_font::KerningPair::groups(
             shift_font::KerningGroupId::from_raw("first_A"),
             shift_font::KerningGroupId::from_raw("second_A"),
@@ -625,7 +625,7 @@ fn edit_groups(font: &mut shift_font::Font) -> shift_font::FontChangeSet {
     font.apply_intents(&shift_font::FontIntentSet {
         intents: vec![
             CreateKerningGroup {
-                group_id: round.clone(),
+                group_id: round,
                 position: shift_font::KerningPosition::First,
                 name: "Round".to_string(),
             }

@@ -127,7 +127,7 @@ impl Source {
     }
 
     pub fn id(&self) -> SourceId {
-        self.id.clone()
+        self.id
     }
 
     pub fn name(&self) -> &str {
@@ -151,8 +151,8 @@ impl Source {
         &mut self.metric_values
     }
 
-    pub fn metric_value(&self, metric_id: &MetricId) -> Option<MetricValue> {
-        self.metric_values.get(metric_id).copied()
+    pub fn metric_value(&self, metric_id: MetricId) -> Option<MetricValue> {
+        self.metric_values.get(&metric_id).copied()
     }
 
     pub fn set_metric_value(&mut self, metric_id: MetricId, value: MetricValue) {
@@ -256,27 +256,27 @@ impl Source {
         self.location = location;
     }
 
-    pub fn remove_axis_location(&mut self, axis_id: &crate::AxisId) -> Option<f64> {
-        self.location.remove(axis_id)
+    pub fn remove_axis_location(&mut self, axis_id: crate::AxisId) -> Option<f64> {
+        self.location.remove(&axis_id)
     }
 }
 
 /// Looks up sources by id in a list of sources.
 pub trait SourceList {
     /// Returns the source with `source_id`.
-    fn source(&self, source_id: &SourceId) -> Option<&Source>;
+    fn source(&self, source_id: SourceId) -> Option<&Source>;
 
     /// Returns the source with `source_id`, for editing.
-    fn source_mut(&mut self, source_id: &SourceId) -> Option<&mut Source>;
+    fn source_mut(&mut self, source_id: SourceId) -> Option<&mut Source>;
 }
 
 impl SourceList for [Source] {
-    fn source(&self, source_id: &SourceId) -> Option<&Source> {
-        self.iter().find(|source| source.id() == *source_id)
+    fn source(&self, source_id: SourceId) -> Option<&Source> {
+        self.iter().find(|source| source.id() == source_id)
     }
 
-    fn source_mut(&mut self, source_id: &SourceId) -> Option<&mut Source> {
-        self.iter_mut().find(|source| source.id() == *source_id)
+    fn source_mut(&mut self, source_id: SourceId) -> Option<&mut Source> {
+        self.iter_mut().find(|source| source.id() == source_id)
     }
 }
 
@@ -289,7 +289,7 @@ mod tests {
     fn source_creation() {
         let mut location = DesignLocation::new();
         let axis_id = AxisId::from_raw("wght");
-        location.set(axis_id.clone(), 400.0);
+        location.set(axis_id, 400.0);
 
         let source = Source::new("Regular".to_string(), location);
         assert_eq!(source.name(), "Regular");
@@ -304,12 +304,12 @@ mod tests {
         ];
         let bold_id = sources[1].id();
 
-        assert_eq!(sources.source(&bold_id).map(Source::name), Some("Bold"));
+        assert_eq!(sources.source(bold_id).map(Source::name), Some("Bold"));
         sources
-            .source_mut(&bold_id)
+            .source_mut(bold_id)
             .unwrap()
             .set_name("Black".to_string());
         assert_eq!(sources[1].name(), "Black");
-        assert!(sources.source(&SourceId::new()).is_none());
+        assert!(sources.source(SourceId::new()).is_none());
     }
 }

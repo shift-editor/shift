@@ -67,7 +67,7 @@ fn names_and_clusters(font: &Font, shaped: &[ShapedGlyph]) -> Vec<(Option<String
             let name = glyph
                 .glyph_id
                 .as_ref()
-                .map(|id| font.glyph(id).unwrap().name().to_string());
+                .map(|id| font.glyph(*id).unwrap().name().to_string());
             (name, glyph.cluster)
         })
         .collect()

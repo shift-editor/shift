@@ -190,7 +190,7 @@ mod exports {
         let font = engine.session.font();
         let blend = match run.source {
             Some(number) => font
-                .kerning_blend_at_source(engine.ids.sources.get(number)?)
+                .kerning_blend_at_source(*engine.ids.sources.get(number)?)
                 .ok()?,
             None => font
                 .kerning_blend_at(&design_location(font, &run.location))
@@ -201,7 +201,7 @@ mod exports {
             .glyphs
             .chunks_exact(2)
             .map(|pair| match pair {
-                &[first, second] => glyphs.get(first).zip(glyphs.get(second)),
+                &[first, second] => glyphs.get(first).copied().zip(glyphs.get(second).copied()),
                 _ => None,
             })
             .collect::<Option<Vec<_>>>()?;
@@ -233,7 +233,7 @@ mod exports {
                     return UNKERNED;
                 };
                 match (glyphs.get(first), glyphs.get(second)) {
-                    (Some(first), Some(second)) => editable_pair(kerning, source, first, second),
+                    (Some(first), Some(second)) => editable_pair(kerning, *source, *first, *second),
                     _ => UNKERNED,
                 }
             })
@@ -250,9 +250,9 @@ mod exports {
 
     fn editable_pair(
         kerning: &Kerning,
-        source_id: &SourceId,
-        first: &GlyphId,
-        second: &GlyphId,
+        source_id: SourceId,
+        first: GlyphId,
+        second: GlyphId,
     ) -> EditablePair {
         let (authored, resolved) = match kerning.resolve(source_id, first, second) {
             Some(resolved) => (true, resolved),

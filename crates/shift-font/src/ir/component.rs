@@ -417,7 +417,7 @@ impl Component {
     }
 
     pub fn base_glyph_id(&self) -> GlyphId {
-        self.base_glyph_id.clone()
+        self.base_glyph_id
     }
 
     pub fn base_glyph_name(&self) -> &GlyphName {
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn component_creation() {
         let base_id = GlyphId::from_raw("a");
-        let c = Component::new(base_id.clone(), "a".to_string());
+        let c = Component::new(base_id, "a".to_string());
         assert_eq!(c.base_glyph_id(), base_id);
         assert_eq!(c.base_glyph_name().as_str(), "a");
         assert!(c.transform().is_identity());

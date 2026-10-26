@@ -203,7 +203,7 @@ fn change_sets_preserve_dense_entity_order_indices() {
     let before_mappings = after.axis_mappings().to_vec();
     let before_instances = after.named_instances().to_vec();
     let before_sources = source_collection(&after);
-    after.remove_axis(&font.axes()[0].id()).unwrap();
+    after.remove_axis(font.axes()[0].id()).unwrap();
     after.remove_source(font.sources()[1].id()).unwrap();
     after.pop_glyph(glyph.id()).unwrap();
 
@@ -379,9 +379,9 @@ fn glyph_replacements_rewrite_only_the_layers_that_changed() {
     };
 
     // Widening one layer rewrites that layer and leaves the other alone.
-    let before = original.glyph(&glyph_id).unwrap().clone();
+    let before = original.glyph(glyph_id).unwrap().clone();
     let mut widened = before.clone();
-    let mut layer = widened.layer(&regular).unwrap().clone();
+    let mut layer = widened.layer(regular).unwrap().clone();
     layer.set_width(layer.width() + 10.0);
     widened.set_layer(layer);
     let mut expected = original.clone();
@@ -396,7 +396,7 @@ fn glyph_replacements_rewrite_only_the_layers_that_changed() {
 
     // Dropping a layer deletes only that layer's rows.
     let mut without_bold = widened.clone();
-    without_bold.remove_layer(&bold);
+    without_bold.remove_layer(bold);
     let after_widening = expected.clone();
     expected
         .apply_change_set(&replaced(&widened, &without_bold))
@@ -670,10 +670,10 @@ fn creates_and_reads_glyph_component() {
     let base_glyph_id = create_glyph_b(&mut store);
     let source_id = create_regular_source(&mut store);
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
-    let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
+    let component_id = create_default_component(&mut store, layer_id, &base_glyph_id);
 
     let layer = store
-        .load_glyph_layer(&layer_id)
+        .load_glyph_layer(layer_id)
         .expect("glyph layer query should succeed")
         .expect("glyph layer should exist");
     let component = layer
@@ -712,10 +712,10 @@ fn lists_glyph_components_for_layer() {
     let base_glyph_id = create_glyph_b(&mut store);
     let source_id = create_regular_source(&mut store);
     let layer_id = create_default_glyph_layer(&mut store, &glyph_id, &source_id);
-    let component_id = create_default_component(&mut store, &layer_id, &base_glyph_id);
+    let component_id = create_default_component(&mut store, layer_id, &base_glyph_id);
 
     let layer = store
-        .load_glyph_layer(&layer_id)
+        .load_glyph_layer(layer_id)
         .expect("glyph layer query should succeed")
         .expect("glyph layer should exist");
     let components = layer.components();
@@ -732,11 +732,10 @@ fn applies_glyph_identity_change_set() {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     let glyph_id = glyph.id();
     let source_id = shift_font::SourceId::new();
-    let layer =
-        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
-    create_regular_source_with_id(&mut store, &source_id);
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id, 500.0);
+    create_regular_source_with_id(&mut store, source_id);
 
-    let mut replacement = shift_font::Glyph::with_id(glyph_id.clone(), "A.alt");
+    let mut replacement = shift_font::Glyph::with_id(glyph_id, "A.alt");
     replacement.set_unicodes(vec![0x00c1]);
     replacement.set_layer(layer);
     store
@@ -772,7 +771,7 @@ fn glyph_rename_preserves_authored_order() {
     let mut store = ShiftStore::open_memory_for_test().unwrap();
     store.replace_font_state(&font).unwrap();
 
-    let original = font.glyph(&second_id).unwrap().clone();
+    let original = font.glyph(second_id).unwrap().clone();
     let mut replacement = original.clone();
     replacement.set_name("second.alt");
     store
@@ -801,9 +800,8 @@ fn popping_glyph_cascades_layers() {
     let glyph = shift_font::Glyph::with_unicode("A", 65);
     let glyph_id = glyph.id();
     let source_id = shift_font::SourceId::new();
-    let layer =
-        shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id.clone(), 500.0);
-    create_regular_source_with_id(&mut store, &source_id);
+    let layer = shift_font::GlyphLayer::with_width(shift_font::LayerId::new(), source_id, 500.0);
+    create_regular_source_with_id(&mut store, source_id);
 
     let mut glyph = glyph;
     glyph.set_layer(layer);
@@ -835,7 +833,7 @@ fn popping_glyph_cascades_layers() {
 fn applies_layer_metrics_and_contour_point_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, contour, point_id) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, &layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id());
 
     let mut glyph = glyph;
     glyph.set_layer(layer.clone());
@@ -862,7 +860,7 @@ fn applies_layer_metrics_and_contour_point_changes() {
         .expect("change set should apply");
 
     let layer = store
-        .load_glyph_layer(&layer.id())
+        .load_glyph_layer(layer.id())
         .expect("layer query should succeed")
         .expect("layer should exist");
     let contours = layer.contours();
@@ -882,7 +880,7 @@ fn applies_layer_metrics_and_contour_point_changes() {
 fn applies_layer_geometry_replacement() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, first_contour, _) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, &layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id());
     let mut replacement = shift_font::GlyphLayer::with_width(layer.id(), layer.source_id(), 500.0);
     replacement.add_contour(contour_with_point(10.0, 20.0));
 
@@ -903,7 +901,7 @@ fn applies_layer_geometry_replacement() {
         .expect("change set should apply");
 
     let layer = store
-        .load_glyph_layer(&layer.id())
+        .load_glyph_layer(layer.id())
         .expect("layer query should succeed")
         .expect("layer should exist");
     let contours = layer.contours();
@@ -919,14 +917,14 @@ fn applies_layer_geometry_replacement() {
 fn layer_geometry_replacement_round_trips_anchors() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, &layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id());
 
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
 
     let layer = store
-        .load_glyph_layer(&layer.id())
+        .load_glyph_layer(layer.id())
         .expect("anchor query should succeed")
         .expect("layer should exist");
     let anchors = layer.anchors();
@@ -941,7 +939,7 @@ fn layer_geometry_replacement_round_trips_anchors() {
 fn applies_anchor_position_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, &layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id());
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
@@ -958,7 +956,7 @@ fn applies_anchor_position_changes() {
         .expect("anchor positions should apply");
 
     let layer = store
-        .load_glyph_layer(&layer.id())
+        .load_glyph_layer(layer.id())
         .expect("anchor query should succeed")
         .expect("layer should exist");
     let anchors = layer.anchors();
@@ -972,7 +970,7 @@ fn reopen_preserves_layer_anchors() {
 
     {
         let mut store = ShiftStore::open(&path).expect("open");
-        create_regular_source_with_id(&mut store, &layer.source_id());
+        create_regular_source_with_id(&mut store, layer.source_id());
         store
             .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
             .expect("change set should apply");
@@ -980,7 +978,7 @@ fn reopen_preserves_layer_anchors() {
 
     let store = ShiftStore::open(&path).expect("reopen");
     let layer = store
-        .load_glyph_layer(&layer.id())
+        .load_glyph_layer(layer.id())
         .expect("anchor query should succeed")
         .expect("layer should exist");
     let anchors = layer.anchors();
@@ -1098,7 +1096,7 @@ fn create_default_glyph_layer(
 
 fn create_default_component(
     store: &mut ShiftStore,
-    layer_id: &shift_font::LayerId,
+    layer_id: shift_font::LayerId,
     base_glyph_id: &GlyphId,
 ) -> shift_font::ComponentId {
     let component_id = shift_font::ComponentId::from_raw("A-B");
@@ -1155,7 +1153,7 @@ fn create_regular_source(store: &mut ShiftStore) -> SourceId {
     source_id
 }
 
-fn create_regular_source_with_id(store: &mut ShiftStore, source_id: &shift_font::SourceId) {
+fn create_regular_source_with_id(store: &mut ShiftStore, source_id: shift_font::SourceId) {
     store
         .create_source(&NewSource {
             id: SourceId::new(source_id.to_string()),
@@ -1597,7 +1595,7 @@ fn applies_axis_and_source_created_change_set_and_survives_reopen() {
 
     let font_axis_id = shift_font::AxisId::from_raw("axis_weight");
     let mut location = shift_font::DesignLocation::new();
-    location.set(font_axis_id.clone(), 700.0);
+    location.set(font_axis_id, 700.0);
     let source = shift_font::Source::new("Bold".to_string(), location);
     let source_id = SourceId::new(source.id().to_string());
 
@@ -1667,7 +1665,7 @@ fn replace_font_state_persists_axes_and_source_locations() {
     let mut font = shift_font::Font::new();
     let font_axis_id = shift_font::AxisId::from_raw("axis_weight");
     font.add_axis(shift_font::Axis::with_id(
-        font_axis_id.clone(),
+        font_axis_id,
         "wght".to_string(),
         "Weight".to_string(),
         100.0,

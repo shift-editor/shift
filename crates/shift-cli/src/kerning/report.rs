@@ -22,13 +22,13 @@ impl SideReport {
         match side {
             KerningSide::Glyph(glyph_id) => Self::Glyph {
                 id: glyph_id.to_string(),
-                name: font.glyph(glyph_id).map(|glyph| glyph.name().to_string()),
+                name: font.glyph(*glyph_id).map(|glyph| glyph.name().to_string()),
             },
             KerningSide::Group(group_id) => Self::Group {
                 id: group_id.to_string(),
                 name: font
                     .kerning()
-                    .group(group_id)
+                    .group(*group_id)
                     .map(|group| group.name.clone()),
             },
         }
@@ -81,7 +81,7 @@ pub(crate) struct GlyphReference {
 }
 
 impl GlyphReference {
-    pub(crate) fn from_id(font: &Font, glyph_id: &GlyphId) -> Self {
+    pub(crate) fn from_id(font: &Font, glyph_id: GlyphId) -> Self {
         Self {
             glyph_id: glyph_id.to_string(),
             name: font.glyph(glyph_id).map(|glyph| glyph.name().to_string()),
@@ -152,7 +152,7 @@ pub(crate) struct GroupReport {
 }
 
 impl GroupReport {
-    pub(crate) fn from_group(font: &Font, group_id: &KerningGroupId, group: &KerningGroup) -> Self {
+    pub(crate) fn from_group(font: &Font, group_id: KerningGroupId, group: &KerningGroup) -> Self {
         Self {
             group_id: group_id.to_string(),
             position: position_label(group.position),
@@ -160,7 +160,7 @@ impl GroupReport {
             members: group
                 .members
                 .iter()
-                .map(|glyph_id| GlyphReference::from_id(font, glyph_id))
+                .map(|glyph_id| GlyphReference::from_id(font, *glyph_id))
                 .collect(),
         }
     }
