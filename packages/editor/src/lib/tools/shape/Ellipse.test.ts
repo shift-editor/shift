@@ -1,25 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Curve, Rect } from "@shift/geo";
-import { Ellipse, Rectangle } from "@shift/editor/tools";
 import { segmentContour } from "@shift/glyph-state";
+import { Ellipse } from "./Ellipse";
 
 const bounds = Rect.fromPoints({ x: 10, y: 20 }, { x: 210, y: 120 });
 
-describe("closed shape geometry", () => {
-  it("creates a rectangle as four corner anchors without repeating the first", () => {
-    const points = new Rectangle().createPoints(bounds);
-    expect(points.map(({ x, y }) => ({ x, y }))).toEqual([
-      { x: 10, y: 20 },
-      { x: 210, y: 20 },
-      { x: 210, y: 120 },
-      { x: 10, y: 120 },
-    ]);
-    expect(points.every((point) => point.pointType === "onCurve" && !point.smooth)).toBe(true);
-    expect(
-      segmentContour({ points, closed: true }).segments.map(({ points: segment }) => segment.type),
-    ).toEqual(["line", "line", "line", "line"]);
-  });
-
+describe("Ellipse", () => {
   it("creates an ellipse with four smooth extrema and eight tangent controls", () => {
     const points = new Ellipse().createPoints(bounds);
     expect(points).toHaveLength(12);
