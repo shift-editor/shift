@@ -14,6 +14,29 @@ describe("Mat - 2D Affine Transform Matrix", () => {
     });
   });
 
+  describe("reflections", () => {
+    it("ReflectHorizontal negates y", () => {
+      expect(Mat.applyToPoint(Mat.ReflectHorizontal(), { x: 2, y: 3 })).toEqual({ x: 2, y: -3 });
+    });
+
+    it("ReflectVertical negates x", () => {
+      expect(Mat.applyToPoint(Mat.ReflectVertical(), { x: 2, y: 3 })).toEqual({ x: -2, y: 3 });
+    });
+
+    it("ReflectAxis reflects across a line at that angle through the origin", () => {
+      const reflected = Mat.applyToPoint(Mat.ReflectAxis(Math.PI / 4), { x: 1, y: 0 });
+      expect(reflected.x).toBeCloseTo(0);
+      expect(reflected.y).toBeCloseTo(1);
+    });
+
+    it("reflecting twice is the identity", () => {
+      const twice = Mat.Compose(Mat.ReflectAxis(0.3), Mat.ReflectAxis(0.3));
+      const point = Mat.applyToPoint(twice, { x: 2, y: 3 });
+      expect(point.x).toBeCloseTo(2);
+      expect(point.y).toBeCloseTo(3);
+    });
+  });
+
   describe("Identity", () => {
     it("should create identity matrix", () => {
       const m = Mat.Identity();

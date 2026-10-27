@@ -4,7 +4,6 @@ import type { Point } from "./Point";
 import type {
   ContourGeometry,
   SegmentPoints,
-  LineSegmentPoints,
   QuadSegmentPoints,
   CubicSegmentPoints,
 } from "./types/contour";
@@ -99,7 +98,6 @@ export class Segment {
   #flatPoints: readonly Point[] | null = null;
   #curve: CurveType | null = null;
   readonly #bounds: Bounds;
-  #length: number | null = null;
 
   /**
    * @param bounds - The segment's tight box, as shift-font bounds it; see {@link Segment.parse}.
@@ -256,19 +254,6 @@ export class Segment {
     return this.#bounds;
   }
 
-  /** @knipclassignore */
-  get length(): number {
-    if (this.#length === null) {
-      this.#length = Curve.length(this.toCurve());
-    }
-    return this.#length;
-  }
-
-  /** @internal Raw discriminated data for rendering / clipboard interop. */
-  get raw(): SegmentType {
-    return this.#structure;
-  }
-
   toCurve(): CurveType {
     if (this.#curve === null) {
       const points = this.points;
@@ -303,16 +288,6 @@ export class Segment {
     return Curve.closestPoint(this.toCurve(), pos);
   }
 
-  /** @knipclassignore */
-  splitAt(t: number): [CurveType, CurveType] {
-    return Curve.splitAt(this.toCurve(), t);
-  }
-
-  /** @knipclassignore */
-  sample(count: number): Point2D[] {
-    return Curve.sample(this.toCurve(), count);
-  }
-
   hit(pos: Point2D, radius: number): SegmentHit | null {
     const radiusVector = { x: radius, y: radius };
     const min = Vec2.sub(this.bounds.min, radiusVector);
@@ -330,12 +305,6 @@ export class Segment {
       closestPoint: closest.point,
       distance: closest.distance,
     };
-  }
-
-  /** @knipclassignore Narrow to line points, or null if this isn't a line. */
-  asLine(): LineSegmentPoints | null {
-    const points = this.points;
-    return points.type === "line" ? points : null;
   }
 
   /** Narrow to quad points, or null if this isn't a quad. */

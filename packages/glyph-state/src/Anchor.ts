@@ -36,22 +36,6 @@ export class Anchor {
     );
   }
 
-  /**
-   * Return the value-buffer offset for every anchor in a glyph structure.
-   *
-   * Offsets point to each anchor's `x` coordinate; `y` is stored immediately
-   * after it. This is used by bulk position updates.
-   */
-  static valueOffsets(structure: GlyphStructure): Map<AnchorId, number> {
-    const offsets = new Map<AnchorId, number>();
-    let cursor = anchorsValueOffset(structure);
-    for (const anchor of structure.anchors) {
-      offsets.set(anchor.id, cursor);
-      cursor += GLYPH_ANCHOR_VALUE_COUNT;
-    }
-    return offsets;
-  }
-
   get id(): AnchorId {
     return this.#data.id;
   }
