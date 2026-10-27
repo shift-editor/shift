@@ -1,6 +1,7 @@
-import { scenePoint, screenPoint, type SceneBounds } from "@shift/editor/spaces";
+import { scenePoint, screenPoint } from "../spaces";
+import type { SceneBounds } from "../../../types/coordinates";
 import { describe, it, expect, beforeEach } from "vitest";
-import { Camera } from "@shift/editor/testing";
+import { Camera } from "./Camera";
 import type { Rect2D } from "@shift/geo";
 
 /** Scene bounds from their smallest and largest corners. */

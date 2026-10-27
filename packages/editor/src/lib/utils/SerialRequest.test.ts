@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SerialRequest } from "@shift/editor/testing";
+import { SerialRequest } from "./SerialRequest";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

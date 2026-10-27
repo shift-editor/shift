@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Mat } from "@shift/geo";
 import { Contour, Point, segmentContour } from "@shift/glyph-state";
 import { asContourId, asPointId } from "@shift/types";
-import { ContourPath } from "@shift/editor/testing";
+import { ContourPath } from "./ContourPath";
 
 const mixedContour = new Contour(
   {

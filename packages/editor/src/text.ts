@@ -16,3 +16,4 @@ export type {
   TextItem,
 } from "./lib/text/layout/types";
 export { fallbackGlyphNameForUnicode, formatCodepointAsUPlus } from "./lib/utils/unicode";
+export { NONSPACING_MARK_EDITOR_ADVANCE } from "./lib/utils/displayAdvance";

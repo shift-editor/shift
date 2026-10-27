@@ -1,8 +1,8 @@
 import type { NodeId, PointId } from "@shift/types";
 import { describe, expect, it } from "vitest";
-import { ShiftStore, Selection } from "@shift/editor/testing";
-import { currentSelectionId } from "@shift/editor/types";
-import type { ShiftEditorRecord } from "@shift/editor/types";
+import { ShiftStore } from "../store/ShiftStore";
+import type { ShiftEditorRecord } from "../../types/records";
+import { Selection } from "./Selection";
 
 const asNodeId = (id: string): NodeId => id as NodeId;
 const asPointId = (id: string): PointId => id as PointId;
@@ -24,7 +24,7 @@ describe("Selection", () => {
     selection.select([nodeId, pointId, nodeId]);
 
     expect(selection.ids).toEqual([nodeId, pointId]);
-    expect(store.get(currentSelectionId)).toMatchObject({ ids: [nodeId, pointId] });
+    expect(new Selection(store).ids).toEqual([nodeId, pointId]);
     expect(selection.hasSelection()).toBe(true);
   });
 
@@ -58,7 +58,7 @@ describe("Selection", () => {
 
     selection.clear();
     expect(selection.stateCell.value.ids).toEqual([]);
-    expect(store.get(currentSelectionId)).toBeNull();
+    expect(new Selection(store).hasSelection()).toBe(false);
     expect(selection.hasSelection()).toBe(false);
   });
 });

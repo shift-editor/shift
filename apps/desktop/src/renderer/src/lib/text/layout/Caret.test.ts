@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { TestEditor } from "@/testing/TestEditor";
-import { Caret } from "@shift/editor/testing";
 import { characterTextItem as char, lineBreakTextItem } from "@shift/editor/text";
 import { layoutTestEditor, makeLayout } from "./testUtils";
 
@@ -15,14 +14,14 @@ describe("Caret", () => {
   it("atCluster returns a caret at the requested cluster", () => {
     const layout = makeLayout([char(65), char(66)], editor);
 
-    expect(Caret.atCluster(layout, 0).cluster).toBe(0);
-    expect(Caret.atCluster(layout, 1).cluster).toBe(1);
+    expect(layout.caretAt(0).cluster).toBe(0);
+    expect(layout.caretAt(1).cluster).toBe(1);
   });
 
   // next advances by one cluster within a paragraph.
   it("next advances by one cluster", () => {
     const layout = makeLayout([char(65), char(66)], editor);
-    const c0 = Caret.atCluster(layout, 0);
+    const c0 = layout.caretAt(0);
 
     expect(c0.next().cluster).toBe(1);
     expect(c0.next().next().cluster).toBe(2);
@@ -31,7 +30,7 @@ describe("Caret", () => {
   // next at end clamps (does not run past the buffer).
   it("next clamps at buffer end", () => {
     const layout = makeLayout([char(65)], editor);
-    const end = Caret.atCluster(layout, 1);
+    const end = layout.caretAt(1);
 
     expect(end.next().cluster).toBe(1);
   });
@@ -43,7 +42,7 @@ describe("Caret", () => {
     const layout = makeLayout([char(65), lineBreakTextItem(), char(66)], editor);
     const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
-    let c = Caret.atCluster(layout, 0);
+    let c = layout.caretAt(0);
 
     c = c.next();
     expect(c.cluster).toBe(1);
@@ -57,7 +56,7 @@ describe("Caret", () => {
   // previous clamps at buffer start.
   it("previous clamps at buffer start", () => {
     const layout = makeLayout([char(65)], editor);
-    const start = Caret.atCluster(layout, 0);
+    const start = layout.caretAt(0);
 
     expect(start.previous().cluster).toBe(0);
   });
@@ -73,7 +72,7 @@ describe("Caret", () => {
     const layout = makeLayout([char(65), lineBreakTextItem()], editor);
     const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
-    const caret = Caret.atCluster(layout, 2);
+    const caret = layout.caretAt(2);
 
     const pos = caret.position();
     expect(pos.x).toBe(layout.origin.x);
@@ -90,7 +89,7 @@ describe("Caret", () => {
     const layout = makeLayout([lineBreakTextItem(), lineBreakTextItem()], editor);
     const metrics = editor.font.defaultSourceMetrics;
     const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
-    const caret = Caret.atCluster(layout, 1);
+    const caret = layout.caretAt(1);
 
     const pos = caret.position();
     expect(pos.x).toBe(layout.origin.x);
