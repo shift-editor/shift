@@ -25,10 +25,14 @@ import type {
   AuthoredComponent,
   AuthoredContour,
   AuthoredPoint,
+  FontOverview,
+  GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
+  ResolvedGlyph,
+  ResolvedLocation,
 } from "@shift/runtime";
-import type { KerningPosition, PointId } from "@shift/types";
+import type { AxisDefinition, KerningPosition, PointId } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 
@@ -44,6 +48,9 @@ export interface Modifiers {
  * returns them to agents.
  */
 export type Outline = readonly AuthoredContour[];
+
+/** A designspace location as each axis's user-facing value, keyed by axis tag; unnamed axes sit at their default. */
+export type AxisValues = Readonly<Record<string, number>>;
 
 export interface EditorTestSurface {
   /**
@@ -121,6 +128,25 @@ export interface EditorTestSurface {
   ): Promise<void>;
   renameKerningGroup(position: KerningPosition, name: string, newName: string): Promise<void>;
   deleteKerningGroup(position: KerningPosition, name: string): Promise<void>;
+  /** Adds a variation axis, as the Create axis menu does. */
+  addAxis(axis: AxisDefinition): void;
+  /**
+   * Replaces the axis tagged `axis`'s own mapping curve with `points`, each an
+   * input (user) value and the output (design) value it maps to, as the
+   * axis mapping settings panel does.
+   */
+  setAxisMapping(
+    axis: string,
+    points: readonly (readonly [input: number, output: number])[],
+  ): Promise<void>;
+  /** Adds a source at `location`, as the Create source menu does; the open glyph gets a layer there. */
+  addSource(name: string, location: AxisValues): void;
+  /** Makes the source named `name` the one being edited, as clicking it in the Sources panel does. */
+  switchToSource(name: string): void;
+  /** Sets a source's metric named `metric` to `position`, as the source settings panel's metric field does. */
+  setSourceMetric(source: string, metric: string, position: number): Promise<void>;
+  /** Adds a named instance at `location`, as the Create instance menu does. */
+  addInstance(name: string, location: AxisValues): void;
 
   /** The open glyph's authored outline, as agents read it. */
   outline(): Promise<Outline>;
@@ -150,6 +176,14 @@ export interface EditorTestSurface {
   shownCursor(): string;
   /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
   documentState(): Promise<WorkspaceDocumentState | null>;
+  /** The font's info, metrics, axes, sources and instances, as agents read them. */
+  fontOverview(): FontOverview;
+  /** The glyph named `name`: its identity and the layer each source holds. */
+  glyph(name: string): GlyphSummary;
+  /** Where `location` sits in the designspace: its design location, the source exactly there, and the metrics there. */
+  locationAt(location: AxisValues): ResolvedLocation;
+  /** The open glyph as it draws at `location`, interpolated between sources; null when it cannot be resolved there. */
+  glyphAt(location: AxisValues): Promise<ResolvedGlyph | null>;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;
