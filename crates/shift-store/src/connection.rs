@@ -136,5 +136,9 @@ pub(crate) fn configure_common(conn: &rusqlite::Connection) -> Result<(), StoreE
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "trusted_schema", "OFF")?;
     conn.busy_timeout(std::time::Duration::from_millis(5_000))?;
+    // SPIKE: SQLite's unix VFS traps opening sorter/temp spill files under
+    // WASI (robust_open calls a syscall slot wasi-libc leaves null).
+    #[cfg(target_os = "wasi")]
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
     Ok(())
 }
