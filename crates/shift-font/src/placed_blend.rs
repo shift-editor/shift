@@ -12,7 +12,7 @@
 //! The rules here work on plain numbers so native projection and the editor,
 //! through `shift-wasm`, run the same code.
 
-use crate::ir::Transform;
+use crate::ir::{FlatOrder, Transform};
 
 /// A contour's closure and point count: what decides how its points pair up
 /// between masters.
@@ -74,11 +74,8 @@ pub fn blend_placed_contours(
     let Some(first) = masters.first() else {
         return false;
     };
-    let point_total = first
-        .shapes
-        .iter()
-        .map(|shape| shape.point_count)
-        .sum::<usize>();
+    let order: FlatOrder = first.shapes.iter().map(|shape| shape.point_count).collect();
+    let point_total = order.len();
     let lines_up = masters
         .iter()
         .all(|master| master.shapes == first.shapes && master.coordinates.len() == point_total * 2);
@@ -91,12 +88,11 @@ pub fn blend_placed_contours(
         .map(|master| master.transform.mirrors())
         .collect::<Vec<_>>();
     out.reserve(point_total);
-    let mut contour_start = 0;
-    for &shape in first.shapes {
+    for (&shape, contour) in first.shapes.iter().zip(order.ranges()) {
         for index in 0..shape.point_count {
             let mut blended = kurbo::Vec2::ZERO;
             for ((master, weight), &mirrored) in masters.iter().zip(weights).zip(&mirrored) {
-                let at = (contour_start + placed_point_index(index, shape, mirrored)) * 2;
+                let at = (contour.start + placed_point_index(index, shape, mirrored)) * 2;
                 let point = kurbo::Point::new(master.coordinates[at], master.coordinates[at + 1]);
                 blended += *weight * master.transform.transform_point(point).to_vec2();
             }
@@ -106,7 +102,6 @@ pub fn blend_placed_contours(
                 y: blended.y,
             });
         }
-        contour_start += shape.point_count;
     }
     true
 }

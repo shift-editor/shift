@@ -7,6 +7,7 @@ pub mod component;
 pub mod contour;
 pub mod entity;
 pub mod features;
+pub mod flat_order;
 pub mod font;
 pub mod glyph;
 pub mod glyph_category;
@@ -36,6 +37,7 @@ pub use entity::{
     GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 pub use features::FeatureData;
+pub use flat_order::{FlatOrder, PointRef};
 pub use font::{Font, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
 pub use glyph_category::{GlyphCategory, GlyphSubcategory, UnknownGlyphCategory};

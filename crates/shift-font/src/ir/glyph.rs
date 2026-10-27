@@ -5,6 +5,7 @@ use crate::contour::Contour;
 use crate::entity::{
     AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, SourceId,
 };
+use crate::flat_order::FlatOrder;
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
@@ -70,6 +71,11 @@ impl GlyphLayer {
     pub fn points(&self) -> impl Iterator<Item = &Point> {
         self.contours_iter()
             .flat_map(|contour| contour.points().iter())
+    }
+
+    /// Returns the flat order of the layer's points, in contour order.
+    pub fn flat_order(&self) -> FlatOrder {
+        self.contours_iter().map(Contour::len).collect()
     }
 
     pub fn new(id: LayerId, source_id: SourceId) -> Self {

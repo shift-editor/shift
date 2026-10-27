@@ -56,9 +56,9 @@ pub use intents::*;
 pub use interpolation::*;
 pub use ir::*;
 pub use ir::{
-    anchor, axis, boolean, collection, component, contour, entity, features, font, glyph,
-    glyph_name, guideline, kerning, lib_data, metrics, named_instance, point, segment, source,
-    variation,
+    anchor, axis, boolean, collection, component, contour, entity, features, flat_order, font,
+    glyph, glyph_name, guideline, kerning, lib_data, metrics, named_instance, point, segment,
+    source, variation,
 };
 /// Points, vectors, and affine maps in the font model's signatures.
 pub use kurbo;

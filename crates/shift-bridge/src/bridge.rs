@@ -15,9 +15,9 @@ use shift_backends::{
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
-  AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, FontChangeImpact,
-  FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId,
-  MetricKind, NamedInstanceId, PointId, SourceId,
+  AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, FlatOrder, Font,
+  FontChangeImpact, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation,
+  MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::length::OrOverflow;
 use shift_slug::{
@@ -376,38 +376,32 @@ impl RetainedSource {
 
   /// Converts one projected shape, naming its entities with `ids`.
   fn shape(&self, shape: &SourceGlyphShape, ids: &ShapeIds) -> BridgeResult<GlyphLayerShape> {
-    let mut point_index = 0_usize;
-    let contours = shape
+    let order: FlatOrder = shape
       .contours
       .iter()
-      .enumerate()
-      .map(|(contour_index, contour)| {
-        let contour_id = ids.contour(contour_index);
-        let points = contour
-          .points
-          .iter()
-          .map(|point| {
-            let id = ids.point(point_index);
-            point_index += 1;
-            PointData {
-              id: id.to_string(),
-              point_type: match point.kind {
-                SourceGlyphPointKind::OnCurve => PointType::OnCurve,
-                SourceGlyphPointKind::QuadraticControl | SourceGlyphPointKind::CubicControl => {
-                  PointType::OffCurve
-                }
-              },
-              smooth: point.smooth,
-            }
-          })
-          .collect();
-        ContourData {
-          id: contour_id.to_string(),
-          closed: contour.closed,
-          points,
-        }
-      })
+      .map(|contour| contour.points.len())
       .collect();
+    let mut contours = Vec::with_capacity(shape.contours.len());
+    for (contour_index, (contour, flat)) in shape.contours.iter().zip(order.ranges()).enumerate() {
+      let mut points = Vec::with_capacity(contour.points.len());
+      for (point, point_index) in contour.points.iter().zip(flat) {
+        points.push(PointData {
+          id: ids.point(point_index).to_string(),
+          point_type: match point.kind {
+            SourceGlyphPointKind::OnCurve => PointType::OnCurve,
+            SourceGlyphPointKind::QuadraticControl | SourceGlyphPointKind::CubicControl => {
+              PointType::OffCurve
+            }
+          },
+          smooth: point.smooth,
+        });
+      }
+      contours.push(ContourData {
+        id: ids.contour(contour_index).to_string(),
+        closed: contour.closed,
+        points,
+      });
+    }
     let anchors = shape
       .anchors
       .iter()
@@ -3248,6 +3242,38 @@ mod tests {
       "directory records should retain component edges without loading payloads"
     );
     assert_eq!(bridge.workspace().unwrap().loaded_layer_count(), 0);
+  }
+
+  fn mutatorsans_source_path() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace")
+  }
+
+  #[test]
+  fn source_glyph_numbers_points_across_contours() {
+    let path = mutatorsans_source_path();
+    let source = RetainedSource::open(&path).unwrap();
+    let glyph_id = SourceGlyphIds::for_path(&path).glyph_id("B");
+
+    let snapshots = source.glyph(&glyph_id).unwrap();
+
+    let contours = &snapshots[0]
+      .projection
+      .as_ref()
+      .unwrap()
+      .fallback
+      .structure
+      .contours;
+    assert_eq!(contours.len(), 2);
+    let mut point_ids = Vec::new();
+    for contour in contours {
+      point_ids.extend(contour.points.iter().map(|point| point.id.clone()));
+    }
+    let ids = ShapeIds::fallback(glyph_id);
+    let expected: Vec<String> = (0..point_ids.len())
+      .map(|index| ids.point(index).to_string())
+      .collect();
+    assert_eq!(point_ids, expected);
   }
 
   fn default_source_id(bridge: &Bridge) -> String {
