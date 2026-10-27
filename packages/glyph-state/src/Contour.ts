@@ -44,24 +44,6 @@ export class Contour {
     });
   }
 
-  /**
-   * Return the value-buffer offset for every point in a glyph structure.
-   *
-   * Offsets point to each point's `x` coordinate; `y` is stored immediately
-   * after it. This is used by bulk position updates.
-   */
-  static pointValueOffsets(structure: GlyphStructure): Map<PointId, number> {
-    const offsets = new Map<PointId, number>();
-    let cursor = CONTOURS_VALUE_OFFSET;
-    for (const contour of structure.contours) {
-      for (const point of contour.points) {
-        offsets.set(point.id, cursor);
-        cursor += GLYPH_POINT_VALUE_COUNT;
-      }
-    }
-    return offsets;
-  }
-
   get id(): ContourId {
     return this.#data.id;
   }

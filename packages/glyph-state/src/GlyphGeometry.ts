@@ -1,7 +1,6 @@
-import { Bounds, type Bounds as BoundsType, Vec2, type Point2D } from "@shift/geo";
+import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import {
   GLYPH_ADVANCE_VALUE_OFFSET,
-  GLYPH_POSITION_VALUE_OFFSETS,
   type AnchorId,
   type ComponentId,
   type ComponentTransformKind,
@@ -80,14 +79,12 @@ export type GlyphHit = GeometryHit;
  *
  * `GlyphGeometry` is the pure data shape used by rendering, hit testing,
  * transforms, clipboard, and edit previews. It does not talk to the bridge and
- * does not mutate its input values. Methods that apply changes return a new
- * geometry object or packed data for another layer to commit.
+ * does not mutate its input values; edits to it are engine intents.
  */
 export class GlyphGeometry {
   readonly structure: GlyphStructure;
   readonly values: Float64Array;
 
-  readonly #componentTransformKind: ComponentTransformKind;
   readonly #cache: GeometryCache;
 
   constructor(
@@ -97,7 +94,6 @@ export class GlyphGeometry {
   ) {
     this.structure = structure;
     this.values = values;
-    this.#componentTransformKind = componentTransformKind;
     this.#cache = new GeometryCache(structure, values, componentTransformKind);
   }
 
@@ -288,95 +284,6 @@ export class GlyphGeometry {
     }
 
     return best;
-  }
-
-  /**
-   * Read current positions for point and anchor targets.
-   *
-   * Missing targets are skipped. This is the pure geometry equivalent of the
-   * editable source API and is useful for transforms that should not know where
-   * the geometry came from.
-   */
-  positionsFor(targets: readonly GlyphPositionTarget[]): GlyphPosition[] {
-    const positions: GlyphPosition[] = [];
-
-    for (const target of targets) {
-      switch (target.kind) {
-        case "point": {
-          const point = this.point(target.id);
-          if (point)
-            positions.push({
-              kind: "point",
-              id: point.id,
-              x: point.x,
-              y: point.y,
-            });
-          break;
-        }
-        case "anchor": {
-          const anchor = this.anchor(target.id);
-          if (anchor)
-            positions.push({
-              kind: "anchor",
-              id: anchor.id,
-              x: anchor.x,
-              y: anchor.y,
-            });
-          break;
-        }
-      }
-    }
-
-    return positions;
-  }
-
-  /**
-   * Return a new geometry object with point/anchor positions applied.
-   *
-   * The structure is reused and the value buffer is copied before changes are
-   * written. Use this for previews and tests; committing to Rust happens at the
-   * editor/model layer.
-   */
-  withPositionUpdates(updates: GlyphPositions): GlyphGeometry {
-    if (updates.length === 0) return this;
-
-    const values = new Float64Array(this.values);
-    const pointOffsets = Contour.pointValueOffsets(this.structure);
-    const anchorOffsets = Anchor.valueOffsets(this.structure);
-
-    for (const update of updates) {
-      switch (update.kind) {
-        case "point": {
-          const offset = pointOffsets.get(update.id);
-          if (offset === undefined) break;
-          values[offset + GLYPH_POSITION_VALUE_OFFSETS.x] = update.x;
-          values[offset + GLYPH_POSITION_VALUE_OFFSETS.y] = update.y;
-          break;
-        }
-        case "anchor": {
-          const offset = anchorOffsets.get(update.id);
-          if (offset === undefined) break;
-          values[offset + GLYPH_POSITION_VALUE_OFFSETS.x] = update.x;
-          values[offset + GLYPH_POSITION_VALUE_OFFSETS.y] = update.y;
-          break;
-        }
-      }
-    }
-
-    return new GlyphGeometry(this.structure, values, this.#componentTransformKind);
-  }
-
-  /**
-   * Move position records without needing access to the original geometry.
-   *
-   * This keeps transform code working with `GlyphPosition` records rather than
-   * points, anchors, or source-specific models.
-   */
-  movePositions(positions: GlyphPositions, delta: Point2D): GlyphPosition[] {
-    return positions.map((position) => {
-      const next = Vec2.add(position, delta);
-      return { ...position, x: next.x, y: next.y };
-    });
   }
 }
 

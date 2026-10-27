@@ -1,21 +1,16 @@
 /**
- * Transform - Pure geometry transformation functions.
+ * Transform - matrices about an origin, and their per-frame application to
+ * points for rotate and scale drag previews.
  *
- * All functions are pure (no side effects) and operate on arrays of points.
- * These are the building blocks for transform commands and tools.
+ * Committed transforms are shift-font's `TransformPoints` intent: callers build
+ * one matrix with {@link Transform.about} and send it; Rust moves the points.
  *
  * @example
  * ```ts
  * import { Transform } from '.';
  *
- * // Rotate points 90° around center
+ * // Preview points rotated 90° around center
  * const rotated = Transform.rotatePoints(points, Math.PI / 2, center);
- *
- * // Scale points 2x from origin
- * const scaled = Transform.scalePoints(points, 2, 2, origin);
- *
- * // Flip horizontally
- * const flipped = Transform.reflectPoints(points, 'horizontal', center);
  * ```
  */
 
@@ -76,22 +71,6 @@ export const Transform = {
   },
 
   /**
-   * Reflect points across an axis through the origin.
-   *
-   * @param points - Points to transform
-   * @param axis - Axis of reflection
-   * @param origin - Point the axis passes through
-   * @returns New array of transformed points (original unchanged)
-   */
-  reflectPoints<T extends Coordinate>(
-    points: readonly T[],
-    axis: ReflectAxis,
-    origin: Point2D,
-  ): T[] {
-    return Transform.applyMatrix(points, reflectionMatrix(axis), origin);
-  },
-
-  /**
    * Apply an arbitrary affine transformation matrix to points.
    * The transform is applied relative to an origin.
    *
@@ -111,58 +90,5 @@ export const Transform = {
       const transformed = Mat.applyToPoint(composite, p);
       return { ...p, x: transformed.x, y: transformed.y };
     });
-  },
-
-  /**
-   * Pre-built transformation matrices for common operations.
-   */
-  matrices: {
-    rotate: Mat.Rotate,
-    scale: Mat.Scale,
-    reflectHorizontal: Mat.ReflectHorizontal,
-    reflectVertical: Mat.ReflectVertical,
-    reflectAxis: Mat.ReflectAxis,
-  },
-
-  /**
-   * Rotate points by 90 degrees counter-clockwise.
-   */
-  rotate90CCW<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
-    return Transform.rotatePoints(points, Math.PI / 2, origin);
-  },
-
-  /**
-   * Rotate points by 90 degrees clockwise.
-   */
-  rotate90CW<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
-    return Transform.rotatePoints(points, -Math.PI / 2, origin);
-  },
-
-  /**
-   * Rotate points by 180 degrees.
-   */
-  rotate180<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
-    return Transform.rotatePoints(points, Math.PI, origin);
-  },
-
-  /**
-   * Scale uniformly (same factor for X and Y).
-   */
-  scaleUniform<T extends Coordinate>(points: readonly T[], factor: number, origin: Point2D): T[] {
-    return Transform.scalePoints(points, factor, factor, origin);
-  },
-
-  /**
-   * Flip horizontally (mirror across horizontal axis through origin).
-   */
-  flipHorizontal<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
-    return Transform.reflectPoints(points, "horizontal", origin);
-  },
-
-  /**
-   * Flip vertically (mirror across vertical axis through origin).
-   */
-  flipVertical<T extends Coordinate>(points: readonly T[], origin: Point2D): T[] {
-    return Transform.reflectPoints(points, "vertical", origin);
   },
 } as const;

@@ -42,18 +42,18 @@ import type {
   GlyphFillHit,
   GlyphOptions,
 } from "../../types/glyph";
+import { followingPlacements } from "../wasm/anchors";
 import {
   propagateAnchors,
   type PropagatedAnchors,
   type PropagationAnchor,
-  followingPlacements,
-} from "../wasm/anchors";
+} from "../wasm/generated/layouts";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
-import { interpolateSourceValues, interpolationWeights } from "../interpolation/InterpolationBasis";
-import { evaluateVariationBasis } from "../wasm/variation";
+import { interpolateSourceValues } from "../interpolation/InterpolationBasis";
+import { evaluateVariationBasis, interpolationWeights } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import type { FontOptions } from "../../types/font";
