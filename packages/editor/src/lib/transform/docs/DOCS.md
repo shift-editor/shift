@@ -102,8 +102,7 @@ const result = Transform.applyMatrix(points, matrix, origin);
 
 ```bash
 # Focused transform tests
-pnpm test:desktop src/renderer/src/lib/transform/Transform.test.ts
-pnpm test:desktop src/renderer/src/lib/transform/zoomFromWheel.test.ts
+pnpm --filter @shift/editor exec vitest run src/lib/transform
 
 # Layer integration tests
 pnpm test:desktop src/renderer/src/lib/model/GlyphLayerGeometry.test.ts

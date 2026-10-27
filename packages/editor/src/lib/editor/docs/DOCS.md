@@ -227,10 +227,10 @@ Glyph geometry exposes domain hit queries for points, anchors, and segments. Too
 - `pnpm test:desktop src/renderer/src/lib/editor/` -- real-editor tests for managers, hit testing, sidebearings, lifecycle, plus editor-outcome suites for boolean operations, clipboard copy/paste, glyph metrics, and unified editor history. `EditorHistory.test.ts` covers selection-only actions, changed-record journaling, compound geometry/selection actions, marquee coalescing and cancellation, redo branching, and failed-apply rebasing through the real workspace.
 - `pnpm test:desktop src/renderer/src/lib/nodes` -- outline choices (row, show-all, editing set) in `OutlineVisibility`, and what `visibleOutlines` draws from them.
 - Outcome tests treat editor actions as asynchronous: metric setters need `await editor.settle()` before asserting, clipboard and history actions (`copy`, `paste`, `undo`, `redo`) return promises that must be awaited, and drag helpers give every drag sample its cumulative delta from the pointer-down origin.
-- [Deletion behavior](../../../../../../apps/desktop/src/renderer/src/lib/editor/Deletion.test.ts), [degree preservation](../../../../../../apps/desktop/src/renderer/src/lib/editor/DeletionDegree.test.ts), [contour topology](../../../../../../apps/desktop/src/renderer/src/lib/editor/DeletionTopology.test.ts), and [save-and-reopen tests](../../../../../../apps/desktop/src/renderer/src/behaviour/document/save-and-reopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:
+- [Deletion topology](../../../../../../apps/desktop/src/renderer/src/behaviour/editing/delete-points.test.ts), [fitting and degree preservation](../../../../../../apps/desktop/src/renderer/src/behaviour/editing/delete-and-fit.test.ts), [handle deletion](../../../../../../apps/desktop/src/renderer/src/behaviour/editing/delete-handles.test.ts), and [save-and-reopen tests](../../../../../../apps/desktop/src/renderer/src/behaviour/document/save-and-reopen.test.ts) cover fitted/gap deletion, exact undo/redo, and saved geometry. Run them and the real-canvas Electron suite with:
 
   ```bash
-  pnpm test:desktop src/renderer/src/lib/editor/Deletion.test.ts src/renderer/src/lib/editor/DeletionDegree.test.ts src/renderer/src/lib/editor/DeletionTopology.test.ts src/renderer/src/behaviour/document/save-and-reopen.test.ts
+  pnpm test:desktop src/renderer/src/behaviour/editing src/renderer/src/behaviour/document/save-and-reopen.test.ts
   pnpm test:e2e:visual e2e/deletion.spec.ts
   ```
 
