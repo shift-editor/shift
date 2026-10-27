@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { AuthoredContour } from "@shift/runtime";
 import { expectEdit } from "@/testing/expectEdit";
+import type { OutlineContour } from "@/testing/reads";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
 
 let editor: EditorTestSurface;
-let source: AuthoredContour;
+let source: OutlineContour;
 beforeEach(async () => {
   editor = await startTestEditor();
   await editor.draw({
@@ -21,13 +21,13 @@ beforeEach(async () => {
       },
     ],
   });
-  [source] = (await editor.outline()) as [AuthoredContour];
+  [source] = (await editor.outline()) as [OutlineContour];
   editor.selectObjects([source.id]);
 });
 afterEach(() => editor.close());
 
 /** A contour's geometry moved by `dx`, `dy`, without its ids. */
-function moved(contour: AuthoredContour, dx: number, dy: number) {
+function moved(contour: OutlineContour, dx: number, dy: number) {
   return {
     closed: contour.closed,
     points: contour.points.map(({ x, y, pointType, smooth }) => ({
@@ -39,7 +39,7 @@ function moved(contour: AuthoredContour, dx: number, dy: number) {
   };
 }
 
-function pointIds(contour: AuthoredContour | undefined): string[] {
+function pointIds(contour: OutlineContour | undefined): string[] {
   return contour?.points.map(({ id }) => id) ?? [];
 }
 
@@ -78,7 +78,7 @@ describe("copying and pasting contours", () => {
         },
       ],
     });
-    const [, open] = (await editor.outline()) as [AuthoredContour, AuthoredContour];
+    const [, open] = (await editor.outline()) as [OutlineContour, OutlineContour];
     editor.selectObjects([source.id, open.id]);
     await editor.copy();
 

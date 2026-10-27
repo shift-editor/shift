@@ -77,6 +77,50 @@ describe("shift/no-inline-comparator", () => {
   });
 });
 
+describe("shift/no-agent-types-in-behaviour-tests", () => {
+  const imports = [
+    'import type { AuthoredPoint } from "@shift/runtime";',
+    'import type { ShiftCodeTypes } from "@shift/runtime/code-api";',
+    'import { ShiftFontReader } from "@/agent/ShiftFontReader";',
+    'import type { DrawnHandle } from "../../agent/ShiftEditorReader";',
+    'export type { AuthoredLayer } from "@shift/runtime";',
+    'const reader = await import("@/agent/ShiftKerningReader");',
+    'import type { OutlinePoint } from "@/testing/reads";',
+    'import type { EditorTestSurface } from "@/testing/surface";',
+    'import { agentConnections } from "@/lib/agentConnections";',
+    'import type { Agent } from "@shift/agents";',
+  ].join("\n");
+
+  it("flags runtime and agent imports in behaviour tests and E2E specs", () => {
+    for (const fileName of [
+      "apps/desktop/src/renderer/src/behaviour/editing/delete-and-fit.test.ts",
+      "apps/desktop/src/renderer/src/behaviour/fixtures.ts",
+      "apps/desktop/e2e/editor.spec.ts",
+    ]) {
+      assert.deepEqual(
+        reportedLines("no-agent-types-in-behaviour-tests", imports, fileName),
+        [1, 2, 3, 4, 5, 6],
+        fileName,
+      );
+    }
+  });
+
+  it("allows them in the test surface, E2E fixtures, reader tests and app code", () => {
+    for (const fileName of [
+      "apps/desktop/src/renderer/src/testing/surface.ts",
+      "apps/desktop/src/renderer/src/agent/ShiftFontReader.test.ts",
+      "apps/desktop/e2e/fixtures/EditorDriver.ts",
+      "apps/desktop/src/renderer/src/lib/editor.test.ts",
+    ]) {
+      assert.deepEqual(
+        reportedLines("no-agent-types-in-behaviour-tests", imports, fileName),
+        [],
+        fileName,
+      );
+    }
+  });
+});
+
 describe("shift/no-page-evaluate-in-specs", () => {
   const evaluations = [
     "declare const page: any;",

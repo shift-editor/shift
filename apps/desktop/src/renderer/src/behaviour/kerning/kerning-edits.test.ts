@@ -20,11 +20,11 @@ afterEach(() => editor.close());
 
 /** T–A's kerning at one master, as shown now. */
 function kernTA(source: string): number {
-  return editor.kerningAt(source, "T", "A")!.amount;
+  return editor.kerningAt(source, "T", "A").amount;
 }
 
 function ruleTA(source: string): string {
-  return editor.kerningAt(source, "T", "A")!.rule;
+  return editor.kerningAt(source, "T", "A").rule;
 }
 
 describe("kerning edits", () => {
