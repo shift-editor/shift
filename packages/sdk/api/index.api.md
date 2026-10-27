@@ -733,8 +733,7 @@ export interface GlyphListInput extends ShiftTarget {
     cursor?: string;
     // (undocumented)
     limit?: number;
-    // (undocumented)
-    sourceId?: SourceId;
+    source?: SourceSelector;
 }
 
 // @public
@@ -824,6 +823,16 @@ export interface GlyphSummary {
 }
 
 // @public
+export interface KerningAtInput extends ShiftTarget {
+    // (undocumented)
+    first: GlyphSelector;
+    // (undocumented)
+    second: GlyphSelector;
+    // (undocumented)
+    source?: SourceSelector;
+}
+
+// @public
 export interface KerningGlyph {
     // (undocumented)
     glyphId: GlyphId;
@@ -899,8 +908,7 @@ export interface KerningPairsInput extends ShiftTarget {
     glyph?: string;
     // (undocumented)
     limit?: number;
-    // (undocumented)
-    sourceId: SourceId;
+    source?: SourceSelector;
 }
 
 // @public
@@ -920,7 +928,7 @@ export interface KerningResolveInput extends ShiftTarget {
     // (undocumented)
     pairs: KerningPairQuery[];
     // (undocumented)
-    sourceId?: SourceId;
+    source?: SourceSelector;
 }
 
 // @public
@@ -949,10 +957,7 @@ export interface LayerAppearance {
 }
 
 // @public
-export interface LayerGetInput extends ShiftTarget {
-    // (undocumented)
-    layerId: LayerId;
-}
+export type LayerGetInput = ShiftTarget & LayerSelector;
 
 // @public
 export interface LayerGuides {
@@ -996,15 +1001,24 @@ export interface LayerRead {
 }
 
 // @public (undocumented)
-export interface LayerRenderInput extends LayerGetInput {
-    // (undocumented)
-    appearance?: LayerAppearance;
-    // (undocumented)
+export type LayerRenderInput = LayerGetInput & {
     overlays?: LayerOverlays;
-}
+    appearance?: LayerAppearance;
+};
 
 // @public (undocumented)
 export type LayerResolveInput = LayerGetInput;
+
+// @public
+export type LayerSelector = {
+    layerId: LayerId;
+    glyph?: never;
+    source?: never;
+} | {
+    glyph: GlyphSelector;
+    source?: SourceSelector;
+    layerId?: never;
+};
 
 // @public
 export interface LayerSvg {
@@ -1217,6 +1231,7 @@ export interface ShiftCapabilities {
         groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
         pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
         resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
+        at(input: KerningAtInput): Promise<ShiftObservation<KerningMasterValue>>;
     };
     // (undocumented)
     layers: {
@@ -1295,6 +1310,7 @@ export interface ShiftRead {
         groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
         pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
         resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+        at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
     };
     // (undocumented)
     layers: {
@@ -1359,6 +1375,15 @@ export interface Signal<T> {
 // @public
 export type SourceId = string & {
     readonly [SourceIdBrand]: typeof SourceIdBrand;
+};
+
+// @public
+export type SourceSelector = {
+    sourceId: SourceId;
+    name?: never;
+} | {
+    name: string;
+    sourceId?: never;
 };
 
 // @public
