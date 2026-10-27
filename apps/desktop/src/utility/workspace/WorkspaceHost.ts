@@ -148,6 +148,10 @@ export class WorkspaceHost {
             : null,
         ),
       "workspace.storeLocation": () => this.#serialize(() => this.#storeLocation()),
+      "workspace.directory": () =>
+        this.#serialize(() =>
+          this.#state.kind === "document" ? this.#bridge.encodedDirectory() : null,
+        ),
       "source.snapshot": () =>
         this.#serialize(() => (this.#state.kind === "preview" ? this.#state.preview : null)),
       "source.glyph": ({ glyphId }) =>

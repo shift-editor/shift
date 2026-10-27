@@ -16,8 +16,8 @@ use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
   AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, FontChangeImpact,
-  FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId,
-  MetricKind, NamedInstanceId, PointId, SourceId,
+  FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation,
+  MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::length::OrOverflow;
 use shift_slug::{
@@ -42,10 +42,10 @@ use shift_wire::{
     NapiAppliedChange, NapiAxisMappingBasis, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
     NapiCatalogAtlasWeights, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
     NapiGlyphLayerSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
-    NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis, NapiKerningSnapshot,
-    NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas, NapiSlugExactSource,
-    NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection, NapiSlugWeightSet,
-    NapiSource, NapiSourceMetricsInterpolationSnapshot,
+    NapiGlyphRecordChanges, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis,
+    NapiKerningSnapshot, NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas,
+    NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection,
+    NapiSlugWeightSet, NapiSource, NapiSourceMetricsInterpolationSnapshot,
   },
 };
 use shift_workspace::{
@@ -272,7 +272,7 @@ impl RetainedSource {
   }
 
   /// Projects one source glyph and its complete component closure.
-  fn glyph(&self, glyph_id: &GlyphId) -> BridgeResult<Vec<GlyphSnapshot>> {
+  fn glyph(&self, glyph_id: GlyphId) -> BridgeResult<Vec<GlyphSnapshot>> {
     let identity = &self.identity;
     let projected = self.font.glyph(identity.glyph_index(glyph_id)?)?;
     let mut projections = Vec::with_capacity(projected.components.len() + 1);
@@ -296,7 +296,7 @@ impl RetainedSource {
       .iter()
       .map(|projection| {
         let glyph_id = identity.glyph_id(projection.glyph)?;
-        let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id.clone()))?;
+        let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id))?;
         let variation = projection
           .variation
           .as_ref()
@@ -337,10 +337,7 @@ impl RetainedSource {
             let source_id = identity.source_id(exact.source)?;
             Ok(GlyphSourceShape {
               source_id,
-              shape: self.shape(
-                &exact.shape,
-                &ShapeIds::exact(glyph_id.clone(), exact.source),
-              )?,
+              shape: self.shape(&exact.shape, &ShapeIds::exact(glyph_id, exact.source))?,
             })
           })
           .collect::<BridgeResult<Vec<_>>>()?;
@@ -356,7 +353,7 @@ impl RetainedSource {
           })
           .collect::<BridgeResult<Vec<_>>>()?;
         Ok(GlyphSnapshot {
-          glyph_id: glyph_id.clone(),
+          glyph_id,
           projection: Some(GlyphProjection {
             glyph_id,
             fallback,
@@ -510,18 +507,15 @@ impl ComponentWalker<'_> {
         .map(|shape| (source, &shape.shape))
     });
     let (ids, shape) = match exact {
-      Some((source, shape)) => (ShapeIds::exact(parent_glyph_id.clone(), source), shape),
-      None => (
-        ShapeIds::fallback(parent_glyph_id.clone()),
-        &projection.fallback,
-      ),
+      Some((source, shape)) => (ShapeIds::exact(parent_glyph_id, source), shape),
+      None => (ShapeIds::fallback(parent_glyph_id), &projection.fallback),
     };
     for (index, component) in shape.components.iter().enumerate() {
       let component_id = ids.component(index);
       let mut component_path = parent_path.clone();
       component_path.push(component_id.clone());
       self.output.push(ComponentGlyph {
-        parent_glyph_id: parent_glyph_id.clone(),
+        parent_glyph_id,
         component_id,
         component_index: index,
         base_glyph_id: self.identity.glyph_id(component.glyph)?,
@@ -839,7 +833,7 @@ impl ToWire for MetricKind {
 
   fn to_wire(&self, id: &MetricId, _identity: &SourceIdentity) -> MetricDefinition {
     MetricDefinition {
-      id: id.clone(),
+      id: *id,
       kind: (*self).into(),
       name: self.default_name().into(),
     }
@@ -852,7 +846,7 @@ impl ToWire for DirectoryGlyph {
 
   fn to_wire(&self, id: &GlyphId, _identity: &SourceIdentity) -> GlyphEntry {
     GlyphEntry {
-      id: id.clone(),
+      id: *id,
       name: self.name.clone().into(),
       unicodes: self.unicodes.to_vec(),
     }
@@ -866,7 +860,7 @@ impl ToWire for DirectorySource {
   fn to_wire(&self, id: &SourceId, identity: &SourceIdentity) -> Source {
     let metrics = &self.metrics;
     Source {
-      id: id.clone(),
+      id: *id,
       name: self.name.clone(),
       location: identity.location(&self.location),
       filename: self.filename.clone(),
@@ -876,7 +870,7 @@ impl ToWire for DirectorySource {
         .zip(MetricKind::STANDARD)
         .filter_map(|(metric_id, kind)| {
           Some(SourceMetricValue {
-            metric_id: metric_id.clone(),
+            metric_id: *metric_id,
             position: metrics.position(kind)?,
             overshoot: 0.0,
           })
@@ -896,7 +890,7 @@ impl ToWire for DirectoryInstance {
 
   fn to_wire(&self, id: &NamedInstanceId, identity: &SourceIdentity) -> NamedInstance {
     NamedInstance {
-      id: id.clone(),
+      id: *id,
       name: self.name.clone(),
       location: identity.location(&self.location),
       postscript_name: self.postscript_name.clone(),
@@ -926,7 +920,7 @@ impl SourceIdentity {
       .into_boxed_slice();
     let glyph_indices = glyph_ids
       .iter()
-      .cloned()
+      .copied()
       .enumerate()
       .map(|(index, glyph_id)| (glyph_id, GlyphIndex::at(index)))
       .collect();
@@ -974,7 +968,7 @@ impl SourceIdentity {
             default,
             maximum,
           } => FontAxis::continuous_with_id(
-            id.clone(),
+            *id,
             axis.tag.clone(),
             axis.name.clone(),
             *minimum,
@@ -982,7 +976,7 @@ impl SourceIdentity {
             *maximum,
           ),
           VariationAxisKind::Discrete { values, default } => FontAxis::discrete_with_id(
-            id.clone(),
+            *id,
             axis.tag.clone(),
             axis.name.clone(),
             values.to_vec(),
@@ -1020,19 +1014,19 @@ impl SourceIdentity {
             input: FontLocation::from_map(
               input_axis_ids
                 .iter()
-                .cloned()
+                .copied()
                 .zip(point.input.iter().copied()),
             ),
             output: FontLocation::from_map(
               output_axis_ids
                 .iter()
-                .cloned()
+                .copied()
                 .zip(point.output.iter().copied()),
             ),
           })
           .collect();
         let mut mapped = FontAxisMapping::with_id(
-          mapping_id.clone(),
+          *mapping_id,
           mapping.name.clone(),
           input_axis_ids,
           output_axis_ids,
@@ -1049,7 +1043,7 @@ impl SourceIdentity {
     &self,
     values: impl IntoIterator<Item = f64>,
   ) -> impl Iterator<Item = (AxisId, f64)> {
-    self.axis_ids.iter().cloned().zip(values)
+    self.axis_ids.iter().copied().zip(values)
   }
 
   /// A location from positional values in source axis order.
@@ -1072,7 +1066,7 @@ impl SourceIdentity {
     self
       .glyph_ids
       .get(index.to_usize())
-      .cloned()
+      .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source glyph index",
         value: index.to_u32().to_string(),
@@ -1088,7 +1082,7 @@ impl SourceIdentity {
     self
       .axis_ids
       .get(axis.to_usize())
-      .cloned()
+      .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source axis index",
         value: axis.to_u32().to_string(),
@@ -1104,17 +1098,17 @@ impl SourceIdentity {
     self
       .source_ids
       .get(source.to_usize())
-      .cloned()
+      .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source index",
         value: source.to_u32().to_string(),
       })
   }
 
-  fn glyph_index(&self, glyph_id: &GlyphId) -> BridgeResult<GlyphIndex> {
+  fn glyph_index(&self, glyph_id: GlyphId) -> BridgeResult<GlyphIndex> {
     self
       .glyph_indices
-      .get(glyph_id)
+      .get(&glyph_id)
       .copied()
       .ok_or_else(|| BridgeError::InvalidInput {
         kind: "source glyph id",
@@ -1322,6 +1316,21 @@ impl Bridge {
     self.document_state_snapshot()
   }
 
+  /// The open font's metadata and its glyph and layer directory, every
+  /// layer a placeholder, as named MessagePack: what a window's engine session
+  /// opens with.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no workspace is open or the directory cannot be encoded.
+  #[napi]
+  pub fn encoded_directory(&self) -> errors::Result<Uint8Array> {
+    let directory = self.workspace()?.directory()?;
+    Ok(Uint8Array::new(
+      rmp_serde::to_vec_named(&directory).map_err(BridgeError::from)?,
+    ))
+  }
+
   #[napi]
   pub fn get_metadata(&self) -> errors::Result<intents::FontMetadata> {
     Ok(FontMetadata::from(self.font()?.metadata()).into())
@@ -1337,13 +1346,50 @@ impl Bridge {
   #[napi]
   pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
     let workspace = self.workspace()?;
-    let font = workspace.font();
     let mut component_references = workspace.glyph_component_references()?;
-    let categories = shift_backends::record_categories(font.glyphs(), font.lib());
-    let mut records = font
-      .glyphs()
+    let glyphs: Vec<&Glyph> = workspace.font().glyphs().collect();
+    self.glyph_records(&glyphs, |glyph_id| {
+      Ok(component_references.remove(&glyph_id).unwrap_or_default())
+    })
+  }
+
+  /// The records of the glyphs `changes` changed, as they are now, and the
+  /// glyphs it removed: what a reply to the edit carries instead of every
+  /// record, which on a 65K-glyph font took 128 ms to build.
+  fn glyph_record_changes(
+    &self,
+    changes: &FontChangeSet,
+  ) -> errors::Result<NapiGlyphRecordChanges> {
+    let workspace = self.workspace()?;
+    let font = workspace.font();
+    let mut glyphs = Vec::new();
+    let mut removed = Vec::new();
+    for glyph_id in changes.record_glyph_ids() {
+      match font.glyph(glyph_id) {
+        Some(glyph) => glyphs.push(glyph),
+        None => removed.push(glyph_id.to_string()),
+      }
+    }
+
+    let updated = self.glyph_records(&glyphs, |glyph_id| {
+      Ok(workspace.referenced_glyph_ids_for_glyph(glyph_id)?)
+    })?;
+    Ok(NapiGlyphRecordChanges { updated, removed })
+  }
+
+  /// The records of `glyphs` sorted by name, each listing only layers on
+  /// [`Font::masters`] and the component bases `component_bases` reads for it.
+  fn glyph_records(
+    &self,
+    glyphs: &[&Glyph],
+    mut component_bases: impl FnMut(GlyphId) -> errors::Result<Vec<GlyphId>>,
+  ) -> errors::Result<Vec<NapiGlyphRecord>> {
+    let font = self.font()?;
+    let categories = shift_backends::record_categories(glyphs.iter().copied(), font.lib());
+    let mut records = glyphs
+      .iter()
       .map(|glyph| {
-        let mut record = GlyphRecord::from(glyph);
+        let mut record = GlyphRecord::from(*glyph);
         if let Some(category) = categories.get(&glyph.id()) {
           record.mark = category.mark;
           record.nonspacing_mark = category.nonspacing_mark;
@@ -1355,15 +1401,14 @@ impl Bridge {
             .to_string()
           });
         }
-        record.component_base_glyph_ids =
-          component_references.remove(&glyph.id()).unwrap_or_default();
+        record.component_base_glyph_ids = component_bases(glyph.id())?;
         record.layers = font
           .master_layers(glyph)
           .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
           .collect();
-        NapiGlyphRecord::from(record)
+        Ok(NapiGlyphRecord::from(record))
       })
-      .collect::<Vec<_>>();
+      .collect::<errors::Result<Vec<_>>>()?;
     records.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(records)
   }
@@ -1398,9 +1443,9 @@ impl Bridge {
   }
 
   /// Assembles the pure-state echo for an applied outcome: replace-grade
-  /// layers plus dependent composites. Shared by apply/undo/redo. The
-  /// records grain (glyphs/axes/sources lists) rides along whenever the
-  /// change set touched that structure.
+  /// layers plus dependent composites. Shared by apply/undo/redo. Font-level
+  /// lists (axes, sources, …) ride along whole whenever the change set
+  /// touched them; glyph records only for the glyphs it changed.
   fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
     let impact = outcome.changes.impact();
     let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
@@ -1432,8 +1477,10 @@ impl Bridge {
 
     let next = FontReplacement::changed_by(self.font()?, impact)?
       .map(|replacement| -> errors::Result<NapiFontReplacement> {
-        let glyphs = glyphs_changed.then(|| self.get_glyphs()).transpose()?;
-        Ok(NapiFontReplacement::new(replacement, glyphs))
+        let glyph_changes = glyphs_changed
+          .then(|| self.glyph_record_changes(&outcome.changes))
+          .transpose()?;
+        Ok(NapiFontReplacement::new(replacement, glyph_changes))
       })
       .transpose()?;
 
@@ -1486,10 +1533,10 @@ impl Bridge {
     change_set: Uint8Array,
     save_state: NapiSaveState,
   ) -> errors::Result<NapiAppliedChange> {
-    let change_set: shift_font::FontChangeSet = rmp_serde::from_slice(&change_set)?;
+    let change_set: shift_font::CompactChangeSet = rmp_serde::from_slice(&change_set)?;
     let outcome = self
       .workspace_mut()?
-      .persist_change_set(change_set, save_state.into())?;
+      .persist_compact_change_set(change_set, save_state.into())?;
     self.mark_font_changed();
     self.applied_echo(outcome)
   }
@@ -1513,22 +1560,22 @@ impl Bridge {
       .collect::<Vec<_>>();
     let glyph_ids = requests
       .iter()
-      .map(|request| request.glyph_id.clone())
+      .map(|request| request.glyph_id)
       .collect::<Vec<_>>();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
     let mut snapshots = Vec::new();
     for request in requests {
       let glyph_id = request.glyph_id;
-      let Some(glyph) = font.glyph(&glyph_id) else {
+      let Some(glyph) = font.glyph(glyph_id) else {
         continue;
       };
 
-      let projection = font.glyph_projection(&glyph_id)?.as_ref().map(Into::into);
+      let projection = font.glyph_projection(glyph_id)?.as_ref().map(Into::into);
 
       let layers = font
         .master_layers(glyph)
         .map(|layer| GlyphLayerSnapshot {
-          glyph_id: glyph_id.clone(),
+          glyph_id,
           source_id: layer.source_id(),
           state: GlyphState::from_layer(layer),
         })
@@ -1565,7 +1612,7 @@ impl Bridge {
       .iter()
       .zip(glyph_ids)
       .map(|(layer_id, glyph_id)| {
-        Ok(layer_snapshot(glyph_id, font.require_layer(layer_id)?).into())
+        Ok(layer_snapshot(glyph_id, font.require_layer(*layer_id)?).into())
       })
       .collect()
   }
@@ -1591,8 +1638,8 @@ impl Bridge {
       .zip(glyph_ids)
       .map(|(layer_id, glyph_id)| {
         Ok(NapiLayerRead {
-          authored: layer_snapshot(glyph_id, font.require_layer(layer_id)?).into(),
-          resolved: (&font.resolve_layer(layer_id)?).into(),
+          authored: layer_snapshot(glyph_id, font.require_layer(*layer_id)?).into(),
+          resolved: (&font.resolve_layer(*layer_id)?).into(),
         })
       })
       .collect()
@@ -1604,7 +1651,7 @@ impl Bridge {
     let layer_ids = parse_id_list::<LayerId>(layer_ids)?;
     let glyph_ids = layer_ids
       .iter()
-      .map(|layer_id| Ok(font.require_layer_owner(layer_id)?))
+      .map(|layer_id| Ok(font.require_layer_owner(*layer_id)?))
       .collect::<errors::Result<Vec<_>>>()?;
     Ok((layer_ids, glyph_ids))
   }
@@ -1625,8 +1672,8 @@ impl Bridge {
     let target_layer_id = parse::<LayerId>(&target_layer_id)?;
     let (reference_glyph_id, target_glyph_id) = {
       let font = self.font()?;
-      let reference_glyph_id = font.require_layer_owner(&reference_layer_id)?;
-      let target_glyph_id = font.require_layer_owner(&target_layer_id)?;
+      let reference_glyph_id = font.require_layer_owner(reference_layer_id)?;
+      let target_glyph_id = font.require_layer_owner(target_layer_id)?;
       (reference_glyph_id, target_glyph_id)
     };
     if reference_glyph_id != target_glyph_id {
@@ -1639,8 +1686,8 @@ impl Bridge {
     }
 
     let font = self.acquire_and_font(&[reference_glyph_id], AcquireScope::Glyphs)?;
-    let reference = font.require_layer(&reference_layer_id)?;
-    let target = font.require_layer(&target_layer_id)?;
+    let reference = font.require_layer(reference_layer_id)?;
+    let target = font.require_layer(target_layer_id)?;
 
     Ok(WireLayerMatch::from_layers(reference, target).into())
   }
@@ -1662,17 +1709,17 @@ impl Bridge {
     let mut seen = HashSet::new();
 
     while let Some(glyph_id) = pending.pop_front() {
-      if !seen.insert(glyph_id.clone()) {
+      if !seen.insert(glyph_id) {
         continue;
       }
-      if font.glyph(&glyph_id).is_none() {
+      if font.glyph(glyph_id).is_none() {
         continue;
       }
 
-      let Some(projection) = font.glyph_projection(&glyph_id)? else {
+      let Some(projection) = font.glyph_projection(glyph_id)? else {
         continue;
       };
-      pending.extend(projection.component_glyph_ids().iter().cloned());
+      pending.extend(projection.component_glyph_ids().iter().copied());
       projections.push(GlyphProjection::from(&projection).into());
     }
 
@@ -1885,7 +1932,7 @@ impl Bridge {
   #[napi(ts_args_type = "glyphId: GlyphId")]
   pub fn read_font_source_glyph(&self, glyph_id: String) -> errors::Result<Vec<NapiGlyphSnapshot>> {
     let glyph_id = parse::<GlyphId>(&glyph_id)?;
-    Ok(self.retained_source()?.glyph(&glyph_id)?.into_each())
+    Ok(self.retained_source()?.glyph(glyph_id)?.into_each())
   }
 
   /// Builds one source-neutral catalog page through the active format adapter.
@@ -1906,7 +1953,7 @@ impl Bridge {
       let location = source.location(coordinates)?;
       let roots = parse_id_list::<GlyphId>(&glyph_ids)?
         .iter()
-        .map(|glyph_id| source.identity.glyph_index(glyph_id))
+        .map(|glyph_id| source.identity.glyph_index(*glyph_id))
         .collect::<BridgeResult<Vec<_>>>()?;
       let page = match &source.font {
         OpenedFont::OpenType(font) => {
@@ -2343,6 +2390,64 @@ mod tests {
   }
 
   #[test]
+  fn glyph_record_echoes_carry_only_the_glyphs_an_edit_changed() {
+    let mut bridge = bridge_with_workspace();
+    for (id, name, unicode) in [("glyph_a", "A", 65), ("glyph_b", "B", 66)] {
+      bridge
+        .apply(
+          vec![create_glyph_napi_with_id(id, name, vec![unicode])],
+          None,
+        )
+        .unwrap();
+    }
+
+    let renamed = bridge
+      .apply(
+        vec![intents::FontIntent::UpdateGlyph {
+          update_glyph: intents::UpdateGlyphIntent {
+            glyph_id: "glyph_a".to_string(),
+            new_name: "A.alt".to_string(),
+            new_unicodes: vec![],
+          },
+        }],
+        None,
+      )
+      .unwrap()
+      .next
+      .and_then(|next| next.glyph_changes)
+      .expect("a rename must echo its glyph's record");
+    assert!(renamed.removed.is_empty());
+    let [record] = renamed.updated.as_slice() else {
+      panic!("only the renamed glyph's record must cross");
+    };
+    let listed = bridge.get_glyphs().unwrap();
+    let listed = listed.iter().find(|glyph| glyph.id == "glyph_a").unwrap();
+    assert_eq!(
+      (
+        &record.name,
+        &record.unicodes,
+        &record.component_base_glyph_ids
+      ),
+      (
+        &listed.name,
+        &listed.unicodes,
+        &listed.component_base_glyph_ids
+      )
+    );
+    assert_eq!(record.name, "A.alt");
+
+    bridge.undo().unwrap();
+    let uncreated = bridge
+      .undo()
+      .unwrap()
+      .and_then(|undone| undone.next)
+      .and_then(|next| next.glyph_changes)
+      .expect("undoing a creation must echo the removal");
+    assert!(uncreated.updated.is_empty());
+    assert_eq!(uncreated.removed, ["glyph_b"]);
+  }
+
+  #[test]
   fn apply_create_glyph_returns_identity_record_without_layers() {
     let mut bridge = bridge_with_workspace();
 
@@ -2356,8 +2461,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("createGlyph must echo font replacements")
-      .glyphs
-      .expect("createGlyph must echo records");
+      .glyph_changes
+      .expect("createGlyph must echo records")
+      .updated;
     assert_eq!(glyphs.len(), 1);
     assert_eq!(glyphs[0].name, "A");
     assert!(glyphs[0].layers.is_empty());
@@ -2384,8 +2490,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("createGlyphLayer must echo font replacements")
-      .glyphs
-      .expect("createGlyphLayer must echo records");
+      .glyph_changes
+      .expect("createGlyphLayer must echo records")
+      .updated;
     assert_eq!(glyphs[0].layers.len(), 1);
     assert_eq!(glyphs[0].layers[0].id, layer_id);
     assert_eq!(glyphs[0].layers[0].source_id, source_id);
@@ -3000,7 +3107,8 @@ mod tests {
         },
       )))
       .unwrap();
-    let bytes = rmp_serde::to_vec_named(&moved.changes).unwrap();
+    // Sent compacted, as the window's engine sends it.
+    let bytes = rmp_serde::to_vec_named(&moved.changes.compact()).unwrap();
 
     let echo = bridge
       .persist(bytes.into(), NapiSaveState::Unsaved)
@@ -3011,7 +3119,9 @@ mod tests {
     assert!(
       bridge
         .persist(
-          rmp_serde::to_vec_named(&moved.changes).unwrap().into(),
+          rmp_serde::to_vec_named(&moved.changes.compact())
+            .unwrap()
+            .into(),
           NapiSaveState::Unsaved,
         )
         .is_err()
@@ -3366,7 +3476,7 @@ mod tests {
     assert_eq!(axes[0].maximum, Some(900.0));
     // locations may change shape, so sources ride along
     assert!(next.sources.is_some());
-    assert!(next.glyphs.is_none());
+    assert!(next.glyph_changes.is_none());
     assert!(applied.layers.is_empty());
     assert!(bridge.is_variable().unwrap());
   }
@@ -3512,7 +3622,7 @@ mod tests {
     assert_eq!(bold.id, "source_bold");
     assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
     assert!(applied.layers.is_empty());
-    assert!(next.glyphs.is_none());
+    assert!(next.glyph_changes.is_none());
     assert_eq!(bridge.get_glyphs().unwrap()[0].layers.len(), 1);
   }
 
@@ -3636,8 +3746,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("layer membership must echo font replacements")
-      .glyphs
-      .expect("layer membership must echo glyph records");
+      .glyph_changes
+      .expect("layer membership must echo glyph records")
+      .updated;
     assert_eq!(glyphs[0].layers.len(), 2);
   }
 
@@ -3827,8 +3938,9 @@ mod tests {
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].name, "Regular");
     let glyphs = next
-      .glyphs
-      .expect("deleteSource layer removal must echo glyph records");
+      .glyph_changes
+      .expect("deleteSource layer removal must echo glyph records")
+      .updated;
     assert_eq!(glyphs[0].layers.len(), 1);
     assert!(applied.layers.is_empty());
     assert!(glyph_source_state(&mut bridge, &glyph_id, "source_bold").is_none());
@@ -3872,8 +3984,9 @@ mod tests {
     let glyphs = applied
       .next
       .expect("createGlyph must echo font replacements")
-      .glyphs
-      .expect("createGlyph must echo records");
+      .glyph_changes
+      .expect("createGlyph must echo records")
+      .updated;
     assert!(glyphs[0].layers.is_empty());
   }
 
@@ -3990,7 +4103,7 @@ mod tests {
       .glyph("A")
       .expect("snapshot should include edited A");
     let layer = glyph
-      .layer_for_source(&snapshot.default_source_id().unwrap())
+      .layer_for_source(snapshot.default_source_id().unwrap())
       .expect("edited glyph should include default layer");
 
     assert_eq!(bridge.get_glyphs().unwrap().len(), 1);

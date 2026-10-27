@@ -23,11 +23,15 @@
 
 pub mod anchors;
 pub mod decomposition;
+pub mod drag;
 #[cfg(feature = "engine")]
 pub mod engine;
+pub mod engine_reads;
+pub mod geometry;
 mod layout;
 pub mod names;
 #[cfg(feature = "reference")]
 pub mod reference;
 pub mod shaping;
+pub mod svg;
 pub mod variation;

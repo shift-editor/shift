@@ -24,7 +24,7 @@ const created = await stack.editCoordinator.apply([
     createGlyphLayer: { layerId, glyphId, sourceId: stack.font.defaultSource.id },
   },
 ]);
-if (!created.next?.glyphs?.[0]?.layers.find((layer) => layer.id === layerId)) {
+if (!created.next?.glyphChanges?.updated[0]?.layers.find((layer) => layer.id === layerId)) {
   throw new Error("createGlyphLayer did not echo sparse layer membership");
 }
 

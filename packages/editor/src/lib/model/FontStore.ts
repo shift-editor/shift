@@ -1,6 +1,5 @@
-import { ascending, EntityMap } from "@shift/types";
+import { ascending, byCodePoint, comparing, EntityMap } from "@shift/types";
 import type {
-  KerningValueEdit,
   AppliedChange,
   FontReplacement,
   AnchorId,
@@ -12,6 +11,8 @@ import type {
   GlyphName,
   GlyphProjection,
   GlyphRecord,
+  GlyphRecordChanges,
+  ReadonlyEntityMap,
   GlyphSnapshot,
   GlyphStructure,
   GlyphState,
@@ -36,11 +37,15 @@ import {
   type Signal,
   type WritableSignal,
 } from "../signals/signal";
-import type { FontRecordIndex, FontStoreOptions, GlyphSourceKey } from "../../types/font";
+import type {
+  FontEngine,
+  FontRecordIndex,
+  FontStoreOptions,
+  GlyphSourceKey,
+} from "../../types/font";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
-import { GlyphLayerState } from "./GlyphLayerState";
-import { Kerning } from "./Kerning";
-import { PreviewedState } from "./PreviewedState";
+import { GlyphLayerState, type LayerUpdate } from "./GlyphLayerState";
+import { Kerning, KerningRecords } from "./Kerning";
 import type { Glyph } from "./Glyph";
 import type { EngineEdit } from "../wasm/engine";
 
@@ -63,7 +68,8 @@ export interface GlyphInvalidation {
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #kerning: PreviewedState<Kerning, KerningValueEdit>;
+  readonly #engine: FontEngine | null;
+  readonly #kerning: Signal<Kerning>;
   readonly #committedRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
@@ -98,7 +104,13 @@ export class FontStore {
   // non-reactive: interning table that dedupes projection bases; only read while interning
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor({ font = null, records = [], workspace = null }: FontStoreOptions = {}) {
+  constructor({
+    font = null,
+    records = [],
+    workspace = null,
+    engine = null,
+  }: FontStoreOptions = {}) {
+    this.#engine = engine;
     this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
       name: "fontStore.font",
     });
@@ -115,24 +127,34 @@ export class FontStore {
     }
 
     // Echoes rebuild the font snapshot but keep its kerning reference unless
-    // kerning changed, so the lookup is indexed again only then.
+    // kerning changed, so the groups are indexed again only then.
     const kerningSnapshot = computed(() => this.#font.value?.kerning ?? null, {
       name: "fontStore.kerningSnapshot",
     });
-    const confirmedKerning = computed(() => Kerning.from(kerningSnapshot.value), {
-      name: "fontStore.confirmedKerning",
+    const kerningRecords = computed(() => KerningRecords.from(kerningSnapshot.value), {
+      name: "fontStore.kerningRecords",
     });
-    this.#kerning = new PreviewedState(confirmedKerning, (kerning, edits) =>
-      kerning.withEdits(edits),
+    this.#kerning = computed(
+      () => {
+        if (engine) track(engine.kerningRevisionCell);
+        return new Kerning(kerningRecords.value, engine);
+      },
+      { name: "fontStore.kerning" },
     );
   }
 
   /**
-   * The font's kerning as the renderer shows it: as the window's engine left
-   * it, with an open kerning edit's preview over it.
+   * The font's kerning: its records as the window's engine left them, and
+   * pair reads answered by the engine, an open edit included. A new value
+   * whenever either may have changed.
    */
-  get kerning(): PreviewedState<Kerning, KerningValueEdit> {
+  get kerningCell(): Signal<Kerning> {
     return this.#kerning;
+  }
+
+  /** The window's editing engine, which answers kerning and metric reads; null without one. */
+  get engine(): FontEngine | null {
+    return this.#engine;
   }
 
   get fontCell(): Signal<FontSnapshot | null> {
@@ -193,7 +215,6 @@ export class FontStore {
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
-      this.#kerning.endEdit();
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
@@ -208,7 +229,6 @@ export class FontStore {
 
   replaceFont(snapshot: FontSnapshot): void {
     batch(() => {
-      this.#kerning.endEdit();
       this.#indexCell.set(fontRecordIndex(snapshot));
       this.#font.set(snapshot);
       this.#workspace.set(null);
@@ -304,7 +324,13 @@ export class FontStore {
     });
   }
 
-  publishLayers(states: readonly GlyphState[]): GlyphState[] {
+  /**
+   * Shows each resident layer as `states` leave it; a state with no structure
+   * changed only values.
+   *
+   * @returns Each shown layer's state before, for taking the edit back.
+   */
+  publishLayers(states: readonly LayerUpdate[]): GlyphState[] {
     const before: GlyphState[] = [];
     batch(() => {
       for (const state of states) {
@@ -329,8 +355,9 @@ export class FontStore {
     const current = this.#workspace.peek();
     if (!current) return [];
     const next = applied.next;
-    const glyphsWithNewLayers = next?.glyphs
-      ? glyphIdsWithChangedLayers(current.glyphs, next.glyphs)
+    const glyphChanges = next?.glyphChanges;
+    const glyphsWithNewLayers = glyphChanges
+      ? glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges)
       : [];
     const restructured = new Set(glyphsWithNewLayers);
     const invalid = new Set<GlyphId>([...glyphsWithNewLayers, ...applied.dependents]);
@@ -343,7 +370,9 @@ export class FontStore {
     }
 
     batch(() => {
-      if (next?.glyphs) this.#applyRecords({ glyphs: next.glyphs });
+      if (glyphChanges) {
+        this.#applyRecords({}, withGlyphRecordChanges(current.glyphs, glyphChanges));
+      }
       this.#showUnshownLayers(applied.layers);
     });
 
@@ -368,8 +397,11 @@ export class FontStore {
     }
   }
 
-  /** Folds `next`'s font-level records into the workspace and drops what they removed. */
-  #applyRecords(next: FontReplacement): void {
+  /**
+   * Folds `next`'s font-level records into the workspace and drops what they
+   * removed; `glyphs`, when given, is the whole glyph record list.
+   */
+  #applyRecords(next: FontReplacement, glyphs: GlyphRecord[] | null = null): void {
     const current = this.#workspace.peek();
     if (!current) return;
     const interpolation = next.sourceMetricsInterpolation;
@@ -377,7 +409,7 @@ export class FontStore {
     const nextWorkspace: WorkspaceSnapshot = {
       ...current,
       metadata: next.metadata ?? current.metadata,
-      glyphs: next.glyphs ?? current.glyphs,
+      glyphs: glyphs ?? current.glyphs,
       axes: next.axes ?? current.axes,
       axisMappings: next.axisMappings ?? current.axisMappings,
       axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
@@ -739,21 +771,49 @@ function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {
   return `${glyphId}:${sourceId}` as GlyphSourceKey;
 }
 
+/** The glyphs `changes` gave new or different layers, or removed. */
 function glyphIdsWithChangedLayers(
-  before: readonly GlyphRecord[],
-  after: readonly GlyphRecord[],
+  before: ReadonlyEntityMap<GlyphId, GlyphRecord>,
+  changes: GlyphRecordChanges,
 ): GlyphId[] {
-  const beforeById = new Map(before.map((glyph) => [glyph.id, glyph]));
-  const changed: GlyphId[] = [];
+  const changed = changes.updated
+    .filter((glyph) => {
+      const previous = before.get(glyph.id);
+      return !previous || !sameGlyphLayers(previous, glyph);
+    })
+    .map((glyph) => glyph.id);
+  return [...changed, ...changes.removed];
+}
 
-  for (const glyph of after) {
-    const previous = beforeById.get(glyph.id);
-    if (!previous || !sameGlyphLayers(previous, glyph)) changed.push(glyph.id);
-    beforeById.delete(glyph.id);
+/** Glyph records in the workspace's order, by name as Rust orders it. */
+const byRecordName = comparing((record: GlyphRecord) => record.name, byCodePoint);
+
+/**
+ * `records`, in the workspace's name order, with `changes` applied: each
+ * changed record takes its place by name, and removed glyphs leave.
+ */
+function withGlyphRecordChanges(
+  records: readonly GlyphRecord[],
+  changes: GlyphRecordChanges,
+): GlyphRecord[] {
+  const leaving = new Set<GlyphId>([
+    ...changes.removed,
+    ...changes.updated.map((record) => record.id),
+  ]);
+  const kept = records.filter((record) => !leaving.has(record.id));
+  const joining = changes.updated.toSorted(byRecordName);
+
+  // Both lists are in name order, so one pass merges them.
+  const merged: GlyphRecord[] = [];
+  let next = 0;
+  for (const record of kept) {
+    while (next < joining.length && byRecordName(joining[next]!, record) < 0) {
+      merged.push(joining[next++]!);
+    }
+    merged.push(record);
   }
-
-  changed.push(...beforeById.keys());
-  return changed;
+  merged.push(...joining.slice(next));
+  return merged;
 }
 
 function sameGlyphLayers(left: GlyphRecord, right: GlyphRecord): boolean {

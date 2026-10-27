@@ -84,7 +84,7 @@ impl Font {
                     let location = Location::from([(axis.id(), default)]);
                     default = basis
                         .evaluate(&location, self.axes())?
-                        .get(&axis.id())
+                        .get(axis.id())
                         .unwrap_or(default);
                     for delta in basis.basis().deltas() {
                         for support in delta.region().supports() {
@@ -104,7 +104,7 @@ impl Font {
                         let location = Location::from([(axis.id(), *value)]);
                         *value = basis
                             .evaluate(&location, self.axes())?
-                            .get(&axis.id())
+                            .get(axis.id())
                             .unwrap_or(*value);
                     }
                 }
@@ -147,7 +147,7 @@ impl AxisMappingBasis {
 
     /// Returns the authored mapping identity that produced this basis.
     pub fn mapping_id(&self) -> AxisMappingId {
-        self.mapping_id.clone()
+        self.mapping_id
     }
 
     /// Returns the mapping's ordered input axes.
@@ -181,9 +181,9 @@ impl AxisMappingBasis {
         let mut result = Location::new();
 
         for (axis_id, adjustment) in self.output_axis_ids.iter().zip(adjustments) {
-            let axis = axes.axis(axis_id).require(&axis_id)?;
+            let axis = axes.axis(*axis_id).require(&axis_id)?;
             let base = location.value_on(axis);
-            result.set(axis_id.clone(), base + adjustment);
+            result.set(*axis_id, base + adjustment);
         }
 
         Ok(result)
@@ -211,7 +211,7 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
                 .iter()
                 .map(|axis| {
                     let base = point.input.value_on(axis);
-                    let output = point.output.get(&axis.id()).unwrap_or(base);
+                    let output = point.output.get(axis.id()).unwrap_or(base);
                     output - base
                 })
                 .collect();
@@ -292,7 +292,7 @@ pub fn map_location_with_bases(
     for basis in bases.iter().filter(|basis| basis.is_independent()) {
         let outputs = basis.evaluate(external.as_untyped(), axes)?;
         for (axis_id, value) in outputs.iter() {
-            mapped.set(axis_id.clone(), *value);
+            mapped.set(*axis_id, *value);
         }
     }
 
@@ -300,11 +300,108 @@ pub fn map_location_with_bases(
     for basis in bases.iter().filter(|basis| !basis.is_independent()) {
         let outputs = basis.evaluate(independently_mapped.as_untyped(), axes)?;
         for (axis_id, value) in outputs.iter() {
-            mapped.set(axis_id.clone(), *value);
+            mapped.set(*axis_id, *value);
         }
     }
 
     Ok(mapped)
+}
+
+/// The external location whose mapping through `bases` reaches `design`, on
+/// the external axes alone: [`map_location_with_bases`] run backwards.
+///
+/// Independent mappings are piecewise linear, so their compiled support
+/// boundaries give an exact inverse without the authored points: each
+/// external axis takes the candidate that maps closest to its design value,
+/// the first of equals in ascending order. A discrete axis's candidates are
+/// its values; a continuous axis's are its bounds, its default and each
+/// support boundary, with the points between neighbours that map exactly to
+/// the target. An external axis no independent mapping outputs keeps its
+/// design value. A design location that is not externally reachable keeps
+/// its externally controlled values; the derived internal axes stay the
+/// forward mapping's.
+pub fn unmap_location_with_bases(
+    design: &DesignLocation,
+    axes: &[Axis],
+    bases: &[AxisMappingBasis],
+) -> ExternalLocation {
+    axes.iter()
+        .filter(|axis| axis.role() == AxisRole::External)
+        .map(|axis| {
+            let target = design.value_on(axis);
+            let mapping = bases
+                .iter()
+                .find(|basis| basis.is_independent() && basis.output_axis_ids() == [axis.id()]);
+            let value = mapping.map_or(target, |basis| basis.unmap_independent(axis, axes, target));
+            (axis.id(), value)
+        })
+        .collect()
+}
+
+impl AxisMappingBasis {
+    /// The value on `axis` that this independent mapping takes closest to `target`.
+    fn unmap_independent(&self, axis: &Axis, axes: &[Axis], target: f64) -> f64 {
+        let error = |value: f64| (self.map_one(axis, axes, value) - target).abs();
+        self.inverse_candidates(axis, axes, target)
+            .into_iter()
+            .fold(None, |best: Option<(f64, f64)>, candidate| {
+                let candidate_error = error(candidate);
+                match best {
+                    Some((_, best_error)) if best_error <= candidate_error => best,
+                    _ => Some((candidate, candidate_error)),
+                }
+            })
+            .map_or_else(|| axis.default(), |(value, _)| value)
+    }
+
+    /// Where `value` on `axis` maps to through this independent mapping;
+    /// `value` itself when the mapping cannot evaluate it.
+    fn map_one(&self, axis: &Axis, axes: &[Axis], value: f64) -> f64 {
+        self.evaluate(&Location::from([(axis.id(), value)]), axes)
+            .ok()
+            .and_then(|mapped| mapped.get(axis.id()))
+            .unwrap_or(value)
+    }
+
+    /// The values on `axis` the inverse chooses among, ascending.
+    fn inverse_candidates(&self, axis: &Axis, axes: &[Axis], target: f64) -> Vec<f64> {
+        if let Some(values) = axis.discrete_values().filter(|values| !values.is_empty()) {
+            let mut sorted = values.to_vec();
+            sorted.sort_by(f64::total_cmp);
+            return sorted;
+        }
+
+        let supports = self
+            .basis()
+            .deltas()
+            .iter()
+            .flat_map(|delta| delta.region().supports())
+            .filter(|support| support.axis_id() == axis.id())
+            .flat_map(|support| [support.minimum(), support.peak(), support.maximum()])
+            .map(|normalized| axis.denormalize(normalized));
+        let mut breakpoints: Vec<f64> = [axis.minimum(), axis.default(), axis.maximum()]
+            .into_iter()
+            .chain(supports)
+            .collect();
+        breakpoints.sort_by(f64::total_cmp);
+        breakpoints.dedup();
+
+        let mut candidates = breakpoints.clone();
+        for pair in breakpoints.windows(2) {
+            let (left, right) = (pair[0], pair[1]);
+            let left_mapped = self.map_one(axis, axes, left);
+            let mapped_range = self.map_one(axis, axes, right) - left_mapped;
+            if mapped_range.abs() < f64::EPSILON {
+                continue;
+            }
+            let ratio = (target - left_mapped) / mapped_range;
+            if ratio > 0.0 && ratio < 1.0 {
+                candidates.push(left + ratio * (right - left));
+            }
+        }
+        candidates.sort_by(f64::total_cmp);
+        candidates
+    }
 }
 
 fn resolve_axes<'a>(
@@ -314,7 +411,7 @@ fn resolve_axes<'a>(
 ) -> CoreResult<Vec<&'a Axis>> {
     ids.iter()
         .map(|axis_id| {
-            axes.axis(axis_id)
+            axes.axis(*axis_id)
                 .ok_or_else(|| invalid_mapping(mapping, format!("unknown axis {axis_id}")))
         })
         .collect()
@@ -481,6 +578,84 @@ mod tests {
     }
 
     #[test]
+    fn unmapping_recovers_the_external_controls_a_mapping_took() {
+        let weight = Axis::weight();
+        let width = Axis::width();
+        let mut optical = Axis::continuous_with_id(
+            AxisId::new(),
+            "opsz".to_string(),
+            "Optical size".to_string(),
+            8.0,
+            12.0,
+            72.0,
+        );
+        optical.set_role(AxisRole::Internal);
+        let axes = vec![weight.clone(), width.clone(), optical.clone()];
+        let mappings = [
+            AxisMapping::new(
+                "Weight curve".to_string(),
+                vec![weight.id()],
+                vec![weight.id()],
+                vec![
+                    point(&[(weight.id(), 100.0)], &[(weight.id(), 100.0)]),
+                    point(&[(weight.id(), 400.0)], &[(weight.id(), 400.0)]),
+                    point(&[(weight.id(), 700.0)], &[(weight.id(), 520.0)]),
+                    point(&[(weight.id(), 900.0)], &[(weight.id(), 800.0)]),
+                ],
+            ),
+            AxisMapping::new(
+                "Optical compensation".to_string(),
+                vec![weight.id(), width.id()],
+                vec![optical.id()],
+                vec![point(
+                    &[(weight.id(), 800.0), (width.id(), 125.0)],
+                    &[(optical.id(), 72.0)],
+                )],
+            ),
+        ];
+        let bases: Vec<AxisMappingBasis> = mappings
+            .iter()
+            .map(|mapping| AxisMappingBasis::try_from((mapping, axes.as_slice())).unwrap())
+            .collect();
+
+        for (controlled_weight, controlled_width) in [
+            (100.0, 75.0),
+            (250.0, 100.0),
+            (650.0, 110.0),
+            (900.0, 125.0),
+        ] {
+            let external = external_location(&[
+                (weight.id(), controlled_weight),
+                (width.id(), controlled_width),
+            ]);
+            let design = map_location_with_bases(&external, &axes, &bases).unwrap();
+
+            let recovered = unmap_location_with_bases(&design, &axes, &bases);
+
+            assert!((recovered.value_on(&weight) - controlled_weight).abs() < 1e-9);
+            assert!((recovered.value_on(&width) - controlled_width).abs() < 1e-9);
+            assert_eq!(recovered.get(&optical.id()), None);
+        }
+    }
+
+    #[test]
+    fn an_axis_no_mapping_outputs_keeps_its_design_value() {
+        let mut axis = Axis::discrete_with_id(
+            AxisId::from_raw("ital"),
+            "ital".to_string(),
+            "Italic".to_string(),
+            vec![0.0, 1.0],
+            0.0,
+        );
+        axis.set_role(AxisRole::External);
+        let design = DesignLocation::from([(axis.id(), 0.8)]);
+
+        let recovered = unmap_location_with_bases(&design, std::slice::from_ref(&axis), &[]);
+
+        assert_eq!(recovered.get(&axis.id()), Some(0.8));
+    }
+
+    #[test]
     fn external_locations_cannot_set_internal_axes_directly() {
         let mut optical = Axis::continuous_with_id(
             AxisId::new(),
@@ -513,7 +688,7 @@ mod tests {
     fn location(values: &[(AxisId, f64)]) -> Location {
         let location: Location = values
             .iter()
-            .map(|(axis_id, value)| (axis_id.clone(), *value))
+            .map(|(axis_id, value)| (*axis_id, *value))
             .collect();
         location
     }

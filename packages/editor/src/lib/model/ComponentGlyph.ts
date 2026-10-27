@@ -1,5 +1,5 @@
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
-import { Point, Segment } from "@shift/glyph-state";
+import { Point, Segment, segmentContour } from "@shift/glyph-state";
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
@@ -215,6 +215,7 @@ export class GlyphContour {
   readonly #matrixCell: Signal<MatModel>;
   readonly #component: ComponentGlyph | null;
   readonly #contourPathCell: Signal<ContourPath>;
+  readonly #boundsCell: Signal<BoundsType | null>;
 
   /**
    * Creates a contour occurrence over live source coordinates and placement.
@@ -235,6 +236,19 @@ export class GlyphContour {
       const contour = this.#contourCell.value;
       contour.trackShape();
       return ContourPath.fromContour(contour, this.#matrixCell.value);
+    });
+    this.#boundsCell = computed(() => {
+      const contour = this.#contourCell.value;
+      contour.trackShape();
+      const matrix = this.#matrixCell.value;
+      // Root contours sit unplaced, so their own cached bounds are already in root coordinates.
+      if (Mat.isIdentity(matrix)) return contour.bounds;
+
+      const points = contour.points.map((point) => ({
+        ...point,
+        ...Mat.applyToPoint(matrix, point),
+      }));
+      return segmentContour({ points, closed: contour.closed }).bounds;
     });
   }
 
@@ -279,11 +293,14 @@ export class GlyphContour {
   }
 
   get bounds(): BoundsType | null {
-    return this.contourPath.bounds;
+    return this.#boundsCell.peek();
   }
 
   /** Returns this occurrence's segments in root-glyph coordinates. */
   segments(): readonly Segment[] {
+    const contour = this.#contourCell.peek();
+    if (Mat.isIdentity(this.#matrixCell.peek())) return contour.segments();
+
     return Segment.parse(this);
   }
 

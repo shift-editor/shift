@@ -32,7 +32,7 @@ impl GlyphStream for GlyphsGlyphStream {
         self.glyph_names
             .iter()
             .map(|name| GlyphDirectoryEntry {
-                glyph_id: self.glyph_ids[name].clone(),
+                glyph_id: self.glyph_ids[name],
                 name: name.clone().into(),
             })
             .collect()

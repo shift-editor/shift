@@ -94,11 +94,11 @@ impl GlyphLayer {
     }
 
     pub fn id(&self) -> LayerId {
-        self.id.clone()
+        self.id
     }
 
     pub fn source_id(&self) -> SourceId {
-        self.source_id.clone()
+        self.source_id
     }
 
     pub fn clone_with_identity(&self, id: LayerId, source_id: SourceId) -> Self {
@@ -431,7 +431,7 @@ impl Glyph {
     }
 
     pub fn id(&self) -> GlyphId {
-        self.id.clone()
+        self.id
     }
 
     pub fn name(&self) -> &str {
@@ -527,7 +527,7 @@ impl Glyph {
 
     /// Returns the ids of the glyph's layers.
     pub fn layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {
-        self.layers.keys().cloned()
+        self.layers.keys().copied()
     }
 
     /// Returns the glyph each component draws, across all of the glyph's layers.
@@ -537,12 +537,12 @@ impl Glyph {
             .flat_map(|layer| layer.component_glyph_ids())
     }
 
-    pub fn layer(&self, id: &LayerId) -> Option<&GlyphLayer> {
-        self.layers.get(id).map(Arc::as_ref)
+    pub fn layer(&self, id: LayerId) -> Option<&GlyphLayer> {
+        self.layers.get(&id).map(Arc::as_ref)
     }
 
-    pub fn layer_mut(&mut self, id: &LayerId) -> Option<&mut GlyphLayer> {
-        self.layers.get_mut(id).map(Arc::make_mut)
+    pub fn layer_mut(&mut self, id: LayerId) -> Option<&mut GlyphLayer> {
+        self.layers.get_mut(&id).map(Arc::make_mut)
     }
 
     pub fn ensure_layer_for_source(&mut self, source_id: SourceId) -> &mut GlyphLayer {
@@ -552,13 +552,13 @@ impl Glyph {
             .find(|layer| layer.source_id() == source_id)
             .map(Identified::id)
         {
-            return self.layer_mut(&layer_id).expect("layer id came from glyph");
+            return self.layer_mut(layer_id).expect("layer id came from glyph");
         }
 
         let layer = GlyphLayer::new(LayerId::new(), source_id);
         let layer_id = layer.id();
-        self.layers.insert(layer_id.clone(), Arc::new(layer));
-        self.layer_mut(&layer_id).expect("layer was just inserted")
+        self.layers.insert(layer_id, Arc::new(layer));
+        self.layer_mut(layer_id).expect("layer was just inserted")
     }
 
     pub fn set_layer<L>(&mut self, layer: L)
@@ -569,26 +569,26 @@ impl Glyph {
         self.layers.insert(layer.id(), layer);
     }
 
-    pub fn layer_for_source(&self, source_id: &SourceId) -> Option<&GlyphLayer> {
+    pub fn layer_for_source(&self, source_id: SourceId) -> Option<&GlyphLayer> {
         self.shared_layer_for_source(source_id).map(Arc::as_ref)
     }
 
     /// Returns the glyph's layer on `source_id` as the shared handle the glyph holds.
-    pub fn shared_layer_for_source(&self, source_id: &SourceId) -> Option<&Arc<GlyphLayer>> {
+    pub fn shared_layer_for_source(&self, source_id: SourceId) -> Option<&Arc<GlyphLayer>> {
         self.layers
             .values()
-            .find(|layer| layer.source_id() == *source_id)
+            .find(|layer| layer.source_id() == source_id)
     }
 
-    pub fn layer_for_source_mut(&mut self, source_id: &SourceId) -> Option<&mut GlyphLayer> {
+    pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
         self.layers
             .values_mut()
-            .find(|layer| layer.source_id() == *source_id)
+            .find(|layer| layer.source_id() == source_id)
             .map(Arc::make_mut)
     }
 
-    pub fn remove_layer(&mut self, id: &LayerId) -> Option<GlyphLayer> {
-        self.layers.remove(id).map(Arc::unwrap_or_clone)
+    pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
+        self.layers.remove(&id).map(Arc::unwrap_or_clone)
     }
 
     pub fn lib(&self) -> &LibData {
@@ -644,12 +644,12 @@ mod tests {
         let mut g = Glyph::new("A".to_string());
         let source_id = SourceId::new();
 
-        let layer = g.ensure_layer_for_source(source_id.clone());
+        let layer = g.ensure_layer_for_source(source_id);
         let layer_id = layer.id();
         layer.set_width(600.0);
 
-        assert_eq!(g.layer(&layer_id).unwrap().width(), 600.0);
-        assert_eq!(g.layer_for_source(&source_id).unwrap().id(), layer_id);
+        assert_eq!(g.layer(layer_id).unwrap().width(), 600.0);
+        assert_eq!(g.layer_for_source(source_id).unwrap().id(), layer_id);
     }
 
     #[test]
@@ -660,24 +660,24 @@ mod tests {
         let first_layer_id = LayerId::new();
         let second_layer_id = LayerId::new();
         glyph.set_layer(GlyphLayer::with_width(
-            first_layer_id.clone(),
+            first_layer_id,
             first_source_id,
             500.0,
         ));
         glyph.set_layer(GlyphLayer::with_width(
-            second_layer_id.clone(),
+            second_layer_id,
             second_source_id,
             600.0,
         ));
         let snapshot = glyph.clone();
 
         glyph
-            .layer_mut(&first_layer_id)
+            .layer_mut(first_layer_id)
             .expect("first layer should exist")
             .set_width(700.0);
 
-        assert_eq!(glyph.layer(&first_layer_id).unwrap().width(), 700.0);
-        assert_eq!(snapshot.layer(&first_layer_id).unwrap().width(), 500.0);
+        assert_eq!(glyph.layer(first_layer_id).unwrap().width(), 700.0);
+        assert_eq!(snapshot.layer(first_layer_id).unwrap().width(), 500.0);
         assert!(!Arc::ptr_eq(
             glyph.layers.get(&first_layer_id).unwrap(),
             snapshot.layers.get(&first_layer_id).unwrap()

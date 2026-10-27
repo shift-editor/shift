@@ -14,6 +14,9 @@ use shift_font::test_support::generated::assert_generated_file;
 use super::{EnumKind, Kind, Layout, StructKind};
 use crate::anchors::{FollowingComponent, PropagationGlyph};
 use crate::decomposition::DecomposedGlyph;
+use crate::engine_reads::{
+    EditablePair, InterpolatedMetrics, KerningRun, SourceMetricsAt, SourcePairs,
+};
 use crate::shaping::{ShapeParagraphs, ShapedRunOutput, ShaperGlyphs};
 
 /// One WebAssembly module and the hot calls it exports, generated into one
@@ -27,7 +30,7 @@ struct Module {
     calls: Vec<Call>,
 }
 
-fn modules() -> [Module; 2] {
+fn modules() -> [Module; 4] {
     [
         Module {
             output: "packages/editor/src/lib/wasm/generated/layouts.ts",
@@ -38,6 +41,16 @@ fn modules() -> [Module; 2] {
             output: "packages/editor/src/lib/wasm/generated/shapingLayouts.ts",
             import: "@shift/wasm/shaping",
             calls: shaping_calls(),
+        },
+        Module {
+            output: "packages/editor/src/lib/wasm/generated/engineLayouts.ts",
+            import: "@shift/wasm/engine",
+            calls: engine_calls(),
+        },
+        Module {
+            output: "packages/glyph-state/src/generated/geometryLayouts.ts",
+            import: "@shift/wasm",
+            calls: geometry_calls(),
         },
     ]
 }
@@ -65,10 +78,45 @@ fn calls() -> Vec<Call> {
             output: Vec::<shift_font::anchor_attachment::Following>::kind(),
         },
         Call {
+            name: "prepareDrag",
+            doc: "Matches shift-font's drag rules for dragging the selected points, keeping the points as the drag found them until `releaseDrag`.",
+            input: crate::drag::DragSelection::kind(),
+            output: crate::drag::PreparedDragHandle::kind(),
+        },
+        Call {
+            name: "dragMoves",
+            doc: "Positions for one frame of a prepared drag: the selected points moved by the delta and the points its rules move. Empty for a released handle.",
+            input: crate::drag::DragFrame::kind(),
+            output: Vec::<crate::drag::DragMove>::kind(),
+        },
+        Call {
             name: "blendDecomposedGlyph",
             doc: "Blends every component occurrence of a decomposed glyph as each master places it, or null when any occurrence's masters don't line up point for point.",
             input: DecomposedGlyph::kind(),
             output: Option::<Vec<Vec<shift_font::placed_blend::BlendedPoint>>>::kind(),
+        },
+    ]
+}
+
+fn geometry_calls() -> Vec<Call> {
+    vec![
+        Call {
+            name: "contourGeometry",
+            doc: "Segments one contour and bounds each segment and the whole contour, as shift-font segments it.",
+            input: crate::geometry::ContourPoints::kind(),
+            output: crate::geometry::ContourGeometry::kind(),
+        },
+        Call {
+            name: "composeTransform",
+            doc: "A component placement's matrix, as shift-font composes it (`DecomposedTransform::to_matrix`).",
+            input: <shift_font::DecomposedTransform as Layout>::kind(),
+            output: <shift_font::Transform as Layout>::kind(),
+        },
+        Call {
+            name: "decomposeMatrix",
+            doc: "The placement a matrix makes, as shift-font decomposes it (`DecomposedTransform::from_matrix`).",
+            input: <shift_font::Transform as Layout>::kind(),
+            output: <shift_font::DecomposedTransform as Layout>::kind(),
         },
     ]
 }
@@ -86,6 +134,35 @@ fn shaping_calls() -> Vec<Call> {
             doc: "Shapes paragraphs with a registered shaper; a paragraph that cannot be shaped is null.",
             input: ShapeParagraphs::kind(),
             output: Vec::<Option<Vec<ShapedRunOutput>>>::kind(),
+        },
+    ]
+}
+
+fn engine_calls() -> Vec<Call> {
+    vec![
+        Call {
+            name: "svgPathContours",
+            doc: "The contours SVG path data draws, one per subpath, as shift-font parses it; null when the path data is malformed.",
+            input: crate::svg::SvgPathData::kind(),
+            output: Option::<Vec<crate::geometry::ContourPoints>>::kind(),
+        },
+        Call {
+            name: "engineKerningRun",
+            doc: "Reads the kerning between glyph pairs in the engine's font, at a source being edited or at a design location; null when the place cannot be read.",
+            input: KerningRun::kind(),
+            output: Option::<Vec<f64>>::kind(),
+        },
+        Call {
+            name: "engineKerningPairs",
+            doc: "Reads, for each glyph pair, the authored pair an edit to it at a source changes in the engine's font.",
+            input: SourcePairs::kind(),
+            output: Vec::<EditablePair>::kind(),
+        },
+        Call {
+            name: "engineSourceMetricsAt",
+            doc: "Interpolates the engine's font's source metrics at a design location; null for a font whose masters do not interpolate.",
+            input: SourceMetricsAt::kind(),
+            output: Option::<InterpolatedMetrics>::kind(),
         },
     ]
 }
@@ -172,7 +249,7 @@ fn render(module: &Module) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     writeln!(out, "import {{ {imports} }} from \"{}\";", module.import).unwrap();
-    out.push_str("import { NumberReader, NumberWriter } from \"../numbers\";\n");
+    out.push_str("import { NumberReader, NumberWriter } from \"@shift/wasm/numbers\";\n");
 
     for layout in named.enums.values() {
         render_enum(&mut out, layout);

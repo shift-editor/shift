@@ -94,7 +94,7 @@ async function variableFont(): Promise<{
       },
     },
   ]);
-  expect(created.next?.glyphs?.[0]?.layers).toContainEqual({
+  expect(created.next?.glyphChanges?.updated[0]?.layers).toContainEqual({
     id: regularLayerId,
     sourceId: stack.font.defaultSource.id,
   });

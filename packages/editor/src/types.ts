@@ -5,6 +5,7 @@ export type {
 } from "./types/componentTransform";
 export type { Coordinates } from "./types/coordinates";
 export type { PendingEditId } from "./types/editing";
+export type { FontEngine, KerningPlace, OpenEdit } from "./types/font";
 export type {
   MemoryFontSession,
   MemoryFontSessionOptions,

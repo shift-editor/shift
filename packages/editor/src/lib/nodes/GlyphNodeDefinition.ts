@@ -318,7 +318,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #trackedMetrics(): SourceMetrics {
     track(this.editor.externalLocationCell);
     track(this.editor.activeSourceIdCell);
-    track(this.editor.font.sourceMetricsInterpolationCell);
+    track(this.editor.font.sourceMetricsRevisionCell);
 
     return this.#metrics();
   }

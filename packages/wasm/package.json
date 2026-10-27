@@ -23,6 +23,10 @@
     "./engine": {
       "types": "./src/engine.ts",
       "import": "./src/engine.ts"
+    },
+    "./numbers": {
+      "types": "./src/numbers.ts",
+      "import": "./src/numbers.ts"
     }
   },
   "scripts": {

@@ -103,7 +103,7 @@ pub(super) fn charset(font: &Font, charset: &Charset) -> Vec<Finding> {
             continue;
         };
         for source in font.masters() {
-            if glyph.layer_for_source(&source.id()).is_none() {
+            if glyph.layer_for_source(source.id()).is_none() {
                 findings.push(
                     Finding::glyph(
                         Check::CharsetMissingLayer,
@@ -161,7 +161,7 @@ pub(super) fn monospace(font: &Font, cell: MonospaceCell) -> Vec<Finding> {
             .glyphs()
             .filter(|glyph| !GlyphRole::of(glyph).mark)
             .filter_map(|glyph| {
-                let layer = glyph.layer_for_source(&source.id())?;
+                let layer = glyph.layer_for_source(source.id())?;
                 let advance = layer.width();
                 (advance.is_finite() && advance > 0.0).then_some((glyph, layer, advance))
             })

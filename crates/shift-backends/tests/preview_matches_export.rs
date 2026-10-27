@@ -108,7 +108,7 @@ fn disagreements(source: &str) -> Vec<String> {
             let Some(gid) = char::from_u32(unicode).and_then(|c| compiled.charmap().map(c)) else {
                 continue;
             };
-            let Some(preview) = projection.glyph(&glyph.id()).unwrap() else {
+            let Some(preview) = projection.glyph(glyph.id()).unwrap() else {
                 continue;
             };
             let mut drawn = BezPath::new();

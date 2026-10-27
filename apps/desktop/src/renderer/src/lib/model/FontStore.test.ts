@@ -65,7 +65,7 @@ describe("FontStore glyph snapshot application", () => {
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
     store.confirmEdit({
-      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
+      next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
       layers: [],
       dependents: [],
     });
@@ -76,6 +76,37 @@ describe("FontStore glyph snapshot application", () => {
 });
 
 describe("FontStore record index", () => {
+  it("places changed glyph records by name and drops removed ones", () => {
+    const base = snapshot("document-a", LAYER_A_ID);
+    const record = (id: string, name: string) => ({
+      id: id as GlyphId,
+      name: name as GlyphName,
+      unicodes: [],
+      componentBaseGlyphIds: [],
+      layers: [],
+    });
+    const store = new FontStore({
+      workspace: {
+        ...base,
+        glyphs: [...base.glyphs, record("glyph_m", "M"), record("glyph_t", "T")],
+      },
+    });
+    const font = new Font({ store });
+
+    store.confirmEdit({
+      next: {
+        glyphChanges: {
+          updated: [record("glyph_m", "Z"), record("glyph_b", "B")],
+          removed: ["glyph_t" as GlyphId],
+        },
+      },
+      layers: [],
+      dependents: [],
+    });
+
+    expect(font.glyphEntries().map(({ name }) => name)).toEqual(["A", "B", "Z"]);
+  });
+
   it("indexes every glyph relation once and follows glyph record changes", () => {
     const base = snapshot("document-a", LAYER_A_ID);
     const acute = {
@@ -108,7 +139,7 @@ describe("FontStore record index", () => {
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
     store.confirmEdit({
-      next: { glyphs: [base.glyphs[0]!, acute] },
+      next: { glyphChanges: { updated: [], removed: [aacute.id] } },
       layers: [],
       dependents: [],
     });
@@ -187,7 +218,7 @@ describe("FontStore glyph object ownership", () => {
     });
 
     store.confirmEdit({
-      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
+      next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
       layers: [
         {
           layerId: LAYER_B_ID,

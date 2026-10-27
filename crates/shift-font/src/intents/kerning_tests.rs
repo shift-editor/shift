@@ -49,7 +49,7 @@ fn setting_a_value_records_one_reversible_change() {
         }]))
         .unwrap();
 
-    assert_eq!(font.kerning().value(&regular(), &a_groups()), Some(-60.0));
+    assert_eq!(font.kerning().value(regular(), &a_groups()), Some(-60.0));
     assert_eq!(outcome.changes.changes.len(), 1);
     assert!(matches!(
         &outcome.changes.changes[0],
@@ -76,7 +76,7 @@ fn an_exception_is_added_and_removed_without_touching_its_group_pair() {
     }]))
     .unwrap();
     assert_eq!(
-        font.kerning().resolve(&regular(), &a, &a).unwrap().pair,
+        font.kerning().resolve(regular(), a, a).unwrap().pair,
         exception()
     );
 
@@ -91,7 +91,7 @@ fn an_exception_is_added_and_removed_without_touching_its_group_pair() {
         &outcome.changes.changes[0],
         FontChange::KerningValue { value, .. } if value.before == Some(-20.0) && value.after.is_none()
     ));
-    let resolved = font.kerning().resolve(&regular(), &a, &a).unwrap();
+    let resolved = font.kerning().resolve(regular(), a, a).unwrap();
     assert_eq!(resolved.pair, a_groups());
     assert_eq!(resolved.value, -80.0);
 }
@@ -178,9 +178,9 @@ fn a_group_on_the_wrong_side_of_a_pair_is_rejected() {
     assert_eq!(font, original);
 }
 
-fn create(group_id: &KerningGroupId, position: KerningPosition, name: &str) -> FontIntent {
+fn create(group_id: KerningGroupId, position: KerningPosition, name: &str) -> FontIntent {
     CreateKerningGroup {
-        group_id: group_id.clone(),
+        group_id,
         position,
         name: name.to_string(),
     }
@@ -197,11 +197,11 @@ fn moving_a_glyph_into_a_new_group_is_one_reversible_step() {
     let outcome = font
         .apply_intents(&FontIntentSet {
             intents: vec![
-                create(&round, KerningPosition::First, " Round "),
+                create(round, KerningPosition::First, " Round "),
                 SetKerningGroupMember {
                     position: KerningPosition::First,
-                    glyph_id: a.clone(),
-                    group_id: Some(round.clone()),
+                    glyph_id: a,
+                    group_id: Some(round),
                 }
                 .into(),
             ],
@@ -209,11 +209,11 @@ fn moving_a_glyph_into_a_new_group_is_one_reversible_step() {
         .unwrap();
 
     assert_eq!(
-        font.kerning().group_of(KerningPosition::First, &a),
+        font.kerning().group_of(KerningPosition::First, a),
         Some(&round)
     );
-    assert_eq!(font.kerning().group(&round).unwrap().name, "Round");
-    assert!(font.kerning().group(&first_a()).unwrap().members.is_empty());
+    assert_eq!(font.kerning().group(round).unwrap().name, "Round");
+    assert!(font.kerning().group(first_a()).unwrap().members.is_empty());
     // The new group and the group A left.
     assert_eq!(outcome.changes.changes.len(), 2);
     font.apply_change_set(&outcome.changes.inverted()).unwrap();
@@ -227,13 +227,13 @@ fn taking_a_glyph_out_of_its_group_keeps_the_group() {
 
     font.apply_intents(&FontIntentSet::from(SetKerningGroupMember {
         position: KerningPosition::Second,
-        glyph_id: a.clone(),
+        glyph_id: a,
         group_id: None,
     }))
     .unwrap();
 
-    assert_eq!(font.kerning().group_of(KerningPosition::Second, &a), None);
-    assert!(font.kerning().group(&second_a()).is_some());
+    assert_eq!(font.kerning().group_of(KerningPosition::Second, a), None);
+    assert!(font.kerning().group(second_a()).is_some());
 }
 
 #[test]
@@ -248,8 +248,8 @@ fn renaming_a_group_keeps_its_pairs() {
         }))
         .unwrap();
 
-    assert_eq!(font.kerning().group(&first_a()).unwrap().name, "Round");
-    assert_eq!(font.kerning().value(&regular(), &a_groups()), Some(-80.0));
+    assert_eq!(font.kerning().group(first_a()).unwrap().name, "Round");
+    assert_eq!(font.kerning().value(regular(), &a_groups()), Some(-80.0));
     assert_eq!(outcome.changes.changes.len(), 1);
     font.apply_change_set(&outcome.changes.inverted()).unwrap();
     assert_eq!(font, original);
@@ -267,9 +267,9 @@ fn deleting_a_group_keeps_its_pairs_for_undo() {
         }))
         .unwrap();
 
-    assert!(font.kerning().group(&second_a()).is_none());
-    assert_eq!(font.kerning().resolve(&regular(), &a, &a), None);
-    assert_eq!(font.kerning().value(&regular(), &a_groups()), Some(-80.0));
+    assert!(font.kerning().group(second_a()).is_none());
+    assert_eq!(font.kerning().resolve(regular(), a, a), None);
+    assert_eq!(font.kerning().value(regular(), &a_groups()), Some(-80.0));
     font.apply_change_set(&outcome.changes.inverted()).unwrap();
     assert_eq!(font, original);
 }
@@ -280,13 +280,13 @@ fn group_edits_reject_bad_names_ids_and_positions_without_changing_anything() {
     let original = font.clone();
     let rejected = [
         create(
-            &KerningGroupId::from_raw("blank"),
+            KerningGroupId::from_raw("blank"),
             KerningPosition::First,
             "  ",
         ),
-        create(&first_a(), KerningPosition::First, "Again"),
+        create(first_a(), KerningPosition::First, "Again"),
         create(
-            &KerningGroupId::from_raw("twin"),
+            KerningGroupId::from_raw("twin"),
             KerningPosition::First,
             "A",
         ),

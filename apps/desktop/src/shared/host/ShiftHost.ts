@@ -249,13 +249,6 @@ export interface LayerReaderHost {
    */
   open: (location: FontStoreLocation) => number;
   /**
-   * The font's metadata and its glyph and layer directory, every layer a
-   * placeholder, as named MessagePack: what the editing engine opens with.
-   *
-   * @throws {Error} for an unknown reader, or when the directory cannot be read.
-   */
-  directory: (reader: number) => Uint8Array;
-  /**
    * The content of `layerIds` as one MessagePack array of named-field layers.
    *
    * @throws {Error} for an unknown reader, an unknown layer, or a layer that cannot be decoded.

@@ -1,11 +1,11 @@
 use crate::test_support::sample_font;
 use crate::{
-    AddAnchors, AddComponent, AddPoints, AnchorId, AnchorSeed, AppliedIntents, ComponentAlignment,
-    ComponentId, ContourId, CoreError, CreateGlyph, CreateGlyphLayer, Font, FontChangeImpact,
-    FontIntent, FontIntentSet, GlyphId, GlyphInterpolationValues, LayerId, MoveAnchors, MovePoints,
-    PointId, PointSeed, PointType, RemoveComponents, ReverseContour, SetComponentAlignment,
-    SetComponentTransforms, SetXAdvance, Source, SourceId, Transform, TransformLayer,
-    TranslatePoints,
+    AddAnchors, AddComponent, AddPoints, Anchor, AnchorId, AnchorSeed, AppliedIntents,
+    ComponentAlignment, ComponentId, ContourId, CoreError, CreateGlyph, CreateGlyphLayer, Font,
+    FontChangeImpact, FontIntent, FontIntentSet, GlyphId, GlyphInterpolationValues, LayerId,
+    MoveAnchors, MovePoints, Point, PointId, PointSeed, PointType, RemoveComponents,
+    ReverseContour, SetComponentAlignment, SetComponentTransforms, SetPositions, SetXAdvance,
+    Source, SourceId, Transform, TransformLayer, TranslatePoints,
 };
 
 fn apply(font: &mut Font, intents: impl IntoIterator<Item = FontIntent>) -> AppliedIntents {
@@ -18,7 +18,7 @@ fn loaded_independently(font: &Font) -> Font {
     serde_json::from_str(&serde_json::to_string(font).unwrap()).unwrap()
 }
 
-fn layer_at(font: &Font, glyph: &str, source_id: &SourceId) -> LayerId {
+fn layer_at(font: &Font, glyph: &str, source_id: SourceId) -> LayerId {
     font.glyph_by_name(glyph)
         .unwrap()
         .layer_for_source(source_id)
@@ -35,23 +35,23 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
     let base = GlyphId::from_raw("A");
 
     for (index, source_id) in sources.iter().enumerate() {
-        let acute_layer = match font.glyph(&acute).unwrap().layer_for_source(source_id) {
+        let acute_layer = match font.glyph(acute).unwrap().layer_for_source(*source_id) {
             Some(layer) => layer.id(),
             None => {
                 let layer_id = LayerId::from_raw(format!("acute_{index}"));
                 apply(
                     &mut font,
                     [CreateGlyphLayer {
-                        layer_id: layer_id.clone(),
-                        glyph_id: acute.clone(),
-                        source_id: source_id.clone(),
+                        layer_id,
+                        glyph_id: acute,
+                        source_id: *source_id,
                     }
                     .into()],
                 );
                 layer_id
             }
         };
-        let base_layer = layer_at(&font, "A", source_id);
+        let base_layer = layer_at(&font, "A", *source_id);
         let mut anchors: Vec<FontIntent> = vec![
             AddAnchors {
                 layer_id: acute_layer,
@@ -65,7 +65,7 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
             .into(),
         ];
         if !font
-            .layer(&base_layer)
+            .layer(base_layer)
             .unwrap()
             .anchors_iter()
             .any(|anchor| anchor.name() == Some("top"))
@@ -91,7 +91,7 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
         apply(
             &mut font,
             [CreateGlyph {
-                glyph_id: Some(glyph_id.clone()),
+                glyph_id: Some(glyph_id),
                 name: format!("stacked{composite}"),
                 unicodes: Vec::new(),
             }
@@ -104,23 +104,23 @@ fn font_with_stacked_composites() -> (Font, Vec<SourceId>) {
                 &mut font,
                 [
                     CreateGlyphLayer {
-                        layer_id: layer_id.clone(),
-                        glyph_id: glyph_id.clone(),
-                        source_id: source_id.clone(),
+                        layer_id,
+                        glyph_id,
+                        source_id: *source_id,
                     }
                     .into(),
                     AddComponent {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         component_id: ComponentId::from_raw(format!(
                             "stacked{composite}_{index}_base"
                         )),
-                        base_glyph_id: base.clone(),
+                        base_glyph_id: base,
                     }
                     .into(),
                     AddComponent {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         component_id: mark.clone(),
-                        base_glyph_id: acute.clone(),
+                        base_glyph_id: acute,
                     }
                     .into(),
                     SetComponentAlignment {
@@ -144,9 +144,9 @@ fn independently_loaded_fonts_produce_identical_changesets() {
     let mut second = loaded_independently(&font);
 
     for (step, source_id) in sources.iter().cycle().take(8).enumerate() {
-        let layer_id = layer_at(&first, "A", source_id);
+        let layer_id = layer_at(&first, "A", *source_id);
         let top = first
-            .layer(&layer_id)
+            .layer(layer_id)
             .unwrap()
             .anchors_iter()
             .find(|anchor| anchor.name() == Some("top"))
@@ -187,18 +187,19 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
     let reversed = apply(
         &mut font,
         [ReverseContour {
-            layer_id: layer_id.clone(),
+            layer_id,
             contour_id: ContourId::from_raw("A_outer"),
         }
         .into()],
     );
     assert!(reversed.layers[0].structural);
     assert!(!reversed.changes.impact().contains(FontChangeImpact::GLYPHS));
+    assert!(reversed.changes.record_glyph_ids().is_empty());
 
     let drawn = apply(
         &mut font,
         [AddPoints {
-            layer_id: layer_id.clone(),
+            layer_id,
             contour_id: Some(ContourId::from_raw("A_outer")),
             before: None,
             points: vec![PointSeed {
@@ -212,18 +213,27 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
         .into()],
     );
     assert!(!drawn.changes.impact().contains(FontChangeImpact::GLYPHS));
+    assert!(drawn.changes.record_glyph_ids().is_empty());
 
     // A new component base changes the record's component base glyphs.
     let composed = apply(
         &mut font,
         [AddComponent {
-            layer_id: layer_id.clone(),
+            layer_id,
             component_id: ComponentId::from_raw("added"),
             base_glyph_id: GlyphId::from_raw("acute"),
         }
         .into()],
     );
     assert!(composed.changes.impact().contains(FontChangeImpact::GLYPHS));
+    let glyph_a = GlyphId::from_raw("A");
+    assert!(
+        composed
+            .changes
+            .record_glyph_ids()
+            .into_iter()
+            .eq([glyph_a])
+    );
 
     let removed = apply(
         &mut font,
@@ -234,6 +244,7 @@ fn layer_edits_resend_glyph_records_only_when_records_change() {
         .into()],
     );
     assert!(removed.changes.impact().contains(FontChangeImpact::GLYPHS));
+    assert!(removed.changes.record_glyph_ids().into_iter().eq([glyph_a]));
 }
 
 #[test]
@@ -246,20 +257,20 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
     for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         let intents: [FontIntent; 7] = [
             MovePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![point.clone()],
                 coords: vec![bad, 0.0],
             }
             .into(),
             TranslatePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![point.clone()],
                 dx: 0.0,
                 dy: bad,
             }
             .into(),
             AddPoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: Some(ContourId::from_raw("A_outer")),
                 before: None,
                 points: vec![PointSeed {
@@ -272,7 +283,7 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
             }
             .into(),
             AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: vec![AnchorSeed {
                     id: AnchorId::from_raw("bad"),
                     name: Some("bottom".to_string()),
@@ -282,18 +293,18 @@ fn non_finite_coordinates_are_rejected_without_changing_the_font() {
             }
             .into(),
             MoveAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchor_ids: vec![anchor.clone()],
                 coords: vec![bad, 0.0],
             }
             .into(),
             SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: bad,
             }
             .into(),
             TransformLayer {
-                layer_id: layer_id.clone(),
+                layer_id,
                 transform: Transform {
                     xx: bad,
                     ..Transform::translate(0.0, 0.0)
@@ -324,13 +335,13 @@ fn negative_zero_is_stored_as_zero() {
         &mut font,
         [
             MovePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![PointId::from_raw("A_0")],
                 coords: vec![-0.0, -0.0],
             }
             .into(),
             AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: vec![AnchorSeed {
                     id: AnchorId::from_raw("zero"),
                     name: Some("bottom".to_string()),
@@ -340,12 +351,12 @@ fn negative_zero_is_stored_as_zero() {
             }
             .into(),
             SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: -0.0,
             }
             .into(),
             SetComponentTransforms {
-                layer_id: layer_id.clone(),
+                layer_id,
                 component_ids: vec![ComponentId::from_raw("a_second")],
                 transforms: vec![-0.0, -0.0, -0.0, 1.0, 1.0, -0.0, -0.0, -0.0, -0.0],
             }
@@ -353,7 +364,7 @@ fn negative_zero_is_stored_as_zero() {
         ],
     );
 
-    let layer = font.layer(&layer_id).unwrap();
+    let layer = font.layer(layer_id).unwrap();
     let point = layer
         .points()
         .find(|point| point.id() == PointId::from_raw("A_0"))
@@ -389,4 +400,70 @@ fn negative_zero_is_stored_as_zero() {
         .apply_interpolation_values(&GlyphInterpolationValues::new(values))
         .unwrap();
     assert_eq!(reloaded, *layer);
+}
+
+#[test]
+fn setting_every_position_moves_points_and_anchors_like_naming_them() {
+    let layer_id = LayerId::from_raw("A_regular");
+    let mut named = sample_font();
+    let mut by_position = sample_font();
+    let layer = named.layer(layer_id).unwrap();
+    let point_ids: Vec<PointId> = layer.points().map(Point::id).collect();
+    let anchor_ids: Vec<AnchorId> = layer.anchors_iter().map(Anchor::id).collect();
+    let moved = |index: usize| [index as f64 * 3.0, -(index as f64)];
+    let point_coords: Vec<f64> = (0..point_ids.len()).flat_map(moved).collect();
+    let anchor_coords: Vec<f64> = (0..anchor_ids.len()).flat_map(|i| moved(100 + i)).collect();
+
+    let by_id = apply(
+        &mut named,
+        [
+            MovePoints {
+                layer_id,
+                point_ids,
+                coords: point_coords.clone(),
+            }
+            .into(),
+            MoveAnchors {
+                layer_id,
+                anchor_ids,
+                coords: anchor_coords.clone(),
+            }
+            .into(),
+        ],
+    );
+    let set = apply(
+        &mut by_position,
+        [SetPositions {
+            layer_id,
+            positions: [point_coords, anchor_coords].concat(),
+        }
+        .into()],
+    );
+
+    assert_eq!(by_position.layer(layer_id), named.layer(layer_id));
+    assert_eq!(set.layers.len(), by_id.layers.len());
+    assert!(set.layers.iter().all(|touched| !touched.structural));
+}
+
+#[test]
+fn setting_positions_needs_one_pair_per_point_and_anchor() {
+    let layer_id = LayerId::from_raw("A_regular");
+    let mut font = sample_font();
+    let original = font.clone();
+    let count = {
+        let layer = font.layer(layer_id).unwrap();
+        (layer.points().count() + layer.anchors().len()) * 2
+    };
+
+    for positions in [vec![0.0; count - 2], vec![0.0; count + 2]] {
+        let rejected = font.apply_intents(&FontIntentSet::from(SetPositions {
+            layer_id,
+            positions,
+        }));
+        assert!(matches!(
+            rejected,
+            Err(CoreError::MissingGlyphValue { .. } | CoreError::TrailingGlyphValues { .. })
+        ));
+    }
+    assert_eq!(font, original);
 }

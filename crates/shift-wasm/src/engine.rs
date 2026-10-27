@@ -12,16 +12,25 @@ use js_sys::{Array, Float64Array, Object, Reflect, Uint8Array};
 use serde::Serialize;
 use shift_engine::{ApplyError, EditHistory, EngineSession, LayerSource};
 use shift_font::{
-    AppliedIntents, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId, GlyphLayer,
-    LayerId, TouchedLayer,
+    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
+    GlyphLayer, LayerId, SetPositions, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
-use shift_wire::{GlyphState, intents};
+use shift_wire::{AnchorData, ComponentData, ContourData, intents};
 use wasm_bindgen::prelude::*;
+
+use crate::engine_reads::InternedIds;
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
-import type { FontIntent, FontReplacement, GlyphStructure, LayerId } from "@shift/types";
+import type {
+  ContourData,
+  ContourId,
+  FontIntent,
+  FontReplacement,
+  GlyphStructure,
+  LayerId,
+} from "@shift/types";
 
 /**
  * Where an engine session reads layers it has not loaded: the saved and
@@ -52,10 +61,40 @@ export interface EngineEdit {
   matchesSaved?: boolean;
 }
 
-/** One layer an edit touched, as the workspace's echo carries it. */
+/**
+ * What applying intents within the open edit did, without the font-level
+ * records an `EngineEdit` carries: the layers they touched, and whether they
+ * changed what the engine's kerning and source-metric reads return.
+ */
+export interface EngineStage {
+  layers: EngineLayer[];
+  kerning: boolean;
+  sourceMetrics: boolean;
+}
+
+/** A contour an edit kept as it was: the one with this id in the structure the edit started from. */
+export interface KeptContour {
+  id: ContourId;
+  kept: true;
+}
+
+/** A layer's structure after a structural edit; the contours it kept come by id alone. */
+export interface EngineStructure extends Omit<GlyphStructure, "contours"> {
+  contours: (ContourData | KeptContour)[];
+}
+
+/**
+ * One layer an edit touched: its values, and its structure when the edit
+ * changed it.
+ */
 export interface EngineLayer {
   layerId: LayerId;
-  structure: GlyphStructure;
+  /**
+   * The layer's structure, or null when the edit changed only its values: the
+   * structure is then the one the edit started from. Contours the edit kept
+   * come by id alone, as they are in that structure.
+   */
+  structure: EngineStructure | null;
   values: Float64Array;
   /** Whether the edit changed the layer's structure, not only its values. */
   structural: boolean;
@@ -146,14 +185,24 @@ fn ids(values: &Array) -> Result<Vec<GlyphId>, HostError> {
     Ok(intents::parse_id_list::<GlyphId>(&texts)?)
 }
 
-/// An open session, the source it reads from, its undo history, and the
+/// An open session, the source it reads from, its undo history, the
 /// session as it stood when the open edit began, to go back to if it is
-/// cancelled.
-struct Engine {
-    session: EngineSession,
+/// cancelled, and the ids the editor's reads name by number.
+pub(crate) struct Engine {
+    pub(crate) session: EngineSession,
     source: EngineLayerSource,
     history: EditHistory,
     before_edit: Option<EngineSession>,
+    pub(crate) ids: InternedIds,
+}
+
+impl Engine {
+    /// Loads `layer_ids` that are still placeholders, from the source.
+    pub(crate) fn load_layers(&mut self, layer_ids: Vec<LayerId>) -> Result<(), JsError> {
+        self.session
+            .load_layers(&mut HostLayers(&self.source), layer_ids)
+            .map_err(|error| JsError::new(&error.to_string()))
+    }
 }
 
 thread_local! {
@@ -161,7 +210,7 @@ thread_local! {
 }
 
 /// Runs `edit` on the engine at `handle`.
-fn with_engine<T>(
+pub(crate) fn with_engine<T>(
     handle: u32,
     edit: impl FnOnce(&mut Engine) -> Result<T, JsError>,
 ) -> Result<T, JsError> {
@@ -192,6 +241,7 @@ pub fn engine_open(directory: &[u8], source: EngineLayerSource) -> Result<u32, J
             source,
             history: EditHistory::default(),
             before_edit: None,
+            ids: InternedIds::default(),
         }));
         Ok(handle)
     })
@@ -232,13 +282,77 @@ pub fn engine_apply(
         if !engine.history.is_open() {
             return Err(JsError::new("no edit is open; begin one first"));
         }
+        let before = engine.session.font().clone();
         let applied = engine
             .session
             .apply(&mut HostLayers(&engine.source), &intents)
             .map_err(apply_error)?;
-        let edit = edit_object(engine.session.font(), &applied)?;
+        let edit = edit_object(engine.session.font(), &before, &applied)?;
         engine.history.record(applied.changes);
         Ok(edit.into())
+    })
+}
+
+/// Puts the session back where the open edit began and keeps the edit open,
+/// so the applies that follow replace what it applied so far: a gesture
+/// re-applies its latest intents each frame.
+///
+/// # Errors
+///
+/// Fails on an unknown handle, or when no edit is open.
+#[wasm_bindgen(js_name = engineRewindEdit)]
+pub fn engine_rewind_edit(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        let before = engine
+            .before_edit
+            .clone()
+            .ok_or_else(|| JsError::new("no edit is open; begin one first"))?;
+        engine.session = before;
+        engine.history.begin();
+        Ok(())
+    })
+}
+
+/// Applies `intents` as part of the open edit, as [`engine_apply`] does, but
+/// returns only the layers they touched and which reads they changed, not the
+/// font-level records: a gesture's frame, whose records are built once when
+/// it commits.
+///
+/// # Errors
+///
+/// As [`engine_apply`].
+#[wasm_bindgen(js_name = engineStage, unchecked_return_type = "EngineStage")]
+pub fn engine_stage(
+    handle: u32,
+    #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
+) -> Result<JsValue, JsError> {
+    let intents = intent_set(&intents)?;
+    with_engine(handle, |engine| {
+        if !engine.history.is_open() {
+            return Err(JsError::new("no edit is open; begin one first"));
+        }
+        let before = engine.session.font().clone();
+        let applied = engine
+            .session
+            .apply(&mut HostLayers(&engine.source), &intents)
+            .map_err(apply_error)?;
+        let layers = engine_layers(&before, &applied.layers)?;
+        let impact = applied.changes.impact();
+        engine.history.record(applied.changes);
+
+        let stage = Object::new();
+        set(&stage, "layers", &layers)?;
+        set(
+            &stage,
+            "kerning",
+            &JsValue::from_bool(impact.intersects(FontChangeImpact::KERNING)),
+        )?;
+        set(
+            &stage,
+            "sourceMetrics",
+            &JsValue::from_bool(impact.intersects(FontChangeImpact::SOURCE_METRICS)),
+        )?;
+        Ok(stage.into())
     })
 }
 
@@ -257,7 +371,7 @@ pub fn engine_end_edit(handle: u32) -> Result<Option<Uint8Array>, JsError> {
             return Ok(None);
         };
         Ok(Some(Uint8Array::from(
-            &rmp_serde::to_vec_named(&change_set)?[..],
+            &rmp_serde::to_vec_named(&change_set.compact())?[..],
         )))
     })
 }
@@ -288,11 +402,12 @@ pub fn engine_cancel_edit(handle: u32) -> Result<(), JsError> {
 #[wasm_bindgen(js_name = engineUndo, unchecked_return_type = "EngineEdit | undefined")]
 pub fn engine_undo(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
+        let before = engine.session.font().clone();
         let undone = engine
             .history
             .undo(&mut engine.session, &mut HostLayers(&engine.source))
             .map_err(apply_error)?;
-        replayed(engine, undone)
+        replayed(engine, &before, undone)
     })
 }
 
@@ -305,11 +420,12 @@ pub fn engine_undo(handle: u32) -> Result<JsValue, JsError> {
 #[wasm_bindgen(js_name = engineRedo, unchecked_return_type = "EngineEdit | undefined")]
 pub fn engine_redo(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
+        let before = engine.session.font().clone();
         let redone = engine
             .history
             .redo(&mut engine.session, &mut HostLayers(&engine.source))
             .map_err(apply_error)?;
-        replayed(engine, redone)
+        replayed(engine, &before, redone)
     })
 }
 
@@ -328,12 +444,16 @@ pub fn engine_discard_redo(handle: u32) -> Result<(), JsError> {
 
 /// An undo or redo as an `EngineEdit` carrying its change set and whether it
 /// left the font as last saved, or `undefined`.
-fn replayed(engine: &Engine, applied: Option<AppliedIntents>) -> Result<JsValue, JsError> {
+fn replayed(
+    engine: &Engine,
+    before: &Font,
+    applied: Option<AppliedIntents>,
+) -> Result<JsValue, JsError> {
     let Some(applied) = applied else {
         return Ok(JsValue::UNDEFINED);
     };
-    let edit = edit_object(engine.session.font(), &applied)?;
-    let change_set = rmp_serde::to_vec_named(&applied.changes)?;
+    let edit = edit_object(engine.session.font(), before, &applied)?;
+    let change_set = rmp_serde::to_vec_named(&applied.changes.compact())?;
     set(&edit, "changeSet", &Uint8Array::from(&change_set[..]))?;
     set(
         &edit,
@@ -359,12 +479,8 @@ pub fn engine_mark_saved(handle: u32) -> Result<(), JsError> {
 
 /// What an edit did as an `EngineEdit`: its touched layers and the font-level
 /// records it changed. Glyph records are left to the workspace's echo.
-fn edit_object(font: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
-    let layers: Array = applied
-        .layers
-        .iter()
-        .map(engine_layer)
-        .collect::<Result<_, _>>()?;
+fn edit_object(font: &Font, before: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
+    let layers = engine_layers(before, &applied.layers)?;
     let edit = Object::new();
     set(&edit, "layers", &layers)?;
     let impact = applied
@@ -396,19 +512,53 @@ pub fn engine_preview(
             .session
             .preview(&mut HostLayers(&engine.source), &set)
             .map_err(apply_error)?;
-        previewed.layers.iter().map(engine_layer).collect()
+        // A preview keeps nothing, so the session's font is what it started from.
+        engine_layers(engine.session.font(), &previewed.layers)
     })
 }
 
 /// `intents`, in the shape the workspace takes, as one set.
 fn intent_set(intents: &JsValue) -> Result<FontIntentSet, JsError> {
-    let wire: Vec<intents::FontIntent> = serde_wasm_bindgen::from_value(plain_arrays(intents)?)?;
-    Ok(FontIntentSet {
-        intents: wire
-            .into_iter()
-            .map(FontIntent::try_from)
-            .collect::<Result<_, _>>()?,
-    })
+    let intents = Array::from(intents)
+        .iter()
+        .map(|intent| {
+            if let Some(intent) = positions_intent(&intent)? {
+                return Ok(intent);
+            }
+            let wire: intents::FontIntent = serde_wasm_bindgen::from_value(plain_arrays(&intent)?)?;
+            Ok(FontIntent::try_from(wire)?)
+        })
+        .collect::<Result<_, JsError>>()?;
+    Ok(FontIntentSet { intents })
+}
+
+/// A `setPositions` intent read straight from its object, or `None` for any
+/// other kind. Its positions, a hundred thousand numbers on a large glyph,
+/// cross as one copied block; through serde they were read one at a time,
+/// which cost ten times the edit.
+fn positions_intent(intent: &JsValue) -> Result<Option<FontIntent>, JsError> {
+    let field = |object: &JsValue, key: &str| Reflect::get(object, &JsValue::from_str(key)).ok();
+    if field(intent, "kind")
+        .and_then(|kind| kind.as_string())
+        .as_deref()
+        != Some("setPositions")
+    {
+        return Ok(None);
+    }
+    let payload =
+        field(intent, "setPositions").ok_or_else(|| JsError::new("setPositions has no payload"))?;
+    let layer_id = field(&payload, "layerId")
+        .and_then(|id| id.as_string())
+        .ok_or_else(|| JsError::new("setPositions has no layer id"))?;
+    let positions = field(&payload, "positions")
+        .ok_or_else(|| JsError::new("setPositions has no positions"))?;
+    Ok(Some(
+        SetPositions {
+            layer_id: intents::parse::<LayerId>(&layer_id)?,
+            positions: Float64Array::new(&positions).to_vec(),
+        }
+        .into(),
+    ))
 }
 
 fn apply_error(error: ApplyError<HostError>) -> JsError {
@@ -448,32 +598,28 @@ pub fn engine_release(handle: u32) {
     });
 }
 
-/// `intents` with each payload's typed-array fields copied into plain arrays.
+/// `intent` with its payload's typed-array fields copied into plain arrays.
 ///
 /// The wire intent is internally tagged, so serde reads its payload through
 /// `deserialize_any`, which serde-wasm-bindgen cannot take a typed array to.
-/// The caller's intents stay as they were: the workspace reads them next.
-fn plain_arrays(intents: &JsValue) -> Result<JsValue, JsError> {
-    let copies = Array::new();
-    for intent in Array::from(intents).iter() {
-        let copy = Object::assign(&Object::new(), &Object::from(intent));
-        for entry in Object::entries(&copy).iter() {
-            let entry = Array::from(&entry);
-            let Some(payload) = entry.get(1).dyn_ref::<Object>().cloned() else {
-                continue;
-            };
-            let payload = Object::assign(&Object::new(), &payload);
-            for field in Object::entries(&payload).iter() {
-                let field = Array::from(&field);
-                if let Some(values) = field.get(1).dyn_ref::<Float64Array>() {
-                    set_value(&payload, &field.get(0), &Array::from(values))?;
-                }
+/// The caller's intent stays as it was: the workspace reads it next.
+fn plain_arrays(intent: &JsValue) -> Result<JsValue, JsError> {
+    let copy = Object::assign(&Object::new(), &Object::from(intent.clone()));
+    for entry in Object::entries(&copy).iter() {
+        let entry = Array::from(&entry);
+        let Some(payload) = entry.get(1).dyn_ref::<Object>().cloned() else {
+            continue;
+        };
+        let payload = Object::assign(&Object::new(), &payload);
+        for field in Object::entries(&payload).iter() {
+            let field = Array::from(&field);
+            if let Some(values) = field.get(1).dyn_ref::<Float64Array>() {
+                set_value(&payload, &field.get(0), &Array::from(values))?;
             }
-            set_value(&copy, &entry.get(0), &payload)?;
         }
-        copies.push(&copy);
+        set_value(&copy, &entry.get(0), &payload)?;
     }
-    Ok(copies.into())
+    Ok(copy.into())
 }
 
 /// Sets `key` on `object`, which fails only on a frozen or proxied object.
@@ -483,27 +629,95 @@ fn set_value(object: &Object, key: &JsValue, value: &JsValue) -> Result<(), JsEr
         .map_err(|_| JsError::new(&format!("cannot set {key:?}")))
 }
 
-/// One touched layer as an `EngineLayer` object.
-fn engine_layer(touched: &TouchedLayer) -> Result<JsValue, JsError> {
-    let state = GlyphState::from_layer(&touched.layer);
+/// Each touched layer as an `EngineLayer` object, against the font as it was
+/// before the edit.
+fn engine_layers(before: &Font, touched: &[TouchedLayer]) -> Result<Array, JsError> {
+    touched
+        .iter()
+        .map(|touched| engine_layer(before, touched))
+        .collect()
+}
+
+/// One touched layer as an `EngineLayer` object. A layer whose structure the
+/// edit left alone crosses as its values only, and a structural edit sends in
+/// full only the contours it changed: building a large glyph's structure as
+/// objects cost more than the edit.
+fn engine_layer(before: &Font, touched: &TouchedLayer) -> Result<JsValue, JsError> {
+    let source = &touched.layer;
     let layer = Object::new();
-    set(
-        &layer,
-        "layerId",
-        &JsValue::from_str(state.layer_id.as_str()),
-    )?;
-    set(
-        &layer,
-        "structure",
-        &serde_wasm_bindgen::to_value(&state.structure)?,
-    )?;
-    set(&layer, "values", &Float64Array::from(&state.values[..]))?;
+    set(&layer, "layerId", &JsValue::from_str(source.id().as_str()))?;
+    let structure = if touched.structural {
+        EditedStructure::new(before.layer(source.id()), source)
+            .serialize(&serde_wasm_bindgen::Serializer::new())?
+    } else {
+        JsValue::NULL
+    };
+    set(&layer, "structure", &structure)?;
+    let values = shift_wire::values_from_layer(source);
+    set(&layer, "values", &Float64Array::from(&values[..]))?;
     set(
         &layer,
         "structural",
         &JsValue::from_bool(touched.structural),
     )?;
     Ok(layer.into())
+}
+
+/// A layer's structure after a structural edit, each contour the edit kept
+/// as it was sent by id alone.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditedStructure {
+    contours: Vec<EditedContour>,
+    anchors: Vec<AnchorData>,
+    components: Vec<ComponentData>,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum EditedContour {
+    Changed(ContourData),
+    /// The contour with this id in the structure the edit started from.
+    Kept {
+        id: String,
+        kept: bool,
+    },
+}
+
+impl EditedStructure {
+    fn new(before: Option<&GlyphLayer>, after: &GlyphLayer) -> Self {
+        let contours = after
+            .contours_iter()
+            .map(|contour| {
+                let kept = before
+                    .and_then(|layer| layer.contour(&contour.id()))
+                    .is_some_and(|previous| same_structure(previous, contour));
+                if kept {
+                    EditedContour::Kept {
+                        id: contour.id().to_string(),
+                        kept: true,
+                    }
+                } else {
+                    EditedContour::Changed(ContourData::from(contour))
+                }
+            })
+            .collect();
+        Self {
+            contours,
+            anchors: after.anchors_iter().map(AnchorData::from).collect(),
+            components: after.components_iter().map(ComponentData::from).collect(),
+        }
+    }
+}
+
+/// Whether two contours have the same points, types, smoothness and closure,
+/// whatever their positions.
+fn same_structure(left: &Contour, right: &Contour) -> bool {
+    left.is_closed() == right.is_closed()
+        && left.points().len() == right.points().len()
+        && left.points().iter().zip(right.points()).all(|(a, b)| {
+            a.id() == b.id() && a.point_type() == b.point_type() && a.is_smooth() == b.is_smooth()
+        })
 }
 
 fn set(object: &Object, key: &str, value: &JsValue) -> Result<(), JsError> {

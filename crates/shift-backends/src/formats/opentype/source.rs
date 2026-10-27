@@ -111,7 +111,7 @@ fn binary_directory(
         .expect("new font should have a default source");
     header
         .set_standard_metrics(
-            &default_source_id,
+            default_source_id,
             StandardMetrics {
                 ascender: Some(metrics.ascent as f64),
                 descender: Some(metrics.descent as f64),
@@ -122,7 +122,7 @@ fn binary_directory(
         )
         .expect("new font should contain its default source");
     let default_source = header
-        .source_mut(&default_source_id)
+        .source_mut(default_source_id)
         .expect("new font should contain its default source");
     default_source.set_name(style_name.unwrap_or_else(|| "Default".to_string()));
     default_source.set_line_gap(Some(metrics.leading as f64));
@@ -140,14 +140,14 @@ fn binary_directory(
         );
         axis.set_hidden(source_axis.is_hidden());
         let axis_id = axis.id();
-        default_location.set(axis_id.clone(), source_axis.default_value() as f64);
+        default_location.set(axis_id, source_axis.default_value() as f64);
         header
             .add_axis(axis)
             .map_err(|error| malformed(path, error.to_string()))?;
         axis_ids.push(axis_id);
     }
     header
-        .source_mut(&default_source_id)
+        .source_mut(default_source_id)
         .expect("new font should contain its default source")
         .set_location(default_location);
 
@@ -168,7 +168,7 @@ fn binary_directory(
                         malformed(path, format!("failed to read avar segment map: {error}"))
                     })?;
                     let axis = &header.axes()[index];
-                    let axis_id = axis_ids[index].clone();
+                    let axis_id = axis_ids[index];
                     let minimum = axis.minimum();
                     let default = axis.default();
                     let maximum = axis.maximum();
@@ -193,11 +193,11 @@ fn binary_directory(
                     // is also the minimum or maximum, two of them name the
                     // same user value, which a mapping cannot repeat.
                     values.dedup_by(|(input, _), (previous, _)| input == previous);
-                    let user_location = |value| Location::from([(axis_id.clone(), value)]);
+                    let user_location = |value| Location::from([(axis_id, value)]);
                     Ok(AxisMapping::new(
                         format!("{} mapping", axis.name()),
-                        vec![axis_id.clone()],
-                        vec![axis_id.clone()],
+                        vec![axis_id],
+                        vec![axis_id],
                         values
                             .into_iter()
                             .map(|(input, output)| AxisMappingPoint {
@@ -232,7 +232,7 @@ fn binary_directory(
             let location = ExternalLocation::from_map(
                 axis_ids
                     .iter()
-                    .cloned()
+                    .copied()
                     .zip(instance.user_coords().map(|coordinate| coordinate as f64)),
             );
             NamedInstance::new(
@@ -288,7 +288,7 @@ mod tests {
         let inputs: Vec<f64> = optical_size_mapping
             .points()
             .iter()
-            .filter_map(|point| point.input.get(&optical_size.id()))
+            .filter_map(|point| point.input.get(optical_size.id()))
             .collect();
         assert_eq!(inputs, vec![14.0, 32.0]);
     }

@@ -1,5 +1,6 @@
 import type { AnchorId, ContourId } from "@shift/types";
-import { Segment, type Anchor, type Contour, type Point } from "@shift/glyph-state";
+import type { Bounds } from "@shift/geo";
+import { Segment, segmentContour, type Anchor, type Contour, type Point } from "@shift/glyph-state";
 import type { GlyphRenderAnchor, GlyphRenderContour } from "../../types/glyphRender";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { GlyphGeometry } from "./Glyph";
@@ -22,6 +23,11 @@ export abstract class RenderContour implements GlyphRenderContour {
 
   segments(): readonly Segment[] {
     return Segment.parse(this);
+  }
+
+  /** The tight box around the contour's segments; `null` with none. */
+  get bounds(): Bounds | null {
+    return segmentContour(this).bounds;
   }
 
   trackShape(): void {}
@@ -59,6 +65,15 @@ export class LayerRenderContour extends RenderContour {
     return this.#input.peek().pointsCell.peek();
   }
 
+  // The buffer segments each coordinate revision once; drawing, bounds and hit tests share it.
+  override segments(): readonly Segment[] {
+    return this.#input.peek().segmentsCell.peek();
+  }
+
+  override get bounds(): Bounds | null {
+    return this.#input.peek().boundsCell.peek();
+  }
+
   override trackShape(): void {
     track(this.#input);
     track(this.#input.peek().dataCell);
@@ -91,6 +106,10 @@ class GeometryRenderContour extends RenderContour {
 
   override segments(): readonly Segment[] {
     return this.#contour.segments();
+  }
+
+  override get bounds(): Bounds | null {
+    return this.#contour.bounds;
   }
 }
 

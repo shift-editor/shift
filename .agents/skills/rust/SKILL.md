@@ -51,8 +51,8 @@ A failure that callers may handle, test, or wrap is a type, not text.
 
 ## Lookups and ids
 
-- Lookups take ids by reference: `fn glyph(&self, id: &GlyphId)`. Ids are `String` newtypes; a by-value parameter forces every caller that keeps its id to clone it. Take an id by value only when the function stores or returns it.
-- Never pass `&id.clone()`; borrow the id you have.
+- Font-level ids (`GlyphId`, `LayerId`, `SourceId`, the axis, instance, kerning group and metric ids) are interned and `Copy`: one word each. Pass them by value, `fn glyph(&self, id: GlyphId)`, and copy rather than clone them (clippy's `trivially_copy_pass_by_ref` and `clone_on_copy` enforce it).
+- Ids inside a layer (`PointId`, `ContourId`, `ComponentId`, `AnchorId`, `GuidelineId`) own their text, because interned text is never freed. Take them by reference: `fn point(&self, id: &PointId)`; by value only when the function stores or returns it. Never pass `&id.clone()`; borrow the id you have.
 - Never clone an id only to build an error that is probably not returned. Use `ok_or_else` or the helpers above, which format the id only on failure. `ok_or(CoreError::X(id.clone()))` clones on every call, including successful ones.
 - `Option` lookups (`font.glyph(id)`) are for "absent is a normal answer". Use `require_*` when absence is an error for this caller.
 

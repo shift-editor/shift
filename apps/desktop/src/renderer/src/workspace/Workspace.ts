@@ -36,8 +36,8 @@ export class Workspace {
 
   constructor(options: WorkspaceOptions) {
     this.#client = options.client;
-    this.#store = new FontStore();
-    this.#engine = new WindowEngine(options.host.layers, () => this.#client.storeLocation());
+    this.#engine = new WindowEngine(options.host.layers, this.#client);
+    this.#store = new FontStore({ engine: this.#engine });
     this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store, this.#engine);
     this.#documentBridge = new WorkspaceDocumentBridge({
       host: options.host,

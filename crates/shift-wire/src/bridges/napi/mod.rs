@@ -360,6 +360,15 @@ impl From<GlyphRecord> for NapiGlyphRecord {
     }
 }
 
+/// The glyph records one edit changed: the changed glyphs' records as they
+/// are now, and the glyphs it removed. Every other record is unchanged.
+#[napi(object)]
+pub struct NapiGlyphRecordChanges {
+    pub updated: Vec<NapiGlyphRecord>,
+    #[napi(ts_type = "Array<GlyphId>")]
+    pub removed: Vec<String>,
+}
+
 #[napi(object)]
 pub struct NapiGlyphLayerRecord {
     #[napi(ts_type = "LayerId")]
@@ -1329,15 +1338,17 @@ pub struct NapiLayerReplaced {
 
 /// Selective replacement-grade font collections produced by one apply.
 ///
-/// Every present collection is complete. An absent collection was untouched;
-/// it must be retained from the renderer's current workspace snapshot.
+/// Every present collection is complete, except glyph records, which list
+/// only what changed. An absent collection was untouched; it must be retained
+/// from the renderer's current workspace snapshot.
 #[derive(Default)]
 #[napi(object)]
 pub struct NapiFontReplacement {
     /// Complete authored metadata when font metadata changed; absent otherwise.
     pub metadata: Option<intents::FontMetadata>,
-    /// Full records list when glyph identity changed; absent when untouched.
-    pub glyphs: Option<Vec<NapiGlyphRecord>>,
+    /// The glyph records the edit changed; absent when it changed none. Only
+    /// the changed glyphs cross, since a large font has tens of thousands.
+    pub glyph_changes: Option<NapiGlyphRecordChanges>,
     /// Full axes list when font-level axis structure changed; absent otherwise.
     pub axes: Option<Vec<intents::Axis>>,
     /// Full mapping list when font-level axis mappings changed; absent otherwise.
@@ -1360,15 +1371,15 @@ pub struct NapiFontReplacement {
 }
 
 impl NapiFontReplacement {
-    /// The shared font-level records with the workspace's glyph records,
+    /// The shared font-level records with the workspace's glyph record changes,
     /// present when the edit changed them.
     pub fn new(
         replacement: crate::replacement::FontReplacement,
-        glyphs: Option<Vec<NapiGlyphRecord>>,
+        glyph_changes: Option<NapiGlyphRecordChanges>,
     ) -> Self {
         Self {
             metadata: replacement.metadata.map(Into::into),
-            glyphs,
+            glyph_changes,
             axes: replacement.axes.map(IntoEach::into_each),
             axis_mappings: replacement.axis_mappings.map(IntoEach::into_each),
             axis_mapping_bases: replacement.axis_mapping_bases.map(IntoEach::into_each),

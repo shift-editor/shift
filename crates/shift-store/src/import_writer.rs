@@ -146,7 +146,7 @@ impl FontImportWriter<'_> {
                 .layers()
                 .get(layer_id)
                 .or_missing(StoreEntity::GlyphLayer, &layer_id)?;
-            store_stored_layer_in_tx(&self.tx, &glyph.id(), layer, stored, WriteMode::Insert)?;
+            store_stored_layer_in_tx(&self.tx, glyph.id(), layer, stored, WriteMode::Insert)?;
         }
         self.next_glyph_order += 1;
         Ok(())

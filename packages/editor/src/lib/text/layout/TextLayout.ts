@@ -23,7 +23,7 @@ import { literalRun, shapedRuns, splitParagraphs } from "./paragraphs";
 import { Positioner } from "./Positioner";
 import type { Editor } from "../../editor/Editor";
 import type { Font } from "../../model/Font";
-import type { Signal } from "../../signals/signal";
+import { track, type Signal } from "../../signals/signal";
 import type { ExternalAxisLocation } from "../../../types/variation";
 import type { TextSelectionRange } from "../../../types/text";
 
@@ -74,6 +74,8 @@ export class TextLayout {
   constructor(params: TextLayoutParams) {
     const { items, origin, editor, externalLocation, shaped = null } = params;
     const activeSourceId = editor.activeSourceId;
+    // Built inside the run's layout computed: metrics between sources follow the engine.
+    if (!activeSourceId) track(editor.font.sourceMetricsRevisionCell);
     this.metrics = activeSourceId
       ? editor.font.metricsForSource(activeSourceId)
       : editor.font.metricsAtLocation(externalLocation.peek());

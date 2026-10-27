@@ -111,7 +111,7 @@ impl LiveGlyphs {
             .glyph_ids
             .iter()
             .enumerate()
-            .filter_map(|(index, glyph_id)| Some((glyph_id.clone()?, u32::try_from(index).ok()?)))
+            .filter_map(|(index, glyph_id)| Some(((*glyph_id)?, u32::try_from(index).ok()?)))
             .collect();
 
         let characters = character_glyphs(view.glyphs().flat_map(|glyph| {
@@ -143,7 +143,7 @@ impl GlyphSource for LiveGlyphs {
             return None;
         }
         let index = usize::try_from(shaper_glyph).ok()?;
-        self.font.glyph_ids.get(index)?.clone()
+        *self.font.glyph_ids.get(index)?
     }
 
     fn character_glyph(&self, codepoint: u32) -> Option<u32> {

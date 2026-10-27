@@ -37,7 +37,7 @@ impl From<&Font> for StaticCompilation {
             .expect("compiled fixture should have a default source");
         for glyph in font.glyphs() {
             let layer = glyph
-                .layer_for_source(&default_source_id)
+                .layer_for_source(default_source_id)
                 .expect("encoded glyph should have a default layer");
             for unicode in glyph.unicodes() {
                 glyphs.insert(

@@ -1,11 +1,16 @@
 export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type Matrix } from "./Component";
+export { composeTransform, decomposeMatrix } from "./generated/geometryLayouts";
 export { Contour } from "./Contour";
 export { IdIndex } from "./IdIndex";
 export { decomposedTransformValues, readDecomposedTransform } from "./valueLayout";
 export { Point, type NewPoint, type PointHit, type PointWithNeighbors } from "./Point";
 export type { ContourGeometry, SegmentedContour } from "./types/contour";
-export { parseContourSegments } from "./parseContourSegments";
+export {
+  segmentContour,
+  type ContourSegment,
+  type SegmentedContourGeometry,
+} from "./segmentContour";
 export { filledContoursContain } from "./filledContoursContain";
 export {
   GlyphGeometry,

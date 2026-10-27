@@ -70,7 +70,7 @@ describe("the window's engine edits from the store", () => {
     openEngine = async () => {
       const { EngineSession } = await loadEngine();
       return EngineSession.open(
-        layers.directory(reader),
+        bridge.encodedDirectory(),
         engineLayerSource(layers, () => reader),
       );
     };
@@ -140,6 +140,7 @@ describe("the window's engine edits from the store", () => {
     });
 
     expect(layer?.structural).toBe(false);
+    expect(layer?.structure).toBeNull();
     expect(holdsPair(layer!.values, 175, 260)).toBe(true);
   });
 
@@ -150,9 +151,26 @@ describe("the window's engine edits from the store", () => {
     });
 
     expect(layer?.structural).toBe(true);
-    expect(layer?.structure.contours[0]?.points.map((point) => point.id)).toEqual(
+    const [contour] = layer?.structure?.contours ?? [];
+    expect(contour && "points" in contour ? contour.points.map((point) => point.id) : null).toEqual(
       pointIds.slice(1),
     );
+  });
+
+  it("sends a contour a structural edit kept by its id alone", () => {
+    // The first edit loads the layer, which the engine then sends whole.
+    applied({ kind: "setXAdvance", setXAdvance: { layerId, width: 640 } });
+    const contourId = mintContourId();
+    const layer = applied({
+      kind: "addContour",
+      addContour: { layerId, contourId, closed: false },
+    });
+
+    expect(layer?.structural).toBe(true);
+    expect(layer?.structure?.contours).toEqual([
+      { id: expect.any(String), kept: true },
+      { id: contourId, points: [], closed: false },
+    ]);
   });
 
   it("moves the composites attached to a moved anchor", async () => {

@@ -110,6 +110,16 @@ impl SourceKerning {
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
+
+    /// Returns the first of `candidates` this source authors, with its value.
+    pub(crate) fn first_authored(&self, candidates: &[KerningPair]) -> Option<ResolvedKerning> {
+        candidates.iter().find_map(|pair| {
+            self.value(pair).map(|value| ResolvedKerning {
+                pair: pair.clone(),
+                value,
+            })
+        })
+    }
 }
 
 impl From<Vec<(KerningPair, f64)>> for SourceKerning {
@@ -138,8 +148,8 @@ struct KerningGroups {
 }
 
 impl KerningGroups {
-    fn get(&self, group_id: &KerningGroupId) -> Option<&KerningGroup> {
-        self.groups.get(group_id)
+    fn get(&self, group_id: KerningGroupId) -> Option<&KerningGroup> {
+        self.groups.get(&group_id)
     }
 
     fn iter(&self) -> impl Iterator<Item = (&KerningGroupId, &KerningGroup)> {
@@ -150,8 +160,8 @@ impl KerningGroups {
         self.groups.keys()
     }
 
-    fn contains(&self, group_id: &KerningGroupId) -> bool {
-        self.groups.contains_key(group_id)
+    fn contains(&self, group_id: KerningGroupId) -> bool {
+        self.groups.contains_key(&group_id)
     }
 
     fn is_empty(&self) -> bool {
@@ -160,43 +170,40 @@ impl KerningGroups {
 
     /// The group `glyph_id` belongs to at `position`; the first by id if a
     /// replay left it in several.
-    fn group_of(&self, position: KerningPosition, glyph_id: &GlyphId) -> Option<&KerningGroupId> {
-        self.members.get(&(position, glyph_id.clone())).min()
+    fn group_of(&self, position: KerningPosition, glyph_id: GlyphId) -> Option<&KerningGroupId> {
+        self.members.get(&(position, glyph_id)).min()
     }
 
     /// Inserts `group` as `group_id`, returning the group it replaced.
     fn insert(&mut self, group_id: KerningGroupId, group: KerningGroup) -> Option<KerningGroup> {
-        let replaced = self.remove(&group_id);
+        let replaced = self.remove(group_id);
         for member in &group.members {
-            self.members
-                .insert((group.position, member.clone()), group_id.clone());
+            self.members.insert((group.position, *member), group_id);
         }
         self.groups.insert(group_id, group);
         replaced
     }
 
-    fn remove(&mut self, group_id: &KerningGroupId) -> Option<KerningGroup> {
-        let group = self.groups.remove(group_id)?;
+    fn remove(&mut self, group_id: KerningGroupId) -> Option<KerningGroup> {
+        let group = self.groups.remove(&group_id)?;
         for member in &group.members {
-            self.members
-                .remove(&(group.position, member.clone()), group_id);
+            self.members.remove(&(group.position, *member), &group_id);
         }
         Some(group)
     }
 
     /// Takes `glyph_id` out of `group_id`, leaving the group's other members
     /// filed where they are.
-    fn remove_member(&mut self, group_id: &KerningGroupId, glyph_id: &GlyphId) {
-        let Some(group) = self.groups.get_mut(group_id) else {
+    fn remove_member(&mut self, group_id: KerningGroupId, glyph_id: GlyphId) {
+        let Some(group) = self.groups.get_mut(&group_id) else {
             return;
         };
-        group.members.retain(|member| member != glyph_id);
-        self.members
-            .remove(&(group.position, glyph_id.clone()), group_id);
+        group.members.retain(|member| *member != glyph_id);
+        self.members.remove(&(group.position, glyph_id), &group_id);
     }
 
-    fn rename(&mut self, group_id: &KerningGroupId, name: String) -> CoreResult<()> {
-        self.groups.get_mut(group_id).require(group_id)?.name = name;
+    fn rename(&mut self, group_id: KerningGroupId, name: String) -> CoreResult<()> {
+        self.groups.get_mut(&group_id).require(&group_id)?.name = name;
         Ok(())
     }
 }
@@ -253,7 +260,7 @@ impl Kerning {
             .filter(move |(_, group)| group.position == position)
     }
 
-    pub fn group(&self, group_id: &KerningGroupId) -> Option<&KerningGroup> {
+    pub fn group(&self, group_id: KerningGroupId) -> Option<&KerningGroup> {
         self.groups.get(group_id)
     }
 
@@ -268,7 +275,7 @@ impl Kerning {
     pub fn group_of(
         &self,
         position: KerningPosition,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
     ) -> Option<&KerningGroupId> {
         self.groups.group_of(position, glyph_id)
     }
@@ -290,7 +297,7 @@ impl Kerning {
         group_id: KerningGroupId,
         mut group: KerningGroup,
     ) -> CoreResult<Vec<GlyphId>> {
-        self.ensure_name_available(&group_id, group.position, &group.name)?;
+        self.ensure_name_available(group_id, group.position, &group.name)?;
 
         let mut unique = Vec::with_capacity(group.members.len());
         for member in group.members {
@@ -302,12 +309,12 @@ impl Kerning {
 
         let mut moved = Vec::new();
         for member in &group.members {
-            let Some(other_id) = self.groups.group_of(group.position, member).cloned() else {
+            let Some(other_id) = self.groups.group_of(group.position, *member).copied() else {
                 continue;
             };
             if other_id != group_id {
-                self.groups.remove_member(&other_id, member);
-                moved.push(member.clone());
+                self.groups.remove_member(other_id, *member);
+                moved.push(*member);
             }
         }
         self.groups.insert(group_id, group);
@@ -324,11 +331,11 @@ impl Kerning {
     /// group at the same position already has `name`.
     pub fn rename_group(
         &mut self,
-        group_id: &KerningGroupId,
+        group_id: KerningGroupId,
         name: impl Into<String>,
     ) -> CoreResult<()> {
         let name = name.into();
-        let position = self.groups.get(group_id).require(group_id)?.position;
+        let position = self.groups.get(group_id).require(&group_id)?.position;
         self.ensure_name_available(group_id, position, &name)?;
         self.groups.rename(group_id, name)
     }
@@ -356,11 +363,11 @@ impl Kerning {
         let added = after
             .groups
             .ids()
-            .filter(|group_id| !self.groups.contains(group_id));
+            .filter(|group_id| !self.groups.contains(**group_id));
         self.groups
             .ids()
             .chain(added)
-            .map(|group_id| (group_id, self.group(group_id), after.group(group_id)))
+            .map(|group_id| (group_id, self.group(*group_id), after.group(*group_id)))
             .filter(|(_, before, after)| before != after)
     }
 
@@ -369,10 +376,10 @@ impl Kerning {
     ///
     /// For replaying a recorded change, whose other changed groups are
     /// installed alongside it.
-    pub(crate) fn put_group(&mut self, group_id: &KerningGroupId, group: Option<KerningGroup>) {
+    pub(crate) fn put_group(&mut self, group_id: KerningGroupId, group: Option<KerningGroup>) {
         match group {
             Some(group) => {
-                self.groups.insert(group_id.clone(), group);
+                self.groups.insert(group_id, group);
             }
             None => {
                 self.groups.remove(group_id);
@@ -384,13 +391,13 @@ impl Kerning {
     ///
     /// Pairs that reference the group are kept and resolve again if the group
     /// is restored with the same id.
-    pub fn remove_group(&mut self, group_id: &KerningGroupId) -> Option<KerningGroup> {
+    pub fn remove_group(&mut self, group_id: KerningGroupId) -> Option<KerningGroup> {
         self.groups.remove(group_id)
     }
 
     /// Returns the pair values authored for `source_id`.
-    pub fn source(&self, source_id: &SourceId) -> Option<&SourceKerning> {
-        self.sources.get(source_id)
+    pub fn source(&self, source_id: SourceId) -> Option<&SourceKerning> {
+        self.sources.get(&source_id)
     }
 
     /// Returns every source with authored pairs, ordered by source id.
@@ -399,7 +406,7 @@ impl Kerning {
     }
 
     /// Returns the value of `pair` authored at `source_id`.
-    pub fn value(&self, source_id: &SourceId, pair: &KerningPair) -> Option<f64> {
+    pub fn value(&self, source_id: SourceId, pair: &KerningPair) -> Option<f64> {
         self.source(source_id)?.value(pair)
     }
 
@@ -414,11 +421,11 @@ impl Kerning {
     /// Removes the value of `pair` at `source_id` and returns it.
     ///
     /// A source left with no pairs is dropped.
-    pub fn remove_value(&mut self, source_id: &SourceId, pair: &KerningPair) -> Option<f64> {
-        let source = self.sources.get_mut(source_id)?;
+    pub fn remove_value(&mut self, source_id: SourceId, pair: &KerningPair) -> Option<f64> {
+        let source = self.sources.get_mut(&source_id)?;
         let removed = source.values.remove(pair);
         if source.is_empty() {
-            self.sources.remove(source_id);
+            self.sources.remove(&source_id);
         }
         removed
     }
@@ -426,41 +433,68 @@ impl Kerning {
     /// Resolves the kerning between `first` followed by `second` at
     /// `source_id`.
     ///
-    /// The most specific authored pair wins, in UFO order: glyph and glyph,
-    /// then glyph and the second's group, then the first's group and glyph,
-    /// then group and group. Returns `None` when no pair applies, which means
+    /// The most specific authored pair wins, in the order of
+    /// [`Self::candidates`]. Returns `None` when no pair applies, which means
     /// no adjustment at this source.
     pub fn resolve(
         &self,
-        source_id: &SourceId,
-        first: &GlyphId,
-        second: &GlyphId,
+        source_id: SourceId,
+        first: GlyphId,
+        second: GlyphId,
     ) -> Option<ResolvedKerning> {
         let source = self.source(source_id)?;
-        let first_glyph = KerningSide::Glyph(first.clone());
-        let second_glyph = KerningSide::Glyph(second.clone());
+        let candidates = self.candidates(first, second);
+        source.first_authored(&candidates)
+    }
+
+    /// Returns the pair an edit to the kerning between `first` followed by
+    /// `second` at `source_id` changes: the one that applies there, or else
+    /// the most general one their groups allow, at zero.
+    pub fn editable_pair(
+        &self,
+        source_id: SourceId,
+        first: GlyphId,
+        second: GlyphId,
+    ) -> ResolvedKerning {
+        let mut candidates = self.candidates(first, second);
+        if let Some(resolved) = self
+            .source(source_id)
+            .and_then(|source| source.first_authored(&candidates))
+        {
+            return resolved;
+        }
+        let pair = candidates
+            .pop()
+            .unwrap_or_else(|| KerningPair::glyphs(first, second));
+        ResolvedKerning { pair, value: 0.0 }
+    }
+
+    /// Returns the pairs that could supply the kerning between `first`
+    /// followed by `second`, most specific first, in UFO order: glyph and
+    /// glyph, then glyph and the second's group, then the first's group and
+    /// glyph, then group and group. Groups the glyphs are not in are left out.
+    pub fn candidates(&self, first: GlyphId, second: GlyphId) -> Vec<KerningPair> {
+        let first_glyph = KerningSide::Glyph(first);
+        let second_glyph = KerningSide::Glyph(second);
         let first_group = self
             .group_of(KerningPosition::First, first)
-            .map(|group_id| KerningSide::Group(group_id.clone()));
+            .map(|group_id| KerningSide::Group(*group_id));
         let second_group = self
             .group_of(KerningPosition::Second, second)
-            .map(|group_id| KerningSide::Group(group_id.clone()));
+            .map(|group_id| KerningSide::Group(*group_id));
 
-        let candidates = [
-            Some((first_glyph.clone(), second_glyph.clone())),
-            second_group.clone().map(|group| (first_glyph, group)),
-            first_group.clone().map(|group| (group, second_glyph)),
-            first_group.zip(second_group),
-        ];
+        let mut candidates = Vec::with_capacity(4);
+        candidates.push(KerningPair::new(first_glyph.clone(), second_glyph.clone()));
+        if let Some(group) = &second_group {
+            candidates.push(KerningPair::new(first_glyph, group.clone()));
+        }
+        if let Some(group) = &first_group {
+            candidates.push(KerningPair::new(group.clone(), second_glyph));
+        }
+        if let (Some(first), Some(second)) = (first_group, second_group) {
+            candidates.push(KerningPair::new(first, second));
+        }
         candidates
-            .into_iter()
-            .flatten()
-            .find_map(|(first, second)| {
-                let pair = KerningPair::new(first, second);
-                source
-                    .value(&pair)
-                    .map(|value| ResolvedKerning { pair, value })
-            })
     }
 
     /// Returns `true` when the font has no groups and no pair values.
@@ -470,12 +504,12 @@ impl Kerning {
 
     fn ensure_name_available(
         &self,
-        group_id: &KerningGroupId,
+        group_id: KerningGroupId,
         position: KerningPosition,
         name: &str,
     ) -> CoreResult<()> {
         match self.group_id(position, name) {
-            Some(existing) if existing != group_id => Err(CoreError::DuplicateKerningGroupName {
+            Some(existing) if *existing != group_id => Err(CoreError::DuplicateKerningGroupName {
                 position,
                 name: name.to_string(),
             }),
@@ -501,7 +535,7 @@ mod tests {
                     .groups(position)
                     .find(|(_, group)| group.members.contains(glyph_id))
                     .map(|(group_id, _)| group_id);
-                assert_eq!(kerning.group_of(position, glyph_id), scanned, "{glyph_id}");
+                assert_eq!(kerning.group_of(position, *glyph_id), scanned, "{glyph_id}");
             }
         }
     }
@@ -509,7 +543,7 @@ mod tests {
     #[test]
     fn member_index_answers_as_a_scan_of_every_group() {
         let glyphs = ["a", "b", "c", "d"].map(glyph);
-        let [a, b, c, d] = glyphs.clone();
+        let [a, b, c, d] = glyphs;
         let left = KerningGroupId::from_raw("left");
         let right = KerningGroupId::from_raw("right");
         let mut kerning = Kerning::new();
@@ -517,25 +551,21 @@ mod tests {
             KerningGroup::new(KerningPosition::First, name, members)
         };
 
-        kerning
-            .set_group(left.clone(), first("left", vec![a.clone(), b.clone()]))
-            .unwrap();
+        kerning.set_group(left, first("left", vec![a, b])).unwrap();
         let moved = kerning
-            .set_group(right, first("right", vec![b.clone(), c.clone()]))
+            .set_group(right, first("right", vec![b, c]))
             .unwrap();
         assert_eq!(moved, [b]);
         assert_members_match_scan(&kerning, &glyphs);
 
         // A replayed change can leave a glyph in two groups for a moment.
-        kerning.put_group(&left, Some(first("left", vec![a, c])));
+        kerning.put_group(left, Some(first("left", vec![a, c])));
         assert_members_match_scan(&kerning, &glyphs);
 
-        kerning.remove_group(&left);
+        kerning.remove_group(left);
         assert_members_match_scan(&kerning, &glyphs);
 
-        kerning
-            .set_group(left.clone(), first("left", vec![d]))
-            .unwrap();
+        kerning.set_group(left, first("left", vec![d])).unwrap();
         let reloaded: Kerning =
             serde_json::from_str(&serde_json::to_string(&kerning).unwrap()).unwrap();
         assert_eq!(reloaded, kerning);
@@ -566,7 +596,7 @@ mod tests {
             )
             .unwrap();
         kerning.set_value(
-            source_id.clone(),
+            source_id,
             KerningPair::groups(group_id("A"), group_id("V")),
             -40.0,
         );
@@ -578,7 +608,7 @@ mod tests {
         let (kerning, source_id) = sample();
 
         let resolved = kerning
-            .resolve(&source_id, &glyph("Aacute"), &glyph("W"))
+            .resolve(source_id, glyph("Aacute"), glyph("W"))
             .unwrap();
         assert_eq!(resolved.value, -40.0);
         assert_eq!(
@@ -598,17 +628,17 @@ mod tests {
             KerningSide::Group(group_id("A")),
             KerningSide::Glyph(glyph("V")),
         );
-        kerning.set_value(source_id.clone(), second_exception, -30.0);
-        kerning.set_value(source_id.clone(), first_exception, -20.0);
+        kerning.set_value(source_id, second_exception, -30.0);
+        kerning.set_value(source_id, first_exception, -20.0);
         kerning.set_value(
-            source_id.clone(),
+            source_id,
             KerningPair::glyphs(glyph("A"), glyph("V")),
             -10.0,
         );
 
         let value = |first: &str, second: &str| {
             kerning
-                .resolve(&source_id, &glyph(first), &glyph(second))
+                .resolve(source_id, glyph(first), glyph(second))
                 .map(|resolved| resolved.value)
         };
         assert_eq!(value("A", "V"), Some(-10.0));
@@ -619,18 +649,60 @@ mod tests {
     }
 
     #[test]
+    fn an_edit_changes_the_pair_that_applies() {
+        let (mut kerning, source_id) = sample();
+        let exception = KerningPair::new(
+            KerningSide::Glyph(glyph("A")),
+            KerningSide::Group(group_id("V")),
+        );
+        kerning.set_value(source_id, exception.clone(), -20.0);
+
+        let edited = kerning.editable_pair(source_id, glyph("A"), glyph("W"));
+
+        assert_eq!(
+            edited,
+            ResolvedKerning {
+                pair: exception,
+                value: -20.0
+            }
+        );
+    }
+
+    #[test]
+    fn an_edit_where_no_pair_applies_changes_the_most_general_pair_at_zero() {
+        let (kerning, _) = sample();
+        let bold = SourceId::from_raw("bold");
+
+        let grouped = kerning.editable_pair(bold, glyph("A"), glyph("V"));
+        let ungrouped = kerning.editable_pair(bold, glyph("A"), glyph("T"));
+
+        assert_eq!(
+            grouped.pair,
+            KerningPair::groups(group_id("A"), group_id("V"))
+        );
+        assert_eq!(grouped.value, 0.0);
+        assert_eq!(
+            ungrouped.pair,
+            KerningPair::new(
+                KerningSide::Group(group_id("A")),
+                KerningSide::Glyph(glyph("T"))
+            )
+        );
+    }
+
+    #[test]
     fn values_are_independent_per_source() {
         let (mut kerning, regular) = sample();
         let bold = SourceId::from_raw("bold");
         kerning.set_value(
-            bold.clone(),
+            bold,
             KerningPair::groups(group_id("A"), group_id("V")),
             -80.0,
         );
 
         let at = |source_id: &SourceId| {
             kerning
-                .resolve(source_id, &glyph("A"), &glyph("V"))
+                .resolve(*source_id, glyph("A"), glyph("V"))
                 .map(|resolved| resolved.value)
         };
         assert_eq!(at(&regular), Some(-40.0));
@@ -651,15 +723,15 @@ mod tests {
 
         assert_eq!(moved, vec![glyph("Aacute")]);
         assert_eq!(
-            kerning.group(&group_id("A")).unwrap().members,
+            kerning.group(group_id("A")).unwrap().members,
             vec![glyph("A")]
         );
         assert_eq!(
-            kerning.group_of(KerningPosition::First, &glyph("Aacute")),
+            kerning.group_of(KerningPosition::First, glyph("Aacute")),
             Some(&group_id("O"))
         );
         assert_eq!(
-            kerning.group_of(KerningPosition::Second, &glyph("V")),
+            kerning.group_of(KerningPosition::Second, glyph("V")),
             Some(&group_id("V"))
         );
     }
@@ -668,9 +740,9 @@ mod tests {
     fn changed_groups_lists_each_added_edited_and_removed_group_once() {
         let (before, _) = sample();
         let mut after = before.clone();
-        after.remove_group(&group_id("V"));
+        after.remove_group(group_id("V"));
         after
-            .rename_group(&group_id("A"), "A_round")
+            .rename_group(group_id("A"), "A_round")
             .expect("name is free");
         after
             .set_group(
@@ -683,7 +755,7 @@ mod tests {
             .changed_groups(&after)
             .map(|(id, original, replacement)| {
                 (
-                    id.clone(),
+                    *id,
                     original.map(|group| group.name.clone()),
                     replacement.map(|group| group.name.clone()),
                 )
@@ -704,16 +776,16 @@ mod tests {
     fn renaming_a_group_keeps_its_pairs() {
         let (mut kerning, source_id) = sample();
 
-        kerning.rename_group(&group_id("A"), "A_round").unwrap();
+        kerning.rename_group(group_id("A"), "A_round").unwrap();
 
-        assert_eq!(kerning.group(&group_id("A")).unwrap().name, "A_round");
+        assert_eq!(kerning.group(group_id("A")).unwrap().name, "A_round");
         assert_eq!(
             kerning.group_id(KerningPosition::First, "A_round"),
             Some(&group_id("A"))
         );
         assert_eq!(
             kerning
-                .resolve(&source_id, &glyph("Aacute"), &glyph("W"))
+                .resolve(source_id, glyph("Aacute"), glyph("W"))
                 .map(|resolved| resolved.value),
             Some(-40.0)
         );
@@ -727,9 +799,9 @@ mod tests {
             group_id("other"),
             KerningGroup::new(KerningPosition::First, "A", vec![glyph("B")]),
         );
-        let duplicate_rename = kerning.rename_group(&group_id("A"), "A");
-        let other_position = kerning.rename_group(&group_id("V"), "A");
-        let missing = kerning.rename_group(&group_id("missing"), "X");
+        let duplicate_rename = kerning.rename_group(group_id("A"), "A");
+        let other_position = kerning.rename_group(group_id("V"), "A");
+        let missing = kerning.rename_group(group_id("missing"), "X");
 
         assert!(matches!(
             duplicate,
@@ -738,7 +810,7 @@ mod tests {
                 ..
             })
         ));
-        assert!(kerning.group(&group_id("other")).is_none());
+        assert!(kerning.group(group_id("other")).is_none());
         duplicate_rename.unwrap();
         other_position.unwrap();
         assert!(matches!(missing, Err(CoreError::KerningGroupNotFound(_))));
@@ -748,21 +820,21 @@ mod tests {
     fn a_new_group_with_a_removed_groups_name_does_not_inherit_its_pairs() {
         let (mut kerning, source_id) = sample();
 
-        let removed = kerning.remove_group(&group_id("A")).unwrap();
+        let removed = kerning.remove_group(group_id("A")).unwrap();
         kerning
             .set_group(
                 group_id("A2"),
                 KerningGroup::new(KerningPosition::First, "A", vec![glyph("A")]),
             )
             .unwrap();
-        let after_recreate = kerning.resolve(&source_id, &glyph("A"), &glyph("V"));
-        kerning.remove_group(&group_id("A2"));
+        let after_recreate = kerning.resolve(source_id, glyph("A"), glyph("V"));
+        kerning.remove_group(group_id("A2"));
         kerning.set_group(group_id("A"), removed).unwrap();
 
         assert_eq!(after_recreate, None);
         assert_eq!(
             kerning
-                .resolve(&source_id, &glyph("A"), &glyph("V"))
+                .resolve(source_id, glyph("A"), glyph("V"))
                 .map(|resolved| resolved.value),
             Some(-40.0)
         );
@@ -773,12 +845,12 @@ mod tests {
         let (mut kerning, source_id) = sample();
 
         let removed = kerning.remove_value(
-            &source_id,
+            source_id,
             &KerningPair::groups(group_id("A"), group_id("V")),
         );
 
         assert_eq!(removed, Some(-40.0));
-        assert!(kerning.source(&source_id).is_none());
+        assert!(kerning.source(source_id).is_none());
     }
 
     #[test]

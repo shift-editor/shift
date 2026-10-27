@@ -228,7 +228,7 @@ impl UfoReader {
                 ))
             })?;
             layer.add_component(Component::with_matrix(
-                base_glyph_id.clone(),
+                *base_glyph_id,
                 pending.base_glyph_name,
                 &pending.matrix,
             ));
@@ -289,7 +289,7 @@ impl UfoReader {
             .units_per_em
             .map_or(1000.0, |value| *value);
         font.set_standard_metrics(
-            &default_source_id,
+            default_source_id,
             StandardMetrics {
                 ascender: norad_font.font_info.ascender,
                 descender: norad_font.font_info.descender,
@@ -299,7 +299,7 @@ impl UfoReader {
             },
         )?;
         let default_source = font
-            .source_mut(&default_source_id)
+            .source_mut(default_source_id)
             .expect("new font should contain its default source");
         default_source.set_italic_angle(norad_font.font_info.italic_angle);
         default_source.set_line_gap(

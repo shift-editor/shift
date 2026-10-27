@@ -67,7 +67,6 @@ Central routing table for Shift's distributed documentation. Before creating new
 | `packages/sandbox/**`                  | [`packages/sandbox/docs/DOCS.md`](../../packages/sandbox/docs/DOCS.md)           | Bounded code execution independent of protocol adapters            |
 | `packages/ui/**`                       | [`packages/ui/docs/DOCS.md`](../../packages/ui/docs/DOCS.md)                     | UI component library wrapping Base UI primitives                   |
 | `packages/validation/**`               | [`packages/validation/docs/DOCS.md`](../../packages/validation/docs/DOCS.md)     | Point sequence validation and persistence schemas                  |
-| `packages/rules/**`                    | [`packages/rules/docs/DOCS.md`](../../packages/rules/docs/DOCS.md)               | Point editing rules engine for geometric constraints               |
 | `packages/wasm/**`                     | [`crates/shift-wasm/docs/DOCS.md`](../../crates/shift-wasm/docs/DOCS.md)         | Build and synchronous loading of the editor's WebAssembly module   |
 
 ## Cross-cutting operations

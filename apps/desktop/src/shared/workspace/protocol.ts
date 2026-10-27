@@ -213,6 +213,11 @@ export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   /** The open workspace's store, for the window's read-only layer reader; `null` for a preview. */
   "workspace.storeLocation": { request: void; response: FontStoreLocation | null };
+  /**
+   * The open font's directory, every layer a placeholder, as named
+   * MessagePack: what the window's engine opens with. `null` for a preview.
+   */
+  "workspace.directory": { request: void; response: Uint8Array | null };
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
   "source.glyph": {
     request: { glyphId: GlyphId };

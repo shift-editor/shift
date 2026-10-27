@@ -77,7 +77,6 @@
   "dependencies": {
     "@shift/geo": "workspace:*",
     "@shift/glyph-state": "workspace:*",
-    "@shift/rules": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",

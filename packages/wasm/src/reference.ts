@@ -16,15 +16,6 @@ import { embeddedModule } from "./embedded";
 
 initSync({ module: embeddedModule(moduleBase64) });
 
-export {
-  compileAxisMappings,
-  composeTransform,
-  contourGeometry,
-  decomposeMatrix,
-  mapLocation,
-  resolveKerning,
-  transformLayer,
-  transformPoint,
-} from "./generated-reference/shift_wasm.js";
+export { compileAxisMappings, mapLocation } from "./generated-reference/shift_wasm.js";
 // oxlint-disable-next-line eslint-js/no-restricted-syntax -- wasm-bindgen output; its types change with the Rust crate
 export type * from "./generated-reference/shift_wasm.js";

@@ -47,7 +47,7 @@ pub struct SourceMetricValues {
 impl SourceMetricValues {
     /// Returns the stable identity of the authored source.
     pub fn source_id(&self) -> SourceId {
-        self.source_id.clone()
+        self.source_id
     }
 
     /// Returns values aligned with the interpolation model's metric schema.
@@ -167,7 +167,7 @@ impl SourceMetricInterpolation {
             let Some(overshoot) = values.get(value_index + SOURCE_METRIC_OVERSHOOT_OFFSET) else {
                 break;
             };
-            metric_values.insert(metric_id.clone(), MetricValue::new(*position, *overshoot));
+            metric_values.insert(*metric_id, MetricValue::new(*position, *overshoot));
         }
 
         let technical_offset = self.metric_ids.len() * SOURCE_METRIC_VALUE_COUNT;
@@ -234,7 +234,7 @@ impl Font {
                     + technical_fields.len() * SOURCE_TECHNICAL_FIELD_VALUE_COUNT,
             );
             for metric_id in &metric_ids {
-                let metric = source.metric_value(metric_id)?;
+                let metric = source.metric_value(*metric_id)?;
                 let mut metric_values = [0.0; SOURCE_METRIC_VALUE_COUNT];
                 metric_values[SOURCE_METRIC_POSITION_OFFSET] = metric.position;
                 metric_values[SOURCE_METRIC_OVERSHOOT_OFFSET] = metric.overshoot;
@@ -313,17 +313,17 @@ mod tests {
             .unwrap()
             .id();
         let default_id = font.default_source_id().unwrap();
-        let default_location = DesignLocation::from([(axis_id.clone(), 400.0)]);
-        let default_source = font.source_mut(&default_id).unwrap();
+        let default_location = DesignLocation::from([(axis_id, 400.0)]);
+        let default_source = font.source_mut(default_id).unwrap();
         default_source.set_location(default_location);
-        default_source.set_metric_value(ascender_id.clone(), MetricValue::new(800.0, 16.0));
+        default_source.set_metric_value(ascender_id, MetricValue::new(800.0, 16.0));
         default_source.set_line_gap(Some(20.0));
 
-        let bold_location = DesignLocation::from([(axis_id.clone(), 700.0)]);
+        let bold_location = DesignLocation::from([(axis_id, 700.0)]);
         let bold_id = font.add_source(Source::new("Bold".to_string(), bold_location));
-        font.source_mut(&bold_id)
+        font.source_mut(bold_id)
             .unwrap()
-            .set_metric_value(ascender_id.clone(), MetricValue::new(900.0, 20.0));
+            .set_metric_value(ascender_id, MetricValue::new(900.0, 20.0));
 
         let interpolation = font.source_metric_interpolation().unwrap();
         let middle = DesignLocation::from([(axis_id, 550.0)]);

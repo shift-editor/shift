@@ -417,8 +417,8 @@ mod tests {
     /// Propagates one glyph at one master with shift-font's port, recursing into components.
     fn propagate_at(
         font: &Font,
-        glyph_id: &shift_font::GlyphId,
-        source_id: &shift_font::SourceId,
+        glyph_id: shift_font::GlyphId,
+        source_id: shift_font::SourceId,
         categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::RecordCategory>,
     ) -> shift_font::anchor_propagation::PropagatedAnchors {
         use shift_font::anchor_propagation::{
@@ -440,7 +440,7 @@ mod tests {
             .components_iter()
             .map(|component| {
                 (
-                    propagate_at(font, &component.base_glyph_id(), source_id, categories),
+                    propagate_at(font, component.base_glyph_id(), source_id, categories),
                     component.matrix(),
                 )
             })
@@ -453,7 +453,7 @@ mod tests {
                 transform: *transform,
             })
             .collect();
-        let category = categories.get(glyph_id).copied().unwrap_or_default();
+        let category = categories.get(&glyph_id).copied().unwrap_or_default();
         let attaching = glyph.has_attaching_anchor();
         compiled_anchors(&PropagationGlyph {
             anchors: &own,
@@ -485,7 +485,7 @@ mod tests {
         for glyph in FontExporter::new().propagated_anchors(&font).unwrap() {
             let glyph_id = font.glyph_by_name(&glyph.glyph_name).unwrap().id();
             for source in glyph.sources {
-                let ours = propagate_at(&font, &glyph_id, &source.source_id, &categories);
+                let ours = propagate_at(&font, glyph_id, source.source_id, &categories);
                 assert_eq!(
                     sorted(
                         ours.anchors

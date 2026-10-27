@@ -47,6 +47,16 @@ export declare class Bridge {
   saveWorkspace(): NapiDocumentState
   saveWorkspaceAsDocument(path: string, recoveryPath: string): NapiDocumentState
   discardWorkspaceChanges(): NapiDocumentState
+  /**
+   * The open font's metadata and its glyph and layer directory, every
+   * layer a placeholder, as named MessagePack: what a window's engine session
+   * opens with.
+   *
+   * # Errors
+   *
+   * Fails when no workspace is open or the directory cannot be encoded.
+   */
+  encodedDirectory(): Uint8Array
   getMetadata(): FontMetadata
   getMetrics(): NapiFontMetrics
   /**
@@ -248,15 +258,6 @@ export declare class LayerReader {
    * Fails when the store cannot be opened read-only.
    */
   static openWorkingStore(storePath: string): LayerReader
-  /**
-   * The font's metadata and its glyph and layer directory, every layer a
-   * placeholder, as named MessagePack: what an engine session opens with.
-   *
-   * # Errors
-   *
-   * Fails when the directory cannot be read or encoded.
-   */
-  loadDirectory(): Buffer
   /**
    * The content of `layer_ids` as one MessagePack array of named-field
    * layers, the encoding the engine decodes.
@@ -561,6 +562,13 @@ export interface AddPointsIntent {
   points: Array<PointSeed>
 }
 
+/** Lines points up on an edge or centre of the box around them. */
+export interface AlignPointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  alignment: "left" | "center-h" | "right" | "top" | "center-v" | "bottom"
+}
+
 /**
  * An anchor to create, carrying its caller-minted id (decision 6: ids are
  * client-minted so verbs return identity synchronously).
@@ -637,6 +645,12 @@ export interface CloneGlyphLayerIntent {
   fromLayerId: LayerId
 }
 
+/** One open end of a contour. */
+export interface ContourEnd {
+  contourId: ContourId
+  side: "start" | "end"
+}
+
 /**
  * Font-level axis creation. The axis id is client-minted; the tag is an
  * OpenType label and must be unique within the font.
@@ -706,9 +720,23 @@ export interface DeleteNamedInstanceIntent {
   instanceId: NamedInstanceId
 }
 
+/** Deletes points and reconnects what survives, fitting or leaving gaps. */
+export interface DeletePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  mode: "fit" | "gap"
+}
+
 /** Font-level source deletion. Removing a source also removes its glyph layers. */
 export interface DeleteSourceIntent {
   sourceId: SourceId
+}
+
+/** Spaces points evenly along an axis between the outermost two. */
+export interface DistributePointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
+  axis: "horizontal" | "vertical"
 }
 
 /** One edit as the editor sends it: `{ kind: "addPoints", addPoints: {…} }`. */
@@ -721,6 +749,7 @@ export type FontIntent =
   | { kind: 'removePoints', removePoints: RemovePointsIntent }
   | { kind: 'addAnchors', addAnchors: AddAnchorsIntent }
   | { kind: 'moveAnchors', moveAnchors: MoveAnchorsIntent }
+  | { kind: 'setPositions', setPositions: SetPositionsIntent }
   | { kind: 'removeAnchors', removeAnchors: RemoveAnchorsIntent }
   | { kind: 'renameAnchors', renameAnchors: RenameAnchorsIntent }
   | { kind: 'addComponent', addComponent: AddComponentIntent }
@@ -734,6 +763,14 @@ export type FontIntent =
   | { kind: 'transformLayer', transformLayer: TransformLayerIntent }
   | { kind: 'setXAdvance', setXAdvance: SetXAdvanceIntent }
   | { kind: 'applyBooleanOp', applyBooleanOp: BooleanOpIntent }
+  | { kind: 'deletePoints', deletePoints: DeletePointsIntent }
+  | { kind: 'splitSegment', splitSegment: SplitSegmentIntent }
+  | { kind: 'upgradeLineToCubic', upgradeLineToCubic: UpgradeLineToCubicIntent }
+  | { kind: 'joinContours', joinContours: JoinContoursIntent }
+  | { kind: 'transformPoints', transformPoints: TransformPointsIntent }
+  | { kind: 'alignPoints', alignPoints: AlignPointsIntent }
+  | { kind: 'distributePoints', distributePoints: DistributePointsIntent }
+  | { kind: 'shiftSidebearing', shiftSidebearing: ShiftSidebearingIntent }
   | { kind: 'createGlyph', createGlyph: CreateGlyphIntent }
   | { kind: 'updateGlyph', updateGlyph: UpdateGlyphIntent }
   | { kind: 'updateFontMetadata', updateFontMetadata: UpdateFontMetadataIntent }
@@ -773,6 +810,14 @@ export interface FontMetadata {
   licenseUrl?: string
   description?: string
   note?: string
+}
+
+/** Closes a contour by its two ends, or joins two contours into `from`. */
+export interface JoinContoursIntent {
+  layerId: LayerId
+  from: ContourEnd
+  to: ContourEnd
+  mode: "merge" | "connect"
 }
 
 export declare const enum KerningPosition {
@@ -992,14 +1037,18 @@ export interface NapiFontMetrics {
 /**
  * Selective replacement-grade font collections produced by one apply.
  *
- * Every present collection is complete. An absent collection was untouched;
- * it must be retained from the renderer's current workspace snapshot.
+ * Every present collection is complete, except glyph records, which list
+ * only what changed. An absent collection was untouched; it must be retained
+ * from the renderer's current workspace snapshot.
  */
 export interface NapiFontReplacement {
   /** Complete authored metadata when font metadata changed; absent otherwise. */
   metadata?: FontMetadata
-  /** Full records list when glyph identity changed; absent when untouched. */
-  glyphs?: Array<NapiGlyphRecord>
+  /**
+   * The glyph records the edit changed; absent when it changed none. Only
+   * the changed glyphs cross, since a large font has tens of thousands.
+   */
+  glyphChanges?: NapiGlyphRecordChanges
   /** Full axes list when font-level axis structure changed; absent otherwise. */
   axes?: Array<Axis>
   /** Full mapping list when font-level axis mappings changed; absent otherwise. */
@@ -1120,6 +1169,15 @@ export interface NapiGlyphRecord {
    * once it has an attaching anchor.
    */
   ligature?: "explicit" | "subcategory"
+}
+
+/**
+ * The glyph records one edit changed: the changed glyphs' records as they
+ * are now, and the glyphs it removed. Every other record is unchanged.
+ */
+export interface NapiGlyphRecordChanges {
+  updated: Array<NapiGlyphRecord>
+  removed: Array<GlyphId>
 }
 
 export interface NapiGlyphSnapshot {
@@ -1527,9 +1585,23 @@ export interface SetPointSmoothIntent {
   smooth: boolean
 }
 
+/** Every point and anchor position of a layer, naming none of them. */
+export interface SetPositionsIntent {
+  layerId: LayerId
+  /** Every contour point, contour after contour, then every anchor, each as `x, y`. */
+  positions: Array<number>
+}
+
 export interface SetXAdvanceIntent {
   layerId: LayerId
   width: number
+}
+
+/** Adds `delta` to one sidebearing; the left one moves the whole layer with the advance. */
+export interface ShiftSidebearingIntent {
+  layerId: LayerId
+  sidebearing: "lsb" | "rsb"
+  delta: number
 }
 
 export interface SourceMetricValue {
@@ -1538,9 +1610,29 @@ export interface SourceMetricValue {
   overshoot: number
 }
 
+/**
+ * Splits the segment between two on-curve points at `t`; the caller mints
+ * the new on-curve point's id.
+ */
+export interface SplitSegmentIntent {
+  layerId: LayerId
+  startId: PointId
+  endId: PointId
+  t: number
+  pointId: PointId
+}
+
 /** Affine transform of a whole layer: points, anchors, and component placements. */
 export interface TransformLayerIntent {
   layerId: LayerId
+  /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
+  matrix: Array<number>
+}
+
+/** Moves points by one affine transform. */
+export interface TransformPointsIntent {
+  layerId: LayerId
+  pointIds: Array<PointId>
   /** Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. */
   matrix: Array<number>
 }
@@ -1587,4 +1679,11 @@ export interface UpdateSourceIntent {
   lineGap?: number
   underlinePosition?: number
   underlineThickness?: number
+}
+
+/** Raises the line between two on-curve points to a cubic of the same shape. */
+export interface UpgradeLineToCubicIntent {
+  layerId: LayerId
+  startId: PointId
+  endId: PointId
 }

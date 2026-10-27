@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Point2D } from "@shift/geo";
 import { PointAlignmentSnap } from "@shift/editor/model";
 
 describe("point alignment snaps each axis to the nearest stationary point", () => {
@@ -53,4 +54,36 @@ describe("point alignment snaps each axis to the nearest stationary point", () =
 
     expect(snap).toBeNull();
   });
+
+  it("snaps as a scan of every target does, ties and their guide order included", () => {
+    // Targets on a 5-unit grid tie on each axis; points halfway between grid lines are as near
+    // a target on one side as on the other, where the first target given must win.
+    let seed = 7;
+    const next = () => ((seed = (seed * 48271) % 2147483647) % 40) * 5;
+    const many: Point2D[] = Array.from({ length: 400 }, () => ({ x: next(), y: next() }));
+    const snap = PointAlignmentSnap.to(many, 6);
+
+    for (const point of Array.from({ length: 50 }, () => ({ x: next() + 2.5, y: next() - 2.5 }))) {
+      expect(snap.snap(point)).toEqual(scanEveryTarget(many, 6, point));
+    }
+  });
 });
+
+/** The snap a scan of every target in order gives: nearest wins, equal offsets keep every guide. */
+function scanEveryTarget(targets: readonly Point2D[], radius: number, point: Point2D) {
+  const axis = (key: "x" | "y") => {
+    let best: { offset: number; guides: object[] } | null = null;
+    for (const target of targets) {
+      const offset = target[key] - point[key];
+      if (Math.abs(offset) > radius) continue;
+      const aligned = key === "x" ? { x: target.x, y: point.y } : { x: point.x, y: target.y };
+      const guide = { kind: "alignment", target, point: aligned };
+      if (!best || Math.abs(offset) < Math.abs(best.offset)) best = { offset, guides: [guide] };
+      else if (offset === best.offset) best.guides.push(guide);
+    }
+    return best;
+  };
+  const x = axis("x");
+  const y = axis("y");
+  return x || y ? { x, y } : null;
+}

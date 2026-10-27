@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Curve, Rect } from "@shift/geo";
 import { Ellipse, Rectangle } from "@shift/editor/tools";
-import { parseContourSegments } from "@shift/glyph-state";
+import { segmentContour } from "@shift/glyph-state";
 
 const bounds = Rect.fromPoints({ x: 10, y: 20 }, { x: 210, y: 120 });
 
@@ -15,12 +15,9 @@ describe("closed shape geometry", () => {
       { x: 10, y: 120 },
     ]);
     expect(points.every((point) => point.pointType === "onCurve" && !point.smooth)).toBe(true);
-    expect(parseContourSegments({ points, closed: true }).map((segment) => segment.type)).toEqual([
-      "line",
-      "line",
-      "line",
-      "line",
-    ]);
+    expect(
+      segmentContour({ points, closed: true }).segments.map(({ points: segment }) => segment.type),
+    ).toEqual(["line", "line", "line", "line"]);
   });
 
   it("creates an ellipse with four smooth extrema and eight tangent controls", () => {
@@ -33,12 +30,9 @@ describe("closed shape geometry", () => {
       { x: 110, y: 20 },
     ]);
     expect(points.filter((point) => point.pointType === "offCurve")).toHaveLength(8);
-    expect(parseContourSegments({ points, closed: true }).map((segment) => segment.type)).toEqual([
-      "cubic",
-      "cubic",
-      "cubic",
-      "cubic",
-    ]);
+    expect(
+      segmentContour({ points, closed: true }).segments.map(({ points: segment }) => segment.type),
+    ).toEqual(["cubic", "cubic", "cubic", "cubic"]);
   });
 
   it("scales kappa handles by the radius in the handle direction", () => {
@@ -53,7 +47,7 @@ describe("closed shape geometry", () => {
 
   it("keeps all four cubic quarters within the standard normalized ellipse error", () => {
     const points = new Ellipse().createPoints(bounds);
-    for (const segment of parseContourSegments({ points, closed: true })) {
+    for (const { points: segment } of segmentContour({ points, closed: true }).segments) {
       if (segment.type !== "cubic") throw new Error("Expected an ellipse cubic");
       const curve = Curve.cubic(
         segment.start,

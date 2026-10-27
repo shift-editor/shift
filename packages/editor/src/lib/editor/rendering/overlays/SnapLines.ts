@@ -1,4 +1,5 @@
 import { Vec2, type Point2D } from "@shift/geo";
+import { ascending, comparing } from "@shift/types";
 import type { MetricPositionGuide, PositionGuide } from "../../../../types/positionEdit";
 import type { Canvas } from "../Canvas";
 
@@ -19,48 +20,145 @@ export class SnapLines {
    */
   draw(canvas: Canvas, guides: readonly PositionGuide[], crossings: readonly Point2D[] = []): void {
     const { color, widthPx, crossSizePx } = canvas.theme.snap;
-    const markers = new Map<string, Point2D>();
-    const addMarker = (point: Point2D) => markers.set(`${point.x}:${point.y}`, point);
-
-    for (const guide of guides) {
-      if (guide.kind !== "direction") continue;
-
-      canvas.line(guide.from, guide.to, color, widthPx);
-      addMarker(guide.from);
-      addMarker(guide.to);
-    }
-
-    const addCrossings = (from: Point2D, to: Point2D) => {
-      for (const crossing of crossings) {
-        if (liesOnSegment(crossing, from, to)) addMarker(crossing);
-      }
-    };
-
-    for (const guide of guides) {
-      if (guide.kind !== "alignment") continue;
-
-      canvas.line(guide.target, guide.point, color, widthPx);
-      addMarker(guide.target);
-      addMarker(guide.point);
-      addCrossings(guide.target, guide.point);
-    }
-
-    for (const span of metricSpans(guides)) {
-      if (span.from.x !== span.to.x) canvas.line(span.from, span.to, color, widthPx);
-      for (const point of span.points) addMarker(point);
-      addCrossings(span.from, span.to);
-    }
+    const feedback = snapFeedback(guides, crossings);
+    for (const [from, to] of feedback.lines) canvas.line(from, to, color, widthPx);
 
     const diagonal: Point2D = { x: crossSizePx, y: crossSizePx };
     const antiDiagonal: Point2D = { x: crossSizePx, y: -crossSizePx };
     canvas.withScreenSpace((screen, project) => {
-      for (const marker of markers.values()) {
+      for (const marker of feedback.markers) {
         const cross = project.point(marker);
         screen.line(Vec2.sub(cross, diagonal), Vec2.add(cross, diagonal), color, widthPx);
         screen.line(Vec2.sub(cross, antiDiagonal), Vec2.add(cross, antiDiagonal), color, widthPx);
       }
     });
   }
+}
+
+/** What one frame's snap feedback draws, in the units the guides are measured in. */
+export interface SnapFeedback {
+  /** Each distinct guide line once, from its start to its end. */
+  readonly lines: readonly (readonly [Point2D, Point2D])[];
+  /** Each position that gets a cross once, in no particular order: guide ends, snapped positions and crossings. */
+  readonly markers: readonly Point2D[];
+}
+
+/**
+ * The lines and crosses that show `guides`; see {@link SnapLines.draw}.
+ *
+ * @remarks
+ * A dragged group yields many guides, often the same line again, and a large
+ * glyph has thousands of crossings, so each distinct line is drawn and tested
+ * once, and a horizontal or vertical one looks only at the crossings on its
+ * coordinate.
+ */
+export function snapFeedback(
+  guides: readonly PositionGuide[],
+  crossings: readonly Point2D[] = [],
+): SnapFeedback {
+  const lines = new Map<string, readonly [Point2D, Point2D]>();
+  const markers = new Map<string, Point2D>();
+  const crossed = new Set<string>();
+  const index = new CrossingIndex(crossings);
+  const addLine = (from: Point2D, to: Point2D) => {
+    const key = lineKey(from, to);
+    if (!lines.has(key)) lines.set(key, [from, to]);
+  };
+  const addMarker = (point: Point2D) => markers.set(`${point.x}:${point.y}`, point);
+  const addCrossings = (from: Point2D, to: Point2D) => {
+    const key = lineKey(from, to);
+    if (crossed.has(key)) return;
+    crossed.add(key);
+    for (const crossing of index.on(from, to)) addMarker(crossing);
+  };
+
+  for (const guide of guides) {
+    if (guide.kind !== "direction") continue;
+
+    addLine(guide.from, guide.to);
+    addMarker(guide.from);
+    addMarker(guide.to);
+  }
+
+  for (const guide of guides) {
+    if (guide.kind !== "alignment") continue;
+
+    addLine(guide.target, guide.point);
+    addMarker(guide.target);
+    addMarker(guide.point);
+    addCrossings(guide.target, guide.point);
+  }
+
+  for (const span of metricSpans(guides)) {
+    if (span.from.x !== span.to.x) addLine(span.from, span.to);
+    for (const point of span.points) addMarker(point);
+    addCrossings(span.from, span.to);
+  }
+
+  return { lines: [...lines.values()], markers: [...markers.values()] };
+}
+
+function lineKey(from: Point2D, to: Point2D): string {
+  return `${from.x}:${from.y}:${to.x}:${to.y}`;
+}
+
+/**
+ * Crossings sorted along each axis, so a horizontal or vertical line tests only
+ * the crossings near its coordinate; any other line tests them all.
+ */
+class CrossingIndex {
+  readonly #crossings: readonly Point2D[];
+  #byX: readonly Point2D[] | null = null;
+  #byY: readonly Point2D[] | null = null;
+
+  constructor(crossings: readonly Point2D[]) {
+    this.#crossings = crossings;
+  }
+
+  /** The crossings on the segment from `from` to `to`, as {@link liesOnSegment} decides. */
+  on(from: Point2D, to: Point2D): Point2D[] {
+    return this.#near(from, to).filter((crossing) => liesOnSegment(crossing, from, to));
+  }
+
+  /** The crossings that can lie on the segment: those near its line when it is axis-aligned. */
+  #near(from: Point2D, to: Point2D): readonly Point2D[] {
+    if (from.x === to.x) {
+      this.#byX ??= this.#sorted("x");
+      return nearOnAxis(this.#byX, "x", from.x);
+    }
+    if (from.y === to.y) {
+      this.#byY ??= this.#sorted("y");
+      return nearOnAxis(this.#byY, "y", from.y);
+    }
+    return this.#crossings;
+  }
+
+  #sorted(axis: "x" | "y"): readonly Point2D[] {
+    return this.#crossings.toSorted(comparing((point: Point2D) => point[axis], ascending));
+  }
+}
+
+/**
+ * The points of `sorted` whose `axis` coordinate is within twice
+ * {@link CROSSING_EPSILON} of `value`: a superset of those a horizontal or
+ * vertical segment there can pass through.
+ */
+function nearOnAxis(sorted: readonly Point2D[], axis: "x" | "y", value: number): Point2D[] {
+  const min = value - 2 * CROSSING_EPSILON;
+  const max = value + 2 * CROSSING_EPSILON;
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (sorted[middle]![axis] < min) low = middle + 1;
+    else high = middle;
+  }
+
+  const near: Point2D[] = [];
+  for (let slot = low; slot < sorted.length && sorted[slot]![axis] <= max; slot++) {
+    near.push(sorted[slot]!);
+  }
+  return near;
 }
 
 interface MetricSpan {

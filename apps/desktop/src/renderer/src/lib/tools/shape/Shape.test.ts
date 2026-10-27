@@ -3,6 +3,7 @@ import { TestEditor } from "@/testing/TestEditor";
 import { Ellipse, Rectangle } from "@shift/editor/tools";
 import { Bounds, Mat, Rect } from "@shift/geo";
 import { ContourPath } from "@shift/editor/testing";
+import { segmentContour } from "@shift/glyph-state";
 
 // Restored from the WS6 behavioral inventory (git show ef037c6e^); asserts
 // confirmed (folded) geometry rather than the deleted currentGlyph getter.
@@ -187,7 +188,8 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
   it("uses the same geometry for preview paths and committed contours", async () => {
     const shape = kind === "ellipse" ? new Ellipse() : new Rectangle();
     const bounds = Rect.fromPoints({ x: 10, y: 20 }, { x: 210, y: 120 });
-    const preview = ContourPath.fromPoints(shape.createPoints(bounds), true);
+    const points = shape.createPoints(bounds);
+    const preview = ContourPath.fromPoints(points, true);
     await editor.dragLocal({
       down: { x: 10, y: 20 },
       start: { x: 80, y: 60 },
@@ -195,7 +197,7 @@ describe.each(["rectangle", "ellipse"] as const)("%s drawing lifecycle", (kind) 
     });
     const committed = ContourPath.fromContour(editor.glyphContours[0], Mat.Identity());
     expect(committed.commands).toEqual(preview.commands);
-    expect(committed.bounds).toEqual(preview.bounds);
+    expect(editor.glyphContours[0].bounds).toEqual(segmentContour({ points, closed: true }).bounds);
   });
 
   it.each([1, -1])(

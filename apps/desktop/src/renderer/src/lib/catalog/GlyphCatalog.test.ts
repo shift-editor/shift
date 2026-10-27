@@ -55,4 +55,52 @@ describe("GlyphCatalog", () => {
     expect(font.sources.map(({ id }) => id)).not.toContain(boldId);
     expect(catalog.metricsCell.peek().unitsPerEm).toBe(font.metrics.unitsPerEm);
   });
+
+  it("follows a master's metric edit between the masters", async () => {
+    editor = await new TestEditor().startSession();
+    const font = editor.font;
+    const axisId = font.createAxis({
+      tag: "wght",
+      name: "Weight",
+      role: "external",
+      axisType: "continuous",
+      minimum: 100,
+      default: 400,
+      maximum: 900,
+      labels: [],
+      hidden: false,
+    });
+    await editor.settle();
+    const boldId = font.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 900 }));
+    await editor.settle();
+    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 650 }));
+    const catalog = new GlyphCatalog(
+      editor,
+      getGlyphInfo(),
+      new AuthoredGlyphAtlasSource(
+        editor.workspaceEditCoordinator,
+        () => font.getAxes(),
+        () => font.getAxisMappingBases(),
+      ),
+    );
+    const ascenders: number[] = [];
+    const reader = effect(() => {
+      ascenders.push(catalog.metricsCell.value.ascender);
+    });
+    const before = catalog.metricsCell.peek().ascender;
+
+    const bold = font.source(boldId)!;
+    const ascender = font.metricDefinitions.find((definition) => definition.kind === "ascender")!;
+    const edited = font.updateSource({
+      ...bold,
+      metricValues: bold.metricValues.map((value) =>
+        value.metricId === ascender.id ? { ...value, position: value.position + 200 } : value,
+      ),
+    });
+    expect(catalog.metricsCell.peek().ascender).toBeCloseTo(before + 100);
+    await edited;
+    reader.dispose();
+
+    expect(ascenders.at(-1)).toBeCloseTo(before + 100);
+  });
 });

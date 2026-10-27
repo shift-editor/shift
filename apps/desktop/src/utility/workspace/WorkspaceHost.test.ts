@@ -144,10 +144,12 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     if (held && FontStoreLocation.equals(held.location, location)) return held.session;
     if (held) disposeEngine(held);
 
+    const directory = await sync.call("workspace.directory", undefined);
+    if (!directory) throw new Error("the workspace has no directory to edit");
     const reader = layerReaders.open(location);
     const { EngineSession } = await loadEngine();
     const session = EngineSession.open(
-      layerReaders.directory(reader),
+      directory,
       engineLayerSource(layerReaders, () => reader),
     );
     engines.set(sync, { session, reader, location });
@@ -1119,8 +1121,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph",
     });
 
-    expect(applied.next?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(applied.next?.glyphs?.[0]?.layers).toEqual([]);
+    expect(applied.next?.glyphChanges?.updated.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([]);
     expect(applied.layers).toEqual([]);
 
     const snapshot = await sync.call("workspace.snapshot", undefined);
@@ -1138,7 +1140,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph Layer",
     });
 
-    expect(applied.next?.glyphs?.[0]?.layers).toEqual([
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([
       { id: layerId, sourceId: snapshot.sources[0].id },
     ]);
     expect(applied.layers).toHaveLength(1);
@@ -1236,19 +1238,19 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       intents: [createGlyphA()],
       label: "Add Glyph",
     });
-    const glyphId = created.next?.glyphs?.[0].id;
+    const glyphId = created.next?.glyphChanges?.updated[0].id;
     if (!glyphId) throw new Error("createGlyph must echo the record id");
 
     const undone = await undoWorkspace(sync);
-    expect(undone?.next?.glyphs?.map((glyph) => glyph.name)).toEqual([]);
+    expect(undone?.next?.glyphChanges).toEqual({ updated: [], removed: [glyphId] });
     expect(undone?.layers).toEqual([]);
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
       glyphs: [],
     });
 
     const redone = await redoWorkspace(sync);
-    expect(redone?.next?.glyphs?.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(redone?.next?.glyphs?.[0]?.layers).toEqual([]);
+    expect(redone?.next?.glyphChanges?.updated.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(redone?.next?.glyphChanges?.updated[0]?.layers).toEqual([]);
     expect(redone?.layers).toEqual([]);
     await expect(sync.call("workspace.snapshot", undefined)).resolves.toMatchObject({
       glyphs: [{ id: glyphId, name: "A", layers: [] }],
@@ -1325,8 +1327,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(structure?.contours[0].points.map((point) => point.id)).toEqual([p1, p2]);
     // Drawing changes no glyph record (its layers and component bases stay the
     // same), so the echo does not resend the directory.
-    expect(applied.next?.glyphs).toBeUndefined();
-    expect(created.next?.glyphs).toEqual([
+    expect(applied.next?.glyphChanges).toBeUndefined();
+    expect(created.next?.glyphChanges?.updated).toEqual([
       {
         id: glyphId,
         name: "A",
@@ -1433,11 +1435,11 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const created = await applyWorkspace(sync, {
       intents,
     });
-    expect(created.next?.glyphs?.[0]?.layers).toEqual([
+    expect(created.next?.glyphChanges?.updated[0]?.layers).toEqual([
       { id: layerId, sourceId: snapshot.sources[0].id },
     ]);
 
-    const glyphId = created.next?.glyphs?.[0]?.id;
+    const glyphId = created.next?.glyphChanges?.updated[0]?.id;
     if (!glyphId) throw new Error("createGlyph did not echo glyph id");
 
     const snapshots = await sync.call("workspace.glyphSnapshots", {

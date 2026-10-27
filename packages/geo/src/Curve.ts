@@ -28,8 +28,6 @@ import type { Point2D, Rect2D } from "./types";
 import { Rect } from "./Rect";
 import type { Bounds } from "./Bounds";
 import { Vec2 } from "./Vec2";
-import { fitCubic } from "./fitCubic";
-import { fitQuadratic } from "./fitQuadratic";
 
 // Types
 
@@ -91,9 +89,6 @@ const RECT_INTERSECTION_MAX_DEPTH = 32;
 // Curve Namespace
 
 export const Curve = {
-  fitCubic,
-  fitQuadratic,
-
   // Construction
 
   line(p0: Point2D, p1: Point2D): LineCurve {
@@ -194,23 +189,6 @@ export const Curve = {
   },
 
   /**
-   * Get axis-aligned bounding box.
-   */
-  bounds(curve: CurveType): Bounds {
-    switch (curve.type) {
-      case "line":
-        return {
-          min: Vec2.min(curve.p0, curve.p1),
-          max: Vec2.max(curve.p0, curve.p1),
-        };
-      case "quadratic":
-        return quadraticBounds(curve);
-      case "cubic":
-        return cubicBounds(curve);
-    }
-  },
-
-  /**
    * Split curve at parameter t using De Casteljau's algorithm.
    */
   splitAt(curve: CurveType, t: number): [CurveType, CurveType] {
@@ -271,8 +249,32 @@ export const Curve = {
   },
 } as const;
 
+/**
+ * The box around a curve's control points, which always contains the curve
+ * (a Bézier lies in its control points' hull): enough to cull pieces while
+ * subdividing. Tight bounds are shift-font's, through the contour.
+ */
+function hullBounds(curve: CurveType): Bounds {
+  const points = controlPoints(curve);
+  return {
+    min: points.reduce((min, point) => Vec2.min(min, point)),
+    max: points.reduce((max, point) => Vec2.max(max, point)),
+  };
+}
+
+function controlPoints(curve: CurveType): Point2D[] {
+  switch (curve.type) {
+    case "line":
+      return [curve.p0, curve.p1];
+    case "quadratic":
+      return [curve.p0, curve.c, curve.p1];
+    case "cubic":
+      return [curve.p0, curve.c0, curve.c1, curve.p1];
+  }
+}
+
 function curvePieceIntersectsRect(curve: CurveType, rect: Rect2D, depth: number): boolean {
-  const bounds = Curve.bounds(curve);
+  const bounds = hullBounds(curve);
   const clear =
     bounds.max.x < rect.left ||
     bounds.min.x > rect.right ||
@@ -331,35 +333,6 @@ function quadraticClosestPoint(curve: QuadraticCurve, point: Point2D): ClosestPo
   bestT = newtonRaphsonQuadratic(curve, point, bestT);
   const closest = quadraticPointAt(curve, bestT);
   return { t: bestT, point: closest, distance: Vec2.dist(point, closest) };
-}
-
-function quadraticBounds(curve: QuadraticCurve): Bounds {
-  let minX = Math.min(curve.p0.x, curve.p1.x);
-  let maxX = Math.max(curve.p0.x, curve.p1.x);
-  let minY = Math.min(curve.p0.y, curve.p1.y);
-  let maxY = Math.max(curve.p0.y, curve.p1.y);
-
-  const denomX = curve.p0.x - 2 * curve.c.x + curve.p1.x;
-  if (Math.abs(denomX) > 1e-10) {
-    const tx = (curve.p0.x - curve.c.x) / denomX;
-    if (tx > 0 && tx < 1) {
-      const x = quadraticPointAt(curve, tx).x;
-      minX = Math.min(minX, x);
-      maxX = Math.max(maxX, x);
-    }
-  }
-
-  const denomY = curve.p0.y - 2 * curve.c.y + curve.p1.y;
-  if (Math.abs(denomY) > 1e-10) {
-    const ty = (curve.p0.y - curve.c.y) / denomY;
-    if (ty > 0 && ty < 1) {
-      const y = quadraticPointAt(curve, ty).y;
-      minY = Math.min(minY, y);
-      maxY = Math.max(maxY, y);
-    }
-  }
-
-  return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
 }
 
 function quadraticSplitAt(curve: QuadraticCurve, t: number): [QuadraticCurve, QuadraticCurve] {
@@ -477,57 +450,6 @@ function newtonRaphsonCubic(curve: CubicCurve, point: Point2D, initialT: number)
   }
 
   return t;
-}
-
-function cubicBounds(curve: CubicCurve): Bounds {
-  let minX = Math.min(curve.p0.x, curve.p1.x);
-  let maxX = Math.max(curve.p0.x, curve.p1.x);
-  let minY = Math.min(curve.p0.y, curve.p1.y);
-  let maxY = Math.max(curve.p0.y, curve.p1.y);
-
-  const extremaX = findCubicExtrema(curve.p0.x, curve.c0.x, curve.c1.x, curve.p1.x);
-  const extremaY = findCubicExtrema(curve.p0.y, curve.c0.y, curve.c1.y, curve.p1.y);
-
-  for (const t of extremaX) {
-    if (t > 0 && t < 1) {
-      const x = cubicPointAt(curve, t).x;
-      minX = Math.min(minX, x);
-      maxX = Math.max(maxX, x);
-    }
-  }
-
-  for (const t of extremaY) {
-    if (t > 0 && t < 1) {
-      const y = cubicPointAt(curve, t).y;
-      minY = Math.min(minY, y);
-      maxY = Math.max(maxY, y);
-    }
-  }
-
-  return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
-}
-
-function findCubicExtrema(p0: number, c0: number, c1: number, p1: number): number[] {
-  const a = -3 * p0 + 9 * c0 - 9 * c1 + 3 * p1;
-  const b = 6 * p0 - 12 * c0 + 6 * c1;
-  const c = -3 * p0 + 3 * c0;
-
-  const roots: number[] = [];
-
-  if (Math.abs(a) < 1e-10) {
-    if (Math.abs(b) > 1e-10) {
-      roots.push(-c / b);
-    }
-  } else {
-    const discriminant = b * b - 4 * a * c;
-    if (discriminant >= 0) {
-      const sqrtD = Math.sqrt(discriminant);
-      roots.push((-b + sqrtD) / (2 * a));
-      roots.push((-b - sqrtD) / (2 * a));
-    }
-  }
-
-  return roots;
 }
 
 function cubicSplitAt(curve: CubicCurve, t: number): [CubicCurve, CubicCurve] {

@@ -166,7 +166,7 @@ fn mappings(font: &Font) -> impl Iterator<Item = Finding> + '_ {
         let mut points = mapping
             .points()
             .iter()
-            .filter_map(|point| Some((point.input.get(axis_id)?, point.output.get(axis_id)?)))
+            .filter_map(|point| Some((point.input.get(*axis_id)?, point.output.get(*axis_id)?)))
             .collect::<Vec<_>>();
         points.sort_by(|left, right| left.0.total_cmp(&right.0));
 
@@ -176,7 +176,7 @@ fn mappings(font: &Font) -> impl Iterator<Item = Finding> + '_ {
             return None;
         };
 
-        let tag = font.axis(axis_id).map_or("?", |axis| axis.tag());
+        let tag = font.axis(*axis_id).map_or("?", |axis| axis.tag());
         Some(Finding::font(
             Check::MappingNotMonotonic,
             format!(

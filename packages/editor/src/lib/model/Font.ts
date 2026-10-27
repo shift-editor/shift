@@ -56,14 +56,21 @@ import {
   type Effect,
   type Signal,
 } from "../signals/signal";
-import type { FontOptions, FontRecordIndex, WorkspaceEditCoordinator } from "../../types/font";
+import type {
+  FontEngine,
+  FontOptions,
+  FontRecordIndex,
+  KerningPlace,
+  WorkspaceEditCoordinator,
+} from "../../types/font";
+import type { InterpolatedMetrics } from "../wasm/engine";
+import { locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import type { Kerning, KerningPairPosition } from "./Kerning";
+import { setKerningValuesIntent, type Kerning, type KerningPairPosition } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
-import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
   locationFromDesignAxisLocation,
@@ -234,7 +241,7 @@ export class Font {
   readonly #metricsCell: Signal<FontMetrics>;
   readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
 
-  readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
+  readonly #sourceMetricsRevisionCell: Signal<number>;
   readonly #kerningCell: Signal<Kerning>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
@@ -285,16 +292,8 @@ export class Font {
     this.#metricsCell = computed(() => fontCell.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#metricDefinitionsCell = computed(() => fontCell.value?.metricDefinitions ?? []);
 
-    this.#sourceMetricsInterpolationCell = computed(() => {
-      const font = fontCell.value;
-      return SourceMetricsInterpolation.from(
-        font?.sourceMetricsInterpolation ?? null,
-        font?.metricDefinitions ?? [],
-        font?.metrics ?? DEFAULT_FONT_METRICS,
-      );
-    });
-
-    this.#kerningCell = store.kerning.cell;
+    this.#sourceMetricsRevisionCell = store.engine?.sourceMetricsRevisionCell ?? NO_REVISIONS;
+    this.#kerningCell = store.kerningCell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
@@ -380,12 +379,15 @@ export class Font {
     return this.#metricDefinitionsCell;
   }
 
-  /** Reactive decoder for the Rust-built source-metric interpolation model. */
-  get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null> {
-    return this.#sourceMetricsInterpolationCell;
+  /**
+   * Changes whenever {@link metricsAtLocation} may answer differently between
+   * sources; track it with the location and the sources it reads.
+   */
+  get sourceMetricsRevisionCell(): Signal<number> {
+    return this.#sourceMetricsRevisionCell;
   }
 
-  /** Reactive kerning groups and per-source pair values. */
+  /** Reactive kerning groups and pair reads; a new value whenever kerning may have changed. */
   get kerningCell(): Signal<Kerning> {
     return this.#kerningCell;
   }
@@ -867,16 +869,27 @@ export class Font {
    * Finds the next unused glyph name for an auto-incrementing base name.
    *
    * @param name - Preferred base name. Blank input falls back to `newGlyph`.
-   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on.
+   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on, as the window's engine names it.
+   * @throws When the window's engine is not open.
    */
   nextAvailableGlyphName(name: GlyphName): GlyphName {
-    const baseName = (name.trim() || "newGlyph") as GlyphName;
-    if (!this.recordForName(baseName)) return baseName;
+    return this.#requireEngine().nextGlyphName(name);
+  }
 
-    for (let index = 1; ; index += 1) {
-      const candidate = `${baseName}.${index}` as GlyphName;
-      if (!this.recordForName(candidate)) return candidate;
-    }
+  /**
+   * The name a new anchor added to every one of `layerIds` takes, as the
+   * window's engine names it.
+   *
+   * @returns `new`, or `new.1`, `new.2`, … when taken in any of the layers.
+   */
+  newAnchorName(layerIds: readonly LayerId[]): string {
+    return this.#requireEngine().newAnchorName(layerIds);
+  }
+
+  #requireEngine(): FontEngine {
+    const engine = this.#store.engine;
+    if (!engine) throw new Error("naming a new glyph or anchor needs the window's editing engine");
+    return engine;
   }
 
   /**
@@ -1624,10 +1637,10 @@ export class Font {
    *
    * @remarks
    * Exact source locations return their authored values. Intermediate
-   * locations evaluate the Rust-built variation model used by the glyph
-   * interpolation path. Sparse optional technical fields remain undefined
-   * between sources; the model includes them only when every master authors a
-   * value.
+   * locations read the window's engine, which interpolates the masters with
+   * the variation model export uses. Sparse optional technical fields remain
+   * undefined between sources; the model includes them only when every master
+   * authors a value.
    *
    * @param location - External location displayed by editor controls.
    * @returns Resolved standard and technical metrics in font units.
@@ -1643,22 +1656,17 @@ export class Font {
     });
     if (exactSource) return this.#metricsForSource(exactSource);
 
-    return (
-      this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, axes) ??
-      this.defaultSourceMetrics
+    const interpolated = this.#store.engine?.sourceMetricsAt(
+      Array.from(locationValues(axes, designLocation)),
     );
+    return (interpolated && this.#interpolatedMetrics(interpolated)) ?? this.defaultSourceMetrics;
   }
 
   /**
    * Resolves the kerning between `first` followed by `second`.
    *
    * @remarks
-   * A variable font blends the sources kerning is authored at, evaluated at
-   * the active source's location when one is being edited and at `location`
-   * otherwise, so every location shows what the compiled font kerns there.
-   * A source without pairs of its own, such as a sparse intermediate master,
-   * therefore shows the blended value. A static font reads the active or
-   * default source.
+   * As {@link kerningRun} reads it, for one pair.
    *
    * @param location - External location displayed by editor controls.
    * @param sourceId - Source being edited, which takes precedence over `location`.
@@ -1670,37 +1678,49 @@ export class Font {
     location: ExternalAxisLocation,
     sourceId: SourceId | null,
   ): number {
-    const kerning = this.#kerningCell.peek();
-    // An authoring source reads its own values, including ones not echoed yet,
-    // whose source the Rust-built basis may not cover until the echo arrives.
-    if (sourceId && kerning.authors(sourceId)) {
-      return kerning.valueAtSource(sourceId, first, second);
-    }
-    const { designLocation, staticSourceId, axes } = this.#peekDesignspace((designspace) => {
-      const source = sourceId ? designspace.source(sourceId) : null;
-      const staticSource = source ?? designspace.sourceAt(designspace.defaultLocation());
-      return {
-        designLocation: source
-          ? designAxisLocationFromLocation(source.location)
-          : designspace.toDesign(location),
-        staticSourceId: staticSource?.id ?? null,
-        axes: designspace.axes,
-      };
-    });
-
-    const interpolated = kerning.valueAtLocation(designLocation, axes, first, second);
-    if (interpolated !== null) return interpolated;
-    return staticSourceId ? kerning.valueAtSource(staticSourceId, first, second) : 0;
+    return this.kerningRun([first, second], location, sourceId)[0] ?? 0;
   }
 
   /**
-   * Opens a kerning edit: previews show at once, and committing submits one
-   * undoable change whose values stay visible until the workspace confirms them.
+   * Resolves the kerning of every glyph pair in `pairs`, in one engine call.
    *
-   * @throws {Error} When another kerning edit is open, or editing is not wired.
+   * @remarks
+   * The window's engine reads it, so it is what the compiled font kerns. A
+   * variable font blends the sources kerning is authored at, evaluated at the
+   * edited source's location when one is being edited and at `location`
+   * otherwise; a source that authors pairs of its own reads them as they are.
+   * A source without pairs of its own, such as a sparse intermediate master,
+   * therefore shows the blended value. A static font reads the edited or
+   * default source.
+   *
+   * @param pairs - Each pair's first glyph then its second.
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns One value per pair, in font units added after its first glyph's advance.
+   */
+  kerningRun(
+    pairs: readonly GlyphId[],
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): readonly number[] {
+    const place = this.#peekDesignspace((designspace): KerningPlace => {
+      if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
+      return {
+        kind: "location",
+        location: Array.from(locationValues(designspace.axes, designspace.toDesign(location))),
+      };
+    });
+    return this.#kerningCell.peek().between(pairs, place);
+  }
+
+  /**
+   * Opens a kerning edit: each preview applies in the window's engine at
+   * once, and committing persists one undoable change.
+   *
+   * @throws {Error} When another edit is open, or editing is not wired.
    */
   beginKerningEdit(): KerningEdit {
-    return new KerningEdit(this.#store.kerning, this.editCoordinator);
+    return new KerningEdit(this.editCoordinator);
   }
 
   /**
@@ -1710,9 +1730,9 @@ export class Font {
    * @param label - Undo label.
    */
   setKerningValues(edits: readonly KerningValueEdit[], label: string): void {
-    const edit = this.beginKerningEdit();
-    edit.preview(edits);
-    edit.commit(label);
+    if (edits.length === 0) return;
+    const coordinator = this.editCoordinator;
+    coordinator.transaction(label, () => coordinator.push(setKerningValuesIntent(edits)));
   }
 
   /**
@@ -1772,6 +1792,36 @@ export class Font {
     );
   }
 
+  /** The engine's interpolated metrics as source metrics; null when they no longer match the definitions. */
+  #interpolatedMetrics(interpolated: InterpolatedMetrics): SourceMetrics | null {
+    const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
+    const definitions = this.#metricDefinitionsCell.peek();
+    if (interpolated.metrics.length !== definitions.length) return null;
+
+    const metricValues = definitions.map((definition, index) => ({
+      metricId: definition.id,
+      position: interpolated.metrics[index]!.position,
+      overshoot: interpolated.metrics[index]!.overshoot,
+    }));
+    const position = (kind: MetricKind): number | undefined => {
+      const index = definitions.findIndex((definition) => definition.kind === kind);
+      return index < 0 ? undefined : metricValues[index]!.position;
+    };
+    return {
+      unitsPerEm,
+      metricValues,
+      ascender: position("ascender") ?? unitsPerEm * 0.8,
+      descender: position("descender") ?? unitsPerEm * -0.2,
+      baseline: position("baseline") ?? 0,
+      capHeight: position("capHeight"),
+      xHeight: position("xHeight"),
+      italicAngle: interpolated.italicAngle ?? undefined,
+      lineGap: interpolated.lineGap ?? undefined,
+      underlinePosition: interpolated.underlinePosition ?? undefined,
+      underlineThickness: interpolated.underlineThickness ?? undefined,
+    };
+  }
+
   #metricsForSource(source: Source | null): SourceMetrics {
     const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
     const definitions = this.#metricDefinitionsCell.peek();
@@ -1820,6 +1870,9 @@ export class Font {
     return untracked(() => read(this.#designspace));
   }
 }
+
+/** Never changes: the revision of reads a font without an engine answers. */
+const NO_REVISIONS: Signal<number> = computed(() => 0);
 
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */
 function memberIntent(

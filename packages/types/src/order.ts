@@ -19,6 +19,28 @@ export const descending: Comparator<number> = (a, b) => b - a;
 /** Strings in locale order. */
 export const alphabetical: Comparator<string> = (a, b) => a.localeCompare(b);
 
+/**
+ * Strings by Unicode code point, the order Rust gives `str`. Unlike `<`,
+ * which compares UTF-16 code units, it sorts a character beyond U+FFFF after
+ * U+E000–U+FFFF.
+ */
+export const byCodePoint: Comparator<string> = (a, b) => {
+  const length = Math.min(a.length, b.length);
+  for (let index = 0; index < length; index++) {
+    const left = a.charCodeAt(index);
+    const right = b.charCodeAt(index);
+    if (left !== right) return codePointRank(left) - codePointRank(right);
+  }
+  return a.length - b.length;
+};
+
+/** A UTF-16 code unit's place in code point order: surrogates after U+E000–U+FFFF. */
+function codePointRank(unit: number): number {
+  if (unit >= 0xd800 && unit <= 0xdfff) return unit + 0x2000;
+  if (unit >= 0xe000) return unit - 0x800;
+  return unit;
+}
+
 /** Values with a `name`, in locale order of the name. */
 export const byName: Comparator<{ readonly name: string }> = (a, b) => a.name.localeCompare(b.name);
 

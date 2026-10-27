@@ -20,7 +20,7 @@ pub(super) fn check(font: &Font) -> Vec<Finding> {
 fn used_pairs(font: &Font) -> BTreeMap<&KerningPair, usize> {
     let mut used = BTreeMap::new();
     for source in font.masters() {
-        let Some(kerning) = font.kerning().source(&source.id()) else {
+        let Some(kerning) = font.kerning().source(source.id()) else {
             continue;
         };
         for (pair, _) in kerning.pairs() {
@@ -39,7 +39,7 @@ fn empty_groups<'a>(
         .all_groups()
         .filter(|(_, group)| group.members.is_empty());
     empty.filter_map(|(group_id, group)| {
-        let side = KerningSide::Group(group_id.clone());
+        let side = KerningSide::Group(*group_id);
         let pairs = used
             .keys()
             .filter(|pair| pair.first == side || pair.second == side)
@@ -62,9 +62,9 @@ fn empty_groups<'a>(
 fn unresolved(font: &Font, used: &BTreeMap<&KerningPair, usize>) -> Option<Finding> {
     let kerning = font.kerning();
     let resolves = |side: &KerningSide, position: KerningPosition| match side {
-        KerningSide::Glyph(glyph_id) => font.glyph(glyph_id).is_some(),
+        KerningSide::Glyph(glyph_id) => font.glyph(*glyph_id).is_some(),
         KerningSide::Group(group_id) => kerning
-            .group(group_id)
+            .group(*group_id)
             .is_some_and(|group| group.position == position),
     };
 
@@ -98,9 +98,9 @@ fn unresolved(font: &Font, used: &BTreeMap<&KerningPair, usize>) -> Option<Findi
 fn label(font: &Font, pair: &KerningPair) -> String {
     let side = |side: &KerningSide| match side {
         KerningSide::Glyph(glyph_id) => font
-            .glyph(glyph_id)
+            .glyph(*glyph_id)
             .map_or_else(|| glyph_id.to_string(), |glyph| glyph.name().to_string()),
-        KerningSide::Group(group_id) => font.kerning().group(group_id).map_or_else(
+        KerningSide::Group(group_id) => font.kerning().group(*group_id).map_or_else(
             || format!("@{group_id}"),
             |group| format!("@{}", group.name),
         ),

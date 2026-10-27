@@ -5,7 +5,6 @@ use shift_font as font;
 
 use crate::StoreError;
 use crate::connection::configure_common;
-use crate::font_state::{FontRead, load_font_from_conn};
 use crate::layer::{
     dependent_glyph_ids_for_layers_from_conn, load_glyph_layers_from_conn,
     referenced_glyph_closure_from_conn,
@@ -56,16 +55,6 @@ impl StoreReader {
         // After the temporary views exist: query_only also refuses TEMP DDL.
         conn.pragma_update(None, "query_only", "ON")?;
         Ok(Self { conn })
-    }
-
-    /// The font's metadata and its glyph and layer directory, with every layer
-    /// a placeholder, as [`crate::ShiftStore::load_font_directory`] loads it.
-    ///
-    /// # Errors
-    ///
-    /// As [`crate::ShiftStore::load_font_directory`].
-    pub fn load_font_directory(&self) -> Result<font::Font, StoreError> {
-        self.read(|conn| load_font_from_conn(conn, FontRead::Directory))
     }
 
     /// The content of `layer_ids`, validated against their directory rows as
@@ -144,7 +133,7 @@ mod tests {
         layers.sort_by_key(font::GlyphLayer::id);
         let mut expected: Vec<font::GlyphLayer> = layer_ids
             .iter()
-            .map(|layer_id| font.layer(layer_id).unwrap().clone())
+            .map(|layer_id| font.layer(*layer_id).unwrap().clone())
             .collect();
         expected.sort_by_key(font::GlyphLayer::id);
         assert_eq!(layers, expected);

@@ -2,14 +2,13 @@
 
 <!-- reviewed: 2026-08-24 review-every: 90d -->
 
-Pure geometry transformation system for rotating, scaling, reflecting, aligning, and distributing selected points.
+Matrix builders and pure point transforms for rotating, scaling and reflecting, used by previews. Committed rotate, scale, reflect, align and distribute edits run in shift-font (`crates/shift-font/src/point_arrange.rs`).
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** All functions in `Transform` are pure -- they return new arrays and never mutate input points. Glyph writes happen through `GlyphLayer` methods.
 - **Architecture Invariant:** Every geometric transform goes through `Transform.applyMatrix` internally. The three high-level functions (`rotatePoints`, `scalePoints`, `reflectPoints`) are thin wrappers that build a matrix and delegate. Custom transforms should follow the same pattern.
 - **Architecture Invariant: CRITICAL:** The composite matrix in `applyMatrix` must be assembled in the order `Translate(+origin) * Matrix * Translate(-origin)` (right-to-left application). Reversing the order silently produces wrong results around non-zero origins.
-- **Architecture Invariant:** `Alignment.distributePoints` requires at least 3 points. With fewer, it returns the input unchanged. The outermost points are always pinned; only interior points move.
 - **Architecture Invariant:** Matrix math (`Mat`, `MatModel`, `Bounds`) comes from `@shift/geo`, not from any local primitives file. The old `primitives/Mat.ts` no longer exists.
 
 ## Codemap
@@ -17,7 +16,6 @@ Pure geometry transformation system for rotating, scaling, reflecting, aligning,
 ```
 transform/
   Transform.ts        — Pure transform functions (rotate, scale, reflect, applyMatrix)
-  Alignment.ts        — Point alignment (edge/center) and distribution
   anchor.ts           — Maps a 9-position anchor grid to a concrete Point2D on bounds
   zoomFromWheel.ts    — Converts wheel deltaY into a zoom multiplier
   types.ts            — Re-exports centralized types from ../../../types/transform
@@ -46,13 +44,12 @@ The `matrices` namespace exposes the raw `Mat` builders (`Mat.Rotate`, `Mat.Scal
 ### Glyph layer writes
 
 `GlyphLayer` owns the mutating transform API: `rotate`, `scale`, `reflect`,
-`moveSelectionTo`, `align`, and `distribute`. Those methods resolve point
-positions, call the pure transform/alignment helpers, and commit one sparse
-position patch through the workspace ledger.
-
-### Alignment
-
-`Alignment.alignPoints` moves every point to one edge or center of the selection's own bounding box (computed via `Bounds.fromPoints`). `Alignment.distributePoints` sorts points along an axis and spaces the interior ones equally between the two extremes.
+`moveSelectionTo`, `align`, and `distribute`. `rotate`, `scale` and `reflect`
+build one matrix about the origin (`Transform.about`) and send it as one
+`transformPoints` intent; `align` and `distribute` send `alignPoints` and
+`distributePoints`. shift-font applies them (`point_arrange.rs`): alignment
+uses the box around the points' own positions, and distribution needs three
+points, keeps the outermost two and keeps ties in the order given.
 
 ### Selection bounds
 
@@ -72,14 +69,13 @@ Segment-aware selection bounds are not part of this module. `Contour.selectionBo
 
 1. Add a pure function to `Transform` in `Transform.ts` that builds a matrix and calls `applyMatrix`.
 2. Add or update the corresponding `GlyphLayer` method if this transform should mutate glyph geometry.
-3. Add pure tests in `Transform.test.ts`; add layer behavior tests alongside the existing suites in `GlyphLayerGeometry.test.ts` (it currently covers structural and metric edits, not transforms).
+3. Add pure tests in `Transform.test.ts`; add layer behavior tests alongside the existing suites in `GlyphLayerGeometry.test.ts` (it covers structural and metric edits and point arrangement).
 
 ### Add a new alignment mode
 
-1. Add the new literal to `AlignmentType` in `packages/editor/src/types/transform.ts`.
-2. Add a `case` branch in `Alignment.alignPoints`.
-3. Update `GlyphLayer.align` if it needs special bounds logic.
-4. Add tests in `Alignment.test.ts`; layer-level tests go alongside the existing suites in `GlyphLayerGeometry.test.ts`.
+1. Add the variant to `PointAlignment` in `crates/shift-font/src/point_arrange.rs` and its branch in `GlyphLayer::align_points`, with a Rust test.
+2. Add the literal to `AlignPointsIntent.alignment` in `crates/shift-wire/src/intents.rs` and to `AlignmentType` in `packages/editor/src/types/transform.ts`.
+3. Add a layer-level test alongside the existing suites in `GlyphLayerGeometry.test.ts`.
 
 ### Use a custom compound transform
 
@@ -100,7 +96,6 @@ const result = Transform.applyMatrix(points, matrix, origin);
 
 - `reflectPoints("horizontal")` flips Y (mirrors across the X axis), not X. The naming follows "flip across the horizontal center line" convention, which inverts the vertical coordinate.
 - `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must supply the pivot themselves — `ScaleSection` resolves its selected scale anchor with `anchorToPoint`, `TransformSection` uses the selection center for rotation and reflection, and the select tool's `BoundingBox` uses the scene rect's center (its local `rectCenter` helper).
-- `distributePoints` with fewer than 3 points is a no-op -- no error is thrown, the input is returned unchanged.
 - There is no `SelectionBounds.ts` here anymore. Segment-aware bounds moved to `Contour.selectionBounds` in `@shift/glyph-state` (only fully selected segments contribute curve bounds there), but nothing in production calls it — the visible selection box is `Editor.selectionBounds()`, which unions full per-object bounds.
 
 ## Verification
@@ -108,7 +103,6 @@ const result = Transform.applyMatrix(points, matrix, origin);
 ```bash
 # Focused transform tests
 pnpm test:desktop src/renderer/src/lib/transform/Transform.test.ts
-pnpm test:desktop src/renderer/src/lib/transform/Alignment.test.ts
 pnpm test:desktop src/renderer/src/lib/transform/zoomFromWheel.test.ts
 
 # Layer integration tests

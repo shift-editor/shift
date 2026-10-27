@@ -50,7 +50,10 @@ describe("the window's engine releases its store", () => {
         host.close(reader);
       },
     };
-    engine = new WindowEngine(layers, () => Promise.resolve({ kind: "working", storePath }));
+    engine = new WindowEngine(layers, {
+      storeLocation: () => Promise.resolve({ kind: "working", storePath }),
+      directory: () => Promise.resolve(bridge.encodedDirectory()),
+    });
     await engine.reopen();
   });
 

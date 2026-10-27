@@ -27,7 +27,7 @@ fn composite_font() -> Font {
         for source_id in &sources {
             let mut content = GlyphLayer::with_width(
                 LayerId::from_raw(format!("{name}@{source_id}")),
-                source_id.clone(),
+                *source_id,
                 500.0,
             );
             layer(&mut content);
@@ -95,7 +95,7 @@ impl LayerSource for Persisted {
     fn load_layers(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphLayer>, Infallible> {
         Ok(layer_ids
             .iter()
-            .filter_map(|layer_id| self.0.layer(layer_id).cloned())
+            .filter_map(|layer_id| self.0.layer(*layer_id).cloned())
             .collect())
     }
 
@@ -103,10 +103,10 @@ impl LayerSource for Persisted {
         let mut pending = roots.to_vec();
         let mut closure = BTreeSet::new();
         while let Some(glyph_id) = pending.pop() {
-            if !closure.insert(glyph_id.clone()) {
+            if !closure.insert(glyph_id) {
                 continue;
             }
-            if let Some(glyph) = self.0.glyph(&glyph_id) {
+            if let Some(glyph) = self.0.glyph(glyph_id) {
                 pending.extend(glyph.layers().values().flat_map(|layer| bases(layer)));
             }
         }
@@ -116,7 +116,7 @@ impl LayerSource for Persisted {
     fn dependents(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphId>, Infallible> {
         let targets: BTreeSet<GlyphId> = layer_ids
             .iter()
-            .filter_map(|layer_id| self.0.glyph_id_by_layer(layer_id))
+            .filter_map(|layer_id| self.0.glyph_id_by_layer(*layer_id))
             .collect();
         Ok(self
             .0
@@ -194,7 +194,7 @@ fn nth<T: Clone>(items: &[T], index: usize) -> T {
 fn intent(font: &Font, glyphs: &[GlyphId], step: &Step, number: usize) -> Option<FontIntent> {
     let layer_of = |glyph: &GlyphId, layer: usize| -> Option<&GlyphLayer> {
         let layers: Vec<&GlyphLayer> = font
-            .glyph(glyph)?
+            .glyph(*glyph)?
             .layers()
             .values()
             .map(AsRef::as_ref)
@@ -355,15 +355,15 @@ fn components_not_persisted_yet_still_load_their_bases() {
 
     // The renderer adds a component the store has not seen yet.
     let add = FontIntentSet::from(FontIntent::from(AddComponent {
-        layer_id: layer_id.clone(),
+        layer_id,
         component_id: ComponentId::from_raw("unpersisted"),
-        base_glyph_id: base.clone(),
+        base_glyph_id: base,
     }));
     session.apply(&mut persisted, &add).unwrap();
     session.evict(std::slice::from_ref(&base)).unwrap();
 
     let component = font
-        .layer(&layer_id)
+        .layer(layer_id)
         .unwrap()
         .components_iter()
         .next()
@@ -375,11 +375,11 @@ fn components_not_persisted_yet_still_load_their_bases() {
     }));
     session.load_reads(&mut persisted, &edit).unwrap();
 
-    let base_layers: Vec<LayerId> = font.glyph(&base).unwrap().layer_ids().collect();
+    let base_layers: Vec<LayerId> = font.glyph(base).unwrap().layer_ids().collect();
     assert!(
         base_layers
             .iter()
-            .all(|layer_id| !session.residency().is_unloaded(layer_id))
+            .all(|layer_id| !session.residency().is_unloaded(*layer_id))
     );
 }
 
@@ -390,7 +390,7 @@ fn a_preview_shows_the_edit_and_keeps_the_font_as_it_was() {
     let mut session = EngineSession::open_directory(placeholders(&font));
     let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
     let add = FontIntentSet::from(FontIntent::from(AddComponent {
-        layer_id: layer_id.clone(),
+        layer_id,
         component_id: ComponentId::from_raw("previewed"),
         base_glyph_id: GlyphId::from_raw("base1"),
     }));
@@ -403,9 +403,27 @@ fn a_preview_shows_the_edit_and_keeps_the_font_as_it_was() {
         .find(|touched| touched.layer.id() == layer_id)
         .unwrap();
     let components = |layer: &GlyphLayer| layer.components_iter().count();
-    let kept = session.font().layer(&layer_id).unwrap();
+    let kept = session.font().layer(layer_id).unwrap();
     assert_eq!(components(&shown.layer), components(kept) + 1);
-    assert_eq!(kept, font.layer(&layer_id).unwrap());
+    assert_eq!(kept, font.layer(layer_id).unwrap());
+}
+
+#[test]
+fn a_partly_loaded_session_hands_out_the_directory_the_store_would() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    session
+        .load_glyphs(&mut persisted, &[GlyphId::from_raw("composite0")])
+        .unwrap();
+
+    let directory = session.directory().unwrap();
+
+    assert!(directory == placeholders(&font));
+    assert!(
+        session.font() != &directory,
+        "the session keeps what it loaded"
+    );
 }
 
 #[test]
@@ -414,7 +432,7 @@ fn a_replayed_change_set_leaves_the_font_as_the_session_that_made_it() {
     let mut persisted = Persisted(font.clone());
     let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
     let add = FontIntentSet::from(FontIntent::from(AddComponent {
-        layer_id: layer_id.clone(),
+        layer_id,
         component_id: ComponentId::from_raw("replayed"),
         base_glyph_id: GlyphId::from_raw("base1"),
     }));
@@ -426,16 +444,13 @@ fn a_replayed_change_set_leaves_the_font_as_the_session_that_made_it() {
     window
         .replay(&mut persisted, applied.changes.clone())
         .unwrap();
-    assert_eq!(
-        window.font().layer(&layer_id),
-        native.font().layer(&layer_id)
-    );
+    assert_eq!(window.font().layer(layer_id), native.font().layer(layer_id));
 
     // Undo replays the inverse, back to the font as it was.
     window
         .replay(&mut persisted, applied.changes.inverted())
         .unwrap();
-    assert_eq!(window.font().layer(&layer_id), font.layer(&layer_id));
+    assert_eq!(window.font().layer(layer_id), font.layer(layer_id));
 }
 
 #[test]
@@ -451,7 +466,7 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
     history.begin();
     for (index, base) in ["base1", "base2"].into_iter().enumerate() {
         let add = FontIntentSet::from(FontIntent::from(AddComponent {
-            layer_id: layer_id.clone(),
+            layer_id,
             component_id: ComponentId::from_raw(format!("added{index}")),
             base_glyph_id: GlyphId::from_raw(base),
         }));
@@ -464,11 +479,8 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
 
     // Native persists the one change set the window sends.
     native.replay(&mut persisted, edit).unwrap();
-    assert_eq!(
-        native.font().layer(&layer_id),
-        window.font().layer(&layer_id)
-    );
-    let edited = window.font().layer(&layer_id).cloned();
+    assert_eq!(native.font().layer(layer_id), window.font().layer(layer_id));
+    let edited = window.font().layer(layer_id).cloned();
 
     // Undo in the window, persisted the same way.
     let undone = history
@@ -476,16 +488,16 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
         .unwrap()
         .expect("one edit to undo");
     native.replay(&mut persisted, undone.changes).unwrap();
-    assert_eq!(window.font().layer(&layer_id), font.layer(&layer_id));
-    assert_eq!(native.font().layer(&layer_id), font.layer(&layer_id));
+    assert_eq!(window.font().layer(layer_id), font.layer(layer_id));
+    assert_eq!(native.font().layer(layer_id), font.layer(layer_id));
 
     let redone = history
         .redo(&mut window, &mut persisted)
         .unwrap()
         .expect("one edit to redo");
     native.replay(&mut persisted, redone.changes).unwrap();
-    assert_eq!(window.font().layer(&layer_id).cloned(), edited);
-    assert_eq!(native.font().layer(&layer_id).cloned(), edited);
+    assert_eq!(window.font().layer(layer_id).cloned(), edited);
+    assert_eq!(native.font().layer(layer_id).cloned(), edited);
 }
 
 #[test]
@@ -498,7 +510,7 @@ fn the_history_knows_when_undo_and_redo_reach_the_saved_font() {
     let edit = |session: &mut EngineSession, history: &mut EditHistory, name: &str| {
         history.begin();
         let add = FontIntentSet::from(FontIntent::from(AddComponent {
-            layer_id: layer_id.clone(),
+            layer_id,
             component_id: ComponentId::from_raw(name),
             base_glyph_id: GlyphId::from_raw("base1"),
         }));
