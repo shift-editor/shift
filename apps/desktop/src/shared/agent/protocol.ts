@@ -7,19 +7,24 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  KerningAtInput,
   KerningGroupSummary,
+  KerningMasterValue,
   KerningPairPage,
   KerningPairQuery,
   LayerAppearance,
   LayerOverlays,
+  LayerSelector,
   LayerSvg,
   ResolvedGlyphs,
   ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
+  ShiftReadInput,
+  SourceSelector,
 } from "@shift/runtime";
-import type { GlyphId, KerningPosition, LayerId, SourceId } from "@shift/types";
+import type { GlyphId, KerningPosition } from "@shift/types";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -54,7 +59,7 @@ export type AgentCallMap = {
     request: {
       limit?: number;
       cursor?: string;
-      sourceId?: SourceId;
+      source?: SourceSelector;
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<GlyphPage>;
@@ -77,7 +82,7 @@ export type AgentCallMap = {
   };
   "kerning.pairs": {
     request: {
-      sourceId: SourceId;
+      source?: SourceSelector;
       glyph?: string;
       limit?: number;
       cursor?: string;
@@ -88,24 +93,27 @@ export type AgentCallMap = {
   "kerning.resolve": {
     request: {
       pairs: KerningPairQuery[];
-      sourceId?: SourceId;
-      // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use sourceId or the default location"
+      source?: SourceSelector;
+      // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use source or the default location"
       location?: AxisCoordinate[];
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<ResolvedKerningPairs>;
   };
+  "kerning.at": {
+    request: ShiftReadInput<KerningAtInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<KerningMasterValue>;
+  };
   "layers.get": {
-    request: { layerId: LayerId; ifFontRevision?: FontRevision };
+    request: LayerSelector & { ifFontRevision?: FontRevision };
     response: ShiftObservation<AuthoredLayer>;
   };
   "layers.resolve": {
-    request: { layerId: LayerId; ifFontRevision?: FontRevision };
+    request: LayerSelector & { ifFontRevision?: FontRevision };
     response: ShiftObservation<ResolvedLayer>;
   };
   "layers.render": {
-    request: {
-      layerId: LayerId;
+    request: LayerSelector & {
       overlays?: LayerOverlays;
       appearance?: LayerAppearance;
       ifFontRevision?: FontRevision;

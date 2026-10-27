@@ -51,27 +51,27 @@ export class AgentBridge {
           this.#observe(ifFontRevision, () => this.#reader.getFont()),
         "locations.resolve": ({ location, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.resolveLocation(location)),
-        "glyphs.list": ({ limit, cursor, sourceId, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () => this.#reader.listGlyphs({ limit, cursor, sourceId })),
+        "glyphs.list": ({ ifFontRevision, ...input }) =>
+          this.#observe(ifFontRevision, () => this.#reader.listGlyphs(input)),
         "glyphs.get": ({ selector, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.getGlyph(selector)),
         "glyphs.resolve": ({ glyphIds, location, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.resolveGlyphs(glyphIds, location)),
         "kerning.groups": ({ position, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#kerning.groups(position)),
-        "kerning.pairs": ({ sourceId, glyph, limit, cursor, ifFontRevision }) =>
+        "kerning.pairs": ({ ifFontRevision, ...input }) =>
+          this.#observe(ifFontRevision, () => this.#kerning.pairs(input)),
+        "kerning.resolve": ({ pairs, source, location, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#kerning.resolve(pairs, { source, location })),
+        "kerning.at": ({ ifFontRevision, ...input }) =>
+          this.#observe(ifFontRevision, () => this.#kerning.at(input)),
+        "layers.get": ({ ifFontRevision, ...selector }) =>
+          this.#observe(ifFontRevision, () => this.#reader.getLayer(selector)),
+        "layers.resolve": ({ ifFontRevision, ...selector }) =>
+          this.#observe(ifFontRevision, () => this.#reader.resolveLayer(selector)),
+        "layers.render": ({ overlays, appearance, ifFontRevision, ...selector }) =>
           this.#observe(ifFontRevision, () =>
-            this.#kerning.pairs({ sourceId, glyph, limit, cursor }),
-          ),
-        "kerning.resolve": ({ pairs, sourceId, location, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () => this.#kerning.resolve(pairs, { sourceId, location })),
-        "layers.get": ({ layerId, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () => this.#reader.getLayer(layerId)),
-        "layers.resolve": ({ layerId, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () => this.#reader.resolveLayer(layerId)),
-        "layers.render": ({ layerId, overlays, appearance, ifFontRevision }) =>
-          this.#observe(ifFontRevision, () =>
-            this.#reader.renderLayer(layerId, { overlays, appearance }),
+            this.#reader.renderLayer(selector, { overlays, appearance }),
           ),
       });
     } catch (error) {

@@ -7,8 +7,10 @@ import type {
   GlyphPage,
   GlyphResolveInput,
   GlyphSummary,
+  KerningAtInput,
   KerningGroupsInput,
   KerningGroupSummary,
+  KerningMasterValue,
   KerningPairPage,
   KerningPairsInput,
   KerningResolveInput,
@@ -83,6 +85,10 @@ export type SandboxHostCallMap = {
   "shift.kerning.resolve": {
     request: KerningResolveInput;
     response: ShiftObservation<ResolvedKerningPairs>;
+  };
+  "shift.kerning.at": {
+    request: KerningAtInput;
+    response: ShiftObservation<KerningMasterValue>;
   };
   "shift.layers.get": {
     request: LayerGetInput;

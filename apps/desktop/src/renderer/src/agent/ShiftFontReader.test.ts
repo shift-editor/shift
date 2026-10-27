@@ -25,9 +25,12 @@ describe("ShiftFontReader serves public reads of accepted font state", () => {
     const glyph = reader.getGlyph({ name: "Aacute" as GlyphName });
     const [{ layerId, sourceId }] = glyph.layers;
 
-    const authored = await reader.getLayer(layerId!);
-    const resolved = await reader.resolveLayer(layerId!);
-    const rendered = await reader.renderLayer(layerId!, { overlays: { points: true } });
+    const authored = await reader.getLayer({ layerId: layerId! });
+    const resolved = await reader.resolveLayer({ layerId: layerId! });
+    const rendered = await reader.renderLayer(
+      { layerId: layerId! },
+      { overlays: { points: true } },
+    );
 
     expect([authored.layerId, resolved.layerId, rendered.layerId]).toEqual([
       layerId,
@@ -40,22 +43,51 @@ describe("ShiftFontReader serves public reads of accepted font state", () => {
     );
   });
 
-  it("rejects unknown layers", async () => {
-    await expect(reader.getLayer(mintLayerId())).rejects.toThrow();
-    await expect(reader.resolveLayer(mintLayerId())).rejects.toThrow();
-    await expect(reader.renderLayer(mintLayerId())).rejects.toThrow();
+  it("addresses a glyph's layer by glyph and source name, the default source when omitted", async () => {
+    const font = stack.font;
+    const aacute = { name: "Aacute" as GlyphName };
+    const glyph = reader.getGlyph(aacute);
+    const boldWide = font.sources.find(({ name }) => name === "BoldWide")!;
+    const layerAt = (sourceId: string) =>
+      glyph.layers.find((layer) => layer.sourceId === sourceId)!.layerId;
+
+    const named = await reader.getLayer({ glyph: aacute, source: { name: "BoldWide" } });
+    const byIds = await reader.resolveLayer({
+      glyph: { glyphId: glyph.id },
+      source: { sourceId: boldWide.id },
+    });
+    const atDefault = await reader.renderLayer({ glyph: aacute });
+
+    expect(named.layerId).toBe(layerAt(boldWide.id));
+    expect(byIds.layerId).toBe(layerAt(boldWide.id));
+    expect(atDefault.layerId).toBe(layerAt(font.defaultSource.id));
+  });
+
+  it("rejects unknown layers, glyphs and sources", async () => {
+    const aacute = { name: "Aacute" as GlyphName };
+    await expect(reader.getLayer({ layerId: mintLayerId() })).rejects.toThrow();
+    await expect(reader.resolveLayer({ layerId: mintLayerId() })).rejects.toThrow();
+    await expect(reader.renderLayer({ layerId: mintLayerId() })).rejects.toThrow();
+    await expect(reader.getLayer({ glyph: { name: "nope" as GlyphName } })).rejects.toThrow(
+      "Glyph nope is not in this font",
+    );
+    await expect(reader.getLayer({ glyph: aacute, source: { name: "Nope" } })).rejects.toThrow(
+      "Source Nope is not in this font",
+    );
   });
 
   it("nests each glyph's layer in a source, or null where the glyph has none", async () => {
     const source = stack.font.sources[0]!;
-    const page = await reader.listGlyphs({ limit: 100, sourceId: source.id });
+    const page = await reader.listGlyphs({ limit: 100, source: { sourceId: source.id } });
+    const named = await reader.listGlyphs({ limit: 100, source: { name: source.name } });
 
     expect(page.items.length).toBeGreaterThan(0);
+    expect(named).toEqual(page);
     for (const item of page.items) {
       const advertised = item.layers.find((layer) => layer.sourceId === source.id);
       expect(item.layer?.layerId ?? null).toBe(advertised?.layerId ?? null);
     }
-    await expect(reader.listGlyphs({ sourceId: mintSourceId() })).rejects.toThrow(
+    await expect(reader.listGlyphs({ source: { sourceId: mintSourceId() } })).rejects.toThrow(
       "is not in this font",
     );
   });

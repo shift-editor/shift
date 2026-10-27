@@ -404,6 +404,31 @@ export type GlyphSelector =
       name: GlyphName;
       glyphId?: never;
     };
+/** Select one source by stable ID or exact name, never by both. */
+export type SourceSelector =
+  | {
+      sourceId: SourceId;
+      name?: never;
+    }
+  | {
+      name: string;
+      sourceId?: never;
+    };
+/**
+ * Select one authored layer by stable ID, or as a glyph's layer at a source,
+ * never both. Without `source`, the glyph's layer at the default source.
+ */
+export type LayerSelector =
+  | {
+      layerId: LayerId;
+      glyph?: never;
+      source?: never;
+    }
+  | {
+      glyph: GlyphSelector;
+      source?: SourceSelector;
+      layerId?: never;
+    };
 /** One bounded page of glyphs in font directory order. */
 export interface GlyphPage {
   items: GlyphSummary[];
@@ -551,22 +576,21 @@ export interface ResolvedGlyphs {
 export interface GlyphListInput extends ShiftTarget {
   limit?: number;
   cursor?: string;
-  sourceId?: SourceId;
+  /** Nests each glyph's authored layer at this source. */
+  source?: SourceSelector;
 }
 export type GlyphGetInput = ShiftTarget & GlyphSelector;
 export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
 }
-/** Addresses one authored layer by its stable identity. */
-export interface LayerGetInput extends ShiftTarget {
-  layerId: LayerId;
-}
+/** Addresses one authored layer by its stable identity, or by glyph and source. */
+export type LayerGetInput = ShiftTarget & LayerSelector;
 export type LayerResolveInput = LayerGetInput;
-export interface LayerRenderInput extends LayerGetInput {
+export type LayerRenderInput = LayerGetInput & {
   overlays?: LayerOverlays;
   appearance?: LayerAppearance;
-}
+};
 export interface LocationResolveInput extends ShiftTarget {
   location: AxisCoordinate[];
 }
@@ -646,7 +670,8 @@ export interface KerningGroupsInput extends ShiftTarget {
   position?: KerningPosition;
 }
 export interface KerningPairsInput extends ShiftTarget {
-  sourceId: SourceId;
+  /** The master whose pairs to list; the default source when omitted. */
+  source?: SourceSelector;
   /** Only pairs that apply to this glyph (exact name or id), directly or through its groups. */
   glyph?: string;
   limit?: number;
@@ -657,11 +682,17 @@ export interface KerningPairQuery {
   first: string;
   second: string;
 }
-/** Resolves at one master (`sourceId`), an external `location`, or else the default location. */
+/** Resolves at one master (`source`), an external `location`, or else the default location. */
 export interface KerningResolveInput extends ShiftTarget {
   pairs: KerningPairQuery[];
-  sourceId?: SourceId;
+  source?: SourceSelector;
   location?: AxisCoordinate[];
+}
+/** One pair, first glyph then second, at one master; the default source when `source` is omitted. */
+export interface KerningAtInput extends ShiftTarget {
+  first: GlyphSelector;
+  second: GlyphSelector;
+  source?: SourceSelector;
 }
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
@@ -692,6 +723,7 @@ export interface ShiftCapabilities {
     groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
     pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
     resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
+    at(input: KerningAtInput): Promise<ShiftObservation<KerningMasterValue>>;
   };
 }
 /** A capability input without the window and revision a read scope binds. */
@@ -733,6 +765,7 @@ export interface ShiftRead {
     groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
     pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+    at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
 }
 /** The `shift` global in scripts: raw capabilities plus revision-bound reads. */

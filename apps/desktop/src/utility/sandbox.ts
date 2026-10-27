@@ -38,6 +38,7 @@ const capabilities: ShiftCapabilities = {
     groups: (input) => host.call("shift.kerning.groups", input),
     pairs: (input) => host.call("shift.kerning.pairs", input),
     resolve: (input) => host.call("shift.kerning.resolve", input),
+    at: (input) => host.call("shift.kerning.at", input),
   },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {

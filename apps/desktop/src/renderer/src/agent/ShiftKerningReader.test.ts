@@ -49,7 +49,7 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
   it("reports each master's value and the kind of pair that applies there", () => {
     const font = stack.font;
     const [resolved] = reader.resolve([{ first: "T", second: "A" }], {
-      sourceId: source(font, "LightCondensed"),
+      source: { name: "LightCondensed" },
     }).items;
 
     expect(resolved!.amount).toBe(-75);
@@ -104,14 +104,47 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
     });
   });
 
+  it("resolves at a master chosen by id the same as by name", () => {
+    const pair = [{ first: "T", second: "A" }];
+    const byId = reader.resolve(pair, {
+      source: { sourceId: source(stack.font, "BoldCondensed") },
+    });
+
+    expect(byId).toEqual(reader.resolve(pair, { source: { name: "BoldCondensed" } }));
+    expect(byId.items[0]!.amount).toBe(-65);
+  });
+
+  it("reads one pair at a master, the default source when none is named", () => {
+    const font = stack.font;
+    const t = { name: "T" as GlyphName };
+    const a = { name: "A" as GlyphName };
+
+    expect(reader.at({ first: t, second: a, source: { name: "BoldCondensed" } })).toMatchObject({
+      sourceId: source(font, "BoldCondensed"),
+      amount: -65,
+      origin: "authored",
+      rule: "glyph",
+    });
+    expect(
+      reader.at({
+        first: { glyphId: font.recordForName("T" as GlyphName)!.id },
+        second: a,
+        source: { sourceId: source(font, "LightWide") },
+      }).amount,
+    ).toBe(-215);
+    expect(reader.at({ first: t, second: a })).toEqual(
+      reader.at({ first: t, second: a, source: { sourceId: font.defaultSource.id } }),
+    );
+  });
+
   it("lists a glyph's pairs, directly or through its groups, page by page", () => {
-    const sourceId = source(stack.font, "LightCondensed");
-    const all = reader.pairs({ sourceId, glyph: "A" });
+    const source = { name: "LightCondensed" };
+    const all = reader.pairs({ source, glyph: "A" });
 
     const paged: AuthoredKerningPair[] = [];
     let cursor: string | undefined;
     do {
-      const page = reader.pairs({ sourceId, glyph: "A", limit: 1, cursor });
+      const page = reader.pairs({ source, glyph: "A", limit: 1, cursor });
       paged.push(...page.items);
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
@@ -139,12 +172,20 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
   });
 
   it("rejects unknown glyphs, sources, and cursors", () => {
-    const sourceId = source(stack.font, "LightCondensed");
+    const t = { name: "T" as GlyphName };
 
     expect(() => reader.resolve([{ first: "T", second: "nope" }], {})).toThrow(
       "Glyph nope is not in this font",
     );
-    expect(() => reader.pairs({ sourceId: mintSourceId() })).toThrow("is not in this font");
-    expect(() => reader.pairs({ sourceId, cursor: "%%" })).toThrow("Invalid kerning pair cursor");
+    expect(() => reader.at({ first: t, second: { name: "nope" as GlyphName } })).toThrow(
+      "Glyph nope is not in this font",
+    );
+    expect(() => reader.at({ first: t, second: t, source: { name: "Nope" } })).toThrow(
+      "Source Nope is not in this font",
+    );
+    expect(() => reader.pairs({ source: { sourceId: mintSourceId() } })).toThrow(
+      "is not in this font",
+    );
+    expect(() => reader.pairs({ cursor: "%%" })).toThrow("Invalid kerning pair cursor");
   });
 });

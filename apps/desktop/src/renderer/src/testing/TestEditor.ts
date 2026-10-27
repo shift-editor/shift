@@ -1086,9 +1086,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
   }
 
-  kerningAt(source: string, first: string, second: string): KerningMasterValue | null {
-    const sourceId = this.#sourceNamed(source);
-    return this.kerning(first, second).find((master) => master.sourceId === sourceId) ?? null;
+  kerningAt(source: string, first: string, second: string): KerningMasterValue {
+    return this.#reads.kerning.at({
+      first: { name: first },
+      second: { name: second },
+      source: { name: source },
+    });
   }
 
   kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null {
@@ -1183,13 +1186,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   /**
-   * The open glyph's authored layer at the active source, read as agents read it.
+   * The open glyph's authored layer at its node's source, read as agents read it.
    *
    * @throws {Error} while edits are pending, or when no glyph is open.
    */
   async #authoredLayer(): Promise<AuthoredLayer> {
     this.#assertWorkspaceSettled();
-    return this.#reads.font.getLayer(this.requireGlyphLayer().layerId);
+    const { glyph } = this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    return this.#reads.font.getLayer({
+      glyph: { glyphId: glyph.glyphId },
+      source: { sourceId: glyph.sourceId },
+    });
   }
 
   shownCursor(): string {
@@ -1218,10 +1226,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   async layerAt(source: string): Promise<AuthoredLayer> {
     this.#assertWorkspaceSettled();
-    const node = this.glyphNode;
-    const layerId = node ? this.font.layerIdFor(node.glyphId, this.#sourceNamed(source)) : null;
-    if (!layerId) throw new Error(`The open glyph has no layer in ${source}`);
-    return this.#reads.font.getLayer(layerId);
+    const { glyph } = this.editorView();
+    if (!glyph) throw new Error("layerAt needs an open glyph");
+    return this.#reads.font.getLayer({
+      glyph: { glyphId: glyph.glyphId },
+      source: { name: source },
+    });
   }
 
   async glyphAt(location: AxisLocation): Promise<ResolvedGlyph | null> {
