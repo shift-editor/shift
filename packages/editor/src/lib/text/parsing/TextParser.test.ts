@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { GlyphId, GlyphName } from "@shift/types";
-import {
-  glyphTextItem,
-  GlyphNameParser,
-  PlainTextParser,
-  type TextItem,
-  type TextParseContext,
-  type TextParser,
-} from "@shift/editor/text";
+import { glyphTextItem, type TextItem } from "../layout/types";
+import { GlyphNameParser } from "./GlyphNameParser";
+import { PlainTextParser } from "./PlainTextParser";
+import type { TextParseContext, TextParser } from "./TextParser";
 
 /** A font with only the named glyphs, each picked by an id equal to its name. */
 function fontWith(...names: string[]): TextParseContext {
