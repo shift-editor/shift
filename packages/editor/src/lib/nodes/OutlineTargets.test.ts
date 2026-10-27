@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asNamedInstanceId, asSourceId } from "@shift/types";
-import { OutlineTargets } from "@shift/editor/model";
+import { OutlineTargets } from "./OutlineTargets";
 
 const bold = asSourceId("source-bold");
 const light = asSourceId("source-light");

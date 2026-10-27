@@ -29,6 +29,7 @@ import type {
   AuthoredPoint,
   FontOverview,
   GlyphSummary,
+  EditorTool,
   KerningGroupSummary,
   KerningMasterValue,
   ResolvedGlyph,
@@ -47,6 +48,9 @@ import type {
   SourceMetrics,
 } from "@shift/types";
 import type { EditorCommandId } from "@shared/commands";
+import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
+import type { KerningPosition, PointId, Source, SourceMetrics } from "@shift/types";
+import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 
@@ -289,6 +293,51 @@ export interface EditorTestSurface {
   editSources(names: readonly string[]): Promise<void>;
   /** Moves to a location, as the axis sliders do; an exact source there becomes active. */
   setLocation(location: AxisLocation): void;
+  /** Drags from one glyph-local position to another, as the pointer does, and waits for the edit. */
+  dragAt(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void>;
+  /**
+   * Presses at `from` and moves to `to` without releasing, so the edit is only
+   * previewed. {@link moveHeldPointer} and {@link releasePointer} carry it on.
+   */
+  holdDragAt(from: Point2D, to: Point2D, modifiers?: Modifiers): void;
+  /** Moves the pointer held by {@link holdDragAt}; moving to where it is samples new modifiers. */
+  moveHeldPointer(to: Point2D, modifiers?: Modifiers): void;
+  /**
+   * Releases the pointer held by {@link holdDragAt} and waits for the edit.
+   *
+   * @param at - where the release lands, when the pointer moved there without
+   * a move being drawn first; where it is held otherwise.
+   */
+  releasePointer(modifiers?: Modifiers, at?: Point2D): Promise<void>;
+  /** Moves the pointer over a glyph-local position with no button held. */
+  hoverAt(position: Point2D, modifiers?: Modifiers): void;
+  /** Zooms the canvas to `zoom`, as the zoom controls do. */
+  setZoom(zoom: number): void;
+  /** Switches to the Hand for as long as Space is held, as the Space key binding does. */
+  holdSpaceForHand(): void;
+  /** Lets go of Space, returning from the Hand to the tool before it. */
+  releaseSpace(): void;
+  /** Picks the item `itemId` from a tool's toolbar menu, as the toolbar's dropdown does. */
+  chooseToolMenuItem(tool: ToolName, itemId: string): void;
+  /** Adds a continuous external axis to the font, as the add-axis menu does, and waits for it. */
+  addAxis(tag: string, minimum: number, defaultValue: number, maximum: number): Promise<void>;
+  /**
+   * Adds a source at a location keyed by axis tag, as the sources panel does,
+   * and waits for it. The new source becomes the active one.
+   */
+  addSource(name: string, location: Readonly<Record<string, number>>): Promise<void>;
+  /** Deletes the source named `name`, as the sources settings panel's delete button does, and waits for it. */
+  deleteSource(name: string): Promise<void>;
+  /** Moves the editor to a location keyed by axis tag, as the location sliders do. */
+  moveToLocation(location: Readonly<Record<string, number>>): void;
+  /** Makes the source named `name` the one shown and edited, as clicking its row in the sources panel does. */
+  openSource(name: string): void;
+  /** Turns the comparison outline of the source named `name` on or off, as its row's toggle does. */
+  toggleSourceOutline(name: string): void;
+  /** Edits every source at once, or back to the active one, as the sources panel's edit-all does. */
+  toggleAllSourcesForEditing(): boolean;
+  /** Stops editing every source but the active one. */
+  collapseEditingSources(): boolean;
 
   /** The open glyph's authored outline, as agents read it. */
   outline(): Promise<Outline>;
@@ -383,6 +432,24 @@ export interface EditorTestSurface {
   canDecomposeSelection(): boolean;
   /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. */
   drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
+  /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
+  drawnOutline(): Outline;
+  /** The point handles the canvas draws on the open glyph, with how each is styled. */
+  drawnHandles(): readonly DrawnHandle[];
+  /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
+  drawnOutlineTargets(): readonly GlyphOutlineTarget[];
+  /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
+  drawnSnapGuides(): readonly PositionGuide[];
+  /** The active tool and the state it is in, as agents read it. */
+  toolState(): EditorTool | null;
+  /** The font's metrics at the editor's location, as agents resolve them. */
+  metrics(): SourceMetrics;
+  /** The font's source named `name`, or null. */
+  source(name: string): Source | null;
+  /** How far the canvas is panned, in screen pixels. Test-only: not agent data. */
+  canvasOffset(): Point2D;
+  /** How far from a point, in the open glyph's units, a click still lands on it. Test-only: not agent data. */
+  clickReach(): number;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;

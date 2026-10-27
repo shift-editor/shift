@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asNamedInstanceId, asSourceId, type SourceId } from "@shift/types";
-import { OutlineVisibility } from "@shift/editor/model";
+import { OutlineVisibility } from "./OutlineVisibility";
 
 const active = asSourceId("source-active");
 const bold = asSourceId("source-bold");
