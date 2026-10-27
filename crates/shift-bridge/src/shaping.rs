@@ -1,16 +1,13 @@
 use napi_derive::napi;
-use shift_backends::shaper_font::{
-  FeatureSetting, ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, TextDirection,
-};
-use shift_font::{ExternalLocation, GlyphId};
-
-use crate::errors::{BridgeError, BridgeResult};
-use crate::input::parse;
 use shift_wire::intents;
 
 /// One unit of text to shape: exactly one of a character or a glyph inserted
 /// by name.
+///
+/// No bridge call takes it; it declares the type the editor's WebAssembly
+/// shaper takes.
 #[napi(object)]
+#[expect(unreachable_pub, reason = "declares a TypeScript type only")]
 pub struct NapiShapeUnit {
   /// A Unicode scalar value.
   pub codepoint: Option<u32>,
@@ -20,6 +17,7 @@ pub struct NapiShapeUnit {
 }
 
 #[napi(object)]
+#[expect(unreachable_pub, reason = "declares a TypeScript type only")]
 pub struct NapiFeatureSetting {
   /// A feature tag such as `liga`.
   pub tag: String,
@@ -28,7 +26,11 @@ pub struct NapiFeatureSetting {
 }
 
 /// A paragraph to shape, split into runs of one script.
+///
+/// No bridge call takes it; it declares the type the editor's WebAssembly
+/// shaper takes.
 #[napi(object)]
+#[expect(dead_code, unreachable_pub, reason = "declares a TypeScript type only")]
 pub struct NapiParagraphRequest {
   pub units: Vec<NapiShapeUnit>,
   /// User-space location to shape at; omitted axes are at their default.
@@ -43,6 +45,7 @@ pub struct NapiParagraphRequest {
 /// code positions; glyph advances, kerning, and mark attachment are the
 /// caller's to add.
 #[napi(object)]
+#[expect(unreachable_pub, reason = "declares a TypeScript type only")]
 pub struct NapiShapedGlyph {
   /// Absent when a character has no glyph.
   #[napi(ts_type = "GlyphId")]
@@ -55,21 +58,12 @@ pub struct NapiShapedGlyph {
   pub y_offset: i32,
 }
 
-impl From<ShapedGlyph> for NapiShapedGlyph {
-  fn from(glyph: ShapedGlyph) -> Self {
-    Self {
-      glyph_id: glyph.glyph_id.map(|id| id.to_string()),
-      cluster: glyph.cluster,
-      x_advance: glyph.x_advance,
-      y_advance: glyph.y_advance,
-      x_offset: glyph.x_offset,
-      y_offset: glyph.y_offset,
-    }
-  }
-}
-
 /// One run of a shaped paragraph, in one script and direction.
+///
+/// No bridge call returns it; it declares the type the editor's WebAssembly
+/// shaper returns.
 #[napi(object)]
+#[expect(dead_code, unreachable_pub, reason = "declares a TypeScript type only")]
 pub struct NapiShapedRun {
   /// First paragraph unit in the run.
   pub start: u32,
@@ -84,84 +78,6 @@ pub struct NapiShapedRun {
   pub glyphs: Vec<NapiShapedGlyph>,
 }
 
-impl From<ShapedRun> for NapiShapedRun {
-  fn from(run: ShapedRun) -> Self {
-    let direction = match run.direction {
-      TextDirection::LeftToRight => "ltr",
-      TextDirection::RightToLeft => "rtl",
-    };
-    Self {
-      start: run.units.start,
-      end: run.units.end,
-      script: run.script,
-      direction: direction.to_string(),
-      glyphs: run.glyphs.into_iter().map(NapiShapedGlyph::from).collect(),
-    }
-  }
-}
-
-/// A [`NapiParagraphRequest`] with its inputs parsed into the types the
-/// shaper takes.
-pub(crate) struct ParsedParagraphRequest {
-  units: Vec<ShapeUnit>,
-  location: ExternalLocation,
-  language: Option<String>,
-  features: Vec<FeatureSetting>,
-}
-
-impl ParsedParagraphRequest {
-  pub(crate) fn as_request(&self) -> ParagraphRequest<'_> {
-    ParagraphRequest {
-      units: &self.units,
-      location: &self.location,
-      language: self.language.as_deref(),
-      features: &self.features,
-    }
-  }
-}
-
-impl TryFrom<NapiParagraphRequest> for ParsedParagraphRequest {
-  type Error = BridgeError;
-
-  fn try_from(request: NapiParagraphRequest) -> BridgeResult<Self> {
-    let units = request
-      .units
-      .into_iter()
-      .map(shape_unit)
-      .collect::<BridgeResult<_>>()?;
-    let location =
-      ExternalLocation::from_untyped(shift_font::Location::try_from(request.location)?);
-    let features = request
-      .features
-      .unwrap_or_default()
-      .iter()
-      .map(|setting| FeatureSetting::parse(&setting.tag, setting.value))
-      .collect::<Result<_, _>>()?;
-
-    Ok(Self {
-      units,
-      location,
-      language: request.language,
-      features,
-    })
-  }
-}
-
-fn shape_unit(unit: NapiShapeUnit) -> BridgeResult<ShapeUnit> {
-  match (unit.codepoint, unit.glyph_id) {
-    (Some(codepoint), None) => char::from_u32(codepoint)
-      .map(ShapeUnit::Character)
-      .ok_or_else(|| BridgeError::InvalidInput {
-        kind: "codepoint",
-        value: codepoint.to_string(),
-      }),
-    (None, Some(glyph_id)) => Ok(ShapeUnit::Glyph(parse::<GlyphId>(&glyph_id)?)),
-    _ => Err(BridgeError::InvalidInput {
-      kind: "shape unit",
-      value: "needs exactly one of codepoint or glyphId".to_string(),
-    }),
-  }
-}
 /// The compiled shaping tables and what the editor needs to shape with them
 /// itself: shaper glyph order and axis normalization.
 #[napi(object)]

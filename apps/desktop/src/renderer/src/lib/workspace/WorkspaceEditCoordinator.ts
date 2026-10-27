@@ -12,8 +12,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ParagraphRequest,
-  ShapedRun,
   ShaperFont,
   SlugAtlas,
 } from "@shift/types";
@@ -450,15 +448,6 @@ export class WorkspaceEditCoordinator {
    */
   mapLocation(location: Location): Promise<Location> {
     return this.#withFlush(() => this.#session.mapLocation(location));
-  }
-
-  /**
-   * Shapes paragraphs behind pending edits, so new glyphs and Unicode values are seen.
-   *
-   * @returns Each paragraph's runs, in request order.
-   */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
-    return this.#withFlush(() => this.#session.shapeParagraphs(paragraphs));
   }
 
   /**

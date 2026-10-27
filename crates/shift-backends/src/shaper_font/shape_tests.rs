@@ -110,6 +110,40 @@ fn turning_a_feature_off_keeps_the_characters() {
 }
 
 #[test]
+fn turning_on_a_feature_that_is_off_by_default_applies_it() {
+    let font = font_with(
+        &[
+            ("one", Some('1')),
+            ("slash", Some('/')),
+            ("two", Some('2')),
+            ("onehalf", None),
+        ],
+        "feature frac { sub one slash two by onehalf; } frac;",
+    );
+    let location = ExternalLocation::new();
+    let units = characters("1/2");
+    let features = [FeatureSetting::parse("frac", 1).unwrap()];
+    let shaper = shaper(&font);
+
+    let plain = shaper.shape(&request(&units, &location)).unwrap();
+    let fraction = shaper
+        .shape(&ShapeRequest {
+            features: &features,
+            ..request(&units, &location)
+        })
+        .unwrap();
+
+    assert_eq!(
+        names_and_clusters(&font, &plain),
+        vec![named("one", 0), named("slash", 1), named("two", 2)]
+    );
+    assert_eq!(
+        names_and_clusters(&font, &fraction),
+        vec![named("onehalf", 0)]
+    );
+}
+
+#[test]
 fn inserted_glyphs_shape_as_themselves() {
     let font = ligature_font();
     let location = ExternalLocation::new();
