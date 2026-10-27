@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Point2D } from "@shift/geo";
-import { PointAlignmentSnap } from "@shift/editor/model";
+import { PointAlignmentSnap } from "./PointAlignmentSnap";
 
 describe("point alignment snaps each axis to the nearest stationary point", () => {
   const targets = [
