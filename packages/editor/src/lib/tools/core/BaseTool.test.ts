@@ -1,9 +1,20 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { BaseTool } from "@shift/editor/tools";
-import type { ToolEvent, ToolName, Behavior } from "@shift/editor/tools";
-import { makeTestCoordinates, TestEditor } from "@/testing";
-import { signal, type Signal } from "@shift/editor/signals";
-import type { CursorType } from "@shift/editor/types";
+import { afterEach, describe, it, expect, beforeEach } from "vitest";
+import type { Point2D } from "@shift/geo";
+import { BaseTool } from "./BaseTool";
+import type { Behavior } from "./Behavior";
+import type { ToolEvent } from "./GestureDetector";
+import type { ToolName } from "./createContext";
+import type { Editor } from "../../editor/Editor";
+import { scenePoint, screenPoint } from "../../editor/spaces";
+import { signal, type Signal } from "../../signals";
+import type { Coordinates } from "../../../types/coordinates";
+import type { CursorType } from "../../../types/editor";
+import type { MemoryFontSession } from "../../../types/fontSession";
+import { startEmptyMemorySession } from "../../../testing/emptyMemorySession";
+
+function makeTestCoordinates({ x, y }: Point2D): Coordinates {
+  return { screen: screenPoint(x, y), scene: scenePoint(x, y) };
+}
 
 type ContractState = { type: "idle" } | { type: "ready" } | { type: "clicked" };
 
@@ -33,7 +44,7 @@ class DisposableTestTool extends BaseTool<ContractState> {
   readonly behaviors: Behavior<ContractState>[] = [];
   readonly #cursorSourceCell: Signal<CursorType>;
 
-  constructor(editor: TestEditor, cursorSourceCell: Signal<CursorType>) {
+  constructor(editor: Editor, cursorSourceCell: Signal<CursorType>) {
     super(editor);
     this.#cursorSourceCell = cursorSourceCell;
   }
@@ -75,14 +86,17 @@ class ContractTestTool extends BaseTool<ContractState> {
 
 describe("BaseTool contract", () => {
   let tool: ContractTestTool;
-  let editor: TestEditor;
+  let session: MemoryFontSession;
+  let editor: Editor;
 
   beforeEach(() => {
-    editor = new TestEditor();
+    session = startEmptyMemorySession();
+    editor = session.editor;
     tool = new ContractTestTool(editor);
     tool.activate();
     tool.stateChanges.length = 0;
   });
+  afterEach(() => session.dispose());
 
   describe("when state changes", () => {
     it("advances tool state and fires onStateChange with prev/next/event", () => {

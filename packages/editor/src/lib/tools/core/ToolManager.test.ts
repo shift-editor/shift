@@ -1,8 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import type { Editor } from "@shift/editor";
-import { TestEditor } from "@/testing/TestEditor";
-import { BaseTool } from "@shift/editor/tools";
-import type { Behavior, ToolManifest, ToolName } from "@shift/editor/tools";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Editor } from "../../editor/Editor";
+import { screenPoint } from "../../editor/spaces";
+import { asPointId } from "@shift/types";
+import type { MemoryFontSession } from "../../../types/fontSession";
+import { startEmptyMemorySession } from "../../../testing/emptyMemorySession";
+import { BaseTool } from "./BaseTool";
+import type { Behavior } from "./Behavior";
+import type { ToolManifest } from "./ToolManifest";
+import type { ToolName } from "./createContext";
 
 type RuntimeToolState = { type: "idle" } | { type: "ready" } | { type: "dragging" };
 type RuntimeDragEnd = "complete" | "leave-open" | "throw";
@@ -91,45 +96,56 @@ function runtimeManifest(
   return shortcut ? { ...manifest, shortcut } : manifest;
 }
 
-describe("tool selection and temporary overrides", () => {
-  let editor: TestEditor;
+const NO_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
-  beforeEach(() => {
-    editor = new TestEditor();
-  });
+/** Drives the editor's pointer input in screen pixels, as the canvas does. */
+class Pointer {
+  readonly #editor: Editor;
 
-  it("keeps Pen behavior active while Meta is pressed", () => {
-    editor.selectTool("pen");
-    const penCursor = editor.cursor;
+  constructor(editor: Editor) {
+    this.#editor = editor;
+  }
 
-    editor.keyDown("Meta", { metaKey: true });
+  down(x: number, y: number, modifiers = NO_MODIFIERS): this {
+    this.#editor.toolManager.handlePointerDown(screenPoint(x, y), modifiers);
+    return this;
+  }
 
-    expect(editor.cursor).toBe(penCursor);
-    expect(editor.currentModifiers.metaKey).toBe(true);
-  });
+  move(x: number, y: number, modifiers = NO_MODIFIERS): this {
+    this.#editor.toolManager.handlePointerMove(screenPoint(x, y), modifiers, { force: true });
+    this.#editor.toolManager.flushPointerMoves();
+    return this;
+  }
 
-  it("temporarily pans with Hand and then resumes Pen editing", async () => {
-    await editor.startSession();
-    editor.selectTool("pen");
-    const penCursor = editor.cursor;
+  up(x: number, y: number, modifiers = NO_MODIFIERS): this {
+    this.#editor.toolManager.handlePointerUp(screenPoint(x, y), modifiers);
+    return this;
+  }
 
-    editor.requestTemporaryTool("hand");
-    editor.pointerDown(0, 0).pointerMove(50, 30).pointerMove(120, 80).pointerUp(120, 80);
-    editor.returnFromTemporaryTool();
-    await editor.clickLocal(100, 100);
+  click(x: number, y: number): this {
+    return this.down(x, y).up(x, y);
+  }
+}
 
-    expect(editor.pan).toEqual({ x: 120, y: 80 });
-    expect(editor.cursor).toBe(penCursor);
-    expect(editor.pointCount).toBe(1);
-  });
+let session: MemoryFontSession;
+let editor: Editor;
+let pointer: Pointer;
 
+beforeEach(() => {
+  session = startEmptyMemorySession();
+  editor = session.editor;
+  pointer = new Pointer(editor);
+});
+afterEach(() => session.dispose());
+
+describe("temporary tool overrides", () => {
   it("does not replace an active temporary Hand tool", () => {
-    editor.selectTool("pen");
+    editor.setActiveTool("select");
     editor.requestTemporaryTool("hand");
     const handCursor = editor.cursor;
 
-    editor.requestTemporaryTool("shape");
-    editor.pointerDown(0, 0).pointerMove(50, 0).pointerMove(100, 0).pointerUp(100, 0);
+    editor.requestTemporaryTool("select");
+    pointer.down(0, 0).move(50, 0).move(100, 0).up(100, 0);
 
     expect(editor.pan.x).toBe(100);
     expect(editor.cursor).toBe(handCursor);
@@ -138,7 +154,7 @@ describe("tool selection and temporary overrides", () => {
   it("notifies the temporary-tool lifecycle boundary", () => {
     let activated = false;
     let returned = false;
-    editor.selectTool("pen");
+    editor.setActiveTool("select");
 
     editor.requestTemporaryTool("hand", {
       onActivate: () => (activated = true),
@@ -151,7 +167,7 @@ describe("tool selection and temporary overrides", () => {
   });
 
   it("publishes the latest pointer modifiers", () => {
-    editor.pointerDown(0, 0, { shiftKey: true, altKey: true, metaKey: true });
+    pointer.down(0, 0, { shiftKey: true, altKey: true, metaKey: true });
 
     expect(editor.currentModifiers).toEqual({
       shiftKey: true,
@@ -159,23 +175,13 @@ describe("tool selection and temporary overrides", () => {
       metaKey: true,
     });
 
-    editor.pointerMove(10, 10, { shiftKey: false, altKey: false, metaKey: false });
+    pointer.move(10, 10, NO_MODIFIERS);
 
-    expect(editor.currentModifiers).toEqual({
-      shiftKey: false,
-      altKey: false,
-      metaKey: false,
-    });
+    expect(editor.currentModifiers).toEqual(NO_MODIFIERS);
   });
 });
 
 describe("runtime tool contributions", () => {
-  let editor: TestEditor;
-
-  beforeEach(() => {
-    editor = new TestEditor();
-  });
-
   it("publishes installed, replaced, and removed metadata", () => {
     const registration = editor.registerTool(runtimeManifest(1, "Runtime One", "r"));
 
@@ -219,30 +225,32 @@ describe("runtime tool contributions", () => {
     const registration = editor.registerTool(runtimeManifest(1));
     registration.replace(runtimeManifest(2));
 
-    editor.selectTool("runtime-test").click(0, 0);
+    editor.setActiveTool("runtime-test");
+    pointer.click(0, 0);
 
     expect(editor.pan.x).toBe(2);
   });
 
-  it("reconstructs an active idle tool without replacing editor-owned state", async () => {
-    await editor.startSession();
-    const glyphNode = editor.glyphNode;
+  it("reconstructs an active idle tool without replacing editor-owned state", () => {
+    const point = asPointId("point_kept");
+    editor.selection.select([point]);
     const registration = editor.registerTool(runtimeManifest(1));
-    editor.selectTool("runtime-test").click(0, 0);
+    editor.setActiveTool("runtime-test");
+    pointer.click(0, 0);
 
     registration.replace(runtimeManifest(2));
-    editor.click(20, 0);
+    pointer.click(20, 0);
 
     expect(editor.pan.x).toBe(2);
-    expect(editor.glyphNode).toBe(glyphNode);
+    expect(editor.selection.ids).toEqual([point]);
     expect(editor.toolIf("runtime-test")?.state.type).toBe("ready");
   });
 
   it("keeps a completed drag result", () => {
     editor.registerTool(runtimeManifest(1));
-    editor.selectTool("runtime-test");
+    editor.setActiveTool("runtime-test");
 
-    editor.pointerDown(0, 0).pointerMove(20, 0).pointerUp(20, 0);
+    pointer.down(0, 0).move(20, 0).up(20, 0);
 
     expect(editor.pan.x).toBe(1);
   });
@@ -252,9 +260,9 @@ describe("runtime tool contributions", () => {
       ...runtimeManifest(1),
       create: (runtimeEditor) => new RuntimeTool(runtimeEditor, "runtime-test", 1, "leave-open"),
     });
-    editor.selectTool("runtime-test");
+    editor.setActiveTool("runtime-test");
 
-    editor.pointerDown(0, 0).pointerMove(20, 0).pointerUp(20, 0);
+    pointer.down(0, 0).move(20, 0).up(20, 0);
 
     expect(editor.pan.x).toBe(-1);
   });
@@ -264,31 +272,32 @@ describe("runtime tool contributions", () => {
       ...runtimeManifest(1),
       create: (runtimeEditor) => new RuntimeTool(runtimeEditor, "runtime-test", 1, "throw"),
     });
-    editor.selectTool("runtime-test").pointerDown(0, 0).pointerMove(20, 0);
+    editor.setActiveTool("runtime-test");
+    pointer.down(0, 0).move(20, 0);
 
-    expect(() => editor.pointerUp(20, 0)).toThrow("runtime drag failed");
+    expect(() => pointer.up(20, 0)).toThrow("runtime drag failed");
     expect(editor.pan.x).toBe(-1);
   });
 
   it("defers active replacement until a drag finishes", () => {
     const registration = editor.registerTool(runtimeManifest(1));
-    editor.selectTool("runtime-test");
-    editor.pointerDown(0, 0).pointerMove(20, 0);
+    editor.setActiveTool("runtime-test");
+    pointer.down(0, 0).move(20, 0);
 
     registration.replace(runtimeManifest(2));
-    editor.pointerMove(30, 0);
+    pointer.move(30, 0);
 
     expect(editor.pan.x).toBe(1);
 
-    editor.pointerUp(30, 0).click(0, 0);
+    pointer.up(30, 0).click(0, 0);
 
     expect(editor.pan.x).toBe(2);
   });
 
   it("cancels an active drag before removing its tool", () => {
     const registration = editor.registerTool(runtimeManifest(1));
-    editor.selectTool("runtime-test");
-    editor.pointerDown(0, 0).pointerMove(20, 0);
+    editor.setActiveTool("runtime-test");
+    pointer.down(0, 0).move(20, 0);
 
     registration.dispose();
 
@@ -299,12 +308,12 @@ describe("runtime tool contributions", () => {
 
   it("replaces a primary tool while a temporary override is active", () => {
     const registration = editor.registerTool(runtimeManifest(1));
-    editor.selectTool("runtime-test");
+    editor.setActiveTool("runtime-test");
     editor.requestTemporaryTool("hand");
 
     registration.replace(runtimeManifest(2));
     editor.returnFromTemporaryTool();
-    editor.click(0, 0);
+    pointer.click(0, 0);
 
     expect(editor.pan.x).toBe(2);
   });

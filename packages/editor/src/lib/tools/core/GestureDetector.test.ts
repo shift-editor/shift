@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { GestureDetector } from "@shift/editor/tools";
-import { expectAt, makeTestCoordinates } from "@/testing";
+import type { Coordinates } from "../../../types/coordinates";
+import { scenePoint, screenPoint } from "../../editor/spaces";
+import { GestureDetector, type GestureEvent } from "./GestureDetector";
 
-function c(x: number, y: number) {
-  return makeTestCoordinates({ x, y });
+/** The same point in screen and scene space, as at an unpanned, unzoomed camera. */
+function c(x: number, y: number): Coordinates {
+  return { screen: screenPoint(x, y), scene: scenePoint(x, y) };
+}
+
+function expectAt(events: readonly GestureEvent[], index: number): GestureEvent {
+  const event = events[index];
+  if (!event) throw new Error(`Expected an event at index ${index}`);
+  return event;
 }
 
 const NO_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
