@@ -315,13 +315,7 @@ test.describe("Toolbar tools", () => {
       { x: bounds.x + bounds.width * 0.85, y: bounds.y + bounds.height * 0.4 },
       5,
     );
-    const draft = await page.evaluate(() => {
-      const b = window.shift!.editor.selectionBounds()!;
-      return {
-        ids: window.shift!.editor.selection.ids,
-        bounds: { width: b.max.x - b.min.x, height: b.max.y - b.min.y },
-      };
-    });
+    const draft = { ids: await editor.selectionIds(), bounds: await editor.selectionBounds() };
     const properties = page.getByRole("complementary", { name: "Glyph properties" });
     const width = properties.getByLabel("Width", { exact: true });
     const height = properties.getByLabel("Height", { exact: true });
@@ -336,7 +330,8 @@ test.describe("Toolbar tools", () => {
     await expect(height).toHaveValue(String(Math.round(draft.bounds.height)));
     await editor.cancelGesture();
     await expect.poll(() => editor.selectionIds()).toEqual(selection);
-    expect(await page.evaluate((id) => window.shift!.editor.object(id), draft.ids[0])).toBeNull();
+    const contourIds = (await editor.outline()).map((contour) => contour.id);
+    expect(contourIds).not.toContain(draft.ids[0]);
   });
 
   test(

@@ -301,6 +301,7 @@ test.describe("opening a font through the application shell", () => {
     page,
   }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
+    const previewEditor = new EditorDriver(workspacePage, electronApp);
     await clickFirstCatalogGlyph(workspacePage);
     await workspacePage.waitForURL(/#\/editor\//);
     const canvas = workspacePage.locator("#interactive-canvas");
@@ -350,9 +351,7 @@ test.describe("opening a font through the application shell", () => {
         .toBeNull();
       await canvas.click({ position: point });
       await expect(notice).toBeVisible();
-      await expect
-        .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
-        .toBe(0);
+      await expect.poll(() => previewEditor.selectionIds()).toEqual([]);
       await notice.getByRole("button", { name: "OK", exact: true }).click();
       await expect(notice).toBeHidden();
     }
@@ -364,17 +363,12 @@ test.describe("opening a font through the application shell", () => {
     await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
     await workspacePage.mouse.down();
     await workspacePage.mouse.move(bounds.x + point.x + 30, bounds.y + point.y + 30, { steps: 5 });
-    const previewEditor = new EditorDriver(workspacePage);
     await expect.poll(() => previewEditor.toolState()).toBe("brushing");
-    await expect
-      .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
-      .toBe(0);
+    await expect.poll(() => previewEditor.selectionIds()).toEqual([]);
     await expect(notice).toBeHidden();
     await workspacePage.mouse.up();
     await expect.poll(() => previewEditor.toolState()).toBe("ready");
-    await expect
-      .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.selection.ids.length))
-      .toBe(0);
+    await expect.poll(() => previewEditor.selectionIds()).toEqual([]);
   });
 });
 
