@@ -92,7 +92,7 @@ Nothing at present. Blending glyph geometry (`interpolateSourceValues`) was the 
 
 A rule that stays in TypeScript is tested against the Rust directly, not against a fixture Rust writes: the test builds its inputs in code, runs the TypeScript and the matching `@shift/wasm/reference` export on each, and compares. Nothing can go stale, and a failure names the input.
 
-Inputs come from `@shift/editor/reference-testing`: seeded sweeps (`seededRandom`, fixed seeds). `expectNumbersClose` compares to 9 decimal digits (the two sides run the same float operations, so they agree to about 1e-12). Axis mapping (`location.test.ts`) compiles its mappings through `compileAxisMappings`, as the bridge would send them, and compares `mapAxisLocation` with `mapLocation` over a sweep of locations.
+Inputs come from `@shift/editor/reference-testing`: seeded sweeps (`seededRandom`, fixed seeds). `expectNumbersClose` compares to 9 decimal digits (the two sides run the same float operations, so they agree to about 1e-12). Axis mapping (`packages/editor/src/lib/variation/location.reference.test.ts`) compiles its mappings through `compileAxisMappings`, as the bridge would send them, and compares `mapAxisLocation` with `mapLocation` over a sweep of locations.
 
 The reference module never ships. It is a second instance with its own memory, about 2.5 times the size of the editor's module (it carries the axis-mapping compiler), and its exports would invite calling Rust for rules the editor deliberately runs in TypeScript.
 

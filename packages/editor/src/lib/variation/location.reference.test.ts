@@ -6,18 +6,13 @@ import {
   type AxisMapping,
   type AxisMappingBasis,
 } from "@shift/types";
-import {
-  between,
-  expectNumbersClose,
-  REFERENCE_SEED,
-  seededRandom,
-} from "@shift/editor/reference-testing";
+import { between, expectNumbersClose, REFERENCE_SEED, seededRandom } from "../../testing/reference";
 import {
   axisValue,
   externalAxisLocationForDesignLocation,
   externalAxisLocationFromRecord,
   mapAxisLocation,
-} from "@shift/editor/variation";
+} from "./location";
 import { compileAxisMappings, mapLocation } from "@shift/wasm/reference";
 import type {
   CoordinateSpacesRemainDistinct,
