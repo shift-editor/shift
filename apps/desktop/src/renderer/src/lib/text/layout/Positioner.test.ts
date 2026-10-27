@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { resolve } from "node:path";
 import { TestEditor } from "@/testing/TestEditor";
 import {
+  NONSPACING_MARK_EDITOR_ADVANCE,
   characterTextItem as char,
   glyphTextItem as glyph,
   lineBreakTextItem,
   type TextItem,
 } from "@shift/editor/text";
-import { layoutTestEditor, makeLayout } from "./testUtils";
+import { layoutTestEditor, makeLayout, runLayout } from "./testUtils";
 import { effect } from "@shift/editor/signals";
 import type { GlyphName } from "@shift/types";
 import { kerningValueEdit } from "@shift/editor/model";
@@ -86,7 +87,7 @@ describe("Positioner", () => {
     it("gives a nonspacing mark a visible advance though its name does not look like one", async () => {
       await addZeroWidthGlyph("fatha-ar");
 
-      expect(positionedAfterA("fatha-ar").xAdvance).toBeGreaterThan(0);
+      expect(positionedAfterA("fatha-ar").xAdvance).toBe(NONSPACING_MARK_EDITOR_ADVANCE);
     });
 
     it("kerns a glyph named like a mark against its neighbour, but not a nonspacing mark", async () => {
@@ -118,7 +119,7 @@ describe("Positioner", () => {
       subscription.dispose();
 
       expect(advances[0]).toBe(0);
-      expect(advances.at(-1)).toBeGreaterThan(0);
+      expect(advances.at(-1)).toBe(NONSPACING_MARK_EDITOR_ADVANCE);
     });
   });
 
@@ -148,11 +149,10 @@ describe("Positioner mark attachment", () => {
   // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
   it("attaches a mark to an anchor a composite takes from its components", async () => {
     const run = editor.text.createRun([glyph(id("aacute")), glyph(id("acutecomb"))]);
-    const layoutCell = editor.text.layoutCell(run.id);
     // Shaped text places marks by their anchors.
     await editor.text.settled();
 
-    const [base, mark] = layoutCell.peek()!.lines[0]!.runs[0]!.glyphs;
+    const [base, mark] = runLayout(editor, run.id).lines[0]!.runs[0]!.glyphs;
 
     expect(mark!.origin).toEqual(base!.origin);
     // acutecomb's `top` (100, 700) moved by its component offset (150, 0), less its `_top` (100, 500).

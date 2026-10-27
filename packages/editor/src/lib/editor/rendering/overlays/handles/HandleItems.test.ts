@@ -26,6 +26,10 @@ function contour(points: readonly PointSpec[], closed = false): Contour {
   );
 }
 
+function positions(path: Contour): { id: string; x: number; y: number }[] {
+  return path.points.map(({ id, x, y }) => ({ id, x, y }));
+}
+
 function stateSource(extra: Partial<HandleStateSource> = {}): HandleStateSource {
   return {
     selection: new Selection(new ShiftStore<ShiftEditorRecord>()),
@@ -66,8 +70,9 @@ describe("handle culling preserves authored neighbors and visibility", () => {
     expect(list.items[0]!.rotation).toBeCloseTo(Math.PI / 4);
   });
 
-  it("restores culled markers after the viewport moves", () => {
+  it("restores culled markers after the viewport moves without changing the glyph", () => {
     const path = contour([[100, 100]]);
+    const authored = positions(path);
     const items = new HandleItems();
     const source = stateSource();
     const offscreen = items.fromContours([path], source, undefined, {
@@ -81,6 +86,7 @@ describe("handle culling preserves authored neighbors and visibility", () => {
       max: { x: 200, y: 200 },
     });
     expect(onscreen.items.map((item) => item.point.id)).toEqual(path.points.map(({ id }) => id));
+    expect(positions(path)).toEqual(authored);
   });
 
   it("continues to exclude explicitly hidden markers inside the viewport", () => {
@@ -92,6 +98,7 @@ describe("handle culling preserves authored neighbors and visibility", () => {
       { min: { x: 0, y: 0 }, max: { x: 200, y: 200 } },
     );
     expect(list.items).toEqual([]);
+    expect(positions(path)).toEqual([{ id: "p0", x: 100, y: 100 }]);
   });
 
   it("omits only the hidden marker while preserving its neighbors' geometric context", () => {

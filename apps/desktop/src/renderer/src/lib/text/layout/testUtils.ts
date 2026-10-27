@@ -11,6 +11,7 @@
  */
 import { TestEditor } from "@/testing/TestEditor";
 import type { TextItem } from "@shift/editor/text";
+import type { RunId } from "@shift/types";
 
 const GLYPHS: ReadonlyArray<readonly [string, number, number]> = [
   ["A", 65, 500],
@@ -48,8 +49,12 @@ export async function layoutTestEditor(): Promise<TestEditor> {
 
 /** Creates a text run of `items` and returns the layout the editor gives it. */
 export function makeLayout(items: readonly TextItem[], editor: TestEditor) {
-  const run = editor.text.createRun(items);
-  const layout = editor.text.layoutCell(run.id).peek();
-  if (!layout) throw new Error("Expected a layout for the new text run");
+  return runLayout(editor, editor.text.createRun(items).id);
+}
+
+/** The layout the editor currently gives a text run. */
+export function runLayout(editor: TestEditor, run: RunId) {
+  const layout = editor.text.layoutCell(run).peek();
+  if (!layout) throw new Error(`Expected a layout for text run ${run}`);
   return layout;
 }
