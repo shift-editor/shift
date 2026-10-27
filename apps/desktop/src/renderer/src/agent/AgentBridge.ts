@@ -3,6 +3,7 @@ import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
+import type { AgentReaders } from "./AgentReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
 import { ShiftKerningReader } from "./ShiftKerningReader";
@@ -14,6 +15,7 @@ export class AgentBridge {
   readonly #reader: ShiftFontReader;
   readonly #kerning: ShiftKerningReader;
   readonly #editor: ShiftEditorReader;
+  readonly #readers: AgentReaders;
   readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
   #disposed = false;
@@ -27,6 +29,7 @@ export class AgentBridge {
       session.editor,
       session.workspace?.applyStatusCell ?? null,
     );
+    this.#readers = { font: this.#reader, kerning: this.#kerning, editor: this.#editor };
   }
 
   /** Connects the renderer lane requested by Electron main. */
@@ -73,6 +76,10 @@ export class AgentBridge {
           this.#observe(ifFontRevision, () =>
             this.#reader.renderLayer(selector, { overlays, appearance }),
           ),
+        "agent.read": async ({ reader, method, args }) => {
+          const { value } = await this.#observe(undefined, () => this.#read(reader, method, args));
+          return value;
+        },
       });
     } catch (error) {
       port.cancel();
@@ -85,6 +92,19 @@ export class AgentBridge {
     this.#disposed = true;
     this.#requests?.dispose();
     this.#requests = null;
+  }
+
+  /** @throws {Error} for a reader or method the window does not serve. */
+  #read(reader: string, method: string, args: unknown[]): unknown {
+    const target: object | undefined = Object.hasOwn(this.#readers, reader)
+      ? this.#readers[reader as keyof AgentReaders]
+      : undefined;
+    const read: unknown =
+      target && method !== "constructor"
+        ? Reflect.get(Object.getPrototypeOf(target), method)
+        : null;
+    if (typeof read !== "function") throw new Error(`No agent read ${reader}.${method}`);
+    return Reflect.apply(read, target, args);
   }
 
   async #readRevision(ifFontRevision: FontRevision | undefined): Promise<FontRevision> {

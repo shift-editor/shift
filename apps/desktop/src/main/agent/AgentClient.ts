@@ -133,6 +133,14 @@ export class AgentClient {
     return this.#call("layers.render", input);
   }
 
+  /**
+   * Calls `reader`'s `method` with `args` in the window's renderer once
+   * pending edits settle, as the E2E read hook does.
+   */
+  read(reader: string, method: string, args: unknown[]): Promise<unknown> {
+    return this.#call("agent.read", { reader, method, args });
+  }
+
   #call<K extends keyof AgentCallMap>(
     operation: K,
     input: AgentCallMap[K]["request"],

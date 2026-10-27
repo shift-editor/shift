@@ -51,6 +51,7 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import { publishE2EAgentReads } from "../agent/e2eAgentReads";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
 import { NO_DEBUG_OVERLAYS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
@@ -273,6 +274,7 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
+      publishE2EAgentReads((windowId) => this.#windowForAgentRequest(windowId).agent);
       void this.#requireCommandLineTool()
         .refresh()
         .catch((error) => {

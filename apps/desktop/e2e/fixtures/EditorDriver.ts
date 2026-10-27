@@ -10,8 +10,14 @@ import type {
   KerningMasterValue,
 } from "@shift/runtime";
 import type { GlyphId, KerningPosition, PointId, Unicode } from "@shift/types";
+import type {
+  AgentReaderName,
+  AgentReadArgs,
+  AgentReadMethod,
+  AgentReadResult,
+} from "@/agent/AgentReaders";
 import type { EditorReads, Outline } from "@/testing/reads";
-import { AppAgent } from "./appAgent";
+import type {} from "../../src/main/agent/e2eAgentReads";
 import { waitForEditorReady } from "./appLocators";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
 
@@ -54,37 +60,29 @@ async function readLivePointPosition(page: Page, pointId: PointId): Promise<Poin
   }, pointId);
 }
 
-/** Reads the open glyph's authored layer at its node's source, as `layers.get` returns it. */
-const OPEN_LAYER = `
-  const view = (await shift.editor.inspect({ windowId })).value;
-  if (!view.glyph) throw new Error("Expected an open glyph");
-  const glyph = (await shift.glyphs.get({ windowId, glyphId: view.glyph.glyphId })).value;
-  const reference = glyph.layers.find(({ sourceId }) => sourceId === view.glyph.sourceId);
-  if (!reference) throw new Error("Expected authored layer");
-  return (await shift.layers.get({ windowId, layerId: reference.layerId })).value;
-`;
-
 /**
  * Drives the real desktop editor through Playwright and reads its observable domain state.
  *
  * @remarks
  * User actions that can persist geometry wait for the workspace edit pipeline before returning.
- * The {@link EditorReads} reads go through the app's local MCP server, as an agent's do, and
- * return the same `@shift/runtime` data the vitest surface reads in-process. Live gesture
- * observations remain available through methods such as {@link selectionBounds}.
+ * The {@link EditorReads} reads call the window's agent readers, the ones agents read through
+ * MCP, over the app's E2E read hook (`globalThis.shiftAgentReads`), with the same reader calls
+ * and selectors as the vitest surface makes in-process. Live gesture observations remain
+ * available through methods such as {@link selectionBounds}.
  */
 export class EditorDriver implements EditorReads {
-  readonly #agent: AppAgent;
+  readonly #app: ElectronApplication | null;
+  #windowId: Promise<number> | null = null;
 
   /**
    * Creates a driver for the editor owned by `page`.
-   * @param app - The app that owns `page`; required when more than one font window is open.
+   * @param app - The app that owns `page`; the {@link EditorReads} reads need it.
    */
   constructor(
     readonly page: Page,
     app: ElectronApplication | null = null,
   ) {
-    this.#agent = new AppAgent(page, app);
+    this.#app = app;
   }
 
   /** Returns the interactive editor canvas locator. */
@@ -641,34 +639,20 @@ export class EditorDriver implements EditorReads {
   }
 
   async kerning(first: string, second: string): Promise<readonly KerningMasterValue[]> {
-    return this.#agent.run(
-      `const resolved = await shift.kerning.resolve({ windowId, pairs: [input] });
-      return resolved.value.items[0].masters;`,
-      { first, second },
-    );
+    const resolved = await this.#read("kerning", "resolve", [{ first, second }], {});
+    return resolved.items[0]!.masters;
   }
 
-  async kerningAt(
-    source: string,
-    first: string,
-    second: string,
-  ): Promise<KerningMasterValue | null> {
-    const sourceId = await this.#agent.run<string>(
-      `const font = (await shift.font.get({ windowId })).value;
-      const source = font.sources.find(({ name }) => name === input);
-      if (!source) throw new Error("The font has no source named " + input);
-      return source.id;`,
-      source,
-    );
-    const masters = await this.kerning(first, second);
-    return masters.find((master) => master.sourceId === sourceId) ?? null;
+  async kerningAt(source: string, first: string, second: string): Promise<KerningMasterValue> {
+    return this.#read("kerning", "at", {
+      first: { name: first },
+      second: { name: second },
+      source: { name: source },
+    });
   }
 
   async kerningGroups(position: KerningPosition): Promise<readonly KerningGroupSummary[]> {
-    return this.#agent.run(
-      "return (await shift.kerning.groups({ windowId, position: input })).value;",
-      position,
-    );
+    return this.#read("kerning", "groups", position);
   }
 
   async kerningGroup(position: KerningPosition, name: string): Promise<KerningGroupSummary | null> {
@@ -685,11 +669,42 @@ export class EditorDriver implements EditorReads {
   }
 
   async selectionIds(): Promise<readonly string[]> {
-    return this.#agent.run("return (await shift.editor.inspect({ windowId })).value.selectionIds;");
+    return (await this.#read("editor", "inspect", "")).selectionIds;
   }
 
-  #openLayer(): Promise<AuthoredLayer> {
-    return this.#agent.run(OPEN_LAYER);
+  /** The open glyph's authored layer at its node's source, as `layers.get` returns it. */
+  async #openLayer(): Promise<AuthoredLayer> {
+    const { glyph } = await this.#read("editor", "inspect", "");
+    if (!glyph) throw new Error("Expected an open glyph");
+    return this.#read("font", "getLayer", {
+      glyph: { glyphId: glyph.glyphId },
+      source: { sourceId: glyph.sourceId },
+    });
+  }
+
+  /**
+   * Calls `reader`'s `method` in this page's window once its pending edits settle.
+   *
+   * @throws {Error} when the driver has no app, or the read fails in the renderer.
+   */
+  async #read<R extends AgentReaderName, M extends AgentReadMethod<R>>(
+    reader: R,
+    method: M,
+    ...args: AgentReadArgs<R, M>
+  ): Promise<AgentReadResult<R, M>> {
+    const app = this.#app;
+    if (!app) throw new Error("Reading the editor needs its app: pass it to the EditorDriver");
+
+    this.#windowId ??= app
+      .browserWindow(this.page)
+      .then((window) => window.evaluate((browserWindow) => browserWindow.id));
+    const call = { windowId: await this.#windowId, reader, method: String(method), args };
+    const value = await app.evaluate(async (_electron, { windowId, reader, method, args }) => {
+      const reads = globalThis.shiftAgentReads;
+      if (!reads) throw new Error("The app has no E2E agent reads; is NODE_ENV test?");
+      return reads.read(windowId, reader, method, args);
+    }, call);
+    return value as AgentReadResult<R, M>;
   }
 
   async #waitForEdits(): Promise<void> {

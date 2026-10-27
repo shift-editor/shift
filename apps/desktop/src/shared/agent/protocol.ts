@@ -120,6 +120,14 @@ export type AgentCallMap = {
     };
     response: ShiftObservation<LayerSvg>;
   };
+  /**
+   * Calls one agent reader's method with `args` once pending edits settle,
+   * returning its plain result. Only the E2E read hook sends it.
+   */
+  "agent.read": {
+    request: { reader: string; method: string; args: unknown[] };
+    response: unknown;
+  };
 };
 
 export type AgentEventMap = Record<string, never>;
