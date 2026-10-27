@@ -16,9 +16,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
-import { externalAxisLocationFromRecord, withIndependentMapping } from "@shift/editor/variation";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import {
   kerningValueEdit,
+  sourceMetricValue,
+  withSourceMetricValue,
   type Glyph,
   type GlyphRenderModel,
   type GlyphLayer,
@@ -30,7 +32,6 @@ import {
   mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
-  upsertBy,
   type Axis,
   type AxisDefinition,
   type MetricId,
@@ -764,9 +765,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
         output: { values: { [target.id]: output } },
       })),
     };
-    await this.font.setAxisMappings(
-      withIndependentMapping(this.font.getAxisMappings(), target, mapping),
-    );
+    await this.font.setIndependentAxisMapping(target, mapping);
   }
 
   addSource(name: string, location: AxisValues): void {
@@ -780,16 +779,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
     const current = this.font.source(this.#sourceNamed(source));
     if (!current) throw new Error(`The font has no source named ${source}`);
-    const metricId = this.#metricNamed(metric);
-    const value = current.metricValues.find((each) => each.metricId === metricId) ?? {
-      metricId,
-      position: 0,
-      overshoot: 0,
-    };
-    await this.font.updateSource({
-      ...current,
-      metricValues: upsertBy(current.metricValues, { ...value, position }, (each) => each.metricId),
-    });
+    const value = sourceMetricValue(current, this.#metricNamed(metric));
+    await this.font.updateSource(withSourceMetricValue(current, { ...value, position }));
   }
 
   addInstance(name: string, location: AxisValues): void {
