@@ -1,16 +1,18 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, parse_id_list};
+use crate::resolve::Resolve;
 use crate::shaping::{NapiParagraphRequest, NapiShapedRun, ParsedParagraphRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_backends::{
-  AxisIndex as SourceAxisIndex, DirectoryGlyph, DirectoryInstance, DirectorySource, ExportFormat,
-  FontDirectory, FontExportRequest, FontExportResult, FontExporter, FontSource, FontView,
-  GlyphIndex, GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
-  GlyphShape as SourceGlyphShape, OpenedFont, SourceAtlasDescriptor, SourceGlyphIds,
-  VariationAxisKind, build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
+  AxisIndex as SourceAxisIndex, DirectoryGlyph, DirectoryInstance, DirectoryMapping,
+  DirectorySource, ExportFormat, FontDirectory, FontExportRequest, FontExportResult, FontExporter,
+  FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
+  GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
+  SourceAtlasDescriptor, SourceGlyphIds, VariationAxisKind, build_binary_atlas_page,
+  font_loader::FontLoader, variable_glyph_inputs,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -33,11 +35,10 @@ use shift_wire::{
   ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
   GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerRecord, GlyphLayerShape,
   GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
-  GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
-  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
-  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition, NamedInstance,
-  PointData, PointType, Source, SourceMetricValue, SourceMetricsInterpolationSnapshot,
-  VariationBasis, VariationDelta,
+  GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure,
+  InterpolationBasis as WireInterpolationBasis, KerningSnapshot, LayerMatch as WireLayerMatch,
+  Location as WireLocation, MetricDefinition, NamedInstance, PointData, PointType, Source,
+  SourceMetricValue, SourceMetricsInterpolationSnapshot,
   bridges::napi::{
     NapiAppliedChange, NapiAxisMappingBasis, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
     NapiCatalogAtlasWeights, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
@@ -295,83 +296,76 @@ impl RetainedSource {
     projections
       .iter()
       .map(|projection| {
-        let glyph_id = identity.glyph_id(projection.glyph)?;
-        let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id.clone()))?;
-        let variation = projection
-          .variation
-          .as_ref()
-          .map(|variation| {
-            let deltas = variation
-              .deltas
-              .iter()
-              .map(|delta| {
-                let region = delta
-                  .region
-                  .supports
-                  .iter()
-                  .map(|support| {
-                    let axis_id = identity.axis_id(support.axis)?;
-                    Ok(InterpolationSupport {
-                      axis_id,
-                      lower: support.lower,
-                      peak: support.peak,
-                      upper: support.upper,
-                    })
-                  })
-                  .collect::<BridgeResult<Vec<_>>>()?;
-                Ok(VariationDelta {
-                  region,
-                  values: delta.values.to_vec(),
-                })
-              })
-              .collect::<BridgeResult<Vec<_>>>()?;
-            Ok::<_, BridgeError>(GlyphVariation {
-              basis: VariationBasis { deltas },
-            })
-          })
-          .transpose()?;
-        let exact_source_shapes = projection
-          .exact_shapes
-          .iter()
-          .map(|exact| {
-            let source_id = identity.source_id(exact.source)?;
-            Ok(GlyphSourceShape {
-              source_id,
-              shape: self.shape(
-                &exact.shape,
-                &ShapeIds::exact(glyph_id.clone(), exact.source),
-              )?,
-            })
-          })
-          .collect::<BridgeResult<Vec<_>>>()?;
-        let components = self.components(projection.glyph, None, &by_index)?;
-        let exact_source_components = exact_sources
-          .iter()
-          .map(|source| {
-            let source_id = identity.source_id(*source)?;
-            Ok(GlyphSourceComponents {
-              source_id,
-              components: self.components(projection.glyph, Some(*source), &by_index)?,
-            })
-          })
-          .collect::<BridgeResult<Vec<_>>>()?;
-        Ok(GlyphSnapshot {
-          glyph_id: glyph_id.clone(),
-          projection: Some(GlyphProjection {
-            glyph_id,
-            fallback,
-            interpolation: None,
-            decomposition: None,
-            variation,
-            exact_source_shapes,
-            components,
-            exact_source_components,
-            component_glyph_ids: component_glyph_ids.clone(),
-          }),
-          layers: Vec::new(),
-        })
+        self.glyph_snapshot(projection, &by_index, &exact_sources, &component_glyph_ids)
       })
       .collect()
+  }
+
+  /// Converts one projection of a glyph's component closure, sharing the
+  /// closure's lookups.
+  fn glyph_snapshot(
+    &self,
+    projection: &SourceGlyphProjection,
+    by_index: &HashMap<GlyphIndex, &SourceGlyphProjection>,
+    exact_sources: &HashSet<shift_backends::SourceIndex>,
+    component_glyph_ids: &[GlyphId],
+  ) -> BridgeResult<GlyphSnapshot> {
+    let glyph_id = self.identity.glyph_id(projection.glyph)?;
+    let fallback = self.shape(&projection.fallback, &ShapeIds::fallback(glyph_id.clone()))?;
+    let variation = projection.variation.resolve(&self.identity)?;
+    let exact_source_shapes = projection
+      .exact_shapes
+      .iter()
+      .map(|exact| self.exact_shape(&glyph_id, exact))
+      .collect::<BridgeResult<Vec<_>>>()?;
+    let components = self.components(projection.glyph, None, by_index)?;
+    let exact_source_components = exact_sources
+      .iter()
+      .map(|&source| self.source_components(projection.glyph, source, by_index))
+      .collect::<BridgeResult<Vec<_>>>()?;
+    Ok(GlyphSnapshot {
+      glyph_id: glyph_id.clone(),
+      projection: Some(GlyphProjection {
+        glyph_id,
+        fallback,
+        interpolation: None,
+        decomposition: None,
+        variation,
+        exact_source_shapes,
+        components,
+        exact_source_components,
+        component_glyph_ids: component_glyph_ids.to_vec(),
+      }),
+      layers: Vec::new(),
+    })
+  }
+
+  /// Converts a glyph's shape on one exact source.
+  fn exact_shape(
+    &self,
+    glyph_id: &GlyphId,
+    exact: &shift_backends::GlyphSourceShape,
+  ) -> BridgeResult<GlyphSourceShape> {
+    Ok(GlyphSourceShape {
+      source_id: exact.source.resolve(&self.identity)?,
+      shape: self.shape(
+        &exact.shape,
+        &ShapeIds::exact(glyph_id.clone(), exact.source),
+      )?,
+    })
+  }
+
+  /// Lists `root`'s component occurrences on one exact source.
+  fn source_components(
+    &self,
+    root: GlyphIndex,
+    source: shift_backends::SourceIndex,
+    projections: &HashMap<GlyphIndex, &SourceGlyphProjection>,
+  ) -> BridgeResult<GlyphSourceComponents> {
+    Ok(GlyphSourceComponents {
+      source_id: source.resolve(&self.identity)?,
+      components: self.components(root, Some(source), projections)?,
+    })
   }
 
   /// Converts one projected shape, naming its entities with `ids`.
@@ -898,7 +892,7 @@ impl ToWire for DirectoryInstance {
   }
 }
 
-struct SourceIdentity {
+pub(crate) struct SourceIdentity {
   glyph_ids: Box<[GlyphId]>,
   glyph_indices: HashMap<GlyphId, GlyphIndex>,
   axis_ids: Box<[AxisId]>,
@@ -995,47 +989,43 @@ impl SourceIdentity {
       .mappings()
       .iter()
       .zip(self.mapping_ids.iter())
-      .map(|(mapping, mapping_id)| {
-        let input_axis_ids = mapping
-          .input_axes
-          .iter()
-          .map(|axis| self.axis_id(*axis))
-          .collect::<BridgeResult<Vec<_>>>()?;
-        let output_axis_ids = mapping
-          .output_axes
-          .iter()
-          .map(|axis| self.axis_id(*axis))
-          .collect::<BridgeResult<Vec<_>>>()?;
-        let points = mapping
-          .points
-          .iter()
-          .map(|point| FontAxisMappingPoint {
-            description: point.description.clone(),
-            input: FontLocation::from_map(
-              input_axis_ids
-                .iter()
-                .cloned()
-                .zip(point.input.iter().copied()),
-            ),
-            output: FontLocation::from_map(
-              output_axis_ids
-                .iter()
-                .cloned()
-                .zip(point.output.iter().copied()),
-            ),
-          })
-          .collect();
-        let mut mapped = FontAxisMapping::with_id(
-          mapping_id.clone(),
-          mapping.name.clone(),
-          input_axis_ids,
-          output_axis_ids,
-          points,
-        );
-        mapped.set_description(mapping.description.clone());
-        Ok(mapped)
-      })
+      .map(|(mapping, mapping_id)| self.axis_mapping(mapping, mapping_id))
       .collect()
+  }
+
+  /// Builds one directory axis mapping under `mapping_id`.
+  fn axis_mapping(
+    &self,
+    mapping: &DirectoryMapping,
+    mapping_id: &AxisMappingId,
+  ) -> BridgeResult<FontAxisMapping> {
+    let input_axis_ids = mapping.input_axes.resolve(self)?;
+    let output_axis_ids = mapping.output_axes.resolve(self)?;
+    let mut points = Vec::with_capacity(mapping.points.len());
+    for point in &mapping.points {
+      let input = input_axis_ids
+        .iter()
+        .cloned()
+        .zip(point.input.iter().copied());
+      let output = output_axis_ids
+        .iter()
+        .cloned()
+        .zip(point.output.iter().copied());
+      points.push(FontAxisMappingPoint {
+        description: point.description.clone(),
+        input: FontLocation::from_map(input),
+        output: FontLocation::from_map(output),
+      });
+    }
+    let mut mapped = FontAxisMapping::with_id(
+      mapping_id.clone(),
+      mapping.name.clone(),
+      input_axis_ids,
+      output_axis_ids,
+      points,
+    );
+    mapped.set_description(mapping.description.clone());
+    Ok(mapped)
   }
 
   /// Pairs positional values, in source axis order, with this identity's axis ids.
@@ -1078,7 +1068,7 @@ impl SourceIdentity {
   /// # Errors
   ///
   /// Returns [`BridgeError::InvalidInput`] when the index is outside the source's axes.
-  fn axis_id(&self, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
+  pub(crate) fn axis_id(&self, axis: SourceAxisIndex) -> BridgeResult<AxisId> {
     self
       .axis_ids
       .get(axis.to_usize())
@@ -1094,7 +1084,7 @@ impl SourceIdentity {
   /// # Errors
   ///
   /// Returns [`BridgeError::InvalidInput`] when the index is outside the source's sources.
-  fn source_id(&self, source: shift_backends::SourceIndex) -> BridgeResult<SourceId> {
+  pub(crate) fn source_id(&self, source: shift_backends::SourceIndex) -> BridgeResult<SourceId> {
     self
       .source_ids
       .get(source.to_usize())
@@ -3274,6 +3264,31 @@ mod tests {
       .map(|index| ids.point(index).to_string())
       .collect();
     assert_eq!(point_ids, expected);
+  }
+
+  #[test]
+  fn source_glyph_variation_names_axes_by_id() {
+    let path = mutatorsans_source_path();
+    let source = RetainedSource::open(&path).unwrap();
+    let glyph_id = SourceGlyphIds::for_path(&path).glyph_id("B");
+
+    let snapshots = source.glyph(&glyph_id).unwrap();
+
+    let projection = snapshots[0].projection.as_ref().unwrap();
+    let variation = projection.variation.as_ref().unwrap();
+    assert!(
+      variation
+        .basis
+        .deltas
+        .iter()
+        .any(|delta| !delta.region.is_empty())
+    );
+    for delta in &variation.basis.deltas {
+      assert_eq!(delta.values.len(), projection.fallback.values.len());
+      for support in &delta.region {
+        assert!(source.identity.axis_ids.contains(&support.axis_id));
+      }
+    }
   }
 
   fn default_source_id(bridge: &Bridge) -> String {
