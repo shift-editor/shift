@@ -13,7 +13,7 @@ import {
 } from "./fixtures/electronApp";
 import { applicationMenuItemEnabled, clickApplicationMenuItem } from "./fixtures/documentLifecycle";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { openScratchGlyph, WAVE_CONTOUR } from "./fixtures/scratchGlyph";
+import { openCubicPointTypes, openScratchGlyph, WAVE_CONTOUR } from "./fixtures/scratchGlyph";
 
 const binaryPreviewTest = launcherTest.extend({
   openFontPath: FONT_PATH,
@@ -908,18 +908,15 @@ authoredTest(
   "native Delete uses fitted deletion rather than raw point removal",
   async ({ page, editor, electronApp }) => {
     await openScratchGlyph(page, editor, "deletionWave", [WAVE_CONTOUR]);
-    await expect
-      .poll(async () => (await editor.outline())[0]?.segments)
-      .toEqual(["cubic", "cubic", "cubic", "cubic"]);
+    const pointTypes = async () => (await editor.outline())[0]?.points.map((p) => p.pointType);
+    await expect.poll(pointTypes).toEqual(openCubicPointTypes(4));
     const before = await editor.outline();
-    const selected = before[0].onCurvePoints[2];
+    const selected = before[0].points.filter((point) => point.pointType === "onCurve")[2]!;
     await editor.clickPoint(selected.id);
 
     await clickApplicationMenuItem(page, electronApp, "edit.deleteSelection");
 
-    await expect
-      .poll(async () => (await editor.outline())[0].segments)
-      .toEqual(["cubic", "cubic", "cubic"]);
+    await expect.poll(pointTypes).toEqual(openCubicPointTypes(3));
     expect((await editor.outline())[0].points.some((point) => point.id === selected.id)).toBe(
       false,
     );

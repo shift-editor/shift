@@ -20,17 +20,11 @@
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
 import type { Point2D } from "@shift/geo";
-import type {
-  AuthoredAnchor,
-  AuthoredComponent,
-  AuthoredContour,
-  AuthoredPoint,
-  KerningGroupSummary,
-  KerningMasterValue,
-} from "@shift/runtime";
+import type { KerningGroupSummary, KerningMasterValue } from "@shift/runtime";
 import type { KerningPosition, PointId } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
+import type { EditorReads } from "./reads";
 
 /** Keyboard modifiers held during a gesture. */
 export interface Modifiers {
@@ -40,12 +34,12 @@ export interface Modifiers {
 }
 
 /**
- * The open glyph's authored contours, as `@shift/runtime`'s `layers.get`
- * returns them to agents.
+ * @remarks
+ * The reads come from {@link EditorReads}, which the Playwright `EditorDriver`
+ * implements too. The in-process editor answers kerning and selection at
+ * once, so those reads narrow to plain values here.
  */
-export type Outline = readonly AuthoredContour[];
-
-export interface EditorTestSurface {
+export interface EditorTestSurface extends EditorReads {
   /**
    * Builds `fixture` into the open glyph through the editor's own commands.
    *
@@ -122,18 +116,6 @@ export interface EditorTestSurface {
   renameKerningGroup(position: KerningPosition, name: string, newName: string): Promise<void>;
   deleteKerningGroup(position: KerningPosition, name: string): Promise<void>;
 
-  /** The open glyph's authored outline, as agents read it. */
-  outline(): Promise<Outline>;
-  /** One authored point of the open glyph, or null when it has none with that id. */
-  point(id: PointId): Promise<AuthoredPoint | null>;
-  /** The open glyph's anchors, in order. */
-  anchors(): Promise<readonly AuthoredAnchor[]>;
-  /** The open glyph's components, in order. */
-  components(): Promise<readonly AuthoredComponent[]>;
-  /** Where each point is now, as the open glyph's authored layer stores it. */
-  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>>;
-  /** The open glyph's advance width. */
-  advanceWidth(): Promise<number>;
   /** The kerning between two glyphs at every source, in font source order. */
   kerning(first: string, second: string): readonly KerningMasterValue[];
   /** The kerning between two glyphs at the source named `source`; null when the font has none. */

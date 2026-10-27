@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import type { GlyphName } from "@shift/types";
+import type { GlyphName, PointType } from "@shift/types";
 import type { EditorDriver } from "./EditorDriver";
 import type { ScratchContour } from "./types";
 
@@ -69,3 +69,13 @@ export const WAVE_CONTOUR: ScratchContour = {
     { x: 1000, y: 300, pointType: "onCurve", smooth: false },
   ],
 };
+
+/**
+ * The point types of an open contour made of `segments` cubic segments, as
+ * {@link WAVE_CONTOUR} is: an on-curve start, then two handles and an on-curve
+ * point per segment.
+ */
+export function openCubicPointTypes(segments: number): readonly PointType[] {
+  const segment: readonly PointType[] = ["offCurve", "offCurve", "onCurve"];
+  return ["onCurve", ...Array.from({ length: segments }, () => segment).flat()];
+}

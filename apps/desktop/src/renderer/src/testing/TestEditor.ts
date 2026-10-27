@@ -63,7 +63,8 @@ import type {
 import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
-import type { EditorTestSurface, Modifiers, Outline } from "./surface";
+import type { Outline } from "./reads";
+import type { EditorTestSurface, Modifiers } from "./surface";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
