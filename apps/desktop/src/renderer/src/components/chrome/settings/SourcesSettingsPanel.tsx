@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  upsertBy,
   type Axis,
   type MetricDefinition,
   type Source,
   type SourceId,
   type SourceMetricValue,
 } from "@shift/types";
+import { sourceMetricValue, withSourceMetricValue } from "@shift/editor/model";
 import { Input, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -192,17 +192,14 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
       <SettingsSection title="Metrics">
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2">
           {definitions.map((definition) => {
-            const value = metricValue(draft, definition);
+            const value = sourceMetricValue(draft, definition.id);
             return (
               <MetricFields
                 key={definition.id}
                 definition={definition}
                 value={value}
                 onChange={(next) => {
-                  form.update((current) => ({
-                    ...current,
-                    metricValues: upsertBy(current.metricValues, next, (value) => value.metricId),
-                  }));
+                  form.update((current) => withSourceMetricValue(current, next));
                 }}
                 onCommit={commit}
               />
@@ -322,13 +319,3 @@ const OptionalSourceNumberField = ({
     />
   </label>
 );
-
-function metricValue(source: Source, definition: MetricDefinition): SourceMetricValue {
-  return (
-    source.metricValues.find((value) => value.metricId === definition.id) ?? {
-      metricId: definition.id,
-      position: 0,
-      overshoot: 0,
-    }
-  );
-}

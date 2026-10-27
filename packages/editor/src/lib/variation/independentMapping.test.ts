@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asAxisId, asAxisMappingId, type Axis, type AxisMapping } from "@shift/types";
-import { independentMappingFor, withIndependentMapping } from "@shift/editor/variation";
+import { independentMappingFor, withIndependentMapping } from "./independentMapping";
 
 const weight: Axis = {
   id: asAxisId("axis_weight"),

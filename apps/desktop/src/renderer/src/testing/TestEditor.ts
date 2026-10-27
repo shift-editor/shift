@@ -19,6 +19,8 @@ import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import {
   kerningValueEdit,
+  sourceMetricValue,
+  withSourceMetricValue,
   type Glyph,
   type GlyphRenderModel,
   type GlyphLayer,
@@ -27,8 +29,12 @@ import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
+  mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
+  type Axis,
+  type AxisDefinition,
+  type MetricId,
   type GlyphId,
   type GlyphName,
   type AnchorId,
@@ -57,13 +63,18 @@ import type {
   AuthoredComponent,
   AuthoredLayer,
   AuthoredPoint,
+  AxisCoordinate,
+  FontOverview,
+  GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
+  ResolvedGlyph,
+  ResolvedLocation,
 } from "@shift/runtime";
 import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
-import type { EditorTestSurface, Modifiers, Outline } from "./surface";
+import type { AxisValues, EditorTestSurface, Modifiers, Outline } from "./surface";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -735,6 +746,47 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.font.deleteKerningGroup(this.#kerningGroupNamed(position, name));
   }
 
+  addAxis(axis: AxisDefinition): void {
+    this.font.createAxis(axis);
+  }
+
+  async setAxisMapping(
+    axis: string,
+    points: readonly (readonly [input: number, output: number])[],
+  ): Promise<void> {
+    const target = this.#axisTagged(axis);
+    const mapping = {
+      id: mintAxisMappingId(),
+      name: `${target.name} mapping`,
+      inputs: [target.id],
+      outputs: [target.id],
+      points: points.map(([input, output]) => ({
+        input: { values: { [target.id]: input } },
+        output: { values: { [target.id]: output } },
+      })),
+    };
+    await this.font.setIndependentAxisMapping(target, mapping);
+  }
+
+  addSource(name: string, location: AxisValues): void {
+    this.createSource(name, externalAxisLocationFromRecord(this.#axisValueRecord(location)));
+  }
+
+  switchToSource(name: string): void {
+    this.selectSourceForEditing(this.#sourceNamed(name));
+  }
+
+  async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
+    const current = this.font.source(this.#sourceNamed(source));
+    if (!current) throw new Error(`The font has no source named ${source}`);
+    const value = sourceMetricValue(current, this.#metricNamed(metric));
+    await this.font.updateSource(withSourceMetricValue(current, { ...value, position }));
+  }
+
+  addInstance(name: string, location: AxisValues): void {
+    this.font.createNamedInstance({ name, location: { values: this.#axisValueRecord(location) } });
+  }
+
   kerning(first: string, second: string): readonly KerningMasterValue[] {
     return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
   }
@@ -770,6 +822,31 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const source = this.font.sources.find((candidate) => candidate.name === name);
     if (!source) throw new Error(`The font has no source named ${name}`);
     return source.id;
+  }
+
+  #axisTagged(tag: string): Axis {
+    const axis = this.font.getAxes().find((candidate) => candidate.tag === tag);
+    if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
+    return axis;
+  }
+
+  #axisValueRecord(location: AxisValues): Record<string, number> {
+    return Object.fromEntries(
+      Object.entries(location).map(([tag, value]) => [this.#axisTagged(tag).id, value]),
+    );
+  }
+
+  #axisCoordinates(location: AxisValues): AxisCoordinate[] {
+    return Object.entries(location).map(([tag, value]) => ({
+      axisId: this.#axisTagged(tag).id,
+      value,
+    }));
+  }
+
+  #metricNamed(name: string): MetricId {
+    const definition = this.font.metricDefinitions.find((candidate) => candidate.name === name);
+    if (!definition) throw new Error(`The font has no metric named ${name}`);
+    return definition.id;
   }
 
   #kerningGroupNamed(position: KerningPosition, name: string): KerningGroupId {
@@ -829,6 +906,28 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   documentState(): Promise<WorkspaceDocumentState | null> {
     return this.font.editCoordinator.state();
+  }
+
+  fontOverview(): FontOverview {
+    return this.#reads.font.getFont();
+  }
+
+  glyph(name: string): GlyphSummary {
+    return this.#reads.font.getGlyph({ name: name as GlyphName });
+  }
+
+  locationAt(location: AxisValues): ResolvedLocation {
+    return this.#reads.font.resolveLocation(this.#axisCoordinates(location));
+  }
+
+  async glyphAt(location: AxisValues): Promise<ResolvedGlyph | null> {
+    const glyphId = this.glyphRecord?.id;
+    if (!glyphId) throw new Error("glyphAt needs an open glyph");
+    const resolved = await this.#reads.font.resolveGlyphs(
+      [glyphId],
+      this.#axisCoordinates(location),
+    );
+    return resolved.items[0] ?? null;
   }
 
   async reopen(): Promise<EditorTestSurface> {

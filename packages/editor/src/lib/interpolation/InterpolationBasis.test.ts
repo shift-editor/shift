@@ -1,13 +1,10 @@
+/// <reference types="node" />
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { Axis, AxisId, InterpolationBasis, SourceId } from "@shift/types";
 import { mintAxisId, mintSourceId } from "@shift/types";
-import {
-  designAxisLocationFromLocation,
-  interpolateSourceValues,
-  interpolationWeights,
-} from "@shift/editor/variation";
+import { interpolateSourceValues, interpolationWeights } from "./InterpolationBasis";
+import { designAxisLocationFromLocation } from "../variation/location";
 
 interface ParityMaster {
   readonly expected: number[];
@@ -90,7 +87,7 @@ describe("InterpolationBasis", () => {
 });
 
 function loadParityFixture(): ParityFixture {
-  const path = resolve(process.cwd(), "../../packages/types/__fixtures__/variation_parity.json");
+  const path = new URL("../../../../types/__fixtures__/variation_parity.json", import.meta.url);
   return JSON.parse(readFileSync(path, "utf-8")) as ParityFixture;
 }
 

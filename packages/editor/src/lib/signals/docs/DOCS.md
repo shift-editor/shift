@@ -27,10 +27,11 @@ For rules on writing and reviewing reactive code, and triage when something does
 signals/
   signal.ts          — signal, computed, effect, batch, untracked, isTracking
   useSignal.ts       — useSignalState (React bridge; optional frame scheduling)
+  KeyedCache.ts      — keyedCache: reuse a derived value per key across input lists
   index.ts           — public re-exports
-apps/desktop/src/renderer/src/lib/signals/
   signal.test.ts     — unit tests (vitest)
   signalCollection.test.ts — real-GC graph ownership and disposal tests
+  KeyedCache.test.ts — keyed reuse and disposal tests
 ```
 
 A second React bridge, `useSignalEffect` (lifecycle-scoped effect), lives in `@/hooks/useSignalEffect`. Purpose-specific hooks for derived values live under `hooks/`:
@@ -138,7 +139,7 @@ For a stable owner that only needs to announce "something changed", expose the r
 
 ```bash
 # Run reactive module tests
-cd apps/desktop && npx vitest run src/renderer/src/lib/signals/signal.test.ts
+cd packages/editor && pnpm exec vitest run src/lib/signals
 
 # Run full test suite
 cd apps/desktop && pnpm test

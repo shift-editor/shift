@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LatestRequest } from "@shift/editor";
+import { LatestRequest } from "./LatestRequest";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
