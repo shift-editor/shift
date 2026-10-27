@@ -1,8 +1,23 @@
-import type { AuthoredContour, EditorView } from "@shift/runtime";
+import type {
+  AuthoredContour,
+  EditorView,
+  KerningGapView,
+  KerningPairSideView,
+  KerningToolView,
+  SpacingGapSide,
+  SpacingHalfView,
+  SpacingToolView,
+  TextRunGlyph,
+  TextRunItem,
+  TextRunView,
+} from "@shift/runtime";
 import type { Editor } from "@shift/editor";
+import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId } from "@shift/types";
 import type { Signal } from "@shift/editor/signals";
+import { TextBuffer, type TextItem } from "@shift/editor/text";
+import { KerningTool, SpacingTool, type KerningPair } from "@shift/editor/tools";
 import type { WorkspaceApplyStatus } from "@/types/workspace";
 
 /** One point handle the canvas draws, and how it is styled. */
@@ -135,5 +150,170 @@ export class ShiftEditorReader {
     const select = this.#editor.toolIf("select")?.state;
     if (select?.type === "translating") return [...select.translate.guides];
     return [];
+  }
+
+  /**
+   * The canvas text run as it shows now: its items, the glyphs they lay out
+   * to, and the caret.
+   *
+   * @returns null when the canvas shows no text run.
+   */
+  textRun(): TextRunView | null {
+    const editor = this.#editor;
+    const node = editor.scene.first("textRun");
+    const run = node ? editor.text.run(node.runId) : null;
+    const layout = node ? editor.text.layoutCell(node.runId).peek() : null;
+    if (!node || !run || !layout) return null;
+
+    const itemIds = new Set(run.items.map((item) => item.id));
+    const open = editor.nodeDefinition("textRun").childGlyph(node);
+    const edited = open && editor.editing.nodeIds.includes(open.id) ? (open.itemId ?? null) : null;
+    const hovered = editor.hover.id;
+    const state = editor.textEditing.state;
+    const showsCaret = state?.active === true && state.nodeId === node.id;
+    const buffer = showsCaret ? new TextBuffer(run.items, state.focus, state.anchor) : null;
+    const caretPoint = buffer ? layout.caretAt(buffer.focusCluster).position() : null;
+
+    return {
+      items: run.items.map((item) => this.#textRunItem(item)),
+      glyphs: layout.placedGlyphs.map(
+        (placed): TextRunGlyph => ({
+          glyphId: placed.glyph.glyphId,
+          name: placed.glyph.glyphName,
+          itemIds: [...placed.glyph.sourceItemIds],
+          line: placed.lineIndex,
+          left: placed.left,
+          baseline: placed.baseline,
+          origin: { x: placed.origin.x, y: placed.origin.y },
+          advance: placed.glyph.xAdvance,
+          kern: placed.glyph.xKern,
+        }),
+      ),
+      advance: layout.totalAdvance,
+      baselines: layout.lines.map((line) => line.y),
+      openItemId: open?.itemId ?? null,
+      openGlyph: open ? (editor.font.entryForId(open.glyphId)?.name ?? null) : null,
+      editedItemId: edited,
+      hoveredItemId: hovered !== null && itemIds.has(hovered as never) ? hovered : null,
+      caret:
+        buffer && caretPoint
+          ? {
+              position: buffer.focusCluster,
+              selection: { ...buffer.selection },
+              x: caretPoint.x,
+              y: caretPoint.y,
+            }
+          : null,
+    };
+  }
+
+  /**
+   * What the Spacing tool shows: the sidebearing under the pointer, the one
+   * selected, and the one whose value field is open; the last two measured
+   * now, so null once their glyphs are gone.
+   *
+   * @returns null when the Spacing tool is not active.
+   */
+  spacingTool(): SpacingToolView | null {
+    const tool = this.#editor.toolManager.activeTool;
+    const state = this.#editor.toolIf("spacing")?.state;
+    if (!(tool instanceof SpacingTool) || !state) return null;
+    const hovered =
+      state.type === "ready" || state.type === "dragging" ? (state.hit ?? null) : null;
+    const selected =
+      state.type === "ready" && state.selected ? tool.runs.refresh(state.selected) : null;
+    const editing = tool.editing;
+    return {
+      hovered: hovered ? this.#spacingHalf(hovered) : null,
+      selected: selected ? this.#spacingHalf(selected) : null,
+      editing: editing ? this.#spacingHalf(editing) : null,
+      sameAsHovered: hovered
+        ? tool.runs.sameSidebearings(hovered).map((half) => this.#spacingHalf(half))
+        : [],
+      overValue: state.type === "ready" && state.overLabel === true,
+      quiet: state.type === "ready" && state.quiet === true,
+    };
+  }
+
+  /**
+   * What the Kerning tool shows: the kern under the pointer, the one selected,
+   * which the sidebar shows, and the one whose value field is open.
+   *
+   * @returns null when the Kerning tool is not active.
+   */
+  kerningTool(): KerningToolView | null {
+    const tool = this.#editor.toolManager.activeTool;
+    const state = this.#editor.toolIf("kerning")?.state;
+    if (!(tool instanceof KerningTool) || !state) return null;
+    const hovered = state.type === "ready" ? state.hit : null;
+    const selected = tool.currentPair;
+    const editing = tool.editing;
+    return {
+      hovered: hovered ? this.#kerningGap(hovered) : null,
+      selected: selected ? this.#kerningGap(selected) : null,
+      editing: editing ? this.#kerningGap(editing) : null,
+      sameAsHovered: hovered
+        ? tool.runs.samePairs(hovered).map((pair) => this.#kerningGap(pair))
+        : [],
+    };
+  }
+
+  #textRunItem(item: TextItem): TextRunItem {
+    if (item.kind === "linebreak") return { id: item.id, text: "\n" };
+    if (item.kind === "character")
+      return { id: item.id, text: String.fromCodePoint(item.codepoint) };
+    return { id: item.id, text: `/${this.#editor.font.entryForId(item.glyphId)?.name ?? ""}` };
+  }
+
+  #spacingHalf(half: NonNullable<SpacingTool["currentHalf"]>): SpacingHalfView {
+    const { gap } = half;
+    return {
+      side: half.side,
+      scope: half.scope,
+      gap: {
+        left: gap.left ? this.#spacingSide(gap.left) : null,
+        right: gap.right ? this.#spacingSide(gap.right) : null,
+        leftBoundary: gap.leftBoundary,
+        rightBoundary: gap.rightBoundary,
+        baseline: gap.baseline,
+        top: gap.top,
+        bottom: gap.bottom,
+      },
+    };
+  }
+
+  #spacingSide(
+    side: NonNullable<NonNullable<SpacingTool["currentHalf"]>["glyphSide"]>,
+  ): SpacingGapSide {
+    return {
+      itemId: side.itemId,
+      glyph: this.#editor.font.entryForId(side.glyphId)?.name ?? "",
+      sidebearing: side.sidebearing,
+      edge: side.edge,
+    };
+  }
+
+  #kerningGap(pair: KerningPair): KerningGapView {
+    const editor = this.#editor;
+    const editable = pair.editablePair(editor);
+    const side = (position: KerningPairPosition): KerningPairSideView => {
+      const id = editable![position];
+      const lock = pair.lock(editor, position);
+      const name = isGroupSide(id)
+        ? editor.font.kerningCell.peek().groups.group(id)?.name
+        : editor.font.entryForId(id)?.name;
+      return { name: name ?? "", group: isGroupSide(id), ...lock };
+    };
+    return {
+      firstItemId: pair.gap.left.itemId,
+      secondItemId: pair.gap.right.itemId,
+      amount: pair.amount,
+      center: pair.center,
+      baseline: pair.gap.baseline,
+      bottom: pair.gap.bottom,
+      pair: editable
+        ? { first: side("first"), second: side("second"), amount: editable.amount }
+        : null,
+    };
   }
 }

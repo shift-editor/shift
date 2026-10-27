@@ -1747,6 +1747,32 @@ export class Font {
   }
 
   /**
+   * Locks one side of the pair between two glyphs to its glyph at a source,
+   * making it an exception to its group, or unlocks it back to the group, as
+   * one undo step. The kern does not move.
+   *
+   * @param exception - true to lock the side to its glyph; false to return it to its group.
+   * @returns false when that side has no group, or is already locked or unlocked.
+   */
+  setKerningException(
+    sourceId: SourceId,
+    first: GlyphId,
+    second: GlyphId,
+    position: KerningPairPosition,
+    exception: boolean,
+  ): boolean {
+    const kerning = this.#kerningCell.peek();
+    const pair = kerning.editablePair(sourceId, first, second);
+    const edit = kerning.exceptionEdit(sourceId, first, second, pair, position, exception);
+    if (!edit) return false;
+    this.setKerningValues(
+      [edit],
+      exception ? "Make kerning exception" : "Remove kerning exception",
+    );
+    return true;
+  }
+
+  /**
    * Moves glyphs into a kerning group, each leaving the group it was in at
    * that position, or takes them out of their group there with null; as one
    * undo step.

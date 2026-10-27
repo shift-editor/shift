@@ -107,15 +107,16 @@ export class TextEditing {
     this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
+  /** Inserts text as pasted: `/name` picks the glyph named `name`. */
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
   }
 
   /**
-   * Inserts typed text character by character, as the text field does: each
-   * newline becomes a line break, never parsed as proof-text syntax.
+   * Inserts text as typed: every character literally, with each line ending
+   * a line break.
    */
-  typeLiteral(text: string): void {
+  typeText(text: string): void {
     this.insert(
       [...text.replaceAll("\r\n", "\n")].map((char) =>
         char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),

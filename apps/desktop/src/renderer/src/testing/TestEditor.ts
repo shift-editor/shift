@@ -900,18 +900,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
     locked: boolean,
   ): Promise<boolean> {
     const sourceId = this.#sourceNamed(source);
-    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
-    const kerning = this.font.kerningCell.peek();
-    const pair = kerning.editablePair(sourceId, firstId, secondId);
-    const edit = kerning.exceptionEdit(sourceId, firstId, secondId, pair, side, locked);
-    if (!edit) return false;
-
-    this.font.setKerningValues(
-      [edit],
-      locked ? "Make kerning exception" : "Remove kerning exception",
+    const changed = this.font.setKerningException(
+      sourceId,
+      this.#glyphNamed(first),
+      this.#glyphNamed(second),
+      side,
+      locked,
     );
     await this.settle();
-    return true;
+    return changed;
   }
 
   async createKerningGroup(

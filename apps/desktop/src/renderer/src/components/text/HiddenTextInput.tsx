@@ -22,7 +22,7 @@ export function TextInput() {
   const flushInput = () => {
     const textarea = ref.current;
     if (!textarea || composing.current || !textarea.value) return;
-    editor.textEditing.typeLiteral(textarea.value);
+    editor.textEditing.typeText(textarea.value);
     textarea.value = "";
   };
 

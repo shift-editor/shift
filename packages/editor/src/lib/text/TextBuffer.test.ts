@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { characterTextItem as char, lineBreakTextItem, TextBuffer } from "@shift/editor/text";
+import { characterTextItem as char, lineBreakTextItem } from "./layout/types";
+import { TextBuffer } from "./TextBuffer";
 
 /** Returns what an edit leaves: the items, and the carets as the items they follow. */
 function contents(buffer: TextBuffer | null) {
