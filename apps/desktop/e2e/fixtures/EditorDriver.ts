@@ -1,17 +1,19 @@
 import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
-import type { Locator, Page } from "@playwright/test";
+import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { Point2D, Rect2D } from "@shift/geo";
-import type { Point } from "@shift/glyph-state";
-import type { GlyphId, PointId, Unicode } from "@shift/types";
-import { waitForEditorReady } from "./appLocators";
 import type {
-  ActiveGlyph,
-  CanvasBounds,
-  CanvasDrag,
-  Outline,
-  PointDrag,
-  PointTarget,
-} from "./types";
+  AuthoredAnchor,
+  AuthoredComponent,
+  AuthoredLayer,
+  AuthoredPoint,
+  KerningGroupSummary,
+  KerningMasterValue,
+} from "@shift/runtime";
+import type { GlyphId, KerningPosition, PointId, Unicode } from "@shift/types";
+import type { EditorReads, Outline } from "@/testing/reads";
+import { AppAgent } from "./appAgent";
+import { waitForEditorReady } from "./appLocators";
+import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
 
 const TOOL_LABELS = {
   select: "Select Tool (V)",
@@ -52,16 +54,38 @@ async function readLivePointPosition(page: Page, pointId: PointId): Promise<Poin
   }, pointId);
 }
 
+/** Reads the open glyph's authored layer at its node's source, as `layers.get` returns it. */
+const OPEN_LAYER = `
+  const view = (await shift.editor.inspect({ windowId })).value;
+  if (!view.glyph) throw new Error("Expected an open glyph");
+  const glyph = (await shift.glyphs.get({ windowId, glyphId: view.glyph.glyphId })).value;
+  const reference = glyph.layers.find(({ sourceId }) => sourceId === view.glyph.sourceId);
+  if (!reference) throw new Error("Expected authored layer");
+  return (await shift.layers.get({ windowId, layerId: reference.layerId })).value;
+`;
+
 /**
  * Drives the real desktop editor through Playwright and reads its observable domain state.
  *
  * @remarks
  * User actions that can persist geometry wait for the workspace edit pipeline before returning.
- * Live gesture observations remain available through methods such as {@link selectionBounds}.
+ * The {@link EditorReads} reads go through the app's local MCP server, as an agent's do, and
+ * return the same `@shift/runtime` data the vitest surface reads in-process. Live gesture
+ * observations remain available through methods such as {@link selectionBounds}.
  */
-export class EditorDriver {
-  /** Creates a driver for the editor owned by `page`. */
-  constructor(readonly page: Page) {}
+export class EditorDriver implements EditorReads {
+  readonly #agent: AppAgent;
+
+  /**
+   * Creates a driver for the editor owned by `page`.
+   * @param app - The app that owns `page`; required when more than one font window is open.
+   */
+  constructor(
+    readonly page: Page,
+    app: ElectronApplication | null = null,
+  ) {
+    this.#agent = new AppAgent(page, app);
+  }
 
   /** Returns the interactive editor canvas locator. */
   get canvas(): Locator {
@@ -367,11 +391,6 @@ export class EditorDriver {
     return (await this.activeGlyph())?.contourCount ?? 0;
   }
 
-  /** Returns a fresh snapshot of the current selection identities. */
-  async selectionIds(): Promise<readonly string[]> {
-    return this.page.evaluate(() => window.shiftSession?.editor.selection.ids ?? []);
-  }
-
   /** Returns the hovered editor object identity, or null when nothing is hovered. */
   async hoverId(): Promise<string | null> {
     return this.page.evaluate(() => window.shiftSession?.editor.hover.id ?? null);
@@ -399,34 +418,6 @@ export class EditorDriver {
       right: b.max.x,
       bottom: b.max.y,
     };
-  }
-
-  /** Returns a fresh confirmed outline; throws without an authored layer. */
-  async outline(): Promise<Outline> {
-    await this.#waitForEdits();
-
-    return this.page.evaluate(() => {
-      const editor = window.shift?.editor;
-      const node = editor?.scene.nodesOfKind("glyph")[0];
-      const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
-      if (!layer) throw new Error("Expected authored layer");
-
-      const snapshotPoint = (point: Point) => ({
-        id: point.id,
-        x: point.x,
-        y: point.y,
-        pointType: point.pointType,
-        smooth: point.smooth,
-      });
-
-      return layer.contours.map((contour) => ({
-        id: contour.id,
-        closed: contour.closed,
-        points: contour.points.map(snapshotPoint),
-        onCurvePoints: contour.points.filter((point) => point.isOnCurve).map(snapshotPoint),
-        segments: contour.segments().map((segment) => segment.type),
-      }));
-    });
   }
 
   /**
@@ -469,8 +460,7 @@ export class EditorDriver {
    * @param pointId - Point in the active authored layer.
    */
   async pointPosition(pointId: PointId): Promise<Point2D> {
-    await this.#waitForEdits();
-    return readLivePointPosition(this.page, pointId);
+    return (await this.pointPositions([pointId]))[pointId];
   }
 
   /**
@@ -613,6 +603,93 @@ export class EditorDriver {
       x: Math.round(bounds.x + bounds.width * fraction.x),
       y: Math.round(bounds.y + bounds.height * fraction.y),
     };
+  }
+
+  async outline(): Promise<Outline> {
+    return (await this.#openLayer()).contours;
+  }
+
+  async point(id: PointId): Promise<AuthoredPoint | null> {
+    const outline = await this.outline();
+    return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
+  }
+
+  async anchors(): Promise<readonly AuthoredAnchor[]> {
+    return (await this.#openLayer()).anchors;
+  }
+
+  async components(): Promise<readonly AuthoredComponent[]> {
+    return (await this.#openLayer()).components;
+  }
+
+  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
+    const outline = await this.outline();
+    const points = new Map(
+      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
+    );
+    return Object.fromEntries(
+      ids.map((id) => {
+        const point = points.get(id);
+        if (!point) throw new Error(`The open glyph has no point ${id}`);
+        return [id, { x: point.x, y: point.y }];
+      }),
+    ) as Record<PointId, Point2D>;
+  }
+
+  async advanceWidth(): Promise<number> {
+    return (await this.#openLayer()).advanceWidth;
+  }
+
+  async kerning(first: string, second: string): Promise<readonly KerningMasterValue[]> {
+    return this.#agent.run(
+      `const resolved = await shift.kerning.resolve({ windowId, pairs: [input] });
+      return resolved.value.items[0].masters;`,
+      { first, second },
+    );
+  }
+
+  async kerningAt(
+    source: string,
+    first: string,
+    second: string,
+  ): Promise<KerningMasterValue | null> {
+    const sourceId = await this.#agent.run<string>(
+      `const font = (await shift.font.get({ windowId })).value;
+      const source = font.sources.find(({ name }) => name === input);
+      if (!source) throw new Error("The font has no source named " + input);
+      return source.id;`,
+      source,
+    );
+    const masters = await this.kerning(first, second);
+    return masters.find((master) => master.sourceId === sourceId) ?? null;
+  }
+
+  async kerningGroups(position: KerningPosition): Promise<readonly KerningGroupSummary[]> {
+    return this.#agent.run(
+      "return (await shift.kerning.groups({ windowId, position: input })).value;",
+      position,
+    );
+  }
+
+  async kerningGroup(position: KerningPosition, name: string): Promise<KerningGroupSummary | null> {
+    const groups = await this.kerningGroups(position);
+    return groups.find((group) => group.name === name) ?? null;
+  }
+
+  async kerningGroupOf(
+    position: KerningPosition,
+    glyph: string,
+  ): Promise<KerningGroupSummary | null> {
+    const groups = await this.kerningGroups(position);
+    return groups.find((group) => group.members.some((member) => member.name === glyph)) ?? null;
+  }
+
+  async selectionIds(): Promise<readonly string[]> {
+    return this.#agent.run("return (await shift.editor.inspect({ windowId })).value.selectionIds;");
+  }
+
+  #openLayer(): Promise<AuthoredLayer> {
+    return this.#agent.run(OPEN_LAYER);
   }
 
   async #waitForEdits(): Promise<void> {

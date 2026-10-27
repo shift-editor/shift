@@ -104,8 +104,8 @@ import type {
   DrawnGlyph,
   EditorTestSurface,
   Modifiers,
-  Outline,
 } from "./surface";
+import type { Outline } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
