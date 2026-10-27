@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -10,8 +10,8 @@ use crate::finding::{Finding, Kind};
 
 /// Types this many or more must share a method for it to suggest a trait.
 const TRAIT_TYPES: usize = 3;
-/// A file needs this many cheap lazy closures before they're worth a helper.
-const LAZY_REPEATS: usize = 3;
+/// A file needs to build one error this many times before it's worth a helper.
+const ERROR_MAPPING_REPEATS: usize = 3;
 /// Method names too generic to suggest a trait.
 const GENERIC_METHODS: [&str; 8] = [
     "new", "len", "is_empty", "iter", "id", "get", "as_str", "from_str",
@@ -62,7 +62,10 @@ impl CrateScan {
                 if !["target", "tests", "benches"].contains(&name) {
                     Self::collect(&path, paths)?;
                 }
-            } else if name.ends_with(".rs") && !name.ends_with("tests.rs") {
+            } else if name.ends_with(".rs")
+                && !name.ends_with("tests.rs")
+                && name != "test_support.rs"
+            {
                 paths.push(path);
             }
         }
@@ -91,26 +94,31 @@ impl CrateScan {
         for file in &self.files {
             let mut scan = FileScan::new(&file.path, &crate_types, &mut inherent_methods);
             scan.visit_file(&file.syntax);
-            findings.extend(Self::repeated_lazy_closures(scan.findings));
+            findings.extend(scan.findings);
+            findings.extend(Self::repeated_error_mappings(scan.error_mappings));
         }
         findings.extend(self.trait_candidates(&inherent_methods));
         findings
     }
 
-    /// Keeps a file's cheap lazy closures only when there are enough of them
-    /// to want one helper, and reports them once, at the first.
-    fn repeated_lazy_closures(findings: Vec<Finding>) -> Vec<Finding> {
-        let (lazy, mut kept): (Vec<_>, Vec<_>) = findings
-            .into_iter()
-            .partition(|finding| finding.kind == Kind::LazyButCheap);
-        if let Some(first) = lazy.first().filter(|_| lazy.len() >= LAZY_REPEATS) {
-            let detail = format!("{} in this file, e.g. {}", lazy.len(), first.detail);
-            kept.push(Finding {
-                detail,
+    /// Reports an error a file builds often enough to want one helper, once,
+    /// at its first use.
+    fn repeated_error_mappings(mappings: BTreeMap<String, Vec<Finding>>) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        for (built, uses) in mappings {
+            let Some(first) = uses.first().filter(|_| uses.len() >= ERROR_MAPPING_REPEATS) else {
+                continue;
+            };
+            findings.push(Finding {
+                detail: format!(
+                    "this file builds `{built}` {} times, e.g. {}",
+                    uses.len(),
+                    first.detail
+                ),
                 ..first.clone()
             });
         }
-        kept
+        findings
     }
 
     fn trait_candidates(&self, inherent_methods: &InherentMethods) -> Vec<Finding> {
@@ -184,26 +192,86 @@ mod tests {
 
     #[test]
     fn a_chain_is_reported_once_at_its_outermost_call() {
-        let found = findings("fn f() { let names = font.glyphs().iter().map(name).collect(); }");
+        let found = findings(
+            "fn f() { let names = font.glyphs().iter().filter(kept).map(name).rev().collect(); }",
+        );
         assert_eq!(
             found,
             [(
                 Kind::LongChain,
-                "4 steps over 1 lines: glyphs.iter.map.collect".to_string()
+                "6 steps over 1 lines: glyphs.iter.filter.map.rev.collect".to_string()
             )]
         );
     }
 
     #[test]
-    fn cheap_lazy_closures_count_once_they_repeat_in_a_file() {
+    fn an_ordinary_iterator_chain_is_not_long() {
+        let found = findings("fn f() { let ids = points.iter().filter_map(id).collect(); }");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn a_long_builder_chain_is_not_reported() {
+        let found = findings(
+            "fn f() { let styles = Styles::new().header(a).usage(b).literal(c).placeholder(d).error(e).valid(f); }",
+        );
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn a_function_taking_an_argument_bundle_is_a_handler() {
+        let found = findings("struct AddGlyphArgs; fn add_glyph(args: AddGlyphArgs) {}");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn a_conversion_reading_fields_off_its_parameter_is_reported() {
+        let found = findings(
+            "struct Glyph; struct Record;
+             impl From<Glyph> for Record {
+                 fn from(glyph: Glyph) -> Self {
+                     Self { id: glyph.id.into(), name: glyph.name, advance: glyph.metrics.advance, points: glyph.points.clone(), kind: Kind::Base }
+                 }
+             }",
+        );
+        assert_eq!(
+            found,
+            [(
+                Kind::FieldCopyConversion,
+                "impl From for Record: 4 of 5 fields read straight off `glyph`".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn a_conversion_computing_its_fields_is_not_reported() {
+        let found = findings(
+            "struct Workspace; struct State;
+             impl From<&Workspace> for State {
+                 fn from(workspace: &Workspace) -> Self {
+                     Self { dirty: workspace.is_dirty(), kind: kind_of(workspace), target: None, id: workspace.id().to_string() }
+                 }
+             }",
+        );
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn an_error_built_three_times_in_a_file_is_reported_once() {
         let once = findings("fn f() { a.ok_or_else(|| invalid(\"a\")); }");
         assert!(once.is_empty());
 
         let repeated = findings(
-            "fn f() { a.ok_or_else(|| invalid(\"a\")); b.ok_or_else(|| invalid(\"b\")); c.ok_or_else(|| invalid(\"c\")); }",
+            "fn f() { a.ok_or_else(|| invalid(\"a\")); b.map_err(|e| invalid(&e)); c.ok_or_else(|| invalid(\"c\")); d.map_err(|e| other(e)); }",
         );
-        assert_eq!(repeated.len(), 1);
-        assert_eq!(repeated[0].0, Kind::LazyButCheap);
+        assert_eq!(
+            repeated,
+            [(
+                Kind::RepeatedErrorMapping,
+                "this file builds `invalid` 3 times, e.g. .ok_or_else(|| invalid(\"a\"))"
+                    .to_string()
+            )]
+        );
     }
 
     #[test]

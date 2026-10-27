@@ -9,12 +9,13 @@ pub(crate) enum Kind {
     MethodCandidate,
     /// The same public method name and arity on three or more types.
     TraitCandidate,
-    /// A method chain of four or more steps.
+    /// A method chain of six or more steps.
     LongChain,
-    /// `ok_or_else`, `unwrap_or_else` or `map_err` whose closure only builds a
-    /// value from paths and literals, repeated often enough to want a helper.
-    LazyButCheap,
-    /// A `From`/`TryFrom` impl that copies fields across one by one.
+    /// The same error built by `ok_or_else` or `map_err` three or more times in
+    /// one file, which a helper trait or a `From` impl would say once.
+    RepeatedErrorMapping,
+    /// A `From`/`TryFrom` impl whose struct literal reads four or more fields
+    /// straight off its parameter.
     FieldCopyConversion,
 }
 
@@ -23,7 +24,7 @@ impl Kind {
         Self::MethodCandidate,
         Self::TraitCandidate,
         Self::LongChain,
-        Self::LazyButCheap,
+        Self::RepeatedErrorMapping,
         Self::FieldCopyConversion,
     ];
 
@@ -32,7 +33,7 @@ impl Kind {
             Self::MethodCandidate => "method-candidate",
             Self::TraitCandidate => "trait-candidate",
             Self::LongChain => "long-chain",
-            Self::LazyButCheap => "lazy-but-cheap",
+            Self::RepeatedErrorMapping => "repeated-error-mapping",
             Self::FieldCopyConversion => "field-copy-conversion",
         }
     }
