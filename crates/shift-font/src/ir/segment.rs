@@ -317,4 +317,41 @@ mod tests {
 
         assert_eq!(segments, [SegmentIndices::Line([0, 0])]);
     }
+
+    #[test]
+    fn leading_off_curves_close_into_a_cubic_only_when_closed() {
+        use PointType::{OffCurve, OnCurve};
+        let kinds = [OffCurve, OffCurve, OnCurve, OnCurve];
+
+        let closed: Vec<_> = SegmentIndexIter::new(kinds.as_slice(), true).collect();
+        let open: Vec<_> = SegmentIndexIter::new(kinds.as_slice(), false).collect();
+
+        assert_eq!(
+            closed,
+            [
+                SegmentIndices::Line([2, 3]),
+                SegmentIndices::Cubic([3, 0, 1, 2])
+            ]
+        );
+        assert_eq!(open, [SegmentIndices::Line([2, 3])]);
+    }
+
+    #[test]
+    fn an_open_run_of_three_off_curves_ends_in_one_cubic() {
+        use PointType::{OffCurve, OnCurve};
+        let kinds = [OnCurve, OffCurve, OffCurve, OffCurve];
+
+        let segments: Vec<_> = SegmentIndexIter::new(kinds.as_slice(), false).collect();
+
+        assert_eq!(segments, [SegmentIndices::Cubic([0, 1, 2, 3])]);
+    }
+
+    #[test]
+    fn a_lone_off_curve_point_has_no_segments() {
+        let kinds = [PointType::OffCurve];
+        for closed in [false, true] {
+            let mut segments = SegmentIndexIter::new(kinds.as_slice(), closed);
+            assert!(segments.next().is_none(), "closed: {closed}");
+        }
+    }
 }

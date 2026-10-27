@@ -83,6 +83,29 @@ fn fewer_than_three_points_are_not_distributed() {
 }
 
 #[test]
+fn distributing_vertically_spaces_y_and_keeps_x() {
+    let mut layer = layer(&[(5.0, 90.0), (6.0, 0.0), (7.0, 10.0), (8.0, 30.0)]);
+
+    layer
+        .distribute_points(&[id(0), id(1), id(2), id(3)], DistributeAxis::Vertical)
+        .unwrap();
+
+    assert_eq!(
+        positions(&layer),
+        [(5.0, 90.0), (6.0, 0.0), (7.0, 30.0), (8.0, 60.0)]
+    );
+}
+
+#[test]
+fn aligning_no_points_leaves_the_layer_unchanged() {
+    let mut layer = layer(&[(0.0, 10.0), (40.0, 30.0)]);
+
+    layer.align_points(&[], PointAlignment::Left).unwrap();
+
+    assert_eq!(positions(&layer), [(0.0, 10.0), (40.0, 30.0)]);
+}
+
+#[test]
 fn arranging_an_unknown_point_moves_nothing() {
     let mut layer = layer(&[(0.0, 0.0), (5.0, 5.0), (9.0, 9.0)]);
     let missing = PointId::from_raw("gone");

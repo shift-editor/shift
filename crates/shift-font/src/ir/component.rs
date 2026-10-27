@@ -572,6 +572,17 @@ mod tests {
     }
 
     #[test]
+    fn decomposed_rotation_turns_counterclockwise() {
+        let d = DecomposedTransform {
+            rotation: 90.0,
+            ..Default::default()
+        };
+        let kurbo::Point { x, y } = d.transform_point(kurbo::Point::new(1.0, 0.0));
+        assert!(x.abs() < 1e-10);
+        assert!((y - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
     fn decomposed_transform_roundtrip() {
         let original = DecomposedTransform {
             translate_x: 50.0,
