@@ -64,6 +64,15 @@ describe("arrow keys nudge the selected points", () => {
     });
   });
 
+  it("changes nothing when no point is selected", async () => {
+    editor.select([]);
+    const before = await editor.outline();
+
+    await editor.pressKey("ArrowRight");
+
+    expect(await editor.outline()).toEqual(before);
+  });
+
   it("moves selected points and anchors together", async () => {
     await editor.draw({ anchors: [{ name: "top", x: 300, y: 300 }] });
     await editor.clickAt({ x: 100, y: 100 });

@@ -80,4 +80,33 @@ describe("adding a point on a segment with the Pen", () => {
       },
     );
   });
+
+  it("splits a quadratic into two quadratics, as one undo step", async () => {
+    await editor.draw({
+      contours: [
+        { points: [[0, 0], { x: 50, y: 100, off: true }, { x: 100, y: 0, qCurve: true }] },
+      ],
+    });
+    expect((await editor.outline())[0]?.points.map(({ pointType }) => pointType)).toEqual([
+      "onCurve",
+      "offCurve",
+      "qCurve",
+    ]);
+    editor.selectTool("pen");
+
+    await expectEdit(
+      editor,
+      (e) => e.clickAt({ x: 50, y: 50 }),
+      async (e) => {
+        const [contour] = await e.outline();
+        expect(contour?.points.map(({ pointType }) => pointType)).toEqual([
+          "onCurve",
+          "offCurve",
+          "qCurve",
+          "offCurve",
+          "qCurve",
+        ]);
+      },
+    );
+  });
 });

@@ -719,50 +719,6 @@ describe("point insertion preserves layer ownership", () => {
   });
 });
 
-describe("GlyphLayer.splitSegment keeps quadratic segments quadratic", () => {
-  let editor: TestEditor;
-  let layer: GlyphLayer;
-
-  beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    layer = editor.requireGlyphLayer();
-    const edit = layer.beginEdit();
-    const contourId = edit.addContour(false);
-    edit.addPoints(contourId, [
-      Point.onCurve({ x: 0, y: 0 }),
-      Point.offCurve({ x: 50, y: 100 }),
-      Point.create({ x: 100, y: 0 }, "qCurve", true),
-    ]);
-    edit.finish("Add quadratic segment");
-    await editor.settle();
-  });
-
-  afterEach(async () => {
-    await editor.settle();
-    editor.destroy();
-  });
-
-  it("preserves qCurve endpoints through the workspace", () => {
-    const segment = layer.contours[0]!.segments()[0]!;
-
-    expect(segment.type).toBe("quad");
-    expect(segment.end.pointType).toBe("qCurve");
-  });
-
-  it("keeps both endpoints quadratic after splitting", async () => {
-    const segment = layer.contours[0]!.segments()[0]!;
-
-    const splitId = layer.splitSegment(segment.id, 0.5);
-    await editor.settle();
-
-    expect(layer.point(splitId!)?.pointType).toBe("qCurve");
-    const segments = layer.contours[0]!.segments();
-    expect(segments.map(({ type }) => type)).toEqual(["quad", "quad"]);
-    expect(segments.map(({ end }) => end.pointType)).toEqual(["qCurve", "qCurve"]);
-  });
-});
-
 describe("GlyphLayer.addComponent with a base not yet loaded this session", () => {
   const outputRoots: string[] = [];
 
