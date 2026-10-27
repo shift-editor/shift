@@ -136,12 +136,13 @@ describe("kerning group edits", () => {
 
   it("takes several glyphs out of their group as one undo step", async () => {
     const group = groupHolding("second", "A")!;
-    const removed = group.members.slice(0, 2);
+    const members = group.members.map(({ name }) => name!);
+    const removed = members.slice(0, 2);
 
     await editor.moveToKerningGroup("second", removed, null);
 
     expect(editor.kerningGroup("second", group.name)?.members).toEqual(
-      group.members.filter((member) => !removed.includes(member)),
+      group.members.filter(({ name }) => !removed.includes(name!)),
     );
     await editor.undo();
     expect(editor.kerningGroup("second", group.name)?.members).toEqual(group.members);
@@ -168,7 +169,7 @@ describe("kerning group edits", () => {
     expect(editor.kerningGroups("second").every(({ position }) => position === "second")).toBe(
       true,
     );
-    expect(editor.kerningGroup("first", "zz-last")?.members).toEqual(["T"]);
+    expect(editor.kerningGroup("first", "zz-last")?.members.map(({ name }) => name)).toEqual(["T"]);
     expect(editor.kerningGroup("second", "zz-last")).toBeNull();
   });
 

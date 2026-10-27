@@ -20,7 +20,9 @@ import type { PointId } from "@shift/types";
 import type { EditorTestSurface } from "./surface";
 
 /** Where points should end up, or assertions to run on an editor holding the edit. */
-export type EditExpectation = Record<PointId, Point2D> | ((editor: EditorTestSurface) => void);
+export type EditExpectation =
+  | Record<PointId, Point2D>
+  | ((editor: EditorTestSurface) => void | Promise<void>);
 
 export async function expectEdit(
   editor: EditorTestSurface,
@@ -28,35 +30,39 @@ export async function expectEdit(
   expected: EditExpectation,
 ): Promise<void> {
   await editor.settle();
-  const before = editor.outline();
+  const before = await editor.outline();
 
   await act(editor);
   await editor.settle();
-  check(editor, expected, "after the edit");
-  const after = editor.outline();
+  await check(editor, expected, "after the edit");
+  const after = await editor.outline();
 
   await editor.undo();
   await editor.settle();
-  expect(editor.outline(), "undo restores the glyph").toEqual(before);
+  expect(await editor.outline(), "undo restores the glyph").toEqual(before);
 
   await editor.redo();
   await editor.settle();
-  expect(editor.outline(), "redo reapplies the edit").toEqual(after);
+  expect(await editor.outline(), "redo reapplies the edit").toEqual(after);
 
   const reopened = await editor.reopen();
   try {
-    expect(reopened.outline(), "the reopened document keeps the edit").toEqual(after);
-    check(reopened, expected, "after reopening");
+    expect(await reopened.outline(), "the reopened document keeps the edit").toEqual(after);
+    await check(reopened, expected, "after reopening");
   } finally {
     await reopened.close();
   }
 }
 
-function check(editor: EditorTestSurface, expected: EditExpectation, when: string): void {
+async function check(
+  editor: EditorTestSurface,
+  expected: EditExpectation,
+  when: string,
+): Promise<void> {
   if (typeof expected === "function") {
-    expected(editor);
+    await expected(editor);
     return;
   }
   const ids = Object.keys(expected) as PointId[];
-  expect(editor.pointPositions(ids), `point positions ${when}`).toEqual(expected);
+  expect(await editor.pointPositions(ids), `point positions ${when}`).toEqual(expected);
 }

@@ -18,7 +18,6 @@ import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/ed
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import {
-  isGroupSide,
   kerningValueEdit,
   type Glyph,
   type GlyphRenderModel,
@@ -54,14 +53,17 @@ import {
   type PointNames,
 } from "./fixtures";
 import type {
-  EditorTestSurface,
-  KerningGroup,
-  KerningRule,
-  Modifiers,
-  Outline,
-  OutlinePoint,
-  SourceKerning,
-} from "./surface";
+  AuthoredAnchor,
+  AuthoredComponent,
+  AuthoredLayer,
+  AuthoredPoint,
+  KerningGroupSummary,
+  KerningMasterValue,
+} from "@shift/runtime";
+import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
+import { ShiftFontReader } from "@/agent/ShiftFontReader";
+import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
+import type { EditorTestSurface, Modifiers, Outline } from "./surface";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -120,6 +122,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
   readonly #stack: WorkspaceStack;
   /** Temporary directories this editor's document was saved into, removed on {@link close}. */
   readonly #temporaryDirectories: string[] = [];
+  /**
+   * The agent readers MCP serves, over this editor: every surface read goes
+   * through them, so a test sees what an agent sees.
+   */
+  readonly #reads: {
+    readonly font: ShiftFontReader;
+    readonly kerning: ShiftKerningReader;
+    readonly editor: ShiftEditorReader;
+  };
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
   #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
@@ -134,6 +145,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
     this.#clipboard = clipboard;
+    this.#reads = {
+      font: new ShiftFontReader(stack.font, sessionMode),
+      kerning: new ShiftKerningReader(stack.font),
+      editor: new ShiftEditorReader(this, stack.editCoordinator.applyStatusCell),
+    };
     registerBuiltInTools(this);
     this.setActiveTool("select");
   }
@@ -634,9 +650,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.setXAdvance(width);
   }
 
-  advanceWidth(): number {
-    this.#assertWorkspaceSettled();
-    return this.requireGlyphLayer().xAdvance;
+  async advanceWidth(): Promise<number> {
+    return (await this.#authoredLayer()).advanceWidth;
   }
 
   setKerning(source: string, first: string, second: string, amount: number | null): void {
@@ -720,39 +735,29 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.font.deleteKerningGroup(this.#kerningGroupNamed(position, name));
   }
 
-  kerning(first: string, second: string): readonly SourceKerning[] {
-    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
-    const kerning = this.font.kerningCell.peek();
-    const location = this.font.defaultLocation();
-
-    return this.font.sources.map((source) => ({
-      source: source.name,
-      amount: this.font.kerningBetween(firstId, secondId, location, source.id),
-      rule: kerningRule(kerning.resolve(source.id, firstId, secondId)),
-    }));
+  kerning(first: string, second: string): readonly KerningMasterValue[] {
+    return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
   }
 
-  kerningAt(source: string, first: string, second: string): SourceKerning | null {
-    return this.kerning(first, second).find((kerning) => kerning.source === source) ?? null;
+  kerningAt(source: string, first: string, second: string): KerningMasterValue | null {
+    const sourceId = this.#sourceNamed(source);
+    return this.kerning(first, second).find((master) => master.sourceId === sourceId) ?? null;
   }
 
-  kerningGroup(position: KerningPosition, name: string): KerningGroup | null {
+  kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null {
     return this.kerningGroups(position).find((group) => group.name === name) ?? null;
   }
 
-  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroup | null {
-    return this.kerningGroups(position).find((group) => group.members.includes(glyph)) ?? null;
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroupSummary | null {
+    return (
+      this.kerningGroups(position).find((group) =>
+        group.members.some((member) => member.name === glyph),
+      ) ?? null
+    );
   }
 
-  kerningGroups(position: KerningPosition): readonly KerningGroup[] {
-    return this.font.kerningCell
-      .peek()
-      .groups.atPosition(position)
-      .map((group) => ({
-        name: group.name,
-        position: group.position,
-        members: group.glyphIds.map((id) => this.font.recordForId(id)?.name ?? id),
-      }));
+  kerningGroups(position: KerningPosition): readonly KerningGroupSummary[] {
+    return this.#reads.kerning.groups(position);
   }
 
   #glyphNamed(name: string): GlyphId {
@@ -773,51 +778,49 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return group.id;
   }
 
-  outline(): Outline {
-    this.#assertWorkspaceSettled();
-    return this.glyphContours.map((contour) => ({
-      closed: contour.closed,
-      points: contour.points.map(({ id, x, y, pointType, smooth }) => ({
-        id,
-        x,
-        y,
-        type: pointType,
-        smooth,
-      })),
-    }));
+  async outline(): Promise<Outline> {
+    return (await this.#authoredLayer()).contours;
   }
 
-  point(id: PointId): OutlinePoint | null {
-    return (
-      this.outline()
-        .flatMap((contour) => contour.points)
-        .find((point) => point.id === id) ?? null
+  async point(id: PointId): Promise<AuthoredPoint | null> {
+    const outline = await this.outline();
+    return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
+  }
+
+  async anchors(): Promise<readonly AuthoredAnchor[]> {
+    return (await this.#authoredLayer()).anchors;
+  }
+
+  async components(): Promise<readonly AuthoredComponent[]> {
+    return (await this.#authoredLayer()).components;
+  }
+
+  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
+    const outline = await this.outline();
+    const points = new Map(
+      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
     );
-  }
-
-  anchors(): readonly { name: string; x: number; y: number }[] {
-    this.#assertWorkspaceSettled();
-    return this.requireGlyphLayer().anchors.map(({ name, x, y }) => ({ name: name ?? "", x, y }));
-  }
-
-  components(): readonly { glyph: string; x: number; y: number }[] {
-    this.#assertWorkspaceSettled();
-    return this.requireGlyphLayer().geometry.components.map((component) => ({
-      glyph: this.font.recordForId(component.baseGlyphId)?.name ?? "",
-      x: component.transform.translateX,
-      y: component.transform.translateY,
-    }));
-  }
-
-  pointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {
-    return Object.fromEntries(ids.map((id) => [id, this.pointPosition(id)])) as Record<
-      PointId,
-      Point2D
-    >;
+    return Object.fromEntries(
+      ids.map((id) => {
+        const point = points.get(id);
+        if (!point) throw new Error(`The open glyph has no point ${id}`);
+        return [id, { x: point.x, y: point.y }];
+      }),
+    ) as Record<PointId, Point2D>;
   }
 
   selectionIds(): readonly string[] {
-    return [...this.selection.ids];
+    return this.#reads.editor.inspect("").selectionIds;
+  }
+
+  /**
+   * The open glyph's authored layer at the active source, read as agents read it.
+   *
+   * @throws {Error} while edits are pending, or when no glyph is open.
+   */
+  async #authoredLayer(): Promise<AuthoredLayer> {
+    this.#assertWorkspaceSettled();
+    return this.#reads.font.getLayer(this.requireGlyphLayer().layerId);
   }
 
   shownCursor(): string {
@@ -859,16 +862,4 @@ export class TestEditor extends Editor implements EditorTestSurface {
       throw new Error("Workspace edits are pending; await the user action before reading geometry");
     }
   }
-}
-
-/** Which kind of authored pair applies, from the pair the kerning resolves to. */
-function kerningRule(
-  applied: { first: GlyphId | KerningGroupId; second: GlyphId | KerningGroupId } | null,
-): KerningRule {
-  if (!applied) return "none";
-  const firstIsGroup = isGroupSide(applied.first);
-  const secondIsGroup = isGroupSide(applied.second);
-  if (firstIsGroup && secondIsGroup) return "group";
-  if (firstIsGroup || secondIsGroup) return "exception";
-  return "glyph";
 }

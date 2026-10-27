@@ -54,15 +54,16 @@ describe("saving and reopening a document", () => {
         e.select([b]);
         await e.deleteSelection(mode);
       },
-      (e) => {
-        const points = e.outline().flatMap((each) => each.points);
+      async (e) => {
+        const outline = await e.outline();
+        const points = outline.flatMap((each) => each.points);
         expect(points.map(({ id }) => id)).not.toContain(b);
         expect(points[0]?.id).toBe(a);
         if (mode === "fit") {
-          expect(e.outline()).toHaveLength(1);
-          expect(points.map(({ type }) => type)).toEqual(kept[span]);
+          expect(outline).toHaveLength(1);
+          expect(points.map(({ pointType }) => pointType)).toEqual(kept[span]);
         } else {
-          expect(e.outline().every((each) => each.points.length < 2)).toBe(true);
+          expect(outline.every((each) => each.points.length < 2)).toBe(true);
         }
       },
     );
@@ -96,8 +97,8 @@ describe("saving and reopening a document", () => {
     editor.setAdvanceWidth(720);
     await expect(editor.documentState()).resolves.toMatchObject({ dirty: true });
     await expect(editor.save()).resolves.toMatchObject({ dirty: false });
-    const saved = editor.outline();
-    expect(editor.point(curve)?.smooth).toBe(true);
+    const saved = await editor.outline();
+    expect((await editor.point(curve))?.smooth).toBe(true);
 
     const reopened = await editor.reopen();
     try {
@@ -105,8 +106,8 @@ describe("saving and reopening a document", () => {
         dirty: false,
         needsSaveAs: false,
       });
-      expect(reopened.outline()).toEqual(saved);
-      expect(reopened.advanceWidth()).toBe(720);
+      expect(await reopened.outline()).toEqual(saved);
+      expect(await reopened.advanceWidth()).toBe(720);
 
       await expectEdit(reopened, (e) => e.dragPoint(start, { x: 30, y: 20 }), {
         [start]: { x: 170, y: 150 },

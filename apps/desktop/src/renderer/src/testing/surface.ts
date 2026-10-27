@@ -8,16 +8,27 @@
  * plain data, so renaming or moving editor internals never reaches a test;
  * only {@link TestEditor}'s implementation changes.
  *
- * Every method is named for something a user does or sees. When a test needs
- * something not here, add a method in those terms, never one that forwards an
- * internal. {@link EditorTestSurface.asEditor} is the one escape hatch, and
+ * Every method is named for something a user does or sees. Reads are the
+ * agent read API (`@shift/runtime`, served to MCP by the window's agent
+ * readers), so a test observes exactly what an agent can, and the harness has
+ * no read logic of its own to bend. When a test needs a read that is not
+ * there, add it to the agent readers, not here. Actions are named for what a
+ * user does, never one that forwards an internal. {@link EditorTestSurface.asEditor} is the one escape hatch, and
  * lint allows it only as a call argument, for code under test that takes an
  * `Editor`.
  */
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
 import type { Point2D } from "@shift/geo";
-import type { KerningPosition, PointId, PointType } from "@shift/types";
+import type {
+  AuthoredAnchor,
+  AuthoredComponent,
+  AuthoredContour,
+  AuthoredPoint,
+  KerningGroupSummary,
+  KerningMasterValue,
+} from "@shift/runtime";
+import type { KerningPosition, PointId } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 
@@ -28,47 +39,11 @@ export interface Modifiers {
   readonly metaKey?: boolean;
 }
 
-/** One authored point, as the open glyph's layer stores it. */
-export interface OutlinePoint {
-  readonly id: PointId;
-  readonly x: number;
-  readonly y: number;
-  readonly type: PointType;
-  readonly smooth: boolean;
-}
-
-/** One authored contour. */
-export interface OutlineContour {
-  readonly closed: boolean;
-  readonly points: readonly OutlinePoint[];
-}
-
-/** The open glyph's authored contours, in order. */
-export type Outline = readonly OutlineContour[];
-
 /**
- * Which kind of authored pair applies between two glyphs, as `@shift/runtime`'s
- * `KerningRule` names it: both sides glyphs, a glyph against a group (an
- * exception), both sides groups, or no pair.
+ * The open glyph's authored contours, as `@shift/runtime`'s `layers.get`
+ * returns them to agents.
  */
-export type KerningRule = "glyph" | "exception" | "group" | "none";
-
-/** The kerning between two glyphs at one source, as `@shift/runtime`'s `KerningMasterValue`. */
-export interface SourceKerning {
-  /** The source's name. */
-  readonly source: string;
-  /** Font units the pair kerns at that source. */
-  readonly amount: number;
-  readonly rule: KerningRule;
-}
-
-/** One kerning group, as `@shift/runtime`'s `KerningGroupSummary`. */
-export interface KerningGroup {
-  readonly name: string;
-  readonly position: KerningPosition;
-  /** Member glyph names, in group order. */
-  readonly members: readonly string[];
-}
+export type Outline = readonly AuthoredContour[];
 
 export interface EditorTestSurface {
   /**
@@ -147,33 +122,33 @@ export interface EditorTestSurface {
   renameKerningGroup(position: KerningPosition, name: string, newName: string): Promise<void>;
   deleteKerningGroup(position: KerningPosition, name: string): Promise<void>;
 
-  /** The open glyph's authored outline. */
-  outline(): Outline;
+  /** The open glyph's authored outline, as agents read it. */
+  outline(): Promise<Outline>;
   /** One authored point of the open glyph, or null when it has none with that id. */
-  point(id: PointId): OutlinePoint | null;
+  point(id: PointId): Promise<AuthoredPoint | null>;
   /** The open glyph's anchors, in order. */
-  anchors(): readonly { readonly name: string; readonly x: number; readonly y: number }[];
-  /** The open glyph's components: each base glyph's name and offset. */
-  components(): readonly { readonly glyph: string; readonly x: number; readonly y: number }[];
-  /** Where each point is now, as the open glyph's layer stores it. */
-  pointPositions(ids: readonly PointId[]): Record<PointId, Point2D>;
+  anchors(): Promise<readonly AuthoredAnchor[]>;
+  /** The open glyph's components, in order. */
+  components(): Promise<readonly AuthoredComponent[]>;
+  /** Where each point is now, as the open glyph's authored layer stores it. */
+  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>>;
   /** The open glyph's advance width. */
-  advanceWidth(): number;
-  /** The kerning between two glyphs at every source, in font source order, as shown now. */
-  kerning(first: string, second: string): readonly SourceKerning[];
-  /** The kerning between two glyphs at one source, as shown now; null when the font has no such source. */
-  kerningAt(source: string, first: string, second: string): SourceKerning | null;
-  /** The kerning groups at a position, in the order the kerning panel lists them. */
-  kerningGroups(position: KerningPosition): readonly KerningGroup[];
+  advanceWidth(): Promise<number>;
+  /** The kerning between two glyphs at every source, in font source order. */
+  kerning(first: string, second: string): readonly KerningMasterValue[];
+  /** The kerning between two glyphs at the source named `source`; null when the font has none. */
+  kerningAt(source: string, first: string, second: string): KerningMasterValue | null;
+  /** The kerning groups at a position, in name order. */
+  kerningGroups(position: KerningPosition): readonly KerningGroupSummary[];
   /** The kerning group named `name` at a position, or null. */
-  kerningGroup(position: KerningPosition, name: string): KerningGroup | null;
-  /** The kerning group `glyph` belongs to at a position, or null. */
-  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroup | null;
+  kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null;
+  /** The kerning group the glyph named `glyph` belongs to at a position, or null. */
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroupSummary | null;
   /** The selected ids, in selection order. */
   selectionIds(): readonly string[];
-  /** The CSS cursor the editor shows. */
+  /** The CSS cursor the editor shows. Test-only: not agent data. */
   shownCursor(): string;
-  /** Flushes pending edits and reads the document's save state. */
+  /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
   documentState(): Promise<WorkspaceDocumentState | null>;
 
   /** Adds a glyph to the font and loads it. */
