@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { snapFeedback } from "@shift/editor/rendering";
-import type { PositionGuide } from "@shift/editor/types";
+import { snapFeedback } from "./SnapLines";
+import type { PositionGuide } from "../../../../types/positionEdit";
 
 const alignment = (target: { x: number; y: number }, point: { x: number; y: number }) =>
   ({ kind: "alignment", target, point }) as const satisfies PositionGuide;

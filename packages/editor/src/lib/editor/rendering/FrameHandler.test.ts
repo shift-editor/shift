@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { FrameHandler, type FrameClock } from "@shift/editor/rendering";
+import { FrameHandler, type FrameClock } from "./FrameHandler";
 
 describe("FrameHandler", () => {
   let frames: (() => void)[];
