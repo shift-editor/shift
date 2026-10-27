@@ -552,6 +552,22 @@ export class Editor {
     this.toolManager.activate(toolName);
   }
 
+  /**
+   * Picks an item from a tool's toolbar menu, as the toolbar's dropdown does:
+   * the item applies its choice, then its tool becomes active.
+   *
+   * @param tool - The toolbar tool whose menu holds the item.
+   * @param itemId - The menu item's id.
+   * @throws {Error} when the tool has no menu item with that id.
+   */
+  public chooseToolMenuItem(tool: ToolName, itemId: string): void {
+    const item = this.toolRegistry.get(tool)?.menuItems?.find(({ id }) => id === itemId);
+    if (!item) throw new Error(`The ${tool} tool has no menu item ${itemId}`);
+
+    item.onSelect();
+    this.setActiveTool(item.toolId ?? tool);
+  }
+
   public get toolManager(): ToolManager {
     return this.#toolManager;
   }

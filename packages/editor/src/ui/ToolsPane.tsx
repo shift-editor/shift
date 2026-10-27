@@ -230,10 +230,7 @@ export function ToolsPane({
                 {...buttonProps}
                 vertical={vertical}
                 menuItems={menuItems}
-                onMenuItemSelect={(item) => {
-                  item.onSelect();
-                  editor.setActiveTool(item.toolId ?? name);
-                }}
+                onMenuItemSelect={(item) => editor.chooseToolMenuItem(name, item.id)}
               />
             );
           })}
