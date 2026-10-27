@@ -25,14 +25,18 @@ import {
 } from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Mat, Rect, type Point2D, type Rect2D } from "@shift/geo";
+import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import { applyBooleanSelection } from "@/lib/editor/sidebarActions";
 import {
   mintGlyphId,
   mintLayerId,
   type GlyphId,
   type GlyphName,
   type AnchorId,
+  type AxisId,
   type GlyphRecord,
+  type SelectableId,
   type ComponentId,
   type KerningGroupId,
   type KerningPosition,
@@ -57,6 +61,9 @@ import type {
   AuthoredComponent,
   AuthoredLayer,
   AuthoredPoint,
+  EditorView,
+  FontOverview,
+  GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
@@ -650,6 +657,97 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.setXAdvance(width);
   }
 
+  selectObjects(ids: readonly SelectableId[]): void {
+    this.selection.select(ids);
+  }
+
+  pointerDownAt(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerDown(screen.x, screen.y, modifiers);
+  }
+
+  pointerMoveTo(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerMove(screen.x, screen.y, modifiers);
+  }
+
+  pointerUpAt(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerUp(screen.x, screen.y, modifiers);
+  }
+
+  async dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void> {
+    const by = { x: to.x - from.x, y: to.y - from.y };
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    await this.dragLocal({
+      down: from,
+      start: { x: from.x + (by.x / length) * lead, y: from.y + (by.y / length) * lead },
+      end: to,
+      options: modifiers,
+    });
+  }
+
+  combineSelectedContours(operation: "union" | "intersect" | "subtract"): Promise<boolean> {
+    return applyBooleanSelection(this, operation);
+  }
+
+  async reverseSelectedContour(): Promise<boolean> {
+    const handled = await runRendererCommand(this, "glyph.reverseSelectedContour");
+    await this.settle();
+    return handled;
+  }
+
+  async addAxis(axis: {
+    readonly tag: string;
+    readonly minimum: number;
+    readonly default: number;
+    readonly maximum: number;
+    readonly role?: "external" | "internal";
+  }): Promise<AxisId> {
+    const axisId = this.font.createAxis({
+      tag: axis.tag,
+      name: axis.tag,
+      role: axis.role ?? "external",
+      axisType: "continuous",
+      minimum: axis.minimum,
+      default: axis.default,
+      maximum: axis.maximum,
+      labels: [],
+      hidden: false,
+    });
+    await this.settle();
+    return axisId;
+  }
+
+  async addSource(name: string, location: Readonly<Record<AxisId, number>>): Promise<SourceId> {
+    const sourceId = this.createSource(name, externalAxisLocationFromRecord(location));
+    await this.settle();
+    return sourceId;
+  }
+
+  setLocation(location: Readonly<Record<AxisId, number>>): void {
+    this.setExternalLocation(externalAxisLocationFromRecord(location));
+  }
+
+  setLanguages(ids: readonly string[]): void {
+    this.setLanguageIds(ids);
+  }
+
+  setViewportSize(width: number, height: number): void {
+    this.setCameraRect(Rect.fromXYWH(0, 0, width, height));
+  }
+
+  zoomTo(level: number): void {
+    this.setZoom(level);
+  }
+
+  frameGlyph(): void {
+    const node = this.glyphNode;
+    if (!node) throw new Error("frameGlyph needs an open glyph");
+    this.fitGlyphFrame(node);
+  }
+
   async advanceWidth(): Promise<number> {
     return (await this.#authoredLayer()).advanceWidth;
   }
@@ -829,6 +927,41 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   documentState(): Promise<WorkspaceDocumentState | null> {
     return this.font.editCoordinator.state();
+  }
+
+  async outlineBounds(): Promise<Bounds | null> {
+    return (await this.#authoredLayer()).bounds;
+  }
+
+  fontOverview(): FontOverview {
+    return this.#reads.font.getFont();
+  }
+
+  editorView(): EditorView {
+    return this.#reads.editor.inspect("");
+  }
+
+  glyphNamed(name: string): GlyphSummary | null {
+    if (!this.font.recordForName(name as GlyphName)) return null;
+    return this.#reads.font.getGlyph({ name: name as GlyphName });
+  }
+
+  languages(): readonly string[] | null {
+    return this.font.languageIdsCell.peek();
+  }
+
+  zoomLevel(): number {
+    return this.zoom;
+  }
+
+  screenPosition(position: Point2D): Point2D {
+    const { x, y } = this.localToScreen(position);
+    return { x, y };
+  }
+
+  viewportCentre(): Point2D {
+    const { x, y } = this.camera.centre;
+    return { x, y };
   }
 
   async reopen(): Promise<EditorTestSurface> {

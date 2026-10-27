@@ -18,17 +18,29 @@
  * `Editor`.
  */
 import type { DeleteMode, Editor } from "@shift/editor";
+import type { SourceSelectionMode } from "@shift/editor/types";
 import type { ToolName } from "@shift/editor/tools";
-import type { Point2D } from "@shift/geo";
+import type { Bounds, Point2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
   AuthoredContour,
   AuthoredPoint,
+  EditorView,
+  FontOverview,
+  GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
-import type { KerningPosition, PointId } from "@shift/types";
+import type {
+  AxisId,
+  GlyphRecord,
+  KerningPosition,
+  PointId,
+  SelectableId,
+  SourceId,
+  Unicode,
+} from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 
@@ -79,6 +91,66 @@ export interface EditorTestSurface {
   deleteSelection(mode?: DeleteMode): Promise<boolean>;
   /** Sets the open glyph's advance width, as the sidebar's width field does. */
   setAdvanceWidth(width: number): void;
+  /** Replaces the selection with any mix of points, contours, anchors and components. */
+  selectObjects(ids: readonly SelectableId[]): void;
+  /** Selects everything in the open glyph, as Edit › Select All does. */
+  selectAll(): void;
+  /** Presses the pointer at a glyph-local position and holds it there. */
+  pointerDownAt(position: Point2D, modifiers?: Modifiers): void;
+  /** Moves the held or hovering pointer to a glyph-local position. */
+  pointerMoveTo(position: Point2D, modifiers?: Modifiers): void;
+  /** Releases the pointer at a glyph-local position, without waiting for the edit it makes. */
+  pointerUpAt(position: Point2D, modifiers?: Modifiers): void;
+  /** Drags from one glyph-local position to another, as the pointer does, and waits for the edit. */
+  dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Copies the selection, as Edit › Copy does. */
+  copy(): Promise<boolean>;
+  /** Cuts the selection, as Edit › Cut does. */
+  cut(): Promise<boolean>;
+  /** Pastes the clipboard into the open glyph, as Edit › Paste does. */
+  paste(): Promise<boolean>;
+  /** Combines the two selected closed contours, as the sidebar's boolean buttons do. */
+  combineSelectedContours(operation: "union" | "intersect" | "subtract"): Promise<boolean>;
+  /** Reverses the contours the selection touches, as the canvas menu's Reverse Contour does. */
+  reverseSelectedContour(): Promise<boolean>;
+  /** Sets the open glyph's left sidebearing, as the sidebar's LSB field does. */
+  setLeftSidebearing(value: number): void;
+  /** Sets the open glyph's right sidebearing, as the sidebar's RSB field does. */
+  setRightSidebearing(value: number): void;
+  /** Adds a variation axis, as the axes menu does, and returns its id. */
+  addAxis(axis: {
+    readonly tag: string;
+    readonly minimum: number;
+    readonly default: number;
+    readonly maximum: number;
+    readonly role?: "external" | "internal";
+  }): Promise<AxisId>;
+  /** Adds a source at an external location, as the sources menu does, and shows it. */
+  addSource(name: string, location: Readonly<Record<AxisId, number>>): Promise<SourceId>;
+  /** Shows a source, as clicking it in the sources panel does. */
+  selectSource(id: SourceId): void;
+  /** Adds a source to, or sets, the sources an edit applies to, as modifier-clicking in the sources panel does. */
+  selectSourceForEditing(id: SourceId, mode?: SourceSelectionMode): void;
+  /** Switches editing between every source and the shown one. */
+  toggleAllSourcesForEditing(): boolean;
+  /** Narrows editing back to the shown source. */
+  collapseEditingSources(): boolean;
+  /** Moves to an external designspace location, as the axis sliders do. */
+  setLocation(location: Readonly<Record<AxisId, number>>): void;
+  /** Creates one glyph per code point, named from Unicode, as the glyph grid's add action does. */
+  createGlyphsForUnicodes(unicodes: readonly Unicode[]): GlyphRecord[];
+  /** Sets the languages the font tracks, as the font info panel does. */
+  setLanguages(ids: readonly string[]): void;
+  /** Resizes the canvas viewport, in screen pixels. */
+  setViewportSize(width: number, height: number): void;
+  /** Sets the zoom level around the viewport centre, as the zoom menu does. */
+  zoomTo(level: number): void;
+  /** Frames all content, as View › Zoom to Fit does. */
+  zoomToFit(): void;
+  /** Frames the selection, as View › Zoom to Selection does. */
+  zoomToSelection(): void;
+  /** Frames the open glyph's metrics box, as opening a glyph does. */
+  frameGlyph(): void;
 
   /**
    * Sets the kerning between two glyphs at a source, as typing into the
@@ -150,6 +222,22 @@ export interface EditorTestSurface {
   shownCursor(): string;
   /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
   documentState(): Promise<WorkspaceDocumentState | null>;
+  /** The open glyph's outline bounds, or null when it has no outline. */
+  outlineBounds(): Promise<Bounds | null>;
+  /** The font's axes, sources and metrics, as agents read them. */
+  fontOverview(): FontOverview;
+  /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */
+  editorView(): EditorView;
+  /** The glyph named `name`, or null when the font has none. */
+  glyphNamed(name: string): GlyphSummary | null;
+  /** The languages the font tracks; null when none were ever set. Test-only: not agent data yet. */
+  languages(): readonly string[] | null;
+  /** The zoom level. Test-only: not agent data. */
+  zoomLevel(): number;
+  /** Where a glyph-local position shows in the viewport, in screen pixels. Test-only: not agent data. */
+  screenPosition(position: Point2D): Point2D;
+  /** The viewport's centre, in screen pixels. Test-only: not agent data. */
+  viewportCentre(): Point2D;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;

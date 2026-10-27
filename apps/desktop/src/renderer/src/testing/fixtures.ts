@@ -13,6 +13,7 @@
  * returns exactly the names a fixture used.
  */
 import type { ContourContent } from "@shift/editor/clipboard";
+import type { PointType } from "@shift/types";
 
 /** An on-curve corner as `[x, y]`, or a point with its kind and an optional name. */
 export type PointFixture<N extends string = string> =
@@ -23,6 +24,8 @@ export type PointFixture<N extends string = string> =
       readonly off?: true;
       readonly smooth?: true;
       readonly name?: N;
+      /** An on-curve point that ends a quadratic run (TrueType's `qCurve`). */
+      readonly qCurve?: true;
     };
 
 /** A contour, open unless `closed`. */
@@ -88,7 +91,7 @@ export function contourContent(contours: readonly ContourFixture[]): {
           : {
               x: point.x,
               y: point.y,
-              pointType: point.off ? ("offCurve" as const) : ("onCurve" as const),
+              pointType: pointType(point),
               smooth: point.smooth ?? false,
             },
       ),
@@ -101,6 +104,12 @@ export function pointNames(contours: readonly ContourFixture[]): readonly (strin
   return contours.flatMap((contour) =>
     contour.points.map((point) => (isCorner(point) ? null : (point.name ?? null))),
   );
+}
+
+function pointType(point: Exclude<PointFixture, readonly [number, number]>): PointType {
+  if (point.off) return "offCurve";
+  if (point.qCurve) return "qCurve";
+  return "onCurve";
 }
 
 function isCorner(point: PointFixture): point is readonly [number, number] {
