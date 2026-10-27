@@ -2535,6 +2535,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-scan"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
 name = "shift-shape"
 version = "0.1.0"
 dependencies = [
