@@ -11,7 +11,6 @@ import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import type { TextRunNode } from "@shift/editor/types";
 import { FloatingToolbar } from "@shift/editor/ui";
 import { useOpenedGlyph } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
@@ -48,32 +47,7 @@ export const Editor = () => {
   useEffect(() => {
     if (!glyph) return undefined;
 
-    const runs = editor.nodeDefinition("textRun");
-    const run =
-      editor.scene.first("textRun") ??
-      editor.scene.createNode<TextRunNode>({
-        kind: "textRun",
-        runId: editor.text.createRun([]).id,
-        size: editor.font.metricsCell.peek().unitsPerEm,
-        position: { x: 0, y: 0 },
-      });
-    const previous = runs.childGlyph(run);
-    const open = () => {
-      if (previous?.glyphId === glyph.id) {
-        editor.enterNode(previous.id);
-        return previous;
-      }
-      const item = editor.text.glyphItem(glyph.id);
-      if (!item) return null;
-      editor.text.setItems(run.runId, [item]);
-      const child = runs.editItem(run, item.id);
-      if (child) editor.enterNode(child.id);
-      return child;
-    };
-    // Route hydration is navigation, never a history entry.
-    const node = editor.history.withoutRecording(open);
-    // Tools activate against the glyph node they find, so reset after it is placed.
-    editor.toolManager.reset();
+    const node = editor.openGlyphInPlace(glyph.id);
     if (node) editor.fitGlyphFrame(node);
 
     return () => {
