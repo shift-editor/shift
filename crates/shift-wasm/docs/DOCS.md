@@ -49,7 +49,7 @@ packages/editor/src/testing/
 packages/editor/src/lib/wasm/
   generated/layouts.ts   generated: interfaces and typed calls for every hot call (oxfmt-ignored)
   generated/engineLayouts.ts   generated: the engine module's hot calls, imported only by engineModule.ts
-  anchors.ts     propagateAnchors, followingPlacements, anchorKind over the generated calls
+  anchors.ts     followingPlacements: follow_anchors' transforms as matrices (callers import propagateAnchors from generated/layouts.ts, anchorKind from @shift/wasm)
   variation.ts   typed wrappers, handles, and the per-basis weights memo
 ```
 

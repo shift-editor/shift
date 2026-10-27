@@ -8,7 +8,7 @@ import type {
 import {
   evaluateVariationBasis as wasmEvaluateVariationBasis,
   interpolationWeights as wasmInterpolationWeights,
-  mapAxisLocation,
+  mapAxisLocation as wasmMapAxisLocation,
   registerAxes,
   registerAxisMappings,
   registerInterpolationBasis,
@@ -17,7 +17,7 @@ import {
   releaseAxisMappings,
   releaseInterpolationBasis,
   releaseVariationBasis,
-  unmapAxisLocation,
+  unmapAxisLocation as wasmUnmapAxisLocation,
 } from "@shift/wasm";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { asDesignAxisLocation, asExternalAxisLocation } from "../variation/location";
@@ -146,13 +146,16 @@ export function evaluateVariationBasis(
   );
 }
 
-/** Maps an external location to its design location through a font's compiled axis mappings. */
-export function mapAxisMappings(
+/**
+ * Maps an external location to its design location, exactly once, through a
+ * font's compiled axis mappings: shift-font's `map_location_with_bases`.
+ */
+export function mapAxisLocation(
   location: ExternalAxisLocation,
   axes: readonly Axis[],
   bases: readonly AxisMappingBasis[],
 ): DesignAxisLocation {
-  const design = mapAxisLocation(
+  const design = wasmMapAxisLocation(
     mappingHandles.of(bases),
     axesHandles.of(axes),
     locationValues(axes, location),
@@ -164,12 +167,12 @@ export function mapAxisMappings(
  * The external location a design location's mapping came from, on the
  * external axes alone: shift-font's `unmap_location_with_bases`.
  */
-export function unmapAxisMappings(
+export function externalAxisLocationForDesignLocation(
   location: DesignAxisLocation,
   axes: readonly Axis[],
   bases: readonly AxisMappingBasis[],
 ): ExternalAxisLocation {
-  const external = unmapAxisLocation(
+  const external = wasmUnmapAxisLocation(
     mappingHandles.of(bases),
     axesHandles.of(axes),
     locationValues(axes, location),
