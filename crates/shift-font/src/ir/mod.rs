@@ -51,6 +51,6 @@ pub use metrics::{
 };
 pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
-pub use segment::{CurveSegment, CurveSegmentIter};
+pub use segment::{CurveSegment, CurveSegmentIter, PointKinds, SegmentIndexIter, SegmentIndices};
 pub use source::{Source, SourceList, SourceRole};
 pub use variation::{AxisMappingBasis, DesignNormalization};

@@ -11,7 +11,7 @@ describe("SvgImporter", () => {
     }
     return value;
   };
-  const requireImport = (input: string) => requireValue(importer.importText(input));
+  const requireImport = async (input: string) => requireValue(await importer.importText(input));
 
   describe("canImportText", () => {
     it("recognizes SVG elements", () => {
@@ -36,8 +36,8 @@ describe("SvgImporter", () => {
   });
 
   describe("import", () => {
-    it("parses simple line path", () => {
-      const result = requireImport("M0,0 L100,0 L100,100 Z");
+    it("parses simple line path", async () => {
+      const result = await requireImport("M0,0 L100,0 L100,100 Z");
       const contour = requireValue(result.contours[0]);
 
       expect(result.contours).toHaveLength(1);
@@ -45,8 +45,8 @@ describe("SvgImporter", () => {
       expect(contour.points.length).toBeGreaterThanOrEqual(3);
     });
 
-    it("parses move and line commands", () => {
-      const result = requireImport("M10,20 L30,40");
+    it("parses move and line commands", async () => {
+      const result = await requireImport("M10,20 L30,40");
       const contour = requireValue(result.contours[0]);
 
       expect(requireValue(contour.points[0])).toMatchObject({
@@ -56,24 +56,24 @@ describe("SvgImporter", () => {
       });
     });
 
-    it("parses cubic bezier (C command)", () => {
-      const result = requireImport("M0,0 C25,50 75,50 100,0");
+    it("parses cubic bezier (C command)", async () => {
+      const result = await requireImport("M0,0 C25,50 75,50 100,0");
       const points = requireValue(result.contours[0]).points;
 
       const offCurvePoints = points.filter((p) => p.pointType === "offCurve");
       expect(offCurvePoints.length).toBeGreaterThan(0);
     });
 
-    it("parses quadratic bezier (Q command)", () => {
-      const result = requireImport("M0,0 Q50,100 100,0");
+    it("parses quadratic bezier (Q command)", async () => {
+      const result = await requireImport("M0,0 Q50,100 100,0");
       const points = requireValue(result.contours[0]).points;
 
       const offCurvePoints = points.filter((p) => p.pointType === "offCurve");
       expect(offCurvePoints.length).toBeGreaterThan(0);
     });
 
-    it("parses horizontal line (H command)", () => {
-      const result = requireImport("M0,0 H100");
+    it("parses horizontal line (H command)", async () => {
+      const result = await requireImport("M0,0 H100");
       const points = requireValue(result.contours[0]).points;
       const secondPoint = requireValue(points[1]);
 
@@ -81,8 +81,8 @@ describe("SvgImporter", () => {
       expect(secondPoint.y).toBe(0);
     });
 
-    it("parses vertical line (V command)", () => {
-      const result = requireImport("M0,0 V100");
+    it("parses vertical line (V command)", async () => {
+      const result = await requireImport("M0,0 V100");
       const points = requireValue(result.contours[0]).points;
       const secondPoint = requireValue(points[1]);
 
@@ -90,8 +90,8 @@ describe("SvgImporter", () => {
       expect(secondPoint.y).toBe(100);
     });
 
-    it("parses relative commands (lowercase)", () => {
-      const result = requireImport("M10,10 l20,0 l0,20");
+    it("parses relative commands (lowercase)", async () => {
+      const result = await requireImport("M10,10 l20,0 l0,20");
       const points = requireValue(result.contours[0]).points;
 
       expect(requireValue(points[0])).toMatchObject({ x: 10, y: 10 });
@@ -99,15 +99,15 @@ describe("SvgImporter", () => {
       expect(requireValue(points[2])).toMatchObject({ x: 30, y: 30 });
     });
 
-    it("parses path from SVG element", () => {
+    it("parses path from SVG element", async () => {
       const svg = '<path d="M0,0 L100,100"/>';
-      const result = requireImport(svg);
+      const result = await requireImport(svg);
 
       expect(result.contours).toHaveLength(1);
     });
 
-    it("creates multiple contours for multiple subpaths", () => {
-      const result = requireImport("M0,0 L100,0 Z M50,50 L150,50 Z");
+    it("creates multiple contours for multiple subpaths", async () => {
+      const result = await requireImport("M0,0 L100,0 Z M50,50 L150,50 Z");
       const contour0 = requireValue(result.contours[0]);
       const contour1 = requireValue(result.contours[1]);
 
@@ -116,19 +116,19 @@ describe("SvgImporter", () => {
       expect(contour1.closed).toBe(true);
     });
 
-    it("returns null for invalid input", () => {
-      const result = importer.importText("");
+    it("returns null for invalid input", async () => {
+      const result = await importer.importText("");
       expect(result).toBeNull();
     });
 
-    it("handles smooth curves (S command)", () => {
-      const result = requireImport("M0,0 C10,20 30,20 40,0 S70,20 80,0");
+    it("handles smooth curves (S command)", async () => {
+      const result = await requireImport("M0,0 C10,20 30,20 40,0 S70,20 80,0");
       const points = requireValue(result.contours[0]).points;
       expect(points.length).toBeGreaterThan(3);
     });
 
-    it("handles smooth quadratic (T command)", () => {
-      const result = requireImport("M0,0 Q25,50 50,0 T100,0");
+    it("handles smooth quadratic (T command)", async () => {
+      const result = await requireImport("M0,0 Q25,50 50,0 T100,0");
       const points = requireValue(result.contours[0]).points;
       expect(points.length).toBeGreaterThan(2);
     });

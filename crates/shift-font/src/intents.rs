@@ -9,6 +9,7 @@ use crate::Require;
 use crate::anchor_attachment::realign_attached_components;
 use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
 use crate::composite::anchor_aligned_offset;
+use crate::contour_edit::{ContourEnd, DeleteMode, JoinMode};
 use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
@@ -19,6 +20,7 @@ use crate::ir::{
     Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
+use crate::point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -123,6 +125,7 @@ font_intents! {
         RemovePoints,
         AddAnchors,
         MoveAnchors,
+        SetPositions,
         RemoveAnchors,
         RenameAnchors,
         AddComponent,
@@ -136,6 +139,14 @@ font_intents! {
         TransformLayer,
         SetXAdvance,
         ApplyBooleanOp,
+        DeletePoints,
+        SplitSegment,
+        UpgradeLineToCubic,
+        JoinContours,
+        TransformPoints,
+        AlignPoints,
+        DistributePoints,
+        ShiftSidebearing,
         ReplaceGlyphLayerContent,
     }
     font {
@@ -196,6 +207,8 @@ enum Coordinates {
     AdvanceWidth,
     ComponentTransforms,
     LayerTransform,
+    PointTransform,
+    SidebearingDelta,
 }
 
 impl Coordinates {
@@ -209,6 +222,8 @@ impl Coordinates {
             Self::AdvanceWidth => "advance width",
             Self::ComponentTransforms => "component transforms",
             Self::LayerTransform => "layer transform",
+            Self::PointTransform => "point transform",
+            Self::SidebearingDelta => "sidebearing delta",
         }
     }
 }
@@ -276,7 +291,7 @@ impl FontIntent {
     /// ever omitted here.
     pub fn required_layer_ids(&self, font: &Font) -> Vec<LayerId> {
         match self.kind() {
-            IntentKind::Layer(intent) => vec![intent.layer_id().clone()],
+            IntentKind::Layer(intent) => vec![*intent.layer_id()],
             IntentKind::Font(intent) => intent.required_layer_ids(font),
         }
     }
@@ -285,7 +300,7 @@ impl FontIntent {
     /// decomposed component is read from its layer, so load that first.
     pub fn edited_component_glyph_ids(&self, font: &Font) -> Vec<GlyphId> {
         match self {
-            Self::AddComponent(AddComponent { base_glyph_id, .. }) => vec![base_glyph_id.clone()],
+            Self::AddComponent(AddComponent { base_glyph_id, .. }) => vec![*base_glyph_id],
             Self::ReplaceGlyphLayerContent(ReplaceGlyphLayerContent { components, .. }) => {
                 components.iter().map(Component::base_glyph_id).collect()
             }
@@ -293,7 +308,7 @@ impl FontIntent {
                 layer_id,
                 component_ids,
             }) => {
-                let Some(layer) = font.layer(layer_id) else {
+                let Some(layer) = font.layer(*layer_id) else {
                     return Vec::new();
                 };
                 component_ids
@@ -376,7 +391,7 @@ impl FontIntentSet {
         for intent in &self.intents {
             if let FontIntent::SetKerningValues(intent) = intent {
                 for edit in &intent.edits {
-                    keys.insert((edit.source_id.clone(), edit.pair.clone()));
+                    keys.insert((edit.source_id, edit.pair.clone()));
                 }
             }
         }
@@ -390,7 +405,7 @@ impl FontIntentSet {
             .iter()
             .filter(|intent| intent.may_move_anchors())
             .filter_map(FontIntent::layer_id)
-            .cloned()
+            .copied()
             .collect()
     }
 }
@@ -463,9 +478,7 @@ impl<'a> FromIterator<&'a FontChange> for EditScopes {
                 FontChange::KerningValue {
                     source_id, pair, ..
                 } => {
-                    scopes
-                        .kerning_keys
-                        .insert((source_id.clone(), pair.clone()));
+                    scopes.kerning_keys.insert((*source_id, pair.clone()));
                 }
                 FontChange::KerningGroup { .. } => scopes.edits_groups = true,
                 _ => {}
@@ -507,19 +520,19 @@ impl Font {
         self.metrics().units_per_em * 0.5
     }
 
-    fn component_reference_would_cycle(&self, glyph_id: &GlyphId, base_glyph_id: &GlyphId) -> bool {
-        let mut pending = vec![base_glyph_id.clone()];
+    fn component_reference_would_cycle(&self, glyph_id: GlyphId, base_glyph_id: GlyphId) -> bool {
+        let mut pending = vec![base_glyph_id];
         let mut visited = HashSet::new();
 
         while let Some(candidate_id) = pending.pop() {
-            if candidate_id == *glyph_id {
+            if candidate_id == glyph_id {
                 return true;
             }
-            if !visited.insert(candidate_id.clone()) {
+            if !visited.insert(candidate_id) {
                 continue;
             }
 
-            let Some(candidate) = self.glyph(&candidate_id) else {
+            let Some(candidate) = self.glyph(candidate_id) else {
                 continue;
             };
             pending.extend(candidate.component_glyph_ids());
@@ -550,7 +563,7 @@ impl Font {
             match intent.kind() {
                 IntentKind::Layer(intent) => {
                     intent.apply(&mut after)?;
-                    scopes.touch_layer(intent.layer_id().clone(), intent.structural());
+                    scopes.touch_layer(*intent.layer_id(), intent.structural());
                 }
                 IntentKind::Font(intent) => {
                     let (layer_ids, glyph_id) = intent.apply(&mut after)?;
@@ -609,7 +622,7 @@ impl Font {
         }
 
         let glyph_id = glyph_id.unwrap_or_default();
-        let mut glyph = Glyph::with_id(glyph_id.clone(), glyph_name);
+        let mut glyph = Glyph::with_id(glyph_id, glyph_name);
         glyph.set_unicodes(unicodes);
 
         self.insert_glyph(glyph)?;
@@ -619,41 +632,41 @@ impl Font {
     fn apply_set_kerning_group_member(
         &mut self,
         position: KerningPosition,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
         group_id: Option<&KerningGroupId>,
     ) -> CoreResult<()> {
         self.require_glyph(glyph_id)?;
         let Some(group_id) = group_id else {
-            let Some(current_id) = self.kerning().group_of(position, glyph_id).cloned() else {
+            let Some(current_id) = self.kerning().group_of(position, glyph_id).copied() else {
                 return Ok(());
             };
             let mut group = self
                 .kerning()
-                .group(&current_id)
+                .group(current_id)
                 .require(&current_id)?
                 .clone();
-            group.members.retain(|member| member != glyph_id);
+            group.members.retain(|member| *member != glyph_id);
             self.kerning_mut().set_group(current_id, group)?;
             return Ok(());
         };
 
-        let mut group = self.kerning().group(group_id).require(group_id)?.clone();
+        let mut group = self.kerning().group(*group_id).require(group_id)?.clone();
         if group.position != position {
             return Err(CoreError::KerningGroupPosition {
-                group_id: group_id.clone(),
+                group_id: *group_id,
                 position,
             });
         }
-        if !group.members.contains(glyph_id) {
-            group.members.push(glyph_id.clone());
+        if !group.members.contains(&glyph_id) {
+            group.members.push(glyph_id);
         }
-        self.kerning_mut().set_group(group_id.clone(), group)?;
+        self.kerning_mut().set_group(*group_id, group)?;
         Ok(())
     }
 
     fn apply_set_kerning_values(&mut self, edits: &[KerningValueEdit]) -> CoreResult<()> {
         for edit in edits {
-            self.require_source(&edit.source_id)?;
+            self.require_source(edit.source_id)?;
             self.require_kerning_side(KerningPosition::First, &edit.pair.first)?;
             self.require_kerning_side(KerningPosition::Second, &edit.pair.second)?;
             match edit.value {
@@ -662,10 +675,10 @@ impl Font {
                 }
                 Some(value) => {
                     self.kerning_mut()
-                        .set_value(edit.source_id.clone(), edit.pair.clone(), value);
+                        .set_value(edit.source_id, edit.pair.clone(), value);
                 }
                 None => {
-                    self.kerning_mut().remove_value(&edit.source_id, &edit.pair);
+                    self.kerning_mut().remove_value(edit.source_id, &edit.pair);
                 }
             }
         }
@@ -678,14 +691,14 @@ impl Font {
         side: &KerningSide,
     ) -> CoreResult<()> {
         match side {
-            KerningSide::Glyph(glyph_id) => self.require_glyph(glyph_id).map(|_| ()),
+            KerningSide::Glyph(glyph_id) => self.require_glyph(*glyph_id).map(|_| ()),
             KerningSide::Group(group_id) => {
-                let group = self.kerning().group(group_id).require(group_id)?;
+                let group = self.kerning().group(*group_id).require(group_id)?;
                 if group.position == position {
                     Ok(())
                 } else {
                     Err(CoreError::KerningGroupPosition {
-                        group_id: group_id.clone(),
+                        group_id: *group_id,
                         position,
                     })
                 }
@@ -722,17 +735,17 @@ impl Font {
         Ok(())
     }
 
-    fn apply_delete_axis(&mut self, axis_id: &AxisId) -> CoreResult<()> {
+    fn apply_delete_axis(&mut self, axis_id: AxisId) -> CoreResult<()> {
         self.remove_axis(axis_id)?;
         Ok(())
     }
 
-    fn apply_delete_source(&mut self, source_id: &SourceId) -> CoreResult<Vec<LayerId>> {
+    fn apply_delete_source(&mut self, source_id: SourceId) -> CoreResult<Vec<LayerId>> {
         if self.sources().len() <= 1 {
             return Err(CoreError::CannotDeleteLastSource);
         }
-        if self.default_source_id().as_ref() == Some(source_id) {
-            return Err(CoreError::CannotDeleteDefaultSource(source_id.clone()));
+        if self.default_source_id().as_ref() == Some(&source_id) {
+            return Err(CoreError::CannotDeleteDefaultSource(source_id));
         }
 
         let layer_ids = self
@@ -741,10 +754,10 @@ impl Font {
             .collect::<Vec<_>>();
 
         for layer_id in &layer_ids {
-            self.remove_glyph_layer(layer_id)?;
+            self.remove_glyph_layer(*layer_id)?;
         }
 
-        self.remove_source(source_id.clone()).require(&source_id)?;
+        self.remove_source(source_id).require(&source_id)?;
         Ok(layer_ids)
     }
 
@@ -761,7 +774,7 @@ impl Font {
         if self.sources().iter().any(|source| source.name() == name) {
             return Err(CoreError::DuplicateSourceName(name.to_string()));
         }
-        if self.source(&source_id).is_some() {
+        if self.source(source_id).is_some() {
             return Err(CoreError::DuplicateSourceId(source_id));
         }
         if let Some(existing) = self.sources().iter().find(|source| {
@@ -774,8 +787,8 @@ impl Font {
         }
 
         for (axis_id, _) in location {
-            if self.axis(axis_id).is_none() {
-                return Err(CoreError::AxisNotFound(axis_id.clone()));
+            if self.axis(*axis_id).is_none() {
+                return Err(CoreError::AxisNotFound(*axis_id));
             }
         }
 
@@ -800,11 +813,11 @@ impl Font {
         glyph_id: GlyphId,
         source_id: SourceId,
     ) -> CoreResult<Vec<LayerId>> {
-        if self.glyph_id_by_layer(&layer_id).is_some() {
+        if self.glyph_id_by_layer(layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+            .layer_id_for_glyph_source(glyph_id, source_id)
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {
@@ -812,7 +825,7 @@ impl Font {
                 source_id,
             });
         }
-        let layer = GlyphLayer::with_width(layer_id.clone(), source_id, self.default_layer_width());
+        let layer = GlyphLayer::with_width(layer_id, source_id, self.default_layer_width());
 
         self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])
@@ -825,8 +838,7 @@ impl Font {
         source_id: SourceId,
         from_layer_id: LayerId,
     ) -> CoreResult<Vec<LayerId>> {
-        let layer =
-            self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
+        let layer = self.cloned_glyph_layer(layer_id, glyph_id, source_id, from_layer_id)?;
 
         self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])
@@ -840,8 +852,7 @@ impl Font {
         from_layer_id: LayerId,
         values: &GlyphInterpolationValues,
     ) -> CoreResult<Vec<LayerId>> {
-        let mut layer =
-            self.cloned_glyph_layer(layer_id.clone(), glyph_id.clone(), source_id, from_layer_id)?;
+        let mut layer = self.cloned_glyph_layer(layer_id, glyph_id, source_id, from_layer_id)?;
         layer.apply_interpolation_values(values)?;
 
         self.insert_glyph_layer(glyph_id, layer)?;
@@ -855,11 +866,11 @@ impl Font {
         source_id: SourceId,
         from_layer_id: LayerId,
     ) -> CoreResult<GlyphLayer> {
-        if self.glyph_id_by_layer(&layer_id).is_some() {
+        if self.glyph_id_by_layer(layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+            .layer_id_for_glyph_source(glyph_id, source_id)
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {
@@ -868,7 +879,7 @@ impl Font {
             });
         }
 
-        let from_glyph_id = self.require_layer_owner(&from_layer_id)?;
+        let from_glyph_id = self.require_layer_owner(from_layer_id)?;
         if from_glyph_id != glyph_id {
             return Err(CoreError::LayerGlyphMismatch {
                 layer_id: from_layer_id,
@@ -877,7 +888,7 @@ impl Font {
             });
         }
 
-        let source_layer = self.require_layer(&from_layer_id)?;
+        let source_layer = self.require_layer(from_layer_id)?;
         let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
 
         Ok(layer)
@@ -885,7 +896,7 @@ impl Font {
 
     fn apply_update_glyph(
         &mut self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
         new_name: GlyphName,
         new_unicodes: Vec<u32>,
     ) -> CoreResult<()> {
@@ -903,16 +914,16 @@ impl Font {
     /// sibling whose base glyph has no layer there contributes no anchors.
     fn anchor_aligned_component_transform(
         &self,
-        layer_id: &LayerId,
-        base_glyph_id: &GlyphId,
+        layer_id: LayerId,
+        base_glyph_id: GlyphId,
     ) -> CoreResult<Option<DecomposedTransform>> {
         let layer = self.require_layer(layer_id)?;
         let source_id = layer.source_id();
         let base_layer_at_source = |glyph_id: GlyphId| {
-            self.glyph(&glyph_id)
-                .and_then(|glyph| glyph.layer_for_source(&source_id))
+            self.glyph(glyph_id)
+                .and_then(|glyph| glyph.layer_for_source(source_id))
         };
-        let Some(component_layer) = base_layer_at_source(base_glyph_id.clone()) else {
+        let Some(component_layer) = base_layer_at_source(base_glyph_id) else {
             return Ok(None);
         };
 
@@ -1015,8 +1026,8 @@ impl FontDiff<'_> {
         let Self { before, after } = *self;
         let mut changes = Vec::new();
         for (source_id, pair) in kerning_keys {
-            let original = before.kerning().value(&source_id, &pair);
-            let replacement = after.kerning().value(&source_id, &pair);
+            let original = before.kerning().value(source_id, &pair);
+            let replacement = after.kerning().value(source_id, &pair);
             if original != replacement {
                 changes.push(FontChange::KerningValue {
                     source_id,
@@ -1031,7 +1042,7 @@ impl FontDiff<'_> {
                 before.kerning().changed_groups(after.kerning())
             {
                 changes.push(FontChange::KerningGroup {
-                    group_id: group_id.clone(),
+                    group_id: *group_id,
                     group: Replacement::new(original.cloned(), replacement.cloned()),
                 });
             }
@@ -1044,8 +1055,8 @@ impl FontDiff<'_> {
         let Self { before, after } = *self;
         let mut changes = Vec::new();
         for glyph_id in glyph_ids {
-            let original = before.glyph(glyph_id).cloned();
-            let replacement = after.glyph(glyph_id).cloned();
+            let original = before.glyph(*glyph_id).cloned();
+            let replacement = after.glyph(*glyph_id).cloned();
             if original != replacement {
                 changes.push(FontChange::Glyph(Box::new(Replacement::new(
                     original,
@@ -1067,26 +1078,26 @@ impl FontDiff<'_> {
         let mut changes = Vec::new();
         let mut layers = Vec::new();
         for (layer_id, structural) in touched {
-            let original_owner = before.glyph_id_by_layer(&layer_id);
-            let replacement_owner = after.glyph_id_by_layer(&layer_id);
+            let original_owner = before.glyph_id_by_layer(layer_id);
+            let replacement_owner = after.glyph_id_by_layer(layer_id);
             let glyph_id = match (&original_owner, &replacement_owner) {
                 (Some(original), Some(replacement)) if original != replacement => {
                     return Err(CoreError::LayerGlyphMismatch {
                         layer_id,
-                        glyph_id: original.clone(),
-                        actual_glyph_id: replacement.clone(),
+                        glyph_id: *original,
+                        actual_glyph_id: *replacement,
                     });
                 }
-                (Some(glyph_id), _) | (_, Some(glyph_id)) => glyph_id.clone(),
+                (Some(glyph_id), _) | (_, Some(glyph_id)) => *glyph_id,
                 (None, None) => return Err(CoreError::LayerNotFound(layer_id)),
             };
 
             let original = before
-                .glyph(&glyph_id)
+                .glyph(glyph_id)
                 .and_then(|glyph| glyph.layers().get(&layer_id))
                 .cloned();
             let replacement = after
-                .glyph(&glyph_id)
+                .glyph(glyph_id)
                 .and_then(|glyph| glyph.layers().get(&layer_id))
                 .cloned();
             if original == replacement {
@@ -1146,16 +1157,16 @@ mod tests {
     fn layer_intents_report_their_layer_and_what_they_change() {
         let layer_id = LayerId::new();
         let moved = FontIntent::from(MovePoints {
-            layer_id: layer_id.clone(),
+            layer_id,
             point_ids: Vec::new(),
             coords: Vec::new(),
         });
         let removed = FontIntent::from(RemovePoints {
-            layer_id: layer_id.clone(),
+            layer_id,
             point_ids: Vec::new(),
         });
         let renamed = FontIntent::from(RenameAnchors {
-            layer_id: layer_id.clone(),
+            layer_id,
             anchor_ids: Vec::new(),
             names: Vec::new(),
         });
@@ -1176,7 +1187,7 @@ mod tests {
             layer_id: LayerId::new(),
             glyph_id: GlyphId::new(),
             source_id: font.default_source_id().unwrap(),
-            from_layer_id: from_layer_id.clone(),
+            from_layer_id,
         });
         let renamed = FontIntent::from(RenameKerningGroup {
             group_id: KerningGroupId::new(),
@@ -1202,7 +1213,7 @@ mod tests {
         let original = font.clone();
 
         let Err(error) = font.apply_intents(&FontIntentSet::from(DeleteSource {
-            source_id: default_source_id.clone(),
+            source_id: default_source_id,
         })) else {
             panic!("default source deletion should be rejected");
         };
@@ -1246,7 +1257,7 @@ mod tests {
         contour.add_point(0.0, 0.0, PointType::OnCurve, false);
         let mut layer = GlyphLayer::new(LayerId::new(), default_source_id);
         layer.add_contour(contour);
-        let mut glyph = Glyph::with_id(glyph_id.clone(), "A");
+        let mut glyph = Glyph::with_id(glyph_id, "A");
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
@@ -1256,7 +1267,7 @@ mod tests {
         let result = candidate.apply_intents(&FontIntentSet {
             intents: vec![
                 CreateGlyphLayer {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     glyph_id,
                     source_id,
                 }
@@ -1282,26 +1293,26 @@ mod tests {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let base_id = GlyphId::new();
-        let mut base = Glyph::with_id(base_id.clone(), "base");
-        base.set_layer(GlyphLayer::new(LayerId::new(), source_id.clone()));
+        let mut base = Glyph::with_id(base_id, "base");
+        base.set_layer(GlyphLayer::new(LayerId::new(), source_id));
         font.insert_glyph(base).unwrap();
 
         let root_id = GlyphId::new();
         let root_layer_id = LayerId::new();
         let mut root = Glyph::with_id(root_id, "root");
-        root.set_layer(GlyphLayer::new(root_layer_id.clone(), source_id));
+        root.set_layer(GlyphLayer::new(root_layer_id, source_id));
         font.insert_glyph(root).unwrap();
         let component_id = ComponentId::new();
 
         font.apply_intents(&FontIntentSet::from(AddComponent {
-            layer_id: root_layer_id.clone(),
+            layer_id: root_layer_id,
             component_id: component_id.clone(),
-            base_glyph_id: base_id.clone(),
+            base_glyph_id: base_id,
         }))
         .unwrap();
 
         let component = font
-            .layer(&root_layer_id)
+            .layer(root_layer_id)
             .unwrap()
             .component(&component_id)
             .unwrap();
@@ -1309,12 +1320,12 @@ mod tests {
         assert_eq!(component.base_glyph_name().as_str(), "base");
 
         font.apply_intents(&FontIntentSet::from(RemoveComponents {
-            layer_id: root_layer_id.clone(),
+            layer_id: root_layer_id,
             component_ids: vec![component_id],
         }))
         .unwrap();
 
-        assert!(font.layer(&root_layer_id).unwrap().components().is_empty());
+        assert!(font.layer(root_layer_id).unwrap().components().is_empty());
     }
 
     #[test]
@@ -1323,7 +1334,7 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
         let layer_id = LayerId::new();
         let mut glyph = Glyph::with_id(GlyphId::new(), "a");
-        glyph.set_layer(GlyphLayer::new(layer_id.clone(), source_id));
+        glyph.set_layer(GlyphLayer::new(layer_id, source_id));
         font.insert_glyph(glyph).unwrap();
         let unknown = (0..8).map(|_| ComponentId::new()).collect::<Vec<_>>();
 
@@ -1343,35 +1354,35 @@ mod tests {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let base_id = GlyphId::new();
-        let mut base = Glyph::with_id(base_id.clone(), "o");
-        let mut base_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        let mut base = Glyph::with_id(base_id, "o");
+        let mut base_layer = GlyphLayer::new(LayerId::new(), source_id);
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 321.0, 485.0));
         base.set_layer(base_layer);
         font.insert_glyph(base).unwrap();
 
         let mark_id = GlyphId::new();
-        let mut mark = Glyph::with_id(mark_id.clone(), "acutecomb");
-        let mut mark_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        let mut mark = Glyph::with_id(mark_id, "acutecomb");
+        let mut mark_layer = GlyphLayer::new(LayerId::new(), source_id);
         mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 0.0, 485.0));
         mark.set_layer(mark_layer);
         font.insert_glyph(mark).unwrap();
 
         let root_layer_id = LayerId::new();
         let mut root = Glyph::with_id(GlyphId::new(), "oacute");
-        root.set_layer(GlyphLayer::new(root_layer_id.clone(), source_id));
+        root.set_layer(GlyphLayer::new(root_layer_id, source_id));
         font.insert_glyph(root).unwrap();
         let mark_component_id = ComponentId::new();
 
         font.apply_intents(&FontIntentSet {
             intents: vec![
                 AddComponent {
-                    layer_id: root_layer_id.clone(),
+                    layer_id: root_layer_id,
                     component_id: ComponentId::new(),
                     base_glyph_id: base_id,
                 }
                 .into(),
                 AddComponent {
-                    layer_id: root_layer_id.clone(),
+                    layer_id: root_layer_id,
                     component_id: mark_component_id.clone(),
                     base_glyph_id: mark_id,
                 }
@@ -1380,7 +1391,7 @@ mod tests {
         })
         .unwrap();
 
-        let layer = font.layer(&root_layer_id).unwrap();
+        let layer = font.layer(root_layer_id).unwrap();
         let mark = layer.component(&mark_component_id).unwrap();
         assert_eq!(mark.matrix(), Transform::translate(321.0, 0.0));
     }
@@ -1391,14 +1402,14 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
         let glyph_id = GlyphId::new();
         let layer_id = LayerId::new();
-        let mut glyph = Glyph::with_id(glyph_id.clone(), "self-referencing");
-        glyph.set_layer(GlyphLayer::new(layer_id.clone(), source_id));
+        let mut glyph = Glyph::with_id(glyph_id, "self-referencing");
+        glyph.set_layer(GlyphLayer::new(layer_id, source_id));
         font.insert_glyph(glyph).unwrap();
 
         let result = font.apply_intents(&FontIntentSet::from(AddComponent {
             layer_id,
             component_id: ComponentId::new(),
-            base_glyph_id: glyph_id.clone(),
+            base_glyph_id: glyph_id,
         }));
 
         assert!(matches!(
@@ -1417,21 +1428,21 @@ mod tests {
         let parent_id = GlyphId::new();
         let child_id = GlyphId::new();
 
-        let mut parent_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
-        parent_layer.add_component(Component::new(child_id.clone(), "child"));
-        let mut parent = Glyph::with_id(parent_id.clone(), "parent");
+        let mut parent_layer = GlyphLayer::new(LayerId::new(), source_id);
+        parent_layer.add_component(Component::new(child_id, "child"));
+        let mut parent = Glyph::with_id(parent_id, "parent");
         parent.set_layer(parent_layer);
         font.insert_glyph(parent).unwrap();
 
         let child_layer_id = LayerId::new();
-        let mut child = Glyph::with_id(child_id.clone(), "child");
-        child.set_layer(GlyphLayer::new(child_layer_id.clone(), source_id));
+        let mut child = Glyph::with_id(child_id, "child");
+        child.set_layer(GlyphLayer::new(child_layer_id, source_id));
         font.insert_glyph(child).unwrap();
 
         let result = font.apply_intents(&FontIntentSet::from(AddComponent {
             layer_id: child_layer_id,
             component_id: ComponentId::new(),
-            base_glyph_id: parent_id.clone(),
+            base_glyph_id: parent_id,
         }));
 
         assert!(matches!(
@@ -1448,19 +1459,19 @@ mod tests {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let layer_id = LayerId::new();
-        let mut layer = GlyphLayer::new(layer_id.clone(), source_id);
+        let mut layer = GlyphLayer::new(layer_id, source_id);
         let anchor_id = layer.add_anchor(Anchor::new(Some("top".to_string()), 10.0, 0.0));
         let mut glyph = Glyph::new("root");
         glyph.set_layer(layer);
         font.insert_glyph(glyph).unwrap();
 
         font.apply_intents(&FontIntentSet::from(TransformLayer {
-            layer_id: layer_id.clone(),
+            layer_id,
             transform: Transform::translate(25.0, 0.0),
         }))
         .unwrap();
         let anchor = font
-            .require_layer(&layer_id)
+            .require_layer(layer_id)
             .unwrap()
             .anchor(&anchor_id)
             .unwrap();
@@ -1485,7 +1496,7 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
         let layer_id = LayerId::new();
         let component_id = ComponentId::new();
-        let mut layer = GlyphLayer::new(layer_id.clone(), source_id);
+        let mut layer = GlyphLayer::new(layer_id, source_id);
         layer.add_component(Component::with_id(
             component_id.clone(),
             GlyphId::new(),
@@ -1497,14 +1508,14 @@ mod tests {
         font.insert_glyph(glyph).unwrap();
 
         font.apply_intents(&FontIntentSet::from(SetComponentTransforms {
-            layer_id: layer_id.clone(),
+            layer_id,
             component_ids: vec![component_id.clone()],
             transforms: vec![12.0, -7.0, 30.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
         }))
         .unwrap();
 
         let transform = font
-            .layer(&layer_id)
+            .layer(layer_id)
             .unwrap()
             .component(&component_id)
             .unwrap()
@@ -1526,16 +1537,16 @@ mod tests {
         let source_id = font.default_source_id().unwrap();
 
         let leaf_id = GlyphId::new();
-        let mut leaf_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        let mut leaf_layer = GlyphLayer::new(LayerId::new(), source_id);
         let mut leaf_contour = Contour::new();
         leaf_contour.add_point(10.0, 20.0, PointType::OnCurve, false);
         leaf_layer.add_contour(leaf_contour);
-        let mut leaf = Glyph::with_id(leaf_id.clone(), "leaf");
+        let mut leaf = Glyph::with_id(leaf_id, "leaf");
         leaf.set_layer(leaf_layer);
         font.insert_glyph(leaf).unwrap();
 
         let middle_id = GlyphId::new();
-        let mut middle_layer = GlyphLayer::new(LayerId::new(), source_id.clone());
+        let mut middle_layer = GlyphLayer::new(LayerId::new(), source_id);
         middle_layer.add_component(Component::with_transform(
             leaf_id,
             "leaf",
@@ -1544,13 +1555,13 @@ mod tests {
                 ..Default::default()
             },
         ));
-        let mut middle = Glyph::with_id(middle_id.clone(), "middle");
+        let mut middle = Glyph::with_id(middle_id, "middle");
         middle.set_layer(middle_layer);
         font.insert_glyph(middle).unwrap();
 
         let root_layer_id = LayerId::new();
         let root_component_id = ComponentId::new();
-        let mut root_layer = GlyphLayer::new(root_layer_id.clone(), source_id);
+        let mut root_layer = GlyphLayer::new(root_layer_id, source_id);
         root_layer.add_component(Component::with_id(
             root_component_id.clone(),
             middle_id,
@@ -1565,12 +1576,12 @@ mod tests {
         font.insert_glyph(root).unwrap();
 
         font.apply_intents(&FontIntentSet::from(DecomposeComponents {
-            layer_id: root_layer_id.clone(),
+            layer_id: root_layer_id,
             component_ids: vec![root_component_id],
         }))
         .unwrap();
 
-        let layer = font.layer(&root_layer_id).unwrap();
+        let layer = font.layer(root_layer_id).unwrap();
         let point = &layer.contours_iter().next().unwrap().points()[0];
         assert!(layer.components().is_empty());
         assert_eq!((point.x(), point.y()), (40.0, 25.0));
@@ -1587,14 +1598,14 @@ mod tests {
         for source_id in &sources {
             let mut layer = GlyphLayer::with_width(
                 LayerId::from_raw(format!("base_{source_id}")),
-                source_id.clone(),
+                *source_id,
                 500.0,
             );
             layer.add_contour(crate::contour![(0, 0), (400, 0), (400, 700)]);
             base.set_layer(layer);
             let mut layer = GlyphLayer::with_width(
                 LayerId::from_raw(format!("composite_{source_id}")),
-                source_id.clone(),
+                *source_id,
                 500.0,
             );
             layer.add_component(Component::with_id(
@@ -1612,12 +1623,12 @@ mod tests {
             let mut font = font.clone();
             let layer_id = LayerId::from_raw(format!("composite_{source_id}"));
             font.apply_intents(&FontIntentSet::from(DecomposeComponents {
-                layer_id: layer_id.clone(),
+                layer_id,
                 component_ids: vec![ComponentId::from_raw(format!("component_{source_id}"))],
             }))
             .unwrap();
 
-            let layer = font.layer(&layer_id).unwrap();
+            let layer = font.layer(layer_id).unwrap();
             assert!(layer.components().is_empty(), "{source_id}");
             assert_eq!(layer.contours_iter().count(), 1, "{source_id}");
         }
@@ -1635,12 +1646,11 @@ mod tests {
 
         let glyph_id = GlyphId::new();
         let from_layer_id = LayerId::new();
-        let mut source_layer =
-            GlyphLayer::with_width(from_layer_id.clone(), default_source_id, 500.0);
+        let mut source_layer = GlyphLayer::with_width(from_layer_id, default_source_id, 500.0);
         let mut contour = Contour::new();
         let source_point_id = contour.add_point(10.0, 20.0, PointType::OnCurve, false);
         source_layer.add_contour(contour);
-        let mut glyph = Glyph::with_id(glyph_id.clone(), "A");
+        let mut glyph = Glyph::with_id(glyph_id, "A");
         glyph.set_layer(source_layer);
         font.insert_glyph(glyph)
             .expect("test glyph should be valid");
@@ -1648,7 +1658,7 @@ mod tests {
         let source_id = SourceId::new();
         let location = DesignLocation::from([(axis_id, 700.0)]);
         font.apply_intents(&FontIntentSet::from(CreateSource {
-            source_id: source_id.clone(),
+            source_id,
             name: "Bold".to_string(),
             location,
         }))
@@ -1657,7 +1667,7 @@ mod tests {
         let layer_id = LayerId::new();
         let values = GlyphInterpolationValues::new(vec![600.0, 30.0, 40.0]);
         font.apply_intents(&FontIntentSet::from(MaterializeGlyphLayer {
-            layer_id: layer_id.clone(),
+            layer_id,
             glyph_id,
             source_id,
             from_layer_id,
@@ -1666,7 +1676,7 @@ mod tests {
         .expect("materialized layer should apply");
 
         let layer = font
-            .layer(&layer_id)
+            .layer(layer_id)
             .expect("materialized layer should be present");
         assert_eq!(layer.interpolation_values(), values);
         assert_ne!(

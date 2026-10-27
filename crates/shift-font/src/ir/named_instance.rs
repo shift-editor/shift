@@ -41,7 +41,7 @@ impl NamedInstance {
 
     /// Returns the identity retained across product renames and location edits.
     pub fn id(&self) -> NamedInstanceId {
-        self.id.clone()
+        self.id
     }
 
     /// Returns the authored product name used as the variable-font subfamily name.

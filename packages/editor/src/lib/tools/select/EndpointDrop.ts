@@ -1,9 +1,8 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { Contour } from "@shift/glyph-state";
-import type { PointId } from "@shift/types";
+import type { ContourEnd, PointId } from "@shift/types";
 import type { Editor } from "../../editor/Editor";
 import type { GlyphLayer } from "../../model/Glyph";
-import type { ContourEnd } from "../../model/JoinContours";
 import { objectIsKindOf } from "../../../types/object";
 import type { GlyphNode } from "../../../types/node";
 

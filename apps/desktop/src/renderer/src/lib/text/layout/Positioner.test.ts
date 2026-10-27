@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { resolve } from "node:path";
 import { TestEditor } from "@/testing/TestEditor";
-import { NONSPACING_MARK_EDITOR_ADVANCE, Positioner } from "@shift/editor/testing";
-import { characterTextItem as char, glyphTextItem as glyph } from "@shift/editor/text";
-import { layoutTestEditor, ltrRun } from "./testUtils";
-import { effect, signal } from "@shift/editor/signals";
+import {
+  NONSPACING_MARK_EDITOR_ADVANCE,
+  characterTextItem as char,
+  glyphTextItem as glyph,
+  lineBreakTextItem,
+  type TextItem,
+} from "@shift/editor/text";
+import { layoutTestEditor, makeLayout, runLayout } from "./testUtils";
+import { effect } from "@shift/editor/signals";
 import type { GlyphName } from "@shift/types";
 import { kerningValueEdit } from "@shift/editor/model";
 
@@ -15,56 +20,42 @@ describe("Positioner", () => {
     editor = await layoutTestEditor();
   });
 
+  /** The positioned run of a single-paragraph layout. */
+  const firstRun = (items: readonly TextItem[]) => makeLayout(items, editor).lines[0]!.runs[0]!;
+
   // Levien invariant: positioned.advance === sum of xAdvance.
   it("advance equals sum of xAdvance", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
-    const run = ltrRun(editor, [char(65), char(66), char(67)]);
-
-    const positioned = positioner.position(run, "literal");
+    const positioned = firstRun([char(65), char(66), char(67)]);
 
     const sum = positioned.glyphs.reduce((s, g) => s + g.xAdvance, 0);
     expect(positioned.advance).toBe(sum);
     expect(positioned.advance).toBeGreaterThan(0);
   });
 
-  // cluster numbering honors clusterStart and is monotonic.
+  // cluster numbering honors the paragraph's clusterStart and is monotonic.
   it("cluster equals clusterStart + i", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
-    const run = ltrRun(editor, [char(65), char(66)], /* clusterStart */ 7);
+    const layout = makeLayout([char(65), lineBreakTextItem(), char(65), char(66)], editor);
 
-    const positioned = positioner.position(run, "literal");
+    const positioned = layout.lines[1]!.runs[0]!;
 
-    expect(positioned.glyphs.map((g) => g.cluster)).toEqual([7, 8]);
+    expect(positioned.glyphs.map((g) => g.cluster)).toEqual([2, 3]);
   });
 
-  // Each positioned glyph carries the bounds from its resolved render model.
-  it("bounds pass through from the Glyph render model", () => {
+  it("places a glyph with its id and the items it came from", () => {
     const a = char(65);
-    const run = ltrRun(editor, [a]);
-    const locationCell = signal(editor.font.defaultLocation());
-    const positioner = new Positioner(editor, locationCell);
 
-    const positioned = positioner.position(run, "literal");
-    const record = editor.font.recordForName("A");
-    const expectedBounds = record
-      ? (editor.glyphForId(record.id)?.renderModelAt(locationCell).bounds ?? null)
-      : null;
+    const positioned = firstRun([a]);
 
-    expect(positioned.glyphs[0].glyphId).toBe(record?.id);
-    expect(positioned.glyphs[0].bounds).toEqual(expectedBounds);
+    expect(positioned.glyphs[0].glyphId).toBe(editor.font.recordForName("A")?.id);
     expect(positioned.glyphs[0].sourceItemIds).toEqual([a.id]);
     expect(positioned.glyphs[0].origin).toEqual({ x: 0, y: 0 });
   });
 
-  // Character the font maps no glyph to → zero advance, null bounds, no throw.
+  // Character the font maps no glyph to → zero advance, no throw.
   it("handles an unmapped character gracefully", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
-    const run = ltrRun(editor, [char(0x10fffd)]);
-
-    const positioned = positioner.position(run, "literal");
+    const positioned = firstRun([char(0x10fffd)]);
 
     expect(positioned.glyphs[0].xAdvance).toBe(0);
-    expect(positioned.glyphs[0].bounds).toBeNull();
     expect(positioned.glyphs[0].glyphId).toBeNull();
   });
 
@@ -79,9 +70,7 @@ describe("Positioner", () => {
     const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
 
     function positionedAfterA(name: string) {
-      const run = ltrRun(editor, [char(65), glyph(id(name))]);
-      return new Positioner(editor, signal(editor.font.defaultLocation())).position(run, "literal")
-        .glyphs[1]!;
+      return firstRun([char(65), glyph(id(name))]).glyphs[1]!;
     }
 
     // Glyph data reads `x.comb` as a suffixed `x`: a letter, though its name says `comb`.
@@ -113,13 +102,7 @@ describe("Positioner", () => {
       );
       await editor.settle();
 
-      const kernAfterA = (name: string) => {
-        const run = ltrRun(editor, [char(65), glyph(id(name))]);
-        return new Positioner(editor, signal(editor.font.defaultLocation())).position(
-          run,
-          "literal",
-        ).glyphs[0]!.xKern;
-      };
+      const kernAfterA = (name: string) => firstRun([char(65), glyph(id(name))]).glyphs[0]!.xKern;
       expect(kernAfterA("x.comb")).toBe(-30);
       expect(kernAfterA("fatha-ar")).toBe(0);
     });
@@ -140,15 +123,15 @@ describe("Positioner", () => {
     });
   });
 
-  // Empty run → empty positioned glyphs, zero advance.
+  // Empty paragraph → empty positioned glyphs, zero advance.
   it("empty run yields empty positioned glyphs", () => {
-    const positioner = new Positioner(editor, signal(editor.font.defaultLocation()));
-    const run = ltrRun(editor, []);
+    const layout = makeLayout([lineBreakTextItem()], editor);
 
-    const positioned = positioner.position(run, "literal");
+    const runs = layout.lines.flatMap((line) => line.runs);
 
-    expect(positioned.glyphs).toEqual([]);
-    expect(positioned.advance).toBe(0);
+    expect(runs).toHaveLength(2);
+    expect(runs.map((run) => run.glyphs)).toEqual([[], []]);
+    expect(runs.map((run) => run.advance)).toEqual([0, 0]);
   });
 });
 
@@ -164,17 +147,54 @@ describe("Positioner mark attachment", () => {
   const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
 
   // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
-  it("attaches a mark to an anchor a composite takes from its components", () => {
-    const run = ltrRun(editor, [glyph(id("aacute")), glyph(id("acutecomb"))]);
+  it("attaches a mark to an anchor a composite takes from its components", async () => {
+    const run = editor.text.createRun([glyph(id("aacute")), glyph(id("acutecomb"))]);
+    // Shaped text places marks by their anchors.
+    await editor.text.settled();
 
-    const [base, mark] = new Positioner(editor, signal(editor.font.defaultLocation())).position(
-      run,
-      "anchors",
-    ).glyphs;
+    const [base, mark] = runLayout(editor, run.id).lines[0]!.runs[0]!.glyphs;
 
     expect(mark!.origin).toEqual(base!.origin);
     // acutecomb's `top` (100, 700) moved by its component offset (150, 0), less its `_top` (100, 500).
     expect({ x: mark!.xOffset, y: mark!.yOffset }).toEqual({ x: 150, y: 200 });
     expect(mark!.xAdvance).toBe(0);
+  });
+
+  describe("re-lays out a run when its anchors move, not when only its outline does", () => {
+    async function liveLayout() {
+      const run = editor.text.createRun([glyph(id("a")), glyph(id("acutecomb"))]);
+      const layout = editor.text.layoutCell(run.id);
+      // Subscribed the way the canvas holds a run's layout.
+      const subscription = effect(() => void layout.value);
+      await editor.text.settled();
+      const marks = () => layout.peek()!.lines[0]!.runs[0]!;
+      return { layout, marks, subscription };
+    }
+
+    it("keeps the layout while a point moves", async () => {
+      const layer = editor.requireGlyphLayer();
+      const contourId = layer.addContour();
+      const pointId = layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+      await editor.settle();
+      const { layout, subscription } = await liveLayout();
+      const before = layout.peek();
+
+      layer.previewPositionPatch([{ kind: "point", id: pointId, x: 40, y: 0 }]);
+      subscription.dispose();
+
+      expect(layout.peek()).toBe(before);
+    });
+
+    it("moves the mark with the anchor it sits on", async () => {
+      const { marks, subscription } = await liveLayout();
+      const before = marks().glyphs[1]!;
+
+      const layer = editor.requireGlyphLayer();
+      const top = layer.anchors.find((anchor) => anchor.name === "top")!;
+      layer.previewPositionPatch([{ kind: "anchor", id: top.id, x: top.x + 40, y: top.y }]);
+      subscription.dispose();
+
+      expect(marks().glyphs[1]!.xOffset).toBe(before.xOffset + 40);
+    });
   });
 });

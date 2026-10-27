@@ -195,16 +195,19 @@ export class RunKerning {
     const edited = pair.editablePair(this.#editor);
     if (!sourceId || !edited) return [];
 
-    const kerning = this.#editor.font.kerningCell.peek();
     const definition = this.#editor.nodeDefinition("textRun");
-    return this.#editor.scene
+    const candidates = this.#editor.scene
       .nodesOfKind("textRun")
       .flatMap((node) => definition.spacingGaps(node).flatMap((gap) => kernedPair(gap) ?? []))
-      .filter((candidate) => {
-        if (candidate.sameAs(pair)) return false;
-        const applied = kerning.editablePair(sourceId, candidate.first, candidate.second);
-        return applied.first === edited.first && applied.second === edited.second;
-      });
+      .filter((candidate) => !candidate.sameAs(pair));
+    const applied = this.#editor.font.kerningCell.peek().editablePairs(
+      sourceId,
+      candidates.flatMap((candidate) => [candidate.first, candidate.second]),
+    );
+    return candidates.filter(
+      (_, index) =>
+        applied[index]?.first === edited.first && applied[index]?.second === edited.second,
+    );
   }
 
   /**

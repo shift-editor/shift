@@ -135,7 +135,7 @@ pub fn sample_font() -> Font {
 
     let weight_id = AxisId::from_raw("weight");
     let mut weight = Axis::with_id(
-        weight_id.clone(),
+        weight_id,
         "wght".to_string(),
         "Weight".to_string(),
         100.0,
@@ -159,7 +159,7 @@ pub fn sample_font() -> Font {
 
     let width_id = AxisId::from_raw("width");
     let mut width = Axis::with_id(
-        width_id.clone(),
+        width_id,
         "wdth".to_string(),
         "Width".to_string(),
         75.0,
@@ -170,7 +170,7 @@ pub fn sample_font() -> Font {
     font.add_axis(width)
         .expect("sample width axis should be valid");
 
-    let regular_location = ExternalLocation::from([(weight_id.clone(), 400.0)]);
+    let regular_location = ExternalLocation::from([(weight_id, 400.0)]);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("regular"),
         "Regular".to_string(),
@@ -183,8 +183,8 @@ pub fn sample_font() -> Font {
     bold_mapping_point.description = Some("Bold compression".to_string());
     let mut weight_mapping = AxisMapping::new(
         "Weight curve".to_string(),
-        vec![weight_id.clone()],
-        vec![weight_id.clone()],
+        vec![weight_id],
+        vec![weight_id],
         vec![
             mapping_point(&weight, 100.0, 100.0),
             mapping_point(&weight, 400.0, 400.0),
@@ -197,17 +197,16 @@ pub fn sample_font() -> Font {
 
     let regular_id = SourceId::from_raw("regular");
     let bold_id = SourceId::from_raw("bold");
-    let regular_location =
-        DesignLocation::from([(weight_id.clone(), 400.0), (width_id.clone(), 100.0)]);
+    let regular_location = DesignLocation::from([(weight_id, 400.0), (width_id, 100.0)]);
     let bold_location = DesignLocation::from([(weight_id, 800.0), (width_id, 112.5)]);
     font.add_source(Source::with_id(
-        regular_id.clone(),
+        regular_id,
         "Regular".to_string(),
         regular_location,
         Some("Regular.ufo".to_string()),
     ));
     let mut bold_source = Source::with_id(
-        bold_id.clone(),
+        bold_id,
         "Bold".to_string(),
         bold_location,
         Some("Bold.ufo".to_string()),
@@ -218,33 +217,33 @@ pub fn sample_font() -> Font {
         LibValue::String("bold layer note".to_string()),
     );
     font.add_source(bold_source);
-    font.set_default_source_id(regular_id.clone());
+    font.set_default_source_id(regular_id);
     let kerned_id = GlyphId::from_raw("A");
-    let (first_group, second_group) = add_a_groups(font.kerning_mut(), &kerned_id);
+    let (first_group, second_group) = add_a_groups(font.kerning_mut(), kerned_id);
     let kerning = font.kerning_mut();
-    let group_pair = KerningPair::groups(first_group, second_group.clone());
-    kerning.set_value(regular_id.clone(), group_pair.clone(), -80.0);
-    kerning.set_value(bold_id.clone(), group_pair, -120.0);
+    let group_pair = KerningPair::groups(first_group, second_group);
+    kerning.set_value(regular_id, group_pair.clone(), -80.0);
+    kerning.set_value(bold_id, group_pair, -120.0);
     kerning.set_value(
-        bold_id.clone(),
+        bold_id,
         KerningPair::new(
             KerningSide::Glyph(kerned_id),
             KerningSide::Group(second_group),
         ),
         -100.0,
     );
-    set_source_metrics(&mut font, &regular_id, 1500.0, -500.0, 1456.0, 1012.0);
-    let regular = font.source_mut(&regular_id).unwrap();
+    set_source_metrics(&mut font, regular_id, 1500.0, -500.0, 1456.0, 1012.0);
+    let regular = font.source_mut(regular_id).unwrap();
     regular.set_line_gap(Some(42.0));
     regular.set_italic_angle(Some(-9.5));
     regular.set_underline_position(Some(-175.0));
     regular.set_underline_thickness(Some(96.0));
 
     let acute_id = GlyphId::from_raw("acute");
-    let mut acute = Glyph::with_id(acute_id.clone(), "acute");
+    let mut acute = Glyph::with_id(acute_id, "acute");
     acute.set_layer(GlyphLayer::with_width(
         LayerId::from_raw("acute_regular"),
-        regular_id.clone(),
+        regular_id,
         200.0,
     ));
     font.insert_glyph(acute).unwrap();
@@ -288,7 +287,7 @@ pub fn sample_font() -> Font {
     ));
     regular_layer.add_component(Component::with_id(
         ComponentId::from_raw("z_first"),
-        acute_id.clone(),
+        acute_id,
         "acute",
         DecomposedTransform {
             translate_x: 10.0,
@@ -381,8 +380,8 @@ pub fn sample_variable_font() -> Font {
         .expect("sample weight axis should be valid");
     font.set_axis_mappings(vec![AxisMapping::new(
         "Weight curve".to_string(),
-        vec![weight_id.clone()],
-        vec![weight_id.clone()],
+        vec![weight_id],
+        vec![weight_id],
         vec![
             mapping_point(&weight, 100.0, 100.0),
             mapping_point(&weight, 400.0, 400.0),
@@ -392,7 +391,7 @@ pub fn sample_variable_font() -> Font {
     )])
     .expect("sample axis mapping should be valid");
 
-    let bold_instance_location = ExternalLocation::from([(weight_id.clone(), 900.0)]);
+    let bold_instance_location = ExternalLocation::from([(weight_id, 900.0)]);
     font.set_named_instances(vec![NamedInstance::with_id(
         NamedInstanceId::from_raw("bold"),
         "Bold".to_string(),
@@ -402,28 +401,28 @@ pub fn sample_variable_font() -> Font {
     .expect("sample named instance should be valid");
 
     let default_source_id = font.default_source_id().unwrap();
-    set_source_metrics(&mut font, &default_source_id, 800.0, -200.0, 700.0, 500.0);
-    let default_source = font.source_mut(&default_source_id).unwrap();
+    set_source_metrics(&mut font, default_source_id, 800.0, -200.0, 700.0, 500.0);
+    let default_source = font.source_mut(default_source_id).unwrap();
     default_source.set_line_gap(Some(20.0));
     default_source.set_underline_position(Some(-100.0));
     default_source.set_underline_thickness(Some(50.0));
-    let default_location = DesignLocation::from([(weight_id.clone(), 400.0)]);
-    font.source_mut(&default_source_id)
+    let default_location = DesignLocation::from([(weight_id, 400.0)]);
+    font.source_mut(default_source_id)
         .unwrap()
         .set_location(default_location);
 
-    let medium_location = DesignLocation::from([(weight_id.clone(), 600.0)]);
+    let medium_location = DesignLocation::from([(weight_id, 600.0)]);
     font.add_source(Source::new("Medium".to_string(), medium_location));
     let bold_location = DesignLocation::from([(weight_id, 800.0)]);
     let bold_source_id = font.add_source(Source::new("Bold".to_string(), bold_location));
-    set_source_metrics(&mut font, &bold_source_id, 820.0, -220.0, 720.0, 510.0);
+    set_source_metrics(&mut font, bold_source_id, 820.0, -220.0, 720.0, 510.0);
 
     let mut glyph = Glyph::with_unicode("A".to_string(), 0x0041);
-    glyph.set_layer(triangle_layer(default_source_id.clone(), 600.0, 300.0));
-    glyph.set_layer(triangle_layer(bold_source_id.clone(), 800.0, 380.0));
+    glyph.set_layer(triangle_layer(default_source_id, 600.0, 300.0));
+    glyph.set_layer(triangle_layer(bold_source_id, 800.0, 380.0));
     let glyph_id = font.insert_glyph(glyph).unwrap();
 
-    let (first_group, second_group) = add_a_groups(font.kerning_mut(), &glyph_id);
+    let (first_group, second_group) = add_a_groups(font.kerning_mut(), glyph_id);
     let group_pair = KerningPair::groups(first_group, second_group);
     let kerning = font.kerning_mut();
     kerning.set_value(default_source_id, group_pair.clone(), -50.0);
@@ -435,7 +434,7 @@ pub fn sample_variable_font() -> Font {
 /// returns their ids.
 fn add_a_groups(
     kerning: &mut crate::Kerning,
-    glyph_id: &GlyphId,
+    glyph_id: GlyphId,
 ) -> (KerningGroupId, KerningGroupId) {
     let first = KerningGroupId::from_raw("first_A");
     let second = KerningGroupId::from_raw("second_A");
@@ -444,10 +443,7 @@ fn add_a_groups(
         (&second, KerningPosition::Second),
     ] {
         kerning
-            .set_group(
-                group_id.clone(),
-                KerningGroup::new(position, "A", vec![glyph_id.clone()]),
-            )
+            .set_group(*group_id, KerningGroup::new(position, "A", vec![glyph_id]))
             .expect("group names are unique per position");
     }
     (first, second)
@@ -455,7 +451,7 @@ fn add_a_groups(
 
 fn set_source_metrics(
     font: &mut Font,
-    source_id: &SourceId,
+    source_id: SourceId,
     ascender: f64,
     descender: f64,
     cap_height: f64,
@@ -473,8 +469,8 @@ fn set_source_metrics(
         let overshoot = font
             .sources()
             .iter()
-            .find(|source| source.id() == *source_id)
-            .and_then(|source| source.metric_value(&definition.id()))
+            .find(|source| source.id() == source_id)
+            .and_then(|source| source.metric_value(definition.id()))
             .map(|value| value.overshoot)
             .unwrap_or_default();
         (definition.id(), MetricValue::new(position, overshoot))
@@ -509,20 +505,15 @@ fn triangle_layer(source_id: SourceId, width: f64, apex_x: f64) -> GlyphLayer {
 
 /// Returns the kerning between two glyphs named `first` and `second` at
 /// `source_id`, or `None` when either glyph is missing or no pair applies.
-pub fn kerning_between(
-    font: &Font,
-    source_id: &SourceId,
-    first: &str,
-    second: &str,
-) -> Option<f64> {
+pub fn kerning_between(font: &Font, source_id: SourceId, first: &str, second: &str) -> Option<f64> {
     let first = font.glyph_id_by_name(first)?;
     let second = font.glyph_id_by_name(second)?;
     font.kerning()
-        .resolve(source_id, &first, &second)
+        .resolve(source_id, first, second)
         .map(|resolved| resolved.value)
 }
 
 /// Returns [`kerning_between`] at the font's default source.
 pub fn default_kerning_between(font: &Font, first: &str, second: &str) -> Option<f64> {
-    kerning_between(font, &font.default_source_id()?, first, second)
+    kerning_between(font, font.default_source_id()?, first, second)
 }

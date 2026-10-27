@@ -6,7 +6,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types` + `@shift/geo` — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
+- **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types`, `@shift/geo` and `@shift/wasm` (shift-font's geometry rules) — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
 - **Architecture Invariant:** `GlyphGeometry` is a lazy reader over `GlyphStructure + values`. The renderer may cache an instance per reactive state update; rendering paths should not rebuild it inside inner draw loops.
 - **Architecture Invariant:** The flat values layout is owned by Rust (`crates/shift-font/src/interpolation/values.rs`): xAdvance, contour point positions, anchor positions, then component transforms. Readers take every offset and stride from the generated `@shift/types` layout constants (`GLYPH_*_VALUE_*`, `*_COMPONENT_VALUE_*`), either directly or through the cursor helpers in `valueLayout.ts`; never write a literal offset or stride.
 - **Architecture Invariant:** On-curve predicates accept both `onCurve` and `qCurve`. Point factories preserve the requested endpoint type and smooth flag; only off-curve controls force smoothness off.
@@ -25,7 +25,8 @@ packages/glyph-state/src/
   Component.ts          -- component reader and decomposed transform matrix
   valueLayout.ts        -- value-buffer cursor helpers built on the generated layout constants
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
-  parseContourSegments.ts -- shared traversal retaining supplied points, with or without IDs
+  segmentContour.ts     -- segments and bounds from shift-font (`contourGeometry`), retaining supplied points
+  generated/geometryLayouts.ts -- generated call into `@shift/wasm` (do not edit)
   filledContoursContain.ts -- non-zero fill hit testing over segmented contours
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list
@@ -38,10 +39,11 @@ packages/glyph-state/src/
 - **`Contour`** -- reader for one contour's point records and point coordinates. Exposes endpoint/on-curve queries, cubic-control ownership, wrapped `pointAt`, `withNeighbors`, `segments`, `selectionBounds`, and `canClose`.
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
+- **`composeTransform` / `decomposeMatrix`** -- a placement's matrix and a matrix's placement, as shift-font computes them (`DecomposedTransform::to_matrix` / `from_matrix`), through `@shift/wasm`. `Component` uses them; TypeScript keeps no copy.
 - **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hit`.
 - **`Point`** -- id-aware point record (`pointType`, `smooth`, coordinates) with on/off-curve predicates and `NewPoint` factories for authoring flows.
 - **`ContourGeometry<TPoint>`** -- minimal named `points + closed` contract accepted by segment parsing; defaults to authored `Point` but also accepts `NewPoint`.
-- **`parseContourSegments`** -- canonical structural traversal returning `SegmentPoints<TPoint>` descriptions without allocating identity. `Segment.parse` wraps these descriptions in ID-aware segment objects.
+- **`segmentContour`** -- a contour's segments and their tight bounds as shift-font segments and bounds them, in one call into `@shift/wasm` (`contourGeometry`), returning `SegmentPoints<TPoint>` over the supplied points without allocating identity. `Segment.parse` wraps them in ID-aware segment objects; `Contour` segments once for its segments and its `bounds`. TypeScript keeps no segment or bounds rule.
 - **`SegmentedContour`** -- contour geometry that exposes domain-owned segment traversal to renderer path derivation.
 - **`filledContoursContain`** -- pure non-zero winding query over a group of closed segmented contours; open contours do not contribute.
 - **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used by `positionsFor`, `movePositions`, and `withPositionUpdates` so transform code stays independent of where the geometry came from.

@@ -27,7 +27,7 @@ use wgpu::{
 #[test]
 fn gpu_resolves_varying_component_transforms() {
     let (font, root_id) = component_font();
-    let projection = font.glyph_projection(&root_id).unwrap().unwrap();
+    let projection = font.glyph_projection(root_id).unwrap().unwrap();
     let interpolation = projection.interpolation().unwrap();
     let weight_indices = [1, 2];
     let weight_set =
@@ -280,7 +280,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     let mut font = sample_variable_font();
     let root_id = font.glyphs_by_unicode(0x41).next().unwrap().id();
     let layers = font
-        .glyph(&root_id)
+        .glyph(root_id)
         .unwrap()
         .layers()
         .values()
@@ -288,11 +288,11 @@ fn component_font() -> (shift_font::Font, GlyphId) {
         .collect::<Vec<_>>();
 
     let base_id = GlyphId::from_raw("gpu-component-base");
-    let mut base = Glyph::with_id(base_id.clone(), "gpu-component-base");
+    let mut base = Glyph::with_id(base_id, "gpu-component-base");
     let mark_id = GlyphId::from_raw("gpu-component-mark");
-    let mut mark = Glyph::with_id(mark_id.clone(), "gpu-component-mark");
+    let mut mark = Glyph::with_id(mark_id, "gpu-component-mark");
     for (source_index, (_, source_id)) in layers.iter().enumerate() {
-        let mut base_layer = triangle_layer(source_id.clone(), source_index as f64 * 15.0);
+        let mut base_layer = triangle_layer(*source_id, source_index as f64 * 15.0);
         base_layer.add_anchor(Anchor::new(
             Some("top".to_string()),
             100.0 + source_index as f64 * 60.0,
@@ -300,7 +300,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
         ));
         base.set_layer(base_layer);
 
-        let mut mark_layer = triangle_layer(source_id.clone(), source_index as f64 * 5.0);
+        let mut mark_layer = triangle_layer(*source_id, source_index as f64 * 5.0);
         mark_layer.add_anchor(Anchor::new(
             Some("_top".to_string()),
             10.0 + source_index as f64 * 5.0,
@@ -312,9 +312,9 @@ fn component_font() -> (shift_font::Font, GlyphId) {
     font.insert_glyph(mark).unwrap();
 
     for (source_index, (layer_id, _)) in layers.into_iter().enumerate() {
-        let layer = font.layer_mut(&layer_id).unwrap();
+        let layer = font.layer_mut(layer_id).unwrap();
         layer.add_component(Component::with_transform(
-            base_id.clone(),
+            base_id,
             "gpu-component-base",
             DecomposedTransform {
                 translate_x: source_index as f64 * 20.0,
@@ -328,7 +328,7 @@ fn component_font() -> (shift_font::Font, GlyphId) {
                 ..DecomposedTransform::identity()
             },
         ));
-        layer.add_component(Component::new(mark_id.clone(), "gpu-component-mark"));
+        layer.add_component(Component::new(mark_id, "gpu-component-mark"));
     }
     (font, root_id)
 }

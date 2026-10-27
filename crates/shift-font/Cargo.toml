@@ -19,6 +19,7 @@ rusqlite = { version = "0.37.0", optional = true }
 fontdrasil = "1.0.0"
 indexmap = { version = "2", features = ["serde"] }
 kurbo = "0.13.0"
+svgtypes = "0.16"
 # Trigonometry with identical bits natively and in WebAssembly.
 libm = "0.2.16"
 # Persistent maps, so a font copy shares its index instead of copying it.

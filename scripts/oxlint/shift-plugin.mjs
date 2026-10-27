@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /** Files where raw .pointType checks are expected (validation implementation). */
-const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/", "packages/rules/"];
+const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/"];
 
 function checkParam(context, node) {
   // Handle destructured or rest patterns — only check simple identifiers

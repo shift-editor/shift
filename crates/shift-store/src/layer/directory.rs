@@ -133,13 +133,13 @@ pub(super) fn map_directory_facts_row(row: &rusqlite::Row<'_>) -> rusqlite::Resu
 }
 
 pub(super) fn validate_directory_facts(
-    expected_id: &font::LayerId,
+    expected_id: font::LayerId,
     expected_source_id: &str,
     expected_width: f64,
     expected_height: Option<f64>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
-    let detail = if layer.id() != *expected_id {
+    let detail = if layer.id() != expected_id {
         Some(format!("payload id is {}", layer.id()))
     } else if layer.source_id().as_str() != expected_source_id {
         Some(format!("payload source id is {}", layer.source_id()))

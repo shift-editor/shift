@@ -94,7 +94,7 @@ editor/rendering/overlays/handles/
 
 `GlyphNodeDefinition` consults `Editor.handlesVisible` during the controls pass. Handle-item filtering retains the original point neighbors and contour topology, and applies equally to accelerated markers and Canvas fallback. Tool drag scopes own release through `ctx.onCancel`; visibility state does not live on tools or node definitions.
 
-`ContourPath.fromPoints` accepts uncommitted point geometry without allocating IDs. This is the sole application-side adapter permitted to call `parseContourSegments` directly; authored contours continue through their domain-owned `segments()` traversal.
+`ContourPath.fromPoints` accepts uncommitted point geometry without allocating IDs. This is the sole application-side adapter permitted to call `segmentContour` directly; authored contours continue through their domain-owned `segments()` traversal. A `ContourPath` draws; it has no bounds of its own, because bounds come from the contour, which shift-font segments.
 
 ### Initialization
 

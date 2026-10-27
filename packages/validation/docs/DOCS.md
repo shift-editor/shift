@@ -2,61 +2,40 @@
 
 <!-- reviewed: 2026-09-05 review-every: 90d -->
 
-Point sequence and clipboard payload validation for the Shift font editor.
+Point-type predicates and clipboard payload validation for the Shift font editor.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** Validators never throw. Detailed validators (`sequence`, `canFormSegments`, `hasAnchor`) return a `ValidationResult` discriminated union -- callers branch on `valid` and read `.errors` (structured `ValidationError[]`) on failure. In practice every use is `ValidationResult<void>`: these are check-only validators, no parsed payload is returned. The `Validate` predicates/shortcuts and both `ValidateClipboard` validators return plain `boolean`.
-- **Architecture Invariant:** Point sequences must start and end with on-curve anchors (`onCurve` or `qCurve`). At most 2 consecutive `offCurve` points are allowed (cubic bezier). 3+ consecutive off-curve points are always invalid.
-- **Architecture Invariant:** `Validate` methods come in pairs: a `ValidationResult`-returning variant for detailed errors (e.g. `canFormSegments`) and a boolean shortcut for hot paths (e.g. `canFormValidSegments`). The boolean variants must enforce identical rules without allocating error objects.
+- **Architecture Invariant:** Validators never throw; every one returns a plain `boolean`.
+- **Architecture Invariant:** Whether points form drawable segments is shift-font's rule (`SegmentIndexIter`, `PointKinds`). This package keeps only point-type predicates, with no TypeScript copy of segment formation.
 - **Architecture Invariant:** Clipboard validation checks serialized boundary payloads only. Editor/runtime glyph state validation belongs with the source-aware glyph model, not snapshot-era DTOs.
 
 ## Codemap
 
 ```
 validation/src/
-  types.ts              -- ValidationResult, ValidationError, ValidationErrorCode, PointLike
-  Validate.ts           -- point sequence rules: ordering, segment formation, anchor checks
+  types.ts              -- PointLike
+  Validate.ts           -- point-type predicates: isOnCurve, isOffCurve, hasValidAnchor
   ValidateClipboard.ts  -- clipboard payload shape checks (contours, points, metadata)
   index.ts              -- public barrel export
 ```
 
 ## Key Types
 
-- `ValidationResult<T>` -- discriminated union: `{ valid: true; value: T }` or `{ valid: false; errors: ValidationError[] }`. Default `T` is `void` for check-only validators.
-- `ValidationError` -- structured failure with machine-readable `code` (`ValidationErrorCode`), human-readable `message`, and optional `context` record.
-- `ValidationErrorCode` -- union of all failure codes: `EMPTY_SEQUENCE`, `MUST_START_WITH_ON_CURVE`, `MUST_END_WITH_ON_CURVE`, `TOO_MANY_CONSECUTIVE_OFF_CURVE`, `ORPHAN_OFF_CURVE`, `INCOMPLETE_SEGMENT`, `INVALID_CLIPBOARD_CONTENT`.
-- `PointLike` -- minimal `{ pointType: PointType }` interface accepted by all point-sequence validators. Full `Point` objects, snapshots, and test stubs all satisfy it.
-- `Validate` -- namespace object with point predicates (`isOnCurve`, `isOffCurve`), pattern matchers (`matchesLinePattern`, `matchesQuadPattern`, `matchesCubicPattern`), sequence validators (`sequence`, `canFormSegments`), boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`), and result constructors (`ok`, `fail`, `error`).
+- `PointLike` -- minimal `{ pointType: PointType }` interface the predicates accept. Full `Point` objects, snapshots, and test stubs all satisfy it.
+- `Validate` -- `isOnCurve` (`onCurve` or `qCurve`), `isOffCurve`, and `hasValidAnchor` (some point is on-curve).
 - `ValidateClipboard` -- namespace object with `isShiftContent` (validates portable contour content; the one validator the app calls) and `isClipboardPayload` (validates the full `shift/glyph-data` envelope with format, version, metadata, content; currently has no callers outside this package).
 
 ## How it works
-
-### Point sequence validation
-
-`Validate` enforces the rules that make a sequence of `PointLike` objects drawable as bezier curve segments. A valid sequence starts and ends with on-curve anchors (`onCurve` or `qCurve`), with at most 2 consecutive `offCurve` points between anchors (forming line, quadratic, or cubic segments).
-
-`Validate.sequence` checks structural validity (bookend on-curve, off-curve run length). `Validate.canFormSegments` additionally walks the sequence to verify every off-curve run is bounded by on-curve anchors -- i.e., the points can actually be decomposed into drawable segments.
-
-Boolean shortcuts (`isValidSequence`, `canFormValidSegments`, `hasValidAnchor`) implement the same logic without allocating `ValidationError` objects, for use in render loops and per-frame checks.
 
 ### Clipboard validation
 
 `ValidateClipboard.isShiftContent` validates the contour/point structure of portable Shift content; `Clipboard` calls it when parsing pasted content. `isClipboardPayload` checks the full envelope (format string `"shift/glyph-data"`, version number, metadata with timestamp) but currently has no callers outside this package -- `Clipboard.tryDeserialize` checks format and version inline with laxer semantics and calls only `isShiftContent`.
 
-## Workflow recipes
-
-### Add a new validation error code
-
-1. Add the code string to `ValidationErrorCode` in `types.ts`
-2. Use it in a validator via `Validate.error("YOUR_CODE", "message")`
-3. Add test cases covering the new failure path
-
 ## Gotchas
 
-- `Validate.sequence` accepts a single `onCurve` or `qCurve` point as valid, but `Validate.canFormSegments` requires at least 2 points. Use the right one depending on whether you need drawable segments or just a well-formed sequence.
 - `ValidateClipboard.isClipboardPayload` hardcodes the format string `"shift/glyph-data"`. If the clipboard format changes, this must be updated in sync.
-- The `PointLike` interface only requires `pointType` -- validators do not check coordinates or IDs. Use clipboard validators at serialization boundaries when full structural validation is needed.
+- The `PointLike` interface only requires `pointType` -- the predicates do not check coordinates or IDs. Use clipboard validators at serialization boundaries when full structural validation is needed.
 
 ## Verification
 

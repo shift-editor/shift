@@ -108,6 +108,17 @@ export class ContourBuffer {
     }));
   }
 
+  /**
+   * Calls `visit` with the position of each point at `indices`, read from the
+   * packed coordinates without building a record per point.
+   */
+  visitPositions(indices: Iterable<number>, visit: (x: number, y: number) => void): void {
+    const coordinates = this.#coordinates;
+    for (const index of indices) {
+      visit(coordinates.getComponent(index, 0), coordinates.getComponent(index, 1));
+    }
+  }
+
   position(pointId: PointId): GlyphPosition | null {
     const index = this.pointIndex(pointId);
     if (index < 0) return null;

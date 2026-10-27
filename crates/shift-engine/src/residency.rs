@@ -20,8 +20,8 @@ impl LayerResidency {
         }
     }
 
-    pub fn is_unloaded(&self, layer_id: &LayerId) -> bool {
-        self.unloaded.contains(layer_id)
+    pub fn is_unloaded(&self, layer_id: LayerId) -> bool {
+        self.unloaded.contains(&layer_id)
     }
 
     /// The layers of `layer_ids` that are still placeholders.
@@ -31,7 +31,7 @@ impl LayerResidency {
     ) -> BTreeSet<LayerId> {
         layer_ids
             .into_iter()
-            .filter(|layer_id| self.is_unloaded(layer_id))
+            .filter(|layer_id| self.is_unloaded(*layer_id))
             .collect()
     }
 
@@ -52,7 +52,7 @@ impl LayerResidency {
     /// Forgets placeholders for layers the directory no longer lists.
     pub fn retain_directory_layers(&mut self, font: &Font) {
         self.unloaded
-            .retain(|layer_id| font.layer(layer_id).is_some());
+            .retain(|layer_id| font.layer(*layer_id).is_some());
     }
 
     pub fn loaded_count(&self, directory_layer_count: usize) -> usize {

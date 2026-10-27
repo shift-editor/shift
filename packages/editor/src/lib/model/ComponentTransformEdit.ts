@@ -1,4 +1,5 @@
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
+import { composeTransform, decomposeMatrix } from "@shift/glyph-state";
 import { batch } from "../signals";
 import type {
   ComponentTransformSelection,
@@ -78,7 +79,7 @@ export class ComponentTransformEdit {
     this.#transforms = this.#layers.map((layer, index) => {
       const delta = deltaForLayer(layer);
       return (this.#baseTransforms[index] ?? []).map((transform) =>
-        Mat.toDecomposed(Mat.Compose(delta, Mat.fromDecomposed(transform))),
+        decomposeMatrix(Mat.Compose(delta, composeTransform(transform))),
       );
     });
 

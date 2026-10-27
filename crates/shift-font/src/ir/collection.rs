@@ -19,7 +19,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Supplies the stable identity owned by an authoring entity.
 pub trait Identified {
-    type Id: Clone + Eq + Hash;
+    type Id: Clone + Eq + Hash + Ord;
 
     fn id(&self) -> Self::Id;
 }

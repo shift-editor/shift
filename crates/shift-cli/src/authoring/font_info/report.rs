@@ -58,7 +58,7 @@ impl FontInfoReport {
 impl SourceMetrics {
     pub(crate) fn from_source(font: &Font, source: &Source) -> Self {
         let position = |kind| {
-            font.metric_value(&source.id(), kind)
+            font.metric_value(source.id(), kind)
                 .map(|value| value.position)
         };
         Self {

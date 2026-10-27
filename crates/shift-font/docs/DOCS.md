@@ -35,12 +35,19 @@ crates/shift-font/src/
     variation.rs   -- external-to-design mapping evaluation
   intents.rs       -- atomic authoring intents and changeset derivation
   changes.rs       -- reversible replacements, impacts, and entity lifecycle views
+  changes/compact.rs -- `CompactChangeSet`: a change set for sending, values-only layer changes as values (`FontChangeSet::compact`, `CompactChangeSet::expand`)
   layer_edit.rs    -- glyph-layer geometry mutations
+  contour_edit.rs  -- whole-contour edits: delete points and reconnect (fit or gap), split a segment, line to cubic, close or join by ends
+  curve_fit.rs     -- one cubic or quadratic fitted to a connected run of segments, for deletion
+  point_arrange.rs -- transform, align and distribute selected points; shift a sidebearing
+  svg_path.rs      -- contours from SVG path data, for authoring payloads and pasted SVG
+  naming.rs        -- names for new glyphs and anchors: the name, or the name numbered `.1`, `.2`, ...
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
   anchor_attachment.rs  -- which components follow their anchors after an edit, and where to
   anchor_propagation.rs -- fontc's anchor propagation into composites, over plain data
+  drag_rules.rs    -- point-neighbourhood drag rules (handles follow anchors, smooth points stay smooth): pattern table, matching once per drag, positions per frame
   check.rs         -- read-only font checks: findings, codes, severities, options
   check/           -- designspace, outline (interpolation), health, kerning, coverage rules
   placed_blend.rs  -- decomposed component placement (mirror reversal, point pairing) and blending, over plain numbers
@@ -94,6 +101,8 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 - `AxisLabelId` identifies an axis value label independently of its editable name or position.
 - `NamedInstanceId` identifies an explicit product preset independently of its editable name and location.
 - `MetricId` identifies an authored metric row independently of its editable name, order, and source-local values.
+
+An id is its prefixed random text everywhere it crosses a boundary: the store, the wire, WebAssembly and the bridge. Font-level ids (`GlyphId`, `LayerId`, `SourceId`, the axis, instance, kerning group and metric ids) are interned in memory: each distinct text is held once per process, and every copy of the id points at it, so they compare and hash by address and order by text. Interned text is never freed, which is why the ids minted per contour, point, component, anchor and guideline own their text instead.
 
 ## How it works
 

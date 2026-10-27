@@ -27,7 +27,12 @@ import type {
 } from "@shared/workspace/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineEdit, EngineLayer, FontStore } from "@shift/editor/model";
-import type { PendingEditId, WorkspaceEditEvent, WorkspaceEditListener } from "@shift/editor/types";
+import type {
+  OpenEdit,
+  PendingEditId,
+  WorkspaceEditEvent,
+  WorkspaceEditListener,
+} from "@shift/editor/types";
 import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
 import type { WindowEngine } from "../engine/WindowEngine";
@@ -81,6 +86,7 @@ export class WorkspaceEditCoordinator {
     /** Each resident layer's state before the transaction first changed it. */
     readonly before: Map<LayerId, GlyphState>;
   } | null = null;
+  #openEdit: StagedEdit | null = null;
 
   constructor(session: FontSessionClient, store: FontStore, engine: WindowEngine) {
     this.#session = session;
@@ -126,9 +132,24 @@ export class WorkspaceEditCoordinator {
    * @throws When the engine rejects the intent; nothing is shown or sent.
    */
   push(intent: FontIntent): PendingEditId {
+    return this.pushAll([intent]);
+  }
+
+  /**
+   * Applies `intents` in the window's engine in one call, shows each layer they
+   * touched once, and queues them for the workspace, as {@link push} does for
+   * one intent. For edits that make many intents: each engine call returns
+   * whole layers, so applying them one at a time costs the layer's size for
+   * every intent.
+   *
+   * @returns The edit's renderer-local pending identity.
+   * @throws When the engine rejects an intent; nothing is shown or sent.
+   */
+  pushAll(intents: readonly FontIntent[]): PendingEditId {
+    this.#assertNoOpenEdit("edit");
     const transaction = this.#transaction;
     if (transaction) {
-      this.#applyInEngine([intent], transaction.before);
+      this.#applyInEngine(intents, transaction.before);
       return transaction.id;
     }
 
@@ -136,7 +157,7 @@ export class WorkspaceEditCoordinator {
     // queue on the workspace lane follows this edit rather than overtaking it.
     return batch(() => {
       const id = this.#mintPendingEditId();
-      this.#enqueuePersist(this.#applyEdit([intent]), undefined, id);
+      this.#enqueuePersist(this.#applyEdit(intents), undefined, id);
       return id;
     });
   }
@@ -170,6 +191,7 @@ export class WorkspaceEditCoordinator {
     if (active) {
       return this.#runTransactionBody(label, body);
     }
+    this.#assertNoOpenEdit("open a transaction");
 
     const id = this.#mintPendingEditId();
     const before = new Map<LayerId, GlyphState>();
@@ -195,6 +217,71 @@ export class WorkspaceEditCoordinator {
         this.#store.publishLayers(before.values().toArray());
         throw error;
       }
+    });
+  }
+
+  /**
+   * Opens an edit that stays open across frames, as a drag does: each stage
+   * replaces what it applied before in the window's engine, and shows the
+   * layers it touched at once. Committing persists it as one undo step.
+   *
+   * @remarks
+   * Reads go on while it is open; edits, undo and redo wait for it to close.
+   * Reopening the engine, as after a failed persist, abandons it.
+   *
+   * @throws When a transaction or another open edit is open.
+   */
+  openEdit(): OpenEdit {
+    this.#assertNoTransaction("open an edit");
+    this.#assertNoOpenEdit("open an edit");
+    this.#engine.beginEdit();
+    const edit = new StagedEdit(this, this.#mintPendingEditId());
+    this.#openEdit = edit;
+    return edit;
+  }
+
+  /** Stages `intents` in place of what `edit` applied so far, and shows the layers they touch. */
+  stageOpenEdit(edit: StagedEdit, intents: readonly FontIntent[]): void {
+    if (this.#openEdit !== edit) return;
+    batch(() => {
+      this.#engine.rewindEdit();
+      // Layers an earlier frame touched and this one does not go back as they were.
+      this.#store.publishLayers(edit.before.values().toArray());
+      if (intents.length === 0) return;
+      try {
+        edit.remember(this.#store.publishLayers(this.#engine.stage(intents).layers));
+      } catch (error) {
+        this.#engine.rewindEdit();
+        throw error;
+      }
+    });
+  }
+
+  /** Closes `edit`: applies its last stage once more with its records, shows it, and persists it. */
+  commitOpenEdit(edit: StagedEdit, intents: readonly FontIntent[], label: string): void {
+    if (this.#openEdit !== edit) return;
+    this.#openEdit = null;
+    batch(() => {
+      try {
+        this.#engine.rewindEdit();
+        this.#store.publishLayers(edit.before.values().toArray());
+        if (intents.length > 0) this.#applyInEngine(intents, null);
+      } catch (error) {
+        this.#engine.cancelEdit();
+        this.#store.publishLayers(edit.before.values().toArray());
+        throw error;
+      }
+      this.#enqueuePersist(this.#engine.endEdit(), label, edit.id);
+    });
+  }
+
+  /** Closes `edit` without keeping it: the engine and the shown layers go back to where it began. */
+  cancelOpenEdit(edit: StagedEdit): void {
+    if (this.#openEdit !== edit) return;
+    this.#openEdit = null;
+    batch(() => {
+      this.#engine.cancelEdit();
+      this.#store.publishLayers(edit.before.values().toArray());
     });
   }
 
@@ -238,6 +325,7 @@ export class WorkspaceEditCoordinator {
    */
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
     this.#assertNoTransaction("apply workspace edits");
+    this.#assertNoOpenEdit("apply workspace edits");
     try {
       // As in `push`, readers of the shown layers queue behind this edit.
       return batch(() => {
@@ -259,6 +347,7 @@ export class WorkspaceEditCoordinator {
    */
   undo(): Promise<AppliedChange | null> {
     this.#assertNoTransaction("undo");
+    this.#assertNoOpenEdit("undo");
     return this.#persistReplay(() => this.#engine.undo());
   }
 
@@ -383,6 +472,7 @@ export class WorkspaceEditCoordinator {
   /** Makes the latest undone edit again, as {@link undo} takes one back. */
   redo(): Promise<AppliedChange | null> {
     this.#assertNoTransaction("redo");
+    this.#assertNoOpenEdit("redo");
     return this.#persistReplay(() => this.#engine.redo());
   }
 
@@ -612,6 +702,10 @@ export class WorkspaceEditCoordinator {
     throw new Error(`cannot ${action} while workspace transaction "${transaction.label}" is open`);
   }
 
+  #assertNoOpenEdit(action: string): void {
+    if (this.#openEdit) throw new Error(`cannot ${action} while an edit is open`);
+  }
+
   /** Recovery: discard loaded projections, reload the workspace summary, and reopen the engine. */
   async #resync(): Promise<void> {
     this.#store.replaceWorkspace(await this.#session.snapshot());
@@ -623,8 +717,48 @@ export class WorkspaceEditCoordinator {
    * new history that starts saved when the document has no unsaved edits.
    */
   async reopenEngine(): Promise<void> {
+    // The new session has no open edit; one open now stages and commits nothing.
+    this.#openEdit = null;
     await this.#engine.reopen();
     const state = await this.#session.documentState();
     if (state && !state.dirty) this.#engine.markSaved();
+  }
+}
+
+/**
+ * An edit open across frames, as {@link WorkspaceEditCoordinator.openEdit}
+ * hands it out: it remembers its last stage, to commit, and each layer's
+ * state before the edit first touched it, to go back to.
+ */
+class StagedEdit implements OpenEdit {
+  readonly #coordinator: WorkspaceEditCoordinator;
+  readonly id: PendingEditId;
+  // non-reactive: the shown states to restore, read only when the edit stages, commits or cancels
+  readonly before = new Map<LayerId, GlyphState>();
+  #intents: readonly FontIntent[] = [];
+
+  constructor(coordinator: WorkspaceEditCoordinator, id: PendingEditId) {
+    this.#coordinator = coordinator;
+    this.id = id;
+  }
+
+  stage(intents: readonly FontIntent[]): void {
+    this.#coordinator.stageOpenEdit(this, intents);
+    this.#intents = [...intents];
+  }
+
+  commit(label: string): void {
+    this.#coordinator.commitOpenEdit(this, this.#intents, label);
+  }
+
+  cancel(): void {
+    this.#coordinator.cancelOpenEdit(this);
+  }
+
+  /** Keeps each of `states` as its layer was before the edit, unless one is kept already. */
+  remember(states: readonly GlyphState[]): void {
+    for (const state of states) {
+      if (!this.before.has(state.layerId)) this.before.set(state.layerId, state);
+    }
   }
 }

@@ -65,8 +65,8 @@ async function checkRuntimeGraph() {
     }
   }
 
-  // `contourGeometry` is exported only by the test-only reference module.
-  const reference = files.filter((name) => /\bcontourGeometry\b/.test(sources.get(name)));
+  // `compileAxisMappings` is exported only by the test-only reference module.
+  const reference = files.filter((name) => /\bcompileAxisMappings\b/.test(sources.get(name)));
   if (reference.length > 0) {
     throw new Error(
       `The SDK must not bundle @shift/wasm/reference, found in: ${reference.join(", ")}`,

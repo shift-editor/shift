@@ -122,21 +122,21 @@ pub(crate) fn axis_mappings_from_designspace(
         let Some(ds_points) = &ds_axis.map else {
             continue;
         };
-        let Some(axis_id) = axes_by_name.get(ds_axis.name.as_str()).cloned() else {
+        let Some(axis_id) = axes_by_name.get(ds_axis.name.as_str()).copied() else {
             continue;
         };
         let points = ds_points
             .iter()
             .map(|point| AxisMappingPoint {
                 description: None,
-                input: singleton_location(axis_id.clone(), point.input as f64),
-                output: singleton_location(axis_id.clone(), point.output as f64),
+                input: singleton_location(axis_id, point.input as f64),
+                output: singleton_location(axis_id, point.output as f64),
             })
             .collect();
         mappings.push(AxisMapping::with_id(
             AxisMappingId::new(),
             format!("{} mapping", ds_axis.name),
-            vec![axis_id.clone()],
+            vec![axis_id],
             vec![axis_id],
             points,
         ));
@@ -188,7 +188,7 @@ fn mapping_location_from_dimensions(
         let Some(value) = dimension.xvalue.or(dimension.uservalue) else {
             continue;
         };
-        location.set(axis_id.clone(), value as f64);
+        location.set(*axis_id, value as f64);
     }
     Ok(location)
 }
@@ -198,11 +198,11 @@ fn singleton_location(axis_id: AxisId, value: f64) -> Location {
 }
 
 fn extend_axis_ids(target: &mut Vec<AxisId>, location: &Location) {
-    let existing = target.iter().cloned().collect::<HashSet<_>>();
+    let existing = target.iter().copied().collect::<HashSet<_>>();
     target.extend(
         location
             .iter()
-            .map(|(axis_id, _)| axis_id.clone())
+            .map(|(axis_id, _)| *axis_id)
             .filter(|axis_id| !existing.contains(axis_id)),
     );
 }

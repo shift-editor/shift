@@ -13,11 +13,11 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
     let layer_id = before
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(&before.default_source_id().unwrap())
+        .layer_for_source(before.default_source_id().unwrap())
         .unwrap()
         .id();
     before
-        .layer_mut(&layer_id)
+        .layer_mut(layer_id)
         .unwrap()
         .add_contour(Contour::new());
     drop(ShiftStore::create_document(&path, &before).unwrap());
@@ -42,8 +42,8 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
     assert_eq!(report["changes"][0]["pointCount"], 3);
     assert_eq!(report["changes"][0]["componentCount"], 0);
     let after = load_font(path.to_str().unwrap());
-    let layer = after.layer(&layer_id).unwrap();
-    let original = before.layer(&layer_id).unwrap();
+    let layer = after.layer(layer_id).unwrap();
+    let original = before.layer(layer_id).unwrap();
     assert_eq!(layer.width(), 720.0);
     assert_eq!(layer.source_id(), original.source_id());
     assert_eq!(layer.height(), original.height());
@@ -68,8 +68,8 @@ fn layer_set_replaces_content_without_changing_identity_or_auxiliary_data() {
         .unwrap()
         .id();
     assert_eq!(
-        after.glyph_by_name("A").unwrap().layer_for_source(&bold),
-        before.glyph_by_name("A").unwrap().layer_for_source(&bold)
+        after.glyph_by_name("A").unwrap().layer_for_source(bold),
+        before.glyph_by_name("A").unwrap().layer_for_source(bold)
     );
 }
 
@@ -101,7 +101,7 @@ fn layer_set_creates_an_absent_layer_then_can_replace_it_with_a_blank_drawing() 
         .unwrap();
     assert!(shift_with_stdin(&args, r#"{"advance":0}"#).status.success());
     let font = load_font(path.to_str().unwrap());
-    let layer = font.layer(&layer_id).unwrap();
+    let layer = font.layer(layer_id).unwrap();
     assert_eq!(layer.width(), 0.0);
     assert!(layer.is_empty());
 }
@@ -130,7 +130,7 @@ fn svg_relative_shorthand_quadratic_and_post_close_commands_preserve_geometry() 
     let layer = font
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(&font.default_source_id().unwrap())
+        .layer_for_source(font.default_source_id().unwrap())
         .unwrap();
     let contours = layer.contours_iter().collect::<Vec<_>>();
     let points = contours[0].points();
@@ -218,7 +218,7 @@ fn glyph_batch_creates_updates_and_authors_distinct_sources_from_one_file() {
     assert_eq!(glyph.layers().len(), 2);
     assert_eq!(
         glyph
-            .layer_for_source(&font.default_source_id().unwrap())
+            .layer_for_source(font.default_source_id().unwrap())
             .unwrap()
             .width(),
         500.0
@@ -269,7 +269,7 @@ fn glyph_batch_components_name_their_bases_even_ones_later_in_the_batch() {
     let layer = font
         .glyph_by_name("Aring")
         .unwrap()
-        .layer_for_source(&font.default_source_id().unwrap())
+        .layer_for_source(font.default_source_id().unwrap())
         .unwrap();
     let components: Vec<_> = layer
         .components()

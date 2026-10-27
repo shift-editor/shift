@@ -22,6 +22,7 @@
     "packages/types/src/layout",
     "packages/types/__fixtures__",
     "packages/editor/src/lib/wasm/generated",
+    "packages/glyph-state/src/generated",
     "packages/wasm/src/generated",
     "packages/wasm/src/generated-reference",
     "packages/wasm/src/generated-shaping",

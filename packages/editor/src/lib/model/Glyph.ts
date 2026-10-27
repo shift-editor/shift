@@ -4,6 +4,7 @@ import type {
   AnchorSeed,
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
+  ContourEnd,
   ContourId,
   GlyphComponents,
   GlyphHandle,
@@ -55,7 +56,6 @@ import { interpolateSourceValues, interpolationWeights } from "../interpolation/
 import { evaluateVariationBasis } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
-import { Alignment } from "../transform/Alignment";
 import type { FontOptions } from "../../types/font";
 import type { AlignmentType, DistributeType, ReflectAxis } from "../../types/transform";
 import {
@@ -67,7 +67,6 @@ import {
   type DecomposedTransform,
   type MatModel,
   type Point2D,
-  type QuadraticCurve,
 } from "@shift/geo";
 import {
   type Anchor,
@@ -106,8 +105,6 @@ import { ComponentTransformEdit } from "./ComponentTransformEdit";
 import { SidebearingEdit } from "./SidebearingEdit";
 import type { Sidebearing } from "../../types/spacing";
 import { GlyphTransformEdit, type GlyphTransformOptions } from "./GlyphTransformEdit";
-import { DeletePoints } from "./DeletePoints";
-import { JoinContours, type ContourEnd } from "./JoinContours";
 import type { GlyphLayerState } from "./GlyphLayerState";
 import type { ContourBuffer } from "./ContourBuffer";
 import type { LayerBuffers, LayerChangeToken } from "./LayerBuffers";
@@ -151,12 +148,21 @@ interface GlyphRenderGeometry {
   hitAt(pos: Point2D, radius: number): GlyphHit | null;
 }
 
+/**
+ * How many layer positions cost about as much to send as one moved position
+ * named by id: a move naming more than this share of the layer sends every
+ * position instead (`setPositions`).
+ */
+const POSITIONS_PER_NAMED_MOVE = 16;
+
 class GlyphLayerWriter {
   readonly #editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null;
   readonly #intents: LayerIntents<void> | null;
   readonly #state: GlyphEditState;
-  /** The intents a preview's steps make, collected instead of pushed; null outside a preview. */
-  #previewIntents: FontIntent[] | null = null;
+  /** The intents being collected instead of pushed, for a preview or {@link together}; null otherwise. */
+  #collecting: FontIntent[] | null = null;
+  /** Whether {@link preview} is the one collecting. */
+  #previewing = false;
 
   constructor(
     editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null,
@@ -166,7 +172,7 @@ class GlyphLayerWriter {
     this.#editCoordinator = editCoordinator;
     this.#intents = editCoordinator
       ? new LayerIntents<void>((intent) => {
-          if (this.#previewIntents) this.#previewIntents.push(intent);
+          if (this.#collecting) this.#collecting.push(intent);
           else editCoordinator.push(intent);
         }, layerId)
       : null;
@@ -186,8 +192,29 @@ class GlyphLayerWriter {
   }
 
   transaction<TResult>(label: string, body: () => TResult): TResult {
-    if (this.#previewIntents || !this.#editCoordinator) return body();
+    if (this.#previewing || !this.#editCoordinator) return body();
     return this.#editCoordinator.transaction(label, body);
+  }
+
+  /**
+   * Runs `steps` and applies every intent they make in one engine call once
+   * they return, showing the layer once. `steps` must not read what it
+   * changes: the layer shows none of it until then.
+   */
+  together<TResult>(steps: () => TResult): TResult {
+    const editCoordinator = this.#editCoordinator;
+    if (!editCoordinator || this.#collecting) return steps();
+
+    const intents: FontIntent[] = [];
+    this.#collecting = intents;
+    let result: TResult;
+    try {
+      result = steps();
+    } finally {
+      this.#collecting = null;
+    }
+    if (intents.length > 0) editCoordinator.pushAll(intents);
+    return result;
   }
 
   /**
@@ -201,14 +228,16 @@ class GlyphLayerWriter {
   preview(steps: () => void): void {
     const editCoordinator = this.#editCoordinator;
     if (!editCoordinator) throw new Error("a preview needs the window's editing engine");
-    if (this.#previewIntents) throw new Error("a preview is already being collected");
+    if (this.#collecting) throw new Error("a preview is already being collected");
 
     const intents: FontIntent[] = [];
-    this.#previewIntents = intents;
+    this.#collecting = intents;
+    this.#previewing = true;
     try {
       steps();
     } finally {
-      this.#previewIntents = null;
+      this.#collecting = null;
+      this.#previewing = false;
     }
 
     const state = this.#state.state;
@@ -247,6 +276,14 @@ class GlyphLayerWriter {
       }
     }
 
+    const state = this.#state.state;
+    // Naming a moved point costs far more than sending a number, so a move of
+    // a large share of the layer sends every position, naming none.
+    if (patch.positions.length * POSITIONS_PER_NAMED_MOVE > state.positionCount) {
+      this.#workspaceIntents.setPositions({ positions: state.positionsWith(patch.positions) });
+      return;
+    }
+
     const commit = () => {
       if (pointIds.length > 0) {
         this.#workspaceIntents.movePoints({
@@ -281,6 +318,29 @@ class GlyphLayerWriter {
 
   translateLayer(dx: number, dy: number): void {
     this.transformLayer(Mat.Translate(dx, dy));
+  }
+
+  transformPoints(pointIds: readonly PointId[], matrix: MatModel): void {
+    if (pointIds.length === 0) return;
+    const { a, b, c, d, e, f } = matrix;
+    this.#workspaceIntents.transformPoints({
+      pointIds: [...pointIds],
+      matrix: [a, b, c, d, e, f],
+    });
+  }
+
+  alignPoints(pointIds: readonly PointId[], alignment: AlignmentType): void {
+    if (pointIds.length === 0) return;
+    this.#workspaceIntents.alignPoints({ pointIds: [...pointIds], alignment });
+  }
+
+  distributePoints(pointIds: readonly PointId[], axis: DistributeType): void {
+    if (pointIds.length === 0) return;
+    this.#workspaceIntents.distributePoints({ pointIds: [...pointIds], axis });
+  }
+
+  shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
+    this.#workspaceIntents.shiftSidebearing({ sidebearing, delta });
   }
 
   addContour(): ContourId {
@@ -355,6 +415,22 @@ class GlyphLayerWriter {
       contourId,
       pointId,
     });
+  }
+
+  deletePoints(pointIds: readonly PointId[], mode: DeleteMode): void {
+    this.#workspaceIntents.deletePoints({ pointIds: [...pointIds], mode });
+  }
+
+  splitSegment(startId: PointId, endId: PointId, t: number, pointId: PointId): void {
+    this.#workspaceIntents.splitSegment({ startId, endId, t, pointId });
+  }
+
+  upgradeLineToCubic(startId: PointId, endId: PointId): void {
+    this.#workspaceIntents.upgradeLineToCubic({ startId, endId });
+  }
+
+  joinContours(from: ContourEnd, to: ContourEnd, merge: boolean): void {
+    this.#workspaceIntents.joinContours({ from, to, mode: merge ? "merge" : "connect" });
   }
 
   applyBooleanOp(
@@ -709,13 +785,10 @@ export class GlyphLayer {
    * @param value - Desired distance from outline right edge to advance width.
    */
   setRightSidebearing(value: number): void {
-    const bounds = this.bounds;
-    if (!bounds) return;
+    const current = this.sidebearings.rsb;
+    if (current === null || value === current) return;
 
-    const width = bounds.max.x + value;
-    if (width === this.xAdvance) return;
-
-    this.setXAdvance(width);
+    this.shiftSidebearing("rsb", value - current);
   }
 
   /**
@@ -731,13 +804,21 @@ export class GlyphLayer {
     const current = this.sidebearings.lsb;
     if (current === null) return;
 
-    const deltaX = value - current;
-    if (deltaX === 0) return;
+    if (value === current) return;
 
     this.#writer.transaction("Set left sidebearing", () => {
-      this.translateLayer(deltaX, 0);
-      this.setXAdvance(this.xAdvance + deltaX);
+      this.shiftSidebearing("lsb", value - current);
     });
+  }
+
+  /**
+   * Adds `delta` units to one sidebearing in one intent.
+   *
+   * @param sidebearing - `"lsb"` moves the whole layer with the advance; `"rsb"` moves only the advance.
+   * @param delta - Units to add; positive adds space.
+   */
+  shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
+    this.#writer.shiftSidebearing(sidebearing, delta);
   }
 
   /**
@@ -1011,23 +1092,18 @@ export class GlyphLayer {
    * Splits a current segment and preserves its shape.
    *
    * @param segmentId - Segment in this layer's current geometry to split.
-   * @param t - Parametric split position from 0 to 1.
+   * @param t - Parametric split position, strictly between 0 and 1.
    * @returns The inserted on-curve point id, or `null` when the segment is unavailable.
    */
   splitSegment(segmentId: SegmentId, t: number): PointId | null {
     const segment = this.geometry.segment(segmentId);
-    if (!segment) return null;
+    if (!segment || !(t > 0 && t < 1)) return null;
 
-    return this.#writer.transaction("Split segment", () => {
-      switch (segment.type) {
-        case "line":
-          return this.#splitLineSegment(segment, t);
-        case "quad":
-          return this.#splitQuadraticSegment(segment, t);
-        case "cubic":
-          return this.#splitCubicSegment(segment, t);
-      }
+    const pointId = mintPointId();
+    this.#writer.transaction("Split segment", () => {
+      this.#writer.splitSegment(segment.startId, segment.endId, t, pointId);
     });
+    return pointId;
   }
 
   /**
@@ -1040,67 +1116,10 @@ export class GlyphLayer {
     const segment = this.geometry.segment(segmentId);
     if (!segment || segment.type !== "line") return false;
 
-    const points = segment.asLine();
-    if (!points) return false;
-
-    const contourId = this.contourIdOfPoint(points.end.id);
-    const contour = contourId ? this.contour(contourId) : null;
-    if (!contour) return false;
-
     this.#writer.transaction("Upgrade line to cubic", () => {
-      const control1Pos = {
-        x: points.start.x + (points.end.x - points.start.x) / 3,
-        y: points.start.y + (points.end.y - points.start.y) / 3,
-      };
-      const control2Pos = {
-        x: points.start.x + ((points.end.x - points.start.x) * 2) / 3,
-        y: points.start.y + ((points.end.y - points.start.y) * 2) / 3,
-      };
-
-      if (contour.closed && contour.points[0]?.id === points.end.id) {
-        this.#writer.addPoints(contour.id, [
-          Point.offCurve(control1Pos),
-          Point.offCurve(control2Pos),
-        ]);
-        return;
-      }
-
-      const control2Id = this.insertPointBefore(points.end.id, Point.offCurve(control2Pos));
-      this.insertPointBefore(control2Id, Point.offCurve(control1Pos));
+      this.#writer.upgradeLineToCubic(segment.startId, segment.endId);
     });
-
     return true;
-  }
-
-  #splitLineSegment(segment: Segment, t: number): PointId {
-    return this.insertPointBefore(segment.endId, Point.onCurve(segment.pointAt(t)));
-  }
-
-  #splitQuadraticSegment(segment: Segment, t: number): PointId {
-    const points = segment.asQuad()!;
-    const [curveA, curveB] = segment.splitAt(t) as [QuadraticCurve, QuadraticCurve];
-
-    const splitPointId = this.insertPointBefore(
-      points.end.id,
-      Point.create(curveA.p1, points.end.pointType, true),
-    );
-    this.insertPointBefore(points.end.id, Point.offCurve(curveB.c));
-    this.movePointTo(points.control.id, curveA.c);
-
-    return splitPointId;
-  }
-
-  #splitCubicSegment(segment: Segment, t: number): PointId {
-    const points = segment.asCubic()!;
-    const [curveA, curveB] = segment.splitAt(t) as [CubicCurve, CubicCurve];
-
-    this.insertPointBefore(points.controlEnd.id, Point.offCurve(curveA.c1));
-    const splitPointId = this.insertPointBefore(points.controlEnd.id, Point.smooth(curveA.p1));
-    this.insertPointBefore(points.controlEnd.id, Point.offCurve(curveB.c0));
-    this.movePointTo(points.controlStart.id, curveA.c0);
-    this.movePointTo(points.controlEnd.id, curveB.c1);
-
-    return splitPointId;
   }
 
   /**
@@ -1132,7 +1151,12 @@ export class GlyphLayer {
    * @throws {Error} When an affected contour span cannot be traversed; the edit is rolled back.
    */
   deletePoints(pointIds: readonly PointId[], mode: DeleteMode = "fit"): boolean {
-    return new DeletePoints(this, pointIds, mode).apply();
+    if (pointIds.length === 0 || pointIds.some((id) => !this.point(id))) return false;
+
+    this.#writer.transaction("Delete selection", () => {
+      this.#writer.deletePoints(pointIds, mode);
+    });
+    return true;
   }
 
   /**
@@ -1140,7 +1164,7 @@ export class GlyphLayer {
    *
    * @remarks
    * Two ends of one contour close it. Ends of different contours join into the
-   * `from` contour; the `to` contour's points get new identities.
+   * `from` contour, and every point keeps its identity.
    *
    * @param from - End whose contour survives a join; dropped when merging.
    * @param to - End connected to `from`.
@@ -1148,7 +1172,18 @@ export class GlyphLayer {
    * @returns Whether both ends were open and were connected.
    */
   joinContours(from: ContourEnd, to: ContourEnd, merge: boolean): boolean {
-    return new JoinContours(this, from, to, merge).apply();
+    const fromContour = this.contour(from.contourId);
+    const toContour = this.contour(to.contourId);
+    if (!fromContour || !toContour || fromContour.closed || toContour.closed) return false;
+    if (fromContour === toContour) {
+      const onCurve = fromContour.points.filter(Point.isOnCurve).length;
+      if (from.side === to.side || onCurve < 2) return false;
+    }
+
+    this.#writer.transaction(fromContour === toContour ? "Close contour" : "Join contours", () => {
+      this.#writer.joinContours(from, to, merge);
+    });
+    return true;
   }
 
   /**
@@ -1210,6 +1245,17 @@ export class GlyphLayer {
    */
   preview(steps: () => void): void {
     this.#writer.preview(steps);
+  }
+
+  /**
+   * Runs `steps`, which call this layer's editing methods, and applies every
+   * intent they make in one engine call once they return, showing the layer
+   * once. For edits that make many intents, such as pasting many contours:
+   * one at a time, each costs the whole layer. `steps` must not read what it
+   * changes, because the layer shows none of it until `steps` returns.
+   */
+  together<TResult>(steps: () => TResult): TResult {
+    return this.#writer.together(steps);
   }
 
   /**
@@ -1321,13 +1367,7 @@ export class GlyphLayer {
    * @param origin - Rotation origin in glyph-local UPM units.
    */
   rotate(pointIds: readonly PointId[], angle: number, origin: Point2D): void {
-    this.applyPositionPatch(
-      Transform.rotatePoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        angle,
-        origin,
-      ),
-    );
+    this.#writer.transformPoints(pointIds, Transform.about(Mat.Rotate(angle), origin));
   }
 
   /**
@@ -1339,14 +1379,7 @@ export class GlyphLayer {
    * @param origin - Scale origin in glyph-local UPM units.
    */
   scale(pointIds: readonly PointId[], sx: number, sy: number, origin: Point2D): void {
-    this.applyPositionPatch(
-      Transform.scalePoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        sx,
-        sy,
-        origin,
-      ),
-    );
+    this.#writer.transformPoints(pointIds, Transform.about(Mat.Scale(sx, sy), origin));
   }
 
   /**
@@ -1357,46 +1390,54 @@ export class GlyphLayer {
    * @param origin - Axis origin in glyph-local UPM units.
    */
   reflect(pointIds: readonly PointId[], axis: ReflectAxis, origin: Point2D): void {
-    this.applyPositionPatch(
-      Transform.reflectPoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        axis,
-        origin,
-      ),
+    this.#writer.transformPoints(
+      pointIds,
+      Transform.about(Transform.reflectionMatrix(axis), origin),
     );
   }
 
   /**
-   * Aligns points using a geometric alignment rule.
+   * Lines points up on an edge or centre of the box around them.
    *
    * @param pointIds - Points to align.
    * @param alignment - Alignment operation to apply.
    */
   align(pointIds: readonly PointId[], alignment: AlignmentType): void {
-    const points = this.positionsFor(pointIds.map((id) => ({ kind: "point", id })));
-    const bounds = Bounds.fromPoints(points);
-    if (!bounds) return;
-
-    this.applyPositionPatch(Alignment.alignPoints(points, alignment, bounds));
+    this.#writer.alignPoints(pointIds, alignment);
   }
 
   /**
-   * Distributes points according to a spacing rule.
+   * Spaces points evenly between the outermost two along an axis.
    *
    * @param pointIds - Points to distribute.
    * @param type - Distribution operation to apply.
    */
   distribute(pointIds: readonly PointId[], type: DistributeType): void {
-    this.applyPositionPatch(
-      Alignment.distributePoints(
-        this.positionsFor(pointIds.map((id) => ({ kind: "point", id }))),
-        type,
-      ),
-    );
+    this.#writer.distributePoints(pointIds, type);
   }
 }
 
 const IDENTITY_GLYPH_TRANSFORM_CELL = signal<MatModel>(Mat.Identity());
+
+/*
+ * Both read the whole layer, so they rerun on every point move of a drag.
+ * Comparing by value stops a move that leaves anchors and placements where
+ * they were from reaching text layout and component placement.
+ */
+function samePropagatedAnchors(a: PropagatedAnchors, b: PropagatedAnchors): boolean {
+  return (
+    a.baseGlyphCount === b.baseGlyphCount &&
+    a.anchors.length === b.anchors.length &&
+    a.anchors.every((anchor, index) => {
+      const other = b.anchors[index]!;
+      return anchor.name === other.name && anchor.x === other.x && anchor.y === other.y;
+    })
+  );
+}
+
+function sameMatrices(a: readonly MatModel[], b: readonly MatModel[]): boolean {
+  return a.length === b.length && a.every((matrix, index) => Mat.equals(matrix, b[index]!));
+}
 const NO_PLACED_CONTOURS_CELL = signal<readonly RenderContour[] | null>(null);
 const NO_ACTIVE_SOURCE_CELL = signal<SourceId | null>(null);
 
@@ -1510,6 +1551,7 @@ export class GlyphRenderModel {
       create: (idCell) =>
         computed(() => this.#propagate(idCell.value), {
           name: "glyph.renderModel.propagatedAnchors",
+          equals: samePropagatedAnchors,
         }),
       dispose: (cell) => cell.dispose(),
     });
@@ -1519,6 +1561,7 @@ export class GlyphRenderModel {
       create: (idCell) =>
         computed(() => this.#placements(idCell.value), {
           name: "glyph.renderModel.componentPlacements",
+          equals: sameMatrices,
         }),
       dispose: (cell) => cell.dispose(),
     });

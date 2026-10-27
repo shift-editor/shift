@@ -111,6 +111,25 @@ export function drawGroupPreview(
   return layout;
 }
 
+/** Each member's kern against the other glyph at the active source or location, in one read. */
+function memberKerns(
+  editor: Editor,
+  content: GroupPreviewContent,
+  memberIds: readonly GlyphId[],
+  other: PreviewGlyph | null,
+): readonly number[] {
+  const otherId = content.other;
+  if (!other || otherId === null) return [];
+  const pairs = memberIds.flatMap((memberId) =>
+    content.position === "first" ? [memberId, otherId] : [otherId, memberId],
+  );
+  return editor.font.kerningRun(
+    pairs,
+    editor.externalLocationCell.peek(),
+    editor.activeSourceIdCell.peek(),
+  );
+}
+
 /** Each loaded member's word, kerned against `other` at the active source or location. */
 function measureWords(
   editor: Editor,
@@ -118,20 +137,20 @@ function measureWords(
   other: PreviewGlyph | null,
   scale: number,
 ): MemberWord[] {
-  const location = editor.externalLocationCell.peek();
-  const sourceId = editor.activeSourceIdCell.peek();
-  const kernOf = (memberId: GlyphId): number => {
-    if (!other || content.other === null) return 0;
-    const [first, second] =
-      content.position === "first" ? [memberId, content.other] : [content.other, memberId];
-    return editor.font.kerningBetween(first, second, location, sourceId);
-  };
+  const loaded = content.members.flatMap((memberId) => {
+    const member = previewGlyph(editor, memberId);
+    return member ? [{ memberId, member }] : [];
+  });
+  const kerns = memberKerns(
+    editor,
+    content,
+    loaded.map(({ memberId }) => memberId),
+    other,
+  );
 
   const words: MemberWord[] = [];
-  for (const memberId of content.members) {
-    const member = previewGlyph(editor, memberId);
-    if (!member) continue;
-    const kern = kernOf(memberId);
+  for (const [index, { memberId, member }] of loaded.entries()) {
+    const kern = kerns[index] ?? 0;
     const advance = member.advance + (other ? kern + other.advance : 0);
     words.push({ memberId, member, kern, width: advance * scale });
   }

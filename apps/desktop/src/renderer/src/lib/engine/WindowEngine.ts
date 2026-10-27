@@ -1,13 +1,27 @@
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
 import { FontStoreLocation } from "@shared/workspace/protocol";
-import type { FontIntent, GlyphId } from "@shift/types";
+import type { FontIntent, GlyphId, GlyphName, LayerId, SourceId } from "@shift/types";
 import {
   loadEngine,
+  type EditablePair,
   type EngineEdit,
   type EngineLayer,
   type EngineSession,
+  type EngineStage,
+  type InterpolatedMetrics,
+  unkerned,
 } from "@shift/editor/model";
+import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
+import type { FontEngine, KerningPlace } from "@shift/editor/types";
 import { engineLayerSource } from "./engineLayerSource";
+
+/** Which of the engine's reads a change may have changed. */
+interface ChangedReads {
+  readonly kerning: boolean;
+  readonly sourceMetrics: boolean;
+}
+
+const UNCHANGED: ChangedReads = { kerning: false, sourceMetrics: false };
 
 /**
  * The open session and the reader it loads layers through, which moves with
@@ -17,6 +31,14 @@ interface Opened {
   readonly session: EngineSession;
   reader: number | null;
   location: FontStoreLocation;
+}
+
+/** Where a {@link WindowEngine} opens from: the workspace serving this window. */
+export interface EngineWorkspace {
+  /** The workspace's store, for the window's layer reader; `null` for a preview. */
+  storeLocation(): Promise<FontStoreLocation | null>;
+  /** The font's directory as the engine opens it; `null` for a preview. */
+  directory(): Promise<Uint8Array | null>;
 }
 
 /**
@@ -30,15 +52,35 @@ interface Opened {
  * set the native workspace persists. Undo and redo run here too, on the
  * engine's own history. {@link reopen} starts over from the store, dropping
  * that history: only after a persist failed.
+ *
+ * The window reads kerning and interpolated metrics from here too, as the
+ * {@link FontEngine}; its revision cells change with every edit, undo, redo
+ * or staged frame that changed what those reads return, and on every open.
  */
-export class WindowEngine {
+export class WindowEngine implements FontEngine {
   readonly #layers: LayerReaderHost;
-  readonly #storeLocation: () => Promise<FontStoreLocation | null>;
+  readonly #workspace: EngineWorkspace;
+  readonly #kerningRevision: WritableSignal<number> = signal(0, {
+    name: "windowEngine.kerningRevision",
+  });
+  readonly #sourceMetricsRevision: WritableSignal<number> = signal(0, {
+    name: "windowEngine.sourceMetricsRevision",
+  });
   #opened: Opened | null = null;
+  /** Which reads the open edit changed so far, to show again when it is rewound or cancelled. */
+  #inEdit: ChangedReads = UNCHANGED;
 
-  constructor(layers: LayerReaderHost, storeLocation: () => Promise<FontStoreLocation | null>) {
+  constructor(layers: LayerReaderHost, workspace: EngineWorkspace) {
     this.#layers = layers;
-    this.#storeLocation = storeLocation;
+    this.#workspace = workspace;
+  }
+
+  get kerningRevisionCell(): Signal<number> {
+    return this.#kerningRevision;
+  }
+
+  get sourceMetricsRevisionCell(): Signal<number> {
+    return this.#sourceMetricsRevision;
   }
 
   get isOpen(): boolean {
@@ -52,8 +94,11 @@ export class WindowEngine {
    * @throws When the workspace has no store to read, as in a preview.
    */
   async reopen(): Promise<void> {
-    const location = await this.#storeLocation();
-    if (!location) throw new Error("the workspace has no font store to edit");
+    const [location, directory] = await Promise.all([
+      this.#workspace.storeLocation(),
+      this.#workspace.directory(),
+    ]);
+    if (!location || !directory) throw new Error("the workspace has no font store to edit");
     const { EngineSession } = await loadEngine();
 
     const reader = this.#layers.open(location);
@@ -61,11 +106,12 @@ export class WindowEngine {
       // The session reads layers only while an edit runs, after this open, so
       // its source can follow the current reader.
       const session = EngineSession.open(
-        this.#layers.directory(reader),
+        directory,
         engineLayerSource(this.#layers, () => this.#reader()),
       );
       this.#close();
       this.#opened = { session, reader, location };
+      this.#changed({ kerning: true, sourceMetrics: true });
     } catch (error) {
       this.#layers.close(reader);
       throw error;
@@ -78,7 +124,7 @@ export class WindowEngine {
    */
   async followStore(): Promise<void> {
     const opened = this.#opened;
-    const location = await this.#storeLocation();
+    const location = await this.#workspace.storeLocation();
     if (!opened || !location || FontStoreLocation.equals(location, opened.location)) return;
 
     const previous = opened.reader;
@@ -101,6 +147,7 @@ export class WindowEngine {
   /** Opens an edit: the applies until {@link endEdit} become one undo step and one change set. */
   beginEdit(): void {
     this.#require().beginEdit();
+    this.#inEdit = UNCHANGED;
   }
 
   /**
@@ -114,9 +161,40 @@ export class WindowEngine {
     const session = this.#require();
     performance.mark("engine.apply.start");
     try {
-      return session.apply(intents);
+      return this.#shown(session.apply(intents));
     } finally {
       performance.measure("engine.apply", "engine.apply.start");
+    }
+  }
+
+  /**
+   * Puts the engine back where the open edit began, keeping the edit open,
+   * so what is applied next replaces what it applied so far.
+   *
+   * @throws When the engine is not open or no edit is open.
+   */
+  rewindEdit(): void {
+    this.#require().rewindEdit();
+    this.#showEditUndone();
+  }
+
+  /**
+   * Applies `intents` within the open edit without building the font-level
+   * records they change: one frame of a gesture, whose records are built when
+   * it commits.
+   *
+   * @returns The layers they touched and which reads they changed.
+   * @throws As {@link apply}.
+   */
+  stage(intents: readonly FontIntent[]): EngineStage {
+    const session = this.#require();
+    performance.mark("engine.stage.start");
+    try {
+      const staged = session.stage(intents);
+      this.#record(staged);
+      return staged;
+    } finally {
+      performance.measure("engine.stage", "engine.stage.start");
     }
   }
 
@@ -143,12 +221,15 @@ export class WindowEngine {
    * when it changed nothing.
    */
   endEdit(): Uint8Array | undefined {
-    return this.#require().endEdit();
+    const changeSet = this.#require().endEdit();
+    this.#inEdit = UNCHANGED;
+    return changeSet;
   }
 
   /** Drops the open edit; the engine goes back to where it began. */
   cancelEdit(): void {
     this.#require().cancelEdit();
+    this.#showEditUndone();
   }
 
   /**
@@ -158,12 +239,36 @@ export class WindowEngine {
    * there is nothing to undo.
    */
   undo(): EngineEdit | undefined {
-    return this.#require().undo();
+    const undone = this.#require().undo();
+    return undone && this.#shown(undone);
   }
 
   /** Makes the latest undone edit again; `undefined` when there is nothing to redo. */
   redo(): EngineEdit | undefined {
-    return this.#require().redo();
+    const redone = this.#require().redo();
+    return redone && this.#shown(redone);
+  }
+
+  kerningRun(pairs: readonly GlyphId[], place: KerningPlace): readonly number[] {
+    const session = this.#opened?.session;
+    if (!session) return unkerned(pairs);
+    return session.kerningRun(pairs, place);
+  }
+
+  kerningPairs(sourceId: SourceId, pairs: readonly GlyphId[]): readonly EditablePair[] {
+    return this.#opened?.session.kerningPairs(sourceId, pairs) ?? [];
+  }
+
+  sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
+    return this.#opened?.session.sourceMetricsAt(location) ?? null;
+  }
+
+  nextGlyphName(name: string): GlyphName {
+    return this.#require().nextGlyphName(name);
+  }
+
+  newAnchorName(layerIds: readonly LayerId[]): string {
+    return this.#require().newAnchorName(layerIds);
   }
 
   /** Forgets every undone edit. */
@@ -200,6 +305,39 @@ export class WindowEngine {
 
   dispose(): void {
     this.#close();
+  }
+
+  /** `edit`, after telling readers which of the engine's reads it changed. */
+  #shown(edit: EngineEdit): EngineEdit {
+    this.#record({
+      kerning: edit.next?.kerning !== undefined,
+      sourceMetrics: edit.next?.sourceMetricsInterpolation !== undefined,
+    });
+    return edit;
+  }
+
+  /** Tells readers that what the open edit changed is gone, as after a rewind or cancel. */
+  #showEditUndone(): void {
+    const changed = this.#inEdit;
+    this.#inEdit = UNCHANGED;
+    this.#changed(changed);
+  }
+
+  /** Records what a change within the open edit, if one is open, changed, and tells readers. */
+  #record(changed: ChangedReads): void {
+    this.#inEdit = {
+      kerning: this.#inEdit.kerning || changed.kerning,
+      sourceMetrics: this.#inEdit.sourceMetrics || changed.sourceMetrics,
+    };
+    this.#changed(changed);
+  }
+
+  /** Tells readers of the reads `changed` names that they may answer differently. */
+  #changed(changed: ChangedReads): void {
+    batch(() => {
+      if (changed.kerning) this.#kerningRevision.update((revision) => revision + 1);
+      if (changed.sourceMetrics) this.#sourceMetricsRevision.update((revision) => revision + 1);
+    });
   }
 
   #require(): EngineSession {

@@ -317,6 +317,25 @@ impl FontWorkspace {
         Ok(outcome)
     }
 
+    /// Persists a change set another process sent compacted, loading the
+    /// layers it sent as values and rebuilding them from this font first.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::persist_change_set`], and [`WorkspaceError::Font`] when a
+    /// layer sent as values no longer has the change's before values.
+    pub fn persist_compact_change_set(
+        &mut self,
+        change_set: shift_font::CompactChangeSet,
+        save_state: SaveState,
+    ) -> Result<AppliedIntents, WorkspaceError> {
+        self.session
+            .load_layers(&mut StoreLayers(&self.store), change_set.value_layer_ids())
+            .map_err(WorkspaceError::from_load)?;
+        let change_set = change_set.expand(self.session.font())?;
+        self.persist_change_set(change_set, save_state)
+    }
+
     /// Persists a change set already applied to a session over this font,
     /// without replaying intents or adding a ledger entry: the session that
     /// made it keeps its undo history. Every `before` must match this font, so a
@@ -510,7 +529,7 @@ impl FontWorkspace {
             AcquireScope::Glyphs => self.session.load_glyphs(&mut source, glyph_ids),
             AcquireScope::ComponentClosure => self
                 .session
-                .load_glyph_closure(&mut source, glyph_ids.iter().cloned()),
+                .load_glyph_closure(&mut source, glyph_ids.iter().copied()),
         }
         .map_err(WorkspaceError::from_load)
     }
@@ -565,7 +584,7 @@ impl FontWorkspace {
     /// Returns [`WorkspaceError::Store`] when the references cannot be read.
     pub fn referenced_glyph_ids_for_glyph(
         &self,
-        glyph_id: &GlyphId,
+        glyph_id: GlyphId,
     ) -> Result<Vec<GlyphId>, WorkspaceError> {
         self.store
             .referenced_glyph_ids_for_glyph(glyph_id)
@@ -584,6 +603,17 @@ impl FontWorkspace {
         self.store
             .dependent_glyph_ids_for_layers(layer_ids)
             .map_err(Into::into)
+    }
+
+    /// The font as the store holds it, with every layer a placeholder: what
+    /// an engine session in another process opens with, built from this
+    /// session instead of from a second read of the store.
+    ///
+    /// # Errors
+    ///
+    /// Fails when a placeholder cannot replace a loaded layer.
+    pub fn directory(&self) -> Result<shift_font::Font, WorkspaceError> {
+        self.session.directory().map_err(Into::into)
     }
 
     /// Metadata and directory are always present. Layer payloads are present
@@ -698,7 +728,7 @@ impl LayerSource for StoreLayers<'_> {
 
     fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error> {
         let started = Instant::now();
-        let closure = self.0.referenced_glyph_closure(roots.iter().cloned())?;
+        let closure = self.0.referenced_glyph_closure(roots.iter().copied())?;
         profile_acquisition("component-closure", started);
         Ok(closure)
     }

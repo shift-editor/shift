@@ -1,4 +1,4 @@
-import type { Bounds, Point2D } from "@shift/geo";
+import type { Point2D } from "@shift/geo";
 import {
   type GlyphName,
   mintTextItemId,
@@ -94,7 +94,6 @@ export interface PositionedGlyph {
   xOffset: number;
   yOffset: number;
   cluster: number;
-  bounds: Bounds | null;
 }
 
 export type Direction = "ltr" | "rtl";

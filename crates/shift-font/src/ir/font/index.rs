@@ -39,8 +39,8 @@ impl FontIndex {
     pub(super) fn from_glyphs(glyphs: &PersistentEntityList<Arc<Glyph>>) -> CoreResult<Self> {
         let mut index = Self::default();
         for (glyph_id, glyph) in glyphs.iter() {
-            require_keyed(&glyph_id, glyph)?;
-            index.try_insert(IndexEntries::of_glyph(&glyph_id, glyph))?;
+            require_keyed(glyph_id, glyph)?;
+            index.try_insert(IndexEntries::of_glyph(glyph_id, glyph))?;
         }
         Ok(index)
     }
@@ -54,8 +54,8 @@ impl FontIndex {
         self.by_unicode.get(&unicode)
     }
 
-    pub(super) fn owner(&self, layer_id: &LayerId) -> Option<&GlyphId> {
-        self.owners.get(layer_id)
+    pub(super) fn owner(&self, layer_id: LayerId) -> Option<&GlyphId> {
+        self.owners.get(&layer_id)
     }
 
     pub(super) fn layer_at(&self, glyph_id: GlyphId, source_id: SourceId) -> Option<&LayerId> {
@@ -77,7 +77,7 @@ impl FontIndex {
         base_glyph_id: &GlyphId,
     ) -> impl Iterator<Item = &GlyphId> {
         self.composites_of(base_glyph_id)
-            .filter_map(|layer_id| self.owner(layer_id))
+            .filter_map(|layer_id| self.owner(*layer_id))
     }
 
     /// Files `entries` under every index.
@@ -151,11 +151,11 @@ impl FontIndex {
             let Some(glyph) = glyphs.get(glyph_id) else {
                 continue;
             };
-            require_keyed(glyph_id, glyph)?;
+            require_keyed(*glyph_id, glyph)?;
             if ids_changed.contains(glyph_id) {
                 transfer.claim(glyph.entity_ids(), &self.entity_ids)?;
             }
-            self.try_insert(IndexEntries::records_of_glyph(glyph_id, glyph))?;
+            self.try_insert(IndexEntries::records_of_glyph(*glyph_id, glyph))?;
             unicodes.extend(glyph.unicodes().iter().copied());
         }
         transfer.apply_to(&mut self.entity_ids);
@@ -180,13 +180,13 @@ pub(super) struct IndexEntries {
 }
 
 impl IndexEntries {
-    pub(super) fn of_glyph(glyph_id: &GlyphId, glyph: &Glyph) -> Self {
+    pub(super) fn of_glyph(glyph_id: GlyphId, glyph: &Glyph) -> Self {
         let mut entries = Self::records_of_glyph(glyph_id, glyph);
         entries.entity_ids.extend(glyph.entity_ids());
         entries
     }
 
-    pub(super) fn of_layer(glyph_id: &GlyphId, layer: &GlyphLayer) -> Self {
+    pub(super) fn of_layer(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
         let mut entries = Self::records_of_layer(glyph_id, layer);
         entries.entity_ids.extend(layer.entity_ids());
         entries
@@ -194,13 +194,11 @@ impl IndexEntries {
 
     /// A glyph's name, code points, and layers, but not its entity ids,
     /// which a change set moves by difference.
-    pub(super) fn records_of_glyph(glyph_id: &GlyphId, glyph: &Glyph) -> Self {
+    pub(super) fn records_of_glyph(glyph_id: GlyphId, glyph: &Glyph) -> Self {
         let mut entries = Self::default();
-        entries
-            .names
-            .push((glyph.glyph_name().clone(), glyph_id.clone()));
+        entries.names.push((glyph.glyph_name().clone(), glyph_id));
         for unicode in glyph.unicodes() {
-            entries.unicodes.push((*unicode, glyph_id.clone()));
+            entries.unicodes.push((*unicode, glyph_id));
         }
         for layer in glyph.layers().values() {
             entries.add_layer_records(glyph_id, layer);
@@ -210,35 +208,35 @@ impl IndexEntries {
 
     /// A layer's owner, source, and component bases, but not its entity ids,
     /// which an in-place edit moves by difference.
-    pub(super) fn records_of_layer(glyph_id: &GlyphId, layer: &GlyphLayer) -> Self {
+    pub(super) fn records_of_layer(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
         let mut entries = Self::default();
         entries.add_layer_records(glyph_id, layer);
         entries
     }
 
-    fn add_layer_records(&mut self, glyph_id: &GlyphId, layer: &GlyphLayer) {
+    fn add_layer_records(&mut self, glyph_id: GlyphId, layer: &GlyphLayer) {
         let layer_id = layer.id();
-        self.owners.push((layer_id.clone(), glyph_id.clone()));
+        self.owners.push((layer_id, glyph_id));
         self.glyph_sources
-            .push((GlyphSource::of(glyph_id, layer), layer_id.clone()));
+            .push((GlyphSource::of(glyph_id, layer), layer_id));
         for component in layer.components_iter() {
             self.component_bases
-                .push((component.base_glyph_id(), layer_id.clone()));
+                .push((component.base_glyph_id(), layer_id));
         }
     }
 }
 
 /// The layer slot a glyph has for one source.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(super) struct GlyphSource {
     glyph_id: GlyphId,
     source_id: SourceId,
 }
 
 impl GlyphSource {
-    fn of(glyph_id: &GlyphId, layer: &GlyphLayer) -> Self {
+    fn of(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
         Self {
-            glyph_id: glyph_id.clone(),
+            glyph_id,
             source_id: layer.source_id(),
         }
     }
@@ -258,15 +256,15 @@ impl DuplicateKey for GlyphName {
 
 impl DuplicateKey for LayerId {
     fn duplicate_error(&self) -> CoreError {
-        CoreError::DuplicateLayerId(self.clone())
+        CoreError::DuplicateLayerId(*self)
     }
 }
 
 impl DuplicateKey for GlyphSource {
     fn duplicate_error(&self) -> CoreError {
         CoreError::DuplicateGlyphLayer {
-            glyph_id: self.glyph_id.clone(),
-            source_id: self.source_id.clone(),
+            glyph_id: self.glyph_id,
+            source_id: self.source_id,
         }
     }
 }
@@ -298,10 +296,10 @@ impl<K: DuplicateKey> OrDuplicate for Result<(), K> {
 }
 
 /// Requires a glyph to be stored under its own id.
-fn require_keyed(glyph_id: &GlyphId, glyph: &Glyph) -> CoreResult<()> {
-    if *glyph_id != glyph.id() {
+fn require_keyed(glyph_id: GlyphId, glyph: &Glyph) -> CoreResult<()> {
+    if glyph_id != glyph.id() {
         return Err(CoreError::MismatchedGlyphId {
-            key: glyph_id.clone(),
+            key: glyph_id,
             glyph_id: glyph.id(),
         });
     }

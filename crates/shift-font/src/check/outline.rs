@@ -33,7 +33,7 @@ const SAMPLES: [f64; 3] = [0.25, 0.5, 0.75];
 
 pub(super) fn check(
     font: &Font,
-    glyph_id: &GlyphId,
+    glyph_id: GlyphId,
     thresholds: &OutlineThresholds,
 ) -> CoreResult<Vec<Finding>> {
     let glyph = font.require_glyph(glyph_id)?;
@@ -141,7 +141,7 @@ pub(super) fn check(
 fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool {
     let outline = |source: &Source| {
         font.projection(source.location())
-            .glyph(&glyph.id())
+            .glyph(glyph.id())
             .ok()
             .flatten()
             .map(|resolved| {

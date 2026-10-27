@@ -18,4 +18,12 @@ export function loadEngine(): Promise<EngineModule> {
   return loading;
 }
 
-export type { EngineEdit, EngineLayer, EngineLayerSource, EngineSession } from "./engineModule";
+export type {
+  EditablePair,
+  EngineEdit,
+  EngineLayer,
+  EngineLayerSource,
+  EngineSession,
+  EngineStage,
+  InterpolatedMetrics,
+} from "./engineModule";

@@ -1,4 +1,4 @@
-use crate::CurveSegment;
+use crate::{CurveSegment, SegmentIndices};
 
 impl CurveSegment<'_> {
     /// Tight axis-aligned bounding box of the segment, as
@@ -13,6 +13,28 @@ impl CurveSegment<'_> {
                 [p0.x(), c0.x(), c1.x(), p1.x()],
                 [p0.y(), c0.y(), c1.y(), p1.y()],
             ),
+        }
+    }
+}
+
+impl SegmentIndices {
+    /// Tight axis-aligned bounding box of the segment whose point at index
+    /// `i` is at `position(i)`, as `(min_x, min_y, max_x, max_y)`: the same
+    /// box [`CurveSegment::bounds`] gives for the same points.
+    pub fn bounds(&self, position: impl Fn(usize) -> (f64, f64)) -> (f64, f64, f64, f64) {
+        match *self {
+            Self::Line([a, b]) => {
+                let ((x0, y0), (x1, y1)) = (position(a), position(b));
+                line_bounds(x0, y0, x1, y1)
+            }
+            Self::Quad([a, b, c]) => {
+                let ((x0, y0), (cx, cy), (x1, y1)) = (position(a), position(b), position(c));
+                quad_bounds(x0, y0, cx, cy, x1, y1)
+            }
+            Self::Cubic([a, b, c, d]) => {
+                let [p0, c0, c1, p1] = [a, b, c, d].map(&position);
+                cubic_bounds([p0.0, c0.0, c1.0, p1.0], [p0.1, c0.1, c1.1, p1.1])
+            }
         }
     }
 }

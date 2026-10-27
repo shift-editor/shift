@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GlyphName } from "@shift/types";
 import type { GlyphRenderModel } from "@shift/editor/model";
 import { TestEditor } from "@/testing/TestEditor";
-import { createStubCanvas } from "@/testing/stubCanvas";
+import { createStubContext } from "@/testing/stubCanvas";
 
 const FONT = resolve(process.cwd(), "../../fixtures/fonts/AnchorDragBench.glyphs");
 
@@ -31,7 +31,7 @@ function recordSceneFrames(editor: TestEditor): () => SceneFrame {
     canvas: element(),
     rect,
     dpr: 1,
-    ctx: createStubCanvas().ctx,
+    ctx: createStubContext(),
     width: 1000,
     height: 800,
   });

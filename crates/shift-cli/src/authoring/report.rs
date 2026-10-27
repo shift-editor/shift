@@ -134,7 +134,7 @@ impl LayerReport {
     fn from_layer(font: &Font, layer: &GlyphLayer) -> Option<Self> {
         Some(Self {
             layer_id: layer.id().to_string(),
-            glyph_id: font.glyph_id_by_layer(&layer.id())?.to_string(),
+            glyph_id: font.glyph_id_by_layer(layer.id())?.to_string(),
             source_id: layer.source_id().to_string(),
             advance: layer.width(),
             contour_count: layer.contours().len(),
@@ -340,7 +340,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         .location()
                         .iter()
                         .filter_map(|(axis_id, value)| {
-                            let axis = font.axis(axis_id)?;
+                            let axis = font.axis(*axis_id)?;
                             Some((axis.tag().to_string(), *value))
                         })
                         .collect(),
@@ -384,7 +384,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
     // Groups first, so a report reads in the order a batch applies.
     report.extend(changes.changes.iter().filter_map(|change| match change {
         FontChange::KerningGroup { group_id, group } => {
-            kerning_group_change(font, group_id, group.before.as_ref(), group.after.as_ref())
+            kerning_group_change(font, *group_id, group.before.as_ref(), group.after.as_ref())
         }
         _ => None,
     }));
@@ -393,7 +393,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
             source_id,
             pair,
             value,
-        } => kerning_value_change(font, source_id, pair, value.before, value.after),
+        } => kerning_value_change(font, *source_id, pair, value.before, value.after),
         _ => None,
     }));
 
@@ -414,7 +414,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
 
 fn kerning_group_change(
     font: &Font,
-    group_id: &KerningGroupId,
+    group_id: KerningGroupId,
     before: Option<&KerningGroup>,
     after: Option<&KerningGroup>,
 ) -> Option<AuthoringChange> {
@@ -436,7 +436,7 @@ fn kerning_group_change(
 
 fn kerning_value_change(
     font: &Font,
-    source_id: &SourceId,
+    source_id: SourceId,
     pair: &KerningPair,
     before: Option<f64>,
     after: Option<f64>,

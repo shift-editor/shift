@@ -1,4 +1,5 @@
-import { Mat, type MatModel } from "@shift/geo";
+import type { MatModel } from "@shift/geo";
+import { composeTransform } from "@shift/glyph-state";
 import {
   followAnchors,
   propagateAnchors as propagate,
@@ -41,5 +42,5 @@ export function propagateAnchors(glyph: PropagationGlyph): PropagatedAnchors {
  * and unset ones last accepted on their anchors, sit on the current anchors.
  */
 export function followingPlacements(components: readonly FollowingComponent[]): MatModel[] {
-  return followAnchors(components).map((following) => Mat.fromDecomposed(following.transform));
+  return followAnchors(components).map((following) => composeTransform(following.transform));
 }

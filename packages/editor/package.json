@@ -38,10 +38,6 @@
       "types": "./src/signals.ts",
       "import": "./src/signals.ts"
     },
-    "./testing": {
-      "types": "./src/testing/index.ts",
-      "import": "./src/testing/index.ts"
-    },
     "./spaces": {
       "types": "./src/spaces.ts",
       "import": "./src/spaces.ts"
@@ -77,7 +73,6 @@
   "dependencies": {
     "@shift/geo": "workspace:*",
     "@shift/glyph-state": "workspace:*",
-    "@shift/rules": "workspace:*",
     "@shift/types": "workspace:*",
     "@shift/ui": "workspace:*",
     "@shift/validation": "workspace:*",

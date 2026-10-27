@@ -119,9 +119,9 @@ fn reported(font: &Font, finding: Finding) -> ReportedFinding {
         severity: finding.check.severity(),
         glyph: finding
             .glyph
-            .and_then(|glyph_id| font.glyph(&glyph_id).map(|glyph| glyph.name().to_string())),
+            .and_then(|glyph_id| font.glyph(glyph_id).map(|glyph| glyph.name().to_string())),
         source: finding.source.and_then(|source_id| {
-            font.source(&source_id)
+            font.source(source_id)
                 .map(|source| source.name().to_string())
         }),
         contour: finding.contour,

@@ -520,6 +520,7 @@ export class Font {
     isVariable(): boolean;
     kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
     get kerningCell(): Signal<Kerning>;
+    kerningRun(pairs: readonly GlyphId[], location: ExternalAxisLocation, sourceId: SourceId | null): readonly number[];
     get languageIdsCell(): Signal<readonly string[] | null>;
     layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
@@ -550,6 +551,7 @@ export class Font {
     nameForUnicode(unicode: Unicode): GlyphName;
     // (undocumented)
     nearestSource(location: ExternalAxisLocation): Source | null;
+    newAnchorName(layerIds: readonly LayerId[]): string;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
@@ -570,7 +572,7 @@ export class Font {
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
     sourceAtOrDefault(location: ExternalAxisLocation): Source;
-    get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null>;
+    get sourceMetricsRevisionCell(): Signal<number>;
     get sources(): Source[];
     get sourcesCell(): Signal<Source[]>;
     // (undocumented)

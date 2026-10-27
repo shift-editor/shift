@@ -61,9 +61,10 @@ describe("kerning edits", () => {
     const applied = font.kerningCell.peek().resolve(boldWide, t, a)!;
 
     font.setKerningValues([kerningValueEdit(boldWide, applied)], "Remove kerning");
-    // The interpolation basis drops BoldWide only once Rust echoes the change.
-    await stack.editCoordinator.settled();
+    // The engine's basis drops BoldWide in the same frame, before the workspace persists it.
+    expect(kernAt(font, "BoldWide", "T", "A")).toBe(-205);
 
+    await stack.editCoordinator.settled();
     expect(kernAt(font, "BoldWide", "T", "A")).toBe(-205);
   });
 

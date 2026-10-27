@@ -57,9 +57,9 @@ impl ShiftStore {
     /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn referenced_glyph_ids_for_glyph(
         &self,
-        glyph_id: &font::GlyphId,
+        glyph_id: font::GlyphId,
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        self.referenced_glyph_ids_for_glyphs(std::slice::from_ref(glyph_id))
+        self.referenced_glyph_ids_for_glyphs(std::slice::from_ref(&glyph_id))
     }
 
     /// Returns the deduplicated direct component bases for a bounded root set.
@@ -201,8 +201,8 @@ pub(crate) fn referenced_glyph_closure_from_conn(
     while !pending.is_empty() {
         let glyph_ids = pending
             .drain(..)
-            .filter(|glyph_id| seen.insert(glyph_id.clone()))
-            .inspect(|glyph_id| result.push(glyph_id.clone()))
+            .filter(|glyph_id| seen.insert(*glyph_id))
+            .inspect(|glyph_id| result.push(*glyph_id))
             .collect::<Vec<_>>();
         if glyph_ids.is_empty() {
             continue;

@@ -28,9 +28,6 @@ export type {
 // Pure transform functions
 export { Transform } from "./Transform";
 
-// Alignment utilities
-export { Alignment } from "./Alignment";
-
 // Anchor utilities
 export { anchorToPoint } from "./anchor";
 

@@ -222,7 +222,7 @@ impl GlyphStream for BinaryGlyphStream {
         self.glyphs
             .iter()
             .map(|glyph| GlyphDirectoryEntry {
-                glyph_id: glyph.shift_id.clone(),
+                glyph_id: glyph.shift_id,
                 name: glyph.name.clone(),
             })
             .collect()
@@ -252,7 +252,7 @@ impl GlyphStream for BinaryGlyphStream {
         let source_id = &self.source_id;
         let glyphs = self.glyphs[self.next_glyph..end]
             .par_iter()
-            .map(|record| glyph_from_skrifa(&hmtx, &outlines, source_id, record))
+            .map(|record| glyph_from_skrifa(&hmtx, &outlines, *source_id, record))
             .collect::<FormatBackendResult<Vec<_>>>()?;
         self.next_glyph = end;
         Ok(glyphs)
@@ -262,7 +262,7 @@ impl GlyphStream for BinaryGlyphStream {
 fn glyph_from_skrifa(
     hmtx: &Hmtx<'_>,
     outlines: &OutlineGlyphCollection<'_>,
-    source_id: &SourceId,
+    source_id: SourceId,
     record: &BinaryGlyphRecord,
 ) -> FormatBackendResult<Glyph> {
     let advance_width = hmtx.advance(record.raw_id).ok_or_else(|| {
@@ -270,7 +270,7 @@ fn glyph_from_skrifa(
     })?;
     let mut layer = GlyphLayer::with_width(
         LayerId::from_raw(format!("binary{}", record.raw_id.to_u32())),
-        source_id.clone(),
+        source_id,
         advance_width as f64,
     );
 
@@ -290,7 +290,7 @@ fn glyph_from_skrifa(
         }
     }
 
-    let mut glyph = Glyph::with_id(record.shift_id.clone(), record.name.clone());
+    let mut glyph = Glyph::with_id(record.shift_id, record.name.clone());
     glyph.set_unicodes(record.unicodes.clone());
     glyph.set_layer(layer);
     Ok(glyph)
@@ -311,7 +311,7 @@ mod tests {
         let header = retained.header.clone();
         let default_source_id = header.default_source_id().unwrap();
         let default_source = header
-            .source(&default_source_id)
+            .source(default_source_id)
             .expect("authored header should contain its default source");
 
         assert_eq!(header.metadata().family_name, directory.family_name);

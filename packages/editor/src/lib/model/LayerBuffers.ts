@@ -1,6 +1,13 @@
 import { EntityMap } from "@shift/types";
 import { Bounds, type Bounds as BoundsType, type DecomposedTransform } from "@shift/geo";
-import type { ComponentId, ContourId, GlyphState, GlyphStructure, PointId } from "@shift/types";
+import type {
+  ComponentId,
+  ContourData,
+  ContourId,
+  GlyphState,
+  GlyphStructure,
+  PointId,
+} from "@shift/types";
 import type {
   GlyphPosition,
   GlyphPositionTarget,
@@ -118,14 +125,26 @@ export class LayerBuffers {
     );
   }
 
-  static fromState(state: GlyphState): LayerBuffers {
+  /**
+   * Buffers for `state`, reusing each contour buffer of `previous` whose
+   * contour data is the same object in `state`: a structural edit to one
+   * contour of a large glyph rebuilds that contour, not the glyph.
+   */
+  static fromState(state: GlyphState, previous?: LayerBuffers): LayerBuffers {
+    const reusable = new Map<ContourData, ContourBuffer>();
+    for (const contour of previous?.contours ?? []) reusable.set(contour.data, contour);
+
     let cursor = 0;
     const xAdvance = state.values[cursor++] ?? 0;
     const contours = state.structure.contours.map((data, contourIndex) => {
       const length = data.points.length * 2;
       const values = state.values.subarray(cursor, cursor + length);
       cursor += length;
-      return new ContourBuffer(data, values, contourIndex);
+      const reused = reusable.get(data);
+      if (!reused) return new ContourBuffer(data, values, contourIndex);
+      reusable.delete(data);
+      reused.replaceValues(values);
+      return reused;
     });
 
     const anchorLength = state.structure.anchors.length * 2;
@@ -196,6 +215,45 @@ export class LayerBuffers {
           break;
         }
       }
+    }
+    return positions;
+  }
+
+  /** How many positions the layer holds: every contour point and every anchor. */
+  get positionCount(): number {
+    let count = this.anchors.data.length;
+    for (const contour of this.contours) count += contour.pointCount;
+    return count;
+  }
+
+  /**
+   * Every contour point's position, contour after contour, then every
+   * anchor's, as `x, y` pairs, with `updates` applied: what a `setPositions`
+   * intent takes.
+   */
+  positionsWith(updates: GlyphPositions): number[] {
+    const starts = new Map<ContourBuffer, number>();
+    let pointsLength = 0;
+    for (const contour of this.contours) {
+      starts.set(contour, pointsLength);
+      pointsLength += contour.pointCount * 2;
+    }
+    const length = pointsLength + this.anchors.data.length * 2;
+    // The snapshot's leading value is the advance; positions follow it.
+    const positions = Array.from(this.snapshot.subarray(1, 1 + length));
+    for (const update of updates) {
+      let start = -1;
+      if (update.kind === "point") {
+        const contour = this.#contourForPoint(update.id);
+        const index = contour?.pointIndex(update.id) ?? -1;
+        if (contour && index >= 0) start = starts.get(contour)! + index * 2;
+      } else {
+        const index = this.anchors.data.findIndex((anchor) => anchor.id === update.id);
+        if (index >= 0) start = pointsLength + index * 2;
+      }
+      if (start < 0) continue;
+      positions[start] = update.x;
+      positions[start + 1] = update.y;
     }
     return positions;
   }

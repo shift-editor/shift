@@ -18,6 +18,14 @@ crate::string_enum! {
     parse_error: String = |text| format!("Invalid point type: {text}");
 }
 
+impl PointType {
+    /// Whether a point of this type lies on the curve: an on-curve point or a
+    /// quadratic one, which the contour passes through.
+    pub fn is_on_curve(self) -> bool {
+        matches!(self, Self::OnCurve | Self::QCurve)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     id: PointId,
@@ -55,8 +63,18 @@ impl Point {
         }
     }
 
+    /// A point at `position`.
+    pub fn at(id: PointId, position: kurbo::Point, point_type: PointType, smooth: bool) -> Self {
+        Self::new(id, position.x, position.y, point_type, smooth)
+    }
+
     pub fn on_curve(x: f64, y: f64) -> Self {
         Self::new(PointId::new(), x, y, PointType::OnCurve, false)
+    }
+
+    /// A new off-curve corner point at `position`.
+    pub fn off_curve_at(position: kurbo::Point) -> Self {
+        Self::at(PointId::new(), position, PointType::OffCurve, false)
     }
 
     pub fn off_curve(x: f64, y: f64) -> Self {
@@ -104,7 +122,7 @@ impl Point {
     }
 
     pub fn is_on_curve(&self) -> bool {
-        matches!(self.point_type, PointType::OnCurve | PointType::QCurve)
+        self.point_type.is_on_curve()
     }
 
     pub fn distance(&self, x: f64, y: f64) -> f64 {

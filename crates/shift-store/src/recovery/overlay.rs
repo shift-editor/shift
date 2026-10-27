@@ -422,7 +422,7 @@ mod tests {
 
         let mut store =
             ShiftStore::open_document_with_recovery(&document_path, &recovery_path).unwrap();
-        let mut layer = store.load_glyph_layer(&layer_id).unwrap().unwrap();
+        let mut layer = store.load_glyph_layer(layer_id).unwrap().unwrap();
         layer.set_width(777.0);
         store.replace_glyph_layer(&layer).unwrap();
         let commit_id = store.recovery.as_mut().unwrap().begin_save().unwrap();
@@ -437,7 +437,7 @@ mod tests {
         );
         assert_eq!(
             reopened
-                .load_glyph_layer(&layer_id)
+                .load_glyph_layer(layer_id)
                 .unwrap()
                 .unwrap()
                 .width(),

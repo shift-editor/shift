@@ -6,7 +6,7 @@ import {
   type Location,
 } from "@shift/types";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
-import { mapAxisMappings, unmapAxisMappings } from "./mapping";
+import { mapAxisMappings, unmapAxisMappings } from "../wasm/variation";
 
 type AnyAxisLocation = ExternalAxisLocation | DesignAxisLocation;
 

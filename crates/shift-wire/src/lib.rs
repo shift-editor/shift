@@ -341,7 +341,7 @@ impl From<&IrSource> for Source {
                 .metric_values()
                 .iter()
                 .map(|(metric_id, value)| SourceMetricValue {
-                    metric_id: metric_id.clone(),
+                    metric_id: *metric_id,
                     position: value.position,
                     overshoot: value.overshoot,
                 })
@@ -643,8 +643,8 @@ impl LayerMatch {
             .collect();
 
         Self {
-            reference_layer_id: layer_match.reference_layer_id().clone(),
-            target_layer_id: layer_match.target_layer_id().clone(),
+            reference_layer_id: *layer_match.reference_layer_id(),
+            target_layer_id: *layer_match.target_layer_id(),
             complete: layer_match.is_complete(),
             contours,
             points,
@@ -885,7 +885,7 @@ pub struct DesignNormalization {
 impl From<&shift_font::DesignNormalization> for DesignNormalization {
     fn from(normalization: &shift_font::DesignNormalization) -> Self {
         Self {
-            axis_id: normalization.axis_id.clone(),
+            axis_id: normalization.axis_id,
             minimum: normalization.minimum,
             default: normalization.default,
             maximum: normalization.maximum,
@@ -1262,7 +1262,7 @@ impl From<&IrLocation> for Location {
         Self {
             values: location
                 .iter()
-                .map(|(axis_id, value)| (axis_id.clone(), *value))
+                .map(|(axis_id, value)| (*axis_id, *value))
                 .collect(),
         }
     }
@@ -1445,7 +1445,7 @@ impl From<&IrFont> for KerningSnapshot {
         let sources = kerning
             .sources()
             .map(|(source_id, pairs)| SourceKerningPairs {
-                source_id: source_id.clone(),
+                source_id: *source_id,
                 pairs: pairs
                     .pairs()
                     .map(|(pair, amount)| KerningPairValue {

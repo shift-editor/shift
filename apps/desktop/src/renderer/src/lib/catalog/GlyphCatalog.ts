@@ -8,7 +8,7 @@ import type {
   GlyphPreview,
   SourceId,
 } from "@shift/types";
-import { computed, type ComputedSignal, type Signal } from "@shift/editor/signals";
+import { computed, track, type ComputedSignal, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
@@ -54,6 +54,7 @@ export class GlyphCatalog {
     this.metricsCell = computed(
       () => {
         const activeSourceId = editor.activeSourceIdCell.value;
+        if (!activeSourceId) track(font.sourceMetricsRevisionCell);
         const metrics = activeSourceId
           ? font.metricsForSource(activeSourceId)
           : font.metricsAtLocation(editor.externalLocationCell.value);

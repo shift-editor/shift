@@ -40,7 +40,9 @@ crates/shift-engine/tests/
 2. **Stage.** `stage_intents` (or `stage_change_set` for undo and redo) applies to an O(1) copy of the font. A change to a layer that is still a placeholder fails with `EngineError::UnloadedLayerMutation`.
 3. **Commit.** `commit` adopts the staged font. It sweeps residency only when the change can remove layers, because the sweep looks up every unloaded layer.
 
-`apply` runs all three for callers that do not persist; `preview` loads and stages but never commits, for a gesture's preview in the editor. `FontWorkspace` stages, writes to its store, and commits only after the write succeeds. `evict` turns loaded layers back into placeholders that keep their width and height; every edit is persisted before it is committed, so eviction never loses work.
+The editor's reads of the font are shift-font queries on `EngineSession::font`, the font as the session's edits left it, an open edit included: kerning between glyphs (`Font::kerning_blend_at`, `Font::kerning_blend_at_source`, `Kerning::editable_pair`) and source metrics between masters (`Font::source_metric_interpolation`). The session adds no read rules of its own; `shift-wasm` exports them (`engine_reads.rs`).
+
+`apply` runs all three for callers that do not persist; `preview` loads and stages but never commits, for a gesture's preview in the editor. `FontWorkspace` stages, writes to its store, and commits only after the write succeeds. `evict` turns loaded layers back into placeholders that keep their width and height; every edit is persisted before it is committed, so eviction never loses work. `directory` returns the font with every layer a placeholder, what another session over the same store opens with; it replaces only the loaded layers, so the workspace hands a window its directory without reading the store again.
 
 ## Verification
 

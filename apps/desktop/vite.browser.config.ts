@@ -62,6 +62,8 @@ export default defineConfig({
   root: path.resolve(__dirname, "src/renderer"),
   plugins: [forbidDesktopModules(), tsconfigPaths()],
   build: {
+    // The engine module instantiates with a top-level await.
+    target: "es2022",
     emptyOutDir: true,
     minify: true,
     outDir: path.resolve(__dirname, ".vite/browser-check"),

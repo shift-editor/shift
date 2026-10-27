@@ -140,11 +140,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(glyph_id) = first_glyph_id {
         let layer_ids = workspace
             .font()
-            .glyph(&glyph_id)
+            .glyph(glyph_id)
             .unwrap()
             .layers()
             .keys()
-            .cloned()
+            .copied()
             .collect::<Vec<_>>();
         let started = Instant::now();
         workspace.acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)?;

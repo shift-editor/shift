@@ -29,7 +29,7 @@ pub(crate) fn font_info(args: FontInfoArgs) -> Result<FontInfoReport> {
     let font = load_font(&args.path)?;
     let source_id = target_source_id(&font, args.source.as_deref())?;
     let source = font
-        .source(&source_id)
+        .source(source_id)
         .ok_or_else(|| miette!("source does not exist"))?;
     let metadata = font.metadata().clone();
 
@@ -122,7 +122,7 @@ fn source_metric_intents(
     args: &SetFontArgs,
 ) -> Result<Vec<FontIntent>> {
     let source = font
-        .source(&source_id)
+        .source(source_id)
         .ok_or_else(|| miette!("source does not exist"))?;
     if !source.is_master() {
         bail!(
