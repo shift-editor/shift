@@ -187,6 +187,7 @@ export class Editor {
     // (undocumented)
     get camera(): Camera;
     canDecomposeSelection(): boolean;
+    chooseToolMenuItem(tool: ToolName, itemId: string): void;
     collapseEditingSources(): boolean;
     componentTransformSelection(ids: readonly SelectableId[]): ComponentTransformSelection | null;
     contentFrom(ids: readonly ShiftId[]): ShiftContent | null;
@@ -226,6 +227,7 @@ export class Editor {
     // (undocumented)
     readonly editing: Editing;
     get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>>;
+    editingLayersMatched(): Promise<void>;
     // (undocumented)
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
