@@ -115,7 +115,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
+import type { GlyphNode, NodeKind, ShiftNode, TextRunNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -1930,6 +1930,47 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /**
+   * Opens a glyph for editing in place in the canvas's text run, as choosing it
+   * in the glyph grid does.
+   *
+   * @remarks
+   * Until pages exist the canvas has one text run at the scene origin, created
+   * on the first open and kept after; opening replaces its text with the glyph.
+   * Opening is navigation, never a history entry. Tools reset afterwards, since
+   * they activate against the glyph node they find.
+   *
+   * @param glyphId - A glyph whose model is already loaded.
+   * @returns the glyph node now being edited, or null when the glyph cannot be placed.
+   */
+  public openGlyphInText(glyphId: GlyphId): GlyphNode | null {
+    const runs = this.nodeDefinition("textRun");
+    const run =
+      this.scene.first("textRun") ??
+      this.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: this.text.createRun([]).id,
+        size: this.font.metricsCell.peek().unitsPerEm,
+        position: { x: 0, y: 0 },
+      });
+    const previous = runs.childGlyph(run);
+    const open = (): GlyphNode | null => {
+      if (previous?.glyphId === glyphId) {
+        this.enterNode(previous.id);
+        return previous;
+      }
+      const item = this.text.glyphItem(glyphId);
+      if (!item) return null;
+      this.text.setItems(run.runId, [item]);
+      const child = runs.editItem(run, item.id);
+      if (child) this.enterNode(child.id);
+      return child;
+    };
+    const node = this.history.withoutRecording(open);
+    this.toolManager.reset();
+    return node;
   }
 
   /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */

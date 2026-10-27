@@ -3,7 +3,13 @@ import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
 import { currentTextEditingId, type TextCaret, type TextEditingRecord } from "../../types/text";
-import { Caret, type SelectionRect, type TextItem } from "./layout";
+import {
+  Caret,
+  characterTextItem,
+  lineBreakTextItem,
+  type SelectionRect,
+  type TextItem,
+} from "./layout";
 import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
 import type { TextRunNode } from "../../types/node";
@@ -103,6 +109,18 @@ export class TextEditing {
 
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
+  }
+
+  /**
+   * Inserts typed text character by character, as the text field does: each
+   * newline becomes a line break, never parsed as proof-text syntax.
+   */
+  typeLiteral(text: string): void {
+    this.insert(
+      [...text.replaceAll("\r\n", "\n")].map((char) =>
+        char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
+      ),
+    );
   }
   deleteBackward(): void {
     this.#edit("Delete text", (buffer) => buffer.delete(-1));

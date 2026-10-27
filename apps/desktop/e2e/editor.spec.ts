@@ -845,7 +845,7 @@ test.describe("Editor view", () => {
     expect(await editor.selectionBounds()).toMatchObject({ x: initialX + 11 });
   });
 
-  // Release geometry with Shift held or released is owned by Select.test.ts.
+  // Release geometry with Shift held or released is owned by behaviour/select/resize-selection.test.ts.
   // This test keeps the browser-only ordering: Shift keyup arrives before mouseup.
   test("keeps constrained drag geometry when Shift is released before mouseup", async ({
     page,
