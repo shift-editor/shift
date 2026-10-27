@@ -28,8 +28,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ParagraphRequest,
-  ShapedRun,
   ShaperFont,
   PointId,
   SegmentId,
@@ -1331,19 +1329,6 @@ export class Font {
 
   nearestSource(location: ExternalAxisLocation): Source | null {
     return this.#peekDesignspace((designspace) => designspace.nearestSource(location));
-  }
-
-  /**
-   * Shapes paragraphs with the font's feature code, after pending edits settle.
-   *
-   * @remarks
-   * Glyph advances, kerning, and mark attachment are not applied; shaped
-   * glyphs carry only what the feature code positions.
-   *
-   * @returns Each paragraph's runs in logical order, in request order.
-   */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
-    return this.editCoordinator.shapeParagraphs(paragraphs);
   }
 
   /**

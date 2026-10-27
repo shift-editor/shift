@@ -215,20 +215,6 @@ export declare class Bridge {
   /** Returns the precomputed source-metric interpolation model for this font. */
   getSourceMetricsInterpolation(): NapiSourceMetricsInterpolationSnapshot | null
   /**
-   * Shapes a paragraph with the font's feature code, split into runs of one
-   * script, each in its script's direction.
-   *
-   * Characters map through the live font's Unicode values and every
-   * glyph's own advance is zero while shaping, so the result carries the
-   * substituted glyphs, their clusters, and only what the feature code
-   * positions. The caller adds live advances, kerning, and mark attachment.
-   *
-   * Feature code with errors shapes with the last version that compiled.
-   * The shaping tables are rebuilt only when a font change since the last
-   * call altered the glyph order, glyph categories, feature code, or axes.
-   */
-  shapeParagraph(request: NapiParagraphRequest): Array<NapiShapedRun>
-  /**
    * Returns the compiled shaping tables, for the editor to shape with
    * itself, or `null` when they are still at `known_revision`. Compiles
    * them first if the font changed in a way they depend on: glyph order,
@@ -378,7 +364,12 @@ export interface NapiNewWorkspace {
   unitsPerEm?: number
 }
 
-/** A paragraph to shape, split into runs of one script. */
+/**
+ * A paragraph to shape, split into runs of one script.
+ *
+ * No bridge call takes it; it declares the type the editor's WebAssembly
+ * shaper takes.
+ */
 export interface NapiParagraphRequest {
   units: Array<NapiShapeUnit>
   /** User-space location to shape at; omitted axes are at their default. */
@@ -419,7 +410,12 @@ export interface NapiShapedGlyph {
   yOffset: number
 }
 
-/** One run of a shaped paragraph, in one script and direction. */
+/**
+ * One run of a shaped paragraph, in one script and direction.
+ *
+ * No bridge call returns it; it declares the type the editor's WebAssembly
+ * shaper returns.
+ */
 export interface NapiShapedRun {
   /** First paragraph unit in the run. */
   start: number
@@ -471,6 +467,9 @@ export interface NapiShaperFont {
 /**
  * One unit of text to shape: exactly one of a character or a glyph inserted
  * by name.
+ *
+ * No bridge call takes it; it declares the type the editor's WebAssembly
+ * shaper takes.
  */
 export interface NapiShapeUnit {
   /** A Unicode scalar value. */
