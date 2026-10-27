@@ -22,7 +22,7 @@ describe("sources on a mapped axis", () => {
     editor = await startTestEditor();
     editor.setAdvanceWidth(300);
     await editor.addAxis(WEIGHT);
-    await editor.mapAxis("wght", [
+    await editor.setAxisMapping("wght", [
       [100, 100],
       [400, 400],
       [900, 800],
@@ -88,7 +88,7 @@ describe("mapped weights keep design-space interpolation", () => {
     editor.setLocation({ wght: 681.25 });
     expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(750);
 
-    await editor.mapAxis("wght", [
+    await editor.setAxisMapping("wght", [
       [100, 30],
       [200, 50],
       [300, 66],
@@ -120,8 +120,8 @@ describe("editing a variable glyph across sources", () => {
     await editor.draw({ advance: 300, contours: [square(100)] });
     await editor.addAxis(WEIGHT);
     await editor.addSource("Bold", { wght: 700 });
-    await editor.setSourceMetric("Bold", "ascender", 900);
-    await editor.setSourceMetric("Bold", "xHeight", 600);
+    await editor.setSourceMetric("Bold", "Ascender", 900);
+    await editor.setSourceMetric("Bold", "x-Height", 600);
     await editor.editSources(["Bold"]);
     editor.setAdvanceWidth(500);
     await editor.settle();

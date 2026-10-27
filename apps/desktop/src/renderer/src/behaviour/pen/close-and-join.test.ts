@@ -25,7 +25,7 @@ describe("closing a contour by dragging off its first point", () => {
 
     await expectEdit(
       editor,
-      (e) => e.dragAt({ x: 100, y: 100 }, { x: 160, y: 130 }),
+      (e) => e.dragFrom({ x: 100, y: 100 }, { x: 160, y: 130 }),
       async (e) => {
         expect(await e.outline()).toMatchObject([
           {
@@ -45,10 +45,10 @@ describe("closing a contour by dragging off its first point", () => {
 
   it("mirrors the first handle of a curve-started contour", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    await editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
     await editor.clickAt({ x: 300, y: 300 });
 
-    await editor.dragAt({ x: 100, y: 100 }, { x: 100, y: 160 });
+    await editor.dragFrom({ x: 100, y: 100 }, { x: 100, y: 160 });
 
     const [contour] = await editor.outline();
     expect(contour?.closed).toBe(true);
@@ -61,9 +61,9 @@ describe("closing a contour by dragging off its first point", () => {
   it("leaves the contour open and the stroke going when Escape cancels the closing drag", async () => {
     await drawStroke();
 
-    editor.holdDragAt({ x: 100, y: 100 }, { x: 160, y: 130 });
+    editor.holdDragFrom({ x: 100, y: 100 }, { x: 160, y: 130 });
     await editor.pressKey("Escape");
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 160, y: 130 });
 
     expect(await editor.outline()).toMatchObject([
       { closed: false, points: [onCurve(100, 100), onCurve(300, 100), onCurve(300, 300)] },
@@ -110,7 +110,7 @@ describe("joining another open contour", () => {
   });
 
   it("shows the end cursor over the other contour's end", () => {
-    editor.hoverAt({ x: 100, y: 100 });
+    editor.movePointerTo({ x: 100, y: 100 });
 
     expect(editor.shownCursor()).toBe(cursorToCSS({ type: "pen-end" }));
   });

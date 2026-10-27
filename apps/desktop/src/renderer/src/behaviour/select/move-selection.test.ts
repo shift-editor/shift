@@ -284,19 +284,19 @@ describe("the selection's bounds follow its points", () => {
 describe("dragging while editing several sources", () => {
   it("moves the matching point in every edited source, as one edit", async () => {
     const { middle } = await diagonal();
-    await editor.addAxis("wght", { minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
     await editor.addSource("Bold", { wght: 700 });
     await editor.editSources(["Regular", "Bold"]);
-    const boldBefore = (await editor.outlineAt("Bold"))[0]!.points[1]!;
+    const boldBefore = (await editor.layerAt("Bold")).contours[0]!.points[1]!;
     editor.select([middle]);
 
     await expectEdit(editor, (e) => e.dragFrom({ x: 150, y: 150 }, { x: 190, y: 180 }), {
       [middle]: { x: 190, y: 180 },
     });
 
-    const boldAfter = (await editor.outlineAt("Bold"))[0]!.points[1]!;
+    const boldAfter = (await editor.layerAt("Bold")).contours[0]!.points[1]!;
     expect(boldAfter).toMatchObject({ x: boldBefore.x + 40, y: boldBefore.y + 30 });
     await editor.undo();
-    expect((await editor.outlineAt("Bold"))[0]!.points[1]).toEqual(boldBefore);
+    expect((await editor.layerAt("Bold")).contours[0]!.points[1]).toEqual(boldBefore);
   });
 });

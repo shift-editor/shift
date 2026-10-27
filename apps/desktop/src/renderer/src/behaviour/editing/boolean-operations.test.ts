@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Polygon } from "@shift/geo";
-import type { AxisId, ContourId } from "@shift/types";
+import type { ContourId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import type { ContourFixture } from "@/testing/fixtures";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
 
 let editor: EditorTestSurface;
-let weight: AxisId;
 beforeEach(async () => {
   editor = await startTestEditor();
-  weight = await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+  await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
 });
 afterEach(() => editor.close());
 
@@ -87,16 +86,15 @@ describe("combining two overlapping contours", () => {
   });
 
   it("does nothing while an interpolated location is shown", async () => {
-    const defaultSource = editor.editorView().activeSourceId!;
     const selection = await drawAndSelect(box(10, 10, 100, 100), box(60, 60, 150, 150));
     const before = await editor.outline();
-    editor.setLocation({ [weight]: 550 });
+    editor.setLocation({ wght: 550 });
 
     await editor.combineSelectedContours("union");
 
     expect(editor.editorView().activeSourceId).toBeNull();
     expect(editor.selectionIds()).toEqual(selection);
-    editor.selectSource(defaultSource);
+    editor.clickSource("Regular");
     expect(await editor.outline()).toEqual(before);
     await editor.undo();
     expect(await editor.outline()).toEqual([]);

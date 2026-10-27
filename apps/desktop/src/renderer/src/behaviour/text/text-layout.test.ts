@@ -271,9 +271,9 @@ describe("marks attach to their base's anchors", () => {
 describe("text follows the shown location", () => {
   it("interpolates the text's advance between masters", async () => {
     editor = await openTestEditor(MUTATOR_SANS, "A");
-    editor.showSource("LightCondensed");
+    editor.clickSource("LightCondensed");
     expect(text().advance).toBe(396);
-    editor.showSource("BoldCondensed");
+    editor.clickSource("BoldCondensed");
     expect(text().advance).toBe(740);
 
     editor.setLocation({ wdth: 0, wght: 500 });

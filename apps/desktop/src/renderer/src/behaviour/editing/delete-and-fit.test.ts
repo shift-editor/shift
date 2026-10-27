@@ -173,15 +173,14 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   it("does not delete while an interpolated location is shown", async () => {
     await editor.draw({ contours: [cubicContour([ORIGINAL])] });
     const before = await editor.outline();
-    const defaultSource = editor.editorView().activeSourceId!;
-    const weight = await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
     editor.selectAll();
-    editor.setLocation({ [weight]: 550 });
+    editor.setLocation({ wght: 550 });
 
     expect(editor.editorView().activeSourceId).toBeNull();
     expect(await editor.deleteSelection()).toBe(false);
 
-    editor.selectSource(defaultSource);
+    editor.clickSource("Regular");
     expect(await editor.outline()).toEqual(before);
   });
 });

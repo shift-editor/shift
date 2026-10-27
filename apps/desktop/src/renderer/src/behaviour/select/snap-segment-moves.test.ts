@@ -87,10 +87,10 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
     editor.movePointerTo({ x: 280, y: 260 }, { shiftKey: true });
     editor.movePointerTo({ x: 280, y: 260 }, { shiftKey: true });
 
-    expect(editor.toolState()).toBe("translating");
-    expect(editor.snapGuides()).toEqual([]);
+    expect(editor.toolState()?.state).toBe("translating");
+    expect(editor.drawnSnapGuides()).toEqual([]);
     await editor.pressKey("Escape");
-    expect(editor.toolState()).toBe("ready");
+    expect(editor.toolState()?.state).toBe("ready");
   });
 
   it("moves a curve segment without changing its shape", async () => {
@@ -141,7 +141,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     editor.pressAt({ x: 150, y: 100 });
     editor.movePointerTo({ x: 210, y: 180 }, { shiftKey: true });
-    expect(editor.toolState()).toBe("resizing");
+    expect(editor.toolState()?.state).toBe("resizing");
     await editor.releaseAt({ x: 210, y: 180 });
 
     expect(await editor.pointPositions([first, middle, last])).toEqual({
@@ -158,7 +158,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     editor.pressAt({ x: 100, y: 100 });
     editor.movePointerTo({ x: 130, y: 140 }, { shiftKey: true });
-    expect(editor.toolState()).toBe("resizing");
+    expect(editor.toolState()?.state).toBe("resizing");
     await editor.pressKey("Escape");
 
     expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 100 } });
@@ -184,7 +184,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
     expect(editor.shownPointPositions([first])).toEqual({ [first]: { x: 100, y: 200 } });
     editor.movePointerTo(to);
     expect(editor.shownPointPositions([first])).toEqual({ [first]: { x: 160, y: 180 } });
-    expect(editor.snapGuides()).toEqual([]);
+    expect(editor.drawnSnapGuides()).toEqual([]);
     editor.movePointerTo(to, { shiftKey: true });
     expect(editor.shownPointPositions([first])).toEqual({ [first]: { x: 100, y: 200 } });
     await editor.pressKey("Escape");

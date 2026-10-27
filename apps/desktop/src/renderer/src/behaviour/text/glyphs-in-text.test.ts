@@ -32,7 +32,7 @@ const SQUARE_100_TO_300 = {
 
 /** The open glyph's sidebearings, as its bounds and advance give them. */
 async function sidebearings() {
-  const bounds = (await editor.glyphBounds())!;
+  const bounds = (await editor.outlineBounds())!;
   return { lsb: bounds.min.x, rsb: (await editor.advanceWidth()) - bounds.max.x };
 }
 
@@ -48,15 +48,15 @@ describe("glyphs in the text around the edited glyph", () => {
   });
 
   it("hovers a glyph's item inside its outline, and nothing in its empty space", () => {
-    editor.hoverAt({ x: 700, y: 200 });
+    editor.movePointerTo({ x: 700, y: 200 });
     expect(text().hoveredItemId).toBe(itemId(1));
 
-    editor.hoverAt({ x: 550, y: 200 });
+    editor.movePointerTo({ x: 550, y: 200 });
     expect(text().hoveredItemId).toBeNull();
   });
 
   it("never hovers the edited glyph's own item as text", () => {
-    editor.hoverAt({ x: 200, y: 200 });
+    editor.movePointerTo({ x: 200, y: 200 });
 
     expect(text().hoveredItemId).toBeNull();
   });
@@ -111,7 +111,7 @@ describe("glyphs in the text around the edited glyph", () => {
   it("hovers the glyph it left as text, and a double-click edits it again", async () => {
     await editor.pressKey("Escape");
 
-    editor.hoverAt({ x: 200, y: 200 });
+    editor.movePointerTo({ x: 200, y: 200 });
     expect(text().hoveredItemId).toBe(itemId(0));
 
     await editor.doubleClickAt({ x: 200, y: 200 });

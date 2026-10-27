@@ -16,7 +16,7 @@ function closeTo(actual: Point2D, expected: Point2D): void {
 
 describe("zooming the viewport", () => {
   beforeEach(async () => {
-    editor.setViewportSize(1000, 800);
+    editor.resizeCanvas(1000, 800);
     await editor.draw({
       contours: [
         {
@@ -34,7 +34,7 @@ describe("zooming the viewport", () => {
 
   it("brings the whole outline into view, closer in, when zooming to fit", async () => {
     const bounds = (await editor.outlineBounds())!;
-    editor.zoomTo(0.25);
+    editor.setZoom(0.25);
 
     editor.zoomToFit();
 
@@ -51,7 +51,7 @@ describe("zooming the viewport", () => {
   it("centres the selection when zooming to selection", async () => {
     editor.selectAll();
     const centre = Bounds.center((await editor.outlineBounds())!);
-    editor.zoomTo(0.25);
+    editor.setZoom(0.25);
 
     editor.zoomToSelection();
 
@@ -63,7 +63,7 @@ describe("zooming the viewport", () => {
     const zoom = editor.zoomLevel();
     const before = editor.screenPosition({ x: 100, y: 100 });
 
-    editor.zoomTo(2);
+    editor.setZoom(2);
 
     expect(editor.zoomLevel()).toBe(2);
     closeTo(editor.screenPosition({ x: 100, y: 100 }), {
@@ -79,7 +79,7 @@ describe("opening a glyph frames its metrics box in the viewport", () => {
   it.each([null, 20, 1200, 5000])(
     "keeps the origin, advance and vertical metrics visible for an outline %s units wide",
     async (width) => {
-      editor.setViewportSize(viewport.width, viewport.height);
+      editor.resizeCanvas(viewport.width, viewport.height);
       const advance = width ?? 500;
       await editor.draw({
         advance,
@@ -101,7 +101,7 @@ describe("opening a glyph frames its metrics box in the viewport", () => {
 
       editor.frameGlyph();
 
-      const { ascender, descender } = editor.shownLocation().metrics;
+      const { ascender, descender } = editor.location().metrics;
       for (const corner of [
         { x: 0, y: ascender },
         { x: advance, y: descender },

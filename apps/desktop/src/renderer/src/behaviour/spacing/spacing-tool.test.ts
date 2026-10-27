@@ -33,13 +33,13 @@ const itemId = (index: number) => editor.canvasText()!.items[index]!.id;
 
 /** A's sidebearings, as its bounds and advance give them. */
 async function sidebearings() {
-  const bounds = (await editor.glyphBounds())!;
+  const bounds = (await editor.outlineBounds())!;
   return { lsb: bounds.min.x, rsb: (await editor.advanceWidth()) - bounds.max.x };
 }
 
 /** Hovers and clicks a position, as a user points before clicking. */
 async function clickHalf(x: number, y = 150): Promise<void> {
-  editor.hoverAt({ x, y });
+  editor.movePointerTo({ x, y });
   await editor.clickAt({ x, y });
 }
 
@@ -53,7 +53,7 @@ describe("the Spacing tool", () => {
   });
 
   it("shows the left glyph's RSB and the right glyph's LSB between two glyphs", () => {
-    editor.hoverAt({ x: 450, y: 200 });
+    editor.movePointerTo({ x: 450, y: 200 });
 
     expect(spacing().hovered?.gap).toMatchObject({
       leftBoundary: 500,
@@ -64,15 +64,15 @@ describe("the Spacing tool", () => {
   });
 
   it("picks the half under the pointer as the sidebearing a drag changes", () => {
-    editor.hoverAt({ x: 450, y: 200 });
+    editor.movePointerTo({ x: 450, y: 200 });
     expect(spacing().hovered?.side).toBe("left");
 
-    editor.hoverAt({ x: 550, y: 200 });
+    editor.movePointerTo({ x: 550, y: 200 });
     expect(spacing().hovered?.side).toBe("right");
   });
 
   it("shows only the LSB before the first glyph", () => {
-    editor.hoverAt({ x: 50, y: 200 });
+    editor.movePointerTo({ x: 50, y: 200 });
 
     expect(spacing().hovered).toMatchObject({
       side: "right",
@@ -81,7 +81,7 @@ describe("the Spacing tool", () => {
   });
 
   it("finds every other place the same glyph shows the hovered sidebearing", () => {
-    editor.hoverAt({ x: 450, y: 200 });
+    editor.movePointerTo({ x: 450, y: 200 });
 
     // The first A's RSB; the second A's RSB, at the line end, is the only other.
     expect(spacing().hovered?.side).toBe("left");
@@ -93,7 +93,7 @@ describe("the Spacing tool", () => {
   });
 
   it("shows no gap inside a glyph's outline, away from its edges", () => {
-    editor.hoverAt({ x: 200, y: 200 });
+    editor.movePointerTo({ x: 200, y: 200 });
 
     expect(spacing().hovered).toBeNull();
   });
@@ -102,7 +102,7 @@ describe("the Spacing tool", () => {
     editor.setAdvanceWidth(520);
     await editor.settle();
 
-    editor.hoverAt({ x: 450, y: 200 });
+    editor.movePointerTo({ x: 450, y: 200 });
 
     expect(spacing().hovered?.gap).toMatchObject({
       leftBoundary: 520,
@@ -167,7 +167,7 @@ describe("dragging a sidebearing", () => {
     editor.setAdvanceWidth(280);
     await editor.settle();
 
-    editor.hoverAt({ x: 290, y: 200 });
+    editor.movePointerTo({ x: 290, y: 200 });
 
     expect(spacing().hovered).toMatchObject({
       side: "left",
@@ -186,13 +186,13 @@ describe("dragging a sidebearing", () => {
 describe("typing a sidebearing", () => {
   /** The left half's value sits in its middle: between the outline edge at 300 and the boundary at 500. */
   function leftValue() {
-    editor.hoverAt({ x: 450, y: 200 });
+    editor.movePointerTo({ x: 450, y: 200 });
     const { top, bottom } = spacing().hovered!.gap;
     return { x: 400, y: (top + bottom) / 2 };
   }
 
   it("marks the value under the pointer and shows the pointer cursor", () => {
-    editor.hoverAt(leftValue());
+    editor.movePointerTo(leftValue());
 
     expect(spacing().overValue).toBe(true);
     expect(editor.shownCursor()).toBe("pointer");
@@ -276,12 +276,12 @@ describe("selecting and nudging a sidebearing", () => {
 
     expect(await sidebearings()).toEqual({ lsb: 100, rsb: 211 });
     expect(spacing().quiet).toBe(true);
-    editor.hoverAt({ x: 460, y: 150 });
+    editor.movePointerTo({ x: 460, y: 150 });
     expect(spacing().quiet).toBe(false);
   });
 
   it("nudges the hovered half when nothing is selected", async () => {
-    editor.hoverAt({ x: 550, y: 150 });
+    editor.movePointerTo({ x: 550, y: 150 });
 
     await editor.pressKey("ArrowLeft");
 

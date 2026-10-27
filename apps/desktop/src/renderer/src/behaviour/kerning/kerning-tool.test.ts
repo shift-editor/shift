@@ -43,7 +43,7 @@ const kerning = () => editor.kerningTool()!;
 
 describe("the Kerning tool", () => {
   it("shows the kern under the pointer and the pair it comes from", () => {
-    editor.hoverAt(kernCenter());
+    editor.movePointerTo(kernCenter());
 
     expect(kerning().hovered).toMatchObject({
       amount: -75,
@@ -60,7 +60,7 @@ describe("the Kerning tool", () => {
     editor.typeText("TAT");
     editor.selectTool("kerning");
 
-    editor.hoverAt(kernCenter());
+    editor.movePointerTo(kernCenter());
 
     // "TATAT": the second T–A uses the same kern; A–T pairs do not.
     expect(kerning().sameAsHovered).toHaveLength(1);
@@ -129,7 +129,7 @@ describe("the Kerning tool", () => {
   });
 
   it("opens the value below the baseline for typing, which sets the kern", async () => {
-    editor.hoverAt(kernCenter());
+    editor.movePointerTo(kernCenter());
     const { baseline, bottom } = kerning().hovered!;
 
     await editor.clickAt(kernCenter((baseline + bottom) / 2));
@@ -148,7 +148,7 @@ describe("the Spacing tool in a kerned gap", () => {
 
   /** T's sidebearings, as its bounds and advance give them. */
   async function tSidebearings() {
-    const bounds = (await editor.glyphBounds())!;
+    const bounds = (await editor.outlineBounds())!;
     return { lsb: bounds.min.x, rsb: (await editor.advanceWidth()) - bounds.max.x };
   }
 
@@ -156,7 +156,7 @@ describe("the Spacing tool in a kerned gap", () => {
     const before = await tSidebearings();
     const center = kernCenter();
 
-    editor.hoverAt(center);
+    editor.movePointerTo(center);
     expect(editor.spacingTool()?.hovered).toBeNull();
 
     await editor.dragFrom(center, { x: center.x + 40, y: center.y });
@@ -169,7 +169,7 @@ describe("the Spacing tool in a kerned gap", () => {
     const { t, a } = tA();
     const inStrip = { x: t.left + t.advance - rsb / 2, y: 300 };
 
-    editor.hoverAt(inStrip);
+    editor.movePointerTo(inStrip);
 
     expect(editor.spacingTool()?.hovered).toMatchObject({
       side: "left",

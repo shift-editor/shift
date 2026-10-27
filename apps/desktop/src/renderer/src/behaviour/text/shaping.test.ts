@@ -80,7 +80,7 @@ describe("double-clicking a character the font draws with several glyphs", () =>
     expect(text().openGlyph).toBe("noonDotless-ar");
 
     // The body is now the open glyph, so positions are measured from its origin.
-    editor.hoverAt({
+    editor.movePointerTo({
       x: dot!.origin.x - body!.origin.x - 100,
       y: dot!.origin.y - body!.origin.y + 550,
     });

@@ -79,14 +79,14 @@ describe("selection changes share the undo timeline with edits", () => {
     expect(editor.selectionIds()).toEqual([second]);
   });
 
-  it("drops only the points a shrinking Shift-marquee had taken in", () => {
+  it("drops only the points a shrinking Shift-marquee had taken in", async () => {
     editor.select([second]);
 
-    editor.pointerDownAt({ x: 60, y: 60 }, { shiftKey: true });
-    editor.pointerMoveTo({ x: 130, y: 130 }, { shiftKey: true });
+    editor.pressAt({ x: 60, y: 60 }, { shiftKey: true });
+    editor.movePointerTo({ x: 130, y: 130 }, { shiftKey: true });
     expect(editor.selectionIds()).toEqual([second, first]);
-    editor.pointerMoveTo({ x: 80, y: 80 }, { shiftKey: true });
-    editor.pointerUpAt({ x: 80, y: 80 }, { shiftKey: true });
+    editor.movePointerTo({ x: 80, y: 80 }, { shiftKey: true });
+    await editor.releaseAt({ x: 80, y: 80 }, { shiftKey: true });
 
     expect(editor.selectionIds()).toEqual([second]);
   });
@@ -94,8 +94,8 @@ describe("selection changes share the undo timeline with edits", () => {
   it("restores the starting selection when a marquee is abandoned", () => {
     editor.select([second]);
 
-    editor.pointerDownAt({ x: 60, y: 60 }, { shiftKey: true });
-    editor.pointerMoveTo({ x: 130, y: 130 }, { shiftKey: true });
+    editor.pressAt({ x: 60, y: 60 }, { shiftKey: true });
+    editor.movePointerTo({ x: 130, y: 130 }, { shiftKey: true });
     expect(editor.selectionIds()).toEqual([second, first]);
 
     editor.cancelGesture();
@@ -114,10 +114,11 @@ describe("selection changes share the undo timeline with edits", () => {
 
   it("waits for a pending edit before undoing it", async () => {
     editor.selectTool("pen");
-    editor.pointerDownAt({ x: 300, y: 300 });
-    editor.pointerUpAt({ x: 300, y: 300 });
+    editor.pressAt({ x: 300, y: 300 });
+    const released = editor.releaseAt({ x: 300, y: 300 });
 
     await editor.undo();
+    await released;
 
     expect(await pointCount(editor)).toBe(2);
   });

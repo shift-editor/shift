@@ -41,7 +41,7 @@ describe("kerning in typed text", () => {
   it("shows each master's own pairs", async () => {
     editor = await typeAfterT(MUTATOR_SANS, "A");
 
-    editor.showSource("BoldWide");
+    editor.clickSource("BoldWide");
     expect(pair().first.kern).toBe(-150);
     expect(pair().second.left).toBe(pair().first.left + pair().first.advance - 150);
 

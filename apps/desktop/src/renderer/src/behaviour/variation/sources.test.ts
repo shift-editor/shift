@@ -9,8 +9,14 @@ let weight: AxisId;
 beforeEach(async () => {
   editor = await startTestEditor();
   reference = editor.editorView().activeSourceId!;
-  weight = await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+  await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+  weight = editor.fontOverview().axes[0]!.id;
 });
+
+async function addSource(name: string, wght: number): Promise<SourceId> {
+  await editor.addSource(name, { wght });
+  return editor.source(name)!.id;
+}
 afterEach(() => editor.close());
 
 describe("adding a source", () => {
@@ -29,7 +35,7 @@ describe("adding a source", () => {
     });
     const [original] = await editor.outline();
 
-    const bold = await editor.addSource("Bold", { [weight]: 700 });
+    const bold = await addSource("Bold", 700);
 
     expect(editor.editorView()).toMatchObject({
       activeSourceId: bold,
@@ -47,48 +53,48 @@ describe("adding a source", () => {
 
 describe("choosing sources", () => {
   it("keeps the shown source and the axis location in step", async () => {
-    const bold = await editor.addSource("Bold", { [weight]: 700 });
+    const bold = await addSource("Bold", 700);
 
-    editor.selectSource(reference);
+    editor.clickSource("Regular");
     expect(editor.editorView().externalLocation).toEqual([{ axisId: weight, value: 400 }]);
-    editor.selectSource(bold);
+    editor.clickSource("Bold");
     expect(editor.editorView()).toMatchObject({
       externalLocation: [{ axisId: weight, value: 700 }],
       editingSourceIds: [bold],
     });
 
-    editor.setLocation({ [weight]: 550 });
+    editor.setLocation({ wght: 550 });
     expect(editor.editorView()).toMatchObject({ activeSourceId: null, editingSourceIds: [] });
 
-    editor.setLocation({ [weight]: 700 });
+    editor.setLocation({ wght: 700 });
     expect(editor.editorView()).toMatchObject({ activeSourceId: bold, editingSourceIds: [bold] });
   });
 
   it("edits a range or a hand-picked set of sources around the shown one", async () => {
-    const thin = await editor.addSource("Thin", { [weight]: 100 });
-    const bold = await editor.addSource("Bold", { [weight]: 700 });
-    const black = await editor.addSource("Black", { [weight]: 900 });
+    const thin = await addSource("Thin", 100);
+    const bold = await addSource("Bold", 700);
+    await addSource("Black", 900);
     const everySource = editor.fontOverview().sources.map(({ id }) => id);
 
-    editor.selectSource(reference);
-    editor.selectSourceForEditing(black, "range");
+    editor.clickSource("Regular");
+    editor.clickSource("Black", "range");
     expect(editor.editorView()).toMatchObject({
       activeSourceId: reference,
       editingSourceIds: everySource,
     });
 
-    editor.selectSource(reference);
-    editor.selectSourceForEditing(bold, "toggle");
-    editor.selectSourceForEditing(thin, "toggle");
+    editor.clickSource("Regular");
+    editor.clickSource("Bold", "toggle");
+    editor.clickSource("Thin", "toggle");
     expect(new Set(editor.editorView().editingSourceIds)).toEqual(new Set([reference, bold, thin]));
 
-    editor.selectSourceForEditing(reference, "toggle");
+    editor.clickSource("Regular", "toggle");
     expect(new Set(editor.editorView().editingSourceIds)).toEqual(new Set([reference, bold, thin]));
   });
 
   it("switches editing between every source and the shown one", async () => {
-    await editor.addSource("Bold", { [weight]: 700 });
-    editor.selectSource(reference);
+    await addSource("Bold", 700);
+    editor.clickSource("Regular");
 
     expect(editor.toggleAllSourcesForEditing()).toBe(true);
     expect(editor.editorView()).toMatchObject({

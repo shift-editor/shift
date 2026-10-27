@@ -76,10 +76,10 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       editor.pressAt(await position(id));
       editor.movePointerTo(to, { shiftKey: true });
 
-      expect(editor.toolState()).toBe("translating");
-      expect(editor.snapGuides()).toMatchObject([{ from: pivot, to: shown(id) }]);
+      expect(editor.toolState()?.state).toBe("translating");
+      expect(editor.drawnSnapGuides()).toMatchObject([{ from: pivot, to: shown(id) }]);
       await editor.pressKey("Escape");
-      expect(editor.toolState()).toBe("ready");
+      expect(editor.toolState()?.state).toBe("ready");
     },
   );
 
@@ -102,7 +102,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
     expect(shown(controlStart).x).toBeCloseTo(100 + 50 * ROOT_3);
     editor.movePointerTo(to);
     expect(shown(controlStart)).toEqual(to);
-    expect(editor.snapGuides()).toEqual([]);
+    expect(editor.drawnSnapGuides()).toEqual([]);
     await editor.pressKey("Escape");
 
     expect(shown(controlStart)).toEqual({ x: 200, y: 100 });
@@ -118,7 +118,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       editor.movePointerTo(to, { shiftKey: true });
       await editor.releaseAt(to, { shiftKey });
 
-      expect(editor.toolState()).toBe("ready");
+      expect(editor.toolState()?.state).toBe("ready");
       expectNear(await position(controlStart), { x: 100 + 50 * ROOT_3, y: 150 });
     },
   );
@@ -144,7 +144,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
     editor.selectTool("pen");
     expect(shown(controlStart)).toEqual({ x: 200, y: 100 });
     editor.selectTool("select");
-    expect(editor.toolState()).toBe("ready");
+    expect(editor.toolState()?.state).toBe("ready");
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 });
 
@@ -211,8 +211,8 @@ describe("Shift-dragging a handle locked to a line does not snap its angle", () 
     editor.pressAt({ x: 500, y: 100 });
     editor.movePointerTo({ x: 560, y: 160 }, { shiftKey: true });
 
-    expect(editor.toolState()).toBe("translating");
-    expect(editor.snapGuides()).toEqual([]);
+    expect(editor.toolState()?.state).toBe("translating");
+    expect(editor.drawnSnapGuides()).toEqual([]);
     expect(shown(handle).y).toBeCloseTo(100);
     await editor.pressKey("Escape");
   });

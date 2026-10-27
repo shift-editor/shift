@@ -26,10 +26,10 @@ describe("panning the canvas with the Hand", () => {
   it("closes the hand on press, before any drag, and opens it on release", async () => {
     expect(editor.shownCursor()).toBe("grab");
 
-    editor.holdDragAt({ x: 0, y: 0 }, { x: 0, y: 0 });
+    editor.holdDragFrom({ x: 0, y: 0 }, { x: 0, y: 0 });
     expect(editor.shownCursor()).toBe("grabbing");
 
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 0, y: 0 });
     expect(editor.shownCursor()).toBe("grab");
     expect(editor.toolState()).toEqual({ id: "hand", state: "ready" });
   });
@@ -38,28 +38,28 @@ describe("panning the canvas with the Hand", () => {
     const start = editor.canvasOffset();
 
     // At zoom 1 a font unit is a screen pixel; screen y runs down.
-    await editor.dragAt({ x: 0, y: 0 }, { x: 120, y: -80 });
+    await editor.dragFrom({ x: 0, y: 0 }, { x: 120, y: -80 });
 
     expect(editor.canvasOffset()).toEqual({ x: start.x + 120, y: start.y + 80 });
   });
 
   it("stops panning when Escape cancels the drag", async () => {
-    editor.holdDragAt({ x: 0, y: 0 }, { x: 100, y: 0 });
+    editor.holdDragFrom({ x: 0, y: 0 }, { x: 100, y: 0 });
     const panned = editor.canvasOffset();
 
     await editor.pressKey("Escape");
     expect(editor.toolState()).toEqual({ id: "hand", state: "ready" });
     expect(editor.shownCursor()).toBe("grab");
 
-    editor.moveHeldPointer({ x: 200, y: 0 });
+    editor.movePointerTo({ x: 200, y: 0 });
     expect(editor.canvasOffset()).toEqual(panned);
   });
 
   it("does not pan on hover", () => {
     const start = editor.canvasOffset();
 
-    editor.hoverAt({ x: 50, y: 50 });
-    editor.hoverAt({ x: 100, y: 100 });
+    editor.movePointerTo({ x: 50, y: 50 });
+    editor.movePointerTo({ x: 100, y: 100 });
 
     expect(editor.canvasOffset()).toEqual(start);
   });
@@ -72,7 +72,7 @@ describe("panning with Space while another tool is active", () => {
     const start = editor.canvasOffset();
 
     editor.holdSpaceForHand();
-    await editor.dragAt({ x: 0, y: 0 }, { x: 120, y: -80 });
+    await editor.dragFrom({ x: 0, y: 0 }, { x: 120, y: -80 });
     editor.releaseSpace();
 
     expect(editor.canvasOffset()).toEqual({ x: start.x + 120, y: start.y + 80 });

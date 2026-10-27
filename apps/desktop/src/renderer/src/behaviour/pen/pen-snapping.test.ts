@@ -22,14 +22,14 @@ describe("the Pen snaps new points to metrics and existing points", () => {
     const { xHeight } = editor.metrics();
     if (xHeight === undefined) throw new Error("Expected the test font to author an x-height");
 
-    await editor.clickAt({ x: 200, y: xHeight - editor.clickReach() / 2 });
+    await editor.clickAt({ x: 200, y: xHeight - editor.hitDistance() / 2 });
 
     expect((await editor.outline())[0]?.points).toMatchObject([onCurve(200, xHeight)]);
   });
 
   it("lines a new point up with an earlier one", async () => {
     await editor.clickAt({ x: 100, y: 120 });
-    await editor.clickAt({ x: 300, y: 120 + editor.clickReach() / 2 });
+    await editor.clickAt({ x: 300, y: 120 + editor.hitDistance() / 2 });
 
     expect((await editor.outline())[0]?.points[1]).toMatchObject(onCurve(300, 120));
   });
@@ -37,7 +37,7 @@ describe("the Pen snaps new points to metrics and existing points", () => {
   it("places the point exactly where clicked while Cmd is held", async () => {
     const { xHeight } = editor.metrics();
     if (xHeight === undefined) throw new Error("Expected the test font to author an x-height");
-    const near = xHeight - editor.clickReach() / 2;
+    const near = xHeight - editor.hitDistance() / 2;
 
     await editor.clickAt({ x: 200, y: near }, { metaKey: true });
 
@@ -58,7 +58,7 @@ describe("the Pen snaps new points to metrics and existing points", () => {
         },
       ],
     });
-    const near = editor.clickReach() / 3;
+    const near = editor.hitDistance() / 3;
 
     await editor.clickAt({ x: 300 - near, y: 300 - near });
 
@@ -80,7 +80,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   ])(
     "shows the whole curve with its handle snapped to $angle degrees, and a direction guide",
     async ({ pointer, angle }) => {
-      editor.holdDragAt({ x: 300, y: 100 }, pointer, { shiftKey: true });
+      editor.holdDragFrom({ x: 300, y: 100 }, pointer, { shiftKey: true });
 
       const length = Math.hypot(pointer.x - 300, pointer.y - 100);
       const radians = (angle * Math.PI) / 180;
@@ -110,23 +110,23 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   );
 
   it("follows Shift on the current pointer sample without stacking previews", async () => {
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 160 });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 });
     expect(editor.drawnOutline()[0]?.points[2]).toMatchObject(offCurve(220, 40));
 
-    editor.moveHeldPointer({ x: 380, y: 160 }, { shiftKey: true });
+    editor.movePointerTo({ x: 380, y: 160 }, { shiftKey: true });
     expect(editor.drawnOutline()[0]?.points[2]?.y).toBeCloseTo(50);
 
-    editor.moveHeldPointer({ x: 380, y: 160 });
+    editor.movePointerTo({ x: 380, y: 160 });
     expect(editor.drawnSnapGuides()).toEqual([]);
     expect(editor.drawnOutline()[0]?.points[2]).toMatchObject(offCurve(220, 40));
     await editor.pressKey("Escape");
   });
 
   it("shows a direction guide while Shift snaps a closing drag", async () => {
-    await editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
     await editor.clickAt({ x: 300, y: 300 });
 
-    editor.holdDragAt({ x: 100, y: 100 }, { x: 100, y: 162 }, { shiftKey: true });
+    editor.holdDragFrom({ x: 100, y: 100 }, { x: 100, y: 162 }, { shiftKey: true });
 
     expect(editor.drawnSnapGuides()).toMatchObject([
       { kind: "direction", from: { x: 100, y: 100 } },
@@ -135,7 +135,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   });
 
   it("shows a direction guide for a handle snapped horizontal", async () => {
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 100 }, { shiftKey: true });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 100 }, { shiftKey: true });
 
     expect(editor.drawnSnapGuides()).toMatchObject([
       {
@@ -150,11 +150,11 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   it.each([false, true])(
     "keeps the constrained handle when the release reports shiftKey=%s",
     async (shiftKey) => {
-      editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
+      editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
       const preview = editor.drawnOutline()[0]?.points[2];
       expect(preview).toMatchObject(offCurve(300 - 50 * Math.sqrt(3), 50));
 
-      await editor.releasePointer({ shiftKey });
+      await editor.releaseAt({ x: 380, y: 160 }, { shiftKey });
 
       expect(editor.toolState()).toEqual({ id: "pen", state: "ready" });
       expect((await editor.outline())[0]?.points[2]).toEqual(preview);
@@ -162,9 +162,9 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   );
 
   it("commits the release position while leaving the anchor and first control fixed", async () => {
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
 
-    await editor.releasePointer({}, { x: 420, y: 190 });
+    await editor.releaseAt({ x: 420, y: 190 });
 
     expect((await editor.outline())[0]?.points).toMatchObject([
       onCurve(100, 100),
@@ -177,7 +177,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   it("adds the snapped curve as one undoable step", async () => {
     await expectEdit(
       editor,
-      (e) => e.dragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true }),
+      (e) => e.dragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true }),
       async (e) => {
         const points = (await e.outline())[0]?.points;
         expect(points).toHaveLength(4);
@@ -187,8 +187,8 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   });
 
   it("carries the snapped outgoing handle into the next curve", async () => {
-    await editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
-    await editor.dragAt({ x: 500, y: 100 }, { x: 580, y: 180 });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
+    await editor.dragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
 
     expect((await editor.outline())[0]?.points.slice(2, 6)).toMatchObject([
       offCurve(300 - 50 * Math.sqrt(3), 50),
@@ -199,10 +199,10 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   });
 
   it("drops a snapped curve on Escape without bending the curve before it", async () => {
-    await editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
     const before = editor.drawnOutline();
 
-    editor.holdDragAt({ x: 500, y: 100 }, { x: 580, y: 160 }, { shiftKey: true });
+    editor.holdDragFrom({ x: 500, y: 100 }, { x: 580, y: 160 }, { shiftKey: true });
     expect(editor.drawnOutline()[0]?.points).toHaveLength(7);
 
     await editor.pressKey("Escape");
@@ -210,7 +210,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   });
 
   it("drops the curve being dragged when another tool is chosen", () => {
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
     expect(editor.drawnOutline()[0]?.points).toHaveLength(4);
 
     editor.selectTool("select");
@@ -221,9 +221,9 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   });
 
   it("lets the pointer come back onto the anchor", async () => {
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
 
-    editor.moveHeldPointer({ x: 300, y: 100 }, { shiftKey: true });
+    editor.movePointerTo({ x: 300, y: 100 }, { shiftKey: true });
 
     expect(editor.drawnOutline()[0]?.points[2]).toMatchObject(offCurve(300, 100));
     await editor.pressKey("Escape");
@@ -240,7 +240,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
   });
 
   it("snaps the anchor of a Shift-dragged curve the same way", async () => {
-    await editor.dragAt({ x: 300, y: 160 }, { x: 380, y: 240 }, { shiftKey: true });
+    await editor.dragFrom({ x: 300, y: 160 }, { x: 380, y: 240 }, { shiftKey: true });
 
     const length = Math.hypot(200, 60);
     expect((await editor.outline())[0]?.points[3]).toMatchObject(

@@ -50,7 +50,7 @@ describe("adding, renaming, and deleting anchors", () => {
     expect(await anchorNames("Light")).toContain("bottomleft");
     expect(await anchorNames("Bold")).toContain("bottomleft");
 
-    editor.hoverAt({ x: 120, y: 340 });
+    editor.movePointerTo({ x: 120, y: 340 });
     expect(await editor.runCommand("glyph.addAnchor")).toBe(true);
     expect(await anchorNames("Light")).toContain("new");
     expect(await anchorNames("Bold")).toContain("new");
@@ -77,7 +77,7 @@ describe("adding, renaming, and deleting anchors", () => {
   });
 
   it("adds an anchor under the pointer to the source being edited and selects it", async () => {
-    editor.hoverAt({ x: 120, y: 340 });
+    editor.movePointerTo({ x: 120, y: 340 });
 
     expect(await editor.runCommand("glyph.addAnchor")).toBe(true);
 

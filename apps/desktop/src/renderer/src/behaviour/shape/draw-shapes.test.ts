@@ -49,7 +49,7 @@ describe("drawing a shape by dragging", () => {
   it("adds a closed four-corner rectangle as one undoable step", async () => {
     await expectEdit(
       editor,
-      (e) => e.dragAt({ x: 10, y: 10 }, { x: 110, y: 90 }),
+      (e) => e.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 }),
       async (e) => {
         const outline = await e.outline();
         expect(outline).toHaveLength(1);
@@ -60,17 +60,17 @@ describe("drawing a shape by dragging", () => {
   });
 
   it("does not draw into the last source shown at a location between sources", async () => {
-    await editor.addAxis("wght", 100, 400, 900);
-    editor.moveToLocation({ wght: 550 });
+    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    editor.setLocation({ wght: 550 });
 
-    await editor.dragAt({ x: 10, y: 10 }, { x: 110, y: 90 });
+    await editor.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 });
 
-    editor.openSource("Regular");
+    editor.clickSource("Regular");
     expect(await editor.outline()).toEqual([]);
   });
 
   it("selects the new shape and goes back to the Select tool", async () => {
-    await editor.dragAt({ x: 10, y: 10 }, { x: 110, y: 90 });
+    await editor.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 });
 
     const [created] = await editor.outline();
     expect(editor.selectionIds()).toEqual([created?.id]);
@@ -80,7 +80,7 @@ describe("drawing a shape by dragging", () => {
   it("draws an ellipse of four smooth curves when Ellipse is chosen", async () => {
     editor.chooseToolMenuItem("shape", "ellipse");
 
-    await editor.dragAt({ x: 10, y: 20 }, { x: 210, y: 120 });
+    await editor.dragFrom({ x: 10, y: 20 }, { x: 210, y: 120 });
 
     const [created] = await editor.outline();
     expect(created?.closed).toBe(true);
@@ -94,7 +94,7 @@ describe("drawing a shape by dragging", () => {
   });
 
   it("adds nothing when Escape cancels the drag", async () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 110, y: 90 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 110, y: 90 });
 
     await editor.pressKey("Escape");
 
@@ -103,10 +103,10 @@ describe("drawing a shape by dragging", () => {
   });
 
   it("adds nothing for a drag that ends under three units across", async () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 14, y: 14 });
-    editor.moveHeldPointer({ x: 12, y: 12 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 14, y: 14 });
+    editor.movePointerTo({ x: 12, y: 12 });
 
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 12, y: 12 });
 
     expect(await editor.outline()).toEqual([]);
   });
@@ -127,7 +127,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
     { x: 210, y: -80 },
     { x: -190, y: -80 },
   ])("fills exactly the box dragged out, in any direction: %j", async (end) => {
-    await editor.dragAt({ x: 10, y: 20 }, end);
+    await editor.dragFrom({ x: 10, y: 20 }, end);
 
     expect(extent((await editor.outline())[0])).toEqual({
       min: { x: Math.min(10, end.x), y: Math.min(20, end.y) },
@@ -136,7 +136,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("keeps the shape cursor while drawing and after cancelling", async () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 100, y: 60 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     expect(editor.shownCursor()).toBe(cursor);
 
     await editor.pressKey("Escape");
@@ -144,10 +144,10 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("adds the same shape it showed while dragging", async () => {
-    editor.holdDragAt({ x: 10, y: 20 }, { x: 210, y: 120 });
+    editor.holdDragFrom({ x: 10, y: 20 }, { x: 210, y: 120 });
     const previewed = editor.drawnOutline();
 
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 210, y: 120 });
 
     expect(await editor.outline()).toEqual(previewed);
   });
@@ -155,7 +155,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   it.each([1, -1])(
     "keeps width and height equal while Shift is held, direction %i",
     async (direction) => {
-      await editor.dragAt(
+      await editor.dragFrom(
         { x: 10, y: 20 },
         { x: 10 + direction * 200, y: 20 + direction * 100 },
         { shiftKey: true },
@@ -168,7 +168,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   );
 
   it("selects the shape while dragging and hides its handles, and Escape drops both", async () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 100, y: 60 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     const [draft] = editor.drawnOutline();
     expect(editor.toolState()).toEqual({ id: "shape", state: "dragging" });
     expect(editor.selectionIds()).toEqual([draft?.id]);
@@ -181,16 +181,16 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("grows with the drag and keeps the same contour, with its handles shown, on release", async () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 100, y: 60 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     const [draft] = editor.drawnOutline();
     const draftWidth = size(draft).width;
     expect(draftWidth).toBeGreaterThan(0);
 
-    editor.moveHeldPointer({ x: 200, y: 90 });
+    editor.movePointerTo({ x: 200, y: 90 });
     const [grown] = editor.drawnOutline();
     expect(size(grown).width).toBeGreaterThan(draftWidth);
 
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 200, y: 90 });
     const [committed] = await editor.outline();
     expect(committed).toEqual(grown);
     expect(committed?.id).toBe(draft?.id);
@@ -200,7 +200,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("squares the shape up when Shift goes down without the pointer moving", async () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 110, y: 60 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 110, y: 60 });
     const loose = size(editor.drawnOutline()[0]);
     expect(loose.width).not.toBeCloseTo(loose.height);
 
@@ -212,12 +212,12 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("leaves other contours and their handles showing, and puts the selection back on cancel", async () => {
-    await editor.dragAt({ x: 0, y: 0 }, { x: 100, y: 100 });
+    await editor.dragFrom({ x: 0, y: 0 }, { x: 100, y: 100 });
     const selection = editor.selectionIds();
     const [original] = await editor.outline();
 
     editor.selectTool("shape");
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 100, y: 60 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     expect(editor.drawnOutline()).toHaveLength(2);
     expect(editor.drawnHandles().map(({ pointId }) => pointId)).toEqual(
       original?.points.map(({ id }) => id),
@@ -229,7 +229,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("drops the shape being dragged when another tool is chosen", () => {
-    editor.holdDragAt({ x: 10, y: 10 }, { x: 100, y: 60 });
+    editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
 
     editor.selectTool("select");
 
@@ -238,14 +238,14 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   });
 
   it("adds nothing when the drag ends under three units wide", async () => {
-    await editor.dragAt({ x: 10, y: 20 }, { x: 12, y: 100 });
+    await editor.dragFrom({ x: 10, y: 20 }, { x: 12, y: 100 });
 
     expect(await editor.outline()).toEqual([]);
     expect(editor.toolState()).toEqual({ id: "shape", state: "ready" });
   });
 
   it("undoes and redoes the whole shape and its selection in one step", async () => {
-    await editor.dragAt({ x: 10, y: 20 }, { x: 210, y: 120 });
+    await editor.dragFrom({ x: 10, y: 20 }, { x: 210, y: 120 });
     const after = await editor.outline();
     const selection = editor.selectionIds();
 

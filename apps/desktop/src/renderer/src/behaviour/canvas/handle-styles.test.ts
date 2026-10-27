@@ -34,7 +34,7 @@ describe("point handles show selection at a source and plain styling between sou
 
   it("draws every handle of a contour selected whole as selected", async () => {
     editor.selectTool("shape");
-    await editor.dragAt({ x: 10, y: 10 }, { x: 110, y: 90 });
+    await editor.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 });
     const [shape] = await editor.outline();
     expect(editor.selectionIds()).toEqual([shape?.id]);
 
@@ -52,16 +52,16 @@ describe("point handles show selection at a source and plain styling between sou
     });
     editor.selectTool("select");
     editor.select([b]);
-    await editor.addAxis("wght", 100, 400, 900);
+    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
 
-    editor.moveToLocation({ wght: 550 });
+    editor.setLocation({ wght: 550 });
     expect(editor.drawnHandles().map(({ state }) => state)).toEqual([
       "interpolated",
       "interpolated",
       "interpolated",
     ]);
 
-    editor.openSource("Regular");
+    editor.clickSource("Regular");
     expect(editor.drawnHandles()).toContainEqual({ pointId: b, state: "selected" });
   });
 });

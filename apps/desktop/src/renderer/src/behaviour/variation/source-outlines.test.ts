@@ -8,7 +8,7 @@ let regular: SourceId;
 
 beforeEach(async () => {
   editor = await startTestEditor();
-  await editor.addAxis("wght", 100, 400, 900);
+  await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
   // Adding Bold makes it the active source, which is never outlined.
   await editor.addSource("Bold", { wght: 700 });
   const source = editor.source("Regular");
@@ -28,7 +28,7 @@ describe("source outlines drawn around the glyph", () => {
 
   it("stops drawing a source's outline once the source is deleted", async () => {
     await editor.addSource("Black", { wght: 900 });
-    editor.openSource("Bold");
+    editor.clickSource("Bold");
     editor.toggleSourceOutline("Black");
     expect(editor.drawnOutlineTargets()).toHaveLength(1);
 

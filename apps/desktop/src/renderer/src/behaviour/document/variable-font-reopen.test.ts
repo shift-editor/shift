@@ -1,4 +1,3 @@
-import type { AxisDefinition } from "@shift/types";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
@@ -8,18 +7,6 @@ beforeEach(async () => {
   editor = await startTestEditor();
 });
 afterEach(() => editor.close());
-
-const weight: AxisDefinition = {
-  tag: "wght",
-  name: "Weight",
-  role: "external",
-  axisType: "continuous",
-  minimum: 100,
-  default: 400,
-  maximum: 900,
-  labels: [],
-  hidden: false,
-};
 
 /** A Regular square, and a Bold source at wght 900 (design 800) with its corner moved, a wider advance and taller metrics. */
 async function authorVariableFont(): Promise<void> {
@@ -37,17 +24,15 @@ async function authorVariableFont(): Promise<void> {
       },
     ],
   });
-  editor.addAxis(weight);
-  await editor.settle();
+  await editor.addAxis({ tag: "wght", name: "Weight", minimum: 100, default: 400, maximum: 900 });
   await editor.setAxisMapping("wght", [
     [100, 100],
     [400, 400],
     [900, 800],
   ]);
-  editor.addSource("Bold", { wght: 900 });
-  await editor.settle();
+  await editor.addSource("Bold", { wght: 900 });
 
-  editor.switchToSource("Bold");
+  editor.clickSource("Bold");
   const boldCorner = (await editor.outline())[0]!.points[0]!.id;
   await editor.dragPoint(boldCorner, { x: 40, y: 20 });
   editor.setAdvanceWidth(700);
@@ -55,7 +40,7 @@ async function authorVariableFont(): Promise<void> {
   await editor.setSourceMetric("Bold", "x-Height", 620);
   editor.addInstance("Bold", { wght: 900 });
   await editor.settle();
-  editor.switchToSource("Regular");
+  editor.clickSource("Regular");
 }
 
 /** Everything about the variable font a reopened document must give back unchanged. */
@@ -63,7 +48,7 @@ async function variableFont(surface: EditorTestSurface) {
   const middle = { wght: 650 };
   return {
     font: surface.fontOverview(),
-    glyph: surface.glyph("A"),
+    glyph: surface.glyphNamed("A"),
     middle: { location: surface.locationAt(middle), glyph: await surface.glyphAt(middle) },
   };
 }
@@ -83,14 +68,14 @@ describe("saving and reopening a variable font", () => {
     expect((await editor.glyphAt(middle))?.advanceWidth).toBe(550);
     await expect(editor.save()).resolves.toMatchObject({ dirty: false });
     const saved = await variableFont(editor);
-    editor.switchToSource("Bold");
+    editor.clickSource("Bold");
     const boldOutline = await editor.outline();
 
     const reopened = await editor.reopen();
     try {
       await expect(reopened.documentState()).resolves.toMatchObject({ dirty: false });
       expect(await variableFont(reopened)).toEqual(saved);
-      reopened.switchToSource("Bold");
+      reopened.clickSource("Bold");
       expect(await reopened.outline()).toEqual(boldOutline);
     } finally {
       await reopened.close();
@@ -101,7 +86,7 @@ describe("saving and reopening a variable font", () => {
     await authorVariableFont();
     const reopened = await editor.reopen();
     try {
-      reopened.switchToSource("Bold");
+      reopened.clickSource("Bold");
       const corner = (await reopened.outline())[0]!.points[0]!.id;
       const saved = await reopened.pointPositions([corner]);
 

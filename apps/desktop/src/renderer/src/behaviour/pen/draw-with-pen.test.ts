@@ -66,7 +66,7 @@ describe("dragging with the Pen draws curves", () => {
   it("shows the whole curve while the drag is held and keeps it on release", async () => {
     await editor.clickAt({ x: 100, y: 100 });
 
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
     await editor.settle();
     expect(editor.drawnOutline()).toMatchObject([
       {
@@ -79,7 +79,7 @@ describe("dragging with the Pen draws curves", () => {
       },
     ]);
 
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 380, y: 180 });
     expect(await editor.outline()).toMatchObject([
       {
         points: [
@@ -94,7 +94,7 @@ describe("dragging with the Pen draws curves", () => {
 
   it("puts the outline back when Escape cancels the curve being dragged", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 340, y: 120 });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 340, y: 120 });
 
     await editor.pressKey("Escape");
 
@@ -106,7 +106,7 @@ describe("dragging with the Pen draws curves", () => {
 
     await expectEdit(
       editor,
-      (e) => e.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 }),
+      (e) => e.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 }),
       async (e) => {
         expect(await e.outline()).toMatchObject([
           {
@@ -125,8 +125,8 @@ describe("dragging with the Pen draws curves", () => {
 
   it("starts the next curve from the handle the last drag pulled out", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    await editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
-    await editor.dragAt({ x: 500, y: 100 }, { x: 580, y: 180 });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
+    await editor.dragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
 
     const [contour] = await editor.outline();
     expect(contour?.points[4]).toMatchObject(offCurve(380, 180));
@@ -135,8 +135,8 @@ describe("dragging with the Pen draws curves", () => {
   it("starts the next curve from the pulled handle even when the drags come faster than the workspace confirms them", async () => {
     await Promise.all([
       editor.clickAt({ x: 100, y: 100 }),
-      editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 }),
-      editor.dragAt({ x: 500, y: 100 }, { x: 580, y: 180 }),
+      editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 }),
+      editor.dragFrom({ x: 500, y: 100 }, { x: 580, y: 180 }),
     ]);
 
     const [contour] = await editor.outline();
@@ -145,9 +145,9 @@ describe("dragging with the Pen draws curves", () => {
 
   it("keeps the held curve showing while the curve before it is confirmed, and drops only the held one on Escape", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    const previous = editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
+    const previous = editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
 
-    editor.holdDragAt({ x: 500, y: 100 }, { x: 580, y: 180 });
+    editor.holdDragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
     await previous;
 
     expect(editor.drawnOutline()[0]?.points.map(({ pointType }) => pointType)).toEqual([
@@ -161,7 +161,7 @@ describe("dragging with the Pen draws curves", () => {
     ]);
 
     await editor.pressKey("Escape");
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 580, y: 180 });
 
     expect(await editor.outline()).toMatchObject([
       {
@@ -177,9 +177,9 @@ describe("dragging with the Pen draws curves", () => {
 
   it("joins two dragged curves at a smooth point", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    await editor.dragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
 
-    editor.holdDragAt({ x: 500, y: 100 }, { x: 580, y: 180 });
+    editor.holdDragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
     expect(editor.drawnOutline()[0]?.points).toMatchObject([
       onCurve(100, 100),
       { pointType: "offCurve" },
@@ -190,7 +190,7 @@ describe("dragging with the Pen draws curves", () => {
       { ...onCurve(500, 100), smooth: false },
     ]);
 
-    await editor.releasePointer();
+    await editor.releaseAt({ x: 580, y: 180 });
     expect((await editor.outline())[0]?.points).toMatchObject([
       onCurve(100, 100),
       { pointType: "offCurve" },
@@ -204,19 +204,19 @@ describe("dragging with the Pen draws curves", () => {
 
   it("pulls a handle for the next curve when dragging off a point just placed", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    await editor.dragAt({ x: 100, y: 100 }, { x: 160, y: 180 });
+    await editor.dragFrom({ x: 100, y: 100 }, { x: 160, y: 180 });
     expect(await editor.outline()).toMatchObject([{ points: [onCurve(100, 100)] }]);
 
-    await editor.dragAt({ x: 300, y: 100 }, { x: 340, y: 140 });
+    await editor.dragFrom({ x: 300, y: 100 }, { x: 340, y: 140 });
 
     expect((await editor.outline())[0]?.points[1]).toMatchObject(offCurve(160, 180));
   });
 
   it("keeps showing the curve between releasing the drag and the workspace confirming it", async () => {
     await editor.clickAt({ x: 100, y: 100 });
-    editor.holdDragAt({ x: 300, y: 100 }, { x: 380, y: 180 });
+    editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
 
-    const released = editor.releasePointer();
+    const released = editor.releaseAt({ x: 380, y: 180 });
     expect(editor.drawnOutline()[0]?.points).toHaveLength(4);
 
     await released;
@@ -250,14 +250,14 @@ describe("drawing between sources", () => {
     await editor.clickAt({ x: 100, y: 100 });
     await editor.clickAt({ x: 300, y: 100 });
     const before = await editor.outline();
-    await editor.addAxis("wght", 100, 400, 900);
-    editor.moveToLocation({ wght: 550 });
+    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    editor.setLocation({ wght: 550 });
 
     await editor.clickAt({ x: 300, y: 300 });
     await editor.clickAt({ x: 500, y: 100 });
     await editor.settle();
 
-    editor.openSource("Regular");
+    editor.clickSource("Regular");
     expect(await editor.outline()).toEqual(before);
   });
 });
