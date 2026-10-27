@@ -59,6 +59,7 @@ import type {
   KerningRule,
   Modifiers,
   Outline,
+  OutlinePoint,
   SourceKerning,
 } from "./surface";
 
@@ -731,6 +732,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
     }));
   }
 
+  kerningAt(source: string, first: string, second: string): SourceKerning | null {
+    return this.kerning(first, second).find((kerning) => kerning.source === source) ?? null;
+  }
+
+  kerningGroup(position: KerningPosition, name: string): KerningGroup | null {
+    return this.kerningGroups(position).find((group) => group.name === name) ?? null;
+  }
+
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroup | null {
+    return this.kerningGroups(position).find((group) => group.members.includes(glyph)) ?? null;
+  }
+
   kerningGroups(position: KerningPosition): readonly KerningGroup[] {
     return this.font.kerningCell
       .peek()
@@ -772,6 +785,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
         smooth,
       })),
     }));
+  }
+
+  point(id: PointId): OutlinePoint | null {
+    return (
+      this.outline()
+        .flatMap((contour) => contour.points)
+        .find((point) => point.id === id) ?? null
+    );
   }
 
   anchors(): readonly { name: string; x: number; y: number }[] {

@@ -149,6 +149,8 @@ export interface EditorTestSurface {
 
   /** The open glyph's authored outline. */
   outline(): Outline;
+  /** One authored point of the open glyph, or null when it has none with that id. */
+  point(id: PointId): OutlinePoint | null;
   /** The open glyph's anchors, in order. */
   anchors(): readonly { readonly name: string; readonly x: number; readonly y: number }[];
   /** The open glyph's components: each base glyph's name and offset. */
@@ -159,8 +161,14 @@ export interface EditorTestSurface {
   advanceWidth(): number;
   /** The kerning between two glyphs at every source, in font source order, as shown now. */
   kerning(first: string, second: string): readonly SourceKerning[];
+  /** The kerning between two glyphs at one source, as shown now; null when the font has no such source. */
+  kerningAt(source: string, first: string, second: string): SourceKerning | null;
   /** The kerning groups at a position, in the order the kerning panel lists them. */
   kerningGroups(position: KerningPosition): readonly KerningGroup[];
+  /** The kerning group named `name` at a position, or null. */
+  kerningGroup(position: KerningPosition, name: string): KerningGroup | null;
+  /** The kerning group `glyph` belongs to at a position, or null. */
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroup | null;
   /** The selected ids, in selection order. */
   selectionIds(): readonly string[];
   /** The CSS cursor the editor shows. */
