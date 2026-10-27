@@ -23,8 +23,9 @@ import {
   type GlyphRenderModel,
   type GlyphLayer,
 } from "@shift/editor/model";
-import type { ToolName } from "@shift/editor/tools";
+import { Select, type ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
+import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintGlyphId,
@@ -32,7 +33,9 @@ import {
   type GlyphId,
   type GlyphName,
   type AnchorId,
+  type AxisId,
   type GlyphRecord,
+  type SourceMetrics,
   type ComponentId,
   type KerningGroupId,
   type KerningPosition,
@@ -43,7 +46,7 @@ import {
 import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
-import type { GlyphNode, TextRunNode } from "@shift/editor/types";
+import type { GlyphNode, PositionGuide, TextRunNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 import {
   contourContent,
@@ -64,6 +67,7 @@ import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
 import type { EditorTestSurface, Modifiers, Outline } from "./surface";
+import { segmentIdFor } from "@shift/glyph-state";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -650,6 +654,85 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.setXAdvance(width);
   }
 
+  pressAt(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerDown(screen.x, screen.y, modifiers);
+  }
+
+  movePointerTo(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerMove(screen.x, screen.y, modifiers);
+  }
+
+  queuePointerMove(position: Point2D, modifiers?: Modifiers): void {
+    this.toolManager.handlePointerMove(this.localToScreen(position), {
+      ...DEFAULT_MODIFIERS,
+      ...modifiers,
+    });
+  }
+
+  async releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
+    const screen = this.localToScreen(position);
+    this.pointerUp(screen.x, screen.y, modifiers);
+    this.toolManager.flushPointerMoves();
+    await this.settle();
+  }
+
+  async dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.dragLocal(this.#dragBetween(from, to, modifiers));
+  }
+
+  /** A drag from `down` to `end`, crossing the drag threshold on a first sample a few units along. */
+  #dragBetween(down: Point2D, end: Point2D, options?: Modifiers): DragInput {
+    const by = { x: end.x - down.x, y: end.y - down.y };
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    return {
+      down,
+      start: { x: down.x + (by.x / length) * lead, y: down.y + (by.y / length) * lead },
+      end,
+      options,
+    };
+  }
+
+  resizeCanvas(width: number, height: number): void {
+    this.setCameraRect({
+      x: 0,
+      y: 0,
+      width,
+      height,
+      left: 0,
+      top: 0,
+      right: width,
+      bottom: height,
+    });
+  }
+
+  setTextSize(size: number): void {
+    const run = this.#requireTextRun();
+    this.scene.updateNode({ id: run.id, size });
+  }
+
+  moveText(to: Point2D): void {
+    const run = this.#requireTextRun();
+    this.scene.updateNode({ id: run.id, position: to });
+  }
+
+  #requireTextRun(): TextRunNode {
+    const run = this.textRun;
+    if (!run) throw new Error("The canvas has no text run");
+    return run;
+  }
+
+  async duplicate(): Promise<boolean> {
+    return runRendererCommand(this, "edit.duplicate");
+  }
+
+  async typeText(text: string): Promise<void> {
+    this.textEditing.typeLiteral(text);
+    await this.settle();
+  }
+
   async advanceWidth(): Promise<number> {
     return (await this.#authoredLayer()).advanceWidth;
   }
@@ -831,6 +914,90 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.font.editCoordinator.state();
   }
 
+  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {
+    const layer = this.requireGlyphLayer();
+    return Object.fromEntries(
+      ids.map((id) => {
+        const point = layer.point(id);
+        if (!point) throw new Error(`The open glyph shows no point ${id}`);
+        return [id, { x: point.x, y: point.y }];
+      }),
+    ) as Record<PointId, Point2D>;
+  }
+
+  editGhost(ids: readonly PointId[]): Record<PointId, Point2D> | null {
+    const ghost = this.requireGlyphLayer().editBaseGeometryCell.peek();
+    if (!ghost) return null;
+    return Object.fromEntries(
+      ids.map((id) => {
+        const point = ghost.point(id);
+        if (!point) throw new Error(`The edit ghost shows no point ${id}`);
+        return [id, { x: point.x, y: point.y }];
+      }),
+    ) as Record<PointId, Point2D>;
+  }
+
+  async outlineAt(source: string): Promise<Outline> {
+    const glyph = this.glyphRecord;
+    if (!glyph) throw new Error("outlineAt needs an open glyph");
+    const layerId = this.font.layerIdFor(glyph.id, this.#sourceNamed(source));
+    if (!layerId) throw new Error(`The open glyph has no layer at ${source}`);
+    return (await this.#reads.font.getLayer(layerId)).contours;
+  }
+
+  segmentBetween(start: PointId, end: PointId): string {
+    return segmentIdFor(start, end);
+  }
+
+  toolState(): string | null {
+    return this.#reads.editor.inspect("").tool?.state ?? null;
+  }
+
+  toolCursor(): string {
+    return this.toolManager.activeTool?.cursorCell.value.type ?? "default";
+  }
+
+  snapGuides(): readonly PositionGuide[] {
+    const state = this.toolIf("select")?.state;
+    return state?.type === "translating" ? state.translate.guides : [];
+  }
+
+  boundingBoxShown(): boolean {
+    const tool = this.toolManager.activeTool;
+    return tool instanceof Select && tool.boundingBox.visible;
+  }
+
+  hitDistance(): number {
+    const node = this.glyphNode;
+    if (!node) throw new Error("hitDistance needs an open glyph");
+    return this.hitRadiusIn(node);
+  }
+
+  pixelSize(): number {
+    return this.camera.screenToSceneDistance(1);
+  }
+
+  metrics(): SourceMetrics {
+    return this.#reads.font.resolveLocation([]).metrics;
+  }
+
+  hoveredId(): string | null {
+    return this.hover.id;
+  }
+
+  toolDisabled(name: ToolName): boolean {
+    return this.toolRegistry.get(name)?.disabled ?? false;
+  }
+
+  targetAt(position: Point2D): string {
+    return this.getPointerTarget(this.screenToScene(this.localToScreen(position))).kind;
+  }
+
+  textLength(): number {
+    const run = this.#requireTextRun();
+    return this.text.run(run.runId)?.items.length ?? 0;
+  }
+
   async reopen(): Promise<EditorTestSurface> {
     const glyphName = this.glyphRecord?.name;
     if (!glyphName) throw new Error("reopen needs an open glyph");
@@ -851,6 +1018,51 @@ export class TestEditor extends Editor implements EditorTestSurface {
     for (const directory of this.#temporaryDirectories) {
       rmSync(directory, { recursive: true, force: true });
     }
+  }
+
+  async openGlyph(name: string): Promise<void> {
+    const glyphId = this.#glyphNamed(name);
+    await this.font.loadGlyph(glyphId);
+    if (!this.openGlyphInText(glyphId)) throw new Error(`${name} did not open`);
+    await this.settle();
+  }
+
+  async addAxis(
+    tag: string,
+    range: { minimum: number; default: number; maximum: number },
+  ): Promise<void> {
+    this.font.createAxis({
+      tag,
+      name: tag,
+      role: "external",
+      axisType: "continuous",
+      ...range,
+      labels: [],
+      hidden: false,
+    });
+    await this.settle();
+  }
+
+  async addSource(name: string, location: Readonly<Record<string, number>>): Promise<void> {
+    const byId = Object.fromEntries(
+      Object.entries(location).map(([tag, value]) => [this.#axisTagged(tag), value]),
+    );
+    this.createSource(name, externalAxisLocationFromRecord(byId));
+    await this.settle();
+  }
+
+  async editSources(names: readonly string[]): Promise<void> {
+    const [first, ...rest] = names;
+    if (first === undefined) throw new Error("editSources needs at least one source");
+    this.selectSourceForEditing(this.#sourceNamed(first));
+    for (const name of rest) this.selectSourceForEditing(this.#sourceNamed(name), "toggle");
+    await this.settle();
+  }
+
+  #axisTagged(tag: string): AxisId {
+    const axis = this.#reads.font.getFont().axes.find((candidate) => candidate.tag === tag);
+    if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
+    return axis.id;
   }
 
   asEditor(): Editor {

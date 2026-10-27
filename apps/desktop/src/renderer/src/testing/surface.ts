@@ -19,7 +19,7 @@
  */
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
-import type { Point2D } from "@shift/geo";
+import type { Point2D, Rect2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -28,7 +28,8 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
-import type { KerningPosition, PointId } from "@shift/types";
+import type { PositionGuide } from "@shift/editor/types";
+import type { KerningPosition, PointId, SourceMetrics } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 
@@ -79,6 +80,38 @@ export interface EditorTestSurface {
   deleteSelection(mode?: DeleteMode): Promise<boolean>;
   /** Sets the open glyph's advance width, as the sidebar's width field does. */
   setAdvanceWidth(width: number): void;
+  /** Presses the pointer at a glyph-local position, starting a gesture. */
+  pressAt(position: Point2D, modifiers?: Modifiers): void;
+  /**
+   * Moves the pointer to a glyph-local position and lets a frame pass, so the
+   * move is handled. With no button pressed this hovers.
+   */
+  movePointerTo(position: Point2D, modifiers?: Modifiers): void;
+  /** Moves the pointer without a frame passing, so the move is still queued when the next event arrives. */
+  queuePointerMove(position: Point2D, modifiers?: Modifiers): void;
+  /** Releases the pointer at a glyph-local position and waits for the edit it makes. */
+  releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
+  /**
+   * Drags from one glyph-local position to another, crossing the drag
+   * threshold a few units along, and waits for the edit.
+   */
+  dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void>;
+  /**
+   * Copies the selection in place and selects the copy, as Edit › Duplicate does.
+   *
+   * @returns false when there was nothing to copy.
+   */
+  duplicate(): Promise<boolean>;
+  /** Zooms the canvas to the selection, as View › Zoom to Selection does. */
+  zoomToSelection(): void;
+  /** Resizes the canvas, as resizing the window does. */
+  resizeCanvas(width: number, height: number): void;
+  /** Sets the size, in glyph units per em, of the text the open glyph is edited in. */
+  setTextSize(size: number): void;
+  /** Moves the text the open glyph is edited in to a canvas position. */
+  moveText(to: Point2D): void;
+  /** Types into the text run, as the Text tool does. */
+  typeText(text: string): Promise<void>;
 
   /**
    * Sets the kerning between two glyphs at a source, as typing into the
@@ -150,6 +183,44 @@ export interface EditorTestSurface {
   shownCursor(): string;
   /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
   documentState(): Promise<WorkspaceDocumentState | null>;
+  /**
+   * Where the canvas shows each point now, including a gesture not yet
+   * released. Test-only: agents read only committed geometry.
+   */
+  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D>;
+  /**
+   * Where the faint pre-edit outline shows each point while a gesture is in
+   * flight, or null when none is shown. Test-only: not agent data.
+   */
+  editGhost(ids: readonly PointId[]): Record<PointId, Point2D> | null;
+  /** The open glyph's authored outline at the source named `source`, as agents read it. */
+  outlineAt(source: string): Promise<Outline>;
+  /** The id selection uses for the segment from `start` to `end`. */
+  segmentBetween(start: PointId, end: PointId): string;
+  /** The active tool's state, as agents read it. */
+  toolState(): string | null;
+  /** The cursor the active tool asks for, by name (`move`, `bend`, `nwse-resize`). Test-only. */
+  toolCursor(): string;
+  /** The snap guides the active tool draws, in glyph units. Test-only: not agent data. */
+  snapGuides(): readonly PositionGuide[];
+  /** The selection's bounds in glyph units, or null when nothing is selected. */
+  selectionLocalRect(): Rect2D | null;
+  /** Whether Select shows the bounding box around the selection. Test-only. */
+  boundingBoxShown(): boolean;
+  /** How near, in the open glyph's units, the pointer must come to hit something. */
+  hitDistance(): number;
+  /** How many canvas units one screen pixel spans at the current zoom. */
+  pixelSize(): number;
+  /** The font's metrics at the default location, as agents read them. */
+  metrics(): SourceMetrics;
+  /** The id of whatever the pointer hovers, or null. Test-only. */
+  hoveredId(): string | null;
+  /** Whether the session disables tool `name`. */
+  toolDisabled(name: ToolName): boolean;
+  /** How many items the text run holds. */
+  textLength(): number;
+  /** What kind of thing the pointer would hit at a glyph-local position (`canvas`, `point`, `segment`…). Test-only. */
+  targetAt(position: Point2D): string;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;
@@ -162,6 +233,14 @@ export interface EditorTestSurface {
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.
    */
   save(): Promise<WorkspaceDocumentState>;
+  /** Opens the glyph named `name` in the text run, as choosing it in the glyph grid does. */
+  openGlyph(name: string): Promise<void>;
+  /** Adds an axis to the font, as the axes panel does. */
+  addAxis(tag: string, range: { minimum: number; default: number; maximum: number }): Promise<void>;
+  /** Adds a source at a location keyed by axis tag, as the sources panel does. */
+  addSource(name: string, location: Readonly<Record<string, number>>): Promise<void>;
+  /** Edits the sources named `names` together, as Cmd-clicking them in the sources panel does. */
+  editSources(names: readonly string[]): Promise<void>;
 
   /**
    * Saves the document to a temporary file and opens it in a new editor on the
