@@ -126,7 +126,8 @@ export class ShiftEditorReader {
 
   /**
    * What the Spacing tool shows: the sidebearing under the pointer, the one
-   * selected, and the one whose value field is open.
+   * selected, and the one whose value field is open; the last two measured
+   * now, so null once their glyphs are gone.
    *
    * @returns null when the Spacing tool is not active.
    */
@@ -136,10 +137,13 @@ export class ShiftEditorReader {
     if (!(tool instanceof SpacingTool) || !state) return null;
     const hovered =
       state.type === "ready" || state.type === "dragging" ? (state.hit ?? null) : null;
+    const selected =
+      state.type === "ready" && state.selected ? tool.runs.refresh(state.selected) : null;
+    const editing = tool.editing;
     return {
       hovered: hovered ? this.#spacingHalf(hovered) : null,
-      selected: state.type === "ready" && state.selected ? this.#spacingHalf(state.selected) : null,
-      editing: state.type === "editing" ? this.#spacingHalf(state.hit) : null,
+      selected: selected ? this.#spacingHalf(selected) : null,
+      editing: editing ? this.#spacingHalf(editing) : null,
       sameAsHovered: hovered
         ? tool.runs.sameSidebearings(hovered).map((half) => this.#spacingHalf(half))
         : [],
