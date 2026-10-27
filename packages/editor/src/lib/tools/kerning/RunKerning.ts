@@ -129,17 +129,13 @@ export class KerningPair {
     const sourceId = this.source(editor);
     const pair = this.editablePair(editor);
     if (!sourceId || !pair) return false;
-
-    const exception = isGroupSide(pair[position]);
-    const edit = editor.font.kerningCell
-      .peek()
-      .exceptionEdit(sourceId, this.first, this.second, pair, position, exception);
-    if (!edit) return false;
-    editor.font.setKerningValues(
-      [edit],
-      exception ? "Make kerning exception" : "Remove kerning exception",
+    return editor.font.setKerningException(
+      sourceId,
+      this.first,
+      this.second,
+      position,
+      isGroupSide(pair[position]),
     );
-    return true;
   }
 }
 
