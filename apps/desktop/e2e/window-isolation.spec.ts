@@ -16,11 +16,11 @@ test("keeps authored document state isolated between windows", async ({ electron
 
   await openGlyphRoute(firstPage, firstGlyphId);
   await addSquare(firstPage);
-  const firstEditor = new EditorDriver(firstPage);
+  const firstEditor = new EditorDriver(firstPage, electronApp);
   await firstEditor.waitForCanvasRender();
   await firstEditor.selectVisiblePoint();
   await openGlyphRoute(secondPage, secondGlyphId);
-  const secondEditor = new EditorDriver(secondPage);
+  const secondEditor = new EditorDriver(secondPage, electronApp);
 
   expect(await secondEditor.selectionIds()).toEqual([]);
   expect(await secondEditor.pointCount()).toBe(0);
