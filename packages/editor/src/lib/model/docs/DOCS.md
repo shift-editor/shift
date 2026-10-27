@@ -64,7 +64,6 @@ lib/interpolation/
 lib/wasm/
   anchors.ts                 -- anchor kinds, propagation, and anchored placement from shift-font
   variation.ts               -- axis mapping and source weights from shift-font, with module handles
-  names.ts                   -- interned anchor names shared with the module
 types/
   glyph.ts                   -- GlyphReader and model construction contracts
   glyphRender.ts             -- renderer contour/anchor contracts plus passive RenderGlyph
