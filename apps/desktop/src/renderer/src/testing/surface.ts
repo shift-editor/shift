@@ -19,16 +19,30 @@
  */
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
-import type { Point2D } from "@shift/geo";
+import type { AlignmentType, DistributeType } from "@shift/editor/transform";
+import type { Bounds, Point2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
   AuthoredContour,
+  AuthoredLayer,
   AuthoredPoint,
+  FontOverview,
+  GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
+  ResolvedLocation,
 } from "@shift/runtime";
-import type { KerningPosition, PointId } from "@shift/types";
+import type {
+  AnchorId,
+  ComponentId,
+  GlyphName,
+  KerningPosition,
+  MetricKind,
+  PointId,
+  SelectableId,
+} from "@shift/types";
+import type { EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 
@@ -44,6 +58,33 @@ export interface Modifiers {
  * returns them to agents.
  */
 export type Outline = readonly AuthoredContour[];
+
+/** A new axis, as the Axes panel creates one. */
+export interface AxisFixture {
+  readonly tag: string;
+  readonly name: string;
+  readonly minimum: number;
+  readonly default: number;
+  readonly maximum: number;
+}
+
+/** A position along each named axis, keyed by axis tag, in user (external) units. */
+export type AxisLocation = Readonly<Record<string, number>>;
+
+/**
+ * A glyph as the canvas draws it at the current location: interpolated
+ * between sources, with its components decomposed and their anchors shown.
+ * Test-only: agents read authored layers, not the canvas.
+ */
+export interface DrawnGlyph {
+  readonly advanceWidth: number;
+  readonly bounds: Bounds | null;
+  readonly sidebearings: { readonly lsb: number | null; readonly rsb: number | null };
+  /** Each placed component, by its base glyph's name, with the bounds it draws. */
+  readonly components: readonly { readonly glyph: string; readonly bounds: Bounds | null }[];
+  /** The glyph's anchors with those it takes from its components, by name. */
+  readonly anchors: readonly { readonly name: string; readonly x: number; readonly y: number }[];
+}
 
 export interface EditorTestSurface {
   /**
@@ -122,6 +163,71 @@ export interface EditorTestSurface {
   renameKerningGroup(position: KerningPosition, name: string, newName: string): Promise<void>;
   deleteKerningGroup(position: KerningPosition, name: string): Promise<void>;
 
+  /** Opens the glyph named `name` on the canvas, as choosing it in the glyph grid does. */
+  openGlyph(name: string): Promise<void>;
+  /** Replaces the selection with any mix of points, anchors and components. */
+  selectObjects(ids: readonly SelectableId[]): void;
+  /** Clicks twice at a glyph-local position and waits for the edit it makes. */
+  doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Moves the pointer to a glyph-local position without pressing, as hovering does. */
+  hoverAt(position: Point2D): void;
+  /** Drags anchor `id` by `by` in glyph units, as the pointer does, and waits for the edit. */
+  dragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Starts dragging anchor `id` by `by` and holds it before release, so the edit is only previewed. */
+  holdDragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): void;
+  /**
+   * Runs an app command, as its menu item or shortcut does, and waits for the edit.
+   *
+   * @returns false when the command does not apply to the selection.
+   */
+  runCommand(id: EditorCommandId): Promise<boolean>;
+  /** Aligns the selected points to an edge or center of their bounds, as the sidebar's align buttons do. */
+  alignSelection(alignment: AlignmentType): boolean;
+  /** Spaces the selected points evenly, as the sidebar's distribute buttons do. */
+  distributeSelection(type: DistributeType): boolean;
+  /** Mirrors the selection across its center, as the sidebar's flip buttons do. */
+  flipSelection(axis: "horizontal" | "vertical"): boolean;
+  /** Rotates the selection about its center, as the sidebar's rotation field does. */
+  rotateSelection(degrees: number): boolean;
+  /** Sets the open glyph's left sidebearing, moving its outline, as the sidebar's LSB field does. */
+  setLeftSidebearing(value: number): void;
+  /** Sets the open glyph's right sidebearing by changing its advance, as the sidebar's RSB field does. */
+  setRightSidebearing(value: number): void;
+  /** Adds an anchor at a glyph-local position in every source being edited, and selects it. */
+  addAnchorAt(position: Point2D): boolean;
+  /** Renames an anchor in every source being edited, as the sidebar's anchor name field does. */
+  renameAnchor(anchorId: AnchorId, name: string): boolean;
+  /** Moves anchors to one coordinate on an axis, as the sidebar's anchor position fields do. */
+  setAnchorAxis(anchorIds: readonly AnchorId[], axis: "x" | "y", value: number): boolean;
+  /**
+   * Anchors the selected components onto their bases' anchors, or frees them
+   * to stay put, as the sidebar's anchoring toggle does.
+   */
+  setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
+  /** Creates the glyph `name` and adds it as a component, as the Add Component dialog does for a missing glyph. */
+  createGlyphAndAddComponent(name: GlyphName): Promise<ComponentId | null>;
+  /** Adds an axis to the font, as the Axes panel does. */
+  addAxis(axis: AxisFixture): Promise<void>;
+  /**
+   * Replaces the font's axis mappings with one for the axis tagged `tag`, as
+   * the axis mapping editor does.
+   *
+   * @param points - Each user (external) value and the design value it maps to.
+   */
+  mapAxis(tag: string, points: readonly (readonly [user: number, design: number])[]): Promise<void>;
+  /** Adds a source at `location` and moves there, as the Sources panel's add button does. */
+  addSource(name: string, location: AxisLocation): Promise<void>;
+  /** Moves a source's metric line, as the source's metrics fields do. */
+  setSourceMetric(source: string, metric: MetricKind, position: number): Promise<void>;
+  /**
+   * Selects sources for editing, as clicking and Command-clicking rows in the
+   * Sources panel does: the first becomes the active source, and edits apply
+   * to all of them once their layers match.
+   */
+  editSources(names: readonly string[]): Promise<void>;
+  /** Moves to a location, as the axis sliders do; an exact source there becomes active. */
+  setLocation(location: AxisLocation): void;
+
   /** The open glyph's authored outline, as agents read it. */
   outline(): Promise<Outline>;
   /** One authored point of the open glyph, or null when it has none with that id. */
@@ -150,6 +256,25 @@ export interface EditorTestSurface {
   shownCursor(): string;
   /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
   documentState(): Promise<WorkspaceDocumentState | null>;
+
+  /** The open glyph's authored layer at the source named `source`, as agents read it. */
+  layerAt(source: string): Promise<AuthoredLayer>;
+  /** The open glyph's point at a position in the active source, or null. */
+  pointAt(position: Point2D): Promise<AuthoredPoint | null>;
+  /** The open glyph's anchor named `name` in the active source, or null. */
+  anchorNamed(name: string): Promise<AuthoredAnchor | null>;
+  /** The glyph named `name` in the font directory, or null when the font has none. */
+  glyphNamed(name: string): GlyphSummary | null;
+  /** The font's axes, sources, instances and metrics, as agents read them. */
+  fontOverview(): FontOverview;
+  /** The current location resolved: its design coordinates, the source there, and the metrics. */
+  location(): ResolvedLocation;
+  /** Whether the selected components are anchored, as the sidebar's anchoring toggle shows; null without components selected. */
+  selectedComponentsAnchored(): boolean | null;
+  /** Whether Decompose Components applies to the selection. */
+  canDecomposeSelection(): boolean;
+  /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. */
+  drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;
