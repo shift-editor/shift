@@ -4,7 +4,8 @@
  * free functions whose first argument is a class of the codebase (maybe a method), classes named
  * as Manager, Store or Cache wrappers, and the `typescript` skill's signs of a type missing a
  * method: `?.` chains across two objects, the same `filter`/`find` in several files, and files
- * leaning on `?? null` / `?? []`. It reports and never fails; anything a rule can
+ * leaning on `?? null` / `?? []`, spreads of a condition (`...(x ? { a } : {})`, `...(x && { a })`),
+ * and inline functions nested three or more deep. It reports and never fails; anything a rule can
  * decide alone belongs in `scripts/oxlint/shift-plugin.mjs` instead.
  *
  * Usage: node scripts/scan/scan-ts.mjs [--since <rev>] [--kind <kind>]... [<dir>...]
@@ -22,13 +23,15 @@ const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 const ts = createRequire(path.join(repositoryRoot, "package.json"))("typescript");
 
 /** Paths never scanned: dependencies, build output and generated code. */
-const SKIPPED = /(node_modules|[/\\]dist[/\\]|generated|\.d\.ts$|[/\\]e2e[/\\])/;
+const SKIPPED = /(node_modules|[/\\]dist[/\\]|generated|\.d\.ts$|[/\\]e2e[/\\]|[/\\]testing[/\\])/;
 const TEST_FILE = /\.(test|spec)\.tsx?$/;
 const WRAPPER_CLASS = /(Manager|Store|Cache)$/;
 /** A body computing at least this much is reported as a Rust twin. */
 const TWIN_WEIGHT = 4;
 /** A file with this many `?? null` / `?? []` fallbacks is reported. */
 const FALLBACKS = 5;
+/** Callbacks nested this deep or deeper are reported, at the outermost. */
+const CALLBACK_DEPTH = 3;
 
 export const KINDS = [
   "rust-twin",
@@ -37,6 +40,8 @@ export const KINDS = [
   "cross-object-chain",
   "repeated-filter",
   "fallbacks",
+  "conditional-spread",
+  "nested-callbacks",
 ];
 
 /** Reports from one set of TypeScript files, knowing the Rust function names to compare with. */
@@ -129,7 +134,7 @@ class FileScan {
         this.#report(
           "rust-twin",
           node,
-          `${name} computes (weight ${weight}) like fn ${snakeCase(name)}`,
+          `${name} computes (weight ${weight}); same name as fn ${snakeCase(name)}, check whether it ports that rule`,
         );
       }
     }
@@ -167,6 +172,20 @@ class FileScan {
         (ts.isArrayLiteralExpression(node.right) && node.right.elements.length === 0));
     if (fallsBack) this.#fallbacks.push(node);
 
+    const spread =
+      (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) && conditionOf(node.expression);
+    if (spread) {
+      this.#report("conditional-spread", node, node.getText(this.#source).slice(0, 80));
+    }
+
+    if (isCallback(node) && !hasCallbackAncestor(node)) {
+      const depth = callbackDepth(node);
+      if (depth >= CALLBACK_DEPTH) {
+        const call = node.parent.getText(this.#source).split("\n")[0].slice(0, 70);
+        this.#report("nested-callbacks", node, `${depth} functions deep: ${call}`);
+      }
+    }
+
     const filters =
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression) &&
@@ -178,6 +197,49 @@ class FileScan {
       if (predicate.length >= 20) this.predicates.set(predicate, node);
     }
   }
+}
+
+/** The condition a spread chooses on: `x ? {..} : {}` or `x && {..}`; null otherwise. */
+function conditionOf(expression) {
+  let inner = expression;
+  while (ts.isParenthesizedExpression(inner)) inner = inner.expression;
+  const choosing = [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken];
+  if (ts.isConditionalExpression(inner)) return inner;
+  if (ts.isBinaryExpression(inner) && choosing.includes(inner.operatorToken.kind)) return inner;
+  return null;
+}
+
+/**
+ * A function written inline: a callback, a handler, a returned `() => …`. One given a name (a
+ * `const`, an object or class member, such as an arrow-function component) is where nesting starts.
+ */
+function isCallback(node) {
+  if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) return false;
+  const parent = node.parent;
+  const named =
+    ts.isVariableDeclaration(parent) ||
+    ts.isPropertyAssignment(parent) ||
+    ts.isPropertyDeclaration(parent);
+  return !named;
+}
+
+function hasCallbackAncestor(node) {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (isCallback(parent)) return true;
+  }
+  return false;
+}
+
+/** How many callbacks deep the deepest path from `callback` goes, counting itself. */
+function callbackDepth(callback) {
+  let deepest = 0;
+  const walk = (node) => {
+    if (isCallback(node)) deepest = Math.max(deepest, callbackDepth(node));
+    else node.forEachChild(walk);
+  };
+  callback.body.forEachChild(walk);
+  if (isCallback(callback.body)) deepest = Math.max(deepest, callbackDepth(callback.body));
+  return deepest + 1;
 }
 
 /** How much a body computes: loops, branches, arithmetic and array passes, not calls handing work on. */

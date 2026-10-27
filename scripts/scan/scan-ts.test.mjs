@@ -21,7 +21,10 @@ describe("rust-twin", () => {
       ["signed_area"],
     );
     assert.equal(found.length, 1);
-    assert.match(found[0], /^rust-twin signedArea computes/);
+    assert.match(
+      found[0],
+      /^rust-twin signedArea computes \(weight \d+\); same name as fn signed_area/,
+    );
   });
 
   it("ignores a same-named function that hands the work on", () => {
@@ -72,6 +75,47 @@ describe("fallbacks", () => {
       Array.from({ length: 5 }, (_, i) => `const v${i} = map.get(${i}) ?? null;`).join("\n"),
     );
     assert.deepEqual(found, ["fallbacks 5 `?? null` / `?? []` in this file"]);
+  });
+});
+
+describe("conditional-spread", () => {
+  it("reports a spread that chooses on a condition", () => {
+    const found = scan(
+      `const a = { ...(name ? { name } : {}) };\nconst b = { ...(open && { open }) };\nconst c = [...(isMac ? [] : [quit])];`,
+    );
+    assert.equal(found.length, 3);
+    assert.ok(found.every((finding) => finding.startsWith("conditional-spread")));
+  });
+
+  it("ignores a plain spread", () => {
+    assert.deepEqual(scan(`const a = { ...defaults, ...options };`), []);
+  });
+});
+
+describe("nested-callbacks", () => {
+  it("reports callbacks three deep once, at the outermost call", () => {
+    const found = scan(
+      `groups.forEach((group) => group.items.map((item) => item.points.filter((point) => point.on)));`,
+    );
+    assert.deepEqual(found, [
+      "nested-callbacks 3 functions deep: groups.forEach((group) => group.items.map((item) => item.points.filter",
+    ]);
+  });
+
+  it("counts handlers and returned functions, not only method callbacks", () => {
+    const found = scan(
+      `useEffect(() => { const stop = onZoom((zoom) => toasts.some((t) => t.id === zoom)); return () => stop(); });`,
+    );
+    assert.equal(found.length, 1);
+    assert.match(found[0], /^nested-callbacks 3 functions deep: useEffect/);
+  });
+
+  it("starts counting inside a named arrow such as a component", () => {
+    assert.deepEqual(scan(`const Panel = () => items.map((item) => item.id);`), []);
+  });
+
+  it("ignores two levels", () => {
+    assert.deepEqual(scan(`groups.map((group) => group.items.map((item) => item.id));`), []);
   });
 });
 
