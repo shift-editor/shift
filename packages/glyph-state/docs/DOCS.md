@@ -6,7 +6,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types` + `@shift/geo` — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
+- **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types`, `@shift/geo` and `@shift/wasm` (shift-font's geometry rules) — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
 - **Architecture Invariant:** `GlyphGeometry` is a lazy reader over `GlyphStructure + values`. The renderer may cache an instance per reactive state update; rendering paths should not rebuild it inside inner draw loops.
 - **Architecture Invariant:** The flat values layout is owned by Rust (`crates/shift-font/src/interpolation/values.rs`): xAdvance, contour point positions, anchor positions, then component transforms. Readers take every offset and stride from the generated `@shift/types` layout constants (`GLYPH_*_VALUE_*`, `*_COMPONENT_VALUE_*`), either directly or through the cursor helpers in `valueLayout.ts`; never write a literal offset or stride.
 - **Architecture Invariant:** On-curve predicates accept both `onCurve` and `qCurve`. Point factories preserve the requested endpoint type and smooth flag; only off-curve controls force smoothness off.
