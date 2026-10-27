@@ -1010,9 +1010,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return (await this.#authoredLayer()).bounds;
   }
 
-  selectionBox(): Rect2D | null {
-    const bounds = this.selectionSceneBounds();
-    return bounds ? Bounds.toRect(bounds) : null;
+  selectionBox(): Bounds | null {
+    return this.selectionSceneBounds();
   }
 
   asEditor(): Editor {

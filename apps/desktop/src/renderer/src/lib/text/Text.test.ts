@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import { Mat } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
 import { localPoint, scenePoint } from "@shift/editor/spaces";
 import { effect } from "@shift/editor/signals";
 import { characterTextItem, glyphTextItem, type TextItem } from "@shift/editor/text";
@@ -82,6 +84,52 @@ describe("Text layout cells", () => {
 });
 
 describe("TextRunNodeDefinition", () => {
+  // No resize handle shows for several run glyphs selected at the run level, so
+  // this drives the run's transform target directly.
+  it("scales each glyph from its own edge, and a component follows its scaled base once", async () => {
+    const editor = await new TestEditor().startSession();
+    await editor.addGlyph("B", 66);
+    const bRecord = editor.font.recordForName("B" as GlyphName)!;
+    const bLayer = (await editor.font.loadGlyph(bRecord.id)).layerForSource(
+      editor.font.defaultSource.id,
+    )!;
+    const contourId = bLayer.addContour();
+    for (const [x, y] of [
+      [100, 100],
+      [300, 100],
+      [300, 300],
+      [100, 300],
+    ] as const) {
+      bLayer.addPoint(contourId, Point.onCurve({ x, y }));
+    }
+    bLayer.closeContour(contourId);
+    bLayer.setXAdvance(500);
+    const aLayer = editor.requireGlyphLayer();
+    aLayer.addComponent(bRecord.id);
+    editor.selectTool("text");
+    editor.textEditing.insertText("B");
+    editor.escape();
+    editor.selection.clear();
+    editor.escape();
+    await editor.settle();
+
+    editor.selectAll();
+    const edit = editor.transformTarget()!.begin("scale");
+    edit.preview(({ bounds }) =>
+      Mat.Compose(
+        Mat.Translate(bounds.left, bounds.bottom),
+        Mat.Compose(Mat.Scale(2, 2), Mat.Translate(-bounds.left, -bounds.bottom)),
+      ),
+    );
+    edit.commit();
+    await editor.settle();
+
+    expect(bLayer.sidebearings).toEqual({ lsb: 100, rsb: 200 });
+    expect(bLayer.xAdvance).toBe(700);
+    expect(aLayer.components[0]?.matrix).toMatchObject({ a: 1, d: 1, e: 0, f: 0 });
+    await editor.close();
+  });
+
   it("deletes the edited child when any writer removes its item, in the same undo step", async () => {
     const editor = await new TestEditor().startSession();
     const run = editor.textRun!;

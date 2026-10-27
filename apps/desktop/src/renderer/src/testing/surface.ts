@@ -19,7 +19,7 @@
  */
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
-import type { Bounds, Point2D, Rect2D } from "@shift/geo";
+import type { Bounds, Point2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -218,7 +218,7 @@ export interface EditorTestSurface {
   /** The open glyph's outline bounds, as agents read them; null when it has no outline. */
   glyphBounds(): Promise<Bounds | null>;
   /** Where the selection's box is drawn, in canvas units. Test-only: not agent data. */
-  selectionBox(): Rect2D | null;
+  selectionBox(): Bounds | null;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;
