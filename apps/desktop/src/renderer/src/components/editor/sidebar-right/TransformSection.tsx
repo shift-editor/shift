@@ -194,14 +194,14 @@ export const TransformSection = () => {
   const handleRotate90 = () => {
     if (!editable) return;
 
-    rotateSelection(editor, -Math.PI / 2);
+    rotateSelection(editor, -90);
   };
 
   const handleRotate = (angle: number) => {
     if (!editable) return;
 
     const wrapped = angle % 360;
-    rotateSelection(editor, (wrapped * Math.PI) / 180);
+    rotateSelection(editor, wrapped);
     setRotation(wrapped);
   };
 

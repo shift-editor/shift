@@ -945,7 +945,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   rotateSelection(degrees: number): boolean {
-    return rotateSelection(this, (degrees * Math.PI) / 180);
+    return rotateSelection(this, degrees);
   }
 
   async addAxis(axis: AxisFixture): Promise<void> {

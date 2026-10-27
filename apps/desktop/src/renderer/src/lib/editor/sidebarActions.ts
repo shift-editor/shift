@@ -71,10 +71,11 @@ export function distributeSelection(editor: Editor, type: DistributeType): boole
  * rotation field and rotate button do. Selected components rotate about
  * their own centers in every source being edited.
  *
- * @param radians - Counter-clockwise angle in the glyph's y-up units.
+ * @param degrees - Counter-clockwise angle in degrees, in the glyph's y-up units.
  * @returns false when nothing rotatable is selected.
  */
-export function rotateSelection(editor: Editor, radians: number): boolean {
+export function rotateSelection(editor: Editor, degrees: number): boolean {
+  const radians = (degrees * Math.PI) / 180;
   const ids = editor.selection.ids;
   const componentSelection = editor.componentTransformSelection(ids);
   if (componentSelection && !editor.isEditing) {
