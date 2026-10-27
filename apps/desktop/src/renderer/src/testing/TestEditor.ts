@@ -35,7 +35,10 @@ import {
   type GlyphRecord,
   type ComponentId,
   type KerningGroupId,
+  type AxisId,
   type KerningPosition,
+  type Source,
+  type SourceMetrics,
   type SourceId,
   type PointId,
   type Unicode,
@@ -43,7 +46,12 @@ import {
 import type { Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
-import type { GlyphNode, TextRunNode } from "@shift/editor/types";
+import type {
+  GlyphNode,
+  GlyphOutlineTarget,
+  PositionGuide,
+  TextRunNode,
+} from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
 import {
   contourContent,
@@ -57,9 +65,11 @@ import type {
   AuthoredComponent,
   AuthoredLayer,
   AuthoredPoint,
+  EditorTool,
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
+import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
@@ -131,6 +141,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     readonly kerning: ShiftKerningReader;
     readonly editor: ShiftEditorReader;
   };
+  /** Where the pointer pressed by {@link holdDragAt} is now, until {@link releasePointer}. */
+  #heldPointer: ScreenPoint | null = null;
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
   #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
@@ -735,6 +747,116 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.font.deleteKerningGroup(this.#kerningGroupNamed(position, name));
   }
 
+  async dragAt(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.dragLocal(this.#positionDrag(from, to, modifiers));
+  }
+
+  holdDragAt(from: Point2D, to: Point2D, modifiers?: Modifiers): void {
+    const drag = this.#positionDrag(from, to, modifiers);
+    const down = this.localToScreen(drag.down);
+    const start = this.localToScreen(drag.start);
+    this.pointerDown(down.x, down.y, modifiers);
+    this.pointerMove(start.x, start.y, modifiers);
+    this.moveHeldPointer(to, modifiers);
+  }
+
+  moveHeldPointer(to: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(to);
+    this.#heldPointer = screen;
+    this.pointerMove(screen.x, screen.y, modifiers);
+  }
+
+  async releasePointer(modifiers?: Modifiers, at?: Point2D): Promise<void> {
+    const held = this.#heldPointer;
+    if (!held) throw new Error("releasePointer needs a pointer held by holdDragAt");
+    this.#heldPointer = null;
+    const release = at ? this.localToScreen(at) : held;
+    this.pointerUp(release.x, release.y, modifiers);
+    await this.settle();
+  }
+
+  hoverAt(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerMove(screen.x, screen.y, modifiers);
+  }
+
+  /** A drag from `from` to `to`, crossing the drag threshold on a first sample a few units along. */
+  #positionDrag(from: Point2D, to: Point2D, options?: Modifiers): DragInput {
+    const by = { x: to.x - from.x, y: to.y - from.y };
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    return {
+      down: from,
+      start: { x: from.x + (by.x / length) * lead, y: from.y + (by.y / length) * lead },
+      end: to,
+      options,
+    };
+  }
+
+  holdSpaceForHand(): void {
+    this.requestTemporaryTool("hand", {});
+  }
+
+  releaseSpace(): void {
+    this.returnFromTemporaryTool();
+  }
+
+  async addAxis(
+    tag: string,
+    minimum: number,
+    defaultValue: number,
+    maximum: number,
+  ): Promise<void> {
+    this.font.createAxis({
+      tag,
+      name: tag,
+      role: "external",
+      axisType: "continuous",
+      minimum,
+      default: defaultValue,
+      maximum,
+      labels: [],
+      hidden: false,
+    });
+    await this.settle();
+  }
+
+  async addSource(name: string, location: Readonly<Record<string, number>>): Promise<void> {
+    this.createSource(name, this.#locationByTag(location));
+    await this.settle();
+  }
+
+  async deleteSource(name: string): Promise<void> {
+    this.font.deleteSource(this.#sourceNamed(name));
+    await this.settle();
+  }
+
+  moveToLocation(location: Readonly<Record<string, number>>): void {
+    this.setExternalLocation(this.#locationByTag(location));
+  }
+
+  openSource(name: string): void {
+    this.selectSourceForEditing(this.#sourceNamed(name), "single");
+  }
+
+  toggleSourceOutline(name: string): void {
+    this.nodeDefinition("glyph").outlines.toggle({
+      kind: "source",
+      sourceId: this.#sourceNamed(name),
+    });
+  }
+
+  #locationByTag(location: Readonly<Record<string, number>>) {
+    const axes = this.font.getAxes();
+    const byId: Record<AxisId, number> = {};
+    for (const [tag, value] of Object.entries(location)) {
+      const axis = axes.find((candidate) => candidate.tag === tag);
+      if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
+      byId[axis.id] = value;
+    }
+    return externalAxisLocationFromRecord(byId);
+  }
+
   kerning(first: string, second: string): readonly KerningMasterValue[] {
     return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
   }
@@ -829,6 +951,45 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   documentState(): Promise<WorkspaceDocumentState | null> {
     return this.font.editCoordinator.state();
+  }
+
+  drawnOutline(): Outline {
+    return this.#reads.editor.drawnOutline();
+  }
+
+  drawnHandles(): readonly DrawnHandle[] {
+    return this.#reads.editor.drawnHandles();
+  }
+
+  drawnOutlineTargets(): readonly GlyphOutlineTarget[] {
+    return this.#reads.editor.drawnOutlineTargets();
+  }
+
+  drawnSnapGuides(): readonly PositionGuide[] {
+    return this.#reads.editor.drawnSnapGuides();
+  }
+
+  toolState(): EditorTool | null {
+    return this.#reads.editor.inspect("").tool;
+  }
+
+  metrics(): SourceMetrics {
+    const { externalLocation } = this.#reads.editor.inspect("");
+    return this.#reads.font.resolveLocation(externalLocation).metrics;
+  }
+
+  source(name: string): Source | null {
+    return this.#reads.font.getFont().sources.find((source) => source.name === name) ?? null;
+  }
+
+  canvasOffset(): Point2D {
+    return this.pan;
+  }
+
+  clickReach(): number {
+    const node = this.glyphNode;
+    if (!node) throw new Error("clickReach needs an open glyph");
+    return this.hitRadiusIn(node);
   }
 
   async reopen(): Promise<EditorTestSurface> {
