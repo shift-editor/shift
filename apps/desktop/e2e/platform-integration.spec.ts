@@ -56,7 +56,7 @@ async function createEvidenceDocument(
   await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
   const glyphId = await glyphIdForName(workspacePage, "newGlyph");
   await workspacePage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle");
-  const editor = new EditorDriver(workspacePage);
+  const editor = new EditorDriver(workspacePage, electronApp);
   await editor.openGlyph(glyphId);
   expect(await editor.pointCount()).toBe(0);
   expect(await addSquare(workspacePage)).toBe(4);
@@ -102,7 +102,7 @@ async function reopenAndVerify(
   await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
   const workspacePage = await workspaceWindow;
   await waitForWorkspaceReady(workspacePage);
-  const editor = new EditorDriver(workspacePage);
+  const editor = new EditorDriver(workspacePage, relaunchedApp);
   await editor.openGlyph(glyphId);
   expect(await editor.pointCount()).toBe(4);
   await attachScreenshot(testInfo, "reopened-editor", workspacePage);
