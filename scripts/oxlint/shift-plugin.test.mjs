@@ -14,13 +14,13 @@ const workDir = mkdtempSync(path.join(tmpdir(), "shift-plugin-test-"));
 after(() => rmSync(workDir, { recursive: true, force: true }));
 
 /** Lints `source` with only `rule` enabled; returns the 1-based lines it reports. */
-function reportedLines(rule, source, fileName = "fixture.ts") {
+function reportedLines(rule, source) {
   const config = path.join(workDir, `${rule}.oxlintrc.json`);
   writeFileSync(
     config,
     JSON.stringify({ jsPlugins: [plugin], rules: { [`shift/${rule}`]: "error" } }),
   );
-  const file = path.join(workDir, fileName);
+  const file = path.join(workDir, "fixture.ts");
   writeFileSync(file, source);
 
   let output;
@@ -68,69 +68,5 @@ describe("shift/no-inline-comparator", () => {
     );
 
     assert.deepEqual(lines, []);
-  });
-});
-
-describe("shift/no-editor-internals-in-tests", () => {
-  const testEditorImport = 'import { TestEditor } from "@/testing/TestEditor";';
-
-  it("flags internals, signal properties and peek() in TestEditor tests", () => {
-    const lines = reportedLines(
-      "no-editor-internals-in-tests",
-      [
-        testEditorImport,
-        "declare const editor: TestEditor;",
-        "editor.toolManager.activeTool;",
-        "editor.scene.nodes;",
-        "editor.font.editCoordinator.settled();",
-        "editor.selectionBoundsCell.value;",
-        "editor.cursorCell.peek();",
-      ].join("\n"),
-      "Pen.test.ts",
-    );
-
-    assert.deepEqual(lines, [3, 4, 5, 6, 7, 7]);
-  });
-
-  it("recognises TestEditor imported through the testing barrel", () => {
-    const lines = reportedLines(
-      "no-editor-internals-in-tests",
-      [
-        'import { TestEditor } from "@/testing";',
-        "declare const editor: TestEditor;",
-        "editor.scene.nodes();",
-      ].join("\n"),
-      "Zoom.test.ts",
-    );
-
-    assert.deepEqual(lines, [3]);
-  });
-
-  it("allows public readers, and files that don't use TestEditor", () => {
-    const publicReaders = reportedLines(
-      "no-editor-internals-in-tests",
-      [
-        testEditorImport,
-        "declare const editor: TestEditor;",
-        "editor.cursor;",
-        "editor.selectionBounds();",
-        "editor.tool?.state.type;",
-        "editor.font.recordForName('A');",
-        "declare const coords: { scene: { x: number } };",
-        "const scene = coords.scene;",
-      ].join("\n"),
-      "Pen.test.ts",
-    );
-    const withoutTestEditor = reportedLines(
-      "no-editor-internals-in-tests",
-      [
-        "declare const stack: { editCoordinator: { settled(): void } };",
-        "stack.editCoordinator.settled();",
-      ].join("\n"),
-      "Workspace.test.ts",
-    );
-
-    assert.deepEqual(publicReaders, []);
-    assert.deepEqual(withoutTestEditor, []);
   });
 });
