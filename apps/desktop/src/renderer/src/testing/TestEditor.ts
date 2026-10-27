@@ -11,13 +11,16 @@
  * change sets; until then the editor surface under test is tool/input state.
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
-import { Bounds, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintGlyphId,
   mintLayerId,
@@ -25,6 +28,7 @@ import {
   type GlyphName,
   type AnchorId,
   type GlyphRecord,
+  type ComponentId,
   type PointId,
   type Unicode,
 } from "@shift/types";
@@ -33,6 +37,14 @@ import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type { GlyphNode, TextRunNode } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
+import {
+  contourContent,
+  pointNames,
+  type ComponentFixture,
+  type GlyphFixture,
+  type PointNames,
+} from "./fixtures";
+import type { EditorTestSurface, Modifiers, Outline } from "./surface";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -65,9 +77,21 @@ class InMemorySystemClipboard implements SystemClipboard {
   }
 }
 
-export class TestEditor extends Editor {
+/**
+ * Starts an editor with one open glyph, `A`, and returns it as the surface
+ * behaviour tests use.
+ */
+export async function startTestEditor(
+  sessionMode: FontSessionMode = "workspace",
+): Promise<EditorTestSurface> {
+  return new TestEditor(sessionMode).startSession();
+}
+
+export class TestEditor extends Editor implements EditorTestSurface {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
+  /** The temporary directory {@link reopen} saved into, removed on {@link close}. */
+  #reopenedFrom: string | null = null;
 
   /**
    * Creates a real editor stack with the requested immutable session capability.
@@ -226,10 +250,9 @@ export class TestEditor extends Editor {
    * Awaits every queued and in-flight apply, then text shaping and the glyph
    * loads it asks for; geometry and text reads see confirmed truth after.
    */
-  async settle(): Promise<this> {
+  async settle(): Promise<void> {
     await this.font.editCoordinator.settled();
     await this.text.settled();
-    return this;
   }
 
   get clipboardBuffer(): string {
@@ -321,7 +344,8 @@ export class TestEditor extends Editor {
     this.toolManager.handlePointerDown(screenPoint(x, y), mods);
     this.toolManager.handlePointerUp(screenPoint(x, y), mods);
 
-    return this.settle();
+    await this.settle();
+    return this;
   }
 
   /**
@@ -467,10 +491,10 @@ export class TestEditor extends Editor {
     return this;
   }
 
-  async pressKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<this> {
+  async pressKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<void> {
     this.keyDown(key, options);
 
-    return this.settle();
+    await this.settle();
   }
 
   escape(): this {
@@ -479,6 +503,161 @@ export class TestEditor extends Editor {
 
   selectTool(name: ToolName): this {
     this.setActiveTool(name);
+    return this;
+  }
+
+  async draw<const F extends GlyphFixture>(fixture: F): Promise<Record<PointNames<F>, PointId>> {
+    const names = {} as Record<PointNames<F>, PointId>;
+    if (fixture.advance !== undefined) this.setXAdvance(fixture.advance);
+
+    const contours = fixture.contours ?? [];
+    if (contours.length > 0) {
+      const ids = this.insertContent(contourContent(contours));
+      if (!ids) throw new Error("draw needs one open glyph to draw into");
+      pointNames(contours).forEach((name, index) => {
+        if (name !== null) (names as Record<string, PointId>)[name] = ids[index] as PointId;
+      });
+    }
+
+    for (const anchor of fixture.anchors ?? []) {
+      if (!this.addAnchorAt({ x: anchor.x, y: anchor.y })) {
+        throw new Error(`draw could not add anchor ${anchor.name}`);
+      }
+      const [anchorId] = this.selection.ids;
+      if (anchorId) this.renameAnchor(anchorId as AnchorId, anchor.name);
+    }
+
+    for (const component of fixture.components ?? []) await this.#drawComponent(component);
+
+    this.selection.clear();
+    await this.settle();
+    return names;
+  }
+
+  /** Adds a component and moves it as the sidebar's position fields do. */
+  async #drawComponent(component: ComponentFixture): Promise<void> {
+    const base = this.font.recordForName(component.glyph as GlyphName);
+    if (!base) throw new Error(`draw needs a glyph named ${component.glyph}`);
+
+    const id: ComponentId | null = await this.addComponent(base.id);
+    if (!id) throw new Error(`draw could not add component ${component.glyph}`);
+
+    const { x = 0, y = 0 } = component;
+    if (x === 0 && y === 0) return;
+    await this.settle();
+    const selection = this.componentTransformSelection([id]);
+    if (!selection) throw new Error(`draw could not move component ${component.glyph}`);
+    selection.layer.transformComponents(selection, "Move components", () => Mat.Translate(x, y));
+  }
+
+  select(ids: readonly PointId[]): void {
+    this.selection.select(ids);
+  }
+
+  async clickAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.clickLocal(position.x, position.y, modifiers);
+  }
+
+  async dragPoint(id: PointId, by: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.dragLocal(this.#pointDrag(id, by, modifiers));
+  }
+
+  holdDrag(id: PointId, by: Point2D, modifiers?: Modifiers): void {
+    const drag = this.#pointDrag(id, by, modifiers);
+    const down = this.localToScreen(drag.down);
+    const start = this.localToScreen(drag.start);
+    const end = this.localToScreen(drag.end);
+
+    this.pointerDown(down.x, down.y, modifiers);
+    this.pointerMove(start.x, start.y, modifiers);
+    this.pointerMove(end.x, end.y, modifiers);
+  }
+
+  /** A drag from point `id` by `by`, crossing the drag threshold on a first sample a few units along. */
+  #pointDrag(id: PointId, by: Point2D, options?: Modifiers): DragInput {
+    const down = this.pointPosition(id);
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    return {
+      down,
+      start: { x: down.x + (by.x / length) * lead, y: down.y + (by.y / length) * lead },
+      end: { x: down.x + by.x, y: down.y + by.y },
+      options,
+    };
+  }
+
+  cancelGesture(): void {
+    this.toolManager.cancelPointerGesture();
+  }
+
+  outline(): Outline {
+    this.#assertWorkspaceSettled();
+    return this.glyphContours.map((contour) => ({
+      closed: contour.closed,
+      points: contour.points.map(({ id, x, y, pointType, smooth }) => ({
+        id,
+        x,
+        y,
+        type: pointType,
+        smooth,
+      })),
+    }));
+  }
+
+  anchors(): readonly { name: string; x: number; y: number }[] {
+    this.#assertWorkspaceSettled();
+    return this.requireGlyphLayer().anchors.map(({ name, x, y }) => ({ name: name ?? "", x, y }));
+  }
+
+  components(): readonly { glyph: string; x: number; y: number }[] {
+    this.#assertWorkspaceSettled();
+    return this.requireGlyphLayer().geometry.components.map((component) => ({
+      glyph: this.font.recordForId(component.baseGlyphId)?.name ?? "",
+      x: component.transform.translateX,
+      y: component.transform.translateY,
+    }));
+  }
+
+  pointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {
+    return Object.fromEntries(ids.map((id) => [id, this.pointPosition(id)])) as Record<
+      PointId,
+      Point2D
+    >;
+  }
+
+  selectionIds(): readonly string[] {
+    return [...this.selection.ids];
+  }
+
+  shownCursor(): string {
+    return this.cursor;
+  }
+
+  documentState(): Promise<WorkspaceDocumentState | null> {
+    return this.font.editCoordinator.state();
+  }
+
+  async reopen(): Promise<EditorTestSurface> {
+    const glyphName = this.glyphRecord?.name;
+    if (!glyphName) throw new Error("reopen needs an open glyph");
+
+    const directory = mkdtempSync(join(tmpdir(), "shift-reopen-"));
+    await this.saveAs(join(directory, "Reopened.shift"));
+    const reopened = new TestEditor();
+    reopened.#reopenedFrom = directory;
+    return reopened.openSession(join(directory, "Reopened.shift"), glyphName);
+  }
+
+  /** Closes the document without saving and disposes the editor. */
+  async close(): Promise<void> {
+    await this.settle();
+    await this.#stack.closeWorkspace(true);
+    this.destroy();
+    this.#stack.dispose();
+    if (this.#reopenedFrom) rmSync(this.#reopenedFrom, { recursive: true, force: true });
+  }
+
+  asEditor(): Editor {
     return this;
   }
 

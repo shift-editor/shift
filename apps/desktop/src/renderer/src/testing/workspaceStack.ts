@@ -27,7 +27,8 @@ export type WorkspaceStack = {
   font: Font;
   createWorkspace(): Promise<void>;
   openWorkspace(sourcePath: string): Promise<void>;
-  closeWorkspace(): Promise<void>;
+  /** Closes the workspace; `discard` drops unsaved edits instead of refusing to close. */
+  closeWorkspace(discard?: boolean): Promise<void>;
   /**
    * Makes the workspace fail the next edit it is sent, as a write the store
    * refuses would, without applying it.
@@ -97,8 +98,8 @@ export function createWorkspaceStack(): WorkspaceStack {
       store.replaceWorkspace(snapshot);
       await editCoordinator.reopenEngine();
     },
-    async closeWorkspace(): Promise<void> {
-      await shell.call("workspace.close", { discard: false });
+    async closeWorkspace(discard = false): Promise<void> {
+      await shell.call("workspace.close", { discard });
     },
     failNextPersist(): void {
       refusals.pending += 1;
