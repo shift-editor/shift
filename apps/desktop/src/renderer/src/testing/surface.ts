@@ -80,8 +80,13 @@ export interface DrawnGlyph {
   readonly advanceWidth: number;
   readonly bounds: Bounds | null;
   readonly sidebearings: { readonly lsb: number | null; readonly rsb: number | null };
-  /** Each placed component, by its base glyph's name, with the bounds it draws. */
-  readonly components: readonly { readonly glyph: string; readonly bounds: Bounds | null }[];
+  /** Each placed component, by its base glyph's name, with where it is placed and the bounds it draws. */
+  readonly components: readonly {
+    readonly glyph: string;
+    readonly dx: number;
+    readonly dy: number;
+    readonly bounds: Bounds | null;
+  }[];
   /** The glyph's anchors with those it takes from its components, by name. */
   readonly anchors: readonly { readonly name: string; readonly x: number; readonly y: number }[];
 }

@@ -16,7 +16,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import {
+  externalAxisLocationFromRecord,
+  independentMappingFor,
+  withIndependentMapping,
+} from "@shift/editor/variation";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import {
   kerningValueEdit,
@@ -877,20 +881,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async openGlyph(name: string): Promise<void> {
-    const glyphId = this.#glyphNamed(name);
-    await this.font.loadGlyph(glyphId);
-    const run = this.textRun;
-    const item = this.text.glyphItem(glyphId);
-    if (!run || !item) throw new Error(`openGlyph could not place ${name}`);
-
-    this.selection.clear();
-    this.history.withoutRecording(() => {
-      this.text.setItems(run.runId, [item]);
-      const child = this.nodeDefinition("textRun").editItem(run, item.id);
-      if (!child) throw new Error(`openGlyph could not place ${name}`);
-      this.enterNode(child.id);
-    });
-    this.toolManager.reset();
+    const glyph = await this.font.loadGlyph(this.#glyphNamed(name));
+    if (!this.openGlyphInPlace(glyph.id)) throw new Error(`openGlyph could not place ${name}`);
     await this.settle();
   }
 
@@ -972,18 +964,20 @@ export class TestEditor extends Editor implements EditorTestSurface {
     points: readonly (readonly [user: number, design: number])[],
   ): Promise<void> {
     const axisId = this.#axisTagged(tag);
-    await this.font.setAxisMappings([
-      {
-        id: mintAxisMappingId(),
-        name: tag,
+    const axis = this.font.getAxes().find((candidate) => candidate.id === axisId)!;
+    const mapping = independentMappingFor(this.font.getAxisMappings(), axis);
+    await this.font.setAxisMappings(
+      withIndependentMapping(this.font.getAxisMappings(), axis, {
+        id: mapping?.id ?? mintAxisMappingId(),
+        name: mapping?.name ?? tag,
         inputs: [axisId],
         outputs: [axisId],
         points: points.map(([user, design]) => ({
           input: { values: { [axisId]: user } },
           output: { values: { [axisId]: design } },
         })),
-      },
-    ]);
+      }),
+    );
     await this.settle();
   }
 
@@ -1013,16 +1007,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.selectSourceForEditing(first);
     for (const sourceId of rest) this.selectSourceForEditing(sourceId, "toggle");
     await this.settle();
-    await this.#editingLayersMatched(rest.length);
-  }
-
-  /** Waits for the editor to match each other editing source's layer to the active one, as it does in the background. */
-  async #editingLayersMatched(count: number): Promise<void> {
-    for (let attempt = 0; attempt < 200; attempt++) {
-      if (this.editingLayerMatchesCell.peek().size >= count) return;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-    throw new Error("The editing sources' layers were never matched");
+    await this.editingLayersMatched();
   }
 
   setLocation(location: AxisLocation): void {
@@ -1094,6 +1079,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
       sidebearings: { lsb, rsb },
       components: model.components.map((component) => ({
         glyph: this.font.entryForId(component.glyphId)?.name ?? component.glyphId,
+        dx: component.transform.e,
+        dy: component.transform.f,
         bounds: plainBounds(component.bounds),
       })),
       anchors: model.anchorsWithComponents.map(({ name, x, y }) => ({ name, x, y })),
