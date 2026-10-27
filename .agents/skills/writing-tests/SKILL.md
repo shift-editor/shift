@@ -44,6 +44,8 @@ Before deleting a test or materially reducing a test file, create a test migrati
 
 Move replacement tests to the new behavioral owner before deleting the old file. Similar-looking coverage is not enough: verify that it exercises the same boundary, failure mode, and state transition. Report removed and replacement test counts in the handoff.
 
+`pnpm scan:ts --since origin/main --kind test-ledger` lists the cases a branch removed and added, cases making fewer `expect` calls, and exact matchers it weakened (`toBe(4)` to `toBeGreaterThan(0)`); start the ledger from it. `--kind refactor-churn` lists the behaviour tests the branch touched: a refactor should touch none.
+
 Example:
 
 | Removed test                               | Protected invariant                                                                             | Replacement                                               |
@@ -198,7 +200,7 @@ Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, vari
 Before committing a test, run through these. Any miss means the test is wrong.
 
 1. **Mental deletion.** Replace the method body under test with `throw new Error("unimplemented")`. Does your test fail? If it still passes, you wrote a tautology — usually because you asserted on a value you constructed rather than on a consequence.
-2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method.
+2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method. `asEditor()` goes only straight into a call that needs an `Editor`, never read from or kept. Enforced by `shift/no-escape-hatch-reads`.
 3. **Specific assertions.** `expect(editor.pointCount).toBe(4)` — yes. `expect(result).toBeDefined()` or `expect(spy).toHaveBeenCalled()` — no, those survive any implementation.
 4. **Correct code path.** If the real production path goes through command history + bridge + signals, your test goes through those too. You didn't reach behind the facade.
 5. **Focused body.** Keep unit-test bodies under roughly 15 lines. E2E flows may be longer when the visible workflow requires it, but each test still protects one behavior and repeated plumbing belongs in `EditorDriver` or the owning fixture.

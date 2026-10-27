@@ -63,6 +63,14 @@
       "rules": {
         "typescript/no-explicit-any": "error"
       }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/testing/**/*.ts"],
+      "rules": {
+        "shift/no-escape-hatch-reads": "error",
+        "shift/no-test-type-escapes": "off",
+        "shift/no-wire-shapes-in-tests": "off"
+      }
     }
   ]
 }
