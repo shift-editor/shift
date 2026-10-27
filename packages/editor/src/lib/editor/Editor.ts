@@ -115,7 +115,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
+import type { GlyphNode, NodeKind, ShiftNode, TextRunNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -1930,6 +1930,43 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /**
+   * Opens a glyph on the canvas, as picking it in the glyph grid does: the
+   * canvas text becomes that glyph alone, edited in place.
+   *
+   * @remarks
+   * Until pages exist the canvas has one text run at the scene origin,
+   * created here when there is none yet. A glyph already edited in place is
+   * entered again rather than replaced. Opening is navigation, never a
+   * history entry.
+   *
+   * @returns The glyph's node, or null when the glyph is not loaded.
+   */
+  public openGlyphInText(glyphId: GlyphId): GlyphNode | null {
+    const runs = this.nodeDefinition("textRun");
+    const run =
+      this.scene.first("textRun") ??
+      this.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: this.text.createRun([]).id,
+        size: this.font.metricsCell.peek().unitsPerEm,
+        position: { x: 0, y: 0 },
+      });
+    const previous = runs.childGlyph(run);
+    return this.history.withoutRecording(() => {
+      if (previous?.glyphId === glyphId) {
+        this.enterNode(previous.id);
+        return previous;
+      }
+      const item = this.text.glyphItem(glyphId);
+      if (!item) return null;
+      this.text.setItems(run.runId, [item]);
+      const child = runs.editItem(run, item.id);
+      if (child) this.enterNode(child.id);
+      return child;
+    });
   }
 
   /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
