@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -13,14 +13,19 @@ const workDir = mkdtempSync(path.join(tmpdir(), "shift-plugin-test-"));
 
 after(() => rmSync(workDir, { recursive: true, force: true }));
 
-/** Lints `source` with only `rule` enabled; returns the 1-based lines it reports, in order. */
-function reportedLines(rule, source) {
+/**
+ * Lints `source` with only `rule` enabled; returns the 1-based lines it reports.
+ *
+ * @param fileName - Where the source lives, relative to a scratch root, for rules scoped by path.
+ */
+function reportedLines(rule, source, fileName = "fixture.ts") {
   const config = path.join(workDir, `${rule}.oxlintrc.json`);
   writeFileSync(
     config,
     JSON.stringify({ jsPlugins: [plugin], rules: { [`shift/${rule}`]: "error" } }),
   );
-  const file = path.join(workDir, "fixture.ts");
+  const file = path.join(workDir, fileName);
+  mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, source);
 
   let output;
@@ -69,6 +74,45 @@ describe("shift/no-inline-comparator", () => {
     );
 
     assert.deepEqual(lines, []);
+  });
+});
+
+describe("shift/no-page-evaluate-in-specs", () => {
+  const evaluations = [
+    "declare const page: any;",
+    "declare const electronApp: any;",
+    "declare const canvas: any;",
+    "await page.evaluate(() => window.shift);",
+    "await electronApp.evaluate(({ app }) => app.getName());",
+    "await canvas.evaluate((element) => element.scrollTop);",
+    "await page.locator('li').evaluateAll((items) => items.length);",
+    "await page.evaluateHandle(() => window);",
+    "await page.waitForURL(/home/);",
+  ].join("\n");
+
+  it("flags evaluate calls on any receiver in a desktop E2E spec", () => {
+    const lines = reportedLines(
+      "no-page-evaluate-in-specs",
+      evaluations,
+      "apps/desktop/e2e/editor.spec.ts",
+    );
+
+    assert.deepEqual(lines, [4, 5, 6, 7, 8]);
+  });
+
+  it("allows evaluations in E2E fixtures and outside desktop E2E specs", () => {
+    for (const fileName of [
+      "apps/desktop/e2e/fixtures/EditorDriver.ts",
+      "apps/desktop/e2e/fixtures/helpers.spec.ts",
+      "apps/desktop/src/renderer/src/editor.test.ts",
+      "apps/web/e2e/landing.spec.ts",
+    ]) {
+      assert.deepEqual(
+        reportedLines("no-page-evaluate-in-specs", evaluations, fileName),
+        [],
+        fileName,
+      );
+    }
   });
 });
 

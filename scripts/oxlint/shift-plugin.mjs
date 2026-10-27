@@ -67,6 +67,9 @@ function brandsWithHelpers() {
   return brandHelperNames;
 }
 
+/** Playwright calls that run a function inside the page, a main process or an element. */
+const EVALUATE_METHODS = new Set(["evaluate", "evaluateAll", "evaluateHandle"]);
+
 function isAllowedFile(filename, allowList) {
   // oxlint may pass relative or absolute paths
   const normalized = filename.replace(/\\/g, "/");
@@ -1659,6 +1662,45 @@ export default {
               messageId: "useEntityMap",
               data: { field: `#${field.property.name}` },
             });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban running code inside the app from a desktop E2E spec.
+     *
+     * A spec reads the app through `EditorDriver` (whose reads are the agent
+     * read API, the same as the vitest test surface) and acts through the
+     * user surface. `page.evaluate`, `electronApp.evaluate` and their
+     * relatives reach into renderer or main internals instead, so a refactor
+     * breaks the spec while the behaviour holds. Fixtures under `e2e/fixtures/`
+     * own the few evaluations the driver needs.
+     */
+    "no-page-evaluate-in-specs": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useDriver:
+            "Do not call .{{method}}() in an E2E spec. Read through EditorDriver (the agent read API) or act through the UI; put any evaluation the driver needs in e2e/fixtures/. See /writing-e2e-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (!filename.includes("/apps/desktop/e2e/")) return {};
+        if (!filename.endsWith(".spec.ts")) return {};
+        if (filename.includes("/e2e/fixtures/")) return {};
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (callee.type !== "MemberExpression" || callee.computed) return;
+
+            const method = callee.property?.name;
+            if (!EVALUATE_METHODS.has(method)) return;
+
+            context.report({ node, messageId: "useDriver", data: { method } });
           },
         };
       },
