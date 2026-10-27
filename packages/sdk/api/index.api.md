@@ -551,6 +551,7 @@ export class Font {
     nameForUnicode(unicode: Unicode): GlyphName;
     // (undocumented)
     nearestSource(location: ExternalAxisLocation): Source | null;
+    newAnchorName(layerIds: readonly LayerId[]): string;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
