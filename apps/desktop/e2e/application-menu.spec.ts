@@ -266,25 +266,15 @@ authoredTest(
 
     await expect(picker).not.toBeVisible();
     await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
+      .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
     await expect
-      .poll(() =>
-        page.evaluate((baseGlyphId) => {
-          const [object] = window.shift!.editor.objects(window.shift!.editor.selection.ids);
-          return object?.kind === "component" && object.component.glyphId === baseGlyphId;
-        }, candidate.id),
-      )
-      .toBe(true);
+      .poll(async () => {
+        const [selectedId] = await editor.selectionIds();
+        const components = await editor.components();
+        return components.find((component) => component.id === selectedId)?.baseGlyphId ?? null;
+      })
+      .toBe(candidate.id);
 
     const contextTarget = await page.evaluate(() => {
       const editor = window.shift!.editor;
@@ -320,38 +310,16 @@ authoredTest(
     });
     await page.evaluate(() => window.shift!.editor.selection.clear());
     await page.mouse.click(contextTarget.x, contextTarget.y, { button: "right" });
-    await expect
-      .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
-      .toEqual([contextTarget.componentId]);
+    await expect.poll(() => editor.selectionIds()).toEqual([contextTarget.componentId]);
 
     const contextMenuDelete = page.getByRole("menuitem", { name: "Delete", exact: true });
     await expect(contextMenuDelete).toBeVisible();
     await contextMenuDelete.click();
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
-      .toBe(candidate.initialCount);
+    await expect.poll(async () => (await editor.components()).length).toBe(candidate.initialCount);
 
     await editor.undo();
     await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
+      .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
     // The engine restores the layer at once; the component shows, and can be
     // selected, once the workspace confirms the undo and its projection returns.
@@ -369,96 +337,34 @@ authoredTest(
       contextTarget.componentId,
     );
     await editor.press("Delete");
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
-      .toBe(candidate.initialCount);
+    await expect.poll(async () => (await editor.components()).length).toBe(candidate.initialCount);
 
     await editor.undo();
     await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
+      .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
 
     const componentRow = page.getByTestId(`object-${contextTarget.componentId}`);
     await expect(componentRow).toBeVisible();
     await page.evaluate(() => window.shift!.editor.selection.clear());
     await componentRow.click({ button: "right" });
-    await expect
-      .poll(() => page.evaluate(() => window.shift!.editor.selection.ids))
-      .toEqual([contextTarget.componentId]);
+    await expect.poll(() => editor.selectionIds()).toEqual([contextTarget.componentId]);
     await expect(contextMenuDelete).toBeVisible();
     await contextMenuDelete.click();
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
-      .toBe(candidate.initialCount);
+    await expect.poll(async () => (await editor.components()).length).toBe(candidate.initialCount);
 
     await editor.undo();
     await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
+      .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
 
     await componentRow.click();
     await componentRow.press("Backspace");
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
-      .toBe(candidate.initialCount);
+    await expect.poll(async () => (await editor.components()).length).toBe(candidate.initialCount);
 
     await editor.undo();
     await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const editor = window.shift!.editor;
-          const [node] = editor.scene.nodesOfKind("glyph");
-          return node
-            ? editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)?.components
-                .length
-            : undefined;
-        }),
-      )
+      .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
   },
 );
@@ -517,25 +423,14 @@ authoredTest(
     await confirmation.getByRole("button", { name: "Create", exact: true }).click();
 
     await expect
-      .poll(() =>
-        page.evaluate(({ name, initialCount }) => {
-          const session = window.shiftSession!;
-          const editor = window.shift!.editor;
-          const record = session.font.glyphEntries().find((glyph) => glyph.name === name);
-          const [node] = editor.scene.nodesOfKind("glyph");
-          const components = node
-            ? (editor.glyphForId(node.glyphId)?.layerForSource(editor.activeSourceId!)
-                ?.components ?? [])
-            : [];
-
-          return (
-            record !== undefined &&
-            components.length === initialCount + 1 &&
-            components.some(({ baseGlyphId }) => baseGlyphId === record.id)
-          );
-        }, candidate),
-      )
-      .toBe(true);
+      .poll(async () => {
+        const components = await editor.components();
+        return {
+          count: components.length,
+          added: components.some(({ baseGlyphName }) => baseGlyphName === candidate.name),
+        };
+      })
+      .toEqual({ count: candidate.initialCount + 1, added: true });
 
     await clickApplicationMenuItem(page, electronApp, "edit.undo");
     await expect

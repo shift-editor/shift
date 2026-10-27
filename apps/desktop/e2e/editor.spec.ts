@@ -375,17 +375,13 @@ test.describe("Editor view", () => {
     await expect(anchorRow).toBeVisible();
     await anchorRow.click();
 
-    const anchorPosition = () =>
-      page.evaluate(() => {
-        const editor = window.shift!.editor;
-        const id = editor.selection.ids[0];
-        const object = id ? editor.object(id) : null;
-        if (object?.kind !== "anchor") throw new Error("Expected selected anchor");
-        const anchor = object.geometry.anchor(object.anchorId);
-        if (!anchor) throw new Error("Expected anchor geometry");
+    expect(await editor.selectionIds()).toEqual([anchorId]);
+    const anchorPosition = async () => {
+      const anchor = (await editor.anchors()).find((candidate) => candidate.id === anchorId);
+      if (!anchor) throw new Error("Expected the added anchor");
 
-        return { x: anchor.x, y: anchor.y };
-      });
+      return { x: anchor.x, y: anchor.y };
+    };
     const initialPosition = await anchorPosition();
     const properties = glyphProperties(page);
     const targetX = Math.round(initialPosition.x) + 25;
