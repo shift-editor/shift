@@ -345,7 +345,7 @@ onDragCancel(state, ctx) {
 - `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
 - `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
 - `EditorHistory.test.ts` — click, Shift-click, marquee, Shift-marquee, cancellation, compound selection/document replay, redo branching, and failed workspace apply rebasing through real tools and the real workspace.
-- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`, `spacing/Spacing.test.ts`.
+- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Text.test.ts`, `spacing/Spacing.test.ts`. Select behaviour tests live in `apps/desktop/src/renderer/src/behaviour/select/`.
 
 ## Related
 
