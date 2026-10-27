@@ -42,14 +42,14 @@ describe("draw builds a fixture through the editor", () => {
       ],
     });
 
-    expect(editor.outline()).toEqual([
+    expect(await editor.outline()).toMatchObject([
       {
         closed: true,
         points: [
-          expect.objectContaining({ x: 0, y: 0, type: "onCurve", smooth: false }),
-          expect.objectContaining({ x: 0, y: 80, type: "offCurve" }),
-          { id: top, x: 50, y: 100, type: "onCurve", smooth: true },
-          expect.objectContaining({ x: 100, y: 0, type: "onCurve" }),
+          expect.objectContaining({ x: 0, y: 0, pointType: "onCurve", smooth: false }),
+          expect.objectContaining({ x: 0, y: 80, pointType: "offCurve" }),
+          { id: top, x: 50, y: 100, pointType: "onCurve", smooth: true },
+          expect.objectContaining({ x: 100, y: 0, pointType: "onCurve" }),
         ],
       },
     ]);
@@ -58,7 +58,9 @@ describe("draw builds a fixture through the editor", () => {
   it("names anchors as the fixture says", async () => {
     await editor.draw({ advance: 500, anchors: [{ name: "top", x: 250, y: 700 }] });
 
-    expect(editor.anchors()).toEqual([{ name: "top", x: 250, y: 700 }]);
+    expect(await editor.anchors()).toEqual([
+      expect.objectContaining({ name: "top", x: 250, y: 700 }),
+    ]);
   });
 
   it("offsets components as the fixture says", async () => {
@@ -66,7 +68,12 @@ describe("draw builds a fixture through the editor", () => {
     try {
       await font.draw({ components: [{ glyph: "A", x: 150, y: 20 }] });
 
-      expect(font.components()).toContainEqual({ glyph: "A", x: 150, y: 20 });
+      expect(await font.components()).toContainEqual(
+        expect.objectContaining({
+          baseGlyphName: "A",
+          transformation: expect.objectContaining({ dx: 150, dy: 20 }),
+        }),
+      );
     } finally {
       await font.close();
     }

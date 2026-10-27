@@ -1,9 +1,10 @@
-import type { EditorView, FontRevision, ShiftObservation } from "@shift/runtime";
+import type { FontRevision, ShiftObservation } from "@shift/runtime";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
 import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
 import { ShiftFontReader } from "./ShiftFontReader";
+import { ShiftEditorReader } from "./ShiftEditorReader";
 import { ShiftKerningReader } from "./ShiftKerningReader";
 
 /** Serves bounded editor observations for one live renderer window. */
@@ -12,6 +13,7 @@ export class AgentBridge {
   readonly #session: FontSession;
   readonly #reader: ShiftFontReader;
   readonly #kerning: ShiftKerningReader;
+  readonly #editor: ShiftEditorReader;
   readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
   #disposed = false;
@@ -21,6 +23,10 @@ export class AgentBridge {
     this.#session = session;
     this.#reader = new ShiftFontReader(session.font, session.mode);
     this.#kerning = new ShiftKerningReader(session.font);
+    this.#editor = new ShiftEditorReader(
+      session.editor,
+      session.workspace?.applyStatusCell ?? null,
+    );
   }
 
   /** Connects the renderer lane requested by Electron main. */
@@ -40,7 +46,7 @@ export class AgentBridge {
         "capture.editorBounds": () => this.#editorCaptureBounds(),
         "font.revision": ({ ifFontRevision }) => this.#readRevision(ifFontRevision),
         "editor.inspect": ({ ifFontRevision }) =>
-          this.#observe(ifFontRevision, () => this.#inspectEditor()),
+          this.#observe(ifFontRevision, () => this.#editor.inspect(window.location.hash.slice(1))),
         "font.get": ({ ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.getFont()),
         "locations.resolve": ({ location, ifFontRevision }) =>
@@ -122,35 +128,6 @@ export class AgentBridge {
     const { x, y, width, height } = element.getBoundingClientRect();
     if (width <= 0 || height <= 0) throw new Error("The Shift editor is not visible");
     return { x, y, width, height };
-  }
-
-  #inspectEditor(): EditorView {
-    const editor = this.#session.editor;
-    const node = editor.scene.first("glyph");
-    const entry = node ? this.#session.font.entryForId(node.glyphId) : null;
-    const glyph =
-      node && entry
-        ? {
-            glyphId: node.glyphId,
-            name: entry.name,
-            nodeId: node.id,
-            sourceId: node.sourceId,
-          }
-        : null;
-    const tool = editor.tool;
-
-    return {
-      route: window.location.hash.slice(1),
-      glyph,
-      activeSourceId: editor.activeSourceId,
-      editingSourceIds: [...editor.editingSourceIds],
-      externalLocation: [...editor.externalLocation].map(([axisId, value]) => ({ axisId, value })),
-      selectionIds: [...editor.selection.ids],
-      tool: tool ? { id: tool.id, state: tool.state.type } : null,
-      dragging: editor.isDragging,
-      editing: editor.isEditing,
-      applyStatus: this.#session.workspace?.applyStatusCell.peek() ?? null,
-    };
   }
 }
 

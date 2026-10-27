@@ -17,7 +17,12 @@ import { join } from "node:path";
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
-import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
+import {
+  kerningValueEdit,
+  type Glyph,
+  type GlyphRenderModel,
+  type GlyphLayer,
+} from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
@@ -29,6 +34,9 @@ import {
   type AnchorId,
   type GlyphRecord,
   type ComponentId,
+  type KerningGroupId,
+  type KerningPosition,
+  type SourceId,
   type PointId,
   type Unicode,
 } from "@shift/types";
@@ -44,6 +52,17 @@ import {
   type GlyphFixture,
   type PointNames,
 } from "./fixtures";
+import type {
+  AuthoredAnchor,
+  AuthoredComponent,
+  AuthoredLayer,
+  AuthoredPoint,
+  KerningGroupSummary,
+  KerningMasterValue,
+} from "@shift/runtime";
+import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
+import { ShiftFontReader } from "@/agent/ShiftFontReader";
+import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
 import type { EditorTestSurface, Modifiers, Outline } from "./surface";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
@@ -87,11 +106,33 @@ export async function startTestEditor(
   return new TestEditor(sessionMode).startSession();
 }
 
+/**
+ * Opens a saved document with `glyphName` open, and returns it as the surface
+ * behaviour tests use.
+ */
+export async function openTestEditor(
+  sourcePath: string,
+  glyphName: string,
+): Promise<EditorTestSurface> {
+  return new TestEditor().openSession(sourcePath, glyphName);
+}
+
 export class TestEditor extends Editor implements EditorTestSurface {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
-  /** The temporary directory {@link reopen} saved into, removed on {@link close}. */
-  #reopenedFrom: string | null = null;
+  /** Temporary directories this editor's document was saved into, removed on {@link close}. */
+  readonly #temporaryDirectories: string[] = [];
+  /**
+   * The agent readers MCP serves, over this editor: every surface read goes
+   * through them, so a test sees what an agent sees.
+   */
+  readonly #reads: {
+    readonly font: ShiftFontReader;
+    readonly kerning: ShiftKerningReader;
+    readonly editor: ShiftEditorReader;
+  };
+  /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
+  #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
   /**
    * Creates a real editor stack with the requested immutable session capability.
@@ -104,6 +145,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
     this.#clipboard = clipboard;
+    this.#reads = {
+      font: new ShiftFontReader(stack.font, sessionMode),
+      kerning: new ShiftKerningReader(stack.font),
+      editor: new ShiftEditorReader(this, stack.editCoordinator.applyStatusCell),
+    };
     registerBuiltInTools(this);
     this.setActiveTool("select");
   }
@@ -150,9 +196,17 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#stack.failNextPersist();
   }
 
-  /** Flushes pending edits and saves to the current target. */
-  save(): Promise<WorkspaceDocumentState> {
-    return this.#stack.editCoordinator.save(null);
+  /**
+   * Flushes pending edits and saves to the current target; a document never
+   * saved yet goes to a temporary file, removed on {@link close}.
+   */
+  async save(): Promise<WorkspaceDocumentState> {
+    const state = await this.#stack.editCoordinator.state();
+    if (!state?.needsSaveAs) return this.#stack.editCoordinator.save(null);
+
+    const directory = mkdtempSync(join(tmpdir(), "shift-saved-"));
+    this.#temporaryDirectories.push(directory);
+    return this.saveAs(join(directory, "Saved.shift"));
   }
 
   /** Closes the clean workspace and permanently disposes this test stack. */
@@ -588,45 +642,185 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   cancelGesture(): void {
     this.toolManager.cancelPointerGesture();
+    this.#kerningPreview?.discard();
+    this.#kerningPreview = null;
   }
 
-  outline(): Outline {
-    this.#assertWorkspaceSettled();
-    return this.glyphContours.map((contour) => ({
-      closed: contour.closed,
-      points: contour.points.map(({ id, x, y, pointType, smooth }) => ({
-        id,
-        x,
-        y,
-        type: pointType,
-        smooth,
-      })),
-    }));
+  setAdvanceWidth(width: number): void {
+    this.setXAdvance(width);
   }
 
-  anchors(): readonly { name: string; x: number; y: number }[] {
-    this.#assertWorkspaceSettled();
-    return this.requireGlyphLayer().anchors.map(({ name, x, y }) => ({ name: name ?? "", x, y }));
+  async advanceWidth(): Promise<number> {
+    return (await this.#authoredLayer()).advanceWidth;
   }
 
-  components(): readonly { glyph: string; x: number; y: number }[] {
-    this.#assertWorkspaceSettled();
-    return this.requireGlyphLayer().geometry.components.map((component) => ({
-      glyph: this.font.recordForId(component.baseGlyphId)?.name ?? "",
-      x: component.transform.translateX,
-      y: component.transform.translateY,
-    }));
+  setKerning(source: string, first: string, second: string, amount: number | null): void {
+    const sourceId = this.#sourceNamed(source);
+    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
+    const kerning = this.font.kerningCell.peek();
+    if (amount === null) {
+      const applied = kerning.resolve(sourceId, firstId, secondId);
+      if (applied)
+        this.font.setKerningValues([kerningValueEdit(sourceId, applied)], "Remove kerning");
+      return;
+    }
+    const pair = kerning.editablePair(sourceId, firstId, secondId);
+    this.font.setKerningValues([kerningValueEdit(sourceId, pair, amount)], "Change kerning");
   }
 
-  pointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {
-    return Object.fromEntries(ids.map((id) => [id, this.pointPosition(id)])) as Record<
-      PointId,
-      Point2D
-    >;
+  previewKerning(source: string, first: string, second: string, amount: number): void {
+    const sourceId = this.#sourceNamed(source);
+    const pair = this.font.kerningCell
+      .peek()
+      .editablePair(sourceId, this.#glyphNamed(first), this.#glyphNamed(second));
+    this.#kerningPreview ??= this.font.beginKerningEdit();
+    this.#kerningPreview.preview([kerningValueEdit(sourceId, pair, amount)]);
+  }
+
+  async setKerningException(
+    source: string,
+    first: string,
+    second: string,
+    side: KerningPosition,
+    locked: boolean,
+  ): Promise<boolean> {
+    const sourceId = this.#sourceNamed(source);
+    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
+    const kerning = this.font.kerningCell.peek();
+    const pair = kerning.editablePair(sourceId, firstId, secondId);
+    const edit = kerning.exceptionEdit(sourceId, firstId, secondId, pair, side, locked);
+    if (!edit) return false;
+
+    this.font.setKerningValues(
+      [edit],
+      locked ? "Make kerning exception" : "Remove kerning exception",
+    );
+    await this.settle();
+    return true;
+  }
+
+  async createKerningGroup(
+    position: KerningPosition,
+    name: string,
+    glyphs: readonly string[],
+  ): Promise<void> {
+    await this.font.createKerningGroup(
+      position,
+      name,
+      glyphs.map((glyph) => this.#glyphNamed(glyph)),
+    );
+  }
+
+  async moveToKerningGroup(
+    position: KerningPosition,
+    glyphs: readonly string[],
+    group: string | null,
+  ): Promise<void> {
+    await this.font.assignKerningGroup(
+      position,
+      glyphs.map((glyph) => this.#glyphNamed(glyph)),
+      group === null ? null : this.#kerningGroupNamed(position, group),
+    );
+  }
+
+  async renameKerningGroup(
+    position: KerningPosition,
+    name: string,
+    newName: string,
+  ): Promise<void> {
+    await this.font.renameKerningGroup(this.#kerningGroupNamed(position, name), newName);
+  }
+
+  async deleteKerningGroup(position: KerningPosition, name: string): Promise<void> {
+    await this.font.deleteKerningGroup(this.#kerningGroupNamed(position, name));
+  }
+
+  kerning(first: string, second: string): readonly KerningMasterValue[] {
+    return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
+  }
+
+  kerningAt(source: string, first: string, second: string): KerningMasterValue | null {
+    const sourceId = this.#sourceNamed(source);
+    return this.kerning(first, second).find((master) => master.sourceId === sourceId) ?? null;
+  }
+
+  kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null {
+    return this.kerningGroups(position).find((group) => group.name === name) ?? null;
+  }
+
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroupSummary | null {
+    return (
+      this.kerningGroups(position).find((group) =>
+        group.members.some((member) => member.name === glyph),
+      ) ?? null
+    );
+  }
+
+  kerningGroups(position: KerningPosition): readonly KerningGroupSummary[] {
+    return this.#reads.kerning.groups(position);
+  }
+
+  #glyphNamed(name: string): GlyphId {
+    const record = this.font.recordForName(name as GlyphName);
+    if (!record) throw new Error(`The font has no glyph named ${name}`);
+    return record.id;
+  }
+
+  #sourceNamed(name: string): SourceId {
+    const source = this.font.sources.find((candidate) => candidate.name === name);
+    if (!source) throw new Error(`The font has no source named ${name}`);
+    return source.id;
+  }
+
+  #kerningGroupNamed(position: KerningPosition, name: string): KerningGroupId {
+    const group = this.font.kerningCell.peek().groups.named(position, name);
+    if (!group) throw new Error(`The font has no ${position} kerning group named ${name}`);
+    return group.id;
+  }
+
+  async outline(): Promise<Outline> {
+    return (await this.#authoredLayer()).contours;
+  }
+
+  async point(id: PointId): Promise<AuthoredPoint | null> {
+    const outline = await this.outline();
+    return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
+  }
+
+  async anchors(): Promise<readonly AuthoredAnchor[]> {
+    return (await this.#authoredLayer()).anchors;
+  }
+
+  async components(): Promise<readonly AuthoredComponent[]> {
+    return (await this.#authoredLayer()).components;
+  }
+
+  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
+    const outline = await this.outline();
+    const points = new Map(
+      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
+    );
+    return Object.fromEntries(
+      ids.map((id) => {
+        const point = points.get(id);
+        if (!point) throw new Error(`The open glyph has no point ${id}`);
+        return [id, { x: point.x, y: point.y }];
+      }),
+    ) as Record<PointId, Point2D>;
   }
 
   selectionIds(): readonly string[] {
-    return [...this.selection.ids];
+    return this.#reads.editor.inspect("").selectionIds;
+  }
+
+  /**
+   * The open glyph's authored layer at the active source, read as agents read it.
+   *
+   * @throws {Error} while edits are pending, or when no glyph is open.
+   */
+  async #authoredLayer(): Promise<AuthoredLayer> {
+    this.#assertWorkspaceSettled();
+    return this.#reads.font.getLayer(this.requireGlyphLayer().layerId);
   }
 
   shownCursor(): string {
@@ -644,7 +838,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const directory = mkdtempSync(join(tmpdir(), "shift-reopen-"));
     await this.saveAs(join(directory, "Reopened.shift"));
     const reopened = new TestEditor();
-    reopened.#reopenedFrom = directory;
+    reopened.#temporaryDirectories.push(directory);
     return reopened.openSession(join(directory, "Reopened.shift"), glyphName);
   }
 
@@ -654,7 +848,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.#stack.closeWorkspace(true);
     this.destroy();
     this.#stack.dispose();
-    if (this.#reopenedFrom) rmSync(this.#reopenedFrom, { recursive: true, force: true });
+    for (const directory of this.#temporaryDirectories) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   }
 
   asEditor(): Editor {

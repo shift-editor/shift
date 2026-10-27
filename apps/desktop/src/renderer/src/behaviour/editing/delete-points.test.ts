@@ -30,15 +30,17 @@ describe("deleting points", () => {
         e.select([b]);
         expect(await e.deleteSelection()).toBe(true);
       },
-      (e) => {
-        expect(e.outline()).toMatchObject([{ closed: false, points: [{ id: a }, { id: c }] }]);
+      async (e) => {
+        expect(await e.outline()).toMatchObject([
+          { closed: false, points: [{ id: a }, { id: c }] },
+        ]);
       },
     );
   });
 
   it("keeps a closed contour closed when one corner goes", async () => {
     await editor.draw({ contours: [square(100)] });
-    const [corner] = editor.outline()[0]!.points;
+    const [corner] = (await editor.outline())[0]!.points;
 
     await expectEdit(
       editor,
@@ -46,8 +48,8 @@ describe("deleting points", () => {
         e.select([corner!.id]);
         await e.deleteSelection();
       },
-      (e) => {
-        const [contour] = e.outline();
+      async (e) => {
+        const [contour] = await e.outline();
         expect(contour?.closed).toBe(true);
         expect(contour?.points.map(({ x, y }) => ({ x, y }))).toEqual([
           { x: 100, y: 0 },

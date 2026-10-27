@@ -65,7 +65,7 @@ describe("dragging a selected point moves the selection", () => {
     const { a } = await editor.draw({
       contours: [{ points: [{ x: 100, y: 100, name: "a" }, [150, 150]] }],
     });
-    const before = editor.outline();
+    const before = await editor.outline();
     editor.selectTool("select");
     editor.select([a]);
 
@@ -73,6 +73,6 @@ describe("dragging a selected point moves the selection", () => {
     editor.cancelGesture();
     await editor.settle();
 
-    expect(editor.outline()).toEqual(before);
+    expect(await editor.outline()).toEqual(before);
   });
 });
