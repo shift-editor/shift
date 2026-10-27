@@ -31,6 +31,7 @@ import type {
   GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
+  ResolvedLocation,
 } from "@shift/runtime";
 import type {
   AxisId,
@@ -232,6 +233,8 @@ export interface EditorTestSurface {
   glyphNamed(name: string): GlyphSummary | null;
   /** The languages the font tracks; null when none were ever set. Test-only: not agent data yet. */
   languages(): readonly string[] | null;
+  /** The font's metrics at the shown location, as agents resolve them. */
+  shownLocation(): ResolvedLocation;
   /** The zoom level. Test-only: not agent data. */
   zoomLevel(): number;
   /** Where a glyph-local position shows in the viewport, in screen pixels. Test-only: not agent data. */

@@ -66,6 +66,7 @@ import type {
   GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
+  ResolvedLocation,
 } from "@shift/runtime";
 import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
@@ -948,6 +949,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   languages(): readonly string[] | null {
     return this.font.languageIdsCell.peek();
+  }
+
+  shownLocation(): ResolvedLocation {
+    return this.#reads.font.resolveLocation(this.editorView().externalLocation);
   }
 
   zoomLevel(): number {
