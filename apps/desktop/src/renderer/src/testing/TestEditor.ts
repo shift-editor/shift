@@ -41,6 +41,9 @@ import {
 } from "@/lib/editor/sidebarActions";
 import type { EditorCommandId } from "@shared/commands";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Mat, Rect, type Point2D, type Rect2D } from "@shift/geo";
+import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import { applyBooleanSelection } from "@/lib/editor/sidebarActions";
 import {
   mintAxisMappingId,
   mintGlyphId,
@@ -56,6 +59,7 @@ import {
   type AxisId,
   type GlyphRecord,
   type SourceMetrics,
+  type SelectableId,
   type ComponentId,
   type KerningGroupId,
   type AxisId,
@@ -96,6 +100,11 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
   ResolvedGlyph,
+  EditorView,
+  FontOverview,
+  GlyphSummary,
+  KerningGroupSummary,
+  KerningMasterValue,
   ResolvedLocation,
 } from "@shift/runtime";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
@@ -779,6 +788,83 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.settle();
   }
 
+  pointerUpAt(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerUp(screen.x, screen.y, modifiers);
+  }
+
+  async dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void> {
+    const by = { x: to.x - from.x, y: to.y - from.y };
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    await this.dragLocal({
+      down: from,
+      start: { x: from.x + (by.x / length) * lead, y: from.y + (by.y / length) * lead },
+      end: to,
+      options: modifiers,
+    });
+  }
+
+  combineSelectedContours(operation: "union" | "intersect" | "subtract"): Promise<boolean> {
+    return applyBooleanSelection(this, operation);
+  }
+
+  async reverseSelectedContour(): Promise<boolean> {
+    const handled = await runRendererCommand(this, "glyph.reverseSelectedContour");
+    await this.settle();
+    return handled;
+  }
+
+  async addAxis(axis: {
+    readonly tag: string;
+    readonly minimum: number;
+    readonly default: number;
+    readonly maximum: number;
+    readonly role?: "external" | "internal";
+  }): Promise<AxisId> {
+    const axisId = this.font.createAxis({
+      tag: axis.tag,
+      name: axis.tag,
+      role: axis.role ?? "external",
+      axisType: "continuous",
+      minimum: axis.minimum,
+      default: axis.default,
+      maximum: axis.maximum,
+      labels: [],
+      hidden: false,
+    });
+    await this.settle();
+    return axisId;
+  }
+
+  async addSource(name: string, location: Readonly<Record<AxisId, number>>): Promise<SourceId> {
+    const sourceId = this.createSource(name, externalAxisLocationFromRecord(location));
+    await this.settle();
+    return sourceId;
+  }
+
+  setLocation(location: Readonly<Record<AxisId, number>>): void {
+    this.setExternalLocation(externalAxisLocationFromRecord(location));
+  }
+
+  setLanguages(ids: readonly string[]): void {
+    this.setLanguageIds(ids);
+  }
+
+  setViewportSize(width: number, height: number): void {
+    this.setCameraRect(Rect.fromXYWH(0, 0, width, height));
+  }
+
+  zoomTo(level: number): void {
+    this.setZoom(level);
+  }
+
+  frameGlyph(): void {
+    const node = this.glyphNode;
+    if (!node) throw new Error("frameGlyph needs an open glyph");
+    this.fitGlyphFrame(node);
+  }
+
   async advanceWidth(): Promise<number> {
     return (await this.#authoredLayer()).advanceWidth;
   }
@@ -1279,6 +1365,45 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const node = this.glyphNode;
     if (!node) throw new Error("clickReach needs an open glyph");
     return this.hitRadiusIn(node);
+  }
+
+  async outlineBounds(): Promise<Bounds | null> {
+    return (await this.#authoredLayer()).bounds;
+  }
+
+  fontOverview(): FontOverview {
+    return this.#reads.font.getFont();
+  }
+
+  editorView(): EditorView {
+    return this.#reads.editor.inspect("");
+  }
+
+  glyphNamed(name: string): GlyphSummary | null {
+    if (!this.font.recordForName(name as GlyphName)) return null;
+    return this.#reads.font.getGlyph({ name: name as GlyphName });
+  }
+
+  languages(): readonly string[] | null {
+    return this.font.languageIdsCell.peek();
+  }
+
+  shownLocation(): ResolvedLocation {
+    return this.#reads.font.resolveLocation(this.editorView().externalLocation);
+  }
+
+  zoomLevel(): number {
+    return this.zoom;
+  }
+
+  screenPosition(position: Point2D): Point2D {
+    const { x, y } = this.localToScreen(position);
+    return { x, y };
+  }
+
+  viewportCentre(): Point2D {
+    const { x, y } = this.camera.centre;
+    return { x, y };
   }
 
   async reopen(): Promise<EditorTestSurface> {

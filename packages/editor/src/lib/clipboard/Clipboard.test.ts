@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { Clipboard } from "@shift/editor/clipboard";
-import type { ShiftContent, SystemClipboard } from "@shift/editor/clipboard";
+import { Clipboard } from "./Clipboard";
+import type { ShiftContent, SystemClipboard } from "./types";
 
 class MemoryClipboard implements SystemClipboard {
   text = "";
