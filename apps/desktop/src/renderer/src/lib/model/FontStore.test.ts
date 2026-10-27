@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   asAnchorId,
@@ -25,6 +26,7 @@ import { segmentIdFor } from "@shift/glyph-state";
 import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
 import { effect, track } from "@shift/editor/signals";
 import { Font, FontStore } from "@shift/editor/model";
+import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 const GLYPH_ID = "glyph_shared" as GlyphId;
 const SOURCE_ID = "source_regular" as SourceId;
@@ -424,3 +426,47 @@ function valuesFor(glyphStructure: GlyphStructure): Float64Array {
   values[GLYPH_ADVANCE_VALUE_OFFSET] = 600;
   return values;
 }
+
+describe("FontStore interpolation projections follow axis mappings", () => {
+  const fixture = resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs");
+
+  it("replaces cached glyph and metric normalization after mapping edits and undo", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(fixture);
+    const glyph = await stack.font.loadGlyph(stack.font.recordForName("A" as GlyphName)!.id);
+    const axisId = stack.font.getAxes()[0]!.id;
+    const mapping = stack.font.getAxisMappings()[0]!;
+    await stack.font.setAxisMappings([
+      {
+        ...mapping,
+        points: mapping.points.map((point) => ({
+          ...point,
+          output: {
+            values: {
+              [axisId]: Math.max(
+                point.output.values[axisId]!,
+                86 + (point.output.values[axisId]! - 86) * 2,
+              ),
+            },
+          },
+        })),
+      },
+    ]);
+
+    expect(
+      stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
+    ).toBeCloseTo(234);
+    expect(
+      stack.store.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+        .maximum,
+    ).toBeCloseTo(234);
+    await stack.editCoordinator.undo();
+    expect(
+      stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
+    ).toBe(160);
+    expect(
+      stack.store.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+        .maximum,
+    ).toBe(160);
+  });
+});
