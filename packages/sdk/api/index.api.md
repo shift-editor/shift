@@ -290,6 +290,7 @@ export class Editor {
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
     on: EventEmitter["on"];
+    openGlyphInText(glyphId: GlyphId): GlyphNode | null;
     // (undocumented)
     get pan(): Point2D;
     paste(): Promise<boolean>;
@@ -563,6 +564,7 @@ export class Font {
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
