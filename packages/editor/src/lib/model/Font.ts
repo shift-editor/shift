@@ -76,6 +76,7 @@ import {
   locationFromDesignAxisLocation,
 } from "../variation/location";
 import { Designspace } from "../variation/Designspace";
+import { withIndependentMapping } from "../variation/independentMapping";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
@@ -1485,6 +1486,16 @@ export class Font {
       ],
       "Update Axis Mappings",
     );
+  }
+
+  /**
+   * Replaces `axis`'s own mapping (one that maps only that axis to itself)
+   * with `mapping`, keeping its place, or adds it when the axis has none.
+   *
+   * @throws {Error} when the resulting collection is invalid or cannot be persisted.
+   */
+  async setIndependentAxisMapping(axis: Axis, mapping: AxisMapping): Promise<void> {
+    await this.setAxisMappings(withIndependentMapping(this.getAxisMappings(), axis, mapping));
   }
 
   /** Replaces the font-owned metric row definitions as one undoable edit. */

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Axis, AxisMapping, AxisMappingPoint } from "@shift/types";
 import { ascending, mintAxisMappingId, removeBy } from "@shift/types";
-import { independentMappingFor, withIndependentMapping } from "@shift/editor/variation";
+import { independentMappingFor } from "@shift/editor/variation";
 import { Button, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -26,7 +26,7 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
     canonical: stored ?? fallback,
     errorMessage: message("settings.mappingSaveFailed"),
     save: async (nextMapping) => {
-      await font.setAxisMappings(withIndependentMapping(font.getAxisMappings(), axis, nextMapping));
+      await font.setIndependentAxisMapping(axis, nextMapping);
       return independentMappingFor(font.getAxisMappings(), axis) ?? nextMapping;
     },
   });

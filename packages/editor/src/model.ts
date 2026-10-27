@@ -1,4 +1,5 @@
 export { Font } from "./lib/model/Font";
+export { sourceMetricValue, withSourceMetricValue } from "./lib/model/sourceMetrics";
 export { isGroupSide, kerningValueEdit, unkerned, wireSide } from "./lib/model/Kerning";
 export type {
   Kerning,
