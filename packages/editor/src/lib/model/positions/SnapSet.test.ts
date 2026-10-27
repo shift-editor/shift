@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Point2D } from "@shift/geo";
 import type { SourceMetrics } from "@shift/types";
-import { MetricSnap, SnapSet } from "@shift/editor/model";
+import { MetricSnap } from "./MetricSnap";
+import { SnapSet } from "./SnapSet";
 
 const metrics: SourceMetrics = {
   unitsPerEm: 1000,

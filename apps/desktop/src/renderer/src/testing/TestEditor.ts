@@ -16,7 +16,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import {
+  externalAxisLocationFromRecord,
+  independentMappingFor,
+  withIndependentMapping,
+} from "@shift/editor/variation";
+import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import {
   kerningValueEdit,
   sourceMetricValue,
@@ -28,6 +33,13 @@ import {
 import { Select, type ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import {
+  alignSelection,
+  distributeSelection,
+  flipSelection,
+  rotateSelection,
+} from "@/lib/editor/sidebarActions";
+import type { EditorCommandId } from "@shared/commands";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintAxisMappingId,
@@ -37,6 +49,8 @@ import {
   type AxisDefinition,
   type MetricId,
   type GlyphId,
+  type MetricKind,
+  type SelectableId,
   type GlyphName,
   type AnchorId,
   type AxisId,
@@ -77,7 +91,15 @@ import type {
 import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
-import type { AxisValues, EditorTestSurface, Modifiers, Outline } from "./surface";
+import type {
+  AxisFixture,
+  AxisLocation,
+  AxisValues,
+  DrawnGlyph,
+  EditorTestSurface,
+  Modifiers,
+  Outline,
+} from "./surface";
 import { segmentIdFor } from "@shift/glyph-state";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
@@ -1142,11 +1164,131 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.settle();
   }
 
+  async openGlyph(name: string): Promise<void> {
+    const glyph = await this.font.loadGlyph(this.#glyphNamed(name));
+    if (!this.openGlyphInPlace(glyph.id)) throw new Error(`openGlyph could not place ${name}`);
+    await this.settle();
+  }
+
+  selectObjects(ids: readonly SelectableId[]): void {
+    this.selection.select(ids);
+  }
+
+  async doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.clickLocal(position.x, position.y, modifiers);
+    await this.clickLocal(position.x, position.y, modifiers);
+  }
+
+  hoverAt(position: Point2D): void {
+    const screen = this.localToScreen(position);
+    this.updateMousePosition(screen.x, screen.y);
+    this.flushMousePosition();
+  }
+
+  async dragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.dragLocal(this.#dragFrom(this.anchorPosition(id), by, modifiers));
+  }
+
+  holdDragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): void {
+    const drag = this.#dragFrom(this.anchorPosition(id), by, modifiers);
+    for (const [index, point] of [drag.down, drag.start, drag.end].entries()) {
+      const screen = this.localToScreen(point);
+      if (index === 0) this.pointerDown(screen.x, screen.y, modifiers);
+      else this.pointerMove(screen.x, screen.y, modifiers);
+    }
+  }
+
+  /** A drag from `down` by `by`, crossing the drag threshold on a first sample a few units along. */
+  #dragFrom(down: Point2D, by: Point2D, options?: Modifiers): DragInput {
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    return {
+      down,
+      start: { x: down.x + (by.x / length) * lead, y: down.y + (by.y / length) * lead },
+      end: { x: down.x + by.x, y: down.y + by.y },
+      options,
+    };
+  }
+
+  async runCommand(id: EditorCommandId): Promise<boolean> {
+    const handled = await runRendererCommand(this, id);
+    await this.settle();
+    return handled;
+  }
+
+  alignSelection(alignment: AlignmentType): boolean {
+    return alignSelection(this, alignment);
+  }
+
+  distributeSelection(type: DistributeType): boolean {
+    return distributeSelection(this, type);
+  }
+
+  flipSelection(axis: "horizontal" | "vertical"): boolean {
+    return flipSelection(this, axis);
+  }
+
+  rotateSelection(degrees: number): boolean {
+    return rotateSelection(this, degrees);
+  }
+
+  async addAxis(axis: AxisFixture): Promise<void> {
+    this.font.createAxis({
+      ...axis,
+      role: "external",
+      axisType: "continuous",
+      labels: [],
+      hidden: false,
+    });
+    await this.settle();
+  }
+
   async addSource(name: string, location: Readonly<Record<string, number>>): Promise<void> {
     const byId = Object.fromEntries(
       Object.entries(location).map(([tag, value]) => [this.#axisTagged(tag), value]),
     );
     this.createSource(name, externalAxisLocationFromRecord(byId));
+    await this.settle();
+  }
+
+  async mapAxis(
+    tag: string,
+    points: readonly (readonly [user: number, design: number])[],
+  ): Promise<void> {
+    const axisId = this.#axisTagged(tag);
+    const axis = this.font.getAxes().find((candidate) => candidate.id === axisId)!;
+    const mapping = independentMappingFor(this.font.getAxisMappings(), axis);
+    await this.font.setAxisMappings(
+      withIndependentMapping(this.font.getAxisMappings(), axis, {
+        id: mapping?.id ?? mintAxisMappingId(),
+        name: mapping?.name ?? tag,
+        inputs: [axisId],
+        outputs: [axisId],
+        points: points.map(([user, design]) => ({
+          input: { values: { [axisId]: user } },
+          output: { values: { [axisId]: design } },
+        })),
+      }),
+    );
+    await this.settle();
+  }
+
+  async addSource(name: string, location: AxisLocation): Promise<void> {
+    this.createSource(name, externalAxisLocationFromRecord(this.#axisValues(location)));
+    await this.settle();
+  }
+
+  async setSourceMetric(source: string, metric: MetricKind, position: number): Promise<void> {
+    const current = this.font.source(this.#sourceNamed(source));
+    const definition = this.font.metricDefinitions.find(({ kind }) => kind === metric);
+    if (!current || !definition) throw new Error(`The font has no ${metric} for ${source}`);
+
+    await this.font.updateSource({
+      ...current,
+      metricValues: current.metricValues.map((value) =>
+        value.metricId === definition.id ? { ...value, position } : value,
+      ),
+    });
     await this.settle();
   }
 
@@ -1164,6 +1306,93 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return axis.id;
   }
 
+  async editSources(names: readonly string[]): Promise<void> {
+    const [first, ...rest] = names.map((name) => this.#sourceNamed(name));
+    if (!first) throw new Error("editSources needs at least one source");
+
+    this.selectSourceForEditing(first);
+    for (const sourceId of rest) this.selectSourceForEditing(sourceId, "toggle");
+    await this.settle();
+    await this.editingLayersMatched();
+  }
+
+  setLocation(location: AxisLocation): void {
+    this.setExternalLocation(externalAxisLocationFromRecord(this.#axisValues(location)));
+  }
+
+  #axisTagged(tag: string): AxisId {
+    const axis = this.font.getAxes().find((candidate) => candidate.tag === tag);
+    if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
+    return axis.id;
+  }
+
+  #axisValues(location: AxisLocation): Record<AxisId, number> {
+    return Object.fromEntries(
+      Object.entries(location).map(([tag, value]) => [this.#axisTagged(tag), value]),
+    ) as Record<AxisId, number>;
+  }
+
+  async layerAt(source: string): Promise<AuthoredLayer> {
+    this.#assertWorkspaceSettled();
+    const node = this.glyphNode;
+    const layerId = node ? this.font.layerIdFor(node.glyphId, this.#sourceNamed(source)) : null;
+    if (!layerId) throw new Error(`The open glyph has no layer in ${source}`);
+    return this.#reads.font.getLayer(layerId);
+  }
+
+  async pointAt(position: Point2D): Promise<AuthoredPoint | null> {
+    const outline = await this.outline();
+    return (
+      outline
+        .flatMap((contour) => contour.points)
+        .find((point) => point.x === position.x && point.y === position.y) ?? null
+    );
+  }
+
+  async anchorNamed(name: string): Promise<AuthoredAnchor | null> {
+    return (await this.anchors()).find((anchor) => anchor.name === name) ?? null;
+  }
+
+  glyphNamed(name: string): GlyphSummary | null {
+    if (!this.font.entryForName(name as GlyphName)) return null;
+    return this.#reads.font.getGlyph({ name: name as GlyphName });
+  }
+
+  fontOverview(): FontOverview {
+    return this.#reads.font.getFont();
+  }
+
+  location(): ResolvedLocation {
+    return this.#reads.font.resolveLocation(
+      [...this.externalLocation].map(([axisId, value]) => ({ axisId, value })),
+    );
+  }
+
+  async drawnGlyph(glyph?: string): Promise<DrawnGlyph> {
+    const model =
+      glyph === undefined
+        ? this.sceneGlyphRenderModel
+        : (await this.font.loadGlyph(this.#glyphNamed(glyph))).renderModelAt(
+            this.externalLocationCell,
+            this.activeSourceIdCell,
+          );
+    if (!model) throw new Error("drawnGlyph needs an open glyph");
+
+    const { lsb, rsb } = model.sidebearings;
+    return {
+      advanceWidth: model.xAdvance,
+      bounds: plainBounds(model.bounds),
+      sidebearings: { lsb, rsb },
+      components: model.components.map((component) => ({
+        glyph: this.font.entryForId(component.glyphId)?.name ?? component.glyphId,
+        dx: component.transform.e,
+        dy: component.transform.f,
+        bounds: plainBounds(component.bounds),
+      })),
+      anchors: model.anchorsWithComponents.map(({ name, x, y }) => ({ name, x, y })),
+    };
+  }
+
   asEditor(): Editor {
     return this;
   }
@@ -1173,4 +1402,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
       throw new Error("Workspace edits are pending; await the user action before reading geometry");
     }
   }
+}
+
+function plainBounds(bounds: Bounds | null): Bounds | null {
+  return bounds && { min: { ...bounds.min }, max: { ...bounds.max } };
 }

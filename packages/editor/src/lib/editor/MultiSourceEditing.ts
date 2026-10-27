@@ -40,6 +40,7 @@ export class MultiSourceEditing {
   readonly #effect: Effect;
 
   #inputs: readonly unknown[] = [];
+  #matching: Promise<void> = Promise.resolve();
 
   /**
    * Starts reactive matching for the editor's placed glyphs and source selection.
@@ -65,6 +66,11 @@ export class MultiSourceEditing {
     this.#effect = effect(() => this.#prepareMatches(), {
       name: "editor.layers.matching",
     });
+  }
+
+  /** Resolves once the latest requested matches are derived (or superseded). */
+  matched(): Promise<void> {
+    return this.#matching;
   }
 
   /** Returns the live matches keyed by non-reference layer ID. */
@@ -253,7 +259,7 @@ export class MultiSourceEditing {
       return;
     }
 
-    void this.#resolveMatches(layerPairs);
+    this.#matching = this.#resolveMatches(layerPairs);
   }
 
   async #resolveMatches(layerPairs: ReadonlyMap<LayerId, LayerId>): Promise<void> {

@@ -745,6 +745,15 @@ export class Editor {
     return this.#multiSourceEditing.matchesCell;
   }
 
+  /**
+   * Resolves once the layer matches for the current editing sources are
+   * derived, which happens in the background after the sources or a layer's
+   * structure change.
+   */
+  public editingLayersMatched(): Promise<void> {
+    return this.#multiSourceEditing.matched();
+  }
+
   /** Current external user-space coordinate used for displayed font data. */
   public get externalLocation(): ExternalAxisLocation {
     return this.#externalLocation.peek();

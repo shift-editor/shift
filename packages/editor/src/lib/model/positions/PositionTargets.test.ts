@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asAnchorId, asPointId } from "@shift/types";
-import { PositionTargets } from "@shift/editor/model";
+import { PositionTargets } from "./PositionTargets";
 
 describe("PositionTargets", () => {
   it("always carries both lists, empty for the kind not targeted", () => {
