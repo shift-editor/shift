@@ -17,7 +17,13 @@ import { join } from "node:path";
 import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
-import type { Glyph, GlyphRenderModel, GlyphLayer } from "@shift/editor/model";
+import {
+  isGroupSide,
+  kerningValueEdit,
+  type Glyph,
+  type GlyphRenderModel,
+  type GlyphLayer,
+} from "@shift/editor/model";
 import type { ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
@@ -29,6 +35,9 @@ import {
   type AnchorId,
   type GlyphRecord,
   type ComponentId,
+  type KerningGroupId,
+  type KerningPosition,
+  type SourceId,
   type PointId,
   type Unicode,
 } from "@shift/types";
@@ -44,7 +53,15 @@ import {
   type GlyphFixture,
   type PointNames,
 } from "./fixtures";
-import type { EditorTestSurface, Modifiers, Outline } from "./surface";
+import type {
+  EditorTestSurface,
+  KerningGroup,
+  KerningRule,
+  Modifiers,
+  Outline,
+  OutlinePoint,
+  SourceKerning,
+} from "./surface";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -87,11 +104,24 @@ export async function startTestEditor(
   return new TestEditor(sessionMode).startSession();
 }
 
+/**
+ * Opens a saved document with `glyphName` open, and returns it as the surface
+ * behaviour tests use.
+ */
+export async function openTestEditor(
+  sourcePath: string,
+  glyphName: string,
+): Promise<EditorTestSurface> {
+  return new TestEditor().openSession(sourcePath, glyphName);
+}
+
 export class TestEditor extends Editor implements EditorTestSurface {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
-  /** The temporary directory {@link reopen} saved into, removed on {@link close}. */
-  #reopenedFrom: string | null = null;
+  /** Temporary directories this editor's document was saved into, removed on {@link close}. */
+  readonly #temporaryDirectories: string[] = [];
+  /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
+  #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
   /**
    * Creates a real editor stack with the requested immutable session capability.
@@ -150,9 +180,17 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#stack.failNextPersist();
   }
 
-  /** Flushes pending edits and saves to the current target. */
-  save(): Promise<WorkspaceDocumentState> {
-    return this.#stack.editCoordinator.save(null);
+  /**
+   * Flushes pending edits and saves to the current target; a document never
+   * saved yet goes to a temporary file, removed on {@link close}.
+   */
+  async save(): Promise<WorkspaceDocumentState> {
+    const state = await this.#stack.editCoordinator.state();
+    if (!state?.needsSaveAs) return this.#stack.editCoordinator.save(null);
+
+    const directory = mkdtempSync(join(tmpdir(), "shift-saved-"));
+    this.#temporaryDirectories.push(directory);
+    return this.saveAs(join(directory, "Saved.shift"));
   }
 
   /** Closes the clean workspace and permanently disposes this test stack. */
@@ -588,6 +626,151 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   cancelGesture(): void {
     this.toolManager.cancelPointerGesture();
+    this.#kerningPreview?.discard();
+    this.#kerningPreview = null;
+  }
+
+  setAdvanceWidth(width: number): void {
+    this.setXAdvance(width);
+  }
+
+  advanceWidth(): number {
+    this.#assertWorkspaceSettled();
+    return this.requireGlyphLayer().xAdvance;
+  }
+
+  setKerning(source: string, first: string, second: string, amount: number | null): void {
+    const sourceId = this.#sourceNamed(source);
+    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
+    const kerning = this.font.kerningCell.peek();
+    if (amount === null) {
+      const applied = kerning.resolve(sourceId, firstId, secondId);
+      if (applied)
+        this.font.setKerningValues([kerningValueEdit(sourceId, applied)], "Remove kerning");
+      return;
+    }
+    const pair = kerning.editablePair(sourceId, firstId, secondId);
+    this.font.setKerningValues([kerningValueEdit(sourceId, pair, amount)], "Change kerning");
+  }
+
+  previewKerning(source: string, first: string, second: string, amount: number): void {
+    const sourceId = this.#sourceNamed(source);
+    const pair = this.font.kerningCell
+      .peek()
+      .editablePair(sourceId, this.#glyphNamed(first), this.#glyphNamed(second));
+    this.#kerningPreview ??= this.font.beginKerningEdit();
+    this.#kerningPreview.preview([kerningValueEdit(sourceId, pair, amount)]);
+  }
+
+  async setKerningException(
+    source: string,
+    first: string,
+    second: string,
+    side: KerningPosition,
+    locked: boolean,
+  ): Promise<boolean> {
+    const sourceId = this.#sourceNamed(source);
+    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
+    const kerning = this.font.kerningCell.peek();
+    const pair = kerning.editablePair(sourceId, firstId, secondId);
+    const edit = kerning.exceptionEdit(sourceId, firstId, secondId, pair, side, locked);
+    if (!edit) return false;
+
+    this.font.setKerningValues(
+      [edit],
+      locked ? "Make kerning exception" : "Remove kerning exception",
+    );
+    await this.settle();
+    return true;
+  }
+
+  async createKerningGroup(
+    position: KerningPosition,
+    name: string,
+    glyphs: readonly string[],
+  ): Promise<void> {
+    await this.font.createKerningGroup(
+      position,
+      name,
+      glyphs.map((glyph) => this.#glyphNamed(glyph)),
+    );
+  }
+
+  async moveToKerningGroup(
+    position: KerningPosition,
+    glyphs: readonly string[],
+    group: string | null,
+  ): Promise<void> {
+    await this.font.assignKerningGroup(
+      position,
+      glyphs.map((glyph) => this.#glyphNamed(glyph)),
+      group === null ? null : this.#kerningGroupNamed(position, group),
+    );
+  }
+
+  async renameKerningGroup(
+    position: KerningPosition,
+    name: string,
+    newName: string,
+  ): Promise<void> {
+    await this.font.renameKerningGroup(this.#kerningGroupNamed(position, name), newName);
+  }
+
+  async deleteKerningGroup(position: KerningPosition, name: string): Promise<void> {
+    await this.font.deleteKerningGroup(this.#kerningGroupNamed(position, name));
+  }
+
+  kerning(first: string, second: string): readonly SourceKerning[] {
+    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
+    const kerning = this.font.kerningCell.peek();
+    const location = this.font.defaultLocation();
+
+    return this.font.sources.map((source) => ({
+      source: source.name,
+      amount: this.font.kerningBetween(firstId, secondId, location, source.id),
+      rule: kerningRule(kerning.resolve(source.id, firstId, secondId)),
+    }));
+  }
+
+  kerningAt(source: string, first: string, second: string): SourceKerning | null {
+    return this.kerning(first, second).find((kerning) => kerning.source === source) ?? null;
+  }
+
+  kerningGroup(position: KerningPosition, name: string): KerningGroup | null {
+    return this.kerningGroups(position).find((group) => group.name === name) ?? null;
+  }
+
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroup | null {
+    return this.kerningGroups(position).find((group) => group.members.includes(glyph)) ?? null;
+  }
+
+  kerningGroups(position: KerningPosition): readonly KerningGroup[] {
+    return this.font.kerningCell
+      .peek()
+      .groups.atPosition(position)
+      .map((group) => ({
+        name: group.name,
+        position: group.position,
+        members: group.glyphIds.map((id) => this.font.recordForId(id)?.name ?? id),
+      }));
+  }
+
+  #glyphNamed(name: string): GlyphId {
+    const record = this.font.recordForName(name as GlyphName);
+    if (!record) throw new Error(`The font has no glyph named ${name}`);
+    return record.id;
+  }
+
+  #sourceNamed(name: string): SourceId {
+    const source = this.font.sources.find((candidate) => candidate.name === name);
+    if (!source) throw new Error(`The font has no source named ${name}`);
+    return source.id;
+  }
+
+  #kerningGroupNamed(position: KerningPosition, name: string): KerningGroupId {
+    const group = this.font.kerningCell.peek().groups.named(position, name);
+    if (!group) throw new Error(`The font has no ${position} kerning group named ${name}`);
+    return group.id;
   }
 
   outline(): Outline {
@@ -602,6 +785,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
         smooth,
       })),
     }));
+  }
+
+  point(id: PointId): OutlinePoint | null {
+    return (
+      this.outline()
+        .flatMap((contour) => contour.points)
+        .find((point) => point.id === id) ?? null
+    );
   }
 
   anchors(): readonly { name: string; x: number; y: number }[] {
@@ -644,7 +835,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const directory = mkdtempSync(join(tmpdir(), "shift-reopen-"));
     await this.saveAs(join(directory, "Reopened.shift"));
     const reopened = new TestEditor();
-    reopened.#reopenedFrom = directory;
+    reopened.#temporaryDirectories.push(directory);
     return reopened.openSession(join(directory, "Reopened.shift"), glyphName);
   }
 
@@ -654,7 +845,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.#stack.closeWorkspace(true);
     this.destroy();
     this.#stack.dispose();
-    if (this.#reopenedFrom) rmSync(this.#reopenedFrom, { recursive: true, force: true });
+    for (const directory of this.#temporaryDirectories) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   }
 
   asEditor(): Editor {
@@ -666,4 +859,16 @@ export class TestEditor extends Editor implements EditorTestSurface {
       throw new Error("Workspace edits are pending; await the user action before reading geometry");
     }
   }
+}
+
+/** Which kind of authored pair applies, from the pair the kerning resolves to. */
+function kerningRule(
+  applied: { first: GlyphId | KerningGroupId; second: GlyphId | KerningGroupId } | null,
+): KerningRule {
+  if (!applied) return "none";
+  const firstIsGroup = isGroupSide(applied.first);
+  const secondIsGroup = isGroupSide(applied.second);
+  if (firstIsGroup && secondIsGroup) return "group";
+  if (firstIsGroup || secondIsGroup) return "exception";
+  return "glyph";
 }
