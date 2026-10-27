@@ -296,6 +296,8 @@ jobs:
         run: pnpm test:lint
       - name: Test Shift lint rules
         run: pnpm test:lint-rules
+      - name: Test Shift scanners
+        run: pnpm test:scan
       - name: Tailwind design-system lint
         run: pnpm lint:tailwind
       - name: Format check (oxfmt)
