@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   mintPointId,
@@ -757,5 +760,49 @@ describe("GlyphLayer.splitSegment keeps quadratic segments quadratic", () => {
     const segments = layer.contours[0]!.segments();
     expect(segments.map(({ type }) => type)).toEqual(["quad", "quad"]);
     expect(segments.map(({ end }) => end.pointType)).toEqual(["qCurve", "qCurve"]);
+  });
+});
+
+describe("GlyphLayer.addComponent with a base not yet loaded this session", () => {
+  const outputRoots: string[] = [];
+
+  afterEach(() => {
+    for (const root of outputRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** Saves a font whose `base` glyph has one contour, then reopens it on `root` without loading `base`. */
+  async function reopenedWithUnloadedBase(): Promise<TestEditor> {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-unloaded-component-"));
+    outputRoots.push(outputRoot);
+    const savePath = join(outputRoot, "Components.shift");
+
+    const setup = new TestEditor();
+    await setup.startSession("root", null);
+    await setup.addGlyph("base", null);
+    const baseRecord = setup.font.recordForName("base" as GlyphName)!;
+    const base = await setup.font.loadGlyph(baseRecord.id);
+    const baseLayer = base.layerForSource(setup.font.defaultSource.id)!;
+    const contourId = baseLayer.addContour();
+    baseLayer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
+    baseLayer.addPoint(contourId, Point.onCurve({ x: 100, y: 100 }));
+    await setup.saveAs(savePath);
+    await setup.closeSession();
+
+    const editor = new TestEditor();
+    await editor.openSession(savePath, "root");
+    return editor;
+  }
+
+  it("draws the outline of a component added at the layer level once its base loads", async () => {
+    const editor = await reopenedWithUnloadedBase();
+    const baseId = editor.font.recordForName("base" as GlyphName)!.id;
+    const model = editor.sceneGlyphRenderModel!;
+    expect(editor.glyphForId(baseId)).toBeFalsy();
+
+    editor.requireGlyphLayer().addComponent(baseId);
+    await editor.settle();
+
+    await expect.poll(() => model.contours.length).toBe(1);
+    expect(model.components).toHaveLength(1);
   });
 });
