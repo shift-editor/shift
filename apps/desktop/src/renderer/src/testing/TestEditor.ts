@@ -23,7 +23,7 @@ import {
   type GlyphRenderModel,
   type GlyphLayer,
 } from "@shift/editor/model";
-import type { ToolName } from "@shift/editor/tools";
+import { KerningTool, SpacingTool, type ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { Bounds, Mat, type Point2D, type Rect2D } from "@shift/geo";
 import {
@@ -57,8 +57,12 @@ import type {
   AuthoredComponent,
   AuthoredLayer,
   AuthoredPoint,
+  EditorTool,
   KerningGroupSummary,
   KerningMasterValue,
+  KerningToolView,
+  SpacingToolView,
+  TextRunView,
 } from "@shift/runtime";
 import { ShiftEditorReader } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
@@ -685,18 +689,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
     locked: boolean,
   ): Promise<boolean> {
     const sourceId = this.#sourceNamed(source);
-    const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
-    const kerning = this.font.kerningCell.peek();
-    const pair = kerning.editablePair(sourceId, firstId, secondId);
-    const edit = kerning.exceptionEdit(sourceId, firstId, secondId, pair, side, locked);
-    if (!edit) return false;
-
-    this.font.setKerningValues(
-      [edit],
-      locked ? "Make kerning exception" : "Remove kerning exception",
+    const changed = this.font.setKerningException(
+      sourceId,
+      this.#glyphNamed(first),
+      this.#glyphNamed(second),
+      side,
+      locked,
     );
     await this.settle();
-    return true;
+    return changed;
   }
 
   async createKerningGroup(
@@ -851,6 +852,167 @@ export class TestEditor extends Editor implements EditorTestSurface {
     for (const directory of this.#temporaryDirectories) {
       rmSync(directory, { recursive: true, force: true });
     }
+  }
+
+  async openGlyph(name: string): Promise<void> {
+    const glyphId = this.#glyphNamed(name);
+    await this.font.loadGlyph(glyphId);
+    if (!this.openGlyphInText(glyphId)) throw new Error(`openGlyph could not open ${name}`);
+    this.toolManager.reset();
+    await this.settle();
+  }
+
+  setGlyphIdentity(name: string, newName: string, unicodes: readonly number[]): void {
+    this.font.updateGlyphIdentity(
+      this.#glyphNamed(name),
+      newName as GlyphName,
+      unicodes as Unicode[],
+    );
+  }
+
+  showSource(name: string): void {
+    this.selectSource(this.#sourceNamed(name));
+  }
+
+  setLocation(axes: Readonly<Record<string, number>>): void {
+    const values = Object.fromEntries(
+      Object.entries(axes).map(([tag, value]) => [this.#axisTagged(tag), value]),
+    );
+    this.setExternalLocation(externalAxisLocationFromRecord(values));
+  }
+
+  #axisTagged(tag: string): string {
+    const axis = this.font.getAxes().find((candidate) => candidate.tag === tag);
+    if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
+    return axis.id;
+  }
+
+  hoverAt(position: Point2D, modifiers?: Modifiers): void {
+    const screen = this.localToScreen(position);
+    this.pointerMove(screen.x, screen.y, modifiers);
+  }
+
+  async doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.clickLocal(position.x, position.y, modifiers);
+    await this.clickLocal(position.x, position.y, modifiers);
+  }
+
+  async dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void> {
+    await this.dragLocal(this.#dragBetween(from, to, modifiers));
+  }
+
+  holdDragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): void {
+    const drag = this.#dragBetween(from, to, modifiers);
+    const [down, start, end] = [drag.down, drag.start, drag.end].map((point) =>
+      this.localToScreen(point),
+    );
+    this.pointerDown(down!.x, down!.y, modifiers);
+    this.pointerMove(start!.x, start!.y, modifiers);
+    this.pointerMove(end!.x, end!.y, modifiers);
+  }
+
+  /** A drag from `from` to `to`, crossing the drag threshold on a first sample a few units along. */
+  #dragBetween(from: Point2D, to: Point2D, options?: Modifiers): DragInput {
+    const by = { x: to.x - from.x, y: to.y - from.y };
+    const length = Math.hypot(by.x, by.y) || 1;
+    const lead = Math.min(4, length);
+    return {
+      down: from,
+      start: { x: from.x + (by.x / length) * lead, y: from.y + (by.y / length) * lead },
+      end: to,
+      options,
+    };
+  }
+
+  typeText(text: string): void {
+    this.textEditing.typeText(text);
+  }
+
+  pasteText(text: string): void {
+    this.textEditing.insertText(text);
+  }
+
+  moveCaret(
+    direction: -1 | 1,
+    by: "character" | "word" | "line" = "character",
+    extend = false,
+  ): void {
+    this.textEditing.move(direction, by, extend);
+  }
+
+  moveCaretLine(direction: -1 | 1, extend = false): void {
+    this.textEditing.moveVertical(direction, extend);
+  }
+
+  deleteBackward(): void {
+    this.textEditing.deleteBackward();
+  }
+
+  deleteForward(): void {
+    this.textEditing.deleteForward();
+  }
+
+  selectAllText(): void {
+    this.textEditing.selectAll();
+  }
+
+  typeSidebearing(value: number): void {
+    this.#spacing().setEditedSidebearing(value);
+  }
+
+  switchSidebearingSide(): void {
+    this.#spacing().switchEditedSide();
+  }
+
+  closeSidebearingField(): void {
+    this.#spacing().endEditing();
+  }
+
+  typeKerning(value: number): void {
+    this.#kerning().setEditedKerning(value);
+  }
+
+  toggleKerningLock(side: KerningPosition): boolean {
+    const pair = this.#kerning().currentPair;
+    if (!pair) throw new Error("toggleKerningLock needs a selected kern");
+    return pair.toggleLock(this, side);
+  }
+
+  #spacing(): SpacingTool {
+    const tool = this.toolManager.activeTool;
+    if (!(tool instanceof SpacingTool)) throw new Error("The Spacing tool is not active");
+    return tool;
+  }
+
+  #kerning(): KerningTool {
+    const tool = this.toolManager.activeTool;
+    if (!(tool instanceof KerningTool)) throw new Error("The Kerning tool is not active");
+    return tool;
+  }
+
+  toolState(): EditorTool | null {
+    return this.#reads.editor.inspect("").tool;
+  }
+
+  canvasText(): TextRunView | null {
+    return this.#reads.editor.textRun();
+  }
+
+  spacingTool(): SpacingToolView | null {
+    return this.#reads.editor.spacingTool();
+  }
+
+  kerningTool(): KerningToolView | null {
+    return this.#reads.editor.kerningTool();
+  }
+
+  async glyphBounds(): Promise<Bounds | null> {
+    return (await this.#authoredLayer()).bounds;
+  }
+
+  selectionBox(): Rect2D | null {
+    const bounds = this.selectionSceneBounds();
+    return bounds ? Bounds.toRect(bounds) : null;
   }
 
   asEditor(): Editor {

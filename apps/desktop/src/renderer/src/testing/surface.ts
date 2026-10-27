@@ -19,14 +19,18 @@
  */
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { ToolName } from "@shift/editor/tools";
-import type { Point2D } from "@shift/geo";
+import type { Bounds, Point2D, Rect2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
   AuthoredContour,
   AuthoredPoint,
+  EditorTool,
   KerningGroupSummary,
   KerningMasterValue,
+  KerningToolView,
+  SpacingToolView,
+  TextRunView,
 } from "@shift/runtime";
 import type { KerningPosition, PointId } from "@shift/types";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
@@ -121,6 +125,59 @@ export interface EditorTestSurface {
   ): Promise<void>;
   renameKerningGroup(position: KerningPosition, name: string, newName: string): Promise<void>;
   deleteKerningGroup(position: KerningPosition, name: string): Promise<void>;
+  /**
+   * Opens the glyph named `name` on the canvas, as picking it in the glyph
+   * grid does: the text becomes that glyph alone, edited in place.
+   */
+  openGlyph(name: string): Promise<void>;
+  /** Renames a glyph and sets its Unicode values, as the glyph name field does. */
+  setGlyphIdentity(name: string, newName: string, unicodes: readonly number[]): void;
+  /** Shows and edits the source named `name`, as the sources panel does. */
+  showSource(name: string): void;
+  /** Moves the shown location to `axes`, by axis tag, as the axis sliders do. */
+  setLocation(axes: Readonly<Record<string, number>>): void;
+  /** Selects everything in the open glyph, or every glyph of the text when none is edited, as Edit › Select All does. */
+  selectAll(): void;
+  /** Moves the pointer to a glyph-local position without pressing. */
+  hoverAt(position: Point2D, modifiers?: Modifiers): void;
+  /** Double-clicks at a glyph-local position and waits for the edit it makes. */
+  doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Drags from one glyph-local position to another and waits for the edit it makes. */
+  dragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Starts dragging from one glyph-local position to another and holds it before release. */
+  holdDragFrom(from: Point2D, to: Point2D, modifiers?: Modifiers): void;
+  /** Types `text` at the caret in Text mode, as the keyboard does; `"\n"` is Enter. */
+  typeText(text: string): void;
+  /** Pastes `text` at the caret in Text mode, where `/name` picks the glyph named `name`. */
+  pasteText(text: string): void;
+  /**
+   * Moves the caret, as the arrow keys do: by character, by word with Option,
+   * or to the line end with Command. `extend` is Shift, extending the selection.
+   */
+  moveCaret(direction: -1 | 1, by?: "character" | "word" | "line", extend?: boolean): void;
+  /** Moves the caret a line up or down, as the up and down arrows do. */
+  moveCaretLine(direction: -1 | 1, extend?: boolean): void;
+  /** Deletes the selected text or the character before the caret, as Backspace does. */
+  deleteBackward(): void;
+  /** Deletes the selected text or the character after the caret, as Delete does. */
+  deleteForward(): void;
+  /** Selects all the text in Text mode, as Command-A does there. */
+  selectAllText(): void;
+  /** Sets the sidebearing whose value field the Spacing tool has open, as typing into it does. */
+  typeSidebearing(value: number): void;
+  /** Switches the Spacing tool's open value field to the gap's other sidebearing. */
+  switchSidebearingSide(): void;
+  /** Closes the Spacing tool's open value field, as its close button does. */
+  closeSidebearingField(): void;
+  /** Sets the kern whose value field the Kerning tool has open, as typing into it does. */
+  typeKerning(value: number): void;
+  /**
+   * Toggles the lock on one side of the selected kern, as the sidebar's lock
+   * does: a locked side is an exception to its group at the active source.
+   *
+   * @returns false when that side cannot be toggled.
+   */
+  toggleKerningLock(side: KerningPosition): boolean;
 
   /** The open glyph's authored outline, as agents read it. */
   outline(): Promise<Outline>;
@@ -150,6 +207,18 @@ export interface EditorTestSurface {
   shownCursor(): string;
   /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
   documentState(): Promise<WorkspaceDocumentState | null>;
+  /** The active tool and its state, as agents read it. */
+  toolState(): EditorTool | null;
+  /** The canvas text as it shows now: items, placed glyphs, and caret; null when there is none. */
+  canvasText(): TextRunView | null;
+  /** What the Spacing tool shows; null when it is not active. */
+  spacingTool(): SpacingToolView | null;
+  /** What the Kerning tool shows; null when it is not active. */
+  kerningTool(): KerningToolView | null;
+  /** The open glyph's outline bounds, as agents read them; null when it has no outline. */
+  glyphBounds(): Promise<Bounds | null>;
+  /** Where the selection's box is drawn, in canvas units. Test-only: not agent data. */
+  selectionBox(): Rect2D | null;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;

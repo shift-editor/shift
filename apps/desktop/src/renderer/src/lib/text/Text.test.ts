@@ -1,95 +1,158 @@
-import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
+import { beforeEach, describe, expect, it } from "vitest";
+import { localPoint, scenePoint } from "@shift/editor/spaces";
+import { effect } from "@shift/editor/signals";
+import { characterTextItem, glyphTextItem, type TextItem } from "@shift/editor/text";
+import { trackRunLayouts } from "@shift/editor/tools";
+import type { GlyphName, RunId, ShapeUnit } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
-import type { GlyphName, RunId } from "@shift/types";
-import {
-  defaultExternalAxisLocation,
-  externalAxisLocationFromRecord,
-  withExternalAxisValue,
-} from "@shift/editor/variation";
 
-describe("placed text layout follows font location", () => {
-  it("interpolates a run's advance between authored masters", async () => {
-    const editor = new TestEditor();
-    await editor.startSession();
-    const glyph = editor.glyphForId(editor.glyphRecord!.id)!;
-    editor.requireGlyphLayer().setXAdvance(300);
-    await editor.settle();
+const FONTS = resolve(process.cwd(), "../../fixtures/fonts");
 
-    const axisId = editor.font.createAxis({
-      tag: "wght",
-      name: "Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await editor.settle();
-    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-    await editor.settle();
-    glyph.layerForSource(sourceId)!.setXAdvance(500);
-    await editor.settle();
-    editor.setSourceToDefault();
-
-    const run = editor.text.createRun([editor.text.glyphItem(glyph.id)!]);
-    expect(editor.text.layoutCell(run.id).peek()?.totalAdvance).toBeCloseTo(300);
-
-    const midpoint = withExternalAxisValue(
-      defaultExternalAxisLocation(editor.font.getAxes()),
-      editor.font.getAxes()[0]!,
-      550,
+/**
+ * Subject tests of `Text`'s layout cells and the text run node: when a layout
+ * is rebuilt, what keeps a run's edited child in step with its items, and
+ * caret hits in a scaled run, which no user can make yet.
+ */
+describe("Text layout cells", () => {
+  it("keep a run's layout while a point moves, since only anchors place marks", async () => {
+    const editor = await new TestEditor().openSession(
+      resolve(FONTS, "AnchorPropagation.glyphs"),
+      "a",
     );
-    editor.setExternalLocation(midpoint);
-    expect(editor.text.layoutCell(run.id).peek()?.totalAdvance).toBeCloseTo(400);
+    for (const record of editor.font.glyphRecords()) await editor.font.loadGlyph(record.id);
+    const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
+    const layer = editor.requireGlyphLayer();
+    const contourId = layer.addContour();
+    const pointId = layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
+    await editor.settle();
+    const run = editor.text.createRun([glyphTextItem(id("a")), glyphTextItem(id("acutecomb"))]);
+    const layout = editor.text.layoutCell(run.id);
+    // Subscribed the way the canvas holds a run's layout.
+    const subscription = effect(() => void layout.value);
+    await editor.text.settled();
+    const before = layout.peek();
+
+    layer.previewPositionPatch([{ kind: "point", id: pointId, x: 40, y: 0 }]);
+    subscription.dispose();
+
+    expect(layout.peek()).toBe(before);
+    await editor.close();
+  });
+
+  it("keep a run's layout while the caret moves, and rebuild it when items change", async () => {
+    const editor = await new TestEditor().startSession();
+    editor.selectTool("text");
+    const layoutCell = editor.text.layoutCell(editor.textRun!.runId);
+    const initial = layoutCell.peek();
+
+    editor.textEditing.placeAtCluster(0);
+    expect(layoutCell.peek()).toBe(initial);
+    editor.textEditing.insert([characterTextItem(65)]);
+    const populated = layoutCell.peek();
+    expect(populated).not.toBe(initial);
+    editor.textEditing.move(-1, "character");
+    expect(layoutCell.peek()).toBe(populated);
+    await editor.close();
+  });
+
+  it("redraw an overlay tracking every run's layout when the active source changes", async () => {
+    const editor = await new TestEditor().openSession(
+      resolve(FONTS, "mutatorsans-variable/MutatorSans.designspace"),
+      "T",
+    );
+    editor.selectTool("text");
+    editor.textEditing.insert([characterTextItem(65)]);
+    editor.escape();
+    await editor.settle();
+    const placed = () => editor.text.layoutCell(editor.textRun!.runId).peek()!.placedGlyphs;
+    const drawn: number[] = [];
+    const overlay = effect(() => {
+      trackRunLayouts(editor);
+      drawn.push(placed()[1]!.left);
+    });
+
+    editor.selectSource(editor.font.sources.find((source) => source.name === "BoldWide")!.id);
+    overlay.dispose();
+
+    expect(drawn).toHaveLength(2);
+    expect(drawn[1]).not.toBe(drawn[0]);
+    await editor.close();
   });
 });
 
-describe("text items resolve to glyphs", () => {
-  const glyphIds = (editor: TestEditor, runId: RunId) =>
-    editor.text
-      .layoutCell(runId)
-      .peek()!
-      .placedGlyphs.map((placed) => placed.glyph.glyphId);
+describe("TextRunNodeDefinition", () => {
+  it("deletes the edited child when any writer removes its item, in the same undo step", async () => {
+    const editor = await new TestEditor().startSession();
+    const run = editor.textRun!;
+    const child = editor.runGlyph!;
 
-  it("shows a character through the font's Unicode mapping and follows a remap", async () => {
-    const editor = new TestEditor();
-    await editor.startSession();
-    await editor.addGlyph("B", 66);
-    const b = editor.font.recordForName("B" as GlyphName)!;
-    const run = editor.text.createRun(editor.text.itemsFromText("B"));
-    await editor.settle();
-    expect(glyphIds(editor, run.id)).toEqual([b.id]);
+    editor.history.capture("Clear run", () => editor.text.setItems(run.runId, []));
+    expect(editor.scene.node(child.id)).toBeNull();
 
-    editor.font.updateGlyphIdentity(b.id, "B" as GlyphName, []);
-    await editor.settle();
-
-    expect(glyphIds(editor, run.id)).toEqual([null]);
+    await editor.undo();
+    expect(editor.text.run(run.runId)!.items[0]?.id).toBe(child.itemId);
+    expect(editor.scene.node(child.id)).not.toBeNull();
+    await editor.close();
   });
 
-  it("keeps a glyph with no Unicode value by identity, through a rename", async () => {
-    const editor = new TestEditor();
-    await editor.startSession();
-    await editor.addGlyph("a.alt", null);
-    const alt = editor.font.recordForName("a.alt" as GlyphName)!;
-    const run = editor.text.createRun(editor.text.itemsFromText("/a.alt"));
-    expect(run.items).toMatchObject([{ kind: "glyph", glyphId: alt.id }]);
+  it("maps a point in a scaled run to its caret position", async () => {
+    const editor = await new TestEditor().startSession();
+    const run = editor.textRun!;
+    editor.selectTool("text");
+    editor.textEditing.insert([characterTextItem(65)]);
+    editor.scene.updateNode({ id: run.id, size: editor.font.metricsCell.peek().unitsPerEm * 2 });
+    const node = editor.scene.nodeOfKind(run.id, "textRun")!;
+    const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance / 2;
+    const definition = editor.nodeDefinition("textRun");
 
-    editor.font.updateGlyphIdentity(alt.id, "a.ss01" as GlyphName, []);
-    await editor.settle();
+    expect(definition.caretAt(node, localPoint(advance * 1.75, 0))).toBe(2);
+    expect(definition.caretAt(node, editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
+    expect(definition.caretAt(node, localPoint(advance * 10, 0))).toBeNull();
+    await editor.close();
+  });
+});
 
-    expect(glyphIds(editor, run.id)).toEqual([alt.id]);
+/** The unit the workspace shapes for an item; none for a line break. */
+function shapeUnit(item: TextItem): ShapeUnit[] {
+  if (item.kind === "character") return [{ codepoint: item.codepoint }];
+  if (item.kind === "glyph") return [{ glyphId: item.glyphId }];
+
+  return [];
+}
+
+/**
+ * Subject test of the editor's `TextShaper` against the workspace's shaper:
+ * the two must give the same glyphs for the same text.
+ */
+describe("TextShaper", () => {
+  let editor: TestEditor;
+
+  beforeEach(async () => {
+    editor = new TestEditor();
+    await editor.openSession(resolve(FONTS, "ShapingTest.ufo"), "f");
   });
 
-  it("reads a slash before a name the font lacks as literal text", async () => {
-    const editor = new TestEditor();
-    await editor.startSession();
+  const run = (text: string) => editor.text.createRun(editor.text.itemsFromText(text)).id;
+  const placed = (runId: RunId) => editor.text.layoutCell(runId).peek()?.placedGlyphs ?? [];
+  const glyphIds = (runId: RunId) => placed(runId).map((glyph) => glyph.glyph.glyphId);
 
-    const items = editor.text.itemsFromText("/nope");
+  /** The workspace's shaping of the same run, as glyph ids in the order a single-direction line shows them. */
+  const workspaceGlyphIds = async (runId: RunId) => {
+    const units = editor.text.run(runId)!.items.flatMap(shapeUnit);
+    const [runs] = await editor.font.shapeParagraphs([{ units, location: { values: {} } }]);
+    return runs!.flatMap((shaped) => shaped.glyphs.map((glyph) => glyph.glyphId ?? null));
+  };
 
-    expect(items.map((item) => item.kind === "character" && item.codepoint)).toEqual(
-      [..."/nope"].map((char) => char.codePointAt(0)),
-    );
+  it.each([
+    ["a ligature", "fi"],
+    ["ligatures among spaces", "fi fifi f"],
+    ["Arabic joining forms", "ببب بب"],
+    ["marks on a base", "بَّ"],
+  ])("shapes %s to the glyphs the workspace's shaper gives", async (_case, text) => {
+    const runId = run(text);
+    const expected = await workspaceGlyphIds(runId);
+
+    await expect.poll(() => glyphIds(runId)).toEqual(expected);
   });
 });
