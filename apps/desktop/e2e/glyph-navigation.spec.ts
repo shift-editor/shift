@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { openCatalogGlyph } from "./fixtures/appLocators";
 import { addSquare } from "./fixtures/editorInteractions";
+import { createGlyphs } from "./fixtures/fontSetup";
 
 interface NavigationGlyphs {
   firstId: GlyphId;
@@ -10,15 +11,8 @@ interface NavigationGlyphs {
 }
 
 async function createNavigationGlyphs(page: Page): Promise<NavigationGlyphs> {
-  return page.evaluate(async () => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected workspace");
-
-    const first = workspace.editor.createGlyph("navigationA" as GlyphName);
-    const second = workspace.editor.createGlyph("navigationB" as GlyphName);
-    await workspace.font.editCoordinator.settled();
-    return { firstId: first.id, secondId: second.id };
-  });
+  const [first, second] = await createGlyphs(page, ["navigationA", "navigationB"]);
+  return { firstId: first!.id, secondId: second!.id };
 }
 
 async function returnHome(page: Page): Promise<void> {
@@ -81,16 +75,12 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
   );
   await editor.waitForIdle();
 
-  const pointCounts = await page.evaluate(({ firstId, secondId }) => {
-    const editor = window.shift?.editor;
-    const sourceId = editor?.font.defaultSource.id;
-    return {
-      first: sourceId ? editor?.glyphForId(firstId)?.layerForSource(sourceId)?.allPoints.length : 0,
-      second: sourceId
-        ? editor?.glyphForId(secondId)?.layerForSource(sourceId)?.allPoints.length
-        : 0,
-    };
-  }, glyphs);
+  const pointCount = async (glyph: string) =>
+    (await editor.layerOf(glyph)).contours.flatMap((contour) => contour.points).length;
+  const pointCounts = {
+    first: await pointCount("navigationA"),
+    second: await pointCount("navigationB"),
+  };
   expect(pointCounts).toEqual({ first: 1, second: 1 });
 });
 
@@ -121,8 +111,7 @@ test("clears transient editor state when navigating between glyphs", async ({ pa
       toolState: "ready",
     });
   const glyph = await editor.activeGlyph();
-  const editing = await page.evaluate(() => window.shift?.editor.editing.nodeIds);
-  expect(editing).toEqual([glyph?.nodeId]);
+  expect(await editor.editedNodeIds()).toEqual([glyph?.nodeId]);
 
   await returnHome(page);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);

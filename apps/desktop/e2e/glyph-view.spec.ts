@@ -1,44 +1,36 @@
 import type { Page } from "@playwright/test";
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
+import { waitForPageClock, wheelZoomThenPan } from "./fixtures/editorInteractions";
+import { createGlyphWithOutline } from "./fixtures/fontSetup";
 
+/** Four glyphs: one empty, and three with a box as wide as their advance (narrow, wide, extreme). */
 async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; name: string }[]> {
-  return page.evaluate(async () => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected workspace");
-
-    const definitions = [
-      { name: "viewEmpty", width: null },
-      { name: "viewNarrow", width: 20 },
-      { name: "viewWide", width: 1200 },
-      { name: "viewExtreme", width: 5000 },
-    ];
-    const records = definitions.map(({ name }) => workspace.editor.createGlyph(name as GlyphName));
-    await workspace.font.editCoordinator.settled();
-
-    for (const [index, record] of records.entries()) {
-      const width = definitions[index]?.width;
-      const glyph = await workspace.font.loadGlyph(record.id);
-      const layer = glyph.layerForSource(workspace.font.defaultSource.id);
-      if (!layer) throw new Error("Expected authored layer");
-
-      layer.setXAdvance(width ?? 500);
-      if (width === null) continue;
-
-      const contourId = layer.addContour();
-      for (const point of [
-        { x: 0, y: -100 },
-        { x: width, y: -100 },
-        { x: width, y: 900 },
-        { x: 0, y: 900 },
-      ]) {
-        layer.addPoint(contourId, { ...point, pointType: "onCurve", smooth: false });
-      }
-      layer.closeContour(contourId);
-    }
-    await workspace.font.editCoordinator.settled();
-    return records.map(({ id, name }) => ({ id, name }));
-  });
+  const definitions = [
+    { name: "viewEmpty", width: null },
+    { name: "viewNarrow", width: 20 },
+    { name: "viewWide", width: 1200 },
+    { name: "viewExtreme", width: 5000 },
+  ];
+  const glyphs: { id: GlyphId; name: string }[] = [];
+  for (const { name, width } of definitions) {
+    const box =
+      width === null
+        ? []
+        : [
+            {
+              closed: true,
+              points: [
+                { x: 0, y: -100 },
+                { x: width, y: -100 },
+                { x: width, y: 900 },
+                { x: 0, y: 900 },
+              ].map((point) => ({ ...point, pointType: "onCurve" as const, smooth: false })),
+            },
+          ];
+    glyphs.push({ id: await createGlyphWithOutline(page, name, width ?? 500, box), name });
+  }
+  return glyphs;
 }
 
 test("keeps the reported wheel position anchored across the full zoom range", async ({
@@ -79,7 +71,7 @@ test("keeps the reported wheel position anchored across the full zoom range", as
     });
   }
 
-  await expect.poll(() => page.evaluate(() => window.shift?.editor.zoom)).toBe(32);
+  await expect.poll(() => editor.zoomLevel()).toBe(32);
   const projected = await editor.projectSceneToCanvas(anchor.scene);
   expect(projected.x).toBeCloseTo(anchor.screen.x, 6);
   expect(projected.y).toBeCloseTo(anchor.screen.y, 6);
@@ -93,35 +85,11 @@ test("does not turn released-modifier zoom momentum into pan", async ({ page, ed
   await editor.openGlyph(glyph.id);
   await editor.waitForCanvasRender();
 
-  // Samples are dispatched synchronously in the page so their timestamps, not Playwright
-  // round trips, decide whether the modifier-free sample continues the zoom gesture.
-  const gesture = await editor.canvas.evaluate((canvas) => {
-    const editorState = window.shift?.editor;
-    if (!editorState) throw new Error("Expected editor");
-
-    const bounds = canvas.getBoundingClientRect();
-    const wheel = (init: WheelEventInit) =>
-      canvas.dispatchEvent(
-        new WheelEvent("wheel", {
-          bubbles: true,
-          cancelable: true,
-          clientX: bounds.left + bounds.width / 2,
-          clientY: bounds.top + bounds.height / 2,
-          deltaMode: 0,
-          ...init,
-        }),
-      );
-
-    wheel({ ctrlKey: true, deltaY: -100 });
-    const zoomPan = editorState.pan;
-    const zoomedAt = performance.now();
-    wheel({ deltaX: 30, deltaY: 0 });
-    return { zoomPan, momentumPan: editorState.pan, zoomedAt };
-  });
+  const gesture = await wheelZoomThenPan(page);
   expect(gesture.momentumPan).toEqual(gesture.zoomPan);
 
   // Elapsed time is the contract: wait on the page clock that stamps wheel events.
-  await page.waitForFunction((zoomedAt) => performance.now() - zoomedAt > 250, gesture.zoomedAt);
+  await waitForPageClock(page, gesture.zoomedAt, 250);
   const bounds = await editor.canvasBounds();
   await editor.canvas.dispatchEvent("wheel", {
     bubbles: true,
@@ -132,5 +100,5 @@ test("does not turn released-modifier zoom momentum into pan", async ({ page, ed
     deltaX: 30,
     deltaY: 0,
   });
-  expect((await page.evaluate(() => window.shift?.editor.pan))?.x).toBe(gesture.zoomPan.x - 30);
+  expect((await editor.canvasOffset()).x).toBe(gesture.zoomPan.x - 30);
 });
