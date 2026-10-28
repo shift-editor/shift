@@ -99,3 +99,10 @@ export async function collectWindowDiagnostics(app: ElectronApplication): Promis
 
   return diagnostics;
 }
+
+/** The primary display's work area, the screen space windows open into, in main's units. */
+export async function primaryWorkArea(
+  app: ElectronApplication,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  return app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
+}

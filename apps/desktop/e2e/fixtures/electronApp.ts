@@ -326,6 +326,9 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
     let page = await readyWorkspacePage(app);
     await use({
       page,
+      get app() {
+        return app;
+      },
       documentPath,
       crashAndRecover: async () => {
         await killApp(app);
@@ -430,6 +433,26 @@ async function expectSharedWorkspaceClean(app: ElectronApplication): Promise<voi
       "This test edited the shared workspace document. Remove `sharedWorkspace` from its describe.",
     );
   }
+}
+
+/** The platform, architecture and versions the running app reports from main. */
+export async function appRuntime(app: ElectronApplication): Promise<{
+  platform: NodeJS.Platform;
+  architecture: string;
+  electronVersion: string;
+  appVersion: string;
+}> {
+  return app.evaluate(({ app: electronApp }) => ({
+    platform: process.platform,
+    architecture: process.arch,
+    electronVersion: process.versions.electron,
+    appVersion: electronApp.getVersion(),
+  }));
+}
+
+/** The platform the renderer's host bridge reports to the page. */
+export async function rendererHostPlatform(page: Page): Promise<string | undefined> {
+  return page.evaluate(() => window.shiftHost?.platform);
 }
 
 /**
