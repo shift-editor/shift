@@ -27,8 +27,11 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
   ResolvedLocation,
+  SpacingToolView,
+  TextRunView,
 } from "@shift/runtime";
 import type { KerningPosition, PointId } from "@shift/types";
+import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 
 /**
  * A read's result: the in-process editor may answer at once, the running app
@@ -66,6 +69,12 @@ export type LocationSummary = ResolvedLocation;
 export type EditorViewState = EditorView;
 /** The window's document and whether it has edits Save has not written. */
 export type DocumentSaveState = DocumentState;
+/** The canvas text run as it shows now. */
+export type CanvasText = TextRunView;
+/** What the Spacing tool shows. */
+export type SpacingToolState = SpacingToolView;
+/** One point handle the canvas draws, and how it is styled. */
+export type CanvasHandle = DrawnHandle;
 
 export interface EditorReads {
   /** The open glyph's authored outline, as agents read it. */
@@ -106,4 +115,10 @@ export interface EditorReads {
   location(): Read<LocationSummary>;
   /** The document's save state behind every edit made so far; null for a session without a document. */
   documentState(): Promise<DocumentSaveState | null>;
+  /** The canvas text as it shows now: items, placed glyphs, and caret; null when there is none. */
+  canvasText(): Read<CanvasText | null>;
+  /** What the Spacing tool shows; null when it is not active. */
+  spacingTool(): Read<SpacingToolState | null>;
+  /** The point handles the canvas draws on the open glyph, with how each is styled. */
+  drawnHandles(): Read<readonly CanvasHandle[]>;
 }

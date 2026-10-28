@@ -17,6 +17,8 @@ import type {
   AgentReadResult,
 } from "@/agent/AgentReaders";
 import type {
+  CanvasHandle,
+  CanvasText,
   DocumentSaveState,
   EditorReads,
   EditorViewState,
@@ -25,6 +27,7 @@ import type {
   LocationSummary,
   Outline,
   SourceLayer,
+  SpacingToolState,
 } from "@/testing/reads";
 import type {} from "../../src/main/agent/e2eAgentReads";
 import { waitForEditorReady } from "./appLocators";
@@ -739,6 +742,18 @@ export class EditorDriver implements EditorReads {
 
   async documentState(): Promise<DocumentSaveState | null> {
     return this.#read("editor", "documentState");
+  }
+
+  async canvasText(): Promise<CanvasText | null> {
+    return this.#read("editor", "textRun");
+  }
+
+  async spacingTool(): Promise<SpacingToolState | null> {
+    return this.#read("editor", "spacingTool");
+  }
+
+  async drawnHandles(): Promise<readonly CanvasHandle[]> {
+    return this.#read("editor", "drawnHandles");
   }
 
   /** The open glyph's authored layer at its node's source, as `layers.get` returns it. */
