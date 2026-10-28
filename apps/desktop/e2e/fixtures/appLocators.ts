@@ -152,6 +152,28 @@ export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void
   await waitForEditorReady(page, glyphId);
 }
 
+/**
+ * Acquires the glyph named `name` in the window's font session (authored or preview), navigates
+ * to its editor route, and waits for scene publication.
+ *
+ * @returns the glyph's identity.
+ * @throws {Error} when the session has no glyph named `name`.
+ */
+export async function openSessionGlyphNamed(page: Page, name: string): Promise<GlyphId> {
+  const glyphId = await page.evaluate(async (glyphName) => {
+    const session = window.shiftSession;
+    if (!session) throw new Error("Expected a font session");
+
+    const entry = session.font.entryForName(glyphName);
+    if (!entry) throw new Error(`Expected a glyph named ${glyphName}`);
+    await session.font.loadGlyph(entry.id);
+    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
+    return entry.id;
+  }, name);
+  await waitForEditorReady(page, glyphId);
+  return glyphId;
+}
+
 export async function openCatalogGlyph(
   page: Page,
   glyphName: string,

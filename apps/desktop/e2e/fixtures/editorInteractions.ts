@@ -571,3 +571,38 @@ export async function drawnAndAuthoredComponents(
     { glyphName, sourceName },
   );
 }
+
+/** How many other sources' layers the editing selection has matched to the active layer. */
+export async function editingLayerMatchCount(page: Page): Promise<number> {
+  return page.evaluate(() => window.shiftSession!.editor.editingLayerMatchesCell.peek().size);
+}
+
+/**
+ * The point the editing selection's one layer match pairs with the active layer's point
+ * `referencePointId`: its layer, id, and position there; throws without a complete match.
+ */
+export async function matchedEditingPoint(
+  page: Page,
+  referencePointId: PointId,
+): Promise<{ layerId: string; pointId: PointId; position: Point2D }> {
+  return page.evaluate((referenceId) => {
+    const session = window.shiftSession!;
+    const [layerMatch] = session.editor.editingLayerMatchesCell.peek().values();
+    if (!layerMatch?.complete) throw new Error("Expected complete layer match");
+    const targetPointId = layerMatch.points.find(
+      (match) => match.referenceId === referenceId,
+    )?.targetId;
+    const node = session.editor.scene.nodesOfKind("glyph")[0];
+    const targetLayer = node
+      ? session.editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)
+      : null;
+    const point = targetPointId ? targetLayer?.point(targetPointId) : null;
+    if (!targetPointId || !point) throw new Error("Expected matched target point");
+
+    return {
+      layerId: layerMatch.targetLayerId,
+      pointId: targetPointId,
+      position: { x: point.x, y: point.y },
+    };
+  }, referencePointId);
+}
