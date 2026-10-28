@@ -105,7 +105,7 @@ async function openProof(count: number): Promise<Proof> {
   await editor.settle();
   flushFrames();
 
-  const layout = editor.text.layoutCell(run.runId).peek()!;
+  const layout = editor.text.layout(run.runId)!;
   const udieresismacron = editor.font.recordForName("udieresismacron" as GlyphName)!.id;
   if (!layout.placedGlyphs.some((placed) => placed.glyph.glyphId === udieresismacron)) {
     throw new Error("the proof run has no ǖ");
@@ -153,7 +153,7 @@ for (const scale of SCALES) {
       async () => {
         const { editor } = await open();
         const run = editor.textRun!;
-        const placed = editor.text.layoutCell(run.runId).peek()!.placedGlyphs[2]!;
+        const placed = editor.text.layout(run.runId)!.placedGlyphs[2]!;
         // Between the bowl's outer and inner rings, inside the fill.
         const local = { x: placed.left + placed.glyph.xAdvance / 2, y: 35 } as LocalPoint;
         if (editor.getPointerTarget(editor.toScene(run, local)).kind !== "text") {

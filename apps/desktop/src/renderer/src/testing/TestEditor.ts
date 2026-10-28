@@ -934,7 +934,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   setKerning(source: string, first: string, second: string, amount: number | null): void {
     const sourceId = this.#sourceNamed(source);
     const [firstId, secondId] = [this.#glyphNamed(first), this.#glyphNamed(second)];
-    const kerning = this.font.kerningCell.peek();
+    const kerning = this.font.kerning;
     if (amount === null) {
       const applied = kerning.resolve(sourceId, firstId, secondId);
       if (applied)
@@ -947,9 +947,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   previewKerning(source: string, first: string, second: string, amount: number): void {
     const sourceId = this.#sourceNamed(source);
-    const pair = this.font.kerningCell
-      .peek()
-      .editablePair(sourceId, this.#glyphNamed(first), this.#glyphNamed(second));
+    const pair = this.font.kerning.editablePair(
+      sourceId,
+      this.#glyphNamed(first),
+      this.#glyphNamed(second),
+    );
     this.#kerningPreview ??= this.font.beginKerningEdit();
     this.#kerningPreview.preview([kerningValueEdit(sourceId, pair, amount)]);
   }
@@ -1090,7 +1092,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   kerning(first: string, second: string): readonly KerningMasterValue[] {
-    return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
+    const pair = { first: { name: first }, second: { name: second } };
+    return this.#reads.kerning.resolve([pair], {}).items[0]!.masters;
   }
 
   kerningAt(source: string, first: string, second: string): KerningMasterValue {
@@ -1123,7 +1126,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   #sourceNamed(name: string): SourceId {
-    const source = this.font.sources.find((candidate) => candidate.name === name);
+    const source = this.font.sourceNamed(name);
     if (!source) throw new Error(`The font has no source named ${name}`);
     return source.id;
   }
@@ -1153,7 +1156,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   #kerningGroupNamed(position: KerningPosition, name: string): KerningGroupId {
-    const group = this.font.kerningCell.peek().groups.named(position, name);
+    const group = this.font.kerning.groups.named(position, name);
     if (!group) throw new Error(`The font has no ${position} kerning group named ${name}`);
     return group.id;
   }
@@ -1261,7 +1264,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   source(name: string): Source | null {
-    return this.#reads.font.getFont().sources.find((source) => source.name === name) ?? null;
+    return this.font.sourceNamed(name);
   }
 
   languages(): readonly string[] | null {
@@ -1359,7 +1362,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
       bounds: plainBounds(model.bounds),
       sidebearings: { lsb, rsb },
       components: model.components.map((component) => ({
-        glyph: this.font.entryForId(component.glyphId)?.name ?? component.glyphId,
+        glyph: this.font.glyphName(component.glyphId) ?? component.glyphId,
         dx: component.transform.e,
         dy: component.transform.f,
         bounds: plainBounds(component.bounds),

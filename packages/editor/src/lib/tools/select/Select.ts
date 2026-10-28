@@ -17,6 +17,7 @@ import {
   NodeDoubleClick,
 } from "./behaviors";
 import type { CursorType } from "../../../types/editor";
+import type { PositionGuide } from "../../../types/positionEdit";
 import { objectIsKindOf, type ShiftObject } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
 import { SnapLines } from "../../editor/rendering/overlays/SnapLines";
@@ -56,6 +57,12 @@ export class Select extends BaseTool<SelectState, Select> {
     if (!drop) return false;
 
     return drop.targetWithin(this.editor.hitRadiusIn(drop.node)) !== null;
+  }
+
+  /** The guides a translation in flight snapped to. */
+  override get snapGuides(): readonly PositionGuide[] {
+    const state = this.getState();
+    return state.type === "translating" ? state.translate.guides : [];
   }
 
   override getCursor(state: SelectState): CursorType {
@@ -197,15 +204,14 @@ export class Select extends BaseTool<SelectState, Select> {
     this.marquee.draw(canvas);
     this.upgradePreview.draw(canvas);
 
-    const state = this.getState();
-    if (state.type !== "translating" || state.translate.guides.length === 0) return;
+    const guides = this.snapGuides;
+    if (guides.length === 0) return;
 
     const ids = this.editor.selection.ids;
     const selection = this.editor.positionSelection(ids);
     const node = this.editor.selectionNode(ids);
     if (!selection || !node) return;
 
-    const guides = state.translate.guides;
     const crossings = this.editor.snapping.crossings(selection.layer, [
       this.editor.selectionBounds(ids),
     ]);

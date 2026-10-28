@@ -146,6 +146,6 @@ function horizontalGranularity(e: React.KeyboardEvent): "character" | "word" | "
 function clipboardText(item: TextItem, editor: Editor): string {
   if (item.kind === "linebreak") return "\n";
   if (item.kind === "character") return String.fromCodePoint(item.codepoint);
-  const name = editor.font.entryForId(item.glyphId)?.name;
+  const name = editor.font.glyphName(item.glyphId);
   return name ? `/${name}` : "";
 }

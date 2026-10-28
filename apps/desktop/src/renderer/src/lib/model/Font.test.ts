@@ -135,6 +135,62 @@ describe("Font projects the workspace snapshot", () => {
   });
 });
 
+describe("Font answers directory and source queries", () => {
+  const glyph = (id: string, name: string) => ({
+    id: id as GlyphId,
+    name: name as GlyphName,
+    unicodes: [],
+    componentBaseGlyphIds: [],
+    layers: [],
+  });
+  const source = (id: string, name: string) => ({
+    id: id as SourceId,
+    name,
+    location: { values: {} },
+    metricValues: [],
+  });
+  const font = (snapshot: Partial<WorkspaceSnapshot>) =>
+    new Font({ store: new FontStore({ workspace: { ...SNAPSHOT, ...snapshot } }) });
+
+  it("pages the directory after a glyph, in font order", () => {
+    const abc = font({ glyphs: [glyph("g_A", "A"), glyph("g_B", "B"), glyph("g_C", "C")] });
+    const names = (page: ReturnType<Font["glyphsAfter"]>) =>
+      page?.entries.map((entry) => entry.name);
+
+    expect(abc.glyphCount).toBe(3);
+    expect(names(abc.glyphsAfter(null, 2))).toEqual(["A", "B"]);
+    expect(abc.glyphsAfter(null, 2)?.hasMore).toBe(true);
+    expect(names(abc.glyphsAfter("g_B" as GlyphId, 2))).toEqual(["C"]);
+    expect(abc.glyphsAfter("g_B" as GlyphId, 2)?.hasMore).toBe(false);
+    expect(abc.glyphsAfter("g_gone" as GlyphId, 2)).toBeNull();
+  });
+
+  it("names a glyph by id, and nothing for an unknown id", () => {
+    const a = font({ glyphs: [glyph("g_A", "A")] });
+
+    expect(a.glyphName("g_A" as GlyphId)).toBe("A");
+    expect(a.glyphName("g_gone" as GlyphId)).toBeNull();
+  });
+
+  it("finds a source by exact name", () => {
+    const sources = font({ sources: [source("s_1", "Regular"), source("s_2", "Bold")] });
+
+    expect(sources.sourceNamed("Bold")?.id).toBe("s_2");
+    expect(sources.sourceNamed("Black")).toBeNull();
+  });
+
+  it("reads a gone source's layer against the default source's metrics", () => {
+    const regular = font({});
+
+    expect(regular.metricsForLayerSource("source-1" as SourceId)).toEqual(
+      regular.metricsForSource("source-1" as SourceId),
+    );
+    expect(regular.metricsForLayerSource("s_gone" as SourceId)).toEqual(
+      regular.defaultSourceMetrics,
+    );
+  });
+});
+
 describe("font-level intents make the font variable", () => {
   it("persists metadata replacement through the reactive font and undo ledger", async () => {
     const stack = createWorkspaceStack();
@@ -183,7 +239,7 @@ describe("font-level intents make the font variable", () => {
       externalAxisLocationFromRecord({ [weightAxisId]: 700 }),
     );
     await stack.editCoordinator.settled();
-    const bold = stack.font.sources.find((source) => source.name === "Bold");
+    const bold = stack.font.sourceNamed("Bold");
     expect(bold?.id).toBe(boldSourceId);
     expect(
       stack.font.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === boldSourceId),
@@ -653,7 +709,7 @@ describe("font-level intents make the font variable", () => {
     );
     const record = stack.font.recordForName("Aacute" as GlyphName);
     if (!record) throw new Error("Expected Aacute fixture glyph");
-    const source = stack.font.sources.find((candidate) => candidate.name === "BoldWide");
+    const source = stack.font.sourceNamed("BoldWide");
     if (!source) throw new Error("Expected BoldWide fixture source");
     const glyph = await stack.font.loadGlyph(record.id);
     const locationCell = signal(stack.font.defaultLocation());

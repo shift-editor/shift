@@ -48,7 +48,7 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
 
   it("reports each master's value and the kind of pair that applies there", () => {
     const font = stack.font;
-    const [resolved] = reader.resolve([{ first: "T", second: "A" }], {
+    const [resolved] = reader.resolve([{ first: { name: "T" }, second: { name: "A" } }], {
       source: { name: "LightCondensed" },
     }).items;
 
@@ -76,7 +76,9 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
     const lightWide = source(font, "LightWide");
     const location = font.designspace.coordinates(font.externalLocationForSource(lightWide)!);
 
-    const [resolved] = reader.resolve([{ first: "T", second: "A" }], { location }).items;
+    const [resolved] = reader.resolve([{ first: { name: "T" }, second: { name: "A" } }], {
+      location,
+    }).items;
 
     expect(resolved!.amount).toBe(-215);
   });
@@ -84,7 +86,7 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
   it("reports 0 at a master whose pair is removed while it kerns other pairs", async () => {
     await removeTAAt(stack, "LightCondensed");
 
-    const [resolved] = reader.resolve([{ first: "T", second: "A" }], {}).items;
+    const [resolved] = reader.resolve([{ first: { name: "T" }, second: { name: "A" } }], {}).items;
 
     expect(masterAt(stack.font, resolved!, "LightCondensed")).toMatchObject({
       amount: 0,
@@ -96,7 +98,7 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
   it("interpolates a master whose last pair is removed", async () => {
     await removeTAAt(stack, "BoldWide");
 
-    const [resolved] = reader.resolve([{ first: "T", second: "A" }], {}).items;
+    const [resolved] = reader.resolve([{ first: { name: "T" }, second: { name: "A" } }], {}).items;
 
     expect(masterAt(stack.font, resolved!, "BoldWide")).toMatchObject({
       amount: -205,
@@ -105,7 +107,7 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
   });
 
   it("resolves at a master chosen by id the same as by name", () => {
-    const pair = [{ first: "T", second: "A" }];
+    const pair = [{ first: { name: "T" }, second: { name: "A" } }];
     const byId = reader.resolve(pair, {
       source: { sourceId: source(stack.font, "BoldCondensed") },
     });
@@ -116,8 +118,8 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
 
   it("reads one pair at a master, the default source when none is named", () => {
     const font = stack.font;
-    const t = { name: "T" as GlyphName };
-    const a = { name: "A" as GlyphName };
+    const t = { name: "T" };
+    const a = { name: "A" };
 
     expect(reader.at({ first: t, second: a, source: { name: "BoldCondensed" } })).toMatchObject({
       sourceId: source(font, "BoldCondensed"),
@@ -139,12 +141,12 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
 
   it("lists a glyph's pairs, directly or through its groups, page by page", () => {
     const source = { name: "LightCondensed" };
-    const all = reader.pairs({ source, glyph: "A" });
+    const all = reader.pairs({ source, glyph: { name: "A" } });
 
     const paged: AuthoredKerningPair[] = [];
     let cursor: string | undefined;
     do {
-      const page = reader.pairs({ source, glyph: "A", limit: 1, cursor });
+      const page = reader.pairs({ source, glyph: { name: "A" }, limit: 1, cursor });
       paged.push(...page.items);
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
@@ -172,12 +174,12 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
   });
 
   it("rejects unknown glyphs, sources, and cursors", () => {
-    const t = { name: "T" as GlyphName };
+    const t = { name: "T" };
 
-    expect(() => reader.resolve([{ first: "T", second: "nope" }], {})).toThrow(
+    expect(() => reader.resolve([{ first: { name: "T" }, second: { name: "nope" } }], {})).toThrow(
       "Glyph nope is not in this font",
     );
-    expect(() => reader.at({ first: t, second: { name: "nope" as GlyphName } })).toThrow(
+    expect(() => reader.at({ first: t, second: { name: "nope" } })).toThrow(
       "Glyph nope is not in this font",
     );
     expect(() => reader.at({ first: t, second: t, source: { name: "Nope" } })).toThrow(

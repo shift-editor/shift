@@ -348,12 +348,12 @@ async function openMutatorSans() {
   await stack.openWorkspace(MUTATOR_SANS);
   const font = stack.font;
   const id = (name: string) => font.recordForName(name as GlyphName)!.id;
-  const source = (name: string) => font.sources.find((candidate) => candidate.name === name)!.id;
+  const source = (name: string) => font.sourceNamed(name)!.id;
   return { stack, font, t: id("T"), a: id("A"), lightCondensed: source("LightCondensed") };
 }
 
 function kernAt(font: Font, sourceName: string, first: string, second: string): number {
-  const sourceId = font.sources.find((candidate) => candidate.name === sourceName)!.id;
+  const sourceId = font.sourceNamed(sourceName)!.id;
   const id = (name: string) => font.recordForName(name as GlyphName)!.id;
   return font.kerningBetween(id(first), id(second), font.defaultLocation(), sourceId);
 }
@@ -363,7 +363,7 @@ function kernAt(font: Font, sourceName: string, first: string, second: string): 
 describe("undo before persistence", () => {
   it("shows an undo right after an edit at once, before either is persisted", async () => {
     const { stack, font, t, a, lightCondensed } = await openMutatorSans();
-    const pair = font.kerningCell.peek().editablePair(lightCondensed, t, a);
+    const pair = font.kerning.editablePair(lightCondensed, t, a);
 
     font.setKerningValues([kerningValueEdit(lightCondensed, pair, -90)], "Change kerning");
     expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-90);

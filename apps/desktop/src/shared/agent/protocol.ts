@@ -83,7 +83,7 @@ export type AgentCallMap = {
   "kerning.pairs": {
     request: {
       source?: SourceSelector;
-      glyph?: string;
+      glyph?: GlyphSelector;
       limit?: number;
       cursor?: string;
       ifFontRevision?: FontRevision;

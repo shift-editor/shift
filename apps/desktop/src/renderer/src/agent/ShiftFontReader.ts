@@ -15,7 +15,7 @@ import type {
   ShiftSessionMode,
   SourceSelector,
 } from "@shift/runtime";
-import type { GlyphId } from "@shift/types";
+import { asGlyphId, type GlyphId } from "@shift/types";
 import type { Font } from "@shift/editor/model";
 import { ShiftLayer } from "./ShiftLayer";
 import { ShiftSelectors } from "./ShiftSelectors";
@@ -45,7 +45,7 @@ export class ShiftFontReader {
       info: font.metadata,
       metrics: font.metrics,
       metricDefinitions: font.metricDefinitions,
-      glyphCount: font.glyphEntries().length,
+      glyphCount: font.glyphCount,
       axes: font.getAxes(),
       sources: font.sources,
       instances: font.namedInstances,
@@ -83,22 +83,11 @@ export class ShiftFontReader {
     }
     const sourceId = source ? this.#select.sourceId(source) : null;
 
-    const entries = this.#font.glyphEntries();
-    let start = 0;
-    if (cursor) {
-      let previousId: string;
-      try {
-        previousId = atob(cursor);
-      } catch {
-        throw new Error("Invalid glyph cursor");
-      }
+    const after = cursor ? decodeGlyphCursor(cursor) : null;
+    const directory = this.#font.glyphsAfter(after, limit);
+    if (!directory) throw new Error("Glyph cursor is no longer in this font");
 
-      const previousIndex = entries.findIndex(({ id }) => id === previousId);
-      if (previousIndex < 0) throw new Error("Glyph cursor is no longer in this font");
-      start = previousIndex + 1;
-    }
-
-    const page = entries.slice(start, start + limit);
+    const page = directory.entries;
     const items = page.map((entry) => this.#glyphSummary(entry.id));
     if (sourceId) {
       const font = this.#font;
@@ -115,7 +104,7 @@ export class ShiftFontReader {
     const last = page.at(-1);
     return {
       items,
-      nextCursor: start + page.length < entries.length && last ? btoa(last.id) : null,
+      nextCursor: directory.hasMore && last ? btoa(last.id) : null,
     };
   }
 
@@ -125,9 +114,7 @@ export class ShiftFontReader {
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {
     const font = this.#font;
-    for (const glyphId of glyphIds) {
-      if (!font.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
-    }
+    for (const glyphId of glyphIds) this.#select.glyphId({ glyphId });
 
     const designspace = font.designspace;
     const design = designspace.toDesign(designspace.location(location));
@@ -160,11 +147,7 @@ export class ShiftFontReader {
     options: { overlays?: LayerOverlays; appearance?: LayerAppearance } = {},
   ): Promise<LayerSvg> {
     const layer = await ShiftLayer.read(this.#font, this.#select.layerId(selector));
-    const { sourceId } = layer.identity;
-    const metrics = this.#font.source(sourceId)
-      ? this.#font.metricsForSource(sourceId)
-      : this.#font.defaultSourceMetrics;
-    return layer.render(metrics, options);
+    return layer.render(this.#font.metricsForLayerSource(layer.identity.sourceId), options);
   }
 
   #glyphSummary(glyphId: GlyphId): GlyphSummary {
@@ -179,5 +162,13 @@ export class ShiftFontReader {
       componentBaseGlyphIds: record?.componentBaseGlyphIds ?? [],
       layers: record?.layers.map(({ id, sourceId }) => ({ layerId: id, sourceId })) ?? [],
     };
+  }
+}
+
+function decodeGlyphCursor(cursor: string): GlyphId {
+  try {
+    return asGlyphId(atob(cursor));
+  } catch {
+    throw new Error("Invalid glyph cursor");
   }
 }

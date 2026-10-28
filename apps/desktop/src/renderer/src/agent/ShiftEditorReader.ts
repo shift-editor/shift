@@ -16,7 +16,7 @@ import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId } from "@shift/types";
 import type { Signal } from "@shift/editor/signals";
-import { TextBuffer, type TextItem } from "@shift/editor/text";
+import type { TextItem } from "@shift/editor/text";
 import { KerningTool, SpacingTool, type KerningPair } from "@shift/editor/tools";
 import type { WorkspaceApplyStatus } from "@/types/workspace";
 
@@ -135,21 +135,7 @@ export class ShiftEditorReader {
    * units; empty when nothing snaps or no gesture is in flight.
    */
   drawnSnapGuides(): PositionGuide[] {
-    const pen = this.#editor.toolIf("pen")?.state;
-    if (pen) {
-      switch (pen.type) {
-        case "closing":
-        case "pulling":
-        case "dragging":
-          return [...pen.guides];
-        default:
-          return [];
-      }
-    }
-
-    const select = this.#editor.toolIf("select")?.state;
-    if (select?.type === "translating") return [...select.translate.guides];
-    return [];
+    return [...(this.#editor.toolManager.activeTool?.snapGuides ?? [])];
   }
 
   /**
@@ -162,17 +148,14 @@ export class ShiftEditorReader {
     const editor = this.#editor;
     const node = editor.scene.first("textRun");
     const run = node ? editor.text.run(node.runId) : null;
-    const layout = node ? editor.text.layoutCell(node.runId).peek() : null;
+    const layout = node ? editor.text.layout(node.runId) : null;
     if (!node || !run || !layout) return null;
 
     const itemIds = new Set(run.items.map((item) => item.id));
     const open = editor.nodeDefinition("textRun").childGlyph(node);
     const edited = open && editor.editing.nodeIds.includes(open.id) ? (open.itemId ?? null) : null;
     const hovered = editor.hover.id;
-    const state = editor.textEditing.state;
-    const showsCaret = state?.active === true && state.nodeId === node.id;
-    const buffer = showsCaret ? new TextBuffer(run.items, state.focus, state.anchor) : null;
-    const caretPoint = buffer ? layout.caretAt(buffer.focusCluster).position() : null;
+    const caret = editor.textEditing.caretIn(node.id);
 
     return {
       items: run.items.map((item) => this.#textRunItem(item)),
@@ -192,18 +175,17 @@ export class ShiftEditorReader {
       advance: layout.totalAdvance,
       baselines: layout.lines.map((line) => line.y),
       openItemId: open?.itemId ?? null,
-      openGlyph: open ? (editor.font.entryForId(open.glyphId)?.name ?? null) : null,
+      openGlyph: open ? editor.font.glyphName(open.glyphId) : null,
       editedItemId: edited,
       hoveredItemId: hovered !== null && itemIds.has(hovered as never) ? hovered : null,
-      caret:
-        buffer && caretPoint
-          ? {
-              position: buffer.focusCluster,
-              selection: { ...buffer.selection },
-              x: caretPoint.x,
-              y: caretPoint.y,
-            }
-          : null,
+      caret: caret
+        ? {
+            position: caret.cluster,
+            selection: { ...caret.selection },
+            x: caret.position.x,
+            y: caret.position.y,
+          }
+        : null,
     };
   }
 
@@ -216,13 +198,9 @@ export class ShiftEditorReader {
    */
   spacingTool(): SpacingToolView | null {
     const tool = this.#editor.toolManager.activeTool;
-    const state = this.#editor.toolIf("spacing")?.state;
-    if (!(tool instanceof SpacingTool) || !state) return null;
-    const hovered =
-      state.type === "ready" || state.type === "dragging" ? (state.hit ?? null) : null;
-    const selected =
-      state.type === "ready" && state.selected ? tool.runs.refresh(state.selected) : null;
-    const editing = tool.editing;
+    if (!(tool instanceof SpacingTool)) return null;
+
+    const { hovered, selected, editing } = tool;
     return {
       hovered: hovered ? this.#spacingHalf(hovered) : null,
       selected: selected ? this.#spacingHalf(selected) : null,
@@ -230,8 +208,8 @@ export class ShiftEditorReader {
       sameAsHovered: hovered
         ? tool.runs.sameSidebearings(hovered).map((half) => this.#spacingHalf(half))
         : [],
-      overValue: state.type === "ready" && state.overLabel === true,
-      quiet: state.type === "ready" && state.quiet === true,
+      overValue: tool.overValue,
+      quiet: tool.quiet,
     };
   }
 
@@ -243,11 +221,9 @@ export class ShiftEditorReader {
    */
   kerningTool(): KerningToolView | null {
     const tool = this.#editor.toolManager.activeTool;
-    const state = this.#editor.toolIf("kerning")?.state;
-    if (!(tool instanceof KerningTool) || !state) return null;
-    const hovered = state.type === "ready" ? state.hit : null;
-    const selected = tool.currentPair;
-    const editing = tool.editing;
+    if (!(tool instanceof KerningTool)) return null;
+
+    const { hovered, currentPair: selected, editing } = tool;
     return {
       hovered: hovered ? this.#kerningGap(hovered) : null,
       selected: selected ? this.#kerningGap(selected) : null,
@@ -262,7 +238,7 @@ export class ShiftEditorReader {
     if (item.kind === "linebreak") return { id: item.id, text: "\n" };
     if (item.kind === "character")
       return { id: item.id, text: String.fromCodePoint(item.codepoint) };
-    return { id: item.id, text: `/${this.#editor.font.entryForId(item.glyphId)?.name ?? ""}` };
+    return { id: item.id, text: `/${this.#editor.font.glyphName(item.glyphId) ?? ""}` };
   }
 
   #spacingHalf(half: NonNullable<SpacingTool["currentHalf"]>): SpacingHalfView {
@@ -287,7 +263,7 @@ export class ShiftEditorReader {
   ): SpacingGapSide {
     return {
       itemId: side.itemId,
-      glyph: this.#editor.font.entryForId(side.glyphId)?.name ?? "",
+      glyph: this.#editor.font.glyphName(side.glyphId) ?? "",
       sidebearing: side.sidebearing,
       edge: side.edge,
     };
@@ -299,10 +275,7 @@ export class ShiftEditorReader {
     const side = (position: KerningPairPosition): KerningPairSideView => {
       const id = editable![position];
       const lock = pair.lock(editor, position);
-      const name = isGroupSide(id)
-        ? editor.font.kerningCell.peek().groups.group(id)?.name
-        : editor.font.entryForId(id)?.name;
-      return { name: name ?? "", group: isGroupSide(id), ...lock };
+      return { name: editor.font.kerningSideName(id) ?? "", group: isGroupSide(id), ...lock };
     };
     return {
       firstItemId: pair.gap.left.itemId,

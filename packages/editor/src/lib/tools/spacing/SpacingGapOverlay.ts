@@ -68,7 +68,7 @@ function drawSameGlyphs(
   theme: SpacingPalette,
 ): void {
   const glyphSide = half.glyphSide;
-  const layout = editor.text.layoutCell(half.gap.node.runId).peek();
+  const layout = editor.text.layout(half.gap.node.runId);
   if (!glyphSide || !layout) return;
 
   for (const placed of layout.placedGlyphs) {

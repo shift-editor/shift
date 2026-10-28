@@ -28,7 +28,7 @@ export class ShiftSelectors {
 
   /**
    * @returns the selected source, or the default source when `selector` is omitted.
-   * @throws {Error} when the font has no such source.
+   * @throws {Error} when the font has no such source, or several sources share the name.
    */
   sourceId(selector?: SourceSelector): SourceId {
     const font = this.#font;
@@ -36,7 +36,7 @@ export class ShiftSelectors {
 
     const source =
       selector.name !== undefined
-        ? (font.sources.find(({ name }) => name === selector.name) ?? null)
+        ? font.sourceNamed(selector.name)
         : font.source(selector.sourceId);
     if (!source)
       throw new Error(`Source ${selector.name ?? selector.sourceId} is not in this font`);

@@ -58,6 +58,20 @@ describe("Text layout cells", () => {
     await editor.close();
   });
 
+  it("read a run's current layout without subscribing", async () => {
+    const editor = await new TestEditor().startSession();
+    editor.selectTool("text");
+    const runId = editor.textRun!.runId;
+
+    const before = editor.text.layout(runId)!;
+    expect(before).toBe(editor.text.layoutCell(runId).peek());
+
+    editor.textEditing.placeAtCluster(0);
+    editor.textEditing.insert([characterTextItem(65)]);
+    expect(editor.text.layout(runId)!.placedGlyphs).toHaveLength(before.placedGlyphs.length + 1);
+    await editor.close();
+  });
+
   it("redraw an overlay tracking every run's layout when the active source changes", async () => {
     const editor = await new TestEditor().openSession(
       resolve(FONTS, "mutatorsans-variable/MutatorSans.designspace"),
@@ -67,14 +81,14 @@ describe("Text layout cells", () => {
     editor.textEditing.insert([characterTextItem(65)]);
     editor.escape();
     await editor.settle();
-    const placed = () => editor.text.layoutCell(editor.textRun!.runId).peek()!.placedGlyphs;
+    const placed = () => editor.text.layout(editor.textRun!.runId)!.placedGlyphs;
     const drawn: number[] = [];
     const overlay = effect(() => {
       trackRunLayouts(editor);
       drawn.push(placed()[1]!.left);
     });
 
-    editor.selectSource(editor.font.sources.find((source) => source.name === "BoldWide")!.id);
+    editor.selectSource(editor.font.sourceNamed("BoldWide")!.id);
     overlay.dispose();
 
     expect(drawn).toHaveLength(2);
@@ -151,12 +165,34 @@ describe("TextRunNodeDefinition", () => {
     editor.textEditing.insert([characterTextItem(65)]);
     editor.scene.updateNode({ id: run.id, size: editor.font.metricsCell.peek().unitsPerEm * 2 });
     const node = editor.scene.nodeOfKind(run.id, "textRun")!;
-    const advance = editor.text.layoutCell(node.runId).peek()!.totalAdvance / 2;
+    const advance = editor.text.layout(node.runId)!.totalAdvance / 2;
     const definition = editor.nodeDefinition("textRun");
 
     expect(definition.caretAt(node, localPoint(advance * 1.75, 0))).toBe(2);
     expect(definition.caretAt(node, editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
     expect(definition.caretAt(node, localPoint(advance * 10, 0))).toBeNull();
+    await editor.close();
+  });
+});
+
+describe("TextEditing", () => {
+  it("shows the caret, its selection and where it draws only in the edited node", async () => {
+    const editor = await new TestEditor().startSession();
+    editor.selectTool("text");
+    const node = editor.textRun!;
+    editor.textEditing.placeAtCluster(0);
+    editor.textEditing.insert([characterTextItem(65), characterTextItem(66)]);
+    editor.textEditing.move(-1, "character", true);
+    const layout = editor.text.layout(node.runId)!;
+
+    expect(editor.textEditing.caretIn(node.id)).toEqual({
+      cluster: 1,
+      selection: { start: 1, end: 2 },
+      position: layout.caretAt(1).position(),
+    });
+
+    editor.escape();
+    expect(editor.textEditing.caretIn(node.id)).toBeNull();
     await editor.close();
   });
 });

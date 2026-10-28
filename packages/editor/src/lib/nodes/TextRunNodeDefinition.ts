@@ -183,7 +183,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   bounds(node: TextRunNode): LocalBounds | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     if (!layout) return null;
 
     const lines = layout.lines;
@@ -240,7 +240,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     ids: readonly SelectableId[],
   ): TransformTarget | null {
     const sourceId = this.editor.activeSourceId;
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     if (!sourceId || !layout || this.editor.sessionMode !== "workspace") return null;
 
     const parts = new Map<GlyphId, GlyphsTransformPart>();
@@ -289,7 +289,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * Later glyphs win where outlines overlap. Caret placement uses {@link caretAt}.
    */
   hit(node: TextRunNode, point: LocalPoint): PointerTarget | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     if (!layout) return null;
 
     const radius = this.editor.hitRadiusIn(node);
@@ -320,7 +320,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * @param point - a point in the run's own units.
    */
   spacingGapAt(node: TextRunNode, point: LocalPoint): SpacingGap | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     if (!layout) return null;
 
     const padding = this.editor.hitRadiusIn(node);
@@ -354,7 +354,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     leftItemId: TextItemId | null,
     rightItemId: TextItemId | null,
   ): SpacingGap | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     if (!layout) return null;
 
     for (const gap of this.#gaps(node, layout)) {
@@ -367,7 +367,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
   /** Returns every gap of the run in reading order, measured now. */
   spacingGaps(node: TextRunNode): SpacingGap[] {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     return layout ? [...this.#gaps(node, layout)] : [];
   }
 
@@ -436,7 +436,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * @param point - a point in the run's own units.
    */
   caretAt(node: TextRunNode, point: LocalPoint): number | null {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     const run = this.editor.text.run(node.runId);
     if (!layout || !run) return null;
 
@@ -460,7 +460,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   }
 
   override draw(node: TextRunNode, ctx: RenderContext, pass: RenderPass): void {
-    const layout = this.editor.text.layoutCell(node.runId).peek();
+    const layout = this.editor.text.layout(node.runId);
     if (!layout) return;
 
     switch (pass) {

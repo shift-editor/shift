@@ -162,6 +162,7 @@ export class Designspace {
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtDesign(location: DesignAxisLocation): Source | null;
+    sourceNamed(name: string): Source | null;
     // (undocumented)
     get sources(): readonly Source[];
     toDesign(location: ExternalAxisLocation): DesignAxisLocation;
@@ -508,22 +509,27 @@ export class Font {
     getAxes(): Axis[];
     getAxisMappingBases(): AxisMappingBasis[];
     getAxisMappings(): AxisMapping[];
+    get glyphCount(): number;
     glyphEntries(): readonly GlyphEntry[];
     get glyphEntriesCell(): Signal<readonly GlyphEntry[]>;
     glyphHandleForName(name: GlyphName): GlyphHandle;
     glyphHandleForUnicode(unicode: Unicode): GlyphHandle;
     glyphIdForLayer(layerId: LayerId): GlyphId | null;
+    glyphName(glyphId: GlyphId): GlyphName | null;
     glyphPreviews(glyphIds: readonly GlyphId[], location: DesignAxisLocation): Promise<readonly GlyphPreview[]>;
     // (undocumented)
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
+    glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isNonspacingMark(name: GlyphName): boolean;
     isVariable(): boolean;
+    get kerning(): Kerning;
     kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
     get kerningCell(): Signal<Kerning>;
     kerningRun(pairs: readonly GlyphId[], location: ExternalAxisLocation, sourceId: SourceId | null): readonly number[];
+    kerningSideName(side: KerningSideId): string | null;
     get languageIdsCell(): Signal<readonly string[] | null>;
     layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
@@ -548,7 +554,9 @@ export class Font {
     get metrics(): FontMetrics;
     metricsAtLocation(location: ExternalAxisLocation): SourceMetrics;
     get metricsCell(): Signal<FontMetrics>;
+    metricsForLayerSource(sourceId: SourceId): SourceMetrics;
     metricsForSource(sourceId: SourceId): SourceMetrics;
+    missingPairOrigin(sourceId: SourceId): MissingKerningOrigin;
     get namedInstances(): NamedInstance[];
     get namedInstancesCell(): Signal<NamedInstance[]>;
     nameForUnicode(unicode: Unicode): GlyphName;
@@ -577,6 +585,7 @@ export class Font {
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
     sourceAtOrDefault(location: ExternalAxisLocation): Source;
     get sourceMetricsRevisionCell(): Signal<number>;
+    sourceNamed(name: string): Source | null;
     get sources(): Source[];
     get sourcesCell(): Signal<Source[]>;
     // (undocumented)
@@ -885,9 +894,9 @@ export interface KerningPairPage {
 // @public
 export interface KerningPairQuery {
     // (undocumented)
-    first: string;
+    first: GlyphSelector;
     // (undocumented)
-    second: string;
+    second: GlyphSelector;
 }
 
 // @public
@@ -905,7 +914,7 @@ export type KerningPairSide = {
 export interface KerningPairsInput extends ShiftTarget {
     // (undocumented)
     cursor?: string;
-    glyph?: string;
+    glyph?: GlyphSelector;
     // (undocumented)
     limit?: number;
     source?: SourceSelector;

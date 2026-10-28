@@ -42,6 +42,21 @@ export function isGroupSide(side: KerningSideId): side is KerningGroupId {
   return isKerningGroupId(side);
 }
 
+/**
+ * Which kind of authored pair applies: two glyphs, two groups, or an
+ * exception that names a glyph against a group.
+ */
+export type KerningPairRule = "glyph" | "group" | "exception";
+
+/** The kind of pair `pair` is, from its sides. */
+export function kerningRule(pair: KerningPairSides): KerningPairRule {
+  const firstIsGroup = isGroupSide(pair.first);
+  const secondIsGroup = isGroupSide(pair.second);
+  if (firstIsGroup && secondIsGroup) return "group";
+  if (firstIsGroup || secondIsGroup) return "exception";
+  return "glyph";
+}
+
 /** A side as the wire spells it, with its kind. */
 export function wireSide(side: KerningSideId): KerningSide {
   return { kind: isGroupSide(side) ? "group" : "glyph", id: side };
@@ -234,6 +249,20 @@ export class Kerning {
   /** Returns every pair value authored at a source; empty for a source without kerning. */
   authoredPairs(sourceId: SourceId): ResolvedKerning[] {
     return this.#records.authoredPairs(sourceId);
+  }
+
+  /**
+   * The pairs authored at a source that name `glyphId` on a side, directly or
+   * through its group at that side, in no set order.
+   */
+  pairsNaming(sourceId: SourceId, glyphId: GlyphId): ResolvedKerning[] {
+    const firstGroup = this.groupOf("first", glyphId);
+    const secondGroup = this.groupOf("second", glyphId);
+    const names = (side: KerningSideId, group: KerningGroupId | null) =>
+      side === glyphId || (group !== null && side === group);
+    return this.authoredPairs(sourceId).filter(
+      (pair) => names(pair.first, firstGroup) || names(pair.second, secondGroup),
+    );
   }
 
   /**
