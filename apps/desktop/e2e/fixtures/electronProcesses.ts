@@ -68,6 +68,7 @@ export class ElectronProcesses {
 
     try {
       const page = await app.firstWindow();
+      // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main, not app state
       const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
         electronApp.getPath("userData"),
       );

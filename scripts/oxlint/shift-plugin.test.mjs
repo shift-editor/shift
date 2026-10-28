@@ -191,10 +191,22 @@ describe("shift/no-page-evaluate-in-specs", () => {
     assert.deepEqual(lines, [5, 7, 8, 9]);
   });
 
-  it("allows evaluations in E2E fixtures and outside desktop E2E specs", () => {
+  it("flags evaluations in E2E fixtures too", () => {
     for (const fileName of [
       "apps/desktop/e2e/fixtures/EditorDriver.ts",
-      "apps/desktop/e2e/fixtures/helpers.spec.ts",
+      "apps/desktop/e2e/fixtures/renderCounter.mts",
+    ]) {
+      assert.deepEqual(
+        reportedLines("no-page-evaluate-in-specs", evaluations, fileName),
+        [3, 4, 5, 6],
+        fileName,
+      );
+    }
+  });
+
+  it("allows evaluations only in the hook bridge and outside desktop E2E", () => {
+    for (const fileName of [
+      "apps/desktop/e2e/fixtures/appHooks.ts",
       "apps/desktop/src/renderer/src/editor.test.ts",
       "apps/web/e2e/landing.spec.ts",
     ]) {

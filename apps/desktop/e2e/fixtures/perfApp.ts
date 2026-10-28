@@ -80,6 +80,7 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
 
         registerApp(app);
         const page = await app.firstWindow();
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
           electronApp.getPath("userData"),
         );
@@ -94,16 +95,19 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
           win.setContentSize(width, height);
           win.center();
         }, contentSize);
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         await page.waitForFunction(
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
           contentSize,
         );
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         await page.waitForFunction(() => document.visibilityState === "visible");
         await browserWindow.evaluate((win, { width, height }) => {
           win.setContentSize(width, height);
           win.center();
         }, contentSize);
         await browserWindow.dispose();
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         await page.waitForFunction(
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
           contentSize,
@@ -127,6 +131,7 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
     },
 
     sourcePath: async ({ electronApp }, use) => {
+      // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
       const sourcePath = await electronApp.evaluate(() => process.env.SHIFT_E2E_FONT_PATH ?? null);
       if (!sourcePath) throw new Error("E2E font source path is unavailable");
 

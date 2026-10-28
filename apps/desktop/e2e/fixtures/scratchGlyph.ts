@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import type { GlyphName, PointId, PointType } from "@shift/types";
+import type { PointId, PointType } from "@shift/types";
 import type { ContourFixture, GlyphFixture, PointNames } from "@/testing/fixtures";
 import type { EditorDriver } from "./EditorDriver";
 import { zoomToFit } from "./editorInteractions";
@@ -36,14 +36,7 @@ export async function openScratchGlyph(
   name: string,
   fixture?: GlyphFixture | readonly ContourFixture[],
 ): Promise<Record<string, PointId>> {
-  const glyphId = await page.evaluate(async (glyphName) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected authored workspace");
-
-    const record = workspace.editor.createGlyph(glyphName as GlyphName);
-    await workspace.font.editCoordinator.settled();
-    return record.id;
-  }, name);
+  const glyphId = await editor.setup.createGlyph(name, null);
   await editor.openGlyph(glyphId);
 
   const glyph: GlyphFixture = isContourList(fixture) ? { contours: fixture } : (fixture ?? {});

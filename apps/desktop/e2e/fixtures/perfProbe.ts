@@ -17,10 +17,9 @@
  * shares.
  */
 import type { Page } from "@playwright/test";
-import type { ScreenPoint } from "@shift/editor/spaces";
 import type { Point2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
 import type { generateContourData } from "./perfApp";
+import { callHook } from "./appHooks";
 
 export interface FrameSample {
   work: number;
@@ -59,6 +58,7 @@ declare global {
  * from tick to message is the frame's main-thread time.
  */
 export async function installFrameProbe(page: Page): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures frame timing in the page, not app state
   await page.evaluate(() => {
     const request = window.requestAnimationFrame.bind(window);
     const probe: NonNullable<Window["__shiftFrameProbe"]> = { callbacks: [], move: null };
@@ -117,11 +117,13 @@ export async function installFrameProbe(page: Page): Promise<void> {
  * frame in that span, including its rendering and commit.
  */
 export async function measureMove(page: Page, position: Point2D): Promise<FrameSample> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures frame timing in the page, not app state
   await page.evaluate(() => {
     window.__shiftFrameProbe!.move = null;
   });
   await page.mouse.move(position.x, position.y);
   // Poll on a timer: polling on animation frames would keep the probe from seeing an idle frame.
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures frame timing in the page, not app state
   await page.waitForFunction(
     () => {
       const move = window.__shiftFrameProbe?.move;
@@ -130,6 +132,7 @@ export async function measureMove(page: Page, position: Point2D): Promise<FrameS
     null,
     { polling: 10 },
   );
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures frame timing in the page, not app state
   return page.evaluate(() => {
     const probe = window.__shiftFrameProbe!;
     const { at, settledAt, frameStarts, frameEnds } = probe.move!;
@@ -157,15 +160,7 @@ export async function timeContourInsertion(
   page: Page,
   contours: PerfContours,
 ): Promise<{ count: number; lastId: string | undefined; ms: number }> {
-  return page.evaluate((data) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("shift runtime API not exposed");
-
-    const start = performance.now();
-    const inserted = workspace.editor.insertContent({ contours: data });
-    if (!inserted) throw new Error("contour insertion failed");
-    return { count: inserted.length, lastId: inserted.at(-1), ms: performance.now() - start };
-  }, contours);
+  return callHook(page, "perf", "timeContourInsertion", contours);
 }
 
 /**
@@ -183,43 +178,7 @@ export async function measurePositionPatch(
     warmup: number;
   },
 ): Promise<Samples> {
-  return page.evaluate(async ({ contours, count, origin, frames, warmup }) => {
-    const editor = window.shift!.editor;
-    const inserted = editor.insertContent({ contours });
-    if (!inserted) throw new Error("contour insertion failed");
-
-    await editor.font.editCoordinator.settled();
-    editor.selectAll();
-
-    const selected = editor.selection.ids as readonly PointId[];
-    const pointIds = count === null ? selected : selected.slice(0, count);
-    const layer = editor.layerForGeometry({ points: pointIds });
-    if (!layer) throw new Error("selected points have no editable layer");
-
-    let updates = pointIds.map((id, index) => ({
-      kind: "point" as const,
-      id,
-      x: origin.x + index,
-      y: origin.y + index,
-    }));
-    const times: number[] = [];
-
-    for (let index = -warmup; index < frames; index++) {
-      const start = performance.now();
-      updates = pointIds.map((id, pointIndex) => ({
-        kind: "point" as const,
-        id,
-        x: origin.x + index + pointIndex,
-        y: origin.y + index + pointIndex,
-      }));
-      layer.previewPositionPatch(updates);
-      if (index >= 0) times.push(performance.now() - start);
-    }
-
-    layer.applyPositionPatch(updates);
-    await editor.font.editCoordinator.settled();
-    return times;
-  }, options);
+  return callHook(page, "perf", "measurePositionPatch", options);
 }
 
 /**
@@ -230,28 +189,7 @@ export async function measureNudge(
   page: Page,
   options: { contours: PerfContours; frames: number; warmup: number },
 ): Promise<Samples> {
-  return page.evaluate(async ({ contours, frames, warmup }) => {
-    const editor = window.shift!.editor;
-    const inserted = editor.insertContent({ contours });
-    if (!inserted) throw new Error("contour insertion failed");
-
-    await editor.font.editCoordinator.settled();
-    editor.selectAll();
-
-    const pointIds = editor.selection.ids as readonly PointId[];
-    const layer = editor.layerForGeometry({ points: pointIds });
-    if (!layer) throw new Error("selected points have no editable layer");
-
-    const times: number[] = [];
-
-    for (let index = -warmup; index < frames; index++) {
-      const start = performance.now();
-      layer.movePoints(pointIds, { x: 1, y: 0 });
-      if (index >= 0) times.push(performance.now() - start);
-    }
-
-    return times;
-  }, options);
+  return callHook(page, "perf", "measureNudge", options);
 }
 
 /**
@@ -262,43 +200,7 @@ export async function measureUndoRedo(
   page: Page,
   options: { contours: PerfContours; sampleCount: number },
 ): Promise<{ undo: Samples; redo: Samples }> {
-  return page.evaluate(async ({ contours, sampleCount }) => {
-    const editor = window.shift!.editor;
-    const inserted = editor.insertContent({ contours });
-    if (!inserted) throw new Error("contour insertion failed");
-
-    await editor.font.editCoordinator.settled();
-    editor.selectAll();
-
-    const pointIds = editor.selection.ids as readonly PointId[];
-    const layer = editor.layerForGeometry({ points: pointIds });
-    if (!layer) throw new Error("selected points have no editable layer");
-
-    const updates = pointIds.map((id, index) => ({
-      kind: "point" as const,
-      id,
-      x: index + 10,
-      y: index + 10,
-    }));
-    layer.previewPositionPatch(updates);
-    layer.applyPositionPatch(updates);
-    await editor.font.editCoordinator.settled();
-
-    const undoTimes: number[] = [];
-    const redoTimes: number[] = [];
-
-    for (let index = 0; index < sampleCount; index++) {
-      const undoStart = performance.now();
-      await editor.font.editCoordinator.undo();
-      undoTimes.push(performance.now() - undoStart);
-
-      const redoStart = performance.now();
-      await editor.font.editCoordinator.redo();
-      redoTimes.push(performance.now() - redoStart);
-    }
-
-    return { undo: undoTimes, redo: redoTimes };
-  }, options);
+  return callHook(page, "perf", "measureUndoRedo", options);
 }
 
 /**
@@ -309,27 +211,5 @@ export async function measurePanZoom(
   page: Page,
   options: { contours: PerfContours; frames: number },
 ): Promise<{ pan: Samples; zoom: Samples }> {
-  return page.evaluate(async ({ contours, frames }) => {
-    const editor = window.shift!.editor;
-    const inserted = editor.insertContent({ contours });
-    if (!inserted) throw new Error("contour insertion failed");
-
-    await editor.font.editCoordinator.settled();
-    editor.selectAll();
-
-    const panTimes: number[] = [];
-    const zoomTimes: number[] = [];
-
-    for (let index = 0; index < frames; index++) {
-      const panStart = performance.now();
-      editor.setPan({ x: index * 10, y: index * 5 });
-      panTimes.push(performance.now() - panStart);
-
-      const zoomStart = performance.now();
-      editor.zoomToPoint({ x: 640, y: 400 } as ScreenPoint, 0.01);
-      zoomTimes.push(performance.now() - zoomStart);
-    }
-
-    return { pan: panTimes, zoom: zoomTimes };
-  }, options);
+  return callHook(page, "perf", "measurePanZoom", options);
 }

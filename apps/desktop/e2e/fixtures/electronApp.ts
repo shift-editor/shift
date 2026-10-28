@@ -23,6 +23,7 @@ import {
 } from "@/testing/fonts";
 import { EditorDriver } from "./EditorDriver";
 import { ElectronProcesses, killApp } from "./electronProcesses";
+import { callHook } from "./appHooks";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";
 export { killApp, MAIN_JS } from "./electronProcesses";
@@ -343,6 +344,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         // Chromium writes renderer storage to disk in batches, and a flush only starts the
         // write. Wait until the text is on disk, as if the user had lingered, so the test
         // checks reopen behavior rather than racing that write.
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main, not the renderer
         await app.evaluate(({ session }) => session.defaultSession.flushStorageData());
         await expect.poll(() => localStorageOnDiskContains(userDataDir, persistedText)).toBe(true);
         await killApp(app);
@@ -438,17 +440,16 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
   }
   const page = windows[0]!;
   // config.toml and themes/ outlive a reload, so a theme from one test would leak into the next.
-  const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
+  const { directory } = await callHook(page, "session", "configState");
   fs.rmSync(path.join(directory, "config.toml"), { force: true });
   fs.rmSync(path.join(directory, "themes"), { recursive: true, force: true });
   await expect
-    .poll(() =>
-      page.evaluate(async () => {
-        const state = await window.shiftHost!.config.state();
-        return state.exists || state.themes.length > 0;
-      }),
-    )
+    .poll(async () => {
+      const state = await callHook(page, "session", "configState");
+      return state.exists || state.themes.length > 0;
+    })
     .toBe(false);
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- resets page storage and the route, not app state
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -461,6 +462,7 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
  * Fails a test that edited the shared document, since every later test would inherit the edit.
  */
 async function expectSharedWorkspaceClean(app: ElectronApplication): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main, not the renderer
   const titles = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().map((window) => window.getTitle()),
   );
@@ -478,6 +480,7 @@ export async function appRuntime(app: ElectronApplication): Promise<{
   electronVersion: string;
   appVersion: string;
 }> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main, not the renderer
   return app.evaluate(({ app: electronApp }) => ({
     platform: process.platform,
     architecture: process.arch,
@@ -488,7 +491,7 @@ export async function appRuntime(app: ElectronApplication): Promise<{
 
 /** The platform the renderer's host bridge reports to the page. */
 export async function rendererHostPlatform(page: Page): Promise<string | undefined> {
-  return page.evaluate(() => window.shiftHost?.platform);
+  return callHook(page, "session", "hostPlatform");
 }
 
 /**
@@ -498,9 +501,9 @@ export async function rendererHostPlatform(page: Page): Promise<string | undefin
  */
 export async function waitForWorkspaceReady(page: Page): Promise<void> {
   await page.waitForURL(/#\/home/, { timeout: 20_000 });
-  await page.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
-    timeout: 20_000,
-  });
+  await expect
+    .poll(() => callHook(page, "session", "workspaceLoaded"), { timeout: 20_000 })
+    .toBe(true);
   await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
 }
 

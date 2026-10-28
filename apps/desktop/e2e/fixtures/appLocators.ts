@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
+import { callHook } from "./appHooks";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -65,7 +66,7 @@ export function settingsDetails(page: Page) {
 }
 
 export async function firstAxisSlider(page: Page) {
-  const axisName = await page.evaluate(() => window.shiftSession?.catalog.axesCell.peek()[0]?.name);
+  const axisName = await callHook(page, "session", "firstCatalogAxisName");
   if (!axisName) throw new Error("Expected a variable axis");
 
   return page.getByRole("slider", { name: axisName, exact: true });
@@ -109,15 +110,7 @@ export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
 export async function waitForEditorReady(page: Page, glyphId: string): Promise<void> {
   await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
   await expect(editorShell(page)).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (expectedGlyphId) =>
-          window.shiftSession?.editor.scene.nodesOfKind("glyph")[0]?.glyphId === expectedGlyphId,
-        glyphId,
-      ),
-    )
-    .toBe(true);
+  await expect.poll(() => callHook(page, "editor", "shownGlyphId")).toBe(glyphId);
 }
 
 /**
@@ -142,13 +135,7 @@ export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
  * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
 export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void> {
-  await page.evaluate(async (id) => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected font workspace");
-
-    await font.loadGlyph(id);
-    window.location.hash = `#/editor/${encodeURIComponent(id)}`;
-  }, glyphId);
+  await callHook(page, "actions", "openGlyph", glyphId);
   await waitForEditorReady(page, glyphId);
 }
 
@@ -160,16 +147,7 @@ export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void
  * @throws {Error} when the session has no glyph named `name`.
  */
 export async function openSessionGlyphNamed(page: Page, name: string): Promise<GlyphId> {
-  const glyphId = await page.evaluate(async (glyphName) => {
-    const session = window.shiftSession;
-    if (!session) throw new Error("Expected a font session");
-
-    const entry = session.font.entryForName(glyphName);
-    if (!entry) throw new Error(`Expected a glyph named ${glyphName}`);
-    await session.font.loadGlyph(entry.id);
-    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
-    return entry.id;
-  }, name);
+  const glyphId = await callHook(page, "session", "openGlyphNamed", name);
   await waitForEditorReady(page, glyphId);
   return glyphId;
 }

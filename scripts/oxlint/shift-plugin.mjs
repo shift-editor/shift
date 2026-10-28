@@ -1805,8 +1805,12 @@ export default {
      * user surface. `page.evaluate`, `page.evaluateHandle`,
      * `page.waitForFunction` and `electronApp.evaluate` reach into renderer or
      * main internals instead, so a refactor breaks the spec while the
-     * behaviour holds. Fixtures under `e2e/fixtures/` own the few evaluations
-     * the driver needs.
+     * behaviour holds. The rule covers specs and fixtures alike: the one
+     * exempt file is `e2e/fixtures/appHooks.ts`, the typed bridge to the
+     * app's E2E hooks (agent reads, setup actions and test probes), so code
+     * that needs app state calls a hook rather than evaluating in the page.
+     * Fixtures that only measure the page or drive Electron main mark each
+     * evaluation with a reasoned disable.
      *
      * Evaluating on a locator, an element handle or a `BrowserWindow` handle
      * reads DOM or window state (`scrollTop`, focus, bounds) and is allowed,
@@ -1818,15 +1822,15 @@ export default {
         type: "suggestion",
         messages: {
           useDriver:
-            "Do not call .{{method}}() in an E2E spec. Read through EditorDriver (the agent read API) or act through the UI; put any evaluation the driver needs in e2e/fixtures/. See /writing-e2e-tests skill.",
+            "Do not call .{{method}}() in an E2E spec or fixture. Read through EditorDriver (the agent read API), act through the UI, or call an E2E hook through fixtures/appHooks.ts. See /writing-e2e-tests skill.",
         },
         schema: [],
       },
       create(context) {
         const filename = context.getFilename().replace(/\\/g, "/");
         if (!filename.includes("/apps/desktop/e2e/")) return {};
-        if (!filename.endsWith(".spec.ts")) return {};
-        if (filename.includes("/e2e/fixtures/")) return {};
+        if (!/\.m?ts$/.test(filename)) return {};
+        if (filename.endsWith("/e2e/fixtures/appHooks.ts")) return {};
 
         return {
           CallExpression(node) {
