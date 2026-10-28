@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolve } from "node:path";
-import { mintAxisId, mintLayerId, mintSourceId, type GlyphName } from "@shift/types";
+import {
+  mintAxisId,
+  mintAxisMappingId,
+  mintLayerId,
+  mintSourceId,
+  type GlyphName,
+} from "@shift/types";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 import { ShiftFontReader } from "./ShiftFontReader";
 
@@ -109,5 +115,23 @@ describe("ShiftFontReader serves public reads of accepted font state", () => {
     expect(() => reader.resolveLocation([{ axisId: mintAxisId(), value: 1 }])).toThrow(
       "Unknown axis",
     );
+  });
+
+  it("lists the font's axis mappings with its axes", async () => {
+    const [axis] = reader.getFont().axes;
+    const mapping = {
+      id: mintAxisMappingId(),
+      name: `${axis!.name} mapping`,
+      inputs: [axis!.id],
+      outputs: [axis!.id],
+      points: [0, 250, 1000].map((value, i) => ({
+        input: { values: { [axis!.id]: value } },
+        output: { values: { [axis!.id]: [0, 400, 1000][i]! } },
+      })),
+    };
+
+    await stack.font.setAxisMappings([mapping]);
+
+    expect(reader.getFont().axisMappings).toEqual([mapping]);
   });
 });

@@ -83,6 +83,7 @@ declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
 declare const AxisIdBrand: unique symbol;
 declare const AxisLabelIdBrand: unique symbol;
+declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
 declare const KerningGroupIdBrand: unique symbol;
@@ -124,6 +125,10 @@ type AxisId = string & {
 /** A stable identifier for one user-space axis label. */
 type AxisLabelId = string & {
   readonly [AxisLabelIdBrand]: typeof AxisLabelIdBrand;
+};
+/** A stable identifier for one font-owned axis mapping. */
+type AxisMappingId = string & {
+  readonly [AxisMappingIdBrand]: typeof AxisMappingIdBrand;
 };
 /**
  * A component identifier from Rust.
@@ -214,6 +219,19 @@ interface AxisLabel {
   maximum?: number;
   linkedValue?: number;
   elidable: boolean;
+}
+interface AxisMapping {
+  id: AxisMappingId;
+  name: string;
+  description?: string;
+  inputs: Array<AxisId>;
+  outputs: Array<AxisId>;
+  points: Array<AxisMappingPoint>;
+}
+interface AxisMappingPoint {
+  description?: string;
+  input: Location;
+  output: Location;
 }
 type AxisRole = "external" | "internal";
 type AxisType = "continuous" | "discrete";
@@ -362,6 +380,20 @@ export interface EditorView {
   editing: boolean;
   applyStatus: "idle" | "queued" | "applying" | null;
 }
+/** Where an open document came from: a `.shift` package, a font file opened for editing, or a new font. */
+export type DocumentSourceKind = "document" | "imported" | "untitled";
+/** One window's document and whether it has edits Save has not written. */
+export interface DocumentState {
+  sourceKind: DocumentSourceKind;
+  /** The file Save writes; null until the document has one. */
+  saveTarget: string | null;
+  /** The file the document was opened from or last saved to; null for a new font. */
+  path: string | null;
+  /** Whether the document has edits Save has not written. */
+  dirty: boolean;
+  /** Whether Save must first ask where to write, as for a new or imported font. */
+  needsSaveAs: boolean;
+}
 /** Editor facts paired with the explicit window and font-session target. */
 export interface EditorInspection extends EditorView {
   windowId: number;
@@ -376,6 +408,8 @@ export interface FontOverview {
   metricDefinitions: MetricDefinition[];
   glyphCount: number;
   axes: Axis[];
+  /** How user coordinates on the axes map to source coordinates (`avar`), in font order. */
+  axisMappings: AxisMapping[];
   /** Global designspace sources; glyph-specific layers are advertised on glyphs. */
   sources: Source[];
   instances: NamedInstance[];

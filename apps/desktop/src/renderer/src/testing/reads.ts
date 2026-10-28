@@ -19,8 +19,12 @@ import type {
   AuthoredComponent,
   AuthoredContour,
   AuthoredPoint,
+  DocumentState,
+  EditorView,
+  FontOverview,
   KerningGroupSummary,
   KerningMasterValue,
+  ResolvedLocation,
 } from "@shift/runtime";
 import type { KerningPosition, PointId } from "@shift/types";
 
@@ -48,6 +52,14 @@ export type GlyphComponent = AuthoredComponent;
 export type SourceKerning = KerningMasterValue;
 /** One kerning group at a pair position and its member glyphs. */
 export type KerningGroup = KerningGroupSummary;
+/** The font's info, metrics, axes, sources and instances. */
+export type FontSummary = FontOverview;
+/** A location resolved: its design coordinates, the source there, and the metrics. */
+export type LocationSummary = ResolvedLocation;
+/** The window's editor facts: open glyph, sources, location, selection, tool and edit state. */
+export type EditorViewState = EditorView;
+/** The window's document and whether it has edits Save has not written. */
+export type DocumentSaveState = DocumentState;
 
 export interface EditorReads {
   /** The open glyph's authored outline, as agents read it. */
@@ -74,4 +86,14 @@ export interface EditorReads {
   kerningGroupOf(position: KerningPosition, glyph: string): Read<KerningGroup | null>;
   /** The selected ids, in selection order. */
   selectionIds(): Read<readonly string[]>;
+  /** Every glyph's name, in font directory order, as agents page through `glyphs.list`. */
+  glyphNames(): Promise<readonly string[]>;
+  /** The font's info, metrics, axes, sources and instances, and the session's mode, as agents read them. */
+  fontOverview(): Read<FontSummary>;
+  /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */
+  editorView(): Read<EditorViewState>;
+  /** The editor's location resolved: its design coordinates, the source there, and the metrics. */
+  location(): Read<LocationSummary>;
+  /** The document's save state behind every edit made so far; null for a session without a document. */
+  documentState(): Promise<DocumentSaveState | null>;
 }

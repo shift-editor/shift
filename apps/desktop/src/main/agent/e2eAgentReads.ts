@@ -18,6 +18,11 @@ export interface E2EAgentReads {
    * @throws {Error} when the window has no font session, or the reader or method is unknown.
    */
   read(windowId: number, reader: string, method: string, args: unknown[]): Promise<unknown>;
+  /**
+   * Whether window `windowId`'s renderer has connected its agent lane, so a read can reach it;
+   * false for a window without a font session.
+   */
+  connected(windowId: number): boolean;
 }
 
 declare global {
@@ -34,5 +39,12 @@ export function publishE2EAgentReads(agentFor: (windowId: number) => AgentClient
 
   globalThis.shiftAgentReads = {
     read: (windowId, reader, method, args) => agentFor(windowId).read(reader, method, args),
+    connected: (windowId) => {
+      try {
+        return agentFor(windowId).connected;
+      } catch {
+        return false;
+      }
+    },
   };
 }

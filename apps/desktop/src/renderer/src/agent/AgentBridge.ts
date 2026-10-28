@@ -27,7 +27,7 @@ export class AgentBridge {
     this.#kerning = new ShiftKerningReader(session.font);
     this.#editor = new ShiftEditorReader(
       session.editor,
-      session.workspace?.applyStatusCell ?? null,
+      session.workspace?.editCoordinator ?? null,
     );
     this.#readers = { font: this.#reader, kerning: this.#kerning, editor: this.#editor };
   }

@@ -25,12 +25,9 @@ import type { Bounds, Point2D, Rect2D } from "@shift/geo";
 import type {
   AuthoredLayer,
   EditorTool,
-  EditorView,
-  FontOverview,
   GlyphSummary,
   KerningToolView,
   ResolvedGlyph,
-  ResolvedLocation,
   SpacingToolView,
   TextRunView,
 } from "@shift/runtime";
@@ -51,7 +48,11 @@ import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 import type {
+  DocumentSaveState,
   EditorReads,
+  EditorViewState,
+  FontSummary,
+  LocationSummary,
   GlyphAnchor,
   KerningGroup,
   Outline,
@@ -120,12 +121,6 @@ export type SourceLayer = AuthoredLayer;
 export type GlyphAtLocation = ResolvedGlyph;
 /** A glyph's identity and the layer each source holds. */
 export type GlyphListing = GlyphSummary;
-/** The font's info, metrics, axes, sources and instances. */
-export type FontSummary = FontOverview;
-/** A location resolved: its design coordinates, the source there, and the metrics. */
-export type LocationSummary = ResolvedLocation;
-/** The window's editor facts: open glyph, sources, location, selection, tool and edit state. */
-export type EditorViewState = EditorView;
 /** The active tool and its state. */
 export type ActiveTool = EditorTool;
 /** The canvas text run as it shows now. */
@@ -512,8 +507,8 @@ export interface EditorTestSurface extends EditorReads {
   screenPosition(position: Point2D): Point2D;
   /** The viewport's centre, in screen pixels. Test-only: not agent data. */
   viewportCentre(): Point2D;
-  /** Flushes pending edits and reads the document's save state. Test-only: not agent data. */
-  documentState(): Promise<WorkspaceDocumentState | null>;
+  /** The document's save state behind every edit made so far, as agents read it; null without a document. */
+  documentState(): Promise<DocumentSaveState | null>;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;
