@@ -67,6 +67,11 @@ export class EditorProbes {
     return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
   }
 
+  /** The glyph the scene shows on the canvas, or null when it shows none. */
+  shownGlyphId(): GlyphId | null {
+    return this.#editor.scene.first("glyph")?.glyphId ?? null;
+  }
+
   /** The glyph the font maps `codepoint` to, or null until the font has it. */
   glyphForUnicode(codepoint: number): GlyphId | null {
     const font = this.#editor.font;

@@ -1,5 +1,6 @@
 import type { Editor } from "@shift/editor";
 import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
+import type { PositionGuide } from "@shift/editor/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { MatModel, Point2D } from "@shift/geo";
 import type { GlyphName, NamedInstanceId, PointId, SegmentId, TextItemId } from "@shift/types";
@@ -159,6 +160,21 @@ export class InteractionProbes {
     const zoomedAt = performance.now();
     wheel({ deltaX: 30, deltaY: 0 });
     return { zoomPan, momentumPan: { x: editor.pan.x, y: editor.pan.y }, zoomedAt };
+  }
+
+  /**
+   * The snap guides the Select tool's translate or the Pen's drag shows now, in glyph units;
+   * empty outside those gestures.
+   */
+  activeSnapGuides(): PositionGuide[] {
+    const editor = this.#editor;
+    const select = editor.toolIf("select")?.state;
+    if (select?.type === "translating") return [...select.translate.guides];
+
+    const pen = editor.toolIf("pen")?.state;
+    if (pen?.type === "dragging") return [...pen.guides];
+
+    return [];
   }
 
   /** Whether the editor tracks a pointer over the canvas (or one it has captured). */

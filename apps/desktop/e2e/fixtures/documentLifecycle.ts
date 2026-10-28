@@ -2,12 +2,14 @@ import { expect, type ElectronApplication, type Page } from "@playwright/test";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import type {} from "../../src/main/dialogs/NativeDialogs";
 import type { CommandId } from "../../src/shared/commands";
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import type { FontSummary } from "@/testing/reads";
+import type { PreloadLayerRead } from "@/testing/e2e/SessionHooks";
 import { execFile, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
 import { promisify } from "node:util";
+import { callHook } from "./appHooks";
 import { EditorDriver } from "./EditorDriver";
 import { MAIN_JS, shiftTestEnvironment, waitForWorkspaceReady } from "./electronApp";
 
@@ -61,6 +63,7 @@ export async function launchSecondInstance(
   testRoot: string,
   documentPath: string,
 ): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   const executablePath = await electronApp.evaluate(() => process.execPath);
   // A second instance that wins the single-instance lock never exits; bound the wait
   // so the test fails with the launch instead of the overall timeout.
@@ -78,32 +81,16 @@ export async function launchSecondInstance(
 
 /** Creates the glyph named `name` in one transaction, so one undo removes it. */
 export async function createGlyphNamed(page: Page, name: string): Promise<void> {
-  await page.evaluate((glyphName) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected authored workspace");
-
-    workspace.font.editCoordinator.transaction(`Create ${glyphName}`, () => {
-      workspace.editor.createGlyph(glyphName as GlyphName);
-    });
-  }, name);
+  await callHook(page, "session", "createGlyphInOneStep", name);
 }
 
 /** Waits for a named glyph in the page's authored workspace and returns its identity. */
 export async function glyphIdForName(page: Page, name: string): Promise<GlyphId> {
-  await expect
-    .poll(() =>
-      page.evaluate(
-        (glyphName) => window.shift?.font.glyphRecords().some(({ name }) => name === glyphName),
-        name,
-      ),
-    )
-    .toBe(true);
-  const glyphId = await page.evaluate(
-    (glyphName) => window.shift?.font.glyphRecords().find(({ name }) => name === glyphName)?.id,
-    name,
-  );
-  if (!glyphId) throw new Error(`Expected ${name} glyph`);
-  return glyphId;
+  const editor = new EditorDriver(page);
+  await expect.poll(async () => (await editor.glyphNamed(name)) !== null).toBe(true);
+  const glyph = await editor.glyphNamed(name);
+  if (!glyph) throw new Error(`Expected ${name} glyph`);
+  return glyph.id;
 }
 
 export async function runCommand(
@@ -127,12 +114,7 @@ export async function runCommand(
 
 /** Runs `command` in `page`'s window as its menu item does, without focusing the window first. */
 export async function runWindowCommand(page: Page, command: CommandId): Promise<void> {
-  await page.evaluate(async (id) => {
-    const host = window.shiftHost;
-    if (!host) throw new Error("Expected Shift host");
-
-    await host.commands.run(id);
-  }, command);
+  await callHook(page, "session", "runCommand", command);
 }
 
 /** What the native application menu holds: its top-level menus, roles and chosen items. */
@@ -155,6 +137,7 @@ export interface ApplicationMenuSummary {
 export async function applicationMenuSummary(
   electronApp: ElectronApplication,
 ): Promise<ApplicationMenuSummary> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   return electronApp.evaluate(({ app, Menu }) => {
     const items = Menu.getApplicationMenu()?.items ?? [];
     const submenuIds = (label: string) =>
@@ -183,6 +166,7 @@ export async function applicationMenuSummary(
 
 /** The labels under File › Open Recent in the native menu, or null when it has no such menu. */
 export async function openRecentLabels(electronApp: ElectronApplication): Promise<string[] | null> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   return electronApp.evaluate(({ Menu }) => {
     const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
     const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
@@ -195,6 +179,7 @@ export async function clickOpenRecentItem(
   electronApp: ElectronApplication,
   label: string,
 ): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   await electronApp.evaluate(({ Menu }, itemLabel) => {
     const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
     const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
@@ -206,6 +191,7 @@ export async function clickOpenRecentItem(
 
 /** The system clipboard's text, read in main. */
 export async function clipboardText(electronApp: ElectronApplication): Promise<string> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   return electronApp.evaluate(({ clipboard }) => clipboard.readText());
 }
 
@@ -214,6 +200,7 @@ export async function writeClipboardText(
   electronApp: ElectronApplication,
   text: string,
 ): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   await electronApp.evaluate(({ clipboard }, value) => clipboard.writeText(value), text);
 }
 
@@ -226,6 +213,7 @@ export async function applicationMenuItemEnabled(
   await browserWindow.evaluate((window) => window.focus());
   await browserWindow.dispose();
 
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   return electronApp.evaluate(({ Menu }, id) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(id);
     if (!item) throw new Error(`Missing application menu item: ${id}`);
@@ -249,6 +237,7 @@ export async function clickApplicationMenuItem(
     .toBe(true);
   await browserWindow.dispose();
 
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   await electronApp.evaluate(({ BrowserWindow, Menu }, id) => {
     const item = Menu.getApplicationMenu()?.getMenuItemById(id);
     if (!item) throw new Error(`Missing application menu item: ${id}`);
@@ -271,6 +260,7 @@ export async function closeWindow(page: Page, electronApp: ElectronApplication):
 }
 
 export async function requestAppQuit(electronApp: ElectronApplication): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   await electronApp.evaluate(({ app }) => {
     setTimeout(() => app.quit(), 0);
   });
@@ -278,6 +268,7 @@ export async function requestAppQuit(electronApp: ElectronApplication): Promise<
 
 /** Asks the app to quit and waits until main has started quitting (`before-quit`). */
 export async function startAppQuit(electronApp: ElectronApplication): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   await electronApp.evaluate(
     ({ app }) =>
       new Promise<void>((resolve) => {
@@ -292,12 +283,7 @@ export async function startAppQuit(electronApp: ElectronApplication): Promise<vo
  * for tests that run without scripted dialogs.
  */
 export async function saveDocumentAs(page: Page, savePath: string): Promise<void> {
-  await page.evaluate(async (target) => {
-    const coordinator = window.shift?.editCoordinator;
-    if (!coordinator) throw new Error("Expected edit coordinator");
-
-    await coordinator.save(target);
-  }, savePath);
+  await callHook(page, "session", "saveDocumentAs", savePath);
 }
 
 /**
@@ -310,11 +296,13 @@ export async function saveDocumentAs(page: Page, savePath: string): Promise<void
 export async function dirtyDocumentDecisions(
   electronApp: ElectronApplication,
 ): Promise<readonly DirtyDocumentChoice[]> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   return electronApp.evaluate(() => globalThis.shiftScriptedDialogs?.dirtyDocumentDecisions ?? []);
 }
 
 /** Returns how many dirty-document confirmations scripted dialogs have started. */
 export async function dirtyDocumentRequests(electronApp: ElectronApplication): Promise<number> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (menu, clipboard, app lifecycle, scripted dialogs), not the renderer
   return electronApp.evaluate(() => globalThis.shiftScriptedDialogs?.dirtyDocumentRequests ?? 0);
 }
 
@@ -346,33 +334,6 @@ export async function quitApp(
  * reads the open document: the store's kind, that layer's id, its decoded bytes, the component
  * closure of the glyph, and the glyph's id.
  */
-export async function readFirstLayerThroughPreload(page: Page): Promise<{
-  kind: string;
-  layerId: string;
-  bytes: string;
-  closure: readonly string[];
-  glyphId: GlyphId;
-}> {
-  return page.evaluate(async () => {
-    const workspace = window.shift!;
-    const location = await workspace.storeLocation();
-    if (!location) throw new Error("an authored document has a layer store");
-    const record = workspace.font.glyphRecords().find((glyph) => glyph.layers.length > 0);
-    if (!record) throw new Error("the fixture has a glyph with a layer");
-    const layerId = record.layers[0]!.id;
-
-    const layers = window.shiftHost!.layers;
-    const reader = layers.open(location);
-    try {
-      return {
-        kind: location.kind,
-        layerId,
-        bytes: new TextDecoder().decode(layers.load(reader, [layerId])),
-        closure: layers.componentClosure(reader, [record.id]),
-        glyphId: record.id,
-      };
-    } finally {
-      layers.close(reader);
-    }
-  });
+export async function readFirstLayerThroughPreload(page: Page): Promise<PreloadLayerRead> {
+  return callHook(page, "session", "firstLayerThroughPreload");
 }

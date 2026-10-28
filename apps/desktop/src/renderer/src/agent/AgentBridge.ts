@@ -119,7 +119,7 @@ export class AgentBridge {
   /** @throws {Error} for a hook or method the E2E hooks do not have. */
   async #callHook(hook: string, method: string, args: unknown[]): Promise<unknown> {
     const { createE2EHooks } = await import("@/testing/e2e/hooks");
-    const hooks = (this.#e2eHooks ??= createE2EHooks(this.#session));
+    const hooks = (this.#e2eHooks ??= createE2EHooks(this.#session, this.#host));
     const target: object | undefined = Object.hasOwn(hooks, hook)
       ? hooks[hook as keyof E2EHooks]
       : undefined;
