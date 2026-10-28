@@ -102,6 +102,7 @@ import type {
   AxisFixture,
   AxisLocation,
   DrawnGlyph,
+  DrawOptions,
   EditorTestSurface,
   Modifiers,
 } from "./surface";
@@ -602,14 +603,19 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this;
   }
 
-  async draw<const F extends GlyphFixture>(fixture: F): Promise<Record<PointNames<F>, PointId>> {
+  async draw<const F extends GlyphFixture>(
+    fixture: F,
+    options: DrawOptions = {},
+  ): Promise<Record<PointNames<F>, PointId>> {
     const names = {} as Record<PointNames<F>, PointId>;
     if (fixture.advance !== undefined) this.setXAdvance(fixture.advance);
 
     const contours = fixture.contours ?? [];
+    let drawn: readonly SelectableId[] = [];
     if (contours.length > 0) {
       const ids = this.insertContent(contourContent(contours));
       if (!ids) throw new Error("draw needs one open glyph to draw into");
+      drawn = ids;
       pointNames(contours).forEach((name, index) => {
         if (name !== null) (names as Record<string, PointId>)[name] = ids[index] as PointId;
       });
@@ -625,7 +631,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
     for (const component of fixture.components ?? []) await this.#drawComponent(component);
 
-    this.selection.clear();
+    if (options.select) this.selection.select(drawn);
+    else this.selection.clear();
     await this.settle();
     return names;
   }
