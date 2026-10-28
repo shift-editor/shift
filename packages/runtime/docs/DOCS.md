@@ -37,7 +37,7 @@ packages/runtime/
 - `ShiftObservation`, `FontRevision`, and `ShiftTarget` -- revision-correlated result, opaque authored-state identity, and explicit window/precondition input.
 - `ShiftCapture` and `ShiftCaptureTarget` -- point-in-time PNG output and its explicit `window` or `editor` target.
 - `EditorInspection` -- point-in-time editor observation paired with its explicit target.
-- `FontOverview`, `GlyphPage`, `GlyphSummary`, and `AuthoredLayer` -- read-only font, paged directory, stable layer references, and nested source-specific geometry.
+- `FontOverview`, `GlyphPage`, `GlyphSummary`, and `AuthoredLayer` -- read-only font (with its axes, axis mappings, sources and instances), paged directory, stable layer references, and nested source-specific geometry.
 - `ResolvedLocation`, `ResolvedGlyph`, and `ResolvedGlyphs` -- mapped location/metrics and drawable glyph output at arbitrary external coordinates.
 - `AuthoredContour`, `AuthoredPoint`, `AuthoredComponent`, `AuthoredAnchor`, and `AffineTransformation` -- familiar scripting hierarchy with stable IDs and conventional component transforms.
 - `LayerSvg`, `LayerOverlays`, `LayerAppearance`, and `LayerGuides` -- portable authored-layer proof output, semantic overlay selection, presentation-only overrides, and style-independent guide positions.
@@ -45,6 +45,7 @@ packages/runtime/
 - `ResolvedKerningPairs`, `KerningResolution`, `KerningMasterValue`, `KerningOrigin`, and `KerningRule` -- the kerning between two glyphs at a master or location, with each master's value, how it arises, and which kind of pair applies.
 - `shiftInputSchemas` -- reusable runtime validation of untrusted capability inputs before IPC.
 - `EditorView` -- renderer-owned portion of an editor observation.
+- `DocumentState` -- one window's document: where it came from, the file Save writes, and whether it is `dirty` or `needsSaveAs`. The desktop's editor reader serves it (`ShiftEditorReader.documentState`); it is not an MCP capability yet.
 - `EditorGlyph` -- active glyph occurrence using canonical domain identifiers.
 - `ShiftSessionMode` -- alias of the canonical `FontSessionMode`, including memory hosts.
 

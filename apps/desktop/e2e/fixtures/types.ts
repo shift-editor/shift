@@ -106,6 +106,8 @@ export interface PointDrag {
 
 export type RecoveryApp = {
   page: Page;
+  /** The app running now: the first launch until a crash, then the launch that recovered. */
+  readonly app: ElectronApplication;
   documentPath: string;
   crashAndRecover: () => Promise<Page>;
   /**

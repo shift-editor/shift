@@ -1,5 +1,6 @@
 import type {
   AuthoredContour,
+  DocumentState,
   EditorView,
   KerningGapView,
   KerningPairSideView,
@@ -15,10 +16,9 @@ import type { Editor } from "@shift/editor";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId } from "@shift/types";
-import type { Signal } from "@shift/editor/signals";
 import type { TextItem } from "@shift/editor/text";
 import { KerningTool, SpacingTool, type KerningPair } from "@shift/editor/tools";
-import type { WorkspaceApplyStatus } from "@/types/workspace";
+import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 /** One point handle the canvas draws, and how it is styled. */
 export interface DrawnHandle {
@@ -29,22 +29,22 @@ export interface DrawnHandle {
 
 /**
  * Public reads of one editor's view: its open glyph, sources, location,
- * selection, tool and edit state.
+ * selection, tool, edit and save state.
  *
  * @remarks
  * Returns runtime DTOs. Revision guarding and transport belong to the caller.
  */
 export class ShiftEditorReader {
   readonly #editor: Editor;
-  readonly #applyStatusCell: Signal<WorkspaceApplyStatus> | null;
+  readonly #edits: WorkspaceEditCoordinator | null;
 
   /**
-   * @param applyStatusCell - The workspace's apply status; null for a session
+   * @param edits - The workspace's edit coordinator; null for a session
    * without a workspace (a preview or an in-memory font).
    */
-  constructor(editor: Editor, applyStatusCell: Signal<WorkspaceApplyStatus> | null) {
+  constructor(editor: Editor, edits: WorkspaceEditCoordinator | null) {
     this.#editor = editor;
-    this.#applyStatusCell = applyStatusCell;
+    this.#edits = edits;
   }
 
   /**
@@ -75,8 +75,23 @@ export class ShiftEditorReader {
       tool: tool ? { id: tool.id, state: tool.state.type } : null,
       dragging: editor.isDragging,
       editing: editor.isEditing,
-      applyStatus: this.#applyStatusCell?.peek() ?? null,
+      applyStatus: this.#edits?.applyStatusCell.peek() ?? null,
     };
+  }
+
+  /**
+   * The window's document and whether it has unsaved edits, read behind every
+   * edit already made.
+   *
+   * @returns null for a session without a document (a preview or an
+   * in-memory font).
+   */
+  async documentState(): Promise<DocumentState | null> {
+    const state = await this.#edits?.state();
+    if (!state) return null;
+
+    const { sourceKind, saveTarget, canonicalPath, dirty, needsSaveAs } = state;
+    return { sourceKind, saveTarget, path: canonicalPath, dirty, needsSaveAs };
   }
 
   /**

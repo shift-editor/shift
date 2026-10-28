@@ -47,6 +47,7 @@ export class ShiftFontReader {
       metricDefinitions: font.metricDefinitions,
       glyphCount: font.glyphCount,
       axes: font.getAxes(),
+      axisMappings: font.getAxisMappings(),
       sources: font.sources,
       instances: font.namedInstances,
     };

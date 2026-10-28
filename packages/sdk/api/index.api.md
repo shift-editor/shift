@@ -603,6 +603,7 @@ export class Font {
 export interface FontOverview {
     // (undocumented)
     axes: Axis[];
+    axisMappings: AxisMapping[];
     // (undocumented)
     glyphCount: number;
     // (undocumented)

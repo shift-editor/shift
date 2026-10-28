@@ -3,6 +3,7 @@ import type {
   AnchorId,
   Axis,
   AxisId,
+  AxisMapping,
   ComponentId,
   ContourId,
   FontMetadata,
@@ -104,6 +105,22 @@ export interface EditorView {
   applyStatus: "idle" | "queued" | "applying" | null;
 }
 
+/** Where an open document came from: a `.shift` package, a font file opened for editing, or a new font. */
+export type DocumentSourceKind = "document" | "imported" | "untitled";
+
+/** One window's document and whether it has edits Save has not written. */
+export interface DocumentState {
+  sourceKind: DocumentSourceKind;
+  /** The file Save writes; null until the document has one. */
+  saveTarget: string | null;
+  /** The file the document was opened from or last saved to; null for a new font. */
+  path: string | null;
+  /** Whether the document has edits Save has not written. */
+  dirty: boolean;
+  /** Whether Save must first ask where to write, as for a new or imported font. */
+  needsSaveAs: boolean;
+}
+
 /** Editor facts paired with the explicit window and font-session target. */
 export interface EditorInspection extends EditorView {
   windowId: number;
@@ -119,6 +136,8 @@ export interface FontOverview {
   metricDefinitions: MetricDefinition[];
   glyphCount: number;
   axes: Axis[];
+  /** How user coordinates on the axes map to source coordinates (`avar`), in font order. */
+  axisMappings: AxisMapping[];
   /** Global designspace sources; glyph-specific layers are advertised on glyphs. */
   sources: Source[];
   instances: NamedInstance[];

@@ -106,7 +106,7 @@ import type {
   EditorTestSurface,
   Modifiers,
 } from "./surface";
-import type { Outline } from "./reads";
+import type { DocumentSaveState, Outline } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -191,7 +191,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#reads = {
       font: new ShiftFontReader(stack.font, sessionMode),
       kerning: new ShiftKerningReader(stack.font),
-      editor: new ShiftEditorReader(this, stack.editCoordinator.applyStatusCell),
+      editor: new ShiftEditorReader(this, stack.editCoordinator),
     };
     registerBuiltInTools(this);
     this.setActiveTool("select");
@@ -1214,8 +1214,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.cursor;
   }
 
-  documentState(): Promise<WorkspaceDocumentState | null> {
-    return this.font.editCoordinator.state();
+  documentState(): Promise<DocumentSaveState | null> {
+    return this.#reads.editor.documentState();
   }
   async pointAt(position: Point2D): Promise<AuthoredPoint | null> {
     const outline = await this.outline();
@@ -1257,6 +1257,17 @@ export class TestEditor extends Editor implements EditorTestSurface {
   glyphNamed(name: string): GlyphSummary | null {
     if (!this.font.recordForName(name as GlyphName)) return null;
     return this.#reads.font.getGlyph({ name: name as GlyphName });
+  }
+
+  async glyphNames(): Promise<readonly string[]> {
+    const names: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.#reads.font.listGlyphs({ limit: 100, cursor });
+      names.push(...page.items.map((glyph) => glyph.name));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return names;
   }
 
   fontOverview(): FontOverview {

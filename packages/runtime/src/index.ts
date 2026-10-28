@@ -10,6 +10,8 @@ export type {
   AuthoredLayer,
   AuthoredPoint,
   AxisCoordinate,
+  DocumentSourceKind,
+  DocumentState,
   EditorGlyph,
   EditorInspection,
   EditorTool,

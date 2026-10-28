@@ -1,5 +1,5 @@
 import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
-import type { ElectronApplication, Locator, Page } from "@playwright/test";
+import { expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import type { Point2D, Rect2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
@@ -16,7 +16,14 @@ import type {
   AgentReadMethod,
   AgentReadResult,
 } from "@/agent/AgentReaders";
-import type { EditorReads, Outline } from "@/testing/reads";
+import type {
+  DocumentSaveState,
+  EditorReads,
+  EditorViewState,
+  FontSummary,
+  LocationSummary,
+  Outline,
+} from "@/testing/reads";
 import type {} from "../../src/main/agent/e2eAgentReads";
 import { waitForEditorReady } from "./appLocators";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
@@ -389,6 +396,11 @@ export class EditorDriver implements EditorReads {
     return (await this.activeGlyph())?.contourCount ?? 0;
   }
 
+  /** Returns the canvas zoom level. */
+  async zoomLevel(): Promise<number> {
+    return this.page.evaluate(() => window.shiftSession?.editor.zoom ?? 0);
+  }
+
   /** Returns the hovered editor object identity, or null when nothing is hovered. */
   async hoverId(): Promise<string | null> {
     return this.page.evaluate(() => window.shiftSession?.editor.hover.id ?? null);
@@ -670,12 +682,40 @@ export class EditorDriver implements EditorReads {
   }
 
   async selectionIds(): Promise<readonly string[]> {
-    return (await this.#read("editor", "inspect", "")).selectionIds;
+    return (await this.editorView()).selectionIds;
+  }
+
+  async glyphNames(): Promise<readonly string[]> {
+    const names: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.#read("font", "listGlyphs", { limit: 100, cursor });
+      names.push(...page.items.map((glyph) => glyph.name));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return names;
+  }
+
+  async fontOverview(): Promise<FontSummary> {
+    return this.#read("font", "getFont");
+  }
+
+  async editorView(): Promise<EditorViewState> {
+    return this.#read("editor", "inspect", new URL(this.page.url()).hash.slice(1));
+  }
+
+  async location(): Promise<LocationSummary> {
+    const { externalLocation } = await this.editorView();
+    return this.#read("font", "resolveLocation", externalLocation);
+  }
+
+  async documentState(): Promise<DocumentSaveState | null> {
+    return this.#read("editor", "documentState");
   }
 
   /** The open glyph's authored layer at its node's source, as `layers.get` returns it. */
   async #openLayer(): Promise<AuthoredLayer> {
-    const { glyph } = await this.#read("editor", "inspect", "");
+    const { glyph } = await this.editorView();
     if (!glyph) throw new Error("Expected an open glyph");
     return this.#read("font", "getLayer", {
       glyph: { glyphId: glyph.glyphId },
@@ -699,7 +739,17 @@ export class EditorDriver implements EditorReads {
     this.#windowId ??= app
       .browserWindow(this.page)
       .then((window) => window.evaluate((browserWindow) => browserWindow.id));
-    const call = { windowId: await this.#windowId, reader, method: String(method), args };
+    const windowId = await this.#windowId;
+    // A window that just opened or reloaded answers once its renderer connects the agent lane.
+    await expect
+      .poll(() =>
+        app.evaluate(
+          (_electron, id) => globalThis.shiftAgentReads?.connected(id) ?? false,
+          windowId,
+        ),
+      )
+      .toBe(true);
+    const call = { windowId, reader, method: String(method), args };
     const value = await app.evaluate(async (_electron, { windowId, reader, method, args }) => {
       const reads = globalThis.shiftAgentReads;
       if (!reads) throw new Error("The app has no E2E agent reads; is NODE_ENV test?");
