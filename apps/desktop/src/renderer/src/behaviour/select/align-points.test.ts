@@ -1,14 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 describe("dragging points aligns them with points that stay put", () => {
   async function drawZigzag() {

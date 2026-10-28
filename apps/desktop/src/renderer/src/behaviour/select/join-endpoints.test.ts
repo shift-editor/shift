@@ -1,14 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 /** An open L, 100,100 → 300,100 → 300,300. */
 function openCorner() {
@@ -64,20 +62,7 @@ describe("dropping an open end onto another open end joins them", () => {
 
   it("joins two contours when an end lands on the other's end", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [100, 100],
-            [300, 100],
-          ],
-        },
-        {
-          points: [
-            [100, 300],
-            [300, 300],
-          ],
-        },
-      ],
+      contours: [line([100, 100], [300, 100]), line([100, 300], [300, 300])],
     });
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 299, y: 101 });

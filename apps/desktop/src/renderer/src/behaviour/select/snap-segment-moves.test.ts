@@ -1,14 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 /** An L of two lines, 100,100 → 300,100 → 300,300. */
 function corner(options: { closed?: boolean; curved?: boolean } = {}) {

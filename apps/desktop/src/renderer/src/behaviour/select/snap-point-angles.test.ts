@@ -1,18 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
 const ROOT_3 = Math.sqrt(3);
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 /** An L of two lines, 100,100 → 300,100 → 300,300, with either line optionally a curve. */
 function corner(options: { closed?: boolean; curve?: "first" | "second" } = {}) {

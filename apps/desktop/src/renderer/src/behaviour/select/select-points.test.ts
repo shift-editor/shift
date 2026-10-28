@@ -1,32 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 /** An open line from 100,100 to 200,200. */
-function line() {
+function drawLine() {
   return editor.draw({
-    contours: [
-      {
-        points: [
-          { x: 100, y: 100, name: "first" },
-          { x: 200, y: 200, name: "second" },
-        ],
-      },
-    ],
+    contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })],
   });
 }
 
 describe("clicking selects", () => {
   it("selects a point clicked on", async () => {
-    const { first } = await line();
+    const { first } = await drawLine();
 
     await editor.clickAt({ x: 100, y: 100 });
 
@@ -34,7 +25,7 @@ describe("clicking selects", () => {
   });
 
   it("clears the selection on a click on empty canvas", async () => {
-    await line();
+    await drawLine();
     await editor.clickAt({ x: 100, y: 100 });
 
     await editor.clickAt({ x: 900, y: 900 });
@@ -59,7 +50,7 @@ describe("Shift-click adds to and removes from the selection", () => {
   let second: PointId;
 
   beforeEach(async () => {
-    ({ first, second } = await line());
+    ({ first, second } = await drawLine());
   });
 
   it("adds an unselected point and keeps the rest", async () => {
@@ -127,7 +118,7 @@ describe("the cursor offers adding to the selection", () => {
   let second: PointId;
 
   beforeEach(async () => {
-    ({ first, second } = await line());
+    ({ first, second } = await drawLine());
   });
 
   it("only while Shift is held over an unselected point", async () => {
@@ -211,14 +202,7 @@ describe("a marquee selects what it covers", () => {
   /** A horizontal line from 100,200 to 180,200. */
   function flatLine() {
     return editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 200, name: "start" },
-            { x: 180, y: 200, name: "end" },
-          ],
-        },
-      ],
+      contours: [line({ x: 100, y: 200, name: "start" }, { x: 180, y: 200, name: "end" })],
     });
   }
 
@@ -276,14 +260,7 @@ describe("the bounding box around the selection", () => {
 
   it("shows when both of its sides are small but not zero", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [100, 100],
-            [112, 112],
-          ],
-        },
-      ],
+      contours: [line([100, 100], [112, 112])],
     });
 
     await editor.dragFrom({ x: 90, y: 90 }, { x: 120, y: 120 });

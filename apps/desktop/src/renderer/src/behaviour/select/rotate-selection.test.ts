@@ -1,33 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
 /** How far diagonally outside a selection corner the user presses to rotate, in screen pixels. */
 const ROTATE_GRAB_OFFSET_PX = 8;
 
-let editor: EditorTestSurface;
+const editor = useTestEditor();
 let first: PointId;
 let second: PointId;
 
 beforeEach(async () => {
-  editor = await startTestEditor();
-  ({ first, second } = await editor.draw({
-    contours: [
-      {
-        points: [
-          { x: 100, y: 100, name: "first" },
-          { x: 200, y: 200, name: "second" },
-        ],
-      },
-    ],
-  }));
+  ({ first, second } = await editor.draw(
+    { contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })] },
+    { select: true },
+  ));
   editor.selectTool("select");
-  editor.select([first, second]);
 });
-afterEach(() => editor.close());
 
 /** Where to press just outside the selection's top-right corner to rotate. */
 function grabPoint(): Point2D {

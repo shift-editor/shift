@@ -1,13 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("dragging a selected point moves the selection", () => {
   it("moves every selected point by the drag", async () => {
@@ -40,14 +36,7 @@ describe("dragging a selected point moves the selection", () => {
 
   it("leaves points it did not select where they were", async () => {
     const { a, b } = await editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "a" },
-            { x: 150, y: 150, name: "b" },
-          ],
-        },
-      ],
+      contours: [line({ x: 100, y: 100, name: "a" }, { x: 150, y: 150, name: "b" })],
     });
 
     await expectEdit(
@@ -63,7 +52,7 @@ describe("dragging a selected point moves the selection", () => {
 
   it("puts the points back when the drag is abandoned", async () => {
     const { a } = await editor.draw({
-      contours: [{ points: [{ x: 100, y: 100, name: "a" }, [150, 150]] }],
+      contours: [line({ x: 100, y: 100, name: "a" }, [150, 150])],
     });
     const before = await editor.outline();
     editor.selectTool("select");

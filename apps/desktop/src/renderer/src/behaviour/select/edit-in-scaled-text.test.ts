@@ -1,16 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor();
 let first: PointId;
 let middle: PointId;
 /** The hit distance in glyph units with the text at the font's own size. */
 let fullSizeHitDistance: number;
 
 beforeEach(async () => {
-  editor = await startTestEditor();
   ({ first, middle } = await editor.draw({
     contours: [
       {
@@ -22,7 +20,6 @@ beforeEach(async () => {
   fullSizeHitDistance = editor.hitDistance();
   editor.setTextSize(editor.metrics().unitsPerEm / 10);
 });
-afterEach(() => editor.close());
 
 describe("a glyph edited in text a tenth of the font's size", () => {
   it("hits a point within the on-screen distance, measured in the glyph's own units", async () => {

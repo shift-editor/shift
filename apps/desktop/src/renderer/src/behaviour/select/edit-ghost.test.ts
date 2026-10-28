@@ -1,19 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor();
 let middle: PointId;
 
 beforeEach(async () => {
-  editor = await startTestEditor();
   ({ middle } = await editor.draw({
     contours: [{ points: [[100, 100], { x: 200, y: 100, name: "middle" }, [300, 100]] }],
   }));
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 describe("dragging shows the outline as it was before the drag", () => {
   it("keeps the pre-drag outline while a point is dragged", () => {

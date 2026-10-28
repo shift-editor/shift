@@ -1,34 +1,35 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { cubic, line } from "@/testing/fixtures";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
+import type { DrawOptions } from "@/testing/surface";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 /** An open diagonal of three points, 100,100 → 150,150 → 200,200. */
-function diagonal() {
-  return editor.draw({
-    contours: [
-      {
-        points: [
-          { x: 100, y: 100, name: "first" },
-          { x: 150, y: 150, name: "middle" },
-          { x: 200, y: 200, name: "last" },
-        ],
-      },
-    ],
-  });
+function diagonal(options?: DrawOptions) {
+  return editor.draw(
+    {
+      contours: [
+        {
+          points: [
+            { x: 100, y: 100, name: "first" },
+            { x: 150, y: 150, name: "middle" },
+            { x: 200, y: 200, name: "last" },
+          ],
+        },
+      ],
+    },
+    options,
+  );
 }
 
 describe("dragging moves the selection", () => {
   it("moves the whole selection when an unselected segment inside its bounds is dragged", async () => {
-    const { first, middle, last } = await diagonal();
-    editor.select([first, middle, last]);
+    const { first, middle, last } = await diagonal({ select: true });
 
     await editor.dragFrom({ x: 125, y: 125 }, { x: 160, y: 150 });
 
@@ -126,14 +127,12 @@ describe("dragging moves the selection", () => {
   it("moves a curve's handle without its point", async () => {
     const { corner, control } = await editor.draw({
       contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "corner" },
-            { x: 170, y: 100, off: true, name: "control" },
-            { x: 220, y: 20, off: true },
-            [300, 100],
-          ],
-        },
+        cubic(
+          { x: 100, y: 100, name: "corner" },
+          { x: 170, y: 100, name: "control" },
+          [220, 20],
+          [300, 100],
+        ),
       ],
     });
 
@@ -147,14 +146,7 @@ describe("dragging moves the selection", () => {
 
   it("moves a line by both of its points", async () => {
     const { start, end } = await editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 200, name: "start" },
-            { x: 180, y: 200, name: "end" },
-          ],
-        },
-      ],
+      contours: [line({ x: 100, y: 200, name: "start" }, { x: 180, y: 200, name: "end" })],
     });
 
     await editor.dragFrom({ x: 140, y: 200 }, { x: 170, y: 220 });
@@ -239,10 +231,10 @@ describe("a drag in flight", () => {
   });
 
   it("commits the last move even when it is still queued at release", async () => {
-    const { lone } = await editor.draw({
-      contours: [{ points: [{ x: 100, y: 200, name: "lone" }] }],
-    });
-    editor.select([lone]);
+    const { lone } = await editor.draw(
+      { contours: [{ points: [{ x: 100, y: 200, name: "lone" }] }] },
+      { select: true },
+    );
 
     editor.pressAt({ x: 100, y: 200 });
     editor.movePointerTo({ x: 110, y: 200 });
@@ -253,10 +245,10 @@ describe("a drag in flight", () => {
   });
 
   it("commits a drag whose only move crosses the threshold while still queued", async () => {
-    const { lone } = await editor.draw({
-      contours: [{ points: [{ x: 100, y: 200, name: "lone" }] }],
-    });
-    editor.select([lone]);
+    const { lone } = await editor.draw(
+      { contours: [{ points: [{ x: 100, y: 200, name: "lone" }] }] },
+      { select: true },
+    );
 
     editor.pressAt({ x: 100, y: 200 });
     editor.queuePointerMove({ x: 150, y: 230 });
@@ -268,8 +260,7 @@ describe("a drag in flight", () => {
 
 describe("the selection's bounds follow its points", () => {
   it("through a drag and a curve inserted before them", async () => {
-    const { first, middle, last } = await diagonal();
-    editor.select([first, middle, last]);
+    const { first, middle, last } = await diagonal({ select: true });
 
     await editor.dragFrom({ x: 150, y: 150 }, { x: 180, y: 170 });
     expect(editor.selectionLocalRect()).toMatchObject({ x: 130, y: 120, width: 100, height: 100 });
@@ -284,7 +275,7 @@ describe("the selection's bounds follow its points", () => {
 describe("dragging while editing several sources", () => {
   it("moves the matching point in every edited source, as one edit", async () => {
     const { middle } = await diagonal();
-    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis(WEIGHT);
     await editor.addSource("Bold", { wght: 700 });
     await editor.editSources(["Regular", "Bold"]);
     const boldBefore = (await editor.layerAt("Bold")).contours[0]!.points[1]!;

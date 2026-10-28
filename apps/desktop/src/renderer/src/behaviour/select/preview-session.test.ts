@@ -1,24 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { LOCK_GAP_PX, LOCK_SIZE_PX } from "@shift/editor/rendering";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor({ mode: "preview" });
 beforeEach(async () => {
-  editor = await startTestEditor("preview");
   await editor.draw({
-    contours: [
-      {
-        points: [
-          [100, 100],
-          [200, 200],
-        ],
-      },
-    ],
+    contours: [line([100, 100], [200, 200])],
   });
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 describe("a preview session only looks", () => {
   it("disables the authoring tools but keeps Select and Text", () => {
