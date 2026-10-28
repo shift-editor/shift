@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { Bounds, type Point2D } from "@shift/geo";
+import { Bounds } from "@shift/geo";
 import { rect } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
+import { near } from "@/testing/outlineMatchers";
 
 const editor = useTestEditor();
-
-function closeTo(actual: Point2D, expected: Point2D): void {
-  expect(actual.x).toBeCloseTo(expected.x);
-  expect(actual.y).toBeCloseTo(expected.y);
-}
 
 describe("zooming the viewport", () => {
   beforeEach(async () => {
@@ -39,7 +35,7 @@ describe("zooming the viewport", () => {
 
     editor.zoomToSelection();
 
-    closeTo(editor.screenPosition(centre), editor.viewportCentre());
+    expect(editor.screenPosition(centre)).toEqual(near(editor.viewportCentre()));
   });
 
   it("sets an absolute zoom level around the viewport centre", () => {
@@ -50,10 +46,12 @@ describe("zooming the viewport", () => {
     editor.setZoom(2);
 
     expect(editor.zoomLevel()).toBe(2);
-    closeTo(editor.screenPosition({ x: 100, y: 100 }), {
-      x: centre.x + ((before.x - centre.x) * 2) / zoom,
-      y: centre.y + ((before.y - centre.y) * 2) / zoom,
-    });
+    expect(editor.screenPosition({ x: 100, y: 100 })).toEqual(
+      near({
+        x: centre.x + ((before.x - centre.x) * 2) / zoom,
+        y: centre.y + ((before.y - centre.y) * 2) / zoom,
+      }),
+    );
   });
 });
 
