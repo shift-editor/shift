@@ -14,7 +14,7 @@
     "typecheck": "tsgo --noEmit -p tsconfig.build.json && tsgo --noEmit -p tsconfig.config.json && pnpm typecheck:e2e",
     "typecheck:e2e": "tsgo --noEmit -p e2e/tsconfig.json",
     "lint": "oxlint --fix src/",
-    "lint:check": "oxlint --deny-warnings src/",
+    "lint:check": "oxlint --deny-warnings src/ && oxlint -c ../../scripts/oxlint/e2e-specs.oxlintrc.json --deny-warnings e2e/",
     "lint:tailwind": "root=$(git rev-parse --show-toplevel) && oxlint -c .oxlintrc.json $root/apps/desktop/src/renderer $root/packages/ui/src",
     "test": "vitest run",
     "test:watch": "vitest",

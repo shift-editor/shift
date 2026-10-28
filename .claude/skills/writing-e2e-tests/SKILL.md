@@ -20,7 +20,7 @@ Read `/writing-tests` first for the general rules (observable state, no mocks, m
 | Hardware rendering, GPU residency, WebGPU presentation                                                    | `gpu` project test                                |
 | Save, quit, crash, recovery, file activation, cross-OS paths                                              | `platform` project test                           |
 
-If most assertions in a draft E2E test read editor state after `page.evaluate`, the behavior probably belongs in `TestEditor`. Keep the E2E test as a thin proof that the real UI reaches it.
+If most assertions in a draft E2E test read editor state, the behavior probably belongs in `TestEditor`. Keep the E2E test as a thin proof that the real UI reaches it.
 
 ## Waiting: never sleep
 
@@ -99,7 +99,7 @@ Updating baselines: only for an intentional appearance change. Run the focused s
 
 - One behavior per test. Split long flows when an early failure would hide unrelated coverage.
 - Do not accumulate state across unrelated steps; start each test from a fixture.
-- Setup may use `page.evaluate` or `insertContent`; the behavior under test must go through the user surface.
+- Setup edits go through `fixtures/fontSetup.ts` (`insertContours`, `createAxis`, `createSource`, …); the behavior under test must go through the user surface. Specs never call `page.evaluate`, `page.evaluateHandle`, `page.waitForFunction` or `electronApp.evaluate` (`shift/no-page-evaluate-in-specs`): fixtures own them, and `locator.evaluate` on a provable locator (a `getByRole(…)`/`locator(…)` chain or a binding annotated `: Locator`) is fine. CI enforces it through `pnpm test:lint` (`scripts/oxlint/e2e-specs.oxlintrc.json`); the only disables are calls waiting on the open-glyph refactor (#824).
 - Name tests after the behavior: "shift-selects glyph categories as a visible range", not "category test".
 
 ## Projects

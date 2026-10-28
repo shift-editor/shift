@@ -8,6 +8,7 @@ import type {
   GlyphId,
   GlyphName,
   NamedInstanceId,
+  PointId,
   SelectableId,
   SourceId,
   Unicode,
@@ -254,5 +255,33 @@ export async function createGlyphWithOutline(
       return record.id;
     },
     { glyphName: name, width: advance, content: contours },
+  );
+}
+
+/**
+ * Moves the points an edit of `ids` matches in each other editing source by (40, 25) times the
+ * source's place among them, through each matched layer's own command, so every source's
+ * outline differs; throws unless `expectedSources` layers match completely.
+ */
+export async function offsetMatchedSourcePoints(
+  page: Page,
+  ids: readonly PointId[],
+  expectedSources: number,
+): Promise<void> {
+  await page.evaluate(
+    async ({ pointIds, expected }) => {
+      const workspace = window.shift!;
+      const targets = workspace.editor.positionSelection(pointIds)?.additionalLayers;
+      if (targets?.length !== expected) {
+        throw new Error(`Expected ${expected} matched source layers`);
+      }
+      for (const [index, target] of targets.entries()) {
+        const points = target.targets.points;
+        if (points?.length !== pointIds.length) throw new Error("Expected a complete point match");
+        target.layer.movePoints(points, { x: 40 * (index + 1), y: 25 * (index + 1) });
+      }
+      await workspace.font.editCoordinator.settled();
+    },
+    { pointIds: ids, expected: expectedSources },
   );
 }

@@ -1,8 +1,15 @@
 import type { Page } from "@playwright/test";
-import type { LocalPoint, ScreenPoint } from "@shift/editor/spaces";
+import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
 import type { ExternalAxisLocation } from "@shift/editor/types";
 import type { MatModel, Point2D } from "@shift/geo";
-import type { PointId, SegmentId } from "@shift/types";
+import type {
+  GlyphName,
+  PointId,
+  SegmentId,
+  SelectableId,
+  SourceId,
+  TextItemId,
+} from "@shift/types";
 
 export async function addSquare(page: Page): Promise<number> {
   return page.evaluate(async () => {
@@ -605,4 +612,128 @@ export async function matchedEditingPoint(
       position: { x: point.x, y: point.y },
     };
   }, referencePointId);
+}
+
+/** Selects the objects `ids`, replacing the selection, as clicking them in the Objects tab does. */
+export async function selectObjects(page: Page, ids: readonly SelectableId[]): Promise<void> {
+  await page.evaluate((selected) => window.shift!.editor.selection.select(selected), ids);
+}
+
+/** Fits the open glyph in the canvas, as View › Zoom to Fit does. */
+export async function zoomToFit(page: Page): Promise<void> {
+  await page.evaluate(() => window.shift!.editor.zoomToFit());
+}
+
+/**
+ * Selects sources for editing in one page task, in order, as clicking their rows in the Sources
+ * panel does: alone each source becomes the active one; with `toggle` it joins or leaves the
+ * editing selection.
+ */
+export async function selectSourcesForEditing(
+  page: Page,
+  steps: readonly { sourceId: SourceId; mode?: "toggle" }[],
+): Promise<void> {
+  await page.evaluate((selections) => {
+    const runtime = window.shift!.editor;
+    for (const { sourceId, mode } of selections) {
+      if (mode === undefined) runtime.selectSourceForEditing(sourceId);
+      else runtime.selectSourceForEditing(sourceId, mode);
+    }
+  }, steps);
+}
+
+/** How many other sources' layers an edit of the points `ids` also moves. */
+export async function matchedSourceLayerCount(
+  page: Page,
+  ids: readonly PointId[],
+): Promise<number | undefined> {
+  return page.evaluate(
+    (pointIds) => window.shift!.editor.positionSelection(pointIds)?.additionalLayers.length,
+    ids,
+  );
+}
+
+/**
+ * Where an edit of the points `ids` finds its first point in each layer it moves: the active
+ * layer first, then each other editing source's matched layer; throws when a layer has no
+ * matched point.
+ */
+export async function matchedFirstPointPositions(
+  page: Page,
+  ids: readonly PointId[],
+): Promise<Point2D[]> {
+  return page.evaluate((pointIds) => {
+    const selection = window.shift!.editor.positionSelection(pointIds);
+    if (!selection) throw new Error("Expected an editable selection");
+    const groups = [selection, ...selection.additionalLayers];
+    return groups.map(({ layer, targets }) => {
+      const id = targets.points?.[0];
+      if (!id) throw new Error("Expected a matched point in each source");
+      const point = layer.point(id);
+      if (!point) throw new Error("Expected editable point geometry");
+      return { x: point.x, y: point.y };
+    });
+  }, ids);
+}
+
+/**
+ * Canvas-local positions over the canvas text run's glyphs 2 to 40 that hit-test as text and lie
+ * inside a canvas of `size`, each with the text item it hits.
+ */
+export async function textRunHoverTargets(
+  page: Page,
+  size: { width: number; height: number },
+): Promise<{ itemId: TextItemId; position: Point2D }[]> {
+  return page.evaluate((canvas) => {
+    const editor = window.shift!.editor;
+    const run = editor.scene.nodesOfKind("textRun")[0];
+    const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
+    if (!run || !layout) throw new Error("Expected the canvas run");
+
+    const found: { itemId: TextItemId; position: Point2D }[] = [];
+    for (const placed of layout.placedGlyphs.slice(1, 40)) {
+      // Between the bowl's outer and inner rings, inside every letter's fill.
+      const local = { x: placed.left + placed.glyph.xAdvance / 2, y: 35 } as LocalPoint;
+      const scene = editor.toScene(run, local);
+      const target = editor.getPointerTarget(scene as ScenePoint);
+      const screen = editor.sceneToScreen(scene);
+      const onCanvas =
+        screen.x > 0 && screen.y > 0 && screen.x < canvas.width && screen.y < canvas.height;
+      if (target.kind === "text" && onCanvas)
+        found.push({ itemId: target.itemId, position: screen });
+    }
+    return found;
+  }, size);
+}
+
+/** How many items the canvas text run has once every glyph it lays out is loaded; null before. */
+export async function loadedTextRunLength(page: Page): Promise<number | null> {
+  return page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const run = editor.scene.nodesOfKind("textRun")[0];
+    const items = run ? editor.text.run(run.runId)?.items : null;
+    const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
+    const loaded = layout?.placedGlyphs.every(
+      (placed) => placed.glyph.glyphId && editor.glyphForId(placed.glyph.glyphId),
+    );
+    return items && loaded ? items.length : null;
+  });
+}
+
+/**
+ * The live position of the `u` glyph's `top` anchor in its default-source layer, a drag's
+ * uncommitted preview included, without waiting for edits to settle.
+ */
+export async function liveUTopAnchor(page: Page): Promise<Point2D> {
+  return page.evaluate(() => {
+    const editor = window.shift!.editor;
+    const record = editor.font.recordForName("u" as GlyphName);
+    const layer = record
+      ? editor.glyphForId(record.id)?.layerForSource(editor.font.defaultSource.id)
+      : null;
+    const anchor = layer?.anchors.find((candidate) => candidate.name === "top");
+    if (!anchor) throw new Error("Expected u's top anchor");
+
+    return { x: anchor.x, y: anchor.y };
+  });
 }
