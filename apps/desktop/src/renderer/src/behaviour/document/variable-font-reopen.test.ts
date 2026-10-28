@@ -1,30 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { square } from "@/testing/fixtures";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 /** A Regular square, and a Bold source at wght 900 (design 800) with its corner moved, a wider advance and taller metrics. */
 async function authorVariableFont(): Promise<void> {
   await editor.draw({
     advance: 400,
-    contours: [
-      {
-        closed: true,
-        points: [
-          [0, 0],
-          [100, 0],
-          [100, 100],
-          [0, 100],
-        ],
-      },
-    ],
+    contours: [square(100)],
   });
-  await editor.addAxis({ tag: "wght", name: "Weight", minimum: 100, default: 400, maximum: 900 });
+  await editor.addAxis({ ...WEIGHT, name: "Weight" });
   await editor.setAxisMapping("wght", [
     [100, 100],
     [400, 400],

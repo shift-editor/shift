@@ -1,30 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { expectEdit } from "@/testing/expectEdit";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { OutlineContour } from "@/testing/reads";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { expectEdit } from "@/testing/expectEdit";
+import { rect } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor({
+  glyphs: { A: { outline: { contours: [rect(20, 40, 110, 110)] } } },
+});
 let source: OutlineContour;
 beforeEach(async () => {
-  editor = await startTestEditor();
-  await editor.draw({
-    contours: [
-      {
-        closed: true,
-        points: [
-          [20, 40],
-          [130, 40],
-          [130, 150],
-          [20, 150],
-        ],
-      },
-    ],
-  });
   [source] = (await editor.outline()) as [OutlineContour];
   editor.selectObjects([source.id]);
 });
-afterEach(() => editor.close());
 
 /** A contour's geometry moved by `dx`, `dy`, without its ids. */
 function moved(contour: OutlineContour, dx: number, dy: number) {

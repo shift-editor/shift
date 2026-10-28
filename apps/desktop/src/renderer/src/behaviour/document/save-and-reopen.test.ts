@@ -1,14 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import type { ContourFixture } from "@/testing/fixtures";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("saving and reopening a document", () => {
   it("returns to clean when undo reaches the saved revision", async () => {

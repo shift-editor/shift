@@ -1,14 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { cursorToCSS } from "@shift/editor/rendering";
 import { onCurve } from "@/testing/outlineMatchers";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("panning the canvas with the Hand", () => {
   beforeEach(() => {
