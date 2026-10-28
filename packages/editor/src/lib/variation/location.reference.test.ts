@@ -7,12 +7,8 @@ import {
   type AxisMappingBasis,
 } from "@shift/types";
 import { between, expectNumbersClose, REFERENCE_SEED, seededRandom } from "../../testing/reference";
-import {
-  axisValue,
-  externalAxisLocationForDesignLocation,
-  externalAxisLocationFromRecord,
-  mapAxisLocation,
-} from "./location";
+import { axisValue, externalAxisLocationFromRecord } from "./location";
+import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/variation";
 import { compileAxisMappings, mapLocation } from "@shift/wasm/reference";
 import type {
   CoordinateSpacesRemainDistinct,

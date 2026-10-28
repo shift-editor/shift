@@ -7,7 +7,12 @@ import { useSignalState } from "@shift/editor/signals";
 import { Bounds, Mat, Vec2, type PointAxis } from "@shift/geo";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
 import { getShiftHost } from "@/host/shiftHost";
-import { alignSelection, flipSelection } from "@/lib/editor/sidebarActions";
+import {
+  alignSelection,
+  distributeSelection,
+  flipSelection,
+  rotateSelection,
+} from "@/lib/editor/sidebarActions";
 import { formatSidebarShortcut, sidebarShortcuts } from "@/lib/keyboard/sidebarShortcuts";
 
 import RotateIcon from "@/assets/sidebar-right/rotate.svg";
@@ -181,61 +186,22 @@ export const TransformSection = () => {
 
   const handleDistribute = useCallback(
     (type: DistributeType) => {
-      if (!layer) return;
-
-      layer.distribute(selectedPointIds, type);
+      distributeSelection(editor, type);
     },
-    [layer, selectedPointIds],
-  );
-
-  const origin = useMemo(
-    () => (selectionBounds ? Bounds.center(selectionBounds) : undefined),
-    [selectionBounds],
+    [editor],
   );
 
   const handleRotate90 = () => {
-    if (!editable || !origin) return;
+    if (!editable) return;
 
-    if (componentSelection && !isEditing) {
-      componentSelection.layer.transformComponents(
-        componentSelection,
-        "Rotate components",
-        ({ bounds }) => {
-          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-          return Mat.Compose(
-            Mat.Translate(center.x, center.y),
-            Mat.Compose(Mat.Rotate(-Math.PI / 2), Mat.Translate(-center.x, -center.y)),
-          );
-        },
-      );
-      return;
-    }
-
-    if (!layer) return;
-
-    layer.rotate(selectedPointIds, -Math.PI / 2, origin);
+    rotateSelection(editor, -90);
   };
 
   const handleRotate = (angle: number) => {
-    if (!editable || !origin) return;
+    if (!editable) return;
 
     const wrapped = angle % 360;
-    const radians = (wrapped * Math.PI) / 180;
-    if (componentSelection && !isEditing) {
-      componentSelection.layer.transformComponents(
-        componentSelection,
-        "Rotate components",
-        ({ bounds }) => {
-          const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-          return Mat.Compose(
-            Mat.Translate(center.x, center.y),
-            Mat.Compose(Mat.Rotate(radians), Mat.Translate(-center.x, -center.y)),
-          );
-        },
-      );
-    } else if (layer) {
-      layer.rotate(selectedPointIds, radians, origin);
-    }
+    rotateSelection(editor, wrapped);
     setRotation(wrapped);
   };
 

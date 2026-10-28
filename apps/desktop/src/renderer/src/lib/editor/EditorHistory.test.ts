@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { mintGlyphId, type GlyphName, type PointId, type Unicode } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
 
-describe("editor actions share one undo timeline", () => {
+describe("EditorHistory", () => {
   let editor: TestEditor;
   let firstId: PointId;
   let secondId: PointId;
@@ -18,17 +18,6 @@ describe("editor actions share one undo timeline", () => {
     [firstId, secondId] = pointIds;
     editor.selectTool("select");
     editor.selection.clear();
-  });
-
-  it("changes no document state when undoing and redoing a selection", async () => {
-    const before = await editor.font.editCoordinator.state();
-
-    await editor.clickLocal(100, 100);
-    await editor.undo();
-    await editor.redo();
-
-    expect(await editor.font.editCoordinator.state()).toEqual(before);
-    expect(editor.selection.ids).toEqual([firstId]);
   });
 
   it("captures a synchronous action and returns its result", async () => {
@@ -91,110 +80,6 @@ describe("editor actions share one undo timeline", () => {
     expect(editor.selection.ids).toEqual([firstId]);
   });
 
-  it("undoes Shift-click selection independently", async () => {
-    await editor.clickLocal(100, 100);
-    await editor.clickLocal(200, 200, { shiftKey: true });
-    expect(editor.selection.ids).toEqual([firstId, secondId]);
-
-    await editor.undo();
-    expect(editor.selection.ids).toEqual([firstId]);
-
-    await editor.redo();
-    expect(editor.selection.ids).toEqual([firstId, secondId]);
-  });
-
-  it("coalesces a marquee gesture into one selection action", async () => {
-    await editor.dragLocal({
-      down: { x: 80, y: 80 },
-      start: { x: 84, y: 80 },
-      end: { x: 130, y: 130 },
-    });
-    expect(editor.selection.ids).toEqual([firstId]);
-
-    await editor.undo();
-    expect(editor.selection.ids).toEqual([]);
-
-    await editor.redo();
-    expect(editor.selection.ids).toEqual([firstId]);
-  });
-
-  it("preserves the starting selection for a Shift-marquee", async () => {
-    editor.selection.select([secondId]);
-
-    await editor.dragLocal({
-      down: { x: 60, y: 60 },
-      start: { x: 70, y: 60 },
-      end: { x: 130, y: 130 },
-      options: { shiftKey: true },
-    });
-    expect(editor.selection.ids).toEqual([secondId, firstId]);
-
-    await editor.undo();
-    expect(editor.selection.ids).toEqual([secondId]);
-  });
-
-  it("preserves selection when a Shift-marquee contains no points", async () => {
-    editor.selection.select([secondId]);
-
-    await editor.dragLocal({
-      down: { x: 60, y: 60 },
-      start: { x: 70, y: 60 },
-      end: { x: 80, y: 80 },
-      options: { shiftKey: true },
-    });
-
-    expect(editor.selection.ids).toEqual([secondId]);
-  });
-
-  it("drops only newly brushed points when a Shift-marquee shrinks", () => {
-    editor.selection.select([secondId]);
-    const down = editor.localToScreen({ x: 60, y: 60 });
-    const expanded = editor.localToScreen({ x: 130, y: 130 });
-    const shrunk = editor.localToScreen({ x: 80, y: 80 });
-
-    editor.pointerDown(down.x, down.y, { shiftKey: true });
-    editor.pointerMove(expanded.x, expanded.y, { shiftKey: true });
-    expect(editor.selection.ids).toEqual([secondId, firstId]);
-    editor.pointerMove(shrunk.x, shrunk.y, { shiftKey: true });
-    editor.pointerUp(shrunk.x, shrunk.y, { shiftKey: true });
-
-    expect(editor.selection.ids).toEqual([secondId]);
-  });
-
-  it("restores the starting selection when a marquee is cancelled", () => {
-    editor.selection.select([secondId]);
-    const down = editor.localToScreen({ x: 60, y: 60 });
-    const end = editor.localToScreen({ x: 130, y: 130 });
-
-    editor.pointerDown(down.x, down.y, { shiftKey: true });
-    editor.pointerMove(end.x, end.y, { shiftKey: true });
-    expect(editor.selection.ids).toEqual([secondId, firstId]);
-
-    editor.toolManager.cancelPointerGesture();
-    expect(editor.selection.ids).toEqual([secondId]);
-  });
-
-  it("undoes Escape deselection independently", async () => {
-    editor.selection.select([firstId]);
-
-    editor.escape();
-    expect(editor.selection.ids).toEqual([]);
-
-    await editor.undo();
-    expect(editor.selection.ids).toEqual([firstId]);
-  });
-
-  it("waits for a pending document action before undoing it", async () => {
-    editor.selectTool("pen");
-    const point = editor.localToScreen({ x: 300, y: 300 });
-    editor.pointerDown(point.x, point.y);
-    editor.pointerUp(point.x, point.y);
-
-    await editor.undo();
-
-    expect(editor.pointCount).toBe(2);
-  });
-
   it("ignores stale selection identities after scene navigation", async () => {
     await editor.clickLocal(100, 100);
     editor.scene.clear();
@@ -204,25 +89,6 @@ describe("editor actions share one undo timeline", () => {
     await editor.redo();
 
     expect(editor.selection.ids).toEqual([]);
-  });
-
-  it("compounds selecting and moving an unselected point", async () => {
-    const before = editor.pointPosition(firstId);
-    await editor.dragLocal({
-      down: before,
-      start: { x: before.x + 4, y: before.y },
-      end: { x: before.x + 40, y: before.y + 30 },
-    });
-    expect(editor.selection.ids).toEqual([firstId]);
-    expect(editor.pointPosition(firstId)).toEqual({ x: before.x + 40, y: before.y + 30 });
-
-    await editor.undo();
-    expect(editor.selection.ids).toEqual([]);
-    expect(editor.pointPosition(firstId)).toEqual(before);
-
-    await editor.redo();
-    expect(editor.selection.ids).toEqual([firstId]);
-    expect(editor.pointPosition(firstId)).toEqual({ x: before.x + 40, y: before.y + 30 });
   });
 
   it("replays multiple workspace operations captured by one action", async () => {
@@ -244,33 +110,6 @@ describe("editor actions share one undo timeline", () => {
     expect(editor.font.recordForName("B" as GlyphName)).not.toBeNull();
     expect(editor.font.recordForName("C" as GlyphName)).not.toBeNull();
     expect(editor.selection.ids).toEqual([firstId]);
-  });
-
-  it("compounds deletion with clearing and restoring its selection", async () => {
-    editor.selection.select([secondId]);
-
-    await editor.deleteSelection();
-    expect(editor.requireGlyphLayer().point(secondId)).toBeNull();
-    expect(editor.selection.ids).toEqual([]);
-
-    await editor.undo();
-    expect(editor.requireGlyphLayer().point(secondId)).not.toBeNull();
-    expect(editor.selection.ids).toEqual([secondId]);
-
-    await editor.redo();
-    expect(editor.requireGlyphLayer().point(secondId)).toBeNull();
-    expect(editor.selection.ids).toEqual([]);
-  });
-
-  it("discards editor redo after a new selection action", async () => {
-    await editor.clickLocal(100, 100);
-    await editor.clickLocal(200, 200, { shiftKey: true });
-    await editor.undo();
-
-    await editor.click(9999, 9999);
-    await editor.redo();
-
-    expect(editor.selection.ids).toEqual([]);
   });
 
   it("rebases a later selection when an earlier workspace action fails", async () => {
@@ -296,19 +135,5 @@ describe("editor actions share one undo timeline", () => {
 
     await editor.undo();
     expect(editor.selection.ids).toEqual([]);
-  });
-
-  it("discards document redo after a new selection action", async () => {
-    editor.selectTool("pen");
-    await editor.clickLocal(300, 300);
-    await editor.undo();
-    expect(editor.pointCount).toBe(2);
-
-    editor.selectTool("select");
-    await editor.clickLocal(100, 100);
-    await editor.redo();
-
-    expect(editor.pointCount).toBe(2);
-    expect(editor.selection.ids).toEqual([firstId]);
   });
 });

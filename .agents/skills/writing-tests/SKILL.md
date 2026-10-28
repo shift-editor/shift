@@ -74,13 +74,13 @@ If you catch yourself doing any of the following, stop. You're about to write a 
 
 ## Test categories
 
-| Category             | Use when                                                                   | Template in repo                                                                            |
-| -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Tool test**        | User-triggerable behavior of a tool (pointer, keyboard, selection, cursor) | `lib/tools/pen/Pen.test.ts`, `lib/tools/hand/Hand.test.ts`, `lib/tools/shape/Shape.test.ts` |
-| **Command test**     | A `Command`'s execute/undo/redo round-trip                                 | `lib/commands/primitives/PointCommands.test.ts`                                             |
-| **Pure module test** | Stateless class or function with no `Editor` dependency                    | `lib/tools/text/TextRunController.test.ts`, `lib/editor/hit/boundingBox.test.ts`            |
-| **Bridge test**      | `NativeBridge` against the real Rust engine                                | `bridge/NativeBridge.test.ts`                                                               |
-| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output      | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                   |
+| Category             | Use when                                                                   | Template in repo                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Tool test**        | User-triggerable behavior of a tool (pointer, keyboard, selection, cursor) | `behaviour/pen/draw-with-pen.test.ts`, `behaviour/canvas/pan-with-hand.test.ts`, `behaviour/shape/draw-shapes.test.ts` |
+| **Command test**     | A `Command`'s execute/undo/redo round-trip                                 | `lib/commands/primitives/PointCommands.test.ts`                                                                        |
+| **Pure module test** | Stateless class or function with no `Editor` dependency                    | `lib/tools/text/TextRunController.test.ts`, `lib/editor/hit/boundingBox.test.ts`                                       |
+| **Bridge test**      | `NativeBridge` against the real Rust engine                                | `bridge/NativeBridge.test.ts`                                                                                          |
+| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output      | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                                              |
 
 If your target doesn't fit one of these, stop and ask — don't invent a new shape.
 

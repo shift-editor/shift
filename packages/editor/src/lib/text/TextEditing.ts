@@ -3,7 +3,13 @@ import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
 import { currentTextEditingId, type TextCaret, type TextEditingRecord } from "../../types/text";
-import { Caret, type SelectionRect, type TextItem } from "./layout";
+import {
+  Caret,
+  characterTextItem,
+  lineBreakTextItem,
+  type SelectionRect,
+  type TextItem,
+} from "./layout";
 import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
 import type { TextRunNode } from "../../types/node";
@@ -101,8 +107,21 @@ export class TextEditing {
     this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
+  /** Inserts text as pasted: `/name` picks the glyph named `name`. */
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
+  }
+
+  /**
+   * Inserts text as typed: every character literally, with each line ending
+   * a line break.
+   */
+  typeText(text: string): void {
+    this.insert(
+      [...text.replaceAll("\r\n", "\n")].map((char) =>
+        char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
+      ),
+    );
   }
   deleteBackward(): void {
     this.#edit("Delete text", (buffer) => buffer.delete(-1));

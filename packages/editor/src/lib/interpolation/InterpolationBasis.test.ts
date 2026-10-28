@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import type { Axis, AxisId, InterpolationBasis, SourceId } from "@shift/types";
 import { mintAxisId, mintSourceId } from "@shift/types";
-import { interpolateSourceValues, interpolationWeights } from "./InterpolationBasis";
+import { interpolateSourceValues } from "./InterpolationBasis";
+import { interpolationWeights } from "../wasm/variation";
 import { designAxisLocationFromLocation } from "../variation/location";
 
 interface ParityMaster {
