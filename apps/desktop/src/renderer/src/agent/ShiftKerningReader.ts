@@ -43,7 +43,7 @@ export class ShiftKerningReader {
 
   /** Returns the font's kerning groups, first-position groups first, each side in name order. */
   groups(position?: KerningPosition): KerningGroupSummary[] {
-    const groups = this.#font.kerningCell.peek().groups;
+    const groups = this.#font.kerning.groups;
     const positions: KerningPosition[] = position ? [position] : ["first", "second"];
 
     return positions.flatMap((at) =>
@@ -79,7 +79,7 @@ export class ShiftKerningReader {
     }
     const sourceId = this.#select.sourceId(source);
 
-    const kerning = this.#font.kerningCell.peek();
+    const kerning = this.#font.kerning;
     const appliesTo = glyph ? this.#pairFilter(this.#glyphId(glyph)) : () => true;
     const pairs = kerning.authoredPairs(sourceId).filter(appliesTo).sort(comparePairs);
     const after = cursor ? decodeCursor(cursor) : null;
@@ -154,7 +154,7 @@ export class ShiftKerningReader {
 
   #masterValue(sourceId: SourceId, first: GlyphId, second: GlyphId): KerningMasterValue {
     const font = this.#font;
-    const kerning = font.kerningCell.peek();
+    const kerning = font.kerning;
     const amount = font.kerningBetween(first, second, font.defaultLocation(), sourceId);
     const applied = kerning.resolve(sourceId, first, second);
     if (applied) {
@@ -179,7 +179,7 @@ export class ShiftKerningReader {
 
   /** Whether a pair names `glyphId` on a side, directly or through its group there. */
   #pairFilter(glyphId: GlyphId): (pair: ResolvedKerning) => boolean {
-    const kerning = this.#font.kerningCell.peek();
+    const kerning = this.#font.kerning;
     const firstSides = new Set<KerningSideId>([glyphId]);
     const secondSides = new Set<KerningSideId>([glyphId]);
     const firstGroup = kerning.groupOf("first", glyphId);
@@ -197,12 +197,12 @@ export class ShiftKerningReader {
   #side(side: KerningSideId): KerningPairSide {
     if (!isGroupSide(side)) return { kind: "glyph", ...this.#glyph(side) };
 
-    const group = this.#font.kerningCell.peek().groups.group(side);
+    const group = this.#font.kerning.groups.group(side);
     return { kind: "group", groupId: side, name: group?.name ?? side };
   }
 
   #glyph(glyphId: GlyphId): KerningGlyph {
-    return { glyphId, name: this.#font.entryForId(glyphId)?.name ?? null };
+    return { glyphId, name: this.#font.glyphName(glyphId) };
   }
 
   /** Resolves an exact glyph name, or a stable id when the reference carries the glyph id prefix. */

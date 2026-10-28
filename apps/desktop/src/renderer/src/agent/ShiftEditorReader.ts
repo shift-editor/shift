@@ -192,7 +192,7 @@ export class ShiftEditorReader {
       advance: layout.totalAdvance,
       baselines: layout.lines.map((line) => line.y),
       openItemId: open?.itemId ?? null,
-      openGlyph: open ? (editor.font.entryForId(open.glyphId)?.name ?? null) : null,
+      openGlyph: open ? editor.font.glyphName(open.glyphId) : null,
       editedItemId: edited,
       hoveredItemId: hovered !== null && itemIds.has(hovered as never) ? hovered : null,
       caret:
@@ -262,7 +262,7 @@ export class ShiftEditorReader {
     if (item.kind === "linebreak") return { id: item.id, text: "\n" };
     if (item.kind === "character")
       return { id: item.id, text: String.fromCodePoint(item.codepoint) };
-    return { id: item.id, text: `/${this.#editor.font.entryForId(item.glyphId)?.name ?? ""}` };
+    return { id: item.id, text: `/${this.#editor.font.glyphName(item.glyphId) ?? ""}` };
   }
 
   #spacingHalf(half: NonNullable<SpacingTool["currentHalf"]>): SpacingHalfView {
@@ -287,7 +287,7 @@ export class ShiftEditorReader {
   ): SpacingGapSide {
     return {
       itemId: side.itemId,
-      glyph: this.#editor.font.entryForId(side.glyphId)?.name ?? "",
+      glyph: this.#editor.font.glyphName(side.glyphId) ?? "",
       sidebearing: side.sidebearing,
       edge: side.edge,
     };
@@ -300,8 +300,8 @@ export class ShiftEditorReader {
       const id = editable![position];
       const lock = pair.lock(editor, position);
       const name = isGroupSide(id)
-        ? editor.font.kerningCell.peek().groups.group(id)?.name
-        : editor.font.entryForId(id)?.name;
+        ? editor.font.kerning.groups.group(id)?.name
+        : editor.font.glyphName(id);
       return { name: name ?? "", group: isGroupSide(id), ...lock };
     };
     return {

@@ -96,6 +96,16 @@ describe("Designspace", () => {
     expect(axisValue(designspace.defaultLocation(), axis)).toBe(400);
   });
 
+  it("finds a source by exact name, and refuses a name two sources share", () => {
+    const { axis, designspace, sourcesCell } = weightDesignspace([]);
+    const light = source("Light", axis, 100);
+    sourcesCell.set([light, source("Bold", axis, 700), source("Bold", axis, 800)]);
+
+    expect(designspace.sourceNamed("Light")).toBe(light);
+    expect(designspace.sourceNamed("light")).toBeNull();
+    expect(() => designspace.sourceNamed("Bold")).toThrow("Source name Bold is ambiguous");
+  });
+
   it("keeps reactive readers current when sources or mappings change", () => {
     const { axis, designspace, mappingBasesCell, sourcesCell } = weightDesignspace([]);
     const external = externalAxisLocationFromRecord({ [axis.id]: 900 });

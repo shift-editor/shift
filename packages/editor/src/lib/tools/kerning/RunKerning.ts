@@ -69,7 +69,7 @@ export class KerningPair {
    */
   editablePair(editor: Editor, sourceId = this.source(editor)): ResolvedKerning | null {
     if (!sourceId || editor.sessionMode !== "workspace") return null;
-    return editor.font.kerningCell.peek().editablePair(sourceId, this.first, this.second);
+    return editor.font.kerning.editablePair(sourceId, this.first, this.second);
   }
 
   /**
@@ -111,7 +111,7 @@ export class KerningPair {
   lock(editor: Editor, position: KerningPairPosition): KerningLock {
     const glyphId = position === "first" ? this.first : this.second;
     const pair = this.editablePair(editor);
-    const grouped = editor.font.kerningCell.peek().groupOf(position, glyphId) !== null;
+    const grouped = editor.font.kerning.groupOf(position, glyphId) !== null;
     const side = pair ? pair[position] : null;
     return {
       locked: !grouped || (side !== null && !isGroupSide(side)),
@@ -196,7 +196,7 @@ export class RunKerning {
       .nodesOfKind("textRun")
       .flatMap((node) => definition.spacingGaps(node).flatMap((gap) => kernedPair(gap) ?? []))
       .filter((candidate) => !candidate.sameAs(pair));
-    const applied = this.#editor.font.kerningCell.peek().editablePairs(
+    const applied = this.#editor.font.kerning.editablePairs(
       sourceId,
       candidates.flatMap((candidate) => [candidate.first, candidate.second]),
     );

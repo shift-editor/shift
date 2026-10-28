@@ -114,7 +114,7 @@ interface PairSideFieldProps {
  */
 const PairSideField = ({ editor, pair, position }: PairSideFieldProps) => {
   const glyphId = position === "first" ? pair.first : pair.second;
-  const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
+  const glyphName = editor.font.glyphName(glyphId) ?? glyphId;
   const edge = position === "first" ? "right" : "left";
 
   return (
@@ -133,7 +133,7 @@ const PairSideField = ({ editor, pair, position }: PairSideFieldProps) => {
 /** One side's exception lock: closed when that glyph kerns on its own rather than through its group. */
 const ExceptionLock = ({ editor, pair, position }: PairSideFieldProps) => {
   const glyphId = position === "first" ? pair.first : pair.second;
-  const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
+  const glyphName = editor.font.glyphName(glyphId) ?? glyphId;
   const lock = pair.lock(editor, position);
   const exception = lock.locked && lock.toggleable;
   const action = exception
@@ -255,5 +255,5 @@ const MasterKernRow = ({
 /** A pair side as people know it: a group's name, or a glyph's. */
 function sideLabel(editor: Editor, kerning: Kerning, side: KerningSideId): string {
   if (isGroupSide(side)) return kerning.groups.group(side)?.name ?? side;
-  return editor.font.entryForId(side)?.name ?? side;
+  return editor.font.glyphName(side) ?? side;
 }

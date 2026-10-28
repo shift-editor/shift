@@ -221,6 +221,13 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
 };
 
+/** One page of a font's glyph directory, in font order. */
+export interface GlyphDirectoryPage {
+  readonly entries: readonly GlyphEntry[];
+  /** Whether more glyphs follow the page's last entry. */
+  readonly hasMore: boolean;
+}
+
 /**
  * Reactive facade for the loaded font.
  *
@@ -391,6 +398,11 @@ export class Font {
     return this.#kerningCell;
   }
 
+  /** The font's kerning now, without subscribing; reactive readers use {@link kerningCell}. */
+  get kerning(): Kerning {
+    return this.#kerningCell.peek();
+  }
+
   /** Reactive committed authored font metadata. */
   get metadataCell(): Signal<FontMetadata> {
     return this.#metadataCell;
@@ -543,6 +555,28 @@ export class Font {
 
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
+  }
+
+  /** How many glyphs the font's directory holds. */
+  get glyphCount(): number {
+    return this.#directoryCell.peek().entries.length;
+  }
+
+  /**
+   * One page of the glyph directory, in font order.
+   *
+   * @param after - The glyph the page follows; null starts at the first glyph.
+   * @param limit - The most entries the page holds.
+   * @returns null when `after` is not in the font.
+   */
+  glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null {
+    const entries = this.#directoryCell.peek().entries;
+    const afterIndex = after === null ? -1 : entries.findIndex(({ id }) => id === after);
+    if (after !== null && afterIndex < 0) return null;
+
+    const start = afterIndex + 1;
+    const page = entries.slice(start, start + limit);
+    return { entries: page, hasMore: start + page.length < entries.length };
   }
 
   /**
@@ -921,6 +955,11 @@ export class Font {
     return this.#directoryCell.peek().entryForId(glyphId);
   }
 
+  /** The glyph's name, or null when the font has no such glyph. */
+  glyphName(glyphId: GlyphId): GlyphName | null {
+    return this.#directoryCell.peek().entryForId(glyphId)?.name ?? null;
+  }
+
   recordForId(glyphId: GlyphId): GlyphRecord | null {
     return this.#directoryCell.peek().recordForId(glyphId);
   }
@@ -1268,6 +1307,16 @@ export class Font {
    */
   source(sourceId: SourceId): Source | null {
     return this.#peekDesignspace((designspace) => designspace.source(sourceId));
+  }
+
+  /**
+   * Find a source by its exact name; see {@link Designspace.sourceNamed}.
+   *
+   * @returns null when no source has the name.
+   * @throws {Error} when more than one source has it.
+   */
+  sourceNamed(name: string): Source | null {
+    return this.#peekDesignspace((designspace) => designspace.sourceNamed(name));
   }
 
   /**
@@ -1626,6 +1675,15 @@ export class Font {
     if (!source) throw new Error(`Unknown source: ${sourceId}`);
 
     return this.#metricsForSource(source);
+  }
+
+  /**
+   * The metrics a layer at `sourceId` draws against: that source's, or the
+   * default source's once the source is gone and the layer outlives it.
+   */
+  metricsForLayerSource(sourceId: SourceId): SourceMetrics {
+    const source = this.source(sourceId);
+    return source ? this.#metricsForSource(source) : this.defaultSourceMetrics;
   }
 
   /**

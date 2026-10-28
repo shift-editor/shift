@@ -74,7 +74,7 @@ describe("Text layout cells", () => {
       drawn.push(placed()[1]!.left);
     });
 
-    editor.selectSource(editor.font.sources.find((source) => source.name === "BoldWide")!.id);
+    editor.selectSource(editor.font.sourceNamed("BoldWide")!.id);
     overlay.dispose();
 
     expect(drawn).toHaveLength(2);
