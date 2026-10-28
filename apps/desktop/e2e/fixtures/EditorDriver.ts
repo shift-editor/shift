@@ -26,6 +26,7 @@ import type {
   GlyphListing,
   LocationSummary,
   Outline,
+  OutlineTarget,
   SourceLayer,
   SpacingToolState,
 } from "@/testing/reads";
@@ -754,6 +755,10 @@ export class EditorDriver implements EditorReads {
 
   async drawnHandles(): Promise<readonly CanvasHandle[]> {
     return this.#read("editor", "drawnHandles");
+  }
+
+  async drawnOutlineTargets(): Promise<readonly OutlineTarget[]> {
+    return this.#read("editor", "drawnOutlineTargets");
   }
 
   /** The open glyph's authored layer at its node's source, as `layers.get` returns it. */

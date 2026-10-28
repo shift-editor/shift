@@ -1,7 +1,8 @@
 import type { Locator, Page } from "@playwright/test";
 import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
-import type { ExternalAxisLocation } from "@shift/editor/types";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import { createAxis, createNamedInstance, createSource } from "./fixtures/fontSetup";
 
 interface VariableFixture {
   axisId: AxisId;
@@ -22,60 +23,57 @@ async function selectCategory(dialog: Locator, category: "Axes" | "Sources" | "I
 }
 
 async function createVariableFixture(page: Page): Promise<VariableFixture> {
-  return page.evaluate(async () => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected authored font");
-
-    const axisId = font.createAxis({
-      tag: "opsz",
-      name: "Optical Size",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await font.editCoordinator.settled();
-    const sourceId = font.createSource(
-      "Bold",
-      new Map([[axisId, 900]]) as unknown as ExternalAxisLocation,
-    );
-    const instanceId = font.createNamedInstance({
-      name: "Black",
-      location: { values: { [axisId]: 800 } },
-    });
-    await font.editCoordinator.settled();
-    return { axisId, sourceId, instanceId };
+  const axisId = await createAxis(page, {
+    tag: "opsz",
+    name: "Optical Size",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
   });
+  const sourceId = await createSource(page, "Bold", { [axisId]: 900 });
+  const instanceId = await createNamedInstance(page, {
+    name: "Black",
+    location: { [axisId]: 800 },
+  });
+  return { axisId, sourceId, instanceId };
+}
+
+/** The axis with id `axisId`, as agents read the font; undefined when it is gone. */
+async function axisWithId(editor: EditorDriver, axisId: string) {
+  return (await editor.fontOverview()).axes.find((axis) => axis.id === axisId);
+}
+
+/** The name of the font's default source: the source a glyph's layer read without one is at. */
+async function nameOfDefaultSource(editor: EditorDriver): Promise<string | undefined> {
+  const [{ sourceId }, { sources }] = await Promise.all([
+    editor.layerOf("A"),
+    editor.fontOverview(),
+  ]);
+  return sources.find(({ id }) => id === sourceId)?.name;
 }
 
 test.describe("variable-font authoring controls", () => {
-  test("creates an axis, source, and named instance through Settings", async ({ page }) => {
-    await expect.poll(() => page.evaluate(() => window.shift?.font.getAxes().length)).toBe(0);
+  test("creates an axis, source, and named instance through Settings", async ({ page, editor }) => {
+    await expect.poll(async () => (await editor.fontOverview()).axes.length).toBe(0);
     const dialog = await openSettings(page, "Axes");
 
     await dialog.getByLabel("Create axis").click();
     await page.getByRole("menuitem").filter({ hasText: "Weight" }).click();
-    await expect.poll(() => page.evaluate(() => window.shift?.font.getAxes()[0]?.tag)).toBe("wght");
+    await expect.poll(async () => (await editor.fontOverview()).axes[0]?.tag).toBe("wght");
 
     const axisName = dialog.locator("main").getByLabel("Name", { exact: true });
     await axisName.fill("Weight Class");
     await axisName.press("Tab");
-    const axisId = await page.evaluate(() => window.shift?.font.getAxes()[0]?.id);
+    const axisId = (await editor.fontOverview()).axes[0]?.id;
     if (!axisId) throw new Error("Expected created axis");
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (id) => window.shift?.font.getAxes().find((axis) => axis.id === id)?.name,
-          axisId,
-        ),
-      )
-      .toBe("Weight Class");
+    await expect.poll(async () => (await axisWithId(editor, axisId))?.name).toBe("Weight Class");
 
     await selectCategory(dialog, "Sources");
-    const defaultSourceName = await page.evaluate(() => window.shift?.font.sources[0]?.name);
+    const defaultSourceName = (await editor.fontOverview()).sources[0]?.name;
     await dialog.getByLabel("Create source").click();
     await page.locator("#create-source-name").fill("Bold");
     await page.getByRole("button", { name: "Create", exact: true }).click();
@@ -99,23 +97,20 @@ test.describe("variable-font authoring controls", () => {
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog.getByRole("button", { name: "Black", exact: true })).toBeVisible();
 
-    const authored = await page.evaluate(async (id) => {
-      const font = window.shift?.font;
-      if (!font) throw new Error("Expected authored font");
-      const axis = font.getAxes().find(({ id: candidateId }) => candidateId === id);
-      return {
-        axis: axis && {
-          tag: axis.tag,
-          name: axis.name,
-          minimum: axis.minimum,
-          default: axis.default,
-          maximum: axis.maximum,
-        },
-        source: font.sources.find(({ name }) => name === "Bold")?.location.values[id],
-        instance: font.namedInstances.find(({ name }) => name === "Black")?.location.values[id],
-        dirty: (await font.editCoordinator.state())?.dirty,
-      };
-    }, axisId);
+    const { axes, sources, instances } = await editor.fontOverview();
+    const axis = axes.find(({ id: candidateId }) => candidateId === axisId);
+    const authored = {
+      axis: axis && {
+        tag: axis.tag,
+        name: axis.name,
+        minimum: axis.minimum,
+        default: axis.default,
+        maximum: axis.maximum,
+      },
+      source: sources.find(({ name }) => name === "Bold")?.location.values[axisId],
+      instance: instances.find(({ name }) => name === "Black")?.location.values[axisId],
+      dirty: (await editor.documentState())?.dirty,
+    };
     expect(authored).toEqual({
       axis: {
         tag: "wght",
@@ -130,7 +125,7 @@ test.describe("variable-font authoring controls", () => {
     });
   });
 
-  test("edits and removes variable records through Settings", async ({ page }) => {
+  test("edits and removes variable records through Settings", async ({ page, editor }) => {
     const fixture = await createVariableFixture(page);
     const dialog = await openSettings(page, "Axes");
     const main = dialog.locator("main");
@@ -139,18 +134,13 @@ test.describe("variable-font authoring controls", () => {
     await axisName.fill("Optical Scale");
     await axisName.press("Tab");
     await expect
-      .poll(() =>
-        page.evaluate(
-          (id) => window.shift?.font.getAxes().find((axis) => axis.id === id)?.name,
-          fixture.axisId,
-        ),
-      )
+      .poll(async () => (await axisWithId(editor, fixture.axisId))?.name)
       .toBe("Optical Scale");
 
     await selectCategory(dialog, "Sources");
-    const defaultSourceName = await page.evaluate(() => window.shift?.font.defaultSource.name);
-    if (!defaultSourceName) throw new Error("Expected default source");
-    await expect(dialog.getByLabel(`Delete ${defaultSourceName}`)).toHaveAttribute(
+    const defaultSource = await nameOfDefaultSource(editor);
+    if (!defaultSource) throw new Error("Expected default source");
+    await expect(dialog.getByLabel(`Delete ${defaultSource}`)).toHaveAttribute(
       "aria-disabled",
       "true",
     );
@@ -162,11 +152,10 @@ test.describe("variable-font authoring controls", () => {
     await sourceLocation.fill("850");
     await sourceLocation.press("Tab");
     await expect
-      .poll(() =>
-        page.evaluate(
-          ({ sourceId, axisId }) => window.shift?.font.source(sourceId)?.location.values[axisId],
-          fixture,
-        ),
+      .poll(
+        async () =>
+          (await editor.fontOverview()).sources.find(({ id }) => id === fixture.sourceId)?.location
+            .values[fixture.axisId],
       )
       .toBe(850);
 
@@ -179,46 +168,31 @@ test.describe("variable-font authoring controls", () => {
     await instanceLocation.fill("750");
     await instanceLocation.press("Tab");
     await expect
-      .poll(() =>
-        page.evaluate(
-          ({ instanceId, axisId }) =>
-            window.shift?.font.namedInstances.find(({ id }) => id === instanceId)?.location.values[
-              axisId
-            ],
-          fixture,
-        ),
+      .poll(
+        async () =>
+          (await editor.fontOverview()).instances.find(({ id }) => id === fixture.instanceId)
+            ?.location.values[fixture.axisId],
       )
       .toBe(750);
 
     await dialog.getByLabel("Delete Display Black").click();
     await expect
-      .poll(() =>
-        page.evaluate(
-          (id) => window.shift?.font.namedInstances.some((instance) => instance.id === id),
-          fixture.instanceId,
-        ),
+      .poll(async () =>
+        (await editor.fontOverview()).instances.some(({ id }) => id === fixture.instanceId),
       )
       .toBe(false);
     await selectCategory(dialog, "Sources");
     await dialog.getByLabel("Delete Display Bold").click();
     await expect
-      .poll(() =>
-        page.evaluate(
-          (id) => window.shift?.font.sources.some((source) => source.id === id),
-          fixture.sourceId,
-        ),
+      .poll(async () =>
+        (await editor.fontOverview()).sources.some(({ id }) => id === fixture.sourceId),
       )
       .toBe(false);
 
     await selectCategory(dialog, "Axes");
     await dialog.getByLabel("Delete Optical Scale").click();
     await expect
-      .poll(() =>
-        page.evaluate(
-          (id) => window.shift?.font.getAxes().some((axis) => axis.id === id),
-          fixture.axisId,
-        ),
-      )
+      .poll(async () => (await axisWithId(editor, fixture.axisId)) !== undefined)
       .toBe(false);
   });
 });

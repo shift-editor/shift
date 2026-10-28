@@ -238,3 +238,25 @@ export async function observeRenameTransition(
     { glyphId, nextName },
   );
 }
+
+/** The location the catalog previews glyphs at, one coordinate per axis in font axis order. */
+export async function catalogLocation(page: Page): Promise<readonly number[] | undefined> {
+  return page.evaluate(() => window.shiftSession?.catalog.locationCell.value);
+}
+
+/**
+ * The catalog's coordinate on the axis `axisId`, and the source it previews exactly (null
+ * between sources).
+ */
+export async function catalogLocationOn(
+  page: Page,
+  axisId: AxisId,
+): Promise<{ location: number | undefined; sourceId: string | null | undefined }> {
+  return page.evaluate((id) => {
+    const axisIndex = window.shift?.font.getAxes().findIndex((axis) => axis.id === id) ?? -1;
+    return {
+      location: window.shiftSession?.catalog.locationCell.value[axisIndex],
+      sourceId: window.shiftSession?.catalog.sourceIdCell.value,
+    };
+  }, axisId);
+}

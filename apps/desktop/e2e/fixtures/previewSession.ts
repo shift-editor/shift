@@ -35,3 +35,21 @@ export async function previewGlyphState(
     };
   }, glyphId);
 }
+
+/**
+ * Makes every later glyph acquisition in the window's font session reject, so a step that would
+ * load or rebuild a glyph model fails instead of quietly reading the source again.
+ */
+export async function rejectGlyphAcquisition(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const font = window.shiftSession?.font;
+    if (!font) throw new Error("Expected preview font");
+
+    font.loadGlyph = async () => {
+      throw new Error("variation scrub attempted glyph acquisition");
+    };
+    font.loadGlyphs = async () => {
+      throw new Error("variation scrub attempted glyph acquisition");
+    };
+  });
+}

@@ -7,6 +7,7 @@ import type {
   AxisId,
   GlyphId,
   GlyphName,
+  NamedInstanceId,
   SelectableId,
   SourceId,
   Unicode,
@@ -45,6 +46,66 @@ export async function createSource(
       return sourceId;
     },
     { sourceName: name, values: location },
+  );
+}
+
+/** Adds a named instance at `location`, as Settings › Instances does, and returns its id. */
+export async function createNamedInstance(
+  page: Page,
+  instance: { name: string; postscriptName?: string; location: AxisValues },
+): Promise<NamedInstanceId> {
+  return page.evaluate(async ({ name, postscriptName, location }) => {
+    const font = window.shift!.font;
+    const instanceId = font.createNamedInstance({
+      name,
+      ...(postscriptName === undefined ? {} : { postscriptName }),
+      location: { values: { ...location } },
+    });
+    await font.editCoordinator.settled();
+    return instanceId;
+  }, instance);
+}
+
+/**
+ * Edits the source `sourceId` as Settings › Sources does: its name, italic angle and line gap,
+ * and each metric named by kind in `metricOffsets` moved by that many units.
+ */
+export async function editSource(
+  page: Page,
+  sourceId: SourceId,
+  edit: {
+    name?: string;
+    italicAngle?: number;
+    lineGap?: number;
+    metricOffsets?: Readonly<Record<string, number>>;
+  },
+): Promise<void> {
+  await page.evaluate(
+    async ({ id, change }) => {
+      const font = window.shift!.font;
+      const source = font.source(id);
+      if (!source) throw new Error(`Expected source ${id}`);
+
+      const offsets = new Map(
+        Object.entries(change.metricOffsets ?? {}).map(([kind, offset]) => {
+          const metric = font.metricDefinitions.find((definition) => definition.kind === kind);
+          if (!metric) throw new Error(`Expected ${kind} metric`);
+          return [metric.id, offset] as const;
+        }),
+      );
+      await font.updateSource({
+        ...source,
+        ...(change.name === undefined ? {} : { name: change.name }),
+        ...(change.italicAngle === undefined ? {} : { italicAngle: change.italicAngle }),
+        ...(change.lineGap === undefined ? {} : { lineGap: change.lineGap }),
+        metricValues: source.metricValues.map((value) => {
+          const offset = offsets.get(value.metricId);
+          return offset === undefined ? value : { ...value, position: value.position + offset };
+        }),
+      });
+      await font.editCoordinator.settled();
+    },
+    { id: sourceId, change: edit },
   );
 }
 
