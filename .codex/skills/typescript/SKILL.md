@@ -15,7 +15,7 @@ TypeScript makes `{ points?: … }`, `?.` and `?? []` free to write, so a vague 
 
 - **A collection field is never optional.** An empty collection means "none". `PositionTargets` carries `points` and `anchors` always, so readers write `targets.points`, not `targets.points ?? []`, and ask `targets.hasAnchors`. Keep an optional collection only where absence differs from empty (an option that falls back to a default, a wire field mirroring Rust's `Option<Vec<_>>`), and say why in the disable comment. Enforced by `shift/no-optional-collection-field`.
 - **Lookups return `T | null`, never `undefined`.** Hold id-keyed collections in `EntityMap` from `@shift/types`: `get` returns `null`, `require` throws a named `EntityNotFoundError` when absence is a bug for that caller, and `where(predicate)` filters in insertion order. Expose indexes as `ReadonlyEntityMap`. Enforced by `shift/no-map-get-to-null`; `no-mutable-collection-field` treats `EntityMap` fields like `Map` fields.
-- **A `find` by key outside the collection's owner means a query is missing.** Before writing `font.sources.find(({ name }) => name === n)`, look on the owner for the query (`Font.entryForName`, `recordForId`, `source(id)`, `layerIdFor`); if none exists, add it there, beside its siblings (`Font.sourceNamed(name)` next to `source(id)`), and point every caller at it. The same lookup written in two places is how a rule (unique names, a default) ends up applied in one and not the other. `scan:ts --kind repeated-filter` lists predicates repeated across files.
+- **Ask first: does Rust already compute this, or could another consumer need the same answer?** Rust means shift-font and its libraries (fontc, fea-rs, fontdrasil, harfrust, line breaking); the other consumers are the CLI, export, the window's engine, the utility process, the SDK and agents. If yes, it has one implementation, in Rust, and every consumer calls it: expose it from shift-font through the engine and make the TypeScript method a one-line call (`Kerning.between` → `engine.kerningRun`; shaping → harfrust through the shaping module; feature compiling → fea-rs; interpolation → fontdrasil). Never write it in TypeScript "for now": two copies drift. If no (a lookup by id or name, a count, stored order, reactivity, UI state), the TypeScript model owns it, beside its siblings: before writing `font.sources.find(({ name }) => name === n)` outside the owner, look for the query there (`Font.entryForName`, `recordForId`, `source(id)`, `layerIdFor`), and if none exists add it (`Font.sourceNamed(name)` next to `source(id)`) and point every caller at it. Unsure → Rust. `scan:ts --kind model-rule` lists model methods that compute without the engine; `--kind repeated-filter` lists predicates repeated across files.
 - **Prove "at least one" in the type.** When a list is never empty, type it `readonly [T, ...T[]]` and read `list[0]` without a fallback.
 - **Use the built-ins before spreading.** Query an iterator directly (`map.values().filter(…).toArray()`; `.some`/`.every`/`.find` need no array), copy-sort with `toSorted`, merge sets with `union`/`intersection`/`difference`, group with `Map.groupBy`. Enforced by `shift/prefer-iterator-helpers`.
 - **A combined collection used in several places is a type.** `ThemeCatalog` builds the shipped-then-user theme list once; `KerningGroups.atPosition` sorts once per change. Spread to build a value once, not at every read.
@@ -52,7 +52,11 @@ const remaining = entries.filter((entry) => !sameDocument(entry, visit));
 entries = [{ ...visit, openedAt }, ...remaining].sort(newestFirst).slice(0, LIMIT);
 
 // After: the list keeps one entry per document, newest first, capped.
-entries = entries.touch(visit, (previous) => ({ ...previous, ...visit, openedAt }));
+entries = entries.touch(visit, (previous) => ({
+  ...previous,
+  ...visit,
+  openedAt,
+}));
 ```
 
 - **Recency lists** use `RecentList` from `@shift/types`: `of(items, rules)`, `find`, `touch`, `update`, `remove`, `where`.

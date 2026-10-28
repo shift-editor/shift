@@ -21,9 +21,11 @@ export function loadEngine(): Promise<EngineModule> {
 export type {
   EditablePair,
   EngineEdit,
+  EngineKerningPair,
   EngineLayer,
   EngineLayerSource,
   EngineSession,
   EngineStage,
   InterpolatedMetrics,
+  MissingKerningOrigin,
 } from "./engineModule";

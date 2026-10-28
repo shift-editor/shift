@@ -367,9 +367,9 @@ export class Editor {
     toLocalVector(node: ShiftNode, vector: SceneVector): LocalVector;
     get tool(): ActiveTool | null;
     get toolCell(): Signal<ActiveTool | null>;
-    toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null>;
+    toolCellIf<Id extends ToolName>(id: Id): Signal<ToolFor<Id> | null>;
     get toolIdCell(): Signal<ToolName | null>;
-    toolIf<Id extends ToolName>(id: Id): ActiveTool<Id> | null;
+    toolIf<Id extends ToolName>(id: Id): ToolFor<Id> | null;
     // (undocumented)
     get toolManager(): ToolManager;
     // (undocumented)

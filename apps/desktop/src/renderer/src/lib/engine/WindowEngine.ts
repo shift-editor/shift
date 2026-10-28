@@ -5,10 +5,12 @@ import {
   loadEngine,
   type EditablePair,
   type EngineEdit,
+  type EngineKerningPair,
   type EngineLayer,
   type EngineSession,
   type EngineStage,
   type InterpolatedMetrics,
+  type MissingKerningOrigin,
   unkerned,
 } from "@shift/editor/model";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
@@ -257,6 +259,14 @@ export class WindowEngine implements FontEngine {
 
   kerningPairs(sourceId: SourceId, pairs: readonly GlyphId[]): readonly EditablePair[] {
     return this.#opened?.session.kerningPairs(sourceId, pairs) ?? [];
+  }
+
+  kerningPairsNaming(sourceId: SourceId, glyphId: GlyphId): EngineKerningPair[] {
+    return this.#opened?.session.kerningPairsNaming(sourceId, glyphId) ?? [];
+  }
+
+  missingKerningOrigin(sourceId: SourceId): MissingKerningOrigin {
+    return this.#opened?.session.missingKerningOrigin(sourceId) ?? "unkerned";
   }
 
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
