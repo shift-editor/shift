@@ -31,6 +31,7 @@ import type {
   TextRunView,
 } from "@shift/runtime";
 import type { KerningPosition, PointId } from "@shift/types";
+import type { GlyphOutlineTarget } from "@shift/editor/types";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 
 /**
@@ -75,6 +76,8 @@ export type CanvasText = TextRunView;
 export type SpacingToolState = SpacingToolView;
 /** One point handle the canvas draws, and how it is styled. */
 export type CanvasHandle = DrawnHandle;
+/** A source or instance outline the canvas draws around the open glyph for comparison. */
+export type OutlineTarget = GlyphOutlineTarget;
 
 export interface EditorReads {
   /** The open glyph's authored outline, as agents read it. */
@@ -121,4 +124,6 @@ export interface EditorReads {
   spacingTool(): Read<SpacingToolState | null>;
   /** The point handles the canvas draws on the open glyph, with how each is styled. */
   drawnHandles(): Read<readonly CanvasHandle[]>;
+  /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
+  drawnOutlineTargets(): Read<readonly OutlineTarget[]>;
 }
