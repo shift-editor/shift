@@ -10,7 +10,11 @@ import {
   glyphProperties,
   openFirstCatalogGlyph,
 } from "./fixtures/appLocators";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import { deleteAxis } from "./fixtures/fontSetup";
+import { afterNextPaint, observeRenameTransition } from "./fixtures/glyphCatalogProbe";
 import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
+import type { GlyphListing } from "@/testing/reads";
 
 test.describe("Home view", () => {
   test("glyph grid matches snapshot", { tag: "@golden" }, async ({ page }) => {
@@ -157,7 +161,7 @@ test.describe("Home view", () => {
     const rightPanel = layout.getByTestId("home-right-sidebar");
     const leftContent = page.getByRole("complementary", { name: "Font navigation" });
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
-    const catalogSurface = glyphCatalogSurface(page);
+    const catalogSurface: Locator = glyphCatalogSurface(page);
 
     if ((await elementWidth(leftPanel)) <= 1) {
       await page.getByRole("button", { name: "Toggle left sidebar" }).click();
@@ -226,48 +230,23 @@ test.describe("Home view", () => {
     await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
   });
 
-  test("finds encoded characters and unencoded glyph names", async ({ page }) => {
+  test("finds encoded characters and unencoded glyph names", async ({ editor, page }) => {
     const search = page.getByPlaceholder("Search glyphs...");
     const surface = glyphCatalogSurface(page);
-    const encodedId = await page.evaluate(() => {
-      const font = window.shift?.font;
-      if (!font) throw new Error("Expected font");
-
-      const handle = font.glyphHandleForUnicode(0x41);
-      return font.recordForName(handle.name)?.id;
-    });
+    const encodedId = (await editor.glyphNamed("A"))?.id;
 
     await search.fill("A");
     await expect(surface).toHaveAttribute("data-first-glyph-id", encodedId ?? "");
 
-    await page.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            window.shift?.font.glyphRecords().some((glyph) => glyph.name.startsWith("newGlyph")) ??
-            false,
-        ),
-      )
-      .toBe(true);
-    const unencoded = await page.evaluate(() =>
-      window.shift?.font.glyphRecords().find((glyph) => glyph.name.startsWith("newGlyph")),
-    );
-    if (!unencoded) throw new Error("Expected unencoded glyph");
+    const unencoded = await createQuickGlyph(page, editor);
 
     await search.fill(unencoded.name);
     await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
     await expect(surface).toHaveAttribute("data-first-glyph-id", unencoded.id);
   });
 
-  test("keeps unavailable source creation discoverable without axes", async ({ page }) => {
-    await page.evaluate(async () => {
-      const font = window.shift?.font;
-      if (!font) throw new Error("Expected font");
-
-      for (const axis of font.getAxes()) font.deleteAxis(axis.id);
-      await font.editCoordinator.settled();
-    });
+  test("keeps unavailable source creation discoverable without axes", async ({ editor, page }) => {
+    for (const axis of (await editor.fontOverview()).axes) await deleteAxis(page, axis.id);
 
     const createSource = page.getByRole("button", { name: "Create source", exact: true });
     const tooltip = page.getByRole("tooltip");
@@ -283,9 +262,10 @@ test.describe("Home view", () => {
   });
 
   test("keeps a renamed glyph visible until the catalog confirms its new name", async ({
+    editor,
     page,
   }) => {
-    const glyph = await createQuickGlyph(page);
+    const glyph = await createQuickGlyph(page, editor);
     const nextName = `${glyph.name}.renamed`;
     await page.getByPlaceholder("Search glyphs...").fill(glyph.name);
     await expect(glyphCatalogSurface(page)).toHaveAttribute("data-filtered-glyph-count", "1");
@@ -303,7 +283,7 @@ test.describe("Home view", () => {
   });
 
   test("keeps the selected renderer when returning from the editor", async ({ page }) => {
-    const renderer = glyphCatalogRenderer(page);
+    const renderer: Locator = glyphCatalogRenderer(page);
     await expect(renderer).toBeVisible({ timeout: 30_000 });
     await expect(renderer).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -343,71 +323,14 @@ async function elementWidth(element: Locator): Promise<number> {
   return (await element.boundingBox())?.width ?? 0;
 }
 
-async function createQuickGlyph(page: Page) {
+/** Creates a glyph with the catalog's Create glyph button and returns it once the font has it. */
+async function createQuickGlyph(page: Page, editor: EditorDriver): Promise<GlyphListing> {
   await page.getByRole("button", { name: "Create glyph", exact: true }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          window.shift?.font.glyphRecords().find((glyph) => glyph.name.startsWith("newGlyph")) ??
-          null,
-      ),
-    )
-    .not.toBeNull();
+  const newName = async () =>
+    (await editor.glyphNames()).find((name) => name.startsWith("newGlyph")) ?? null;
+  await expect.poll(newName).not.toBeNull();
 
-  const glyph = await page.evaluate(() =>
-    window.shift?.font.glyphRecords().find((record) => record.name.startsWith("newGlyph")),
-  );
+  const glyph = await editor.glyphNamed((await newName())!);
   if (!glyph) throw new Error("Expected new glyph");
-
   return glyph;
-}
-
-async function observeRenameTransition(
-  page: Page,
-  glyphId: string,
-  nextName: string,
-): Promise<boolean> {
-  return page.evaluate(
-    ({ glyphId, nextName }) =>
-      new Promise<boolean>((resolve) => {
-        function sample(): void {
-          const currentName = window.shift?.font
-            .glyphRecords()
-            .find(({ id }) => id === glyphId)?.name;
-          const input = document.querySelector<HTMLInputElement>('[aria-label="Glyph name"]');
-          const renderer = [
-            ...document.querySelectorAll<HTMLElement>("[data-glyph-catalog-renderer]"),
-          ].find((element) => getComputedStyle(element).visibility === "visible");
-          if (input) {
-            requestAnimationFrame(sample);
-            return;
-          }
-
-          const visibleName = renderer?.dataset.firstGlyphName;
-          if (currentName === nextName) {
-            resolve(visibleName === nextName);
-            return;
-          }
-          if (visibleName !== nextName) {
-            resolve(false);
-            return;
-          }
-
-          requestAnimationFrame(sample);
-        }
-
-        requestAnimationFrame(sample);
-      }),
-    { glyphId, nextName },
-  );
-}
-
-async function afterNextPaint(page: Page): Promise<void> {
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
 }

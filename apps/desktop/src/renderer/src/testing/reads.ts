@@ -18,10 +18,12 @@ import type {
   AuthoredAnchor,
   AuthoredComponent,
   AuthoredContour,
+  AuthoredLayer,
   AuthoredPoint,
   DocumentState,
   EditorView,
   FontOverview,
+  GlyphSummary,
   KerningGroupSummary,
   KerningMasterValue,
   ResolvedLocation,
@@ -52,6 +54,10 @@ export type GlyphComponent = AuthoredComponent;
 export type SourceKerning = KerningMasterValue;
 /** One kerning group at a pair position and its member glyphs. */
 export type KerningGroup = KerningGroupSummary;
+/** One glyph's authored layer at one source, as agents read it with `layers.get`. */
+export type SourceLayer = AuthoredLayer;
+/** A glyph's identity and the layer each source holds. */
+export type GlyphListing = GlyphSummary;
 /** The font's info, metrics, axes, sources and instances. */
 export type FontSummary = FontOverview;
 /** A location resolved: its design coordinates, the source there, and the metrics. */
@@ -88,6 +94,10 @@ export interface EditorReads {
   selectionIds(): Read<readonly string[]>;
   /** Every glyph's name, in font directory order, as agents page through `glyphs.list`. */
   glyphNames(): Promise<readonly string[]>;
+  /** The glyph named `name`: its identity and the layer each source holds; null when the font has none. */
+  glyphNamed(name: string): Read<GlyphListing | null>;
+  /** The authored layer of the glyph named `glyph` at the source named `source`, the default source when omitted. */
+  layerOf(glyph: string, source?: string): Promise<SourceLayer>;
   /** The font's info, metrics, axes, sources and instances, and the session's mode, as agents read them. */
   fontOverview(): Read<FontSummary>;
   /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */

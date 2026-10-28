@@ -23,9 +23,7 @@ import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
 import type {
-  AuthoredLayer,
   EditorTool,
-  GlyphSummary,
   KerningToolView,
   ResolvedGlyph,
   SpacingToolView,
@@ -52,7 +50,9 @@ import type {
   EditorReads,
   EditorViewState,
   FontSummary,
+  GlyphListing,
   LocationSummary,
+  SourceLayer,
   GlyphAnchor,
   KerningGroup,
   Outline,
@@ -115,12 +115,8 @@ export interface DrawnGlyph {
 // `@shift/runtime` (or agent reader) type agents read; tests import these,
 // never the runtime or `agent/`.
 
-/** One glyph's authored layer at one source, as agents read it with `layers.get`. */
-export type SourceLayer = AuthoredLayer;
 /** A glyph drawn at a designspace location: its path and advance. */
 export type GlyphAtLocation = ResolvedGlyph;
-/** A glyph's identity and the layer each source holds. */
-export type GlyphListing = GlyphSummary;
 /** The active tool and its state. */
 export type ActiveTool = EditorTool;
 /** The canvas text run as it shows now. */

@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
@@ -8,6 +8,7 @@ import {
   glyphCatalogViewport,
   waitForEditorReady,
 } from "./fixtures/appLocators";
+import { createGlyphsForUnicodes } from "./fixtures/fontSetup";
 
 test.use({ electronArgs: ["--disable-gpu"] });
 
@@ -27,15 +28,8 @@ test.describe("SVG glyph catalog fallback", () => {
   });
 
   test("shows the system character for an empty encoded glyph", async ({ page }) => {
-    const name = await page.evaluate(async () => {
-      const workspace = window.shift;
-      if (!workspace) throw new Error("Expected workspace");
-
-      const [glyph] = workspace.editor.createGlyphsForUnicodes([0x3042]);
-      if (!glyph) throw new Error("Expected an empty Hiragana glyph");
-      await workspace.font.editCoordinator.settled();
-      return glyph.name;
-    });
+    const [name] = await createGlyphsForUnicodes(page, [0x3042]);
+    if (!name) throw new Error("Expected an empty Hiragana glyph");
 
     await page.getByPlaceholder("Search glyphs...").fill(name);
     const svg = glyphCatalogSvg(page);
@@ -72,12 +66,11 @@ test.describe("SVG glyph catalog fallback", () => {
     const initialPath = await firstPath.getAttribute("d");
     if (!initialPath) throw new Error("Expected a visible catalog path");
 
-    await glyphCatalogViewport(page).evaluate(
-      (viewport) => (viewport.scrollTop = viewport.scrollHeight),
-    );
+    const viewport: Locator = glyphCatalogViewport(page);
+    await viewport.evaluate((element) => (element.scrollTop = element.scrollHeight));
     await expect.poll(() => firstPath.getAttribute("d")).not.toBe(initialPath);
     await expect.poll(() => hasOpenButtonInViewport(page)).toBe(true);
-    await glyphCatalogViewport(page).evaluate((viewport) => (viewport.scrollTop = 0));
+    await viewport.evaluate((element) => (element.scrollTop = 0));
     await expect.poll(() => firstPath.getAttribute("d")).toBe(initialPath);
     await expect.poll(() => hasOpenButtonInViewport(page)).toBe(true);
 
