@@ -10,7 +10,8 @@ export type {
 } from "./lib/model/Kerning";
 export { FontStore, type GlyphInvalidation } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
-export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
+/** An anchor's role in mark positioning, and the kind fontc reads from a name. */
+export { anchorKind, type AnchorKind } from "@shift/wasm";
 export {
   loadEngine,
   type EditablePair,

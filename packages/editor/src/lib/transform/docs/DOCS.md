@@ -2,12 +2,12 @@
 
 <!-- reviewed: 2026-08-24 review-every: 90d -->
 
-Matrix builders and pure point transforms for rotating, scaling and reflecting, used by previews. Committed rotate, scale, reflect, align and distribute edits run in shift-font (`crates/shift-font/src/point_arrange.rs`).
+Matrices about an origin, and pure point transforms for the rotate and scale previews. Committed rotate, scale, reflect, align and distribute edits run in shift-font (`crates/shift-font/src/point_arrange.rs`).
 
 ## Architecture Invariants
 
 - **Architecture Invariant:** All functions in `Transform` are pure -- they return new arrays and never mutate input points. Glyph writes happen through `GlyphLayer` methods.
-- **Architecture Invariant:** Every geometric transform goes through `Transform.applyMatrix` internally. The three high-level functions (`rotatePoints`, `scalePoints`, `reflectPoints`) are thin wrappers that build a matrix and delegate. Custom transforms should follow the same pattern.
+- **Architecture Invariant:** Every point transform goes through `Transform.applyMatrix` internally. `rotatePoints` and `scalePoints` build a matrix and delegate. A committed transform is never applied here: it is one matrix (`Transform.about`) sent to shift-font.
 - **Architecture Invariant: CRITICAL:** The composite matrix in `applyMatrix` must be assembled in the order `Translate(+origin) * Matrix * Translate(-origin)` (right-to-left application). Reversing the order silently produces wrong results around non-zero origins.
 - **Architecture Invariant:** Matrix math (`Mat`, `MatModel`, `Bounds`) comes from `@shift/geo`, not from any local primitives file. The old `primitives/Mat.ts` no longer exists.
 
@@ -15,7 +15,7 @@ Matrix builders and pure point transforms for rotating, scaling and reflecting, 
 
 ```
 transform/
-  Transform.ts        — Pure transform functions (rotate, scale, reflect, applyMatrix)
+  Transform.ts        — Matrices about an origin (about, reflectionMatrix) and preview transforms (rotatePoints, scalePoints, applyMatrix)
   anchor.ts           — Maps a 9-position anchor grid to a concrete Point2D on bounds
   zoomFromWheel.ts    — Converts wheel deltaY into a zoom multiplier
   types.ts            — Re-exports centralized types from ../../../types/transform
@@ -37,9 +37,7 @@ transform/
 
 ### Pure functions layer
 
-`Transform` is a namespace object with pure functions. All three geometric operations -- `rotatePoints`, `scalePoints`, `reflectPoints` -- build a `MatModel` via `Mat` helpers and pass it to `applyMatrix`. These helpers operate on generic coordinate-bearing objects and preserve metadata such as `kind` and `id`. `applyMatrix` constructs the composite `Translate(+origin) * Matrix * Translate(-origin)` so every transform pivots around the caller-supplied origin.
-
-The `matrices` namespace exposes the raw `Mat` builders (`Mat.Rotate`, `Mat.Scale`, etc.) for callers that need to compose custom transforms.
+`Transform` is a namespace object with pure functions. `about` puts a matrix about an origin and `reflectionMatrix` builds the reflection for a `ReflectAxis`; `GlyphLayer` sends what they build to shift-font. `rotatePoints` and `scalePoints`, used by the drag previews, build a `MatModel` via `Mat` helpers and pass it to `applyMatrix`. These helpers operate on generic coordinate-bearing objects and preserve metadata such as `kind` and `id`. `applyMatrix` constructs the composite `Translate(+origin) * Matrix * Translate(-origin)` so every transform pivots around the caller-supplied origin.
 
 ### Glyph layer writes
 
@@ -67,9 +65,9 @@ Segment-aware selection bounds are not part of this module. `Contour.selectionBo
 
 ### Add a new transform type
 
-1. Add a pure function to `Transform` in `Transform.ts` that builds a matrix and calls `applyMatrix`.
-2. Add or update the corresponding `GlyphLayer` method if this transform should mutate glyph geometry.
-3. Add pure tests in `Transform.test.ts`; add layer behavior tests alongside the existing suites in `GlyphLayerGeometry.test.ts` (it covers structural and metric edits and point arrangement).
+1. Build its matrix with `Mat` (and `Transform.about` for an origin); add a matrix builder to `Mat` in `@shift/geo` with a test in `Mat.test.ts` if none fits.
+2. Add the `GlyphLayer` method that sends it as one `transformPoints` intent.
+3. Add layer behavior tests alongside the existing suites in `GlyphLayerGeometry.test.ts` (it covers structural and metric edits and point arrangement).
 
 ### Add a new alignment mode
 
@@ -79,7 +77,7 @@ Segment-aware selection bounds are not part of this module. `Contour.selectionBo
 
 ### Use a custom compound transform
 
-Build matrices with `Transform.matrices.*`, compose with `Mat.Compose`, then call `Transform.applyMatrix`:
+Build matrices with `Mat`, compose with `Mat.Compose`, then call `Transform.applyMatrix`:
 
 ```ts
 import { Mat, type Point2D } from "@shift/geo";
@@ -94,7 +92,7 @@ const result = Transform.applyMatrix(points, matrix, origin);
 
 ## Gotchas
 
-- `reflectPoints("horizontal")` flips Y (mirrors across the X axis), not X. The naming follows "flip across the horizontal center line" convention, which inverts the vertical coordinate.
+- `reflectionMatrix("horizontal")` flips Y (mirrors across the X axis), not X. The naming follows "flip across the horizontal center line" convention, which inverts the vertical coordinate.
 - `applyMatrix` defaults origin to `{ x: 0, y: 0 }`, not the selection center. Callers must supply the pivot themselves — `ScaleSection` resolves its selected scale anchor with `anchorToPoint`, `TransformSection` uses the selection center for rotation and reflection, and the select tool's `BoundingBox` uses the scene rect's center (its local `rectCenter` helper).
 - There is no `SelectionBounds.ts` here anymore. Segment-aware bounds moved to `Contour.selectionBounds` in `@shift/glyph-state` (only fully selected segments contribute curve bounds there), but nothing in production calls it — the visible selection box is `Editor.selectionBounds()`, which unions full per-object bounds.
 

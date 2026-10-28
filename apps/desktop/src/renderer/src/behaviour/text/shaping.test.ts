@@ -25,6 +25,25 @@ describe("typed text is shaped with the font's feature code", () => {
     editor.deleteBackward();
   });
 
+  it.each([
+    ["a ligature", "fi", ["f_i"]],
+    ["ligatures among spaces", "fi fifi f", ["f_i", "space", "f_i", "f_i", "space", "f"]],
+    [
+      "Arabic joining forms",
+      "ببب بب",
+      ["beh-ar.fina", "beh-ar.init", "space", "beh-ar.fina", "beh-ar.medi", "beh-ar.init"],
+    ],
+    ["marks on a base", "بَّ", ["fatha-ar", "shadda-ar", "beh-ar"]],
+  ])(
+    "shapes %s to the font's substituted glyphs, in display order",
+    async (_case, typed, expected) => {
+      editor.typeText(typed);
+      await editor.settle();
+
+      expect(names()).toEqual(expected);
+    },
+  );
+
   it("forms a ligature that covers both typed characters", async () => {
     editor.typeText("fi");
     await editor.settle();

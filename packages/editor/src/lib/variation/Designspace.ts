@@ -8,10 +8,9 @@ import {
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   emptyExternalAxisLocation,
-  externalAxisLocationForDesignLocation,
   externalAxisLocationFromRecord,
-  mapAxisLocation,
 } from "./location";
+import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/variation";
 
 /**
  * A font's axes, axis mappings, and sources, with the location operations over them.

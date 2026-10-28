@@ -1,6 +1,5 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, parse_id_list};
-use crate::shaping::{NapiParagraphRequest, NapiShapedRun, ParsedParagraphRequest};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -2130,27 +2129,6 @@ impl Bridge {
     let snapshot = SourceMetricsInterpolationSnapshot::from(&interpolation);
 
     Ok(Some(snapshot.into()))
-  }
-
-  /// Shapes a paragraph with the font's feature code, split into runs of one
-  /// script, each in its script's direction.
-  ///
-  /// Characters map through the live font's Unicode values and every
-  /// glyph's own advance is zero while shaping, so the result carries the
-  /// substituted glyphs, their clusters, and only what the feature code
-  /// positions. The caller adds live advances, kerning, and mark attachment.
-  ///
-  /// Feature code with errors shapes with the last version that compiled.
-  /// The shaping tables are rebuilt only when a font change since the last
-  /// call altered the glyph order, glyph categories, feature code, or axes.
-  #[napi]
-  pub fn shape_paragraph(
-    &mut self,
-    request: NapiParagraphRequest,
-  ) -> errors::Result<Vec<NapiShapedRun>> {
-    let request = ParsedParagraphRequest::try_from(request)?;
-    let runs = self.live_shaper()?.shape_paragraph(&request.as_request())?;
-    Ok(runs.into_each())
   }
 
   /// Returns the compiled shaping tables, for the editor to shape with

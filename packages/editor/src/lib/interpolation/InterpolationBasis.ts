@@ -1,8 +1,6 @@
 import type { InterpolationBasis, SourceId } from "@shift/types";
 import { blendSourceValues } from "@shift/wasm";
 
-export { interpolationWeights } from "../wasm/variation";
-
 /**
  * Combines source value vectors using a location's evaluated source weights,
  * as shift-font blends them (`interpolation::blend_values`).

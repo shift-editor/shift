@@ -1,12 +1,5 @@
-import {
-  asAxisId,
-  type Axis,
-  type AxisId,
-  type AxisMappingBasis,
-  type Location,
-} from "@shift/types";
+import { asAxisId, type Axis, type AxisId, type Location } from "@shift/types";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
-import { mapAxisMappings, unmapAxisMappings } from "../wasm/variation";
 
 type AnyAxisLocation = ExternalAxisLocation | DesignAxisLocation;
 
@@ -82,31 +75,6 @@ export function withExternalAxisValue(
   const next = new Map(location);
   next.set(axis.id, value);
   return asExternalAxisLocation(next);
-}
-
-/** Maps external coordinates exactly once into internal design-space coordinates. */
-export function mapAxisLocation(
-  location: ExternalAxisLocation,
-  axes: readonly Axis[],
-  bases: readonly AxisMappingBasis[],
-): DesignAxisLocation {
-  return mapAxisMappings(location, axes, bases);
-}
-
-/**
- * Resolves the user-control coordinates representing a design-space location.
- *
- * @param location - Design location to represent in external axis controls.
- * @param axes - Complete axis definitions governing coordinate roles and ranges.
- * @param bases - Rust-compiled mappings used by the corresponding forward mapping.
- * @returns A fresh external location containing the user-controlled axes.
- */
-export function externalAxisLocationForDesignLocation(
-  location: DesignAxisLocation,
-  axes: readonly Axis[],
-  bases: readonly AxisMappingBasis[],
-): ExternalAxisLocation {
-  return unmapAxisMappings(location, axes, bases);
 }
 
 /** Whether two user-space locations name the same value on exactly the same axes. */

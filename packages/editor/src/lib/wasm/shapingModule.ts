@@ -19,7 +19,7 @@ const released = new FinalizationRegistry<number>(releaseShaper);
 
 /**
  * A shaper font registered in `@shift/wasm/shaping`, which shapes with
- * shift-shape, the shaper the workspace uses.
+ * shift-shape.
  *
  * @remarks
  * Loaded through `loadShaping` so this module, and the shaping module it
@@ -68,7 +68,7 @@ export class RegisteredShaper {
   }
 
   /**
-   * Shapes paragraphs, as `Font.shapeParagraphs` does in the workspace.
+   * Shapes paragraphs with the font's feature code.
    *
    * @returns Each paragraph's runs in logical order, in request order; null
    * for a paragraph that cannot be shaped.

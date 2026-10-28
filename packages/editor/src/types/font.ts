@@ -13,8 +13,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ParagraphRequest,
-  ShapedRun,
   ShaperFont,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
@@ -181,7 +179,6 @@ export interface WorkspaceEditCoordinator {
   resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
   shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
   settled(): Promise<void>;
   undo(): Promise<AppliedChange | null>;

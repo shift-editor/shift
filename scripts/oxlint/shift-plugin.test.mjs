@@ -13,7 +13,7 @@ const workDir = mkdtempSync(path.join(tmpdir(), "shift-plugin-test-"));
 
 after(() => rmSync(workDir, { recursive: true, force: true }));
 
-/** Lints `source` with only `rule` enabled; returns the 1-based lines it reports. */
+/** Lints `source` with only `rule` enabled; returns the 1-based lines it reports, in order. */
 function reportedLines(rule, source) {
   const config = path.join(workDir, `${rule}.oxlintrc.json`);
   writeFileSync(
@@ -33,7 +33,8 @@ function reportedLines(rule, source) {
 
   return JSON.parse(output)
     .diagnostics.filter((diagnostic) => diagnostic.code === `shift(${rule})`)
-    .map((diagnostic) => diagnostic.labels[0].span.line);
+    .map((diagnostic) => diagnostic.labels[0].span.line)
+    .toSorted((a, b) => a - b);
 }
 
 describe("shift/no-inline-comparator", () => {
@@ -64,6 +65,140 @@ describe("shift/no-inline-comparator", () => {
         "values.sort(keys.order);",
         "values.toSorted();",
         "values.filter((value) => value > 0);",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, []);
+  });
+});
+
+describe("shift/no-escape-hatch-reads", () => {
+  it("flags reads from asEditor() and keeping its result", () => {
+    const lines = reportedLines(
+      "no-escape-hatch-reads",
+      [
+        "declare const editor: { asEditor(): { font: { name: string }; undo(): void } };",
+        "editor.asEditor().font;",
+        "editor.asEditor().undo();",
+        "editor.asEditor()?.font;",
+        'editor.asEditor()["font"];',
+        "const raw = editor.asEditor();",
+        "const { font } = editor.asEditor();",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [2, 3, 4, 5, 6, 7]);
+  });
+
+  it("allows asEditor() passed straight into a call", () => {
+    const lines = reportedLines(
+      "no-escape-hatch-reads",
+      [
+        "declare const editor: { asEditor(): object };",
+        "declare function zoomToFit(editor: object): void;",
+        "declare class Panel { constructor(editor: object) }",
+        "zoomToFit(editor.asEditor());",
+        "new Panel(editor.asEditor());",
+        "expect(render(editor.asEditor(), 2)).toBe(true);",
+        "editor.asEditorLike().font;",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, []);
+  });
+});
+
+describe("shift/no-test-type-escapes", () => {
+  it("flags any casts, double casts and ts-ignore", () => {
+    const lines = reportedLines(
+      "no-test-type-escapes",
+      [
+        "declare const value: unknown;",
+        "const a = value as any;",
+        "const b = value as unknown as { font: string };",
+        "// @ts-ignore",
+        "const c: number = 'x';",
+        "// @ts-expect-error",
+        "const d: number = 'x';",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [2, 3, 4, 6]);
+  });
+
+  it("flags reads of members that are private by convention", () => {
+    const lines = reportedLines(
+      "no-test-type-escapes",
+      [
+        "declare const editor: Record<string, unknown>;",
+        "editor._selection;",
+        'editor["_selection"];',
+        'editor["#selection"];',
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [2, 3, 4]);
+  });
+
+  it("allows explained expect-errors, single casts, this._x and __x names", () => {
+    const lines = reportedLines(
+      "no-test-type-escapes",
+      [
+        "declare const value: unknown;",
+        "declare const module: { __esModule: boolean; name: string };",
+        "// @ts-expect-error a glyph name must be a string",
+        "const a: number = 'x';",
+        "const b = value as { font: string };",
+        "const c = value as unknown;",
+        "module.__esModule;",
+        'module["name"];',
+        "class Probe { _count = 0; read() { return this._count; } }",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, []);
+  });
+});
+
+describe("shift/no-wire-shapes-in-tests", () => {
+  it("flags literals whose kind names their payload key", () => {
+    const lines = reportedLines(
+      "no-wire-shapes-in-tests",
+      [
+        "const edits = [",
+        "  { kind: 'createGlyph', createGlyph: { name: 'A' } },",
+        "  { 'kind': 'moveAnchors', 'moveAnchors': {} },",
+        "];",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [2, 3]);
+  });
+
+  it("flags imports of the generated bridge types", () => {
+    const lines = reportedLines(
+      "no-wire-shapes-in-tests",
+      [
+        'import type { GlyphName } from "@shift/types/src/bridge/generated";',
+        'import type { Unicode } from "../../types/src/bridge/generated.ts";',
+        'export type { LayerId } from "./bridge/generated";',
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [1, 2, 3]);
+  });
+
+  it("allows domain unions and kinds without a matching payload", () => {
+    const lines = reportedLines(
+      "no-wire-shapes-in-tests",
+      [
+        'import type { GlyphName } from "@shift/types";',
+        'import { generated } from "./bridge/generatedFixtures";',
+        "declare const point: object;",
+        "const a = { kind: 'metric', metric: 'xHeight', y: 500 };",
+        "const b = { kind: 'point', point };",
+        "const c = { kind: 'createGlyph', glyph: { name: 'A' } };",
+        "const d = { type: 'createGlyph', createGlyph: {} };",
       ].join("\n"),
     );
 

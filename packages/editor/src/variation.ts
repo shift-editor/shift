@@ -1,18 +1,18 @@
+export { interpolateSourceValues } from "./lib/interpolation/InterpolationBasis";
 export {
-  interpolateSourceValues,
+  externalAxisLocationForDesignLocation,
   interpolationWeights,
-} from "./lib/interpolation/InterpolationBasis";
+  mapAxisLocation,
+} from "./lib/wasm/variation";
 export {
   axisValue,
   defaultExternalAxisLocation,
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   emptyExternalAxisLocation,
-  externalAxisLocationForDesignLocation,
   externalAxisLocationFromLocation,
   externalAxisLocationFromRecord,
   locationFromDesignAxisLocation,
-  mapAxisLocation,
   withExternalAxisValue,
 } from "./lib/variation/location";
 export { Designspace } from "./lib/variation/Designspace";
