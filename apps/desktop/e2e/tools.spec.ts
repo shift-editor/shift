@@ -1,8 +1,15 @@
 import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
+import {
+  canvasTextReadiness,
+  hasCanvasPointer,
+  liveShapeDraft,
+  setZoom,
+} from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 import type { PointDrag } from "./fixtures/types";
+import type { CanvasText } from "@/testing/reads";
 
 async function dragWithSyntheticPointerEnd(
   page: Page,
@@ -69,24 +76,9 @@ async function startShapeDraft(editor: EditorDriver, kind: "Rectangle" | "Ellips
   await editor.pointerMove(await editor.canvasPagePoint({ x: 0.85, y: 0.5 }), 5);
 }
 
-/** Reads the selected live shape draft published by the Shape tool. */
-async function liveShapeDraft(editor: EditorDriver) {
-  return editor.page.evaluate(() => {
-    const editor = window.shift!.editor;
-    const id = editor.selection.ids[0];
-    const object = editor.object(id);
-    if (object?.kind !== "contour") throw new Error("Expected a selected draft contour");
-    const contour = object.geometry.contour(object.contourId)!;
-    return {
-      id,
-      bounds: (() => {
-        const b = editor.selectionBounds()!;
-        return { x: b.min.x, y: b.min.y, width: b.max.x - b.min.x, height: b.max.y - b.min.y };
-      })(),
-      points: contour.points.length,
-      handles: editor.handlesVisible(contour.id),
-    };
-  });
+/** Each canvas text item's codepoint; a line break reads as 10. */
+function textCodepoints(text: CanvasText): (number | undefined)[] {
+  return text.items.map((item) => item.text.codePointAt(0));
 }
 
 const TOOLBAR_TOOLS = ["select", "pen", "hand", "rectangle", "text"] as const;
@@ -110,8 +102,7 @@ test.describe("Canvas pointer lifecycle", () => {
       x: inside.x,
       y: bounds.y - 10,
     };
-    const hasPointer = () =>
-      page.evaluate(() => (window.shift?.editor.input.pointer ?? null) !== null);
+    const hasPointer = () => hasCanvasPointer(page);
 
     await page.mouse.move(inside.x, inside.y);
     await expect.poll(hasPointer).toBe(true);
@@ -256,7 +247,7 @@ test.describe("Toolbar tools", () => {
       editor,
     }) => {
       await startShapeDraft(editor, kind);
-      const draft = await liveShapeDraft(editor);
+      const draft = await liveShapeDraft(page);
       expect(draft.points).toBe(kind === "Ellipse" ? 12 : 4);
       expect(draft.handles).toBe(false);
 
@@ -342,30 +333,7 @@ test.describe("Toolbar tools", () => {
       await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
       await page.keyboard.type("AB");
       await expect
-        .poll(() =>
-          page.evaluate(() => {
-            const editor = window.shift!.editor;
-            const run = editor.scene.nodesOfKind("textRun")[0];
-            const items = run ? editor.text.run(run.runId)?.items : null;
-            const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
-            return items && layout
-              ? {
-                  codepoints: items.map((item) =>
-                    item.kind === "character" ? item.codepoint : 10,
-                  ),
-                  editingNodes: editor.editing.nodeIds.length,
-                  caretAtEnd: editor.textEditing.state?.focus === items[items.length - 1]?.id,
-                  glyphsLoaded: layout.lines.every((line) =>
-                    line.runs.every((part) =>
-                      part.glyphs.every(
-                        (glyph) => glyph.glyphId && editor.glyphForId(glyph.glyphId),
-                      ),
-                    ),
-                  ),
-                }
-              : null;
-          }),
-        )
+        .poll(() => canvasTextReadiness(page))
         .toEqual({
           codepoints: [65, 65, 66],
           editingNodes: 0,
@@ -373,7 +341,7 @@ test.describe("Toolbar tools", () => {
           glyphsLoaded: true,
         });
       // Keep the caret after the last glyph inside the canvas.
-      await page.evaluate(() => window.shift!.editor.setZoom(window.shift!.editor.zoom * 0.8));
+      await setZoom(page, (await editor.zoomLevel()) * 0.8);
       await page.mouse.move(0, 0);
       await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
     },
@@ -385,14 +353,11 @@ test.describe("Toolbar tools", () => {
     await page.keyboard.type("Hi");
     await editor.press("ArrowLeft");
     await page.keyboard.type("X");
-    const codepoints = () =>
-      page.evaluate(() => {
-        const editor = window.shift!.editor;
-        const run = editor.scene.nodesOfKind("textRun")[0]!;
-        return editor.text
-          .run(run.runId)!
-          .items.map((item) => (item.kind === "character" ? item.codepoint : 10));
-      });
+    const codepoints = async () => {
+      const text = await editor.canvasText();
+      if (!text) throw new Error("Expected the canvas text run");
+      return textCodepoints(text);
+    };
     await expect.poll(codepoints).toEqual([65, 72, 88, 105]);
     await editor.undo();
     await expect.poll(codepoints).toEqual([65, 72, 105]);
@@ -404,20 +369,13 @@ test.describe("Toolbar tools", () => {
     page,
     editor,
   }) => {
-    const runState = () =>
-      page.evaluate(() => {
-        const editor = window.shift!.editor;
-        const run = editor.scene.nodesOfKind("textRun")[0];
-        const child = editor.scene.nodesOfKind("glyph")[0];
-        return {
-          codepoints: run
-            ? editor.text
-                .run(run.runId)!
-                .items.map((item) => (item.kind === "character" ? item.codepoint : 10))
-            : null,
-          edited: child ? editor.glyphForId(child.glyphId)?.name : null,
-        };
-      });
+    const runState = async () => {
+      const text = await editor.canvasText();
+      return {
+        codepoints: text ? textCodepoints(text) : null,
+        edited: (await editor.editorView()).glyph?.name ?? null,
+      };
+    };
     await editor.selectTool("text");
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.type("BB");
@@ -432,14 +390,10 @@ test.describe("Toolbar tools", () => {
     page,
     editor,
   }) => {
-    const editedGlyph = () =>
-      page.evaluate(() => {
-        const editor = window.shift!.editor;
-        return {
-          child: editor.scene.nodesOfKind("glyph")[0]?.id ?? null,
-          editing: editor.editing.nodeIds,
-        };
-      });
+    const editedGlyph = async () => ({
+      child: (await editor.editorView()).glyph?.nodeId ?? null,
+      editing: await editor.editedNodeIds(),
+    });
     const before = await editedGlyph();
 
     await editor.press("t");

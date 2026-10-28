@@ -1,5 +1,3 @@
-import type { LocalPoint } from "@shift/editor/spaces";
-import type { Page } from "@playwright/test";
 import {
   workspaceTest,
   documentTest,
@@ -9,7 +7,12 @@ import {
   navigateToEditor,
 } from "./fixtures/electronApp";
 import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
-import type { ExternalAxisLocation } from "@shift/editor/types";
+import { EditorDriver } from "./fixtures/EditorDriver";
+import {
+  drawnPointCount,
+  glyphClickTargets,
+  instanceBetweenSources,
+} from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
@@ -25,26 +28,22 @@ interface DrawnHandles {
 }
 
 /** Reads the point handles the glyph node draws at the current location. */
-async function drawnHandles(page: Page): Promise<DrawnHandles> {
-  return page.evaluate(() => {
-    const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
-    if (!node) return { states: [], count: 0, pointCount: 0 };
-
-    const states = editor.nodeDefinition("glyph").handleStates(node);
-    const geometry = editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation);
-    return {
-      states: [...new Set(states.values())].sort(),
-      count: states.size,
-      pointCount: geometry?.allPoints.length ?? 0,
-    };
-  });
+async function drawnHandles(editor: EditorDriver): Promise<DrawnHandles> {
+  const handles = await editor.drawnHandles();
+  return {
+    states: [...new Set(handles.map((handle) => handle.state))].sort(),
+    count: handles.length,
+    pointCount: await drawnPointCount(editor.page),
+  };
 }
 
-async function expectEveryHandleDrawnAs(page: Page, states: readonly string[]): Promise<void> {
+async function expectEveryHandleDrawnAs(
+  editor: EditorDriver,
+  states: readonly string[],
+): Promise<void> {
   await expect
     .poll(async () => {
-      const handles = await drawnHandles(page);
+      const handles = await drawnHandles(editor);
       return { states: handles.states, complete: handles.count === handles.pointCount };
     })
     .toEqual({ states, complete: true });
@@ -52,9 +51,9 @@ async function expectEveryHandleDrawnAs(page: Page, states: readonly string[]): 
 
 authoredTest(
   "handles stay drawn with interpolated styling while scrubbing between sources",
-  async ({ page }) => {
+  async ({ page, editor }) => {
     await navigateToEditor(page, "53");
-    await expectEveryHandleDrawnAs(page, ["idle"]);
+    await expectEveryHandleDrawnAs(editor, ["idle"]);
     const controls = await openVariationControls(page);
     // Collapse the record lists so the axis controls sit inside the fixed-size window.
     await controls.getByRole("button", { name: "Sources", exact: true }).click();
@@ -72,10 +71,8 @@ authoredTest(
       // Offsets stay inside the short sidebar track, between the width sources.
       for (const offset of [10, 15, 20]) {
         await page.mouse.move(start.x + offset, start.y, { steps: 3 });
-        await expect
-          .poll(() => page.evaluate(() => window.shiftSession!.editor.activeSourceId))
-          .toBeNull();
-        await expectEveryHandleDrawnAs(page, ["interpolated"]);
+        await expect.poll(async () => (await editor.editorView()).activeSourceId).toBeNull();
+        await expectEveryHandleDrawnAs(editor, ["interpolated"]);
         values.push(await slider.getAttribute("aria-valuenow"));
       }
     } finally {
@@ -85,7 +82,7 @@ authoredTest(
 
     await slider.focus();
     await slider.press("Home");
-    await expectEveryHandleDrawnAs(page, ["idle"]);
+    await expectEveryHandleDrawnAs(editor, ["idle"]);
   },
 );
 
@@ -94,25 +91,13 @@ authoredTest(
   { tag: "@golden" },
   async ({ page, editor }) => {
     await navigateToEditor(page, "53");
-    const instance = await page.evaluate(() => {
-      const font = window.shiftSession!.font;
-      return font.namedInstances.find(
-        (instance) =>
-          !font.sourceAt(
-            new Map(
-              font
-                .getAxes()
-                .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-            ) as unknown as ExternalAxisLocation,
-          ),
-      );
-    });
-    if (!instance) throw new Error("Expected an instance between sources");
+    const instanceId = await instanceBetweenSources(page);
+    if (!instanceId) throw new Error("Expected an instance between sources");
     const controls = await openVariationControls(page);
 
-    await controls.getByTestId(`instance-${instance.id}`).click();
+    await controls.getByTestId(`instance-${instanceId}`).click();
 
-    await expectEveryHandleDrawnAs(page, ["interpolated"]);
+    await expectEveryHandleDrawnAs(editor, ["interpolated"]);
     await expectCanvasSnapshot(editor, "handles-interpolated-instance.png");
   },
 );
@@ -125,22 +110,16 @@ previewTest(
     const workspacePage = await workspaceWindow;
     await workspacePage.waitForURL(/#\/home$/);
     await clickFirstCatalogGlyph(workspacePage);
-    await expectEveryHandleDrawnAs(workspacePage, ["idle"]);
+    const workspace = new EditorDriver(workspacePage, electronApp);
+    await expectEveryHandleDrawnAs(workspace, ["idle"]);
 
-    const point = await workspacePage.evaluate(() => {
-      const editor = window.shiftSession!.editor;
-      const node = editor.scene.nodesOfKind("glyph")[0]!;
-      const point = editor.glyphForId(node.glyphId)!.geometryAt(editor.externalLocation)
-        .allPoints[0]!;
-      return editor.sceneToScreen(editor.toScene(node, { x: point.x, y: point.y } as LocalPoint));
-    });
-    const bounds = await workspacePage.locator("#interactive-canvas").boundingBox();
-    if (!bounds) throw new Error("Expected interactive canvas bounds");
+    // The glyph's first point as the canvas draws it.
+    const [point] = await glyphClickTargets(workspacePage);
+    if (!point) throw new Error("Expected the glyph's first point");
+    const bounds = await workspace.canvasBounds();
     await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
 
-    await expect
-      .poll(() => workspacePage.evaluate(() => window.shiftSession!.editor.hover.id))
-      .toBeNull();
-    await expectEveryHandleDrawnAs(workspacePage, ["idle"]);
+    await expect.poll(() => workspace.hoverId()).toBeNull();
+    await expectEveryHandleDrawnAs(workspace, ["idle"]);
   },
 );

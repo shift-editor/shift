@@ -340,3 +340,39 @@ export async function quitApp(
   }
   await exited;
 }
+
+/**
+ * Reads the first glyph that has a layer through the preload's layer store API, as the window
+ * reads the open document: the store's kind, that layer's id, its decoded bytes, the component
+ * closure of the glyph, and the glyph's id.
+ */
+export async function readFirstLayerThroughPreload(page: Page): Promise<{
+  kind: string;
+  layerId: string;
+  bytes: string;
+  closure: readonly string[];
+  glyphId: GlyphId;
+}> {
+  return page.evaluate(async () => {
+    const workspace = window.shift!;
+    const location = await workspace.storeLocation();
+    if (!location) throw new Error("an authored document has a layer store");
+    const record = workspace.font.glyphRecords().find((glyph) => glyph.layers.length > 0);
+    if (!record) throw new Error("the fixture has a glyph with a layer");
+    const layerId = record.layers[0]!.id;
+
+    const layers = window.shiftHost!.layers;
+    const reader = layers.open(location);
+    try {
+      return {
+        kind: location.kind,
+        layerId,
+        bytes: new TextDecoder().decode(layers.load(reader, [layerId])),
+        closure: layers.componentClosure(reader, [record.id]),
+        glyphId: record.id,
+      };
+    } finally {
+      layers.close(reader);
+    }
+  });
+}

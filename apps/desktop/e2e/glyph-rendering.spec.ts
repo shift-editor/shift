@@ -1,4 +1,3 @@
-import type { ScreenPoint } from "@shift/editor/spaces";
 /**
  * Visual snapshot tests for glyph rendering — covers handles, curves, filled
  * outlines, and distinct visual styles for on-curve vs off-curve points.
@@ -14,6 +13,11 @@ import type { ScreenPoint } from "@shift/editor/spaces";
 import type { Point2D } from "@shift/geo";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
+import {
+  insertEdgeOverlappingContour,
+  selectedObjectKind,
+  setCanvasOffset,
+} from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 // MutatorSans glyph codepoints (hex).
@@ -68,48 +72,15 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
     { tag: "@golden" },
     async ({ page, editor }) => {
       const initialCount = await editor.pointCount();
-      await page.evaluate(() => {
-        const editor = window.shift!.editor;
-        const node = editor.scene.nodesOfKind("glyph")[0]!;
-        // A glyph inside a text run is placed by the run, so move the run.
-        const placement = editor.scene.node(node.parentId) ?? node;
-        editor.scene.updateNode({ id: placement.id, position: { x: 200, y: -300 } });
-        const placed = editor.scene.node(node.id)!;
-        editor.zoomIn();
-        const camera = editor.getCameraTransform();
-        const width = camera.logicalWidth;
-        const inserted = editor.insertContent({
-          contours: [
-            {
-              closed: false,
-              points: [-100, -2, width / 2, width + 100].map((x) => {
-                const scene = editor.screenToScene({
-                  x,
-                  y: camera.logicalHeight / 2,
-                } as ScreenPoint);
-                const local = editor.toLocal(placed, scene);
-                return {
-                  x: local.x,
-                  y: local.y,
-                  pointType: "onCurve" as const,
-                  smooth: false,
-                };
-              }),
-            },
-          ],
-        });
-        if (!inserted) throw new Error("Expected inserted points");
-      });
+      await insertEdgeOverlappingContour(page);
       await editor.waitForCanvasRender();
       expect(await editor.pointCount()).toBe(initialCount + 4);
       await page.mouse.move(1, 1);
       await editor.flushPointerMoves();
       await expectCanvasSnapshot(editor, "handles-S-culled-before-pan.png");
 
-      await page.evaluate(() => {
-        const editor = window.shift!.editor;
-        editor.setPan({ x: editor.pan.x + 200, y: editor.pan.y });
-      });
+      const offset = await editor.canvasOffset();
+      await setCanvasOffset(page, { x: offset.x + 200, y: offset.y });
       await editor.waitForCanvasRender();
       await expectCanvasSnapshot(editor, "handles-S-culled-after-pan.png");
       expect(await editor.pointCount()).toBe(initialCount + 4);
@@ -145,7 +116,7 @@ test.describe("Glyph rendering — zoom", () => {
 
       // Wheel steps are clamped to ×1.1, so a fixed step count from the fit zoom is
       // deterministic; anchoring on the handle keeps it at the same canvas position.
-      const zoom = () => page.evaluate(() => window.shift!.editor.zoom);
+      const zoom = () => editor.zoomLevel();
       const fitZoom = await zoom();
       const steps = Math.ceil(Math.log(12 / fitZoom) / Math.log(1.1));
       for (let step = 0; step < steps; step++) {
@@ -292,15 +263,7 @@ test.describe("Segment selection rendering", () => {
       const middle = { x: 0.675, y: 0.625 };
       const middlePage = await editor.canvasPagePoint(middle);
       await page.mouse.click(middlePage.x, middlePage.y);
-      await expect
-        .poll(() =>
-          page.evaluate(() => {
-            const editor = window.shift?.editor;
-            const [id] = editor?.selection.ids ?? [];
-            return id ? editor?.object(id)?.kind : null;
-          }),
-        )
-        .toBe("segment");
+      await expect.poll(() => selectedObjectKind(page)).toBe("segment");
       await expectCanvasSnapshot(editor, "segment-selected.png");
 
       await editor.pointerDown(middlePage);

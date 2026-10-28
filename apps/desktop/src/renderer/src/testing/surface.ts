@@ -22,13 +22,7 @@ import type { GlyphOutlineTarget, PositionGuide, SourceSelectionMode } from "@sh
 import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
-import type {
-  EditorTool,
-  KerningToolView,
-  ResolvedGlyph,
-  SpacingToolView,
-  TextRunView,
-} from "@shift/runtime";
+import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime";
 import type {
   AnchorId,
   ComponentId,
@@ -42,10 +36,11 @@ import type {
   Unicode,
 } from "@shift/types";
 import type { EditorCommandId } from "@shared/commands";
-import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
 import type {
+  CanvasHandle,
+  CanvasText,
   DocumentSaveState,
   EditorReads,
   EditorViewState,
@@ -58,6 +53,7 @@ import type {
   Outline,
   OutlinePoint,
   SourceKerning,
+  SpacingToolState,
 } from "./reads";
 
 /** Keyboard modifiers held during a gesture. */
@@ -119,14 +115,8 @@ export interface DrawnGlyph {
 export type GlyphAtLocation = ResolvedGlyph;
 /** The active tool and its state. */
 export type ActiveTool = EditorTool;
-/** The canvas text run as it shows now. */
-export type CanvasText = TextRunView;
-/** What the Spacing tool shows. */
-export type SpacingToolState = SpacingToolView;
 /** What the Kerning tool shows. */
 export type KerningToolState = KerningToolView;
-/** One point handle the canvas draws, and how it is styled. */
-export type CanvasHandle = DrawnHandle;
 
 /**
  * @remarks
