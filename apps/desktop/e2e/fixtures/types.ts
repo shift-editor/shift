@@ -1,14 +1,11 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
-import type { SegmentType } from "@shift/glyph-state";
 import type {
   Axis,
-  ContourId,
   GlyphId,
   NamedInstance,
   NodeId,
   PointId,
-  PointSeed,
   PointType,
   Source,
   SourceId,
@@ -106,16 +103,6 @@ export interface PointDrag {
   readonly endPagePosition: Point2D;
   readonly expectedGlyphPosition: Point2D;
 }
-
-export interface OutlineContour {
-  readonly id: ContourId;
-  readonly closed: boolean;
-  readonly points: readonly Readonly<PointSeed>[];
-  readonly onCurvePoints: readonly Readonly<PointSeed>[];
-  readonly segments: readonly SegmentType["type"][];
-}
-
-export type Outline = readonly OutlineContour[];
 
 export type RecoveryApp = {
   page: Page;

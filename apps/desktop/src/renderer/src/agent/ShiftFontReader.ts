@@ -7,15 +7,18 @@ import type {
   GlyphSummary,
   LayerAppearance,
   LayerOverlays,
+  LayerSelector,
   LayerSvg,
   ResolvedGlyphs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftSessionMode,
+  SourceSelector,
 } from "@shift/runtime";
-import type { GlyphId, LayerId, SourceId } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import type { Font } from "@shift/editor/model";
 import { ShiftLayer } from "./ShiftLayer";
+import { ShiftSelectors } from "./ShiftSelectors";
 
 /**
  * Public font, location, glyph, and layer reads over one renderer's font.
@@ -27,10 +30,12 @@ import { ShiftLayer } from "./ShiftLayer";
 export class ShiftFontReader {
   readonly #font: Font;
   readonly #mode: ShiftSessionMode;
+  readonly #select: ShiftSelectors;
 
   constructor(font: Font, mode: ShiftSessionMode) {
     this.#font = font;
     this.#mode = mode;
+    this.#select = new ShiftSelectors(font);
   }
 
   getFont(): FontOverview {
@@ -60,25 +65,23 @@ export class ShiftFontReader {
   }
 
   /**
-   * Lists one directory page; with `sourceId`, nests each glyph's authored layer.
+   * Lists one directory page; with `source`, nests each glyph's authored layer there.
    *
    * @throws {Error} for an invalid limit or cursor, or an unknown source.
    */
   async listGlyphs({
     limit = 25,
     cursor,
-    sourceId,
+    source,
   }: {
     limit?: number;
     cursor?: string;
-    sourceId?: SourceId;
+    source?: SourceSelector;
   }): Promise<GlyphPage> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("glyphs.list limit must be between 1 and 100");
     }
-    if (sourceId && !this.#font.source(sourceId)) {
-      throw new Error(`Source ${sourceId} is not in this font`);
-    }
+    const sourceId = source ? this.#select.sourceId(source) : null;
 
     const entries = this.#font.glyphEntries();
     let start = 0;
@@ -117,12 +120,7 @@ export class ShiftFontReader {
   }
 
   getGlyph(selector: GlyphSelector): GlyphSummary {
-    const entry =
-      selector.name !== undefined
-        ? this.#font.entryForName(selector.name)
-        : this.#font.entryForId(selector.glyphId);
-    if (!entry) throw new Error(`Glyph ${selector.name ?? selector.glyphId} is not in this font`);
-    return this.#glyphSummary(entry.id);
+    return this.#glyphSummary(this.#select.glyphId(selector));
   }
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {
@@ -146,19 +144,22 @@ export class ShiftFontReader {
     };
   }
 
-  async getLayer(layerId: LayerId): Promise<AuthoredLayer> {
-    return (await ShiftLayer.readAuthored(this.#font, layerId)).authored();
+  /** @throws {Error} for an unknown layer, glyph or source, or a glyph with no layer at that source. */
+  async getLayer(selector: LayerSelector): Promise<AuthoredLayer> {
+    return (await ShiftLayer.readAuthored(this.#font, this.#select.layerId(selector))).authored();
   }
 
-  async resolveLayer(layerId: LayerId): Promise<ResolvedLayer> {
-    return (await ShiftLayer.read(this.#font, layerId)).resolved();
+  /** @throws {Error} as {@link getLayer} does, or when a component cannot resolve. */
+  async resolveLayer(selector: LayerSelector): Promise<ResolvedLayer> {
+    return (await ShiftLayer.read(this.#font, this.#select.layerId(selector))).resolved();
   }
 
+  /** @throws {Error} as {@link resolveLayer} does. */
   async renderLayer(
-    layerId: LayerId,
+    selector: LayerSelector,
     options: { overlays?: LayerOverlays; appearance?: LayerAppearance } = {},
   ): Promise<LayerSvg> {
-    const layer = await ShiftLayer.read(this.#font, layerId);
+    const layer = await ShiftLayer.read(this.#font, this.#select.layerId(selector));
     const { sourceId } = layer.identity;
     const metrics = this.#font.source(sourceId)
       ? this.#font.metricsForSource(sourceId)

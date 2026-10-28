@@ -7,7 +7,9 @@ import type {
   GlyphPage,
   GlyphResolveInput,
   GlyphSummary,
+  KerningAtInput,
   KerningGroupsInput,
+  KerningMasterValue,
   KerningGroupSummary,
   KerningPairPage,
   KerningPairsInput,
@@ -72,6 +74,7 @@ export class ShiftReadScope implements ShiftRead {
     groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
     pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+    at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
 
   readonly #capabilities: ShiftCapabilities;
@@ -127,6 +130,8 @@ export class ShiftReadScope implements ShiftRead {
         this.#guard(input, (bound) => kerning.pairs(bound)),
       resolve: (input: ShiftReadInput<KerningResolveInput>) =>
         this.#guard(input, (bound) => kerning.resolve(bound)),
+      at: (input: ShiftReadInput<KerningAtInput>) =>
+        this.#guard(input, (bound) => kerning.at(bound)),
     });
   }
 

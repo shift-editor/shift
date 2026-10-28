@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cursorToCSS } from "@shift/editor/rendering";
-import type { AuthoredContour } from "@shift/runtime";
 import { expectEdit } from "@/testing/expectEdit";
+import type { OutlineContour } from "@/testing/reads";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
 
@@ -13,7 +13,7 @@ beforeEach(async () => {
 afterEach(() => editor.close());
 
 /** The box a contour's points span, which for a drawn shape is the box it was dragged out to. */
-function extent(contour: AuthoredContour | undefined) {
+function extent(contour: OutlineContour | undefined) {
   const xs = contour?.points.map(({ x }) => x) ?? [];
   const ys = contour?.points.map(({ y }) => y) ?? [];
   return {
@@ -22,7 +22,7 @@ function extent(contour: AuthoredContour | undefined) {
   };
 }
 
-function size(contour: AuthoredContour | undefined) {
+function size(contour: OutlineContour | undefined) {
   const { min, max } = extent(contour);
   return { width: max.x - min.x, height: max.y - min.y };
 }

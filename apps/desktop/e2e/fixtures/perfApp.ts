@@ -146,8 +146,8 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
       }
     },
 
-    editor: async ({ page }, use) => {
-      await use(new EditorDriver(page));
+    editor: async ({ page, electronApp }, use) => {
+      await use(new EditorDriver(page, electronApp));
     },
   });
 }

@@ -295,8 +295,8 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     }
   },
 
-  editor: async ({ page }, use) => {
-    await use(new EditorDriver(page));
+  editor: async ({ page, electronApp }, use) => {
+    await use(new EditorDriver(page, electronApp));
   },
 });
 

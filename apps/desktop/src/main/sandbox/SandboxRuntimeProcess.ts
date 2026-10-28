@@ -61,6 +61,7 @@ export class SandboxRuntimeProcess {
       "shift.kerning.groups": (input) => this.#capabilities.kerning.groups(input),
       "shift.kerning.pairs": (input) => this.#capabilities.kerning.pairs(input),
       "shift.kerning.resolve": (input) => this.#capabilities.kerning.resolve(input),
+      "shift.kerning.at": (input) => this.#capabilities.kerning.at(input),
       "shift.layers.get": (input) => this.#capabilities.layers.get(input),
       "shift.layers.resolve": (input) => this.#capabilities.layers.resolve(input),
       "shift.layers.render": (input) => this.#capabilities.layers.render(input),

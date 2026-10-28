@@ -8,9 +8,8 @@ import type {
   GlyphSelector,
   GlyphSummary,
   KerningGroupSummary,
+  KerningMasterValue,
   KerningPairPage,
-  LayerAppearance,
-  LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
   ResolvedKerningPairs,
@@ -18,7 +17,7 @@ import type {
   ResolvedLocation,
   ShiftObservation,
 } from "@shift/runtime";
-import type { GlyphId, LayerId, SourceId } from "@shift/types";
+import type { GlyphId } from "@shift/types";
 import type { MessagePortMain } from "electron";
 import type { AgentCallMap, AgentEventMap, EditorCaptureBounds } from "../../shared/agent/protocol";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
@@ -73,7 +72,7 @@ export class AgentClient {
   listGlyphs(input: {
     limit?: number;
     cursor?: string;
-    sourceId?: SourceId;
+    source?: AgentCallMap["glyphs.list"]["request"]["source"];
     ifFontRevision?: FontRevision;
   }): Promise<ShiftObservation<GlyphPage>> {
     return this.#call("glyphs.list", input);
@@ -112,27 +111,34 @@ export class AgentClient {
     return this.#call("kerning.resolve", input);
   }
 
-  getLayer(
-    layerId: LayerId,
-    ifFontRevision?: FontRevision,
-  ): Promise<ShiftObservation<AuthoredLayer>> {
-    return this.#call("layers.get", { layerId, ifFontRevision });
+  kerningAt(
+    input: AgentCallMap["kerning.at"]["request"],
+  ): Promise<ShiftObservation<KerningMasterValue>> {
+    return this.#call("kerning.at", input);
+  }
+
+  getLayer(input: AgentCallMap["layers.get"]["request"]): Promise<ShiftObservation<AuthoredLayer>> {
+    return this.#call("layers.get", input);
   }
 
   resolveLayer(
-    layerId: LayerId,
-    ifFontRevision?: FontRevision,
+    input: AgentCallMap["layers.resolve"]["request"],
   ): Promise<ShiftObservation<ResolvedLayer>> {
-    return this.#call("layers.resolve", { layerId, ifFontRevision });
+    return this.#call("layers.resolve", input);
   }
 
   renderLayer(
-    layerId: LayerId,
-    overlays?: LayerOverlays,
-    appearance?: LayerAppearance,
-    ifFontRevision?: FontRevision,
+    input: AgentCallMap["layers.render"]["request"],
   ): Promise<ShiftObservation<LayerSvg>> {
-    return this.#call("layers.render", { layerId, overlays, appearance, ifFontRevision });
+    return this.#call("layers.render", input);
+  }
+
+  /**
+   * Calls `reader`'s `method` with `args` in the window's renderer once
+   * pending edits settle, as the E2E read hook does.
+   */
+  read(reader: string, method: string, args: unknown[]): Promise<unknown> {
+    return this.#call("agent.read", { reader, method, args });
   }
 
   #call<K extends keyof AgentCallMap>(

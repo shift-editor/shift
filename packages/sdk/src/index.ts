@@ -23,10 +23,10 @@ export type {
 } from "@shift/editor/variation";
 export type {
   AffineTransformation,
-  AuthoredKerningPair,
   AuthoredAnchor,
   AuthoredComponent,
   AuthoredContour,
+  AuthoredKerningPair,
   AuthoredLayer,
   AuthoredPoint,
   AxisCoordinate,
@@ -43,6 +43,7 @@ export type {
   GlyphResolveInput,
   GlyphSelector,
   GlyphSummary,
+  KerningAtInput,
   KerningGlyph,
   KerningGroupsInput,
   KerningGroupSummary,
@@ -61,6 +62,7 @@ export type {
   LayerOverlays,
   LayerRenderInput,
   LayerResolveInput,
+  LayerSelector,
   LayerSvg,
   LocationResolveInput,
   ResolvedComponent,
@@ -81,6 +83,7 @@ export type {
   ShiftSession,
   ShiftSessionMode,
   ShiftTarget,
+  SourceSelector,
 } from "@shift/runtime";
 export type {
   FontSnapshot,

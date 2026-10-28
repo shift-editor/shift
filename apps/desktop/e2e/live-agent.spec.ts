@@ -87,7 +87,7 @@ test.describe("authored font reads from Home", () => {
           },
           appearance: { outlineFill: "#123456" },
         })).value;
-        const sourcePage = (await shift.glyphs.list({ ...target, limit: 1, sourceId })).value;
+        const sourcePage = (await shift.glyphs.list({ ...target, limit: 1, source: { sourceId } })).value;
         const absent = await shift.layers
           .get({ ...target, layerId: "missing-layer" })
           .then(() => "found", () => "rejected");
@@ -223,7 +223,7 @@ test.describe("sparse source reads", () => {
         return shift.read({ windowId: session.windowId }, async (read) => {
           const font = await read.font.get();
           for (const source of font.sources) {
-            const page = await read.glyphs.list({ limit: 100, sourceId: source.id });
+            const page = await read.glyphs.list({ limit: 100, source: { sourceId: source.id } });
             const authored = page.items.find(({ layer }) => layer);
             const missing = page.items.find(({ layer }) => layer === null);
             if (!authored || !missing) continue;
@@ -264,11 +264,11 @@ test.describe("sparse source reads", () => {
           const font = await read.font.get();
           const lightCondensed = font.sources.find(({ name }) => name === "LightCondensed");
           const groups = await read.kerning.groups({ position: "second" });
-          const pairs = await read.kerning.pairs({ sourceId: lightCondensed.id, glyph: "T" });
-          const resolved = await read.kerning.resolve({
-            pairs: [{ first: "T", second: "A" }],
-            sourceId: lightCondensed.id,
-          });
+          const source = { name: "LightCondensed" };
+          const pairs = await read.kerning.pairs({ source, glyph: "T" });
+          const resolved = await read.kerning.resolve({ pairs: [{ first: "T", second: "A" }], source });
+          const at = await read.kerning.at({ first: { name: "T" }, second: { name: "A" }, source });
+          const layer = await read.layers.get({ glyph: { name: "A" }, source });
           const [ta] = resolved.items;
           return {
             aGroupMembers: groups
@@ -278,6 +278,8 @@ test.describe("sparse source reads", () => {
             amount: ta.amount,
             masters: ta.masters.length === font.sources.length,
             lightCondensed: ta.masters.find(({ sourceId }) => sourceId === lightCondensed.id),
+            at,
+            layerSource: layer.sourceId === lightCondensed.id,
           };
         });
       }`,
@@ -289,6 +291,8 @@ test.describe("sparse source reads", () => {
       amount: -75,
       masters: true,
       lightCondensed: { amount: -75, origin: "authored", rule: "exception" },
+      at: { amount: -75, origin: "authored", rule: "exception" },
+      layerSource: true,
     });
   });
 });

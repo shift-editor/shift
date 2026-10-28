@@ -13,6 +13,37 @@ const location = z.array(axisCoordinate).max(64);
 const kerningPosition = z.enum(["first", "second"]);
 /** A glyph by exact name, or by stable id when it carries the glyph id prefix. */
 const glyphReference = z.string().min(1).max(256);
+const name = z.string().min(1).max(256);
+const glyphSelector = z.union([z.strictObject({ glyphId }), z.strictObject({ name })]);
+const sourceSelector = z.union([z.strictObject({ sourceId }), z.strictObject({ name })]);
+/** A layer by stable id, or a glyph's layer at a source (the default source when omitted). */
+const layerSelector = {
+  byId: { layerId },
+  byGlyph: { glyph: glyphSelector, source: sourceSelector.optional() },
+};
+const layerOverlays = z
+  .strictObject({
+    points: z.boolean().optional(),
+    controlLines: z.boolean().optional(),
+    anchors: z.boolean().optional(),
+    components: z.boolean().optional(),
+    fontMetrics: z.boolean().optional(),
+    advanceWidth: z.boolean().optional(),
+  })
+  .optional();
+const layerAppearance = z
+  .strictObject({
+    outlineFill: z.string().min(1).optional(),
+    onCurveStroke: z.string().min(1).optional(),
+    offCurveStroke: z.string().min(1).optional(),
+    handleFill: z.string().min(1).optional(),
+    controlStroke: z.string().min(1).optional(),
+    anchorStroke: z.string().min(1).optional(),
+    metricStroke: z.string().min(1).optional(),
+    advanceStroke: z.string().min(1).optional(),
+    componentStroke: z.string().min(1).optional(),
+  })
+  .optional();
 
 /** Validates untrusted scripting inputs before they enter a host capability. */
 export const shiftInputSchemas = {
@@ -31,7 +62,7 @@ export const shiftInputSchemas = {
     ifFontRevision,
     limit: z.number().int().min(1).max(100).optional(),
     cursor: z.string().min(1).max(1024).optional(),
-    sourceId: sourceId.optional(),
+    source: sourceSelector.optional(),
   }),
   "glyphs.get": z.union([
     z.strictObject({ windowId, ifFontRevision, glyphId }),
@@ -51,7 +82,7 @@ export const shiftInputSchemas = {
   "kerning.pairs": z.strictObject({
     windowId,
     ifFontRevision,
-    sourceId,
+    source: sourceSelector.optional(),
     glyph: glyphReference.optional(),
     limit: z.number().int().min(1).max(500).optional(),
     cursor: z.string().min(1).max(1024).optional(),
@@ -64,40 +95,41 @@ export const shiftInputSchemas = {
         .array(z.strictObject({ first: glyphReference, second: glyphReference }))
         .min(1)
         .max(100),
-      sourceId: sourceId.optional(),
+      source: sourceSelector.optional(),
       location: location.optional(),
     })
-    .refine(({ sourceId, location }) => !(sourceId && location), {
-      message: "kerning.resolve takes sourceId or location, not both",
+    .refine(({ source, location }) => !(source && location), {
+      message: "kerning.resolve takes source or location, not both",
     }),
-  "layers.get": z.strictObject({ windowId, ifFontRevision, layerId }),
-  "layers.resolve": z.strictObject({ windowId, ifFontRevision, layerId }),
-  "layers.render": z.strictObject({
+  "kerning.at": z.strictObject({
     windowId,
     ifFontRevision,
-    layerId,
-    overlays: z
-      .strictObject({
-        points: z.boolean().optional(),
-        controlLines: z.boolean().optional(),
-        anchors: z.boolean().optional(),
-        components: z.boolean().optional(),
-        fontMetrics: z.boolean().optional(),
-        advanceWidth: z.boolean().optional(),
-      })
-      .optional(),
-    appearance: z
-      .strictObject({
-        outlineFill: z.string().min(1).optional(),
-        onCurveStroke: z.string().min(1).optional(),
-        offCurveStroke: z.string().min(1).optional(),
-        handleFill: z.string().min(1).optional(),
-        controlStroke: z.string().min(1).optional(),
-        anchorStroke: z.string().min(1).optional(),
-        metricStroke: z.string().min(1).optional(),
-        advanceStroke: z.string().min(1).optional(),
-        componentStroke: z.string().min(1).optional(),
-      })
-      .optional(),
+    first: glyphSelector,
+    second: glyphSelector,
+    source: sourceSelector.optional(),
   }),
+  "layers.get": z.union([
+    z.strictObject({ windowId, ifFontRevision, ...layerSelector.byId }),
+    z.strictObject({ windowId, ifFontRevision, ...layerSelector.byGlyph }),
+  ]),
+  "layers.resolve": z.union([
+    z.strictObject({ windowId, ifFontRevision, ...layerSelector.byId }),
+    z.strictObject({ windowId, ifFontRevision, ...layerSelector.byGlyph }),
+  ]),
+  "layers.render": z.union([
+    z.strictObject({
+      windowId,
+      ifFontRevision,
+      ...layerSelector.byId,
+      overlays: layerOverlays,
+      appearance: layerAppearance,
+    }),
+    z.strictObject({
+      windowId,
+      ifFontRevision,
+      ...layerSelector.byGlyph,
+      overlays: layerOverlays,
+      appearance: layerAppearance,
+    }),
+  ]),
 } as const;

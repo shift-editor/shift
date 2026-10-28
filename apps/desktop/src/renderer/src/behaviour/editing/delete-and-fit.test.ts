@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Curve, Vec2, type CubicCurve } from "@shift/geo";
-import type { AuthoredPoint } from "@shift/runtime";
 import { expectEdit } from "@/testing/expectEdit";
+import type { OutlinePoint } from "@/testing/reads";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
 
@@ -60,7 +60,7 @@ function cubicContour(pieces: readonly CubicCurve[]): { readonly points: readonl
 }
 
 /** The cubic an open contour of four points describes. */
-function cubicOf(points: readonly AuthoredPoint[]): CubicCurve {
+function cubicOf(points: readonly OutlinePoint[]): CubicCurve {
   const [p0, c0, c1, p1] = points;
   if (!p0 || !c0 || !c1 || !p1) throw new Error("a cubic needs four points");
   return Curve.cubic(p0, c0, c1, p1);
@@ -78,7 +78,7 @@ function maxDistance(a: CubicCurve, b: CubicCurve, count = 40): number {
 /** The open glyph's only contour as positions and kinds, leaving out the ids a fit mints. */
 async function onlyContourShape(
   e: EditorTestSurface,
-): Promise<readonly Omit<AuthoredPoint, "id">[]> {
+): Promise<readonly Omit<OutlinePoint, "id">[]> {
   return (await onlyContourPoints(e)).map(({ x, y, pointType, smooth }) => ({
     x,
     y,
@@ -87,7 +87,7 @@ async function onlyContourShape(
   }));
 }
 
-async function onlyContourPoints(e: EditorTestSurface): Promise<readonly AuthoredPoint[]> {
+async function onlyContourPoints(e: EditorTestSurface): Promise<readonly OutlinePoint[]> {
   const [contour] = await e.outline();
   return contour?.points ?? [];
 }

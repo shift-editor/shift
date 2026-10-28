@@ -51,6 +51,7 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import { publishE2EAgentReads } from "../agent/e2eAgentReads";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
 import { NO_DEBUG_OVERLAYS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
@@ -273,6 +274,7 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
+      publishE2EAgentReads((windowId) => this.#windowForAgentRequest(windowId).agent);
       void this.#requireCommandLineTool()
         .refresh()
         .catch((error) => {
@@ -1127,13 +1129,8 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.resolveLocation(location, ifFontRevision),
       },
       glyphs: {
-        list: ({ windowId, limit, cursor, sourceId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.listGlyphs({
-            limit,
-            cursor,
-            sourceId,
-            ifFontRevision,
-          }),
+        list: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.listGlyphs(input),
         get: ({ windowId, ifFontRevision, ...selector }) =>
           this.#windowForAgentRequest(windowId).agent.getGlyph(selector, ifFontRevision),
         resolve: ({ windowId, glyphIds, location, ifFontRevision }) =>
@@ -1144,17 +1141,12 @@ export class App {
           ),
       },
       layers: {
-        get: ({ windowId, layerId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.getLayer(layerId, ifFontRevision),
-        resolve: ({ windowId, layerId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.resolveLayer(layerId, ifFontRevision),
-        render: ({ windowId, layerId, overlays, appearance, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.renderLayer(
-            layerId,
-            overlays,
-            appearance,
-            ifFontRevision,
-          ),
+        get: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(input),
+        resolve: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLayer(input),
+        render: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.renderLayer(input),
       },
       kerning: {
         groups: ({ windowId, ...input }) =>
@@ -1163,6 +1155,8 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.kerningPairs(input),
         resolve: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.resolveKerning(input),
+        at: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.kerningAt(input),
       },
     });
     this.#sandbox = sandbox;

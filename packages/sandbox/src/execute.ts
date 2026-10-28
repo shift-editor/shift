@@ -79,6 +79,9 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftResolveKerning", deadline, (input) =>
     validated.kerning.resolve(input as never),
   );
+  installAsyncJsonFunction(vm, "__shiftKerningAt", deadline, (input) =>
+    validated.kerning.at(input as never),
+  );
   installAsyncJsonFunction(vm, "__shiftReadOpen", deadline, async (target) => {
     const scope = await ShiftReadScope.open(validated, shiftInputSchemas.read.parse(target));
     const scopeId = scopes.size + 1;
@@ -124,6 +127,7 @@ export async function executeShiftCode(
         groups: async (input) => JSON.parse(await __shiftKerningGroups(input)),
         pairs: async (input) => JSON.parse(await __shiftKerningPairs(input)),
         resolve: async (input) => JSON.parse(await __shiftResolveKerning(input)),
+        at: async (input) => JSON.parse(await __shiftKerningAt(input)),
       }),
       read: async (target, callback) => {
         if (typeof callback !== "function") throw new TypeError("shift.read requires a callback");
@@ -151,6 +155,7 @@ export async function executeShiftCode(
             groups: call("kerning.groups"),
             pairs: call("kerning.pairs"),
             resolve: call("kerning.resolve"),
+            at: call("kerning.at"),
           }),
         });
         try {
@@ -232,6 +237,7 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       pairs: (input) => capabilities.kerning.pairs(shiftInputSchemas["kerning.pairs"].parse(input)),
       resolve: (input) =>
         capabilities.kerning.resolve(shiftInputSchemas["kerning.resolve"].parse(input)),
+      at: (input) => capabilities.kerning.at(shiftInputSchemas["kerning.at"].parse(input)),
     },
   };
 }
@@ -270,6 +276,8 @@ function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): 
       return scope.kerning.pairs(args);
     case "kerning.resolve":
       return scope.kerning.resolve(args);
+    case "kerning.at":
+      return scope.kerning.at(args);
     default:
       throw new Error(`Unknown shift.read method: ${String(method)}`);
   }

@@ -1,6 +1,7 @@
 import type {
   AuthoredKerningPair,
   AxisCoordinate,
+  GlyphSelector,
   KerningGlyph,
   KerningGroupSummary,
   KerningMasterValue,
@@ -10,6 +11,7 @@ import type {
   KerningResolution,
   KerningRule,
   ResolvedKerningPairs,
+  SourceSelector,
 } from "@shift/runtime";
 import { isGlyphId, type GlyphId, type KerningPosition, type SourceId } from "@shift/types";
 import {
@@ -19,6 +21,7 @@ import {
   type KerningSideId,
   type ResolvedKerning,
 } from "@shift/editor/model";
+import { ShiftSelectors } from "./ShiftSelectors";
 
 /**
  * Public kerning reads over one renderer's font.
@@ -31,9 +34,11 @@ import {
  */
 export class ShiftKerningReader {
   readonly #font: Font;
+  readonly #select: ShiftSelectors;
 
   constructor(font: Font) {
     this.#font = font;
+    this.#select = new ShiftSelectors(font);
   }
 
   /** Returns the font's kerning groups, first-position groups first, each side in name order. */
@@ -52,18 +57,19 @@ export class ShiftKerningReader {
   }
 
   /**
-   * Lists one page of the pairs authored at a source, ordered by side ids.
+   * Lists one page of the pairs authored at a source, the default source when
+   * omitted, ordered by side ids.
    *
    * @param glyph - Keeps only pairs naming this glyph, or its group at that pair position.
    * @throws {Error} for an unknown source or glyph, an invalid limit, or a malformed cursor.
    */
   pairs({
-    sourceId,
+    source,
     glyph,
     limit = 100,
     cursor,
   }: {
-    sourceId: SourceId;
+    source?: SourceSelector;
     glyph?: string;
     limit?: number;
     cursor?: string;
@@ -71,7 +77,7 @@ export class ShiftKerningReader {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error("kerning.pairs limit must be between 1 and 500");
     }
-    if (!this.#font.source(sourceId)) throw new Error(`Source ${sourceId} is not in this font`);
+    const sourceId = this.#select.sourceId(source);
 
     const kerning = this.#font.kerningCell.peek();
     const appliesTo = glyph ? this.#pairFilter(this.#glyphId(glyph)) : () => true;
@@ -97,21 +103,19 @@ export class ShiftKerningReader {
   resolve(
     queries: KerningPairQuery[],
     // oxlint-disable-next-line shift/no-optional-collection-field -- mirrors the agent protocol request
-    target: { sourceId?: SourceId; location?: AxisCoordinate[] },
+    target: { source?: SourceSelector; location?: AxisCoordinate[] },
   ): ResolvedKerningPairs {
     const font = this.#font;
-    const { sourceId, location } = target;
-    if (sourceId && location)
-      throw new Error("kerning.resolve takes sourceId or location, not both");
-    if (sourceId && !font.source(sourceId))
-      throw new Error(`Source ${sourceId} is not in this font`);
+    const { source, location } = target;
+    if (source && location) throw new Error("kerning.resolve takes source or location, not both");
+    const sourceId = source ? this.#select.sourceId(source) : null;
 
     const external = location ? font.designspace.location(location) : font.defaultLocation();
     const pairs = queries.flatMap(({ first, second }) => [
       this.#glyphId(first),
       this.#glyphId(second),
     ]);
-    const amounts = font.kerningRun(pairs, external, sourceId ?? null);
+    const amounts = font.kerningRun(pairs, external, sourceId);
     const items = queries.map((_, index): KerningResolution => {
       const firstId = pairs[2 * index]!;
       const secondId = pairs[2 * index + 1]!;
@@ -123,6 +127,29 @@ export class ShiftKerningReader {
       };
     });
     return { items };
+  }
+
+  /**
+   * The kerning between two glyphs at one master, the default source when
+   * `source` is omitted.
+   *
+   * @throws {Error} for an unknown glyph or source.
+   */
+  at({
+    first,
+    second,
+    source,
+  }: {
+    first: GlyphSelector;
+    second: GlyphSelector;
+    source?: SourceSelector;
+  }): KerningMasterValue {
+    const select = this.#select;
+    return this.#masterValue(
+      select.sourceId(source),
+      select.glyphId(first),
+      select.glyphId(second),
+    );
   }
 
   #masterValue(sourceId: SourceId, first: GlyphId, second: GlyphId): KerningMasterValue {

@@ -23,17 +23,11 @@ import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
 import type {
-  AuthoredAnchor,
-  AuthoredComponent,
-  AuthoredContour,
   AuthoredLayer,
-  AuthoredPoint,
   EditorTool,
   EditorView,
   FontOverview,
   GlyphSummary,
-  KerningGroupSummary,
-  KerningMasterValue,
   KerningToolView,
   ResolvedGlyph,
   ResolvedLocation,
@@ -56,6 +50,14 @@ import type { EditorCommandId } from "@shared/commands";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { GlyphFixture, PointNames } from "./fixtures";
+import type {
+  EditorReads,
+  GlyphAnchor,
+  KerningGroup,
+  Outline,
+  OutlinePoint,
+  SourceKerning,
+} from "./reads";
 
 /** Keyboard modifiers held during a gesture. */
 export interface Modifiers {
@@ -63,12 +65,6 @@ export interface Modifiers {
   readonly altKey?: boolean;
   readonly metaKey?: boolean;
 }
-
-/**
- * The open glyph's authored contours, as `@shift/runtime`'s `layers.get`
- * returns them to agents.
- */
-export type Outline = readonly AuthoredContour[];
 
 /** A new continuous axis, as the Axes panel creates one. */
 export interface AxisFixture {
@@ -108,7 +104,40 @@ export interface DrawnGlyph {
   readonly anchors: readonly { readonly name: string; readonly x: number; readonly y: number }[];
 }
 
-export interface EditorTestSurface {
+// The read types tests see beyond {@link EditorReads}'s. Each aliases the
+// `@shift/runtime` (or agent reader) type agents read; tests import these,
+// never the runtime or `agent/`.
+
+/** One glyph's authored layer at one source, as agents read it with `layers.get`. */
+export type SourceLayer = AuthoredLayer;
+/** A glyph drawn at a designspace location: its path and advance. */
+export type GlyphAtLocation = ResolvedGlyph;
+/** A glyph's identity and the layer each source holds. */
+export type GlyphListing = GlyphSummary;
+/** The font's info, metrics, axes, sources and instances. */
+export type FontSummary = FontOverview;
+/** A location resolved: its design coordinates, the source there, and the metrics. */
+export type LocationSummary = ResolvedLocation;
+/** The window's editor facts: open glyph, sources, location, selection, tool and edit state. */
+export type EditorViewState = EditorView;
+/** The active tool and its state. */
+export type ActiveTool = EditorTool;
+/** The canvas text run as it shows now. */
+export type CanvasText = TextRunView;
+/** What the Spacing tool shows. */
+export type SpacingToolState = SpacingToolView;
+/** What the Kerning tool shows. */
+export type KerningToolState = KerningToolView;
+/** One point handle the canvas draws, and how it is styled. */
+export type CanvasHandle = DrawnHandle;
+
+/**
+ * @remarks
+ * The reads come from {@link EditorReads}, which the Playwright `EditorDriver`
+ * implements too. The in-process editor answers kerning and selection at
+ * once, so those reads narrow to plain values here.
+ */
+export interface EditorTestSurface extends EditorReads {
   /**
    * Builds `fixture` into the open glyph through the editor's own commands.
    *
@@ -371,69 +400,57 @@ export interface EditorTestSurface {
   /** Moves to a location, as the axis sliders do; an exact source there becomes active. */
   setLocation(location: AxisLocation): void;
 
-  /** The open glyph's authored outline, as agents read it. */
-  outline(): Promise<Outline>;
-  /** One authored point of the open glyph, or null when it has none with that id. */
-  point(id: PointId): Promise<AuthoredPoint | null>;
   /** The open glyph's point at a position in the active source, or null. */
-  pointAt(position: Point2D): Promise<AuthoredPoint | null>;
-  /** The open glyph's anchors, in order. */
-  anchors(): Promise<readonly AuthoredAnchor[]>;
+  pointAt(position: Point2D): Promise<OutlinePoint | null>;
   /** The open glyph's anchor named `name` in the active source, or null. */
-  anchorNamed(name: string): Promise<AuthoredAnchor | null>;
-  /** The open glyph's components, in order. */
-  components(): Promise<readonly AuthoredComponent[]>;
-  /** Where each point is now, as the open glyph's authored layer stores it. */
-  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>>;
-  /** The open glyph's advance width. */
-  advanceWidth(): Promise<number>;
+  anchorNamed(name: string): Promise<GlyphAnchor | null>;
   /** The open glyph's outline bounds, as agents read them; null when it has no outline. */
   outlineBounds(): Promise<Bounds | null>;
   /** The open glyph's authored layer at the source named `source`, as agents read it. */
-  layerAt(source: string): Promise<AuthoredLayer>;
+  layerAt(source: string): Promise<SourceLayer>;
   /** The open glyph as it draws at `location`, interpolated between sources; null when it cannot be resolved there. */
-  glyphAt(location: AxisLocation): Promise<ResolvedGlyph | null>;
+  glyphAt(location: AxisLocation): Promise<GlyphAtLocation | null>;
   /** The glyph named `name`: its identity and the layer each source holds; null when the font has none. */
-  glyphNamed(name: string): GlyphSummary | null;
+  glyphNamed(name: string): GlyphListing | null;
   /** The font's info, metrics, axes, sources and instances, as agents read them. */
-  fontOverview(): FontOverview;
+  fontOverview(): FontSummary;
   /** The font's source named `name`, or null. */
   source(name: string): Source | null;
   /** The languages the font tracks; null when none were ever set. Test-only: not agent data yet. */
   languages(): readonly string[] | null;
   /** The current location resolved: its design coordinates, the source there, and the metrics. */
-  location(): ResolvedLocation;
+  location(): LocationSummary;
   /** Where `location` sits in the designspace: its design location, the source exactly there, and the metrics there. */
-  locationAt(location: AxisLocation): ResolvedLocation;
+  locationAt(location: AxisLocation): LocationSummary;
   /** The font's metrics at the editor's location, as agents resolve them. */
   metrics(): SourceMetrics;
   /** The kerning between two glyphs at every source, in font source order. */
-  kerning(first: string, second: string): readonly KerningMasterValue[];
-  /** The kerning between two glyphs at the source named `source`; null when the font has none. */
-  kerningAt(source: string, first: string, second: string): KerningMasterValue | null;
+  kerning(first: string, second: string): readonly SourceKerning[];
+  /** The kerning between two glyphs at the source named `source`. */
+  kerningAt(source: string, first: string, second: string): SourceKerning;
   /** The kerning groups at a position, in name order. */
-  kerningGroups(position: KerningPosition): readonly KerningGroupSummary[];
+  kerningGroups(position: KerningPosition): readonly KerningGroup[];
   /** The kerning group named `name` at a position, or null. */
-  kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null;
+  kerningGroup(position: KerningPosition, name: string): KerningGroup | null;
   /** The kerning group the glyph named `glyph` belongs to at a position, or null. */
-  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroupSummary | null;
+  kerningGroupOf(position: KerningPosition, glyph: string): KerningGroup | null;
 
   /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */
-  editorView(): EditorView;
+  editorView(): EditorViewState;
   /** The selected ids, in selection order. */
   selectionIds(): readonly string[];
   /** The active tool and the state it is in, as agents read it. */
-  toolState(): EditorTool | null;
+  toolState(): ActiveTool | null;
   /** The canvas text as it shows now: items, placed glyphs, and caret; null when there is none. */
-  canvasText(): TextRunView | null;
+  canvasText(): CanvasText | null;
   /** What the Spacing tool shows; null when it is not active. */
-  spacingTool(): SpacingToolView | null;
+  spacingTool(): SpacingToolState | null;
   /** What the Kerning tool shows; null when it is not active. */
-  kerningTool(): KerningToolView | null;
+  kerningTool(): KerningToolState | null;
   /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
   drawnOutline(): Outline;
   /** The point handles the canvas draws on the open glyph, with how each is styled. */
-  drawnHandles(): readonly DrawnHandle[];
+  drawnHandles(): readonly CanvasHandle[];
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
   drawnOutlineTargets(): readonly GlyphOutlineTarget[];
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
