@@ -11,36 +11,34 @@ import {
   openVariationControls,
   settingsDetails,
 } from "./fixtures/appLocators";
+import { createAxis } from "./fixtures/fontSetup";
 
 async function createWeightAxis(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected authored font");
-
-    font.createAxis({
-      tag: "wght",
-      name: "Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await font.editCoordinator.settled();
+  await createAxis(page, {
+    tag: "wght",
+    name: "Weight",
+    role: "external",
+    axisType: "continuous",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+    labels: [],
+    hidden: false,
   });
 }
 
-test("exposes stable semantic selectors for major application surfaces", async ({ page }) => {
+test("exposes stable semantic selectors for major application surfaces", async ({
+  page,
+  editor,
+}) => {
   const navigation = fontNavigation(page);
   await expect(navigation).toBeVisible();
   await expect(glyphProperties(page)).toBeVisible();
   await expect(glyphCatalogSurface(page)).toBeVisible();
   await expect(glyphCatalogCanvas(page)).toBeAttached();
 
-  const defaultSourceId = await page.evaluate(() => window.shift?.font.defaultSource.id);
-  if (!defaultSourceId) throw new Error("Expected default source");
+  // A glyph's layer read without a source is its layer at the default source.
+  const defaultSourceId = (await editor.layerOf("A")).sourceId;
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 

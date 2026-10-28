@@ -106,3 +106,17 @@ export async function primaryWorkArea(
 ): Promise<{ x: number; y: number; width: number; height: number }> {
   return app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
 }
+
+/** The device pixels per CSS pixel the page renders at. */
+export async function devicePixelRatio(page: Page): Promise<number> {
+  return page.evaluate(() => window.devicePixelRatio);
+}
+
+/** Grows the app's first window's content area by `delta` CSS pixels in width, as a user resize does. */
+export async function resizeWindowContent(app: ElectronApplication, delta: number): Promise<void> {
+  await app.evaluate(({ BrowserWindow }, change) => {
+    const window = BrowserWindow.getAllWindows()[0]!;
+    const [width, height] = window.getContentSize();
+    window.setContentSize(width! + change, height!);
+  }, delta);
+}

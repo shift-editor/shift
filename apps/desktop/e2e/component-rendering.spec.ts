@@ -1,8 +1,12 @@
 import path from "node:path";
-import type { MatModel } from "@shift/geo";
 import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { editorSidebar, glyphProperties, openVariationControls } from "./fixtures/appLocators";
-import type { ExternalAxisLocation } from "@shift/editor/types";
+import {
+  drawnAndAuthoredComponents,
+  drawnComponentCount,
+  instanceBetweenSources,
+  setZoom,
+} from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const VARIABLE_FONT_PATH = path.resolve(
@@ -17,59 +21,20 @@ test(
   { tag: "@golden" },
   async ({ page, editor }) => {
     await navigateToEditor(page, "C1");
-    const sourceId = await page.evaluate(
-      () => window.shift?.font.sources.find((candidate) => candidate.name === "BoldWide")?.id,
-    );
+    const { sources } = await editor.fontOverview();
+    const sourceId = sources.find((candidate) => candidate.name === "BoldWide")?.id;
     if (!sourceId) throw new Error("Expected BoldWide fixture source");
     await openVariationControls(page);
     await page.getByTestId(`source-${sourceId}`).click();
-    await expect
-      .poll(() => page.evaluate(() => window.shift?.editor.activeSourceId))
-      .toBe(sourceId);
+    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBe(sourceId);
 
-    const sample = await page.evaluate(() => {
-      const workspace = window.shift;
-      if (!workspace) throw new Error("Expected workspace");
-
-      const record = workspace.font.recordForName("Aacute");
-      if (!record) throw new Error("Expected Aacute fixture glyph");
-      const source = workspace.font.sources.find((candidate) => candidate.name === "BoldWide");
-      if (!source) throw new Error("Expected BoldWide fixture source");
-      const glyph = workspace.editor.glyphForId(record.id);
-      if (!glyph) throw new Error("Expected loaded Aacute glyph");
-
-      const renderModel = glyph.renderModelAt(
-        workspace.editor.externalLocationCell,
-        workspace.editor.activeSourceIdCell,
-      );
-      const exactGeometry = glyph.geometryForSource(source.id);
-      const directComponents = renderModel.components.filter(
-        (component) => component.parentPath.length === 0,
-      );
-      const matrixValues = (matrix: MatModel) => [
-        matrix.a,
-        matrix.b,
-        matrix.c,
-        matrix.d,
-        matrix.e,
-        matrix.f,
-      ];
-
-      return {
-        renderedIds: directComponents.map((component) => component.componentId),
-        exactIds: exactGeometry.components.map((component) => component.id),
-        renderedTransforms: directComponents.map((component) => matrixValues(component.transform)),
-        exactTransforms: exactGeometry.components.map((component) =>
-          matrixValues(component.matrix),
-        ),
-      };
-    });
+    const sample = await drawnAndAuthoredComponents(page, "Aacute", "BoldWide");
 
     expect(sample.renderedIds).not.toEqual(sample.exactIds);
     expect(sample.renderedTransforms).toEqual(sample.exactTransforms);
 
     // Keep the wide component's right edge inside the canvas.
-    await page.evaluate(() => window.shift!.editor.setZoom(window.shift!.editor.zoom * 0.8));
+    await setZoom(page, (await editor.zoomLevel()) * 0.8);
     await expectCanvasSnapshot(editor, "canvas-Aacute-bold-wide-components.png");
   },
 );
@@ -80,32 +45,12 @@ test(
   async ({ page, editor }) => {
     await navigateToEditor(page, "C1");
     const controls = await openVariationControls(page);
-    const instanceId = await page.evaluate(() => {
-      const font = window.shift!.font;
-      return font.namedInstances.find(
-        (instance) =>
-          !font.sourceAt(
-            new Map(
-              font
-                .getAxes()
-                .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-            ) as unknown as ExternalAxisLocation,
-          ),
-      )?.id;
-    });
+    const instanceId = await instanceBetweenSources(page);
     if (!instanceId) throw new Error("Expected an instance between sources");
 
     await controls.getByTestId(`instance-${instanceId}`).click();
-    await expect.poll(() => page.evaluate(() => window.shift!.editor.activeSourceId)).toBeNull();
-    const componentCount = await page.evaluate(() => {
-      const { editor } = window.shift!;
-      const node = editor.scene.nodesOfKind("glyph")[0];
-      const glyph = node ? editor.glyphForId(node.glyphId) : null;
-      if (!glyph) throw new Error("Expected loaded Aacute glyph");
-
-      return glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell).components
-        .length;
-    });
+    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBeNull();
+    const componentCount = await drawnComponentCount(page);
     expect(componentCount).toBeGreaterThan(0);
 
     await expectCanvasSnapshot(editor, "canvas-Aacute-interpolated-components.png");

@@ -1,6 +1,16 @@
 import type { Page } from "@playwright/test";
 import type { ExternalAxisLocation } from "@shift/editor/types";
-import type { AxisDefinition, AxisId, GlyphId, GlyphName, SourceId, Unicode } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type {
+  AnchorId,
+  AxisDefinition,
+  AxisId,
+  GlyphId,
+  GlyphName,
+  SelectableId,
+  SourceId,
+  Unicode,
+} from "@shift/types";
 import type { ScratchContour } from "./types";
 
 // Setup edits for specs whose subject is something else (the Grid, recovery, navigation). Each
@@ -91,11 +101,11 @@ export async function setLocation(page: Page, location: AxisValues): Promise<voi
   }, location);
 }
 
-/** Pastes `contours` into the open glyph, as Paste does, and returns how many contours it added. */
+/** Pastes `contours` into the open glyph, as Paste does, and returns the ids of the points it added. */
 export async function insertContours(
   page: Page,
   contours: readonly ScratchContour[],
-): Promise<number> {
+): Promise<readonly SelectableId[]> {
   return page.evaluate(async (content) => {
     const editor = window.shift!.editor;
     const inserted = editor.insertContent({
@@ -104,8 +114,27 @@ export async function insertContours(
     if (!inserted) throw new Error("Expected inserted contours");
 
     await editor.font.editCoordinator.settled();
-    return inserted.length;
+    return inserted;
   }, contours);
+}
+
+/** Adds an anchor named `name` at `position` to the open glyph's layer, and returns its id. */
+export async function addAnchor(page: Page, name: string, position: Point2D): Promise<AnchorId> {
+  return page.evaluate(
+    async ({ anchorName, at }) => {
+      const workspace = window.shift!;
+      const editor = workspace.editor;
+      const node = editor.scene.nodesOfKind("glyph")[0];
+      if (!node) throw new Error("Expected glyph node");
+      const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
+      if (!layer) throw new Error("Expected editable glyph layer");
+
+      const anchorId = layer.addAnchor(anchorName, at);
+      await workspace.font.editCoordinator.settled();
+      return anchorId;
+    },
+    { anchorName: name, at: position },
+  );
 }
 
 /** Creates empty glyphs named `names`, as Create glyph does, and returns each one's id and name. */
