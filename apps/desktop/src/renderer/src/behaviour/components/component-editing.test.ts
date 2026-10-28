@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { ComponentId, GlyphName } from "@shift/types";
+import type { GlyphName } from "@shift/types";
 import { square, triangle } from "@/testing/fixtures";
 import { startEditorWith, WEIGHT, type FontFixture } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
@@ -13,10 +13,6 @@ const WITH_BASE = {
   glyphs: { base: { outline: { contours: [square(100)] } }, root: {} },
   open: "root",
 } satisfies FontFixture;
-
-async function componentIds(): Promise<ComponentId[]> {
-  return (await editor.components()).map(({ id }) => id);
-}
 
 describe("component references become removable or editable local contours", () => {
   it("removes a nested component, restores it, and decomposes it into its outline", async () => {
@@ -39,7 +35,7 @@ describe("component references become removable or editable local contours", () 
 
     await editor.undo();
     await editor.settle();
-    expect(await componentIds()).toEqual([component!.id]);
+    expect((await editor.components()).map(({ id }) => id)).toEqual([component!.id]);
     expect((await editor.drawnGlyph()).bounds).toEqual(drawn);
 
     editor.selectObjects([component!.id]);
@@ -53,7 +49,7 @@ describe("component references become removable or editable local contours", () 
 
     await editor.undo();
     await editor.settle();
-    expect(await componentIds()).toEqual([component!.id]);
+    expect((await editor.components()).map(({ id }) => id)).toEqual([component!.id]);
     expect(await editor.outline()).toEqual([]);
     expect((await editor.drawnGlyph()).bounds).toEqual(drawn);
   });
@@ -81,7 +77,7 @@ describe("component references become removable or editable local contours", () 
   it("deletes a selected component of an empty glyph, which has no bounds", async () => {
     editor = await startEditorWith({ glyphs: { "empty-base": {} } });
     await editor.draw({ components: [{ glyph: "empty-base" }] });
-    editor.selectObjects(await componentIds());
+    editor.selectObjects((await editor.components()).map(({ id }) => id));
 
     expect(await editor.deleteSelection()).toBe(true);
     expect(await editor.components()).toEqual([]);
@@ -101,7 +97,7 @@ describe("component references become removable or editable local contours", () 
     expect((await editor.layerAt("Bold")).components).toHaveLength(1);
 
     await editor.editSources([regular, "Bold"]);
-    editor.selectObjects(await componentIds());
+    editor.selectObjects((await editor.components()).map(({ id }) => id));
     expect(await editor.deleteSelection()).toBe(true);
     expect((await editor.layerAt(regular)).components).toEqual([]);
     expect((await editor.layerAt("Bold")).components).toEqual([]);
@@ -122,7 +118,7 @@ describe("Decompose Components replaces selected components with outlines", () =
   it("decomposes the selection as one undoable edit", async () => {
     editor = await startEditorWith(WITH_BASE);
     await editor.draw({ components: [{ glyph: "base" }] });
-    const ids = await componentIds();
+    const ids = (await editor.components()).map(({ id }) => id);
     editor.selectObjects(ids);
 
     expect(editor.canDecomposeSelection()).toBe(true);
@@ -137,7 +133,7 @@ describe("Decompose Components replaces selected components with outlines", () =
 
     await editor.undo();
     await editor.settle();
-    expect(await componentIds()).toEqual(ids);
+    expect((await editor.components()).map(({ id }) => id)).toEqual(ids);
     expect(await editor.outline()).toEqual([]);
   });
 
