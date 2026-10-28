@@ -1,16 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { cursorToCSS } from "@shift/editor/rendering";
-import { expectEdit } from "@/testing/expectEdit";
 import type { OutlineContour } from "@/testing/reads";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { expectEdit } from "@/testing/expectEdit";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("shape");
 });
-afterEach(() => editor.close());
 
 /** The box a contour's points span, which for a drawn shape is the box it was dragged out to. */
 function extent(contour: OutlineContour | undefined) {
@@ -60,7 +57,7 @@ describe("drawing a shape by dragging", () => {
   });
 
   it("does not draw into the last source shown at a location between sources", async () => {
-    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis(WEIGHT);
     editor.setLocation({ wght: 550 });
 
     await editor.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 });

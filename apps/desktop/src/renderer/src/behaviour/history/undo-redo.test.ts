@@ -1,17 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { describe, expect, it } from "vitest";
+import { rect } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
-const corner = {
-  closed: true,
-  points: [{ x: 0, y: 0, name: "corner" }, [100, 0], [100, 100], [0, 100]],
-} as const;
+const corner = rect(0, 0, 100, 100, { bottomLeft: "corner" });
 
 describe("undoing and redoing edits", () => {
   it("undoes edits one at a time, newest first", async () => {

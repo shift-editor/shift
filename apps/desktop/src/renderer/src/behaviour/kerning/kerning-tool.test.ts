@@ -1,20 +1,10 @@
-import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor } from "@/testing/TestEditor";
-
-const MUTATOR_SANS = resolve(
-  process.cwd(),
-  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
-);
-
-let editor: EditorTestSurface;
-afterEach(() => editor.close());
+import { beforeEach, describe, expect, it } from "vitest";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
 // The text is "TA" at LightCondensed, the default source: T kerns with A's
 // second-position group by -75 there. T is the open glyph, drawn from 0.
+const editor = useTestEditor({ file: FONTS.mutatorSans, glyph: "T" });
 beforeEach(async () => {
-  editor = await openTestEditor(MUTATOR_SANS, "T");
   editor.selectTool("text");
   editor.typeText("A");
   await editor.pressKey("Escape");

@@ -1,16 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { cursorToCSS } from "@shift/editor/rendering";
 import { expectEdit } from "@/testing/expectEdit";
+import { line } from "@/testing/fixtures";
 import { offCurve, onCurve } from "@/testing/outlineMatchers";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("pen");
 });
-afterEach(() => editor.close());
 
 /** Clicks out an open corner contour with the Pen, leaving its stroke active. */
 async function drawStroke(): Promise<void> {
@@ -81,16 +79,7 @@ describe("closing a contour by dragging off its first point", () => {
 
 describe("joining another open contour", () => {
   beforeEach(async () => {
-    await editor.draw({
-      contours: [
-        {
-          points: [
-            [100, 100],
-            [300, 100],
-          ],
-        },
-      ],
-    });
+    await editor.draw({ contours: [line([100, 100], [300, 100])] });
     await editor.clickAt({ x: 100, y: 300 });
     await editor.clickAt({ x: 300, y: 300 });
   });
