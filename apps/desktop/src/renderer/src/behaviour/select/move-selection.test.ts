@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import { cubic, line } from "@/testing/fixtures";
+import { cubic, line, type GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import type { DrawOptions } from "@/testing/surface";
 
 const editor = useTestEditor();
 beforeEach(() => {
@@ -10,26 +9,21 @@ beforeEach(() => {
 });
 
 /** An open diagonal of three points, 100,100 → 150,150 → 200,200. */
-function diagonal(options?: DrawOptions) {
-  return editor.draw(
+const DIAGONAL = {
+  contours: [
     {
-      contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "first" },
-            { x: 150, y: 150, name: "middle" },
-            { x: 200, y: 200, name: "last" },
-          ],
-        },
+      points: [
+        { x: 100, y: 100, name: "first" },
+        { x: 150, y: 150, name: "middle" },
+        { x: 200, y: 200, name: "last" },
       ],
     },
-    options,
-  );
-}
+  ],
+} as const satisfies GlyphFixture;
 
 describe("dragging moves the selection", () => {
   it("moves the whole selection when an unselected segment inside its bounds is dragged", async () => {
-    const { first, middle, last } = await diagonal({ select: true });
+    const { first, middle, last } = await editor.draw(DIAGONAL, { select: true });
 
     await editor.dragFrom({ x: 125, y: 125 }, { x: 160, y: 150 });
 
@@ -42,7 +36,7 @@ describe("dragging moves the selection", () => {
   });
 
   it("moves the selection, not an unselected point dragged inside its bounds", async () => {
-    const { first, middle, last } = await diagonal();
+    const { first, middle, last } = await editor.draw(DIAGONAL);
     editor.select([first, last]);
 
     await editor.dragFrom({ x: 150, y: 150 }, { x: 190, y: 180 });
@@ -56,7 +50,7 @@ describe("dragging moves the selection", () => {
   });
 
   it("moves the selection when dragged from inside its bounding box", async () => {
-    const { first, last } = await diagonal();
+    const { first, last } = await editor.draw(DIAGONAL);
     editor.select([first, last]);
 
     await editor.dragFrom({ x: 120, y: 180 }, { x: 150, y: 220 });
@@ -68,7 +62,7 @@ describe("dragging moves the selection", () => {
   });
 
   it("selects and moves an anchor dragged directly", async () => {
-    await diagonal();
+    await editor.draw(DIAGONAL);
     await editor.draw({ anchors: [{ name: "top", x: 300, y: 300 }] });
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 330, y: 320 });
@@ -79,7 +73,7 @@ describe("dragging moves the selection", () => {
   });
 
   it("moves selected points and anchors together", async () => {
-    const { first, middle } = await diagonal();
+    const { first, middle } = await editor.draw(DIAGONAL);
     await editor.draw({ anchors: [{ name: "top", x: 300, y: 300 }] });
     await editor.clickAt({ x: 100, y: 100 });
     await editor.clickAt({ x: 150, y: 150 }, { shiftKey: true });
@@ -95,7 +89,7 @@ describe("dragging moves the selection", () => {
   });
 
   it("moves each point once when its contour is selected too", async () => {
-    const { first, middle, last } = await diagonal();
+    const { first, middle, last } = await editor.draw(DIAGONAL);
     await editor.clickAt({ x: 125, y: 125 });
     await editor.clickAt({ x: 125, y: 125 });
     const [contour] = await editor.outline();
@@ -182,7 +176,7 @@ describe("dragging moves the selection", () => {
   });
 
   it("does not move anything before the drag threshold is crossed", async () => {
-    const { first, last } = await diagonal();
+    const { first, last } = await editor.draw(DIAGONAL);
     const nudge = { x: 100 + 2 * editor.pixelSize(), y: 100 };
 
     editor.pressAt({ x: 100, y: 100 });
@@ -198,7 +192,7 @@ describe("dragging moves the selection", () => {
 
 describe("a drag in flight", () => {
   it("puts every point back when Escape cancels it", async () => {
-    const { first, middle, last } = await diagonal();
+    const { first, middle, last } = await editor.draw(DIAGONAL);
     const before = await editor.outline();
     editor.select([first, middle, last]);
 
@@ -215,18 +209,18 @@ describe("a drag in flight", () => {
   });
 
   it("previews each sample from where the drag began", async () => {
-    const { first } = await diagonal();
+    const { first } = await editor.draw(DIAGONAL);
     editor.select([first]);
 
     editor.pressAt({ x: 100, y: 100 });
     editor.movePointerTo({ x: 104, y: 100 });
     editor.movePointerTo({ x: 120, y: 100 });
-    const firstSample = editor.shownPointPositions([first])[first]!;
+    const [firstSample] = editor.drawnOutline()[0]!.points;
     editor.movePointerTo({ x: 130, y: 100 });
-    const secondSample = editor.shownPointPositions([first])[first]!;
+    const [secondSample] = editor.drawnOutline()[0]!.points;
     await editor.pressKey("Escape");
 
-    expect(secondSample.x - firstSample.x).toBeCloseTo(10);
+    expect(secondSample!.x - firstSample!.x).toBeCloseTo(10);
     expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 100 } });
   });
 
@@ -260,7 +254,7 @@ describe("a drag in flight", () => {
 
 describe("the selection's bounds follow its points", () => {
   it("through a drag and a curve inserted before them", async () => {
-    const { first, middle, last } = await diagonal({ select: true });
+    const { first, middle, last } = await editor.draw(DIAGONAL, { select: true });
 
     await editor.dragFrom({ x: 150, y: 150 }, { x: 180, y: 170 });
     expect(editor.selectionLocalRect()).toMatchObject({ x: 130, y: 120, width: 100, height: 100 });
@@ -274,7 +268,7 @@ describe("the selection's bounds follow its points", () => {
 
 describe("dragging while editing several sources", () => {
   it("moves the matching point in every edited source, as one edit", async () => {
-    const { middle } = await diagonal();
+    const { middle } = await editor.draw(DIAGONAL);
     await editor.addAxis(WEIGHT);
     await editor.addSource("Bold", { wght: 700 });
     await editor.editSources(["Regular", "Bold"]);

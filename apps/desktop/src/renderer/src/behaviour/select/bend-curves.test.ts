@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { Vec2, type Point2D } from "@shift/geo";
+import { Curve, Vec2 } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import { cubic, line, triangle } from "@/testing/fixtures";
@@ -10,34 +10,41 @@ beforeEach(() => {
   editor.selectTool("select");
 });
 
-const third = (from: number, to: number, step: 1 | 2) => from + ((to - from) * step) / 3;
+/** A straight curve from 100,200 to 200,200, its handles at the thirds. */
+const FLAT_CURVE = {
+  contours: [
+    cubic(
+      { x: 100, y: 200, name: "start" },
+      { x: 100 + 100 / 3, y: 200, name: "one" },
+      { x: 100 + 200 / 3, y: 200, name: "two" },
+      { x: 200, y: 200, name: "end" },
+    ),
+  ],
+};
 
-/** A straight curve from `start` to `end`, its handles at the thirds. */
-function flatCurve(start: Point2D, end: Point2D) {
-  return editor.draw({
-    contours: [
-      cubic(
-        { ...start, name: "start" },
-        { x: third(start.x, end.x, 1), y: third(start.y, end.y, 1), name: "one" },
-        { x: third(start.x, end.x, 2), y: third(start.y, end.y, 2), name: "two" },
-        { ...end, name: "end" },
-      ),
-    ],
-  });
-}
+/** A straight curve from 100,100 to 300,300, its handles at the thirds. */
+const DIAGONAL_CURVE = {
+  contours: [
+    cubic(
+      { x: 100, y: 100, name: "start" },
+      { x: 100 + 200 / 3, y: 100 + 200 / 3, name: "one" },
+      { x: 100 + 400 / 3, y: 100 + 400 / 3, name: "two" },
+      { x: 300, y: 300, name: "end" },
+    ),
+  ],
+};
 
-/** The point halfway along the open glyph's first curve. */
-async function curveMidpoint(): Promise<Point2D> {
-  const [p0, p1, p2, p3] = (await editor.outline())[0]!.points;
-  return {
-    x: (p0!.x + 3 * p1!.x + 3 * p2!.x + p3!.x) / 8,
-    y: (p0!.y + 3 * p1!.y + 3 * p2!.y + p3!.y) / 8,
-  };
-}
-
-async function position(id: PointId): Promise<Point2D> {
-  return (await editor.pointPositions([id]))[id]!;
-}
+/** A straight curve from 100,200 to 190,230, its handles at the thirds. */
+const SLOPED_CURVE = {
+  contours: [
+    cubic(
+      { x: 100, y: 200, name: "start" },
+      { x: 130, y: 210, name: "one" },
+      { x: 160, y: 220, name: "two" },
+      { x: 190, y: 230, name: "end" },
+    ),
+  ],
+};
 
 describe("Cmd-clicking a line turns it into a curve", () => {
   it("puts the handles at the thirds, as one edit", async () => {
@@ -138,7 +145,7 @@ describe("dragging a curve bends it", () => {
   const middle = { x: 150, y: 200 };
 
   beforeEach(async () => {
-    ({ one, two } = await flatCurve({ x: 100, y: 200 }, { x: 200, y: 200 }));
+    ({ one, two } = await editor.draw(FLAT_CURVE));
   });
 
   it("keeps the normal cursor over a curve with Cmd or Alt held", async () => {
@@ -174,7 +181,7 @@ describe("dragging a curve bends it", () => {
     editor.pressAt(middle);
     editor.movePointerTo({ x: 154, y: 200 });
     editor.movePointerTo({ x: 154, y: 240 });
-    expect(editor.shownPointPositions([one])[one]).not.toEqual({ x: third(100, 200, 1), y: 200 });
+    expect(editor.shownPointPositions([one])).not.toEqual({ [one]: { x: 100 + 100 / 3, y: 200 } });
     await editor.pressKey("Escape");
 
     expect(editor.toolCursor()).toBe("default");
@@ -196,37 +203,41 @@ describe("dragging a curve bends it", () => {
   it("snaps each handle to the nearest 45° while Shift bends a flat curve", async () => {
     await editor.dragFrom(middle, { x: 150, y: 240 }, { shiftKey: true });
 
-    const handleOne = Vec2.sub(await position(one), { x: 100, y: 200 });
-    const handleTwo = Vec2.sub(await position(two), { x: 200, y: 200 });
+    const handleOne = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
+    const handleTwo = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
     expect(handleOne.x).toBeGreaterThan(0);
     expect(handleOne.y).toBeCloseTo(handleOne.x);
     expect(handleTwo.x).toBeLessThan(0);
     expect(handleTwo.y).toBeCloseTo(-handleTwo.x);
-    expect((await curveMidpoint()).y).toBeCloseTo(240);
+    const [p0, p1, p2, p3] = (await editor.outline())[0]!.points;
+    expect(Curve.pointAt(Curve.cubic(p0!, p1!, p2!, p3!), 0.5).y).toBeCloseTo(240);
   });
 
   it("frees the handles once Shift is released mid-bend", () => {
-    const handleOne = () => Vec2.sub(editor.shownPointPositions([one])[one]!, { x: 100, y: 200 });
-
     editor.pressAt(middle);
     editor.movePointerTo({ x: 154, y: 200 });
     editor.movePointerTo({ x: 150, y: 240 }, { shiftKey: true });
-    expect(handleOne().y).toBeCloseTo(handleOne().x);
+    const [, snappedOne] = editor.drawnOutline()[0]!.points;
+    const snapped = Vec2.sub(snappedOne!, { x: 100, y: 200 });
+    expect(snapped.y).toBeCloseTo(snapped.x);
 
     editor.movePointerTo({ x: 150, y: 241 });
-    expect(handleOne().y).not.toBeCloseTo(handleOne().x);
+    const [, freeOne] = editor.drawnOutline()[0]!.points;
+    const free = Vec2.sub(freeOne!, { x: 100, y: 200 });
+    expect(free.y).not.toBeCloseTo(free.x);
   });
 
   it("keeps each handle's direction and changes only its length while Alt is held", async () => {
     await editor.dragFrom(middle, { x: 170, y: 240 });
-    const oneBefore = Vec2.sub(await position(one), { x: 100, y: 200 });
-    const twoBefore = Vec2.sub(await position(two), { x: 200, y: 200 });
-    const bent = await curveMidpoint();
+    const oneBefore = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
+    const twoBefore = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
+    const [p0, p1, p2, p3] = (await editor.outline())[0]!.points;
+    const bent = Curve.pointAt(Curve.cubic(p0!, p1!, p2!, p3!), 0.5);
 
     await editor.dragFrom(bent, { x: bent.x - 10, y: bent.y + 30 }, { altKey: true });
 
-    const oneAfter = Vec2.sub(await position(one), { x: 100, y: 200 });
-    const twoAfter = Vec2.sub(await position(two), { x: 200, y: 200 });
+    const oneAfter = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
+    const twoAfter = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
     expect(Vec2.cross(Vec2.unit(oneAfter), Vec2.unit(oneBefore))).toBeCloseTo(0);
     expect(Vec2.cross(Vec2.unit(twoAfter), Vec2.unit(twoBefore))).toBeCloseTo(0);
     expect(Vec2.dot(oneAfter, oneBefore)).toBeGreaterThan(0);
@@ -237,7 +248,7 @@ describe("dragging a curve bends it", () => {
 
 describe("Shift-bending a diagonal curve", () => {
   it("snaps its handles to one horizontal and one vertical", async () => {
-    const { one, two } = await flatCurve({ x: 100, y: 100 }, { x: 300, y: 300 });
+    const { one, two } = await editor.draw(DIAGONAL_CURVE);
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 260, y: 140 }, { shiftKey: true });
 
@@ -250,7 +261,7 @@ describe("Shift-bending a diagonal curve", () => {
 
 describe("dragging an unselected curve", () => {
   it("bends it without moving its ends", async () => {
-    const { start, one, two, end } = await flatCurve({ x: 100, y: 200 }, { x: 190, y: 230 });
+    const { start, one, two, end } = await editor.draw(SLOPED_CURVE);
 
     await editor.dragFrom({ x: 145, y: 215 }, { x: 149, y: 255 });
 
@@ -262,7 +273,7 @@ describe("dragging an unselected curve", () => {
   });
 
   it("moves it whole once it is selected by a click", async () => {
-    const { start, one, two, end } = await flatCurve({ x: 100, y: 200 }, { x: 190, y: 230 });
+    const { start, one, two, end } = await editor.draw(SLOPED_CURVE);
     await editor.clickAt({ x: 145, y: 215 });
 
     await editor.dragFrom({ x: 145, y: 215 }, { x: 149, y: 255 });

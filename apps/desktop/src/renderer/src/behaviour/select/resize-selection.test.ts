@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import { line } from "@/testing/fixtures";
@@ -17,20 +16,6 @@ beforeEach(async () => {
   editor.selectTool("select");
 });
 
-function expectShown(firstAt: Point2D, secondAt: Point2D): void {
-  expect(editor.shownPointPositions([first, second])).toEqual({
-    [first]: firstAt,
-    [second]: secondAt,
-  });
-}
-
-async function expectAt(firstAt: Point2D, secondAt: Point2D): Promise<void> {
-  expect(await editor.pointPositions([first, second])).toEqual({
-    [first]: firstAt,
-    [second]: secondAt,
-  });
-}
-
 describe("dragging the selection's bounding box resizes it", () => {
   it("changes only x when dragging the right edge, as one edit", async () => {
     await expectEdit(editor, (e) => e.dragFrom({ x: 200, y: 150 }, { x: 250, y: 150 }), {
@@ -42,25 +27,37 @@ describe("dragging the selection's bounding box resizes it", () => {
   it("changes only y when dragging the top edge", async () => {
     await editor.dragFrom({ x: 150, y: 200 }, { x: 150, y: 250 });
 
-    await expectAt({ x: 100, y: 100 }, { x: 200, y: 250 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 200, y: 250 },
+    });
   });
 
   it("resizes both axes from a corner", async () => {
     await editor.dragFrom({ x: 200, y: 200 }, { x: 250, y: 225 });
 
-    await expectAt({ x: 100, y: 100 }, { x: 250, y: 225 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 225 },
+    });
   });
 
   it("scales both axes alike when Shift is held at a corner", async () => {
     await editor.dragFrom({ x: 200, y: 200 }, { x: 300, y: 250 }, { shiftKey: true });
 
-    await expectAt({ x: 100, y: 100 }, { x: 300, y: 300 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 300, y: 300 },
+    });
   });
 
   it("flips the shape once the dragged edge crosses the fixed one", async () => {
     await editor.dragFrom({ x: 200, y: 150 }, { x: 50, y: 150 });
 
-    await expectAt({ x: 100, y: 100 }, { x: 50, y: 200 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 50, y: 200 },
+    });
   });
 
   it("resizes in the glyph's own units when the text is moved on the canvas", async () => {
@@ -68,7 +65,10 @@ describe("dragging the selection's bounding box resizes it", () => {
 
     await editor.dragFrom({ x: 200, y: 150 }, { x: 250, y: 150 });
 
-    await expectAt({ x: 100, y: 100 }, { x: 250, y: 200 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 200 },
+    });
   });
 
   it("resizes from the handle under the pointer-down, not where the drag began", async () => {
@@ -77,17 +77,26 @@ describe("dragging the selection's bounding box resizes it", () => {
     editor.movePointerTo({ x: 250, y: 250 });
     await editor.releaseAt({ x: 250, y: 250 });
 
-    await expectAt({ x: 100, y: 100 }, { x: 250, y: 250 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 250 },
+    });
   });
 
   it("puts the points back when Escape cancels the resize", async () => {
     editor.pressAt({ x: 200, y: 200 });
     editor.movePointerTo({ x: 204, y: 204 });
     editor.movePointerTo({ x: 250, y: 250 });
-    expectShown({ x: 100, y: 100 }, { x: 250, y: 250 });
+    expect(editor.shownPointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 250 },
+    });
     await editor.pressKey("Escape");
 
-    await expectAt({ x: 100, y: 100 }, { x: 200, y: 200 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 200, y: 200 },
+    });
   });
 });
 
@@ -206,7 +215,10 @@ describe.each([false, true])(
 
         await editor.dragFrom(down, to, { altKey });
 
-        await expectAt(firstAt, secondAt);
+        expect(await editor.pointPositions([first, second])).toEqual({
+          [first]: firstAt,
+          [second]: secondAt,
+        });
       },
     );
   },
@@ -217,10 +229,16 @@ describe("resize modifiers follow each drag sample", () => {
     editor.pressAt({ x: 200, y: 150 }, { altKey: !altKey });
     editor.movePointerTo({ x: 225, y: 150 }, { altKey: !altKey });
     editor.movePointerTo({ x: 250, y: 150 }, { altKey });
-    expectShown({ x: altKey ? 50 : 100, y: 100 }, { x: 250, y: 200 });
+    expect(editor.shownPointPositions([first, second])).toEqual({
+      [first]: { x: altKey ? 50 : 100, y: 100 },
+      [second]: { x: 250, y: 200 },
+    });
     await editor.pressKey("Escape");
 
-    await expectAt({ x: 100, y: 100 }, { x: 200, y: 200 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 200, y: 200 },
+    });
   });
 
   it.each([true, false])(
@@ -230,7 +248,10 @@ describe("resize modifiers follow each drag sample", () => {
       editor.movePointerTo({ x: 240, y: 150 }, { altKey });
       await editor.releaseAt({ x: 250, y: 150 }, { altKey: !altKey });
 
-      await expectAt({ x: altKey ? 50 : 100, y: 100 }, { x: 250, y: 200 });
+      expect(await editor.pointPositions([first, second])).toEqual({
+        [first]: { x: altKey ? 50 : 100, y: 100 },
+        [second]: { x: 250, y: 200 },
+      });
     },
   );
 
@@ -255,7 +276,10 @@ describe("resize modifiers follow each drag sample", () => {
     editor.movePointerTo({ x: 250, y: 150 }, { altKey: true });
     await editor.releaseAt({ x: 250, y: 150 });
 
-    await expectAt({ x: 50, y: 100 }, { x: 250, y: 200 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 50, y: 100 },
+      [second]: { x: 250, y: 200 },
+    });
   });
 });
 
@@ -263,10 +287,16 @@ describe("Alt resizes from the centre", () => {
   it("does not halve the shape on its first sample, and Escape puts it back", async () => {
     editor.pressAt({ x: 200, y: 150 }, { altKey: true });
     editor.movePointerTo({ x: 210, y: 150 }, { altKey: true });
-    expectShown({ x: 90, y: 100 }, { x: 210, y: 200 });
+    expect(editor.shownPointPositions([first, second])).toEqual({
+      [first]: { x: 90, y: 100 },
+      [second]: { x: 210, y: 200 },
+    });
     await editor.pressKey("Escape");
 
-    await expectAt({ x: 100, y: 100 }, { x: 200, y: 200 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 200, y: 200 },
+    });
   });
 
   it("combines with Shift as one edit", async () => {
@@ -283,10 +313,16 @@ describe("Shift-constrained resizes commit what they show", () => {
     editor.pressAt({ x: 200, y: 200 }, { shiftKey: true });
     editor.movePointerTo({ x: 250, y: 225 }, { shiftKey: true });
     expect(editor.toolState()?.state).toBe("resizing");
-    expectShown({ x: 100, y: 100 }, { x: 250, y: 250 });
+    expect(editor.shownPointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 250 },
+    });
     await editor.releaseAt({ x: 250, y: 225 }, { shiftKey });
 
-    await expectAt({ x: 100, y: 100 }, { x: 250, y: 250 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 250 },
+    });
   });
 
   it("commits at the release point with the last sample's constraint, as one edit", async () => {
@@ -307,7 +343,10 @@ describe("Shift-constrained resizes commit what they show", () => {
     editor.movePointerTo({ x: 275, y: 230 });
     await editor.releaseAt({ x: 275, y: 230 }, { shiftKey: true });
 
-    await expectAt({ x: 100, y: 100 }, { x: 275, y: 230 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 275, y: 230 },
+    });
   });
 
   it("takes Shift from a move still queued at release", async () => {
@@ -315,7 +354,10 @@ describe("Shift-constrained resizes commit what they show", () => {
     editor.queuePointerMove({ x: 250, y: 225 }, { shiftKey: true });
     await editor.releaseAt({ x: 250, y: 225 });
 
-    await expectAt({ x: 100, y: 100 }, { x: 250, y: 250 });
+    expect(await editor.pointPositions([first, second])).toEqual({
+      [first]: { x: 100, y: 100 },
+      [second]: { x: 250, y: 250 },
+    });
   });
 });
 

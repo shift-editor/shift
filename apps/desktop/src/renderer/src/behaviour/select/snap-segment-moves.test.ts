@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
+import type { ContourFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
@@ -7,31 +8,28 @@ beforeEach(() => {
   editor.selectTool("select");
 });
 
-/** An L of two lines, 100,100 → 300,100 → 300,300. */
-function corner(options: { closed?: boolean; curved?: boolean } = {}) {
-  return editor.draw({
-    contours: [
-      {
-        closed: options.closed,
-        points: [
-          { x: 100, y: 100, name: "first" },
-          ...(options.curved
-            ? [
-                { x: 167, y: 100, off: true as const, name: "controlStart" as const },
-                { x: 233, y: 100, off: true as const, name: "controlEnd" as const },
-              ]
-            : []),
-          { x: 300, y: 100, name: "middle" },
-          { x: 300, y: 300, name: "last" },
-        ],
-      },
-    ],
-  });
-}
+const FIRST = { x: 100, y: 100, name: "first" } as const;
+const MIDDLE = { x: 300, y: 100, name: "middle" } as const;
+const LAST = { x: 300, y: 300, name: "last" } as const;
+
+/** An open L of two lines, 100,100 → 300,100 → 300,300. */
+const CORNER = { points: [FIRST, MIDDLE, LAST] } satisfies ContourFixture;
+/** {@link CORNER} closed back to its first point. */
+const CLOSED_CORNER = { ...CORNER, closed: true } satisfies ContourFixture;
+/** {@link CORNER} with its first line a curve. */
+const CURVED_CORNER = {
+  points: [
+    FIRST,
+    { x: 167, y: 100, off: true, name: "controlStart" },
+    { x: 233, y: 100, off: true, name: "controlEnd" },
+    MIDDLE,
+    LAST,
+  ],
+} as const satisfies ContourFixture;
 
 describe("Shift-dragging segments moves them in 90-degree steps", () => {
   it.each([false, true])("snaps a line already selected: %s", async (selected) => {
-    const { first, middle, last } = await corner();
+    const { first, middle, last } = await editor.draw({ contours: [CORNER] });
     if (selected) await editor.clickAt({ x: 150, y: 100 });
 
     await editor.dragFrom({ x: 150, y: 100 }, { x: 210, y: 180 }, { shiftKey: true });
@@ -44,7 +42,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("moves several selected segments together without moving their shared point twice", async () => {
-    const { first, middle, last } = await corner({ closed: true });
+    const { first, middle, last } = await editor.draw({ contours: [CLOSED_CORNER] });
     await editor.clickAt({ x: 150, y: 100 });
     await editor.clickAt({ x: 200, y: 200 }, { shiftKey: true });
     expect(editor.selectionIds()).toEqual([
@@ -62,7 +60,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("moves the selected segments when dragging inside their combined bounds", async () => {
-    const { first, middle, last } = await corner();
+    const { first, middle, last } = await editor.draw({ contours: [CORNER] });
     await editor.clickAt({ x: 150, y: 100 });
     await editor.clickAt({ x: 300, y: 150 }, { shiftKey: true });
 
@@ -76,7 +74,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("shows no guide for a horizontal or vertical segment move", async () => {
-    await corner();
+    await editor.draw({ contours: [CORNER] });
     await editor.clickAt({ x: 150, y: 100 });
     await editor.clickAt({ x: 300, y: 150 }, { shiftKey: true });
 
@@ -91,7 +89,9 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("moves a curve segment without changing its shape", async () => {
-    const { first, middle, controlStart, controlEnd } = await corner({ curved: true });
+    const { first, middle, controlStart, controlEnd } = await editor.draw({
+      contours: [CURVED_CORNER],
+    });
     await editor.clickAt({ x: 200, y: 100 });
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 260, y: 180 }, { shiftKey: true });
@@ -105,7 +105,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("moves freely when a point is selected alongside the segment", async () => {
-    const { first, middle, last } = await corner({ closed: true });
+    const { first, middle, last } = await editor.draw({ contours: [CLOSED_CORNER] });
     await editor.clickAt({ x: 200, y: 200 });
     await editor.clickAt({ x: 300, y: 100 }, { shiftKey: true });
     expect(editor.selectionIds()).toEqual([editor.segmentBetween(last, first), middle]);
@@ -120,7 +120,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("moves freely when an anchor is selected alongside the segment", async () => {
-    const { first } = await corner({ closed: true });
+    const { first } = await editor.draw({ contours: [CLOSED_CORNER] });
     await editor.draw({ anchors: [{ name: "top", x: 500, y: 500 }] });
     await editor.clickAt({ x: 200, y: 200 });
     await editor.clickAt({ x: 500, y: 500 }, { shiftKey: true });
@@ -132,7 +132,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("resizes from a selection edge even where a selected segment lies on it", async () => {
-    const { first, middle, last } = await corner();
+    const { first, middle, last } = await editor.draw({ contours: [CORNER] });
     await editor.clickAt({ x: 150, y: 100 });
     await editor.clickAt({ x: 300, y: 150 }, { shiftKey: true });
 
@@ -149,7 +149,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("resizes from a selection corner even where a selected segment ends on it", async () => {
-    const { first } = await corner();
+    const { first } = await editor.draw({ contours: [CORNER] });
     await editor.clickAt({ x: 150, y: 100 });
     await editor.clickAt({ x: 300, y: 150 }, { shiftKey: true });
 
@@ -162,7 +162,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("moves a segment freely without Shift", async () => {
-    const { first, middle } = await corner();
+    const { first, middle } = await editor.draw({ contours: [CORNER] });
 
     await editor.dragFrom({ x: 150, y: 100 }, { x: 210, y: 180 });
 
@@ -173,7 +173,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("recomputes from where the drag began as Shift toggles, and Escape puts it back", async () => {
-    const { first, middle } = await corner();
+    const { first, middle } = await editor.draw({ contours: [CORNER] });
     const to = { x: 210, y: 180 };
 
     editor.pressAt({ x: 150, y: 100 });
@@ -193,7 +193,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
   });
 
   it("commits the last Shift sample, even when still queued at release, as one edit", async () => {
-    const { first } = await corner();
+    const { first } = await editor.draw({ contours: [CORNER] });
 
     await expectEdit(
       editor,

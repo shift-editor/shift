@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import { line } from "@/testing/fixtures";
+import { line, type GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
@@ -9,15 +9,13 @@ beforeEach(() => {
 });
 
 /** An open L, 100,100 → 300,100 → 300,300. */
-function openCorner() {
-  return editor.draw({
-    contours: [{ points: [[100, 100], [300, 100], { x: 300, y: 300, name: "end" }] }],
-  });
-}
+const OPEN_CORNER = {
+  contours: [{ points: [[100, 100], [300, 100], { x: 300, y: 300, name: "end" }] }],
+} as const satisfies GlyphFixture;
 
 describe("dropping an open end onto another open end joins them", () => {
   it("closes the contour when its end lands on its own start, as one edit", async () => {
-    await openCorner();
+    await editor.draw(OPEN_CORNER);
 
     await expectEdit(
       editor,
@@ -80,7 +78,7 @@ describe("dropping an open end onto another open end joins them", () => {
   });
 
   it("shows the end cursor while a dragged end is over another open end", async () => {
-    await openCorner();
+    await editor.draw(OPEN_CORNER);
 
     editor.pressAt({ x: 300, y: 300 });
     editor.movePointerTo({ x: 280, y: 280 });
@@ -92,7 +90,7 @@ describe("dropping an open end onto another open end joins them", () => {
   });
 
   it("only moves an end dropped away from other ends", async () => {
-    const { end } = await openCorner();
+    const { end } = await editor.draw(OPEN_CORNER);
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 300, y: 250 });
 

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Point2D } from "@shift/geo";
-import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
+import type { GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
+import { near } from "@/testing/outlineMatchers";
 
 const ROOT_3 = Math.sqrt(3);
 
@@ -12,104 +11,99 @@ beforeEach(() => {
   editor.selectTool("select");
 });
 
-function expectNear(actual: Point2D | undefined, expected: Point2D): void {
-  expect(actual?.x).toBeCloseTo(expected.x);
-  expect(actual?.y).toBeCloseTo(expected.y);
-}
-
-async function position(id: PointId, from: EditorTestSurface = editor): Promise<Point2D> {
-  return (await from.pointPositions([id]))[id]!;
-}
-
-function shown(id: PointId): Point2D {
-  return editor.shownPointPositions([id])[id]!;
-}
+/** Two flat curves meeting smoothly at 400,100. */
+const TWO_CURVES = {
+  contours: [
+    {
+      points: [
+        { x: 100, y: 100, name: "start" },
+        { x: 200, y: 100, off: true, name: "controlStart" },
+        { x: 300, y: 100, off: true, name: "controlEnd" },
+        { x: 400, y: 100, smooth: true, name: "junction" },
+        { x: 500, y: 100, off: true, name: "outgoing" },
+        { x: 600, y: 100, off: true },
+        [700, 100],
+      ],
+    },
+  ],
+} as const satisfies GlyphFixture;
 
 describe("Shift-dragging one handle snaps its angle around its own point", () => {
-  /** Two flat curves meeting smoothly at 400,100. */
-  function twoCurves() {
-    return editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "start" },
-            { x: 200, y: 100, off: true, name: "controlStart" },
-            { x: 300, y: 100, off: true, name: "controlEnd" },
-            { x: 400, y: 100, smooth: true, name: "junction" },
-            { x: 500, y: 100, off: true, name: "outgoing" },
-            { x: 600, y: 100, off: true },
-            [700, 100],
-          ],
-        },
-      ],
-    });
-  }
-
   it.each([
     { handle: "controlStart", pivot: { x: 100, y: 100 }, to: { x: 180, y: 160 }, side: 1 },
     { handle: "controlEnd", pivot: { x: 400, y: 100 }, to: { x: 320, y: 160 }, side: -1 },
   ] as const)(
     "snaps $handle around its own point rather than where the drag began",
     async ({ handle, pivot, to, side }) => {
-      const points = await twoCurves();
+      const points = await editor.draw(TWO_CURVES);
       const id = points[handle];
-      const from = await position(id);
+      const from = (await editor.point(id))!;
 
       await editor.dragFrom(from, to, { shiftKey: true });
 
-      expectNear(await position(id), { x: pivot.x + side * 50 * ROOT_3, y: 150 });
+      expect(await editor.pointPositions([id])).toEqual({
+        [id]: near({ x: pivot.x + side * 50 * ROOT_3, y: 150 }),
+      });
       expect(editor.selectionIds()).toEqual([id]);
     },
   );
 
   it.each([
-    { handle: "controlStart", pivot: { x: 100, y: 100 }, to: { x: 180, y: 160 } },
-    { handle: "controlEnd", pivot: { x: 400, y: 100 }, to: { x: 320, y: 160 } },
+    { handle: "controlStart", pivot: { x: 100, y: 100 }, to: { x: 180, y: 160 }, side: 1 },
+    { handle: "controlEnd", pivot: { x: 400, y: 100 }, to: { x: 320, y: 160 }, side: -1 },
   ] as const)(
     "shows a guide from the handle's point to the snapped $handle on the first sample",
-    async ({ handle, pivot, to }) => {
-      const points = await twoCurves();
+    async ({ handle, pivot, to, side }) => {
+      const points = await editor.draw(TWO_CURVES);
       const id = points[handle];
+      const snapped = { x: pivot.x + side * 50 * ROOT_3, y: 150 };
 
-      editor.pressAt(await position(id));
+      editor.pressAt((await editor.point(id))!);
       editor.movePointerTo(to, { shiftKey: true });
 
       expect(editor.toolState()?.state).toBe("translating");
-      expect(editor.drawnSnapGuides()).toMatchObject([{ from: pivot, to: shown(id) }]);
+      expect(editor.shownPointPositions([id])).toEqual({ [id]: near(snapped) });
+      expect(editor.drawnSnapGuides()).toMatchObject([{ from: pivot, to: near(snapped) }]);
       await editor.pressKey("Escape");
       expect(editor.toolState()?.state).toBe("ready");
     },
   );
 
   it("leaves a lone handle free without Shift", async () => {
-    const { controlStart } = await twoCurves();
+    const { controlStart } = await editor.draw(TWO_CURVES);
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 });
 
-    expect(await position(controlStart)).toEqual({ x: 180, y: 160 });
+    expect(await editor.pointPositions([controlStart])).toEqual({
+      [controlStart]: { x: 180, y: 160 },
+    });
   });
 
   it("follows Shift on each sample of the drag", async () => {
-    const { controlStart } = await twoCurves();
+    const { controlStart } = await editor.draw(TWO_CURVES);
     const to = { x: 180, y: 160 };
 
     editor.pressAt({ x: 200, y: 100 });
     editor.movePointerTo(to);
-    expect(shown(controlStart)).toEqual(to);
+    expect(editor.shownPointPositions([controlStart])).toEqual({ [controlStart]: to });
     editor.movePointerTo(to, { shiftKey: true });
-    expect(shown(controlStart).x).toBeCloseTo(100 + 50 * ROOT_3);
+    expect(editor.shownPointPositions([controlStart])).toMatchObject({
+      [controlStart]: { x: expect.closeTo(100 + 50 * ROOT_3) },
+    });
     editor.movePointerTo(to);
-    expect(shown(controlStart)).toEqual(to);
+    expect(editor.shownPointPositions([controlStart])).toEqual({ [controlStart]: to });
     expect(editor.drawnSnapGuides()).toEqual([]);
     await editor.pressKey("Escape");
 
-    expect(shown(controlStart)).toEqual({ x: 200, y: 100 });
+    expect(editor.shownPointPositions([controlStart])).toEqual({
+      [controlStart]: { x: 200, y: 100 },
+    });
   });
 
   it.each([false, true])(
     "keeps the snapped position when the release reports Shift %s",
     async (shiftKey) => {
-      const { controlStart } = await twoCurves();
+      const { controlStart } = await editor.draw(TWO_CURVES);
       const to = { x: 180, y: 160 };
 
       editor.pressAt({ x: 200, y: 100 });
@@ -117,12 +111,14 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       await editor.releaseAt(to, { shiftKey });
 
       expect(editor.toolState()?.state).toBe("ready");
-      expectNear(await position(controlStart), { x: 100 + 50 * ROOT_3, y: 150 });
+      expect(await editor.pointPositions([controlStart])).toEqual({
+        [controlStart]: near({ x: 100 + 50 * ROOT_3, y: 150 }),
+      });
     },
   );
 
   it("snaps the last pointer move even when it is still queued at release", async () => {
-    const { controlStart } = await twoCurves();
+    const { controlStart } = await editor.draw(TWO_CURVES);
     const end = { x: 220, y: 190 };
 
     editor.pressAt({ x: 200, y: 100 });
@@ -130,37 +126,48 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
     editor.queuePointerMove(end, { shiftKey: true });
     await editor.releaseAt(end);
 
-    expectNear(await position(controlStart), { x: 100 + 75 * ROOT_3, y: 175 });
+    expect(await editor.pointPositions([controlStart])).toEqual({
+      [controlStart]: near({ x: 100 + 75 * ROOT_3, y: 175 }),
+    });
   });
 
   it("drops the preview when another tool is chosen, and the next drag starts without Shift", async () => {
-    const { controlStart } = await twoCurves();
+    const { controlStart } = await editor.draw(TWO_CURVES);
 
     editor.pressAt({ x: 200, y: 100 });
     editor.movePointerTo({ x: 180, y: 160 }, { shiftKey: true });
-    expect(shown(controlStart).x).toBeCloseTo(100 + 50 * ROOT_3);
+    expect(editor.shownPointPositions([controlStart])).toMatchObject({
+      [controlStart]: { x: expect.closeTo(100 + 50 * ROOT_3) },
+    });
     editor.selectTool("pen");
-    expect(shown(controlStart)).toEqual({ x: 200, y: 100 });
+    expect(editor.shownPointPositions([controlStart])).toEqual({
+      [controlStart]: { x: 200, y: 100 },
+    });
     editor.selectTool("select");
     expect(editor.toolState()?.state).toBe("ready");
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 });
 
-    expect(await position(controlStart)).toEqual({ x: 180, y: 160 });
+    expect(await editor.pointPositions([controlStart])).toEqual({
+      [controlStart]: { x: 180, y: 160 },
+    });
   });
 
   it("commits a snapped handle move as one edit", async () => {
-    const { controlStart } = await twoCurves();
+    const { controlStart } = await editor.draw(TWO_CURVES);
 
     await expectEdit(
       editor,
       (e) => e.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 }, { shiftKey: true }),
-      async (e) => expectNear(await position(controlStart, e), { x: 100 + 50 * ROOT_3, y: 150 }),
+      async (e) =>
+        expect(await e.pointPositions([controlStart])).toEqual({
+          [controlStart]: near({ x: 100 + 50 * ROOT_3, y: 150 }),
+        }),
     );
   });
 
   it("does not snap a selection of several handles", async () => {
-    const { controlStart, controlEnd } = await twoCurves();
+    const { controlStart, controlEnd } = await editor.draw(TWO_CURVES);
     editor.select([controlStart, controlEnd]);
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 }, { shiftKey: true });
@@ -172,21 +179,27 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
   });
 
   it("snaps a curve's on-curve point around where it was", async () => {
-    const { start } = await twoCurves();
+    const { start } = await editor.draw(TWO_CURVES);
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 130, y: 140 }, { shiftKey: true });
 
-    expectNear(await position(start), { x: 125, y: 100 + 25 * ROOT_3 });
+    expect(await editor.pointPositions([start])).toEqual({
+      [start]: near({ x: 125, y: 100 + 25 * ROOT_3 }),
+    });
   });
 
   it("keeps the opposite handle's length and the smooth tangent after snapping", async () => {
-    const { controlEnd, junction, outgoing } = await twoCurves();
+    const { controlEnd, junction, outgoing } = await editor.draw(TWO_CURVES);
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 320, y: 160 }, { shiftKey: true });
 
-    expectNear(await position(controlEnd), { x: 400 - 50 * ROOT_3, y: 150 });
-    expectNear(await position(outgoing), { x: 400 + 50 * ROOT_3, y: 50 });
-    expect(await position(junction)).toEqual({ x: 400, y: 100 });
+    expect(await editor.pointPositions([controlEnd])).toEqual({
+      [controlEnd]: near({ x: 400 - 50 * ROOT_3, y: 150 }),
+    });
+    expect(await editor.pointPositions([outgoing])).toEqual({
+      [outgoing]: near({ x: 400 + 50 * ROOT_3, y: 50 }),
+    });
+    expect(await editor.pointPositions([junction])).toEqual({ [junction]: { x: 400, y: 100 } });
   });
 });
 
@@ -211,7 +224,9 @@ describe("Shift-dragging a handle locked to a line does not snap its angle", () 
 
     expect(editor.toolState()?.state).toBe("translating");
     expect(editor.drawnSnapGuides()).toEqual([]);
-    expect(shown(handle).y).toBeCloseTo(100);
+    expect(editor.shownPointPositions([handle])).toMatchObject({
+      [handle]: { y: expect.closeTo(100) },
+    });
     await editor.pressKey("Escape");
   });
 });
