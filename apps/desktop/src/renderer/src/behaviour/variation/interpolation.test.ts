@@ -1,14 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { square } from "@/testing/fixtures";
 import { FONTS, useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import type { EditorTestSurface } from "@/testing/surface";
-
-/** The rightmost edge of what the canvas draws. */
-async function drawnRight(editor: EditorTestSurface): Promise<number> {
-  const { bounds } = await editor.drawnGlyph();
-  if (!bounds) throw new Error("Expected a drawn outline");
-  return bounds.max.x;
-}
 
 describe("sources on a mapped axis", () => {
   const editor = useTestEditor({ glyphs: { A: { outline: { advance: 300 } } }, axes: [WEIGHT] });
@@ -56,7 +48,7 @@ describe("mapped weights keep design-space interpolation", () => {
     async (weight, right, advance, ascender) => {
       editor.setLocation({ wght: weight });
 
-      expect(await drawnRight(editor)).toBeCloseTo(right);
+      expect((await editor.drawnGlyph()).bounds?.max.x).toBeCloseTo(right);
       expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(advance);
       expect(editor.location().metrics.ascender).toBeCloseTo(ascender);
     },
@@ -90,7 +82,7 @@ describe("mapped weights keep design-space interpolation", () => {
     ]);
 
     expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(900);
-    expect(await drawnRight(editor)).toBeCloseTo(160);
+    expect((await editor.drawnGlyph()).bounds?.max.x).toBeCloseTo(160);
     expect(editor.location().metrics.ascender).toBeCloseTo(900);
 
     await editor.undo();
@@ -149,7 +141,7 @@ describe("editing a variable glyph across sources", () => {
 
     expect(editor.location().sourceId).toBeNull();
     expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(400);
-    expect(await drawnRight(editor)).toBeCloseTo(150);
+    expect((await editor.drawnGlyph()).bounds?.max.x).toBeCloseTo(150);
     expect(editor.location().metrics.ascender).toBeCloseTo(850);
     expect(editor.location().metrics.xHeight).toBeCloseTo(550);
   });
