@@ -117,6 +117,10 @@ describe("BaseTool contract", () => {
     });
   });
 
+  it("draws no snap guides unless the tool says it snapped", () => {
+    expect(tool.snapGuides).toEqual([]);
+  });
+
   it("permanent disposal severs computed dependencies", () => {
     const cursorSourceCell = signal<CursorType>({ type: "default" });
     const disposableTool = new DisposableTestTool(editor, cursorSourceCell);

@@ -135,21 +135,7 @@ export class ShiftEditorReader {
    * units; empty when nothing snaps or no gesture is in flight.
    */
   drawnSnapGuides(): PositionGuide[] {
-    const pen = this.#editor.toolIf("pen")?.state;
-    if (pen) {
-      switch (pen.type) {
-        case "closing":
-        case "pulling":
-        case "dragging":
-          return [...pen.guides];
-        default:
-          return [];
-      }
-    }
-
-    const select = this.#editor.toolIf("select")?.state;
-    if (select?.type === "translating") return [...select.translate.guides];
-    return [];
+    return [...(this.#editor.toolManager.activeTool?.snapGuides ?? [])];
   }
 
   /**
@@ -216,13 +202,9 @@ export class ShiftEditorReader {
    */
   spacingTool(): SpacingToolView | null {
     const tool = this.#editor.toolManager.activeTool;
-    const state = this.#editor.toolIf("spacing")?.state;
-    if (!(tool instanceof SpacingTool) || !state) return null;
-    const hovered =
-      state.type === "ready" || state.type === "dragging" ? (state.hit ?? null) : null;
-    const selected =
-      state.type === "ready" && state.selected ? tool.runs.refresh(state.selected) : null;
-    const editing = tool.editing;
+    if (!(tool instanceof SpacingTool)) return null;
+
+    const { hovered, selected, editing } = tool;
     return {
       hovered: hovered ? this.#spacingHalf(hovered) : null,
       selected: selected ? this.#spacingHalf(selected) : null,
@@ -230,8 +212,8 @@ export class ShiftEditorReader {
       sameAsHovered: hovered
         ? tool.runs.sameSidebearings(hovered).map((half) => this.#spacingHalf(half))
         : [],
-      overValue: state.type === "ready" && state.overLabel === true,
-      quiet: state.type === "ready" && state.quiet === true,
+      overValue: tool.overValue,
+      quiet: tool.quiet,
     };
   }
 
@@ -243,11 +225,9 @@ export class ShiftEditorReader {
    */
   kerningTool(): KerningToolView | null {
     const tool = this.#editor.toolManager.activeTool;
-    const state = this.#editor.toolIf("kerning")?.state;
-    if (!(tool instanceof KerningTool) || !state) return null;
-    const hovered = state.type === "ready" ? state.hit : null;
-    const selected = tool.currentPair;
-    const editing = tool.editing;
+    if (!(tool instanceof KerningTool)) return null;
+
+    const { hovered, currentPair: selected, editing } = tool;
     return {
       hovered: hovered ? this.#kerningGap(hovered) : null,
       selected: selected ? this.#kerningGap(selected) : null,

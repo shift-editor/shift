@@ -12,6 +12,9 @@ import {
   type WritableSignal,
 } from "../../signals/signal";
 import type { CursorType } from "../../../types/editor";
+import type { PositionGuide } from "../../../types/positionEdit";
+
+const NO_GUIDES: readonly PositionGuide[] = [];
 
 export type { ToolName, ToolState };
 
@@ -84,6 +87,14 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
   protected isEditing(state: S): boolean {
     void state;
     return false;
+  }
+
+  /**
+   * The snap guides the tool draws for the gesture in flight, in glyph units;
+   * empty when nothing snaps or no gesture is in flight.
+   */
+  get snapGuides(): readonly PositionGuide[] {
+    return NO_GUIDES;
   }
 
   /** Return a state to short-circuit the behavior loop, or null to continue. */
