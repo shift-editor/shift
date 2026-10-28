@@ -66,23 +66,26 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeVisible();
 });
 
-test("positions an initially hidden variation slider at its current value", async ({ page }) => {
-  await createWeightAxis(page);
-  await navigateToEditor(page, "41");
+test.describe("with a weight axis", () => {
+  test.use({ font: { axes: [{ ...WEIGHT, name: "Weight" }] } });
 
-  const controls = await openVariationControls(page);
-  const slider = controls.getByRole("slider", { name: "Weight", exact: true });
-  await expect(slider).toHaveValue("400");
+  test("positions an initially hidden variation slider at its current value", async ({ page }) => {
+    await navigateToEditor(page, "41");
 
-  const normalizedPosition = await slider.evaluate((input) => {
-    const thumb = input.parentElement;
-    const track = thumb?.parentElement;
-    if (!thumb || !track) throw new Error("Expected slider thumb and track");
+    const controls = await openVariationControls(page);
+    const slider = controls.getByRole("slider", { name: "Weight", exact: true });
+    await expect(slider).toHaveValue("400");
 
-    const thumbBounds = thumb.getBoundingClientRect();
-    const trackBounds = track.getBoundingClientRect();
-    return (thumbBounds.left + thumbBounds.width / 2 - trackBounds.left) / trackBounds.width;
+    const normalizedPosition = await slider.evaluate((input) => {
+      const thumb = input.parentElement;
+      const track = thumb?.parentElement;
+      if (!thumb || !track) throw new Error("Expected slider thumb and track");
+
+      const thumbBounds = thumb.getBoundingClientRect();
+      const trackBounds = track.getBoundingClientRect();
+      return (thumbBounds.left + thumbBounds.width / 2 - trackBounds.left) / trackBounds.width;
+    });
+
+    expect(normalizedPosition).toBeCloseTo(0.375, 2);
   });
-
-  expect(normalizedPosition).toBeCloseTo(0.375, 2);
 });

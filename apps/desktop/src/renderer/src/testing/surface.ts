@@ -38,6 +38,7 @@ import type {
 import type { EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
+import type { AxisFixture, AxisLocation, FontBuilder } from "./fonts";
 import type {
   CanvasHandle,
   CanvasText,
@@ -57,6 +58,7 @@ import type {
 } from "./reads";
 
 export type { DrawOptions } from "./fixtures";
+export type { AxisFixture, AxisLocation } from "./fonts";
 
 /** Keyboard modifiers held during a gesture. */
 export interface Modifiers {
@@ -64,24 +66,6 @@ export interface Modifiers {
   readonly altKey?: boolean;
   readonly metaKey?: boolean;
 }
-
-/** A new continuous axis, as the Axes panel creates one. */
-export interface AxisFixture {
-  readonly tag: string;
-  /** The axis's display name; its tag when omitted. */
-  readonly name?: string;
-  readonly minimum: number;
-  readonly default: number;
-  readonly maximum: number;
-  /** Whether users see the axis; `external` when omitted. */
-  readonly role?: "external" | "internal";
-}
-
-/**
- * A designspace location as each axis's user-facing value, keyed by axis tag;
- * unnamed axes sit at their default.
- */
-export type AxisLocation = Readonly<Record<string, number>>;
 
 /**
  * A glyph as the canvas draws it at the current location: interpolated
@@ -120,7 +104,7 @@ export type KerningToolState = KerningToolView;
  * implements too. The in-process editor answers kerning and selection at
  * once, so those reads narrow to plain values here.
  */
-export interface EditorTestSurface extends EditorReads {
+export interface EditorTestSurface extends EditorReads, FontBuilder {
   /**
    * Builds `fixture` into the open glyph through the editor's own commands.
    *

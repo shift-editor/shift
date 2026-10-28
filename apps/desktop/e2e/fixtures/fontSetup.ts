@@ -109,6 +109,70 @@ export async function editSource(
   );
 }
 
+/**
+ * Adds a source named `name` at `location` as the Create source menu does: the editor moves
+ * there, gives the open glyph a layer there, and makes the new source active once it is
+ * confirmed. Returns its id.
+ *
+ * @remarks
+ * Unlike {@link createSource}, which adds only the source record, this is the command the
+ * sources panel's Create source menu calls (`Editor.createSource`), as vitest's `addSource` does.
+ */
+export async function createSourceHere(
+  page: Page,
+  name: string,
+  location: AxisValues,
+): Promise<SourceId> {
+  return page.evaluate(
+    async ({ sourceName, values }) => {
+      const workspace = window.shift!;
+      const external = new Map(Object.entries(values)) as unknown as ExternalAxisLocation;
+      const sourceId = workspace.editor.createSource(sourceName, external);
+      await workspace.font.editCoordinator.settled();
+      await workspace.editor.text.settled();
+      return sourceId;
+    },
+    { sourceName: name, values: location },
+  );
+}
+
+/**
+ * Creates the glyph named `name`, encoded at `unicode` (or not encoded when null), with its
+ * default-source layer, loads it, and waits for it.
+ *
+ * @remarks
+ * Goes through the Font commands the glyph creation UI calls: `createGlyphForUnicode` for an
+ * encoded glyph, `createGlyph` otherwise. Both name or encode a glyph by the font's glyph
+ * metadata, so a `name` and `unicode` they would not produce together throw rather than make a
+ * different glyph.
+ */
+export async function createGlyphEncoded(
+  page: Page,
+  name: string,
+  unicode: number | null,
+): Promise<GlyphId> {
+  return page.evaluate(
+    async ({ glyphName, codepoint }) => {
+      const workspace = window.shift!;
+      const record =
+        codepoint === null
+          ? workspace.font.createGlyph(glyphName as GlyphName)
+          : workspace.font.createGlyphForUnicode(codepoint as Unicode);
+      const unicodes = [...record.unicodes];
+      const expected = codepoint === null ? [] : [codepoint];
+      if (record.name !== glyphName || unicodes.join() !== expected.join()) {
+        throw new Error(
+          `Expected glyph ${glyphName} at ${expected.join() || "no Unicode"}; the font made ${record.name} at ${unicodes.join() || "no Unicode"}`,
+        );
+      }
+      await workspace.font.editCoordinator.settled();
+      await workspace.font.loadGlyph(record.id);
+      return record.id;
+    },
+    { glyphName: name, codepoint: unicode },
+  );
+}
+
 /** Multiplies every metric position of the source `sourceId` by `factor`, as Settings › Sources does. */
 export async function scaleSourceMetrics(
   page: Page,
@@ -179,19 +243,6 @@ export async function addAnchor(page: Page, name: string, position: Point2D): Pr
     },
     { anchorName: name, at: position },
   );
-}
-
-/** Creates empty glyphs named `names`, as Create glyph does, and returns each one's id and name. */
-export async function createGlyphs(
-  page: Page,
-  names: readonly string[],
-): Promise<{ id: GlyphId; name: string }[]> {
-  return page.evaluate(async (glyphNames) => {
-    const workspace = window.shift!;
-    const records = glyphNames.map((name) => workspace.editor.createGlyph(name as GlyphName));
-    await workspace.font.editCoordinator.settled();
-    return records.map(({ id, name }) => ({ id, name }));
-  }, names);
 }
 
 /** Creates the glyphs a language needs for `unicodes`, as the language panel does, and returns their names. */

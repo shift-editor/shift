@@ -29,10 +29,8 @@
  */
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach } from "vitest";
-import type { FontSessionMode } from "@shared/workspace/protocol";
-import type { GlyphFixture } from "./fixtures";
-import { FONT_FILES, WEIGHT, type FontName } from "./fonts";
-import type { AxisFixture, AxisLocation, EditorTestSurface } from "./surface";
+import { buildFont, FONT_FILES, WEIGHT, type FontFixture, type FontName } from "./fonts";
+import type { EditorTestSurface } from "./surface";
 import { openTestEditor, startTestEditor } from "./TestEditor";
 
 const FONTS_DIRECTORY = fileURLToPath(
@@ -48,41 +46,7 @@ export const FONTS = Object.fromEntries(
 export type FontFile = (typeof FONTS)[FontName];
 
 export { WEIGHT };
-
-/** A glyph a {@link FontFixture} adds, or draws into when the font already has it. */
-export interface GlyphEntry {
-  /** The glyph's Unicode value; none when omitted. Ignored for `A`, which every new font has. */
-  readonly unicode?: number | null;
-  /** What to draw into the glyph at the default source. */
-  readonly outline?: GlyphFixture;
-}
-
-/**
- * The font a test starts from. A new font has one source, `Regular`, and one
- * glyph, `A` (U+0041), open.
- *
- * @remarks
- * It is built in this order:
- * 1. each of `glyphs`, in order: added unless the font has it, then opened and
- *    drawn when it has an `outline`;
- * 2. the glyph `open` is opened, `A` when omitted;
- * 3. each of `axes` is added;
- * 4. each of `sources` is added, in order. Each new source becomes the active
- *    one and gives the open glyph a layer there, so the last source is active
- *    when the test starts.
- */
-export interface FontFixture {
-  /** The editor's session capability; `workspace` when omitted. */
-  readonly mode?: FontSessionMode;
-  readonly glyphs?: Readonly<Record<string, GlyphEntry>>;
-  /** The glyph open on the canvas when the test starts; `A` when omitted. */
-  readonly open?: string;
-  readonly axes?: readonly AxisFixture[];
-  /** Sources to add, by name, at a location keyed by axis tag. */
-  readonly sources?: Readonly<Record<string, AxisLocation>>;
-  /** Never set: a fixture with a `file` is an {@link OpenFontFixture}. */
-  readonly file?: never;
-}
+export type { FontFixture, GlyphEntry } from "./fonts";
 
 /** A saved font file to open, with the glyph `glyph` open. */
 export interface OpenFontFixture {
@@ -128,23 +92,4 @@ export function useTestEditor(fixture?: FontFixture | OpenFontFixture): EditorTe
       return typeof value === "function" ? value.bind(current) : value;
     },
   });
-}
-
-async function buildFont(editor: EditorTestSurface, fixture: FontFixture): Promise<void> {
-  let open = "A";
-  for (const [name, glyph] of Object.entries(fixture.glyphs ?? {})) {
-    if (!editor.glyphNamed(name)) await editor.addGlyph(name, glyph.unicode ?? null);
-    if (!glyph.outline) continue;
-    if (open !== name) await editor.openGlyph(name);
-    open = name;
-    await editor.draw(glyph.outline);
-  }
-
-  const target = fixture.open ?? "A";
-  if (open !== target) await editor.openGlyph(target);
-
-  for (const axis of fixture.axes ?? []) await editor.addAxis(axis);
-  for (const [name, location] of Object.entries(fixture.sources ?? {})) {
-    await editor.addSource(name, location);
-  }
 }

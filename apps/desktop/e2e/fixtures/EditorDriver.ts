@@ -9,7 +9,7 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
-import type { GlyphId, GlyphName, KerningPosition, PointId, Unicode } from "@shift/types";
+import type { AxisId, GlyphId, GlyphName, KerningPosition, PointId, Unicode } from "@shift/types";
 import type {
   AgentReaderName,
   AgentReadArgs,
@@ -39,6 +39,8 @@ import {
   type GlyphFixture,
   type PointNames,
 } from "@/testing/fixtures";
+import type { AxisFixture, AxisLocation } from "@/testing/fonts";
+import { createAxis, createGlyphEncoded, createSourceHere } from "./fontSetup";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
 
 const TOOL_LABELS = {
@@ -264,6 +266,45 @@ export class EditorDriver implements EditorReads {
       if (name !== null) names[name] = drawn[index] as PointId;
     });
     return names as Record<PointNames<F>, PointId>;
+  }
+
+  /**
+   * Adds the glyph named `name`, encoded at `unicode`, and loads it, as vitest's `addGlyph`
+   * does; throws when the font's glyph metadata would name or encode it otherwise.
+   */
+  async addGlyph(name: string, unicode: number | null): Promise<void> {
+    await createGlyphEncoded(this.page, name, unicode);
+  }
+
+  /** Adds a continuous axis, as the Create axis menu does, and waits for it. */
+  async addAxis(axis: AxisFixture): Promise<void> {
+    await createAxis(this.page, {
+      tag: axis.tag,
+      name: axis.name ?? axis.tag,
+      role: axis.role ?? "external",
+      axisType: "continuous",
+      minimum: axis.minimum,
+      default: axis.default,
+      maximum: axis.maximum,
+      labels: [],
+      hidden: false,
+    });
+  }
+
+  /**
+   * Adds a source named `name` at `location`, keyed by axis tag, as the Create source menu does,
+   * and waits for it: the editor moves there and the new source becomes active.
+   */
+  async addSource(name: string, location: AxisLocation): Promise<void> {
+    const { axes } = await this.fontOverview();
+    const values = Object.fromEntries(
+      Object.entries(location).map(([tag, value]) => {
+        const axis = axes.find((candidate) => candidate.tag === tag);
+        if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
+        return [axis.id, value];
+      }),
+    ) as Record<AxisId, number>;
+    await createSourceHere(this.page, name, values);
   }
 
   /**

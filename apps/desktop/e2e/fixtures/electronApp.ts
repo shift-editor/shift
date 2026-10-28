@@ -14,7 +14,13 @@ import type {
   ShiftWorkerFixtures,
   SharedWorkspace,
 } from "./types";
-import { FONT_FILES, type FontName } from "@/testing/fonts";
+import {
+  buildFont,
+  FONT_FILES,
+  type FontBuilder,
+  type FontFixture,
+  type FontName,
+} from "@/testing/fonts";
 import { EditorDriver } from "./EditorDriver";
 import { ElectronProcesses, killApp } from "./electronProcesses";
 
@@ -108,6 +114,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
   scriptedDialogs: [false, { option: true }],
   openFontPath: [undefined, { option: true }],
   saveShiftPaths: [undefined, { option: true }],
+  font: [undefined, { option: true }],
   dirtyDocumentChoice: ["cancel", { option: true }],
   dirtyDocumentChoices: [undefined, { option: true }],
   dirtyDocumentDelayMs: [0, { option: true }],
@@ -360,8 +367,9 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
 export const workspaceTest = test.extend<ShiftOptions>({
   startupFontPath: FONTS.mutatorSansTtf,
 
-  page: async ({ page }, use) => {
+  page: async ({ page, electronApp, font, sharedWorkspace }, use) => {
     await waitForWorkspaceReady(page);
+    await applyFontFixture(page, electronApp, font, sharedWorkspace);
     await use(page);
   },
 });
@@ -370,11 +378,43 @@ export const workspaceTest = test.extend<ShiftOptions>({
 export const documentWorkspaceTest = documentTest.extend<ShiftOptions>({
   startupFontPath: FONTS.mutatorSansTtf,
 
-  page: async ({ page }, use) => {
+  page: async ({ page, electronApp, font, sharedWorkspace }, use) => {
     await waitForWorkspaceReady(page);
+    await applyFontFixture(page, electronApp, font, sharedWorkspace);
     await use(page);
   },
 });
+
+/** Builds the `font` option into the ready workspace in `page`, when the test sets one. */
+async function applyFontFixture(
+  page: Page,
+  electronApp: ElectronApplication,
+  font: FontFixture | undefined,
+  sharedWorkspace: boolean,
+): Promise<void> {
+  if (!font) return;
+  if (sharedWorkspace)
+    throw new Error("The `font` option edits the document; drop `sharedWorkspace`.");
+  if (font.mode !== undefined) {
+    throw new Error("The `font` option builds into the launched workspace; it has no `mode`.");
+  }
+  await buildFont(fontBuilder(new EditorDriver(page, electronApp)), font);
+}
+
+/**
+ * The driver as {@link buildFont} needs it: the vitest surface's `openGlyph(name)` is the
+ * driver's `openGlyphByName`, since the driver's own `openGlyph` takes a glyph id.
+ */
+function fontBuilder(driver: EditorDriver): FontBuilder {
+  return {
+    glyphNamed: (name) => driver.glyphNamed(name),
+    addGlyph: (name, unicode) => driver.addGlyph(name, unicode),
+    openGlyph: (name) => driver.openGlyphByName(name),
+    draw: driver.draw.bind(driver),
+    addAxis: (axis) => driver.addAxis(axis),
+    addSource: (name, location) => driver.addSource(name, location),
+  };
+}
 
 /** Makes `page` render and report focus as if its window held the OS focus. */
 async function emulateFocus(page: Page): Promise<void> {

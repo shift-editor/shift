@@ -2,6 +2,7 @@ import type { ElectronApplication, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
 import type { Axis, GlyphId, NamedInstance, NodeId, PointId, Source, SourceId } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
+import type { FontFixture } from "@/testing/fonts";
 import type { EditorDriver } from "./EditorDriver";
 import type { ElectronProcesses } from "./electronProcesses";
 
@@ -49,6 +50,14 @@ export type ShiftOptions = {
   documentCrashChoice: "reopen" | "close";
   /** Permits renderer alert, confirm, prompt, or beforeunload dialogs during the test. */
   allowRendererDialogs: boolean;
+  /**
+   * Builds this font fixture into the launched document once the workspace is ready, before the
+   * test body runs, through the same commands vitest's `useTestEditor` uses: glyphs the font has
+   * are drawn into, others are added; then axes, then sources. Only the workspace fixtures
+   * (`workspaceTest`, `documentWorkspaceTest`) apply it; `mode` is not supported, and it cannot
+   * be combined with `sharedWorkspace`.
+   */
+  font: FontFixture | undefined;
 };
 
 export interface CanonicalVariableFont {

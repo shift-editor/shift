@@ -94,6 +94,7 @@ Updating baselines: only for an intentional appearance change. Run the focused s
 - Script native dialogs with the fixture options (`dirtyDocumentChoice(s)`, `saveShiftPaths`, `openFontPath`). An unexpected renderer dialog fails the test; opt in with `allowRendererDialogs` only when the dialog is the behavior.
 - Put shared setup in fixtures or `EditorDriver` (`openScratchGlyph()`, `commitInputValue()`, `toolButton()`), not copied helpers in specs. Do not grow `EditorDriver` with one-off helpers.
 - Draw glyph content with `editor.draw(fixture)` and the shapes from `@/testing/fixtures` (`rect`, `square`, …), name the points a test needs, open fonts by `FONTS.<name>` and use `WEIGHT` from `@/testing/fonts`: the same fixture data vitest uses.
+- When a test's setup is a font build (glyphs, axes, sources), set `test.use({ font: FontFixture })` on `workspaceTest` instead of calling `fontSetup` in the body; it is built before the test, as `useTestEditor` builds it.
 - Prefer `getByRole()` / `getByLabel()` and locators from `fixtures/appLocators.ts`. No parent traversal (`locator("..")`), no styling classes, no `toHaveCSS()` unless the style value is the product contract.
 
 ## Structure
