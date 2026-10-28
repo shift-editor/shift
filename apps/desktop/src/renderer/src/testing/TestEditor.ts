@@ -1092,7 +1092,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   kerning(first: string, second: string): readonly KerningMasterValue[] {
-    return this.#reads.kerning.resolve([{ first, second }], {}).items[0]!.masters;
+    const pair = { first: { name: first }, second: { name: second } };
+    return this.#reads.kerning.resolve([pair], {}).items[0]!.masters;
   }
 
   kerningAt(source: string, first: string, second: string): KerningMasterValue {

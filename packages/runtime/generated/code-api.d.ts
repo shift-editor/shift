@@ -672,15 +672,15 @@ export interface KerningGroupsInput extends ShiftTarget {
 export interface KerningPairsInput extends ShiftTarget {
   /** The master whose pairs to list; the default source when omitted. */
   source?: SourceSelector;
-  /** Only pairs that apply to this glyph (exact name or id), directly or through its groups. */
-  glyph?: string;
+  /** Only pairs that apply to this glyph, directly or through its groups. */
+  glyph?: GlyphSelector;
   limit?: number;
   cursor?: string;
 }
-/** Two glyphs, first then second, each by exact name or stable glyph id. */
+/** Two glyphs, first then second, each selected by exact name or stable glyph id. */
 export interface KerningPairQuery {
-  first: string;
-  second: string;
+  first: GlyphSelector;
+  second: GlyphSelector;
 }
 /** Resolves at one master (`source`), an external `location`, or else the default location. */
 export interface KerningResolveInput extends ShiftTarget {

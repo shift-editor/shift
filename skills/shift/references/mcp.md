@@ -49,8 +49,8 @@ async () => {
   return shift.read({ windowId: session.windowId }, async (read) => {
     const { items } = await read.kerning.resolve({
       pairs: [
-        { first: "T", second: "o" },
-        { first: "A", second: "V" },
+        { first: { name: "T" }, second: { name: "o" } },
+        { first: { name: "A" }, second: { name: "V" } },
       ],
       source: { name: "Regular" }, // or `location: [...]`, or neither for the default location
     });
@@ -64,8 +64,8 @@ async () => {
 ```
 
 - `kerning.groups({ position? })` lists groups with their member glyphs. A `first` group kerns before the other glyph (UFO `public.kern1`), a `second` group after it (`public.kern2`).
-- `kerning.pairs({ source?, glyph?, limit?, cursor? })` pages through the pairs authored at one master (the default source when `source` is omitted). Each side is `{ kind: "glyph", glyphId, name }` or `{ kind: "group", groupId, name }`. `glyph` keeps pairs naming that glyph directly or through its group at that position.
-- `kerning.resolve({ pairs, source? | location? })` answers what the compiled font kerns between two glyphs (by name, or a `glyph_…` id). Do not recompute this yourself: the specific pair beats the general one, and a master's value depends on whether it kerns anything.
+- `kerning.pairs({ source?, glyph?, limit?, cursor? })` pages through the pairs authored at one master (the default source when `source` is omitted). Each side is `{ kind: "glyph", glyphId, name }` or `{ kind: "group", groupId, name }`. `glyph` (`{ name }` or `{ glyphId }`) keeps pairs naming that glyph directly or through its group at that position.
+- `kerning.resolve({ pairs, source? | location? })` answers what the compiled font kerns between two glyphs, each `{ name }` or `{ glyphId }` as in `kerning.at`. Do not recompute this yourself: the specific pair beats the general one, and a master's value depends on whether it kerns anything.
 - `kerning.at({ first, second, source? })` reads one pair at one master (the default source when `source` is omitted), with glyphs as `{ name }` or `{ glyphId }`. It returns that master's entry from `kerning.resolve`'s `masters`: `{ sourceId, amount, origin, rule, pair }`.
 - Every resolution lists each master: `origin` is `authored` (a pair applies there), `unkerned` (the master kerns other pairs but not this one, so 0), or `interpolated` (the master authors no kerning and takes the blend of those that do). `rule` is `glyph` (glyph against glyph), `exception` (a glyph against a group, overriding the group pair), `group` (group against group), or `none`.
 - Useful audits: glyphs missing from the group their base glyph is in; pairs authored at some masters and not others; exceptions whose value equals their group pair; a sign that flips between masters.

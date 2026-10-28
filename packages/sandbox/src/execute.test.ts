@@ -18,6 +18,8 @@ import {
 import { describe, expect, it } from "vitest";
 import { executeShiftCode } from "./execute";
 
+const T_THEN_A: KerningPairQuery = { first: { name: "T" }, second: { name: "A" } };
+
 const FONT_REVISION = "revision-a";
 
 function observation<Value>(value: Value): ShiftObservation<Value> {
@@ -176,7 +178,7 @@ const capabilities: ShiftCapabilities = {
       return observation({ items: pairs.map(kerningResolution) });
     },
     async at() {
-      return observation(kerningResolution({ first: "T", second: "A" }).masters[0]!);
+      return observation(kerningResolution(T_THEN_A).masters[0]!);
     },
   },
 };
@@ -198,7 +200,9 @@ function authoredKerningPair() {
   };
 }
 
-function kerningResolution({ first, second }: KerningPairQuery) {
+function kerningResolution(query: KerningPairQuery) {
+  const first = query.first.name ?? query.first.glyphId;
+  const second = query.second.name ?? query.second.glyphId;
   return {
     first: { glyphId: asGlyphId(`glyph-${first}`), name: first },
     second: { glyphId: asGlyphId(`glyph-${second}`), name: second },
@@ -355,7 +359,7 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     await expect(
       executeShiftCode(
         capabilities,
-        "async () => shift.kerning.resolve({ windowId: 7, pairs: [{ first: 'T', second: 'A' }], source: { name: 'Light' }, location: [] })",
+        "async () => shift.kerning.resolve({ windowId: 7, pairs: [{ first: { name: 'T' }, second: { name: 'A' } }], source: { name: 'Light' }, location: [] })",
       ),
     ).rejects.toThrow("source or location, not both");
     await expect(
@@ -451,7 +455,7 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
         nextCursor: null,
       })),
       resolve: guarded("kerning.resolve", ({ pairs }) => ({ items: pairs.map(kerningResolution) })),
-      at: guarded("kerning.at", () => kerningResolution({ first: "T", second: "A" }).masters[0]!),
+      at: guarded("kerning.at", () => kerningResolution(T_THEN_A).masters[0]!),
     },
   };
 
@@ -491,7 +495,7 @@ describe("shift.read binds one font revision for its callback", () => {
 
     const result = await executeShiftCode(
       host.capabilities,
-      "async () => shift.read({ windowId: 7 }, async (read) => { const groups = await read.kerning.groups(); const page = await read.kerning.pairs({ source: { name: 'Light' } }); const resolved = await read.kerning.resolve({ pairs: [{ first: 'T', second: 'A' }] }); const at = await read.kerning.at({ first: { name: 'T' }, second: { name: 'A' } }); return { group: groups[0].name, pair: page.items[0].amount, amount: resolved.items[0].amount, at: at.amount }; })",
+      "async () => shift.read({ windowId: 7 }, async (read) => { const groups = await read.kerning.groups(); const page = await read.kerning.pairs({ source: { name: 'Light' } }); const resolved = await read.kerning.resolve({ pairs: [{ first: { name: 'T' }, second: { name: 'A' } }] }); const at = await read.kerning.at({ first: { name: 'T' }, second: { name: 'A' } }); return { group: groups[0].name, pair: page.items[0].amount, amount: resolved.items[0].amount, at: at.amount }; })",
     );
 
     expect(result).toEqual({ group: "A", pair: -75, amount: -75, at: -75 });

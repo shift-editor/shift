@@ -114,9 +114,7 @@ export class ShiftFontReader {
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {
     const font = this.#font;
-    for (const glyphId of glyphIds) {
-      if (!font.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
-    }
+    for (const glyphId of glyphIds) this.#select.glyphId({ glyphId });
 
     const designspace = font.designspace;
     const design = designspace.toDesign(designspace.location(location));

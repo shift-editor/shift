@@ -11,8 +11,6 @@ const axisId = z.string().min(1).transform(asAxisId);
 const axisCoordinate = z.strictObject({ axisId, value: z.number() });
 const location = z.array(axisCoordinate).max(64);
 const kerningPosition = z.enum(["first", "second"]);
-/** A glyph by exact name, or by stable id when it carries the glyph id prefix. */
-const glyphReference = z.string().min(1).max(256);
 const name = z.string().min(1).max(256);
 const glyphSelector = z.union([z.strictObject({ glyphId }), z.strictObject({ name })]);
 const sourceSelector = z.union([z.strictObject({ sourceId }), z.strictObject({ name })]);
@@ -83,7 +81,7 @@ export const shiftInputSchemas = {
     windowId,
     ifFontRevision,
     source: sourceSelector.optional(),
-    glyph: glyphReference.optional(),
+    glyph: glyphSelector.optional(),
     limit: z.number().int().min(1).max(500).optional(),
     cursor: z.string().min(1).max(1024).optional(),
   }),
@@ -92,7 +90,7 @@ export const shiftInputSchemas = {
       windowId,
       ifFontRevision,
       pairs: z
-        .array(z.strictObject({ first: glyphReference, second: glyphReference }))
+        .array(z.strictObject({ first: glyphSelector, second: glyphSelector }))
         .min(1)
         .max(100),
       source: sourceSelector.optional(),

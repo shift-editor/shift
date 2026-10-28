@@ -12,7 +12,7 @@ import type {
   ResolvedKerningPairs,
   SourceSelector,
 } from "@shift/runtime";
-import { isGlyphId, type GlyphId, type KerningPosition, type SourceId } from "@shift/types";
+import type { GlyphId, KerningPosition, SourceId } from "@shift/types";
 import {
   isGroupSide,
   kerningRule,
@@ -70,7 +70,7 @@ export class ShiftKerningReader {
     cursor,
   }: {
     source?: SourceSelector;
-    glyph?: string;
+    glyph?: GlyphSelector;
     limit?: number;
     cursor?: string;
   }): KerningPairPage {
@@ -81,7 +81,7 @@ export class ShiftKerningReader {
 
     const kerning = this.#font.kerning;
     const authored = glyph
-      ? kerning.pairsNaming(sourceId, this.#glyphId(glyph))
+      ? kerning.pairsNaming(sourceId, this.#select.glyphId(glyph))
       : kerning.authoredPairs(sourceId);
     const pairs = authored.sort(comparePairs);
     const after = cursor ? decodeCursor(cursor) : null;
@@ -113,9 +113,10 @@ export class ShiftKerningReader {
     const sourceId = source ? this.#select.sourceId(source) : null;
 
     const external = location ? font.designspace.location(location) : font.defaultLocation();
+    const select = this.#select;
     const pairs = queries.flatMap(({ first, second }) => [
-      this.#glyphId(first),
-      this.#glyphId(second),
+      select.glyphId(first),
+      select.glyphId(second),
     ]);
     const amounts = font.kerningRun(pairs, external, sourceId);
     const items = queries.map((_, index): KerningResolution => {
@@ -189,15 +190,6 @@ export class ShiftKerningReader {
 
   #glyph(glyphId: GlyphId): KerningGlyph {
     return { glyphId, name: this.#font.glyphName(glyphId) };
-  }
-
-  /** Resolves an exact glyph name, or a stable id when the reference carries the glyph id prefix. */
-  #glyphId(reference: string): GlyphId {
-    const entry = isGlyphId(reference)
-      ? this.#font.entryForId(reference)
-      : this.#font.entryForName(reference);
-    if (!entry) throw new Error(`Glyph ${reference} is not in this font`);
-    return entry.id;
   }
 }
 

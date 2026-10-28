@@ -639,7 +639,8 @@ export class EditorDriver implements EditorReads {
   }
 
   async kerning(first: string, second: string): Promise<readonly KerningMasterValue[]> {
-    const resolved = await this.#read("kerning", "resolve", [{ first, second }], {});
+    const pair = { first: { name: first }, second: { name: second } };
+    const resolved = await this.#read("kerning", "resolve", [pair], {});
     return resolved.items[0]!.masters;
   }
 

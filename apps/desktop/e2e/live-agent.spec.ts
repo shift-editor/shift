@@ -265,8 +265,11 @@ test.describe("sparse source reads", () => {
           const lightCondensed = font.sources.find(({ name }) => name === "LightCondensed");
           const groups = await read.kerning.groups({ position: "second" });
           const source = { name: "LightCondensed" };
-          const pairs = await read.kerning.pairs({ source, glyph: "T" });
-          const resolved = await read.kerning.resolve({ pairs: [{ first: "T", second: "A" }], source });
+          const pairs = await read.kerning.pairs({ source, glyph: { name: "T" } });
+          const resolved = await read.kerning.resolve({
+            pairs: [{ first: { name: "T" }, second: { name: "A" } }],
+            source,
+          });
           const at = await read.kerning.at({ first: { name: "T" }, second: { name: "A" }, source });
           const layer = await read.layers.get({ glyph: { name: "A" }, source });
           const [ta] = resolved.items;
