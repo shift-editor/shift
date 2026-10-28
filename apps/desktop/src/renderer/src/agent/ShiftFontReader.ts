@@ -15,7 +15,7 @@ import type {
   ShiftSessionMode,
   SourceSelector,
 } from "@shift/runtime";
-import { asGlyphId, type GlyphId } from "@shift/types";
+import { asGlyphId, type GlyphId, type GlyphName, type Source } from "@shift/types";
 import type { Font } from "@shift/editor/model";
 import { ShiftLayer } from "./ShiftLayer";
 import { ShiftSelectors } from "./ShiftSelectors";
@@ -111,6 +111,35 @@ export class ShiftFontReader {
 
   getGlyph(selector: GlyphSelector): GlyphSummary {
     return this.#glyphSummary(this.#select.glyphId(selector));
+  }
+
+  /** The glyph named `name`, or null when the font has none. */
+  glyphNamed(name: GlyphName): GlyphSummary | null {
+    const entry = this.#font.entryForName(name);
+    return entry ? this.#glyphSummary(entry.id) : null;
+  }
+
+  /** The font's default source: where every axis sits at its default. */
+  defaultSource(): Source {
+    return this.#font.defaultSource;
+  }
+
+  /**
+   * The source `selector` names, as `sources.get` returns it.
+   *
+   * @throws {Error} when the font has no such source, or several sources share the name.
+   */
+  getSource(selector: SourceSelector): Source {
+    return this.#font.source(this.#select.sourceId(selector))!;
+  }
+
+  /**
+   * The source named `name`, or null when the font has none.
+   *
+   * @throws {Error} when several sources share the name.
+   */
+  sourceNamed(name: string): Source | null {
+    return this.#font.sourceNamed(name);
   }
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {

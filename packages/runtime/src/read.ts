@@ -29,7 +29,9 @@ import type {
   ShiftReadInput,
   ShiftReadState,
   ShiftTarget,
+  SourceGetInput,
 } from "./capabilities";
+import type { Source } from "@shift/types";
 
 /** Thrown when the font changed after a read scope bound its revision. */
 export class FontChangedError extends Error {
@@ -65,6 +67,9 @@ export class ShiftReadScope implements ShiftRead {
     get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
     resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
   };
+  readonly sources: {
+    get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
+  };
   readonly layers: {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
     resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
@@ -95,6 +100,7 @@ export class ShiftReadScope implements ShiftRead {
     this.#overview = value;
 
     const layers = capabilities.layers;
+    const sources = capabilities.sources;
     const glyphs = capabilities.glyphs;
     const kerning = capabilities.kerning;
     this.font = Object.freeze({
@@ -114,6 +120,10 @@ export class ShiftReadScope implements ShiftRead {
         this.#guard(input, (bound) => glyphs.get(bound as GlyphGetInput)),
       resolve: (input: ShiftReadInput<GlyphResolveInput>) =>
         this.#guard(input, (bound) => glyphs.resolve(bound)),
+    });
+    this.sources = Object.freeze({
+      get: (input: ShiftReadInput<SourceGetInput>) =>
+        this.#guard(input, (bound) => sources.get(bound as SourceGetInput)),
     });
     this.layers = Object.freeze({
       get: (input: ShiftReadInput<LayerGetInput>) =>

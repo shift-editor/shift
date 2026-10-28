@@ -114,14 +114,9 @@ function driverFor(recoveryApp: RecoveryApp, page: Page): EditorDriver {
   return new EditorDriver(page, recoveryApp.app);
 }
 
-/** The font's default source: the source a glyph's layer read without one is at. */
-async function defaultSourceId(editor: EditorDriver): Promise<SourceId> {
-  return (await editor.layerOf("A")).sourceId;
-}
-
 async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFixture> {
   const page = recoveryApp.page;
-  const defaultSource = await defaultSourceId(driverFor(recoveryApp, page));
+  const defaultSource = (await driverFor(recoveryApp, page).defaultSource()).id;
   const axisId = await createAxis(page, {
     ...WEIGHT,
     name: "Weight",
@@ -149,7 +144,7 @@ async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFix
 
 async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture> {
   const page = recoveryApp.page;
-  const defaultSource = await defaultSourceId(driverFor(recoveryApp, page));
+  const defaultSource = (await driverFor(recoveryApp, page).defaultSource()).id;
   const weightAxisId = await createAxis(page, {
     ...WEIGHT,
     name: "Weight",
@@ -208,14 +203,14 @@ async function observeVariableFont(
   const editor = driverFor(recoveryApp, page);
   const [{ axes, sources, instances }, defaultSource, document] = await Promise.all([
     editor.fontOverview(),
-    defaultSourceId(editor),
+    editor.defaultSource(),
     editor.documentState(),
   ]);
   return {
     axes,
     sources,
     namedInstances: instances,
-    defaultSourceId: defaultSource,
+    defaultSourceId: defaultSource.id,
     dirty: document?.dirty ?? false,
   };
 }

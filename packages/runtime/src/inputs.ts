@@ -66,6 +66,10 @@ export const shiftInputSchemas = {
     z.strictObject({ windowId, ifFontRevision, glyphId }),
     z.strictObject({ windowId, ifFontRevision, name: z.string().min(1) }),
   ]),
+  "sources.get": z.union([
+    z.strictObject({ windowId, ifFontRevision, sourceId }),
+    z.strictObject({ windowId, ifFontRevision, name }),
+  ]),
   "glyphs.resolve": z.strictObject({
     windowId,
     ifFontRevision,

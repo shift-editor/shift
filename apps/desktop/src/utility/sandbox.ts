@@ -29,6 +29,9 @@ const capabilities: ShiftCapabilities = {
     get: (input) => host.call("shift.glyphs.get", input),
     resolve: (input) => host.call("shift.glyphs.resolve", input),
   },
+  sources: {
+    get: (input) => host.call("shift.sources.get", input),
+  },
   layers: {
     get: (input) => host.call("shift.layers.get", input),
     resolve: (input) => host.call("shift.layers.resolve", input),

@@ -1105,15 +1105,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null {
-    return this.kerningGroups(position).find((group) => group.name === name) ?? null;
+    return this.#reads.kerning.group(position, name);
   }
 
   kerningGroupOf(position: KerningPosition, glyph: string): KerningGroupSummary | null {
-    return (
-      this.kerningGroups(position).find((group) =>
-        group.members.some((member) => member.name === glyph),
-      ) ?? null
-    );
+    return this.#reads.kerning.groupOf(position, { name: glyph as GlyphName });
   }
 
   kerningGroups(position: KerningPosition): readonly KerningGroupSummary[] {
@@ -1262,8 +1258,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   glyphNamed(name: string): GlyphSummary | null {
-    if (!this.font.recordForName(name as GlyphName)) return null;
-    return this.#reads.font.getGlyph({ name: name as GlyphName });
+    return this.#reads.font.glyphNamed(name as GlyphName);
   }
 
   async glyphNames(): Promise<readonly string[]> {
@@ -1282,7 +1277,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   source(name: string): Source | null {
-    return this.font.sourceNamed(name);
+    return this.#reads.font.sourceNamed(name);
+  }
+
+  defaultSource(): Source {
+    return this.#reads.font.defaultSource();
+  }
+
+  currentSource(): Source | null {
+    return this.#reads.editor.activeSource();
   }
 
   languages(): readonly string[] | null {

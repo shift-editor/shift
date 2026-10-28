@@ -117,6 +117,25 @@ describe("ShiftFontReader serves public reads of accepted font state", () => {
     );
   });
 
+  it("gets a source by name or id, and finds the default source", () => {
+    const font = stack.font;
+    const boldWide = font.sourceNamed("BoldWide")!;
+
+    expect(reader.getSource({ name: "BoldWide" })).toEqual(boldWide);
+    expect(reader.getSource({ sourceId: boldWide.id })).toEqual(boldWide);
+    expect(() => reader.getSource({ name: "Nope" })).toThrow("Source Nope is not in this font");
+    expect(reader.sourceNamed("BoldWide")).toEqual(boldWide);
+    expect(reader.sourceNamed("Nope")).toBeNull();
+    expect(reader.defaultSource()).toEqual(font.defaultSource);
+  });
+
+  it("finds a glyph by name, or null when the font has none", () => {
+    expect(reader.glyphNamed("Aacute" as GlyphName)).toEqual(
+      reader.getGlyph({ name: "Aacute" as GlyphName }),
+    );
+    expect(reader.glyphNamed("nope" as GlyphName)).toBeNull();
+  });
+
   it("lists the font's axis mappings with its axes", async () => {
     const [axis] = reader.getFont().axes;
     const mapping = {

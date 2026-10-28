@@ -58,6 +58,9 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftGetGlyph", deadline, (input) =>
     validated.glyphs.get(input as never),
   );
+  installAsyncJsonFunction(vm, "__shiftGetSource", deadline, (input) =>
+    validated.sources.get(input as never),
+  );
   installAsyncJsonFunction(vm, "__shiftResolveGlyphs", deadline, (input) =>
     validated.glyphs.resolve(input as never),
   );
@@ -118,6 +121,9 @@ export async function executeShiftCode(
         get: async (input) => JSON.parse(await __shiftGetGlyph(input)),
         resolve: async (input) => JSON.parse(await __shiftResolveGlyphs(input)),
       }),
+      sources: Object.freeze({
+        get: async (input) => JSON.parse(await __shiftGetSource(input)),
+      }),
       layers: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetLayer(input)),
         resolve: async (input) => JSON.parse(await __shiftResolveLayer(input)),
@@ -145,6 +151,9 @@ export async function executeShiftCode(
             list: call("glyphs.list"),
             get: call("glyphs.get"),
             resolve: call("glyphs.resolve"),
+          }),
+          sources: Object.freeze({
+            get: call("sources.get"),
           }),
           layers: Object.freeze({
             get: call("layers.get"),
@@ -224,6 +233,9 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       resolve: (input) =>
         capabilities.glyphs.resolve(shiftInputSchemas["glyphs.resolve"].parse(input)),
     },
+    sources: {
+      get: (input) => capabilities.sources.get(shiftInputSchemas["sources.get"].parse(input)),
+    },
     layers: {
       get: (input) => capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
       resolve: (input) =>
@@ -264,6 +276,8 @@ function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): 
       return scope.glyphs.get(args);
     case "glyphs.resolve":
       return scope.glyphs.resolve(args);
+    case "sources.get":
+      return scope.sources.get(args);
     case "layers.get":
       return scope.layers.get(args);
     case "layers.resolve":

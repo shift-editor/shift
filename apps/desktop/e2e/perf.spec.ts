@@ -272,8 +272,7 @@ test.describe("Performance — 50K points", () => {
       hidden: false,
     });
     await editor.waitForIdle();
-    // A glyph's layer read without a source is its layer at the default source.
-    const referenceId = (await editor.layerOf("S")).sourceId;
+    const referenceId = (await editor.defaultSource()).id;
     const targetId = await createSource(page, "Benchmark Bold", { [axisId]: 900 });
     const sourceIds = { referenceId, targetId };
     await editor.waitForIdle();

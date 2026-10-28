@@ -68,12 +68,11 @@ async function openOutlineFixture(page: Page, editor: EditorDriver): Promise<Out
   await navigateToEditor(page, "53");
   await openVariationControls(page);
 
-  const [{ sources, instances }, { activeSourceId }] = await Promise.all([
+  const [{ sources, instances }, activeSource] = await Promise.all([
     editor.fontOverview(),
-    editor.editorView(),
+    editor.currentSource(),
   ]);
-  const activeSource = sources.find(({ id }) => id === activeSourceId);
-  const comparisonSources = sources.filter(({ id }) => id !== activeSourceId);
+  const comparisonSources = sources.filter(({ id }) => id !== activeSource?.id);
   const instance = instances[0];
   if (!activeSource || !comparisonSources[0] || !instance) {
     throw new Error("Expected variable sources and an instance");
@@ -130,12 +129,11 @@ async function pointInSource(
 test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
   const controls = await openVariationControls(page);
-  const [{ sources }, { activeSourceId: active }] = await Promise.all([
-    editor.fontOverview(),
-    editor.editorView(),
-  ]);
-  const source = sources.find(({ id }) => id !== active);
-  if (!source) throw new Error("Expected comparison source");
+  // LightCondensed is the open default source; BoldWide is the comparison source.
+  const source = await editor.source("BoldWide");
+  if (!source || source.id === (await editor.currentSource())?.id) {
+    throw new Error("Expected BoldWide as a comparison source");
+  }
 
   await controls
     .getByTestId(`source-${source.id}`)

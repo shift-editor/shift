@@ -68,6 +68,7 @@ export type {
   ShiftSession,
   ShiftSessionMode,
   ShiftTarget,
+  SourceGetInput,
   SourceSelector,
   SpacingGapSide,
   SpacingGapView,

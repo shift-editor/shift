@@ -41,8 +41,7 @@ async function prepareFourSourceGlyph(
   });
   await editor.waitForIdle();
 
-  // A glyph's layer read without a source is its layer at the default source.
-  const referenceId = (await editor.layerOf("S")).sourceId;
+  const referenceId = (await editor.defaultSource()).id;
   const sourceIds: SourceId[] = [];
   for (const [name, value] of [
     ["Benchmark Medium", 500],

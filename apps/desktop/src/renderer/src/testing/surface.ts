@@ -43,6 +43,7 @@ import type {
   CanvasHandle,
   CanvasText,
   DocumentSaveState,
+  EditorActions,
   EditorReads,
   EditorViewState,
   FontSummary,
@@ -104,7 +105,7 @@ export type KerningToolState = KerningToolView;
  * implements too. The in-process editor answers kerning and selection at
  * once, so those reads narrow to plain values here.
  */
-export interface EditorTestSurface extends EditorReads, FontBuilder {
+export interface EditorTestSurface extends EditorReads, EditorActions, FontBuilder {
   /**
    * Builds `fixture` into the open glyph through the editor's own commands.
    *

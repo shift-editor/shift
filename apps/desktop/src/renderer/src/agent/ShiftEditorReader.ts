@@ -15,7 +15,7 @@ import type {
 import type { Editor } from "@shift/editor";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
-import type { PointId } from "@shift/types";
+import type { PointId, Source } from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
 import { KerningTool, SpacingTool, type KerningPair } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -77,6 +77,13 @@ export class ShiftEditorReader {
       editing: editor.isEditing,
       applyStatus: this.#edits?.applyStatusCell.peek() ?? null,
     };
+  }
+
+  /** The source the editor shows and edits, or null between sources. */
+  activeSource(): Source | null {
+    const editor = this.#editor;
+    const sourceId = editor.activeSourceId;
+    return sourceId ? editor.font.source(sourceId) : null;
   }
 
   /**

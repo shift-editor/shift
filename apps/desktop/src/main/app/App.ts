@@ -1140,6 +1140,10 @@ export class App {
             ifFontRevision,
           ),
       },
+      sources: {
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getSource(selector, ifFontRevision),
+      },
       layers: {
         get: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.getLayer(input),

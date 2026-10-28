@@ -173,6 +173,18 @@ describe("ShiftKerningReader serves kerning as the compiled font applies it", ()
     expect(reader.groups().length).toBeGreaterThan(groups.length);
   });
 
+  it("finds a group by name and the group a glyph kerns through", () => {
+    const aGroup = reader.groupOf("second", { name: "A" as GlyphName });
+
+    expect(aGroup?.members.map(({ name }) => name)).toContain("A");
+    expect(reader.group("second", aGroup!.name)).toEqual(aGroup);
+    expect(reader.group("first", aGroup!.name)).toBeNull();
+    expect(reader.group("second", "no such group")).toBeNull();
+    expect(() => reader.groupOf("second", { name: "nope" as GlyphName })).toThrow(
+      "Glyph nope is not in this font",
+    );
+  });
+
   it("rejects unknown glyphs, sources, and cursors", () => {
     const t = { name: "T" };
 

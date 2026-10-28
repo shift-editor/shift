@@ -257,7 +257,7 @@ test.describe("sparse source reads", () => {
         if (!session) throw new Error("Expected connected font");
         return shift.read({ windowId: session.windowId }, async (read) => {
           const font = await read.font.get();
-          const lightCondensed = font.sources.find(({ name }) => name === "LightCondensed");
+          const lightCondensed = await read.sources.get({ name: "LightCondensed" });
           const groups = await read.kerning.groups({ position: "second" });
           const source = { name: "LightCondensed" };
           const pairs = await read.kerning.pairs({ source, glyph: { name: "T" } });

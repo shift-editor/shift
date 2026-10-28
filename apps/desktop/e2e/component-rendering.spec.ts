@@ -15,12 +15,7 @@ test(
   { tag: "@golden" },
   async ({ page, editor }) => {
     await navigateToEditor(page, "C1");
-    const { sources } = await editor.fontOverview();
-    const sourceId = sources.find((candidate) => candidate.name === "BoldWide")?.id;
-    if (!sourceId) throw new Error("Expected BoldWide fixture source");
-    await openVariationControls(page);
-    await page.getByTestId(`source-${sourceId}`).click();
-    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBe(sourceId);
+    await editor.clickSource("BoldWide");
 
     const sample = await drawnAndAuthoredComponents(page, "Aacute", "BoldWide");
 

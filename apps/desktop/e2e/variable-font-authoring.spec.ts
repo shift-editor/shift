@@ -47,15 +47,6 @@ async function axisWithId(editor: EditorDriver, axisId: string) {
   return (await editor.fontOverview()).axes.find((axis) => axis.id === axisId);
 }
 
-/** The name of the font's default source: the source a glyph's layer read without one is at. */
-async function nameOfDefaultSource(editor: EditorDriver): Promise<string | undefined> {
-  const [{ sourceId }, { sources }] = await Promise.all([
-    editor.layerOf("A"),
-    editor.fontOverview(),
-  ]);
-  return sources.find(({ id }) => id === sourceId)?.name;
-}
-
 test.describe("variable-font authoring controls", () => {
   test("creates an axis, source, and named instance through Settings", async ({ page, editor }) => {
     await expect.poll(async () => (await editor.fontOverview()).axes.length).toBe(0);
@@ -97,7 +88,7 @@ test.describe("variable-font authoring controls", () => {
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog.getByRole("button", { name: "Black", exact: true })).toBeVisible();
 
-    const { axes, sources, instances } = await editor.fontOverview();
+    const { axes, instances } = await editor.fontOverview();
     const axis = axes.find(({ id: candidateId }) => candidateId === axisId);
     const authored = {
       axis: axis && {
@@ -107,7 +98,7 @@ test.describe("variable-font authoring controls", () => {
         default: axis.default,
         maximum: axis.maximum,
       },
-      source: sources.find(({ name }) => name === "Bold")?.location.values[axisId],
+      source: (await editor.source("Bold"))?.location.values[axisId],
       instance: instances.find(({ name }) => name === "Black")?.location.values[axisId],
       dirty: (await editor.documentState())?.dirty,
     };
@@ -138,8 +129,7 @@ test.describe("variable-font authoring controls", () => {
       .toBe("Optical Scale");
 
     await selectCategory(dialog, "Sources");
-    const defaultSource = await nameOfDefaultSource(editor);
-    if (!defaultSource) throw new Error("Expected default source");
+    const defaultSource = (await editor.defaultSource()).name;
     await expect(dialog.getByLabel(`Delete ${defaultSource}`)).toHaveAttribute(
       "aria-disabled",
       "true",
@@ -152,11 +142,7 @@ test.describe("variable-font authoring controls", () => {
     await sourceLocation.fill("850");
     await sourceLocation.press("Tab");
     await expect
-      .poll(
-        async () =>
-          (await editor.fontOverview()).sources.find(({ id }) => id === fixture.sourceId)?.location
-            .values[fixture.axisId],
-      )
+      .poll(async () => (await editor.source("Display Bold"))?.location.values[fixture.axisId])
       .toBe(850);
 
     await selectCategory(dialog, "Instances");

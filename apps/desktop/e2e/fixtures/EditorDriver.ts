@@ -9,7 +9,15 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
-import type { AxisId, GlyphId, GlyphName, KerningPosition, PointId, Unicode } from "@shift/types";
+import type {
+  AxisId,
+  GlyphId,
+  GlyphName,
+  KerningPosition,
+  PointId,
+  Source,
+  Unicode,
+} from "@shift/types";
 import type {
   AgentReaderName,
   AgentReadArgs,
@@ -20,6 +28,7 @@ import type {
   CanvasHandle,
   CanvasText,
   DocumentSaveState,
+  EditorActions,
   EditorReads,
   EditorViewState,
   FontSummary,
@@ -31,7 +40,7 @@ import type {
   SpacingToolState,
 } from "@/testing/reads";
 import type {} from "../../src/main/agent/e2eAgentReads";
-import { waitForEditorReady } from "./appLocators";
+import { openVariationControls, waitForEditorReady } from "./appLocators";
 import {
   contourContent,
   pointNames,
@@ -92,7 +101,7 @@ async function readLivePointPosition(page: Page, pointId: PointId): Promise<Poin
  * and selectors as the vitest surface makes in-process. Live gesture observations remain
  * available through methods such as {@link selectionBounds}.
  */
-export class EditorDriver implements EditorReads {
+export class EditorDriver implements EditorReads, EditorActions {
   readonly #app: ElectronApplication | null;
   #windowId: Promise<number> | null = null;
 
@@ -158,13 +167,10 @@ export class EditorDriver implements EditorReads {
    * @param name - Glyph name in the loaded workspace.
    */
   async openGlyphByName(name: string): Promise<void> {
-    const glyphId = await this.page.evaluate((glyphName) => {
-      const record = window.shift?.font.glyphRecords().find((glyph) => glyph.name === glyphName);
-      if (!record) throw new Error(`Expected ${glyphName} glyph`);
-      return record.id;
-    }, name);
+    const glyph = await this.glyphNamed(name);
+    if (!glyph) throw new Error(`Expected ${name} glyph`);
 
-    await this.openGlyph(glyphId);
+    await this.openGlyph(glyph.id);
   }
 
   /**
@@ -297,11 +303,12 @@ export class EditorDriver implements EditorReads {
    */
   async addSource(name: string, location: AxisLocation): Promise<void> {
     const { axes } = await this.fontOverview();
+    const axisIds = new Map(axes.map((axis) => [axis.tag, axis.id]));
     const values = Object.fromEntries(
       Object.entries(location).map(([tag, value]) => {
-        const axis = axes.find((candidate) => candidate.tag === tag);
-        if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
-        return [axis.id, value];
+        const axisId = axisIds.get(tag);
+        if (!axisId) throw new Error(`The font has no axis tagged ${tag}`);
+        return [axisId, value];
       }),
     ) as Record<AxisId, number>;
     await createSourceHere(this.page, name, values);
@@ -822,16 +829,14 @@ export class EditorDriver implements EditorReads {
   }
 
   async kerningGroup(position: KerningPosition, name: string): Promise<KerningGroupSummary | null> {
-    const groups = await this.kerningGroups(position);
-    return groups.find((group) => group.name === name) ?? null;
+    return this.#read("kerning", "group", position, name);
   }
 
   async kerningGroupOf(
     position: KerningPosition,
     glyph: string,
   ): Promise<KerningGroupSummary | null> {
-    const groups = await this.kerningGroups(position);
-    return groups.find((group) => group.members.some((member) => member.name === glyph)) ?? null;
+    return this.#read("kerning", "groupOf", position, { name: glyph as GlyphName });
   }
 
   async selectionIds(): Promise<readonly string[]> {
@@ -850,8 +855,29 @@ export class EditorDriver implements EditorReads {
   }
 
   async glyphNamed(name: string): Promise<GlyphListing | null> {
-    if (!(await this.glyphNames()).includes(name)) return null;
-    return this.#read("font", "getGlyph", { name: name as GlyphName });
+    return this.#read("font", "glyphNamed", name as GlyphName);
+  }
+
+  async source(name: string): Promise<Source | null> {
+    return this.#read("font", "sourceNamed", name);
+  }
+
+  async defaultSource(): Promise<Source> {
+    return this.#read("font", "defaultSource");
+  }
+
+  async currentSource(): Promise<Source | null> {
+    return this.#read("editor", "activeSource");
+  }
+
+  /** Clicks the row of the source named `name` in the Variations panel, opening the panel first. */
+  async clickSource(name: string): Promise<void> {
+    const source = await this.source(name);
+    if (!source) throw new Error(`The font has no source named ${name}`);
+
+    const controls = await openVariationControls(this.page);
+    await controls.getByTestId(`source-${source.id}`).click();
+    await expect.poll(async () => (await this.currentSource())?.id).toBe(source.id);
   }
 
   async layerOf(glyph: string, source?: string): Promise<SourceLayer> {

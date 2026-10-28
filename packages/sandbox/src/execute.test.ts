@@ -86,6 +86,7 @@ const capabilities: ShiftCapabilities = {
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       });
@@ -104,6 +105,18 @@ const capabilities: ShiftCapabilities = {
           descender: -200,
           baseline: 0,
         },
+      });
+    },
+  },
+  sources: {
+    async get(input) {
+      if ("name" in input && input.name !== "Light")
+        throw new Error(`Source ${input.name} is not in this font`);
+      return observation({
+        id: asSourceId("source-a"),
+        name: "Light",
+        location: { values: {} },
+        metricValues: [],
       });
     },
   },
@@ -334,6 +347,21 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     ).rejects.toThrow();
   });
 
+  it("gets a source by exact name and rejects ambiguous selectors", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.sources.get({ windowId: 7, name: 'Light' })",
+      ),
+    ).resolves.toMatchObject({ value: { id: "source-a", name: "Light" } });
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.sources.get({ windowId: 7, name: 'Light', sourceId: 'source-a' })",
+      ),
+    ).rejects.toThrow();
+  });
+
   it("gets a glyph by exact name and rejects ambiguous selectors", async () => {
     const result = await executeShiftCode(
       capabilities,
@@ -433,6 +461,7 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       })),

@@ -24,8 +24,8 @@ test.describe("variable font preview projection", () => {
       "aria-disabled",
       "true",
     );
-    const { sources, instances } = await editor.fontOverview();
-    const regularSourceId = sources.find(({ name }) => name === "Regular")?.id;
+    const { instances } = await editor.fontOverview();
+    const regularSourceId = (await editor.source("Regular"))?.id;
     if (!regularSourceId) throw new Error("Expected Regular source");
     await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();

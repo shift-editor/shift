@@ -30,7 +30,7 @@ import type {
   SpacingToolView,
   TextRunView,
 } from "@shift/runtime";
-import type { KerningPosition, PointId } from "@shift/types";
+import type { KerningPosition, PointId, Source } from "@shift/types";
 import type { GlyphOutlineTarget } from "@shift/editor/types";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 
@@ -110,6 +110,15 @@ export interface EditorReads {
   glyphNamed(name: string): Read<GlyphListing | null>;
   /** The authored layer of the glyph named `glyph` at the source named `source`, the default source when omitted. */
   layerOf(glyph: string, source?: string): Promise<SourceLayer>;
+  /** The font's source named `name`, or null when it has none. */
+  source(name: string): Read<Source | null>;
+  /** The font's default source: where every axis sits at its default. */
+  defaultSource(): Read<Source>;
+  /**
+   * The source the editor shows and edits (the editor's active source), or null between
+   * sources. Named apart from `Editor.activeSource`, which `TestEditor` inherits.
+   */
+  currentSource(): Read<Source | null>;
   /** The font's info, metrics, axes, sources and instances, and the session's mode, as agents read them. */
   fontOverview(): Read<FontSummary>;
   /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */
@@ -126,4 +135,10 @@ export interface EditorReads {
   drawnHandles(): Read<readonly CanvasHandle[]>;
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
   drawnOutlineTargets(): Read<readonly OutlineTarget[]>;
+}
+
+/** What both drivers do the way a user does it, under the same names. */
+export interface EditorActions {
+  /** Shows and edits the source named `name`, as clicking its row in the Sources panel does. */
+  clickSource(name: string): Read<void>;
 }

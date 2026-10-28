@@ -1257,6 +1257,10 @@ export interface ShiftCapabilities {
     sessions: {
         list(): Promise<ShiftSession[]>;
     };
+    // (undocumented)
+    sources: {
+        get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
+    };
 }
 
 // @public
@@ -1331,6 +1335,10 @@ export interface ShiftRead {
     // (undocumented)
     locations: {
         resolve(input: ShiftReadInput<LocationResolveInput>): Promise<ResolvedLocation>;
+    };
+    // (undocumented)
+    sources: {
+        get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
     };
     // (undocumented)
     readonly state: ShiftReadState;

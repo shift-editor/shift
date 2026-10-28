@@ -58,6 +58,8 @@ export class AgentBridge {
           this.#observe(ifFontRevision, () => this.#reader.listGlyphs(input)),
         "glyphs.get": ({ selector, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.getGlyph(selector)),
+        "sources.get": ({ selector, ifFontRevision }) =>
+          this.#observe(ifFontRevision, () => this.#reader.getSource(selector)),
         "glyphs.resolve": ({ glyphIds, location, ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.resolveGlyphs(glyphIds, location)),
         "kerning.groups": ({ position, ifFontRevision }) =>

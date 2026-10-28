@@ -614,6 +614,8 @@ export interface GlyphListInput extends ShiftTarget {
   source?: SourceSelector;
 }
 export type GlyphGetInput = ShiftTarget & GlyphSelector;
+/** One source by stable id or exact name, never by both. */
+export type SourceGetInput = ShiftTarget & SourceSelector;
 export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
@@ -748,6 +750,9 @@ export interface ShiftCapabilities {
     get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
     resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
   };
+  sources: {
+    get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
+  };
   layers: {
     get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
     resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
@@ -789,6 +794,9 @@ export interface ShiftRead {
     list(input?: ShiftReadInput<GlyphListInput>): Promise<GlyphPage>;
     get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
     resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
+  };
+  sources: {
+    get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
   };
   layers: {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
