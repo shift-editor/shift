@@ -22,6 +22,7 @@ import type {
   DocumentSaveState,
   EditorReads,
   EditorViewState,
+  GlyphChoice,
   FontSummary,
   GlyphListing,
   LocationSummary,
@@ -634,25 +635,28 @@ export class EditorDriver implements EditorReads {
     };
   }
 
-  async outline(): Promise<Outline> {
-    return (await this.#openLayer()).contours;
+  async outline(choice?: GlyphChoice): Promise<Outline> {
+    return (await this.#openLayer(choice)).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, choice?: GlyphChoice): Promise<AuthoredPoint | null> {
+    const outline = await this.outline(choice);
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
-  async anchors(): Promise<readonly AuthoredAnchor[]> {
-    return (await this.#openLayer()).anchors;
+  async anchors(choice?: GlyphChoice): Promise<readonly AuthoredAnchor[]> {
+    return (await this.#openLayer(choice)).anchors;
   }
 
-  async components(): Promise<readonly AuthoredComponent[]> {
-    return (await this.#openLayer()).components;
+  async components(choice?: GlyphChoice): Promise<readonly AuthoredComponent[]> {
+    return (await this.#openLayer(choice)).components;
   }
 
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
-    const outline = await this.outline();
+  async pointPositions(
+    ids: readonly PointId[],
+    choice?: GlyphChoice,
+  ): Promise<Record<PointId, Point2D>> {
+    const outline = await this.outline(choice);
     const points = new Map(
       outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
     );
@@ -665,8 +669,8 @@ export class EditorDriver implements EditorReads {
     ) as Record<PointId, Point2D>;
   }
 
-  async advanceWidth(): Promise<number> {
-    return (await this.#openLayer()).advanceWidth;
+  async advanceWidth(choice?: GlyphChoice): Promise<number> {
+    return (await this.#openLayer(choice)).advanceWidth;
   }
 
   async kerning(first: string, second: string): Promise<readonly KerningMasterValue[]> {
@@ -720,7 +724,7 @@ export class EditorDriver implements EditorReads {
     return this.#read("font", "getGlyph", { name: name as GlyphName });
   }
 
-  async layerOf(glyph: string, source?: string): Promise<SourceLayer> {
+  async sourceLayer(glyph: string, source?: string): Promise<SourceLayer> {
     return this.#read("font", "getLayer", {
       glyph: { name: glyph as GlyphName },
       ...(source === undefined ? {} : { source: { name: source } }),
@@ -756,10 +760,10 @@ export class EditorDriver implements EditorReads {
     return this.#read("editor", "drawnHandles");
   }
 
-  /** The open glyph's authored layer at its node's source, as `layers.get` returns it. */
-  async #openLayer(): Promise<AuthoredLayer> {
-    const { glyph } = await this.editorView();
-    if (!glyph) throw new Error("Expected an open glyph");
+  /** A glyph's authored layer at its node's source, as `layers.get` returns it. */
+  async #openLayer(choice: GlyphChoice = {}): Promise<AuthoredLayer> {
+    const glyph = await this.#read("editor", "glyph", { ...choice });
+    if (!glyph) throw new Error("Expected one open glyph, or one showing the chosen name");
     return this.#read("font", "getLayer", {
       glyph: { glyphId: glyph.glyphId },
       source: { sourceId: glyph.sourceId },

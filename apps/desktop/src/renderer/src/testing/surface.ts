@@ -49,6 +49,7 @@ import type {
   LocationSummary,
   SourceLayer,
   GlyphAnchor,
+  GlyphChoice,
   KerningGroup,
   Outline,
   OutlinePoint,
@@ -393,15 +394,15 @@ export interface EditorTestSurface extends EditorReads {
   setLocation(location: AxisLocation): void;
 
   /** The open glyph's point at a position in the active source, or null. */
-  pointAt(position: Point2D): Promise<OutlinePoint | null>;
+  pointAt(position: Point2D, choice?: GlyphChoice): Promise<OutlinePoint | null>;
   /** The open glyph's anchor named `name` in the active source, or null. */
-  anchorNamed(name: string): Promise<GlyphAnchor | null>;
+  anchorNamed(name: string, choice?: GlyphChoice): Promise<GlyphAnchor | null>;
   /** The open glyph's outline bounds, as agents read them; null when it has no outline. */
-  outlineBounds(): Promise<Bounds | null>;
+  outlineBounds(choice?: GlyphChoice): Promise<Bounds | null>;
   /** The open glyph's authored layer at the source named `source`, as agents read it. */
-  layerAt(source: string): Promise<SourceLayer>;
+  layerAt(source: string, choice?: GlyphChoice): Promise<SourceLayer>;
   /** The open glyph as it draws at `location`, interpolated between sources; null when it cannot be resolved there. */
-  glyphAt(location: AxisLocation): Promise<GlyphAtLocation | null>;
+  glyphAt(location: AxisLocation, choice?: GlyphChoice): Promise<GlyphAtLocation | null>;
   /** The glyph named `name`: its identity and the layer each source holds; null when the font has none. */
   glyphNamed(name: string): GlyphListing | null;
   /** The font's info, metrics, axes, sources and instances, as agents read them. */
@@ -439,19 +440,23 @@ export interface EditorTestSurface extends EditorReads {
   spacingTool(): SpacingToolState | null;
   /** What the Kerning tool shows; null when it is not active. */
   kerningTool(): KerningToolState | null;
-  /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
-  drawnOutline(): Outline;
+  /**
+   * The open glyph's own contours as the canvas draws it now: at the active
+   * source with a gesture's uncommitted preview included, or interpolated
+   * between sources. Empty when the glyph is not on the canvas.
+   */
+  drawnOutline(choice?: GlyphChoice): Outline;
   /** The point handles the canvas draws on the open glyph, with how each is styled. */
-  drawnHandles(): readonly CanvasHandle[];
+  drawnHandles(choice?: GlyphChoice): readonly CanvasHandle[];
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
-  drawnOutlineTargets(): readonly GlyphOutlineTarget[];
+  drawnOutlineTargets(choice?: GlyphChoice): readonly GlyphOutlineTarget[];
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   drawnSnapGuides(): readonly PositionGuide[];
   /**
    * Where the canvas shows each point now, including a gesture not yet
    * released, as {@link drawnOutline} draws them.
    */
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D>;
+  shownPointPositions(ids: readonly PointId[], choice?: GlyphChoice): Record<PointId, Point2D>;
   /**
    * Where the faint pre-edit outline shows each point while a gesture is in
    * flight, or null when none is shown. Test-only: not agent data.

@@ -31,7 +31,7 @@ describe("adding a source", () => {
 
     expect(editor.editorView()).toMatchObject({
       activeSourceId: bold,
-      glyph: { sourceId: bold },
+      glyphs: [{ sourceId: bold }],
     });
     const [copy] = await editor.outline();
     expect(await editor.advanceWidth()).toBe(520);

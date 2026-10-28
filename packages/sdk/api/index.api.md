@@ -263,6 +263,8 @@ export class Editor {
     // (undocumented)
     getToolState(scope: ToolStateScope, toolId: string, key: string): unknown;
     glyphForId(glyphId: GlyphId): Glyph | null;
+    glyphIdOf(node: GlyphNode): GlyphId | null;
+    glyphOf(node: GlyphNode): Glyph | null;
     handlesVisible(id: PointId | ContourId, contourId?: ContourId): boolean;
     hideHandles(id: PointId | ContourId): () => void;
     // (undocumented)
@@ -282,6 +284,7 @@ export class Editor {
     get isEditingCell(): Signal<boolean>;
     layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null;
     layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null;
+    layerOf(node: GlyphNode, sourceId: SourceId): GlyphLayer | null;
     nodeBounds(node: ShiftNode): SceneBounds | null;
     // (undocumented)
     nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
@@ -353,10 +356,14 @@ export class Editor {
     setXAdvance(width: number): void;
     setZoom(zoom: number): void;
     readonly snapping: Snapping;
+    soleSubjectGlyphNode(): GlyphNode | null;
+    get soleSubjectGlyphNodeCell(): Signal<GlyphNode | null>;
     // (undocumented)
     startFpsMonitor(): void;
     // (undocumented)
     stopFpsMonitor(): void;
+    get subjectGlyphIdsCell(): Signal<readonly GlyphId[]>;
+    get subjectGlyphNodesCell(): Signal<readonly GlyphNode[]>;
     // (undocumented)
     readonly text: Text_2;
     // (undocumented)
@@ -404,13 +411,13 @@ export class Editor {
 
 // @public
 export interface EditorGlyph {
+    edited: boolean;
     // (undocumented)
     glyphId: GlyphId;
     // (undocumented)
     name: string;
     // (undocumented)
     nodeId: NodeId;
-    // (undocumented)
     sourceId: SourceId;
 }
 
@@ -446,8 +453,7 @@ export interface EditorView {
     editingSourceIds: SourceId[];
     // (undocumented)
     externalLocation: AxisCoordinate[];
-    // (undocumented)
-    glyph: EditorGlyph | null;
+    glyphs: EditorGlyph[];
     // (undocumented)
     route: string;
     // (undocumented)

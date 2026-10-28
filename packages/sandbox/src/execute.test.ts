@@ -60,12 +60,15 @@ const capabilities: ShiftCapabilities = {
         sessionId: "session-a",
         mode: "workspace",
         route: "/editor/glyph-a",
-        glyph: {
-          glyphId: asGlyphId("glyph-a"),
-          name: "A",
-          nodeId: asNodeId("node-a"),
-          sourceId: asSourceId("source-a"),
-        },
+        glyphs: [
+          {
+            glyphId: asGlyphId("glyph-a"),
+            name: "A",
+            nodeId: asNodeId("node-a"),
+            sourceId: asSourceId("source-a"),
+            edited: true,
+          },
+        ],
         activeSourceId: asSourceId("source-a"),
         editingSourceIds: [asSourceId("source-a")],
         externalLocation: [],
@@ -86,6 +89,7 @@ const capabilities: ShiftCapabilities = {
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       });
@@ -261,7 +265,7 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
 
     expect(result).toMatchObject({
       fontRevision: FONT_REVISION,
-      value: { windowId: 7, glyph: { name: "A" }, selectionIds: ["point-a"] },
+      value: { windowId: 7, glyphs: [{ name: "A" }], selectionIds: ["point-a"] },
     });
   });
 
@@ -433,6 +437,7 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       })),

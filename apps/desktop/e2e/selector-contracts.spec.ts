@@ -38,7 +38,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await expect(glyphCatalogCanvas(page)).toBeAttached();
 
   // A glyph's layer read without a source is its layer at the default source.
-  const defaultSourceId = (await editor.layerOf("A")).sourceId;
+  const defaultSourceId = (await editor.sourceLayer("A")).sourceId;
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 

@@ -77,12 +77,15 @@ export interface AxisCoordinate {
   value: number;
 }
 
-/** Glyph occurrence currently placed in the editor, when a glyph route is open. */
+/** One glyph the editor is working on: a glyph node on the canvas and the glyph it shows. */
 export interface EditorGlyph {
   glyphId: GlyphId;
   name: string;
   nodeId: NodeId;
+  /** The source whose layer the node shows; between sources, the last one it showed. */
   sourceId: SourceId;
+  /** Whether the glyph is entered for editing, rather than only placed on the canvas. */
+  edited: boolean;
 }
 
 /** Active editor tool and its published state discriminator. */
@@ -94,7 +97,12 @@ export interface EditorTool {
 /** Renderer-owned facts for one live Shift window. */
 export interface EditorView {
   route: string;
-  glyph: EditorGlyph | null;
+  /**
+   * The glyphs the editor is working on, in canvas order: those being edited,
+   * or, with none entered (as in Text, Spacing, Kerning, and Hand), every
+   * glyph placed on the canvas. Empty when no glyph is on the canvas.
+   */
+  glyphs: EditorGlyph[];
   activeSourceId: SourceId | null;
   editingSourceIds: SourceId[];
   externalLocation: AxisCoordinate[];

@@ -99,6 +99,7 @@ import type { EditorRenderTheme } from "./rendering/Theme";
 import type { CameraTransform } from "./managers";
 import type { DebugOverlays } from "../../types/uiState";
 import { Editing } from "./Editing";
+import { GlyphSubjects } from "./GlyphSubjects";
 import { Selection } from "./Selection";
 import { EditorHistory } from "./history/EditorHistory";
 import type { Font } from "../model/Font";
@@ -192,6 +193,7 @@ export class Editor {
    */
   readonly selection: Selection;
   readonly editing: Editing;
+  readonly #glyphSubjects: GlyphSubjects;
   readonly history: EditorHistory;
   readonly hover: Hover;
   /** Builds the snap targets tools use while moving or placing glyph points. */
@@ -318,6 +320,7 @@ export class Editor {
 
     this.selection = new Selection(this.#store);
     this.editing = new Editing(this.#store);
+    this.#glyphSubjects = new GlyphSubjects(this);
     this.history = new EditorHistory(
       this,
       this.#store,
@@ -490,6 +493,41 @@ export class Editor {
    */
   public get toolIdCell(): Signal<ToolName | null> {
     return this.#toolId;
+  }
+
+  /**
+   * The glyph nodes the sidebar, metric edits, and single-glyph gestures act
+   * on: those the selection belongs to, otherwise those being edited,
+   * otherwise every glyph node in the scene.
+   *
+   * @remarks
+   * A handle from one glyph and a point from another make both the subject.
+   */
+  public get subjectGlyphNodesCell(): Signal<readonly GlyphNode[]> {
+    return this.#glyphSubjects.nodesCell;
+  }
+
+  /** The glyphs the subject glyph nodes show; see {@link subjectGlyphNodesCell}. */
+  public get subjectGlyphIdsCell(): Signal<readonly GlyphId[]> {
+    return this.#glyphSubjects.glyphIdsCell;
+  }
+
+  /**
+   * The one subject glyph node, for what acts on exactly one glyph: drawing,
+   * pasting, adding a component or an anchor, the metric fields.
+   *
+   * @remarks
+   * Null with no glyph node, and with several subjects, such as two edited
+   * glyphs and nothing selected; a gesture then has no target rather than
+   * guessing one.
+   */
+  public get soleSubjectGlyphNodeCell(): Signal<GlyphNode | null> {
+    return this.#glyphSubjects.soleNodeCell;
+  }
+
+  /** Returns the one subject glyph node now; see {@link soleSubjectGlyphNodeCell}. */
+  public soleSubjectGlyphNode(): GlyphNode | null {
+    return this.#glyphSubjects.soleNodeCell.peek();
   }
 
   /**
@@ -670,10 +708,10 @@ export class Editor {
     const activeSourceId = this.activeSourceId;
     if (this.sessionMode !== "workspace" || !activeSourceId) return null;
 
-    const node = this.scene.only("glyph");
-    if (!node) return null;
+    const glyphId = this.#soleSubjectGlyphId();
+    if (!glyphId) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(glyphId);
     if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
@@ -711,10 +749,10 @@ export class Editor {
     // Load the base first so the component draws its outline as soon as it is added.
     await this.font.loadGlyph(baseGlyphId);
 
-    const node = this.scene.only("glyph");
-    if (!node || node.glyphId === baseGlyphId) return null;
+    const glyphId = this.#soleSubjectGlyphId();
+    if (!glyphId || glyphId === baseGlyphId) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(glyphId);
     if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
@@ -1158,13 +1196,19 @@ export class Editor {
     return this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation) ?? null;
   }
 
-  /** The active source's layer of the scene's one glyph node; null without exactly one. */
+  /** The glyph the one subject glyph node shows; null without exactly one. */
+  #soleSubjectGlyphId(): GlyphId | null {
+    const node = this.soleSubjectGlyphNode();
+    return node ? this.glyphIdOf(node) : null;
+  }
+
+  /** The active source's layer of the one subject glyph node; null without exactly one. */
   #soleActiveLayer(): GlyphLayer | null {
     const sourceId = this.activeSourceId;
-    const node = this.scene.only("glyph");
+    const node = this.soleSubjectGlyphNode();
     if (!sourceId || !node) return null;
 
-    return this.layerForGlyph(node.glyphId, sourceId);
+    return this.layerOf(node, sourceId);
   }
 
   /**
@@ -1191,7 +1235,38 @@ export class Editor {
   editableLayer(node: GlyphNode): GlyphLayer | null {
     if (node.sourceId !== this.#activeSourceIdCell.peek()) return null;
 
-    return this.layerForGlyph(node.glyphId, node.sourceId);
+    return this.layerOf(node, node.sourceId);
+  }
+
+  /**
+   * Returns the glyph a glyph node shows.
+   *
+   * @remarks
+   * Ask this rather than reading the node: what a node shows is the node
+   * definition's answer, and a node placed in a run may come to show another
+   * glyph as the run reshapes.
+   *
+   * @returns null when the node shows no glyph.
+   */
+  glyphIdOf(node: GlyphNode): GlyphId | null {
+    return node.glyphId;
+  }
+
+  /** Returns the loaded glyph a node shows; null when it shows none or it is not loaded. */
+  glyphOf(node: GlyphNode): Glyph | null {
+    const glyphId = this.glyphIdOf(node);
+    return glyphId ? this.#fontStore.glyphForId(glyphId) : null;
+  }
+
+  /**
+   * Returns the layer at a source of the glyph a node shows.
+   *
+   * @param sourceId - The source to read; a node's own source is `node.sourceId`.
+   * Use {@link editableLayer} when the layer must be one edits may target.
+   * @returns null when the glyph is not loaded or has no layer at that source.
+   */
+  layerOf(node: GlyphNode, sourceId: SourceId): GlyphLayer | null {
+    return this.glyphOf(node)?.layerForSource(sourceId) ?? null;
   }
 
   /**
@@ -1557,21 +1632,24 @@ export class Editor {
     });
   }
 
+  /** Gives each subject glyph a layer at `sourceId`, from its default layer, and shows it. */
   #ensureCurrentGlyphLayer(sourceId: SourceId, valuesFor: (glyph: Glyph) => Float64Array): void {
-    const node = this.scene.only("glyph");
-    if (!node) return;
+    // Two nodes can show the same glyph; give it the layer once.
+    const materialized = new Set<GlyphId>();
+    for (const node of this.subjectGlyphNodesCell.peek()) {
+      const glyph = this.glyphOf(node);
+      if (!glyph) continue;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
-    if (!glyph) return;
+      if (!glyph.layerForSource(sourceId) && !materialized.has(glyph.id)) {
+        materialized.add(glyph.id);
+        const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
+        if (!defaultLayer) continue;
 
-    if (!glyph.layerForSource(sourceId)) {
-      const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
-      if (!defaultLayer) return;
+        this.font.materializeGlyphLayer(glyph.id, sourceId, defaultLayer.id, valuesFor(glyph));
+      }
 
-      this.font.materializeGlyphLayer(node.glyphId, sourceId, defaultLayer.id, valuesFor(glyph));
+      this.scene.updateNode({ id: node.id, sourceId });
     }
-
-    this.scene.updateNode({ id: node.id, sourceId });
   }
 
   /**
@@ -2264,7 +2342,7 @@ export class Editor {
    * @returns `false` when there is no single edited glyph at an active source.
    */
   public addAnchorAtPointer(): boolean {
-    const node = this.scene.only("glyph");
+    const node = this.soleSubjectGlyphNode();
     if (!node) return false;
     return this.addAnchorAt(this.toLocal(node, this.getMousePosition()));
   }
@@ -2283,8 +2361,8 @@ export class Editor {
    */
   public addAnchorAt(position: Point2D): boolean {
     const activeSourceId = this.activeSourceId;
-    const node = this.scene.only("glyph");
-    const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
+    const glyphId = this.#soleSubjectGlyphId();
+    const layers = glyphId ? this.#multiSourceEditing.layersFor(glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
     const name = this.font.newAnchorName(layers.map((layer) => layer.layerId));

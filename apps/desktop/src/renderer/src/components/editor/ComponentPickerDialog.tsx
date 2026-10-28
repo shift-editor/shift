@@ -61,7 +61,8 @@ function OpenComponentPickerDialog({ onOpenChange }: OpenComponentPickerDialogPr
   const [pendingCreation, setPendingCreation] = useState<ComponentCandidate | null>(null);
 
   const addingComponentRef = useRef(false);
-  const currentGlyphId = editor.scene.only("glyph")?.glyphId ?? null;
+  const subjectNode = useSignalState(editor.soleSubjectGlyphNodeCell);
+  const currentGlyphId = subjectNode ? editor.glyphIdOf(subjectNode) : null;
   const candidates = useMemo(
     () =>
       currentGlyphId
