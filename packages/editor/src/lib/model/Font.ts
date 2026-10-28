@@ -67,7 +67,13 @@ import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import { setKerningValuesIntent, type Kerning, type KerningPairPosition } from "./Kerning";
+import {
+  isGroupSide,
+  setKerningValuesIntent,
+  type Kerning,
+  type KerningPairPosition,
+  type KerningSideId,
+} from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
 import {
   designAxisLocationFromLocation,
@@ -220,6 +226,9 @@ interface ComponentGlyphs {
 const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
 };
+
+/** Where a pair's value comes from at a source that authors no pair for it; see {@link Font.missingPairOrigin}. */
+export type MissingKerningOrigin = "unkerned" | "interpolated";
 
 /** One page of a font's glyph directory, in font order. */
 export interface GlyphDirectoryPage {
@@ -1765,6 +1774,25 @@ export class Font {
       };
     });
     return this.#kerningCell.peek().between(pairs, place);
+  }
+
+  /**
+   * Where a pair's value at a source comes from when that source authors no
+   * pair for it.
+   *
+   * @returns `unkerned` when the source authors pairs of its own, or the font
+   * has one source, so the missing pair kerns zero; `interpolated` when the
+   * value blends the sources that do author kerning.
+   */
+  missingPairOrigin(sourceId: SourceId): MissingKerningOrigin {
+    const ownsKerning = this.#kerningCell.peek().authors(sourceId) || this.sources.length === 1;
+    return ownsKerning ? "unkerned" : "interpolated";
+  }
+
+  /** A kerning side as people know it: the group's name, or the glyph's; null when unknown. */
+  kerningSideName(side: KerningSideId): string | null {
+    if (isGroupSide(side)) return this.#kerningCell.peek().groups.group(side)?.name ?? null;
+    return this.glyphName(side);
   }
 
   /**

@@ -1,9 +1,16 @@
-export { Font } from "./lib/model/Font";
+export { Font, type GlyphDirectoryPage, type MissingKerningOrigin } from "./lib/model/Font";
 export { sourceMetricValue, withSourceMetricValue } from "./lib/model/sourceMetrics";
-export { isGroupSide, kerningValueEdit, unkerned, wireSide } from "./lib/model/Kerning";
+export {
+  isGroupSide,
+  kerningRule,
+  kerningValueEdit,
+  unkerned,
+  wireSide,
+} from "./lib/model/Kerning";
 export type {
   Kerning,
   KerningPairPosition,
+  KerningPairRule,
   KerningPairSides,
   KerningSideId,
   ResolvedKerning,

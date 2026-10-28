@@ -1,7 +1,6 @@
 import { useSignalState } from "@shift/editor/signals";
 import { KerningTool, type KerningPair } from "@shift/editor/tools";
 import {
-  isGroupSide,
   kerningValueEdit,
   type Kerning,
   type KerningPairPosition,
@@ -225,8 +224,8 @@ const MasterKernRow = ({
           <Tooltip
             content={
               <>
-                Remove {sideLabel(editor, kerning, applied.first)} /{" "}
-                {sideLabel(editor, kerning, applied.second)} at this master
+                Remove {sideLabel(editor, applied.first)} / {sideLabel(editor, applied.second)} at
+                this master
               </>
             }
           >
@@ -253,7 +252,6 @@ const MasterKernRow = ({
 };
 
 /** A pair side as people know it: a group's name, or a glyph's. */
-function sideLabel(editor: Editor, kerning: Kerning, side: KerningSideId): string {
-  if (isGroupSide(side)) return kerning.groups.group(side)?.name ?? side;
-  return editor.font.glyphName(side) ?? side;
+function sideLabel(editor: Editor, side: KerningSideId): string {
+  return editor.font.kerningSideName(side) ?? side;
 }

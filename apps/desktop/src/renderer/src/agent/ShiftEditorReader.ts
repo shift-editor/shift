@@ -299,10 +299,7 @@ export class ShiftEditorReader {
     const side = (position: KerningPairPosition): KerningPairSideView => {
       const id = editable![position];
       const lock = pair.lock(editor, position);
-      const name = isGroupSide(id)
-        ? editor.font.kerning.groups.group(id)?.name
-        : editor.font.glyphName(id);
-      return { name: name ?? "", group: isGroupSide(id), ...lock };
+      return { name: editor.font.kerningSideName(id) ?? "", group: isGroupSide(id), ...lock };
     };
     return {
       firstItemId: pair.gap.left.itemId,
