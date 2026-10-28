@@ -125,23 +125,70 @@ describe("shift/no-page-evaluate-in-specs", () => {
   const evaluations = [
     "declare const page: any;",
     "declare const electronApp: any;",
-    "declare const canvas: any;",
     "await page.evaluate(() => window.shift);",
     "await electronApp.evaluate(({ app }) => app.getName());",
-    "await canvas.evaluate((element) => element.scrollTop);",
-    "await page.locator('li').evaluateAll((items) => items.length);",
     "await page.evaluateHandle(() => window);",
+    "await page.waitForFunction(() => window.shift);",
     "await page.waitForURL(/home/);",
   ].join("\n");
 
-  it("flags evaluate calls on any receiver in a desktop E2E spec", () => {
+  it("flags page, main-process and wait-for-function evaluations in a desktop E2E spec", () => {
     const lines = reportedLines(
       "no-page-evaluate-in-specs",
       evaluations,
       "apps/desktop/e2e/editor.spec.ts",
     );
 
-    assert.deepEqual(lines, [4, 5, 6, 7, 8]);
+    assert.deepEqual(lines, [3, 4, 5, 6]);
+  });
+
+  it("allows evaluations on locators, element handles and window handles", () => {
+    const lines = reportedLines(
+      "no-page-evaluate-in-specs",
+      [
+        "import type { Locator, ElementHandle } from '@playwright/test';",
+        "declare const page: any;",
+        "declare const electronApp: any;",
+        "declare function helperCanvas(page: any): Locator;",
+        "async function slider(page: any): Promise<Locator> { return page.getByRole('slider'); }",
+        "await page.locator('#canvas').evaluate((element) => element.scrollTop);",
+        "await page.getByRole('list').first().evaluate((element) => element.id);",
+        "await page.locator('li').evaluateAll((items) => items.length);",
+        "const grid = page.getByRole('grid');",
+        "const viewport = grid;",
+        "await viewport.evaluate((element) => element.scrollTop);",
+        "const annotated: Locator = helperCanvas(page);",
+        "await annotated.evaluate((element) => element.scrollTop);",
+        "await (await slider(page)).evaluate((element) => element.value);",
+        "async function focused(element: ElementHandle) { return element.evaluate((node) => node === document.activeElement); }",
+        "const window = await electronApp.browserWindow(page);",
+        "await window.evaluate((browserWindow) => browserWindow.isMaximized());",
+        "await (await page.$('body')).evaluateHandle((body) => body);",
+      ].join("\n"),
+      "apps/desktop/e2e/editor.spec.ts",
+    );
+
+    assert.deepEqual(lines, []);
+  });
+
+  it("flags receivers it cannot prove are element-side", () => {
+    const lines = reportedLines(
+      "no-page-evaluate-in-specs",
+      [
+        "import { glyphCatalogCanvas } from './fixtures/appLocators';",
+        "declare const page: any;",
+        "declare const editor: any;",
+        "const workspacePage = page;",
+        "await workspacePage.evaluate(() => window.shift);",
+        "const canvas = glyphCatalogCanvas(page);",
+        "await canvas.evaluate((element) => element.scrollTop);",
+        "await editor.page.evaluate(() => window.shift);",
+        "await page.locator('#canvas').waitForFunction(() => true);",
+      ].join("\n"),
+      "apps/desktop/e2e/editor.spec.ts",
+    );
+
+    assert.deepEqual(lines, [5, 7, 8, 9]);
   });
 
   it("allows evaluations in E2E fixtures and outside desktop E2E specs", () => {

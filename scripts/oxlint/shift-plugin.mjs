@@ -67,8 +67,95 @@ function brandsWithHelpers() {
   return brandHelperNames;
 }
 
-/** Playwright calls that run a function inside the page, a main process or an element. */
-const EVALUATE_METHODS = new Set(["evaluate", "evaluateAll", "evaluateHandle"]);
+/** Playwright calls that run a function inside the page or the main process. */
+const EVALUATE_METHODS = new Set(["evaluate", "evaluateHandle", "waitForFunction"]);
+
+/** Playwright calls that return a `Locator` or `ElementHandle`. */
+const ELEMENT_METHODS = new Set([
+  "$",
+  "and",
+  "filter",
+  "first",
+  "getByAltText",
+  "getByLabel",
+  "getByPlaceholder",
+  "getByRole",
+  "getByTestId",
+  "getByText",
+  "getByTitle",
+  "last",
+  "locator",
+  "nth",
+  "or",
+  "waitForSelector",
+]);
+
+/** Types whose `evaluate` runs on one DOM element or one native window, not on the app. */
+const ELEMENT_TYPES = new Set(["ElementHandle", "Locator"]);
+
+/** The name a type annotation refers to, looking through `Promise<T>`. */
+function annotatedTypeName(annotation) {
+  const type = annotation?.typeAnnotation;
+  if (type?.type !== "TSTypeReference") return undefined;
+  const name = type.typeName?.name;
+  if (name !== "Promise") return name;
+  const inner = (type.typeArguments ?? type.typeParameters)?.params?.[0];
+  return annotatedTypeName({ typeAnnotation: inner });
+}
+
+/** The first definition of `identifier` in scope, or `undefined` for a global. */
+function definitionOf(context, identifier) {
+  for (let scope = context.sourceCode.getScope(identifier); scope; scope = scope.upper) {
+    const variable = scope.set.get(identifier.name);
+    if (variable) return variable.defs[0];
+  }
+  return undefined;
+}
+
+/**
+ * True when `expression` is provably a locator, an element handle or an Electron
+ * `BrowserWindow` handle, whose `evaluate` reads one element or window rather than the app.
+ *
+ * Proof is syntactic: a locator call (`page.getByRole(…)`), `electronApp.browserWindow(…)`, a
+ * binding annotated `Locator` or `ElementHandle`, a `const` initialised from one of those, or a
+ * same-file function whose return type is one. A locator returned by an imported helper cannot be
+ * seen, so a spec annotates the binding (`const grid: Locator = glyphCatalogCanvas(page)`).
+ */
+function isElementSide(context, expression, seen = new Set()) {
+  let node = expression;
+  while (
+    node?.type === "AwaitExpression" ||
+    node?.type === "ChainExpression" ||
+    node?.type === "TSNonNullExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    node = node.type === "AwaitExpression" ? node.argument : node.expression;
+  }
+
+  if (node?.type === "CallExpression") {
+    const callee = node.callee;
+    if (callee.type === "MemberExpression" && !callee.computed) {
+      return ELEMENT_METHODS.has(callee.property.name) || callee.property.name === "browserWindow";
+    }
+    if (callee.type !== "Identifier") return false;
+    const definition = definitionOf(context, callee);
+    return (
+      definition?.type === "FunctionName" &&
+      ELEMENT_TYPES.has(annotatedTypeName(definition.node.returnType))
+    );
+  }
+
+  if (node?.type !== "Identifier" || seen.has(node.name)) return false;
+  seen.add(node.name);
+  const definition = definitionOf(context, node);
+  if (!definition) return false;
+  if (ELEMENT_TYPES.has(annotatedTypeName(definition.name.typeAnnotation))) return true;
+  return (
+    definition.type === "Variable" &&
+    definition.node.init != null &&
+    isElementSide(context, definition.node.init, seen)
+  );
+}
 
 function isAllowedFile(filename, allowList) {
   // oxlint may pass relative or absolute paths
@@ -1715,10 +1802,16 @@ export default {
      *
      * A spec reads the app through `EditorDriver` (whose reads are the agent
      * read API, the same as the vitest test surface) and acts through the
-     * user surface. `page.evaluate`, `electronApp.evaluate` and their
-     * relatives reach into renderer or main internals instead, so a refactor
-     * breaks the spec while the behaviour holds. Fixtures under `e2e/fixtures/`
-     * own the few evaluations the driver needs.
+     * user surface. `page.evaluate`, `page.evaluateHandle`,
+     * `page.waitForFunction` and `electronApp.evaluate` reach into renderer or
+     * main internals instead, so a refactor breaks the spec while the
+     * behaviour holds. Fixtures under `e2e/fixtures/` own the few evaluations
+     * the driver needs.
+     *
+     * Evaluating on a locator, an element handle or a `BrowserWindow` handle
+     * reads DOM or window state (`scrollTop`, focus, bounds) and is allowed,
+     * as is `evaluateAll`. Without type information the rule flags any
+     * receiver it cannot prove is one of those (see `isElementSide`).
      */
     "no-page-evaluate-in-specs": {
       meta: {
@@ -1742,6 +1835,7 @@ export default {
 
             const method = callee.property?.name;
             if (!EVALUATE_METHODS.has(method)) return;
+            if (method !== "waitForFunction" && isElementSide(context, callee.object)) return;
 
             context.report({ node, messageId: "useDriver", data: { method } });
           },
