@@ -1,10 +1,12 @@
 import type {
   AuthoredLayer,
   AxisCoordinate,
+  AxisSelector,
   FontOverview,
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  InstanceSelector,
   LayerAppearance,
   LayerOverlays,
   LayerSelector,
@@ -15,7 +17,14 @@ import type {
   ShiftSessionMode,
   SourceSelector,
 } from "@shift/runtime";
-import { asGlyphId, type GlyphId, type GlyphName, type Source } from "@shift/types";
+import {
+  asGlyphId,
+  type Axis,
+  type GlyphId,
+  type GlyphName,
+  type NamedInstance,
+  type Source,
+} from "@shift/types";
 import type { Font } from "@shift/editor/model";
 import { ShiftLayer } from "./ShiftLayer";
 import { ShiftSelectors } from "./ShiftSelectors";
@@ -134,12 +143,46 @@ export class ShiftFontReader {
   }
 
   /**
-   * The source named `name`, or null when the font has none.
+   * The source `selector` names, or null when the font has none.
    *
    * @throws {Error} when several sources share the name.
    */
-  sourceNamed(name: string): Source | null {
-    return this.#font.sourceNamed(name);
+  source(selector: SourceSelector): Source | null {
+    const font = this.#font;
+    return selector.name !== undefined
+      ? font.sourceNamed(selector.name)
+      : font.source(selector.sourceId);
+  }
+
+  /**
+   * The named instance `selector` names, as `instances.get` returns it.
+   *
+   * @throws {Error} when the font has no such instance, or several instances share the name.
+   */
+  getInstance(selector: InstanceSelector): NamedInstance {
+    const instance = this.instance(selector);
+    if (!instance) {
+      throw new Error(`Instance ${selector.name ?? selector.instanceId} is not in this font`);
+    }
+    return instance;
+  }
+
+  /**
+   * The named instance `selector` names, or null when the font has none.
+   *
+   * @throws {Error} when several instances share the name.
+   */
+  instance(selector: InstanceSelector): NamedInstance | null {
+    const font = this.#font;
+    return selector.name !== undefined
+      ? font.namedInstanceNamed(selector.name)
+      : font.namedInstance(selector.instanceId);
+  }
+
+  /** The axis `selector` names, by id or tag, or null when the font has none. */
+  axis(selector: AxisSelector): Axis | null {
+    const font = this.#font;
+    return selector.tag !== undefined ? font.axisTagged(selector.tag) : font.axis(selector.axisId);
   }
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {

@@ -17,8 +17,9 @@ import type {
   ResolvedLocation,
   ShiftObservation,
   SourceSelector,
+  InstanceSelector,
 } from "@shift/runtime";
-import type { GlyphId, Source } from "@shift/types";
+import type { GlyphId, NamedInstance, Source } from "@shift/types";
 import type { MessagePortMain } from "electron";
 import type { AgentCallMap, AgentEventMap, EditorCaptureBounds } from "../../shared/agent/protocol";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
@@ -91,6 +92,13 @@ export class AgentClient {
     ifFontRevision?: FontRevision,
   ): Promise<ShiftObservation<Source>> {
     return this.#call("sources.get", { selector, ifFontRevision });
+  }
+
+  getInstance(
+    selector: InstanceSelector,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<NamedInstance>> {
+    return this.#call("instances.get", { selector, ifFontRevision });
   }
 
   resolveGlyphs(

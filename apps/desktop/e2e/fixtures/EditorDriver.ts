@@ -15,6 +15,8 @@ import type {
   GlyphName,
   KerningPosition,
   PointId,
+  Axis,
+  NamedInstance,
   Source,
   Unicode,
 } from "@shift/types";
@@ -27,9 +29,12 @@ import type {
 import type {
   CanvasHandle,
   CanvasText,
+  AxisRef,
   DocumentSaveState,
   EditorActions,
   EditorReads,
+  InstanceRef,
+  SourceRef,
   EditorViewState,
   FontSummary,
   GlyphListing,
@@ -858,8 +863,17 @@ export class EditorDriver implements EditorReads, EditorActions {
     return this.#read("font", "glyphNamed", name as GlyphName);
   }
 
-  async source(name: string): Promise<Source | null> {
-    return this.#read("font", "sourceNamed", name);
+  async source(source: SourceRef): Promise<Source | null> {
+    return this.#read("font", "source", typeof source === "string" ? { name: source } : source);
+  }
+
+  async instance(instance: InstanceRef): Promise<NamedInstance | null> {
+    const selector = typeof instance === "string" ? { name: instance } : instance;
+    return this.#read("font", "instance", selector);
+  }
+
+  async axis(axis: AxisRef): Promise<Axis | null> {
+    return this.#read("font", "axis", typeof axis === "string" ? { tag: axis } : axis);
   }
 
   async defaultSource(): Promise<Source> {

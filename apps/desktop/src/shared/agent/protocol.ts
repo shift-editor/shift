@@ -23,8 +23,9 @@ import type {
   ShiftObservation,
   ShiftReadInput,
   SourceSelector,
+  InstanceSelector,
 } from "@shift/runtime";
-import type { GlyphId, KerningPosition, Source } from "@shift/types";
+import type { GlyphId, KerningPosition, NamedInstance, Source } from "@shift/types";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -63,6 +64,10 @@ export type AgentCallMap = {
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<GlyphPage>;
+  };
+  "instances.get": {
+    request: { selector: InstanceSelector; ifFontRevision?: FontRevision };
+    response: ShiftObservation<NamedInstance>;
   };
   "sources.get": {
     request: { selector: SourceSelector; ifFontRevision?: FontRevision };

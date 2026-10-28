@@ -50,9 +50,7 @@ async function prepareFourSourceGlyph(
   ] as const) {
     const sourceId = await createSource(page, name, { [axisId]: value });
     await editor.waitForIdle();
-    await expect
-      .poll(async () => (await editor.fontOverview()).sources.some(({ id }) => id === sourceId))
-      .toBe(true);
+    await expect.poll(() => editor.source({ sourceId })).not.toBeNull();
     sourceIds.push(sourceId);
   }
 

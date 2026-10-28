@@ -4,6 +4,7 @@ import type { ExternalAxisLocation } from "@shift/editor/types";
 import type { MatModel, Point2D } from "@shift/geo";
 import type {
   GlyphName,
+  NamedInstanceId,
   PointId,
   SegmentId,
   SelectableId,
@@ -454,7 +455,7 @@ export async function handleSnapDrag(page: Page): Promise<{
 }
 
 /** The id of the font's first named instance that no source sits exactly at, or null. */
-export async function instanceBetweenSources(page: Page): Promise<string | null> {
+export async function instanceBetweenSources(page: Page): Promise<NamedInstanceId | null> {
   return page.evaluate(() => {
     const font = window.shiftSession!.font;
     return (

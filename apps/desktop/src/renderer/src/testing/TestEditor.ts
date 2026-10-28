@@ -54,6 +54,7 @@ import {
   type MetricId,
   type PointId,
   type SelectableId,
+  type NamedInstance,
   type Source,
   type SourceId,
   type SourceMetrics,
@@ -106,7 +107,7 @@ import type {
   EditorTestSurface,
   Modifiers,
 } from "./surface";
-import type { DocumentSaveState, Outline } from "./reads";
+import type { AxisRef, DocumentSaveState, InstanceRef, Outline, SourceRef } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -1276,8 +1277,16 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.font.getFont();
   }
 
-  source(name: string): Source | null {
-    return this.#reads.font.sourceNamed(name);
+  source(source: SourceRef): Source | null {
+    return this.#reads.font.source(typeof source === "string" ? { name: source } : source);
+  }
+
+  instance(instance: InstanceRef): NamedInstance | null {
+    return this.#reads.font.instance(typeof instance === "string" ? { name: instance } : instance);
+  }
+
+  axis(axis: AxisRef): Axis | null {
+    return this.#reads.font.axis(typeof axis === "string" ? { tag: axis } : axis);
   }
 
   defaultSource(): Source {

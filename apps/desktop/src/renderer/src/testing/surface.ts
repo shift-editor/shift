@@ -31,6 +31,8 @@ import type {
   KerningPosition,
   PointId,
   SelectableId,
+  Axis,
+  NamedInstance,
   Source,
   SourceMetrics,
   Unicode,
@@ -43,8 +45,11 @@ import type {
   CanvasHandle,
   CanvasText,
   DocumentSaveState,
+  AxisRef,
   EditorActions,
   EditorReads,
+  InstanceRef,
+  SourceRef,
   EditorViewState,
   FontSummary,
   GlyphListing,
@@ -388,7 +393,9 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The font's info, metrics, axes, sources and instances, as agents read them. */
   fontOverview(): FontSummary;
   /** The font's source named `name`, or null. */
-  source(name: string): Source | null;
+  source(source: SourceRef): Source | null;
+  instance(instance: InstanceRef): NamedInstance | null;
+  axis(axis: AxisRef): Axis | null;
   /** The languages the font tracks; null when none were ever set. Test-only: not agent data yet. */
   languages(): readonly string[] | null;
   /** The current location resolved: its design coordinates, the source there, and the metrics. */

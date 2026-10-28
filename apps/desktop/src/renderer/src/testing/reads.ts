@@ -30,7 +30,16 @@ import type {
   SpacingToolView,
   TextRunView,
 } from "@shift/runtime";
-import type { KerningPosition, PointId, Source } from "@shift/types";
+import type {
+  Axis,
+  AxisId,
+  KerningPosition,
+  NamedInstance,
+  NamedInstanceId,
+  PointId,
+  Source,
+  SourceId,
+} from "@shift/types";
 import type { GlyphOutlineTarget } from "@shift/editor/types";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 
@@ -60,6 +69,13 @@ export type SourceKerning = KerningMasterValue;
 export type KerningGroup = KerningGroupSummary;
 /** One glyph's authored layer at one source, as agents read it with `layers.get`. */
 export type SourceLayer = AuthoredLayer;
+/** A source by its exact name, or by stable id. */
+export type SourceRef = string | { readonly sourceId: SourceId };
+/** A named instance by its exact name, or by stable id. */
+export type InstanceRef = string | { readonly instanceId: NamedInstanceId };
+/** An axis by its tag, or by stable id. */
+export type AxisRef = string | { readonly axisId: AxisId };
+
 /** A glyph's identity and the layer each source holds. */
 export type GlyphListing = GlyphSummary;
 /** The font's info, metrics, axes, sources and instances. */
@@ -110,8 +126,12 @@ export interface EditorReads {
   glyphNamed(name: string): Read<GlyphListing | null>;
   /** The authored layer of the glyph named `glyph` at the source named `source`, the default source when omitted. */
   layerOf(glyph: string, source?: string): Promise<SourceLayer>;
-  /** The font's source named `name`, or null when it has none. */
-  source(name: string): Read<Source | null>;
+  /** The font's source by name or id, or null when it has none. */
+  source(source: SourceRef): Read<Source | null>;
+  /** The font's named instance by name or id, or null when it has none. */
+  instance(instance: InstanceRef): Read<NamedInstance | null>;
+  /** The font's axis by tag or id, or null when it has none. */
+  axis(axis: AxisRef): Read<Axis | null>;
   /** The font's default source: where every axis sits at its default. */
   defaultSource(): Read<Source>;
   /**

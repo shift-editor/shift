@@ -1,7 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
-import type { EditorDriver } from "./fixtures/EditorDriver";
 import { createAxis, createNamedInstance, createSource } from "./fixtures/fontSetup";
 
 interface VariableFixture {
@@ -42,11 +41,6 @@ async function createVariableFixture(page: Page): Promise<VariableFixture> {
   return { axisId, sourceId, instanceId };
 }
 
-/** The axis with id `axisId`, as agents read the font; undefined when it is gone. */
-async function axisWithId(editor: EditorDriver, axisId: string) {
-  return (await editor.fontOverview()).axes.find((axis) => axis.id === axisId);
-}
-
 test.describe("variable-font authoring controls", () => {
   test("creates an axis, source, and named instance through Settings", async ({ page, editor }) => {
     await expect.poll(async () => (await editor.fontOverview()).axes.length).toBe(0);
@@ -61,7 +55,9 @@ test.describe("variable-font authoring controls", () => {
     await axisName.press("Tab");
     const axisId = (await editor.fontOverview()).axes[0]?.id;
     if (!axisId) throw new Error("Expected created axis");
-    await expect.poll(async () => (await axisWithId(editor, axisId))?.name).toBe("Weight Class");
+    await expect
+      .poll(async () => (await editor.axis({ axisId: axisId }))?.name)
+      .toBe("Weight Class");
 
     await selectCategory(dialog, "Sources");
     const defaultSourceName = (await editor.fontOverview()).sources[0]?.name;
@@ -88,8 +84,7 @@ test.describe("variable-font authoring controls", () => {
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(dialog.getByRole("button", { name: "Black", exact: true })).toBeVisible();
 
-    const { axes, instances } = await editor.fontOverview();
-    const axis = axes.find(({ id: candidateId }) => candidateId === axisId);
+    const axis = await editor.axis({ axisId });
     const authored = {
       axis: axis && {
         tag: axis.tag,
@@ -99,7 +94,7 @@ test.describe("variable-font authoring controls", () => {
         maximum: axis.maximum,
       },
       source: (await editor.source("Bold"))?.location.values[axisId],
-      instance: instances.find(({ name }) => name === "Black")?.location.values[axisId],
+      instance: (await editor.instance("Black"))?.location.values[axisId],
       dirty: (await editor.documentState())?.dirty,
     };
     expect(authored).toEqual({
@@ -125,7 +120,7 @@ test.describe("variable-font authoring controls", () => {
     await axisName.fill("Optical Scale");
     await axisName.press("Tab");
     await expect
-      .poll(async () => (await axisWithId(editor, fixture.axisId))?.name)
+      .poll(async () => (await editor.axis({ axisId: fixture.axisId }))?.name)
       .toBe("Optical Scale");
 
     await selectCategory(dialog, "Sources");
@@ -156,29 +151,22 @@ test.describe("variable-font authoring controls", () => {
     await expect
       .poll(
         async () =>
-          (await editor.fontOverview()).instances.find(({ id }) => id === fixture.instanceId)
-            ?.location.values[fixture.axisId],
+          (await editor.instance({ instanceId: fixture.instanceId }))?.location.values[
+            fixture.axisId
+          ],
       )
       .toBe(750);
 
     await dialog.getByLabel("Delete Display Black").click();
-    await expect
-      .poll(async () =>
-        (await editor.fontOverview()).instances.some(({ id }) => id === fixture.instanceId),
-      )
-      .toBe(false);
+    await expect.poll(() => editor.instance({ instanceId: fixture.instanceId })).toBeNull();
     await selectCategory(dialog, "Sources");
     await dialog.getByLabel("Delete Display Bold").click();
-    await expect
-      .poll(async () =>
-        (await editor.fontOverview()).sources.some(({ id }) => id === fixture.sourceId),
-      )
-      .toBe(false);
+    await expect.poll(() => editor.source({ sourceId: fixture.sourceId })).toBeNull();
 
     await selectCategory(dialog, "Axes");
     await dialog.getByLabel("Delete Optical Scale").click();
     await expect
-      .poll(async () => (await axisWithId(editor, fixture.axisId)) !== undefined)
+      .poll(async () => (await editor.axis({ axisId: fixture.axisId })) !== undefined)
       .toBe(false);
   });
 });

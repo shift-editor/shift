@@ -448,6 +448,26 @@ export type SourceSelector =
       name: string;
       sourceId?: never;
     };
+/** Select one named instance by stable ID or exact name, never by both. */
+export type InstanceSelector =
+  | {
+      instanceId: NamedInstanceId;
+      name?: never;
+    }
+  | {
+      name: string;
+      instanceId?: never;
+    };
+/** Select one axis by stable ID or tag, never by both. */
+export type AxisSelector =
+  | {
+      axisId: AxisId;
+      tag?: never;
+    }
+  | {
+      tag: string;
+      axisId?: never;
+    };
 /**
  * Select one authored layer by stable ID, or as a glyph's layer at a source,
  * never both. Without `source`, the glyph's layer at the default source.
@@ -616,6 +636,8 @@ export interface GlyphListInput extends ShiftTarget {
 export type GlyphGetInput = ShiftTarget & GlyphSelector;
 /** One source by stable id or exact name, never by both. */
 export type SourceGetInput = ShiftTarget & SourceSelector;
+/** One named instance by stable id or exact name, never by both. */
+export type InstanceGetInput = ShiftTarget & InstanceSelector;
 export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
@@ -753,6 +775,9 @@ export interface ShiftCapabilities {
   sources: {
     get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
   };
+  instances: {
+    get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
+  };
   layers: {
     get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
     resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
@@ -797,6 +822,9 @@ export interface ShiftRead {
   };
   sources: {
     get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
+  };
+  instances: {
+    get(input: ShiftReadInput<InstanceGetInput>): Promise<NamedInstance>;
   };
   layers: {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;

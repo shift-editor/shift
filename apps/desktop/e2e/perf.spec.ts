@@ -276,11 +276,7 @@ test.describe("Performance — 50K points", () => {
     const targetId = await createSource(page, "Benchmark Bold", { [axisId]: 900 });
     const sourceIds = { referenceId, targetId };
     await editor.waitForIdle();
-    await expect
-      .poll(async () =>
-        (await editor.fontOverview()).sources.some(({ id }) => id === sourceIds.targetId),
-      )
-      .toBe(true);
+    await expect.poll(() => editor.source({ sourceId: sourceIds.targetId })).not.toBeNull();
     await selectSourcesForEditing(page, [
       { sourceId: sourceIds.targetId },
       { sourceId: sourceIds.referenceId },

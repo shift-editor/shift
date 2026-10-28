@@ -24,13 +24,12 @@ workspaceTest.describe("mapped weight interpolation", () => {
     async ({ page, editor }) => {
       await editor.openGlyphByName("A");
       const controls = await openVariationControls(page);
-      const { instances } = await editor.fontOverview();
 
       for (const [name, x, advance] of [
         ["ExtraLight", 50, 407.14285714285717],
         ["SemiBold", 110, 697.2972972972973],
       ] as const) {
-        const instance = instances.find((candidate) => candidate.name === name);
+        const instance = await editor.instance(name);
         if (!instance) throw new Error(`Expected ${name} instance`);
         await controls.getByTestId(`instance-${instance.id}`).click();
         await editor.waitForCanvasRender();
@@ -312,7 +311,7 @@ async function interpolatedInstance(
   editor: EditorDriver,
 ): Promise<{ id: string; name: string }> {
   const instanceId = await instanceBetweenSources(page);
-  const instance = (await editor.fontOverview()).instances.find(({ id }) => id === instanceId);
+  const instance = instanceId ? await editor.instance({ instanceId }) : null;
   if (!instance) throw new Error("Expected an instance between sources");
 
   return { id: instance.id, name: instance.name };

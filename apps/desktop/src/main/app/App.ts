@@ -1144,6 +1144,10 @@ export class App {
         get: ({ windowId, ifFontRevision, ...selector }) =>
           this.#windowForAgentRequest(windowId).agent.getSource(selector, ifFontRevision),
       },
+      instances: {
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getInstance(selector, ifFontRevision),
+      },
       layers: {
         get: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.getLayer(input),

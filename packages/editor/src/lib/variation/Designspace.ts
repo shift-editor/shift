@@ -50,6 +50,15 @@ export class Designspace {
     track(this.#sourcesCell);
   }
 
+  axis(axisId: AxisId): Axis | null {
+    return this.axes.find((axis) => axis.id === axisId) ?? null;
+  }
+
+  /** The axis tagged `tag`; a font has at most one axis per tag. */
+  axisTagged(tag: string): Axis | null {
+    return this.axes.find((axis) => axis.tag === tag) ?? null;
+  }
+
   source(sourceId: SourceId): Source | null {
     return this.sources.find((source) => source.id === sourceId) ?? null;
   }

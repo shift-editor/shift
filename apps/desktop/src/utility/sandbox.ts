@@ -32,6 +32,9 @@ const capabilities: ShiftCapabilities = {
   sources: {
     get: (input) => host.call("shift.sources.get", input),
   },
+  instances: {
+    get: (input) => host.call("shift.instances.get", input),
+  },
   layers: {
     get: (input) => host.call("shift.layers.get", input),
     resolve: (input) => host.call("shift.layers.resolve", input),

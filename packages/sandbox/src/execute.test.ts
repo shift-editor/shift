@@ -4,6 +4,7 @@ import {
   asLayerId,
   asNodeId,
   asPointId,
+  asNamedInstanceId,
   asSourceId,
 } from "@shift/types";
 import {
@@ -117,6 +118,18 @@ const capabilities: ShiftCapabilities = {
         name: "Light",
         location: { values: {} },
         metricValues: [],
+      });
+    },
+  },
+  instances: {
+    async get(input) {
+      if ("name" in input && input.name !== "Black") {
+        throw new Error(`Instance ${input.name} is not in this font`);
+      }
+      return observation({
+        id: asNamedInstanceId("instance-a"),
+        name: "Black",
+        location: { values: {} },
       });
     },
   },
@@ -358,6 +371,21 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
       executeShiftCode(
         capabilities,
         "async () => shift.sources.get({ windowId: 7, name: 'Light', sourceId: 'source-a' })",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("gets a named instance by exact name and rejects ambiguous selectors", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.instances.get({ windowId: 7, name: 'Black' })",
+      ),
+    ).resolves.toMatchObject({ value: { id: "instance-a", name: "Black" } });
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.instances.get({ windowId: 7, name: 'Black', instanceId: 'instance-a' })",
       ),
     ).rejects.toThrow();
   });
