@@ -1,10 +1,8 @@
-import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AnchorId } from "@shift/types";
+import { FONTS } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import { openTestEditor } from "@/testing/TestEditor";
-
-const FIXTURE = resolve(process.cwd(), "../../fixtures/fonts/AnchorPropagation.glyphs");
 
 let editor: EditorTestSurface;
 afterEach(() => editor.close());
@@ -21,7 +19,7 @@ async function anchorId(name: string): Promise<AnchorId> {
 
 describe("adding, renaming, and deleting anchors", () => {
   beforeEach(async () => {
-    editor = await openTestEditor(FIXTURE, "a");
+    editor = await openTestEditor(FONTS.anchorPropagation, "a");
   });
 
   it("renames an anchor in the source being edited, into composites, and undoes", async () => {
@@ -134,7 +132,7 @@ describe("adding, renaming, and deleting anchors", () => {
 
 describe("aligning components to anchors", () => {
   beforeEach(async () => {
-    editor = await openTestEditor(FIXTURE, "aacute");
+    editor = await openTestEditor(FONTS.anchorPropagation, "aacute");
   });
 
   async function moveTopOfA(dx: number): Promise<void> {

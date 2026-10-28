@@ -1,27 +1,20 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { beforeEach, describe, expect, it } from "vitest";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 describe("duplicating the selection", () => {
   it("copies the selected points in place and selects the copy", async () => {
-    const { first, second } = await editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "first" },
-            { x: 200, y: 100, name: "second" },
-          ],
-        },
-      ],
-    });
-    editor.select([first, second]);
+    const { first, second } = await editor.draw(
+      {
+        contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 100, name: "second" })],
+      },
+      { select: true },
+    );
 
     expect(await editor.duplicate()).toBe(true);
 

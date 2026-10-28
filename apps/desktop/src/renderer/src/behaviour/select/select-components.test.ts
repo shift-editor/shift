@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { square, type GlyphFixture } from "@/testing/fixtures";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { beforeEach, describe, expect, it } from "vitest";
+import { line, square, type GlyphFixture } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
 /** How far diagonally outside a selection corner the user presses to rotate, in screen pixels. */
 const ROTATE_GRAB_OFFSET_PX = 8;
@@ -22,12 +21,10 @@ const SQUARE_WITH_HOLE: GlyphFixture = {
   ],
 };
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 /** Adds a glyph named `name` drawn as `fixture`, then reopens A. */
 async function drawGlyph(name: string, fixture: GlyphFixture): Promise<void> {
@@ -75,14 +72,7 @@ describe("clicking a component's fill selects the component", () => {
 
   it("selects an open component by nearness to its line", async () => {
     await drawGlyph("open", {
-      contours: [
-        {
-          points: [
-            [0, 0],
-            [100, 0],
-          ],
-        },
-      ],
+      contours: [line([0, 0], [100, 0])],
     });
     await editor.draw({ components: [{ glyph: "open" }] });
     const [component] = await editor.components();

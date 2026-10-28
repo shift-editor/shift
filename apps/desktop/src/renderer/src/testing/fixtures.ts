@@ -115,3 +115,107 @@ function pointType(point: Exclude<PointFixture, readonly [number, number]>): Poi
 function isCorner(point: PointFixture): point is readonly [number, number] {
   return Array.isArray(point);
 }
+
+/** A point a shape factory is given: an on-curve corner as `[x, y]`, or a position with an optional name. */
+export type ShapePoint<N extends string = never> =
+  | readonly [x: number, y: number]
+  | { readonly x: number; readonly y: number; readonly name?: N };
+
+/** A point a shape factory made, carrying the name it was given. */
+interface NamedPointFixture<N extends string> {
+  readonly x: number;
+  readonly y: number;
+  readonly off?: true;
+  readonly name: N;
+}
+
+/**
+ * A contour a shape factory made. Its point type lists the names the factory
+ * was given, so `draw` returns exactly those names.
+ */
+export interface ShapeFixture<N extends string = never> extends ContourFixture<N> {
+  readonly points: readonly (PointFixture<never> | NamedPointFixture<N>)[];
+}
+
+/** Names for a rectangle's corners. */
+export interface CornerNames<N extends string> {
+  readonly bottomLeft?: N;
+  readonly bottomRight?: N;
+  readonly topRight?: N;
+  readonly topLeft?: N;
+}
+
+/**
+ * A closed rectangle of on-curve corners, `width` by `height` from `x`, `y`,
+ * drawn bottom-left, bottom-right, top-right, top-left as {@link square} is.
+ */
+export function rect<const N extends string = never>(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  names?: CornerNames<N>,
+): ShapeFixture<NoInfer<N>> {
+  return {
+    closed: true,
+    points: [
+      corner(x, y, names?.bottomLeft),
+      corner(x + width, y, names?.bottomRight),
+      corner(x + width, y + height, names?.topRight),
+      corner(x, y + height, names?.topLeft),
+    ],
+  };
+}
+
+/** A closed triangle of on-curve corners, in the order given. */
+export function triangle<const N extends string = never>(
+  a: ShapePoint<N>,
+  b: ShapePoint<N>,
+  c: ShapePoint<N>,
+): ShapeFixture<NoInfer<N>> {
+  return { closed: true, points: [onCurve(a), onCurve(b), onCurve(c)] };
+}
+
+/** An open straight line from `from` to `to`. */
+export function line<const N extends string = never>(
+  from: ShapePoint<N>,
+  to: ShapePoint<N>,
+): ShapeFixture<NoInfer<N>> {
+  return { points: [onCurve(from), onCurve(to)] };
+}
+
+/** An open cubic curve from `start` to `end`, pulled by two off-curve controls. */
+export function cubic<const N extends string = never>(
+  start: ShapePoint<N>,
+  control1: ShapePoint<N>,
+  control2: ShapePoint<N>,
+  end: ShapePoint<N>,
+): ShapeFixture<NoInfer<N>> {
+  return {
+    points: [onCurve(start), offCurve(control1), offCurve(control2), onCurve(end)],
+  };
+}
+
+function corner<N extends string>(
+  x: number,
+  y: number,
+  name: N | undefined,
+): PointFixture<never> | NamedPointFixture<N> {
+  return name === undefined ? [x, y] : { x, y, name };
+}
+
+function onCurve<N extends string>(
+  point: ShapePoint<N>,
+): PointFixture<never> | NamedPointFixture<N> {
+  if (isCorner(point)) return point;
+  const { x, y, name } = point;
+  return name === undefined ? [x, y] : { x, y, name };
+}
+
+function offCurve<N extends string>(
+  point: ShapePoint<N>,
+): PointFixture<never> | NamedPointFixture<N> {
+  if (isCorner(point)) return { x: point[0], y: point[1], off: true };
+  const { x, y, name } = point;
+  return name === undefined ? { x, y, off: true } : { x, y, off: true, name };
+}

@@ -66,6 +66,12 @@ export interface Modifiers {
   readonly metaKey?: boolean;
 }
 
+/** How {@link EditorTestSurface.draw} leaves the selection. */
+export interface DrawOptions {
+  /** Selects every point drawn, as if the test had then selected them all. */
+  readonly select?: boolean;
+}
+
 /** A new continuous axis, as the Axes panel creates one. */
 export interface AxisFixture {
   readonly tag: string;
@@ -145,9 +151,14 @@ export interface EditorTestSurface extends EditorReads {
    * The drawing is undoable like any edit: the engine keeps its own undo
    * stack, which setup cannot yet opt out of. Undo only what the test did.
    *
+   * @param options - `select` selects every point drawn, in drawing order;
+   * otherwise nothing is selected afterwards.
    * @returns the minted point ids, keyed by each point's `name`.
    */
-  draw<const F extends GlyphFixture>(fixture: F): Promise<Record<PointNames<F>, PointId>>;
+  draw<const F extends GlyphFixture>(
+    fixture: F,
+    options?: DrawOptions,
+  ): Promise<Record<PointNames<F>, PointId>>;
 
   /** Makes `name` the active tool. */
   selectTool(name: ToolName): void;

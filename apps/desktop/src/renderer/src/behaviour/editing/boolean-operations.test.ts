@@ -1,32 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { Polygon } from "@shift/geo";
 import type { ContourId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
-import type { ContourFixture } from "@/testing/fixtures";
+import { rect, type ContourFixture } from "@/testing/fixtures";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-  await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
-});
-afterEach(() => editor.close());
-
-function box(x0: number, y0: number, x1: number, y1: number): ContourFixture<never> {
-  return {
-    closed: true,
-    points: [
-      [x0, y0],
-      [x1, y0],
-      [x1, y1],
-      [x0, y1],
-    ],
-  };
-}
+const editor = useTestEditor({ axes: [WEIGHT] });
 
 /** Draws two closed boxes and selects both contours. */
-async function drawAndSelect(...boxes: ContourFixture<never>[]): Promise<ContourId[]> {
+async function drawAndSelect(...boxes: ContourFixture[]): Promise<ContourId[]> {
   await editor.draw({ contours: boxes });
   const ids = (await editor.outline()).map(({ id }) => id);
   editor.selectObjects(ids);
@@ -52,7 +35,7 @@ describe("combining two overlapping contours", () => {
   ] as const)(
     "$operation replaces them as one undoable edit and selects the result",
     async ({ operation, contours, area, bounds }) => {
-      const before = await drawAndSelect(box(10, 10, 100, 100), box(60, 60, 150, 150));
+      const before = await drawAndSelect(rect(10, 10, 90, 90), rect(60, 60, 90, 90));
       let selected: readonly string[] = [];
 
       await expectEdit(
@@ -77,7 +60,7 @@ describe("combining two overlapping contours", () => {
   );
 
   it("clears the selection when nothing is left", async () => {
-    await drawAndSelect(box(10, 10, 100, 100), box(260, 60, 350, 150));
+    await drawAndSelect(rect(10, 10, 90, 90), rect(260, 60, 90, 90));
 
     await editor.combineSelectedContours("intersect");
 
@@ -86,7 +69,7 @@ describe("combining two overlapping contours", () => {
   });
 
   it("does nothing while an interpolated location is shown", async () => {
-    const selection = await drawAndSelect(box(10, 10, 100, 100), box(60, 60, 150, 150));
+    const selection = await drawAndSelect(rect(10, 10, 90, 90), rect(60, 60, 90, 90));
     const before = await editor.outline();
     editor.setLocation({ wght: 550 });
 

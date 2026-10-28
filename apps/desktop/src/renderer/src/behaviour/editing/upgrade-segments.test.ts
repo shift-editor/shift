@@ -1,25 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("turning a line into a curve", () => {
   it("Command-clicking a line makes it a cubic of the same shape, as one undo step", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [0, 0],
-            [90, 30],
-          ],
-        },
-      ],
+      contours: [line([0, 0], [90, 30])],
     });
     editor.selectTool("select");
 

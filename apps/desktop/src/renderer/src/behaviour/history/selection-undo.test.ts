@@ -1,26 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor();
 let first: PointId;
 let second: PointId;
 beforeEach(async () => {
-  editor = await startTestEditor();
   ({ first, second } = await editor.draw({
-    contours: [
-      {
-        points: [
-          { x: 100, y: 100, name: "first" },
-          { x: 200, y: 200, name: "second" },
-        ],
-      },
-    ],
+    contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })],
   }));
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 async function pointCount(e: EditorTestSurface): Promise<number> {
   return (await e.outline()).flatMap(({ points }) => points).length;

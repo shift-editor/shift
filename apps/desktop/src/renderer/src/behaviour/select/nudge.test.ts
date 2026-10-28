@@ -1,15 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 describe("arrow keys nudge the selected points", () => {
   let first: PointId;
@@ -17,14 +15,7 @@ describe("arrow keys nudge the selected points", () => {
 
   beforeEach(async () => {
     ({ first, second } = await editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "first" },
-            { x: 200, y: 200, name: "second" },
-          ],
-        },
-      ],
+      contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })],
     }));
     editor.select([first]);
   });
@@ -90,14 +81,7 @@ describe("arrow keys nudge a selected component", () => {
     await editor.addGlyph("base", null);
     await editor.openGlyph("base");
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [0, 0],
-            [100, 100],
-          ],
-        },
-      ],
+      contours: [line([0, 0], [100, 100])],
     });
     await editor.openGlyph("A");
     await editor.draw({ components: [{ glyph: "base" }] });

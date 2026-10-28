@@ -1,16 +1,8 @@
-import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { byName } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor } from "@/testing/TestEditor";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
-const FIXTURE = resolve(process.cwd(), "../../fixtures/fonts/AnchorPropagation.glyphs");
-
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await openTestEditor(FIXTURE, "a");
-});
-afterEach(() => editor.close());
+const editor = useTestEditor({ file: FONTS.anchorPropagation, glyph: "a" });
 
 async function shownAnchors(glyph: string) {
   return [...(await editor.drawnGlyph(glyph)).anchors].sort(byName);

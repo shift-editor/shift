@@ -1,17 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor();
 let xHeight: number;
 let top: number;
 let topLeft: PointId;
 let topRight: PointId;
 
 beforeEach(async () => {
-  editor = await startTestEditor();
   const authored = editor.metrics().xHeight;
   if (authored === undefined) throw new Error("Expected the test font to author an x-height");
   xHeight = authored;
@@ -30,7 +28,6 @@ beforeEach(async () => {
   }));
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 describe("dragging points snaps them to the font's metrics", () => {
   it("snaps a lone point to a metric within the hit distance", async () => {

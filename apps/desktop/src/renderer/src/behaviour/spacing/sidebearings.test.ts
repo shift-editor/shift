@@ -1,30 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Point2D } from "@shift/geo";
+import { line, rect } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
-
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
-
-async function drawSquare(): Promise<void> {
-  await editor.draw({
-    advance: 500,
-    contours: [
-      {
-        closed: true,
-        points: [
-          [100, 200],
-          [150, 200],
-          [150, 250],
-          [100, 250],
-        ],
-      },
-    ],
-  });
-}
 
 async function spacing(e: EditorTestSurface) {
   const bounds = await e.outlineBounds();
@@ -37,7 +15,9 @@ async function positions(e: EditorTestSurface): Promise<Point2D[]> {
 }
 
 describe("setting the glyph's metrics from the sidebar", () => {
-  beforeEach(drawSquare);
+  const editor = useTestEditor({
+    glyphs: { A: { outline: { advance: 500, contours: [rect(100, 200, 50, 50)] } } },
+  });
 
   it("sets the advance width as one undoable step", async () => {
     editor.setAdvanceWidth(540);
@@ -105,18 +85,10 @@ describe("setting the glyph's metrics from the sidebar", () => {
 });
 
 describe("setting a curved glyph's left sidebearing", () => {
+  const editor = useTestEditor();
+
   it("leaves the glyph alone when set to the left sidebearing it already shows", async () => {
-    await editor.draw({
-      advance: 500,
-      contours: [
-        {
-          points: [
-            [100, 200],
-            [150, 200],
-          ],
-        },
-      ],
-    });
+    await editor.draw({ advance: 500, contours: [line([100, 200], [150, 200])] });
     await editor.clickAt({ x: 125, y: 200 }, { metaKey: true });
     const [, control] = (await editor.outline())[0]!.points;
     editor.select([control!.id]);

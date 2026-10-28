@@ -1,24 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { ComponentId, GlyphName } from "@shift/types";
-import { square } from "@/testing/fixtures";
+import { square, triangle } from "@/testing/fixtures";
+import { startEditorWith, WEIGHT, type FontFixture } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
-
-const WEIGHT = { tag: "wght", name: "Weight", minimum: 100, default: 400, maximum: 900 };
 
 let editor: EditorTestSurface;
 afterEach(() => editor.close());
 
-/** Starts on `root`, with `base` drawn as a square `size` units wide. */
-async function withBase(size = 100): Promise<EditorTestSurface> {
-  const started = await startTestEditor();
-  await started.addGlyph("base", null);
-  await started.openGlyph("base");
-  await started.draw({ contours: [square(size)] });
-  await started.addGlyph("root", null);
-  await started.openGlyph("root");
-  return started;
-}
+/** Open on `root`, with `base` drawn as a 100-unit square. */
+const WITH_BASE = {
+  glyphs: { base: { outline: { contours: [square(100)] } }, root: {} },
+  open: "root",
+} satisfies FontFixture;
 
 async function componentIds(): Promise<ComponentId[]> {
   return (await editor.components()).map(({ id }) => id);
@@ -26,27 +20,14 @@ async function componentIds(): Promise<ComponentId[]> {
 
 describe("component references become removable or editable local contours", () => {
   it("removes a nested component, restores it, and decomposes it into its outline", async () => {
-    editor = await startTestEditor();
-    await editor.addGlyph("leaf", null);
-    await editor.openGlyph("leaf");
-    await editor.draw({
-      contours: [
-        {
-          closed: true,
-          points: [
-            [40, 25],
-            [60, 25],
-            [60, 45],
-          ],
-        },
-      ],
+    editor = await startEditorWith({
+      glyphs: {
+        leaf: { outline: { contours: [triangle([40, 25], [60, 25], [60, 45])] } },
+        middle: { outline: { components: [{ glyph: "leaf" }] } },
+        root: { outline: { components: [{ glyph: "middle" }] } },
+      },
+      open: "root",
     });
-    await editor.addGlyph("middle", null);
-    await editor.openGlyph("middle");
-    await editor.draw({ components: [{ glyph: "leaf" }] });
-    await editor.addGlyph("root", null);
-    await editor.openGlyph("root");
-    await editor.draw({ components: [{ glyph: "middle" }] });
     const [component] = await editor.components();
     const drawn = (await editor.drawnGlyph()).bounds;
     expect(drawn).toEqual({ min: { x: 40, y: 25 }, max: { x: 60, y: 45 } });
@@ -98,8 +79,7 @@ describe("component references become removable or editable local contours", () 
   });
 
   it("deletes a selected component of an empty glyph, which has no bounds", async () => {
-    editor = await startTestEditor();
-    await editor.addGlyph("empty-base", null);
+    editor = await startEditorWith({ glyphs: { "empty-base": {} } });
     await editor.draw({ components: [{ glyph: "empty-base" }] });
     editor.selectObjects(await componentIds());
 
@@ -108,10 +88,12 @@ describe("component references become removable or editable local contours", () 
   });
 
   it("adds and deletes matching components in every source being edited, as one edit", async () => {
-    editor = await withBase();
+    editor = await startEditorWith({
+      ...WITH_BASE,
+      axes: [{ ...WEIGHT, name: "Weight" }],
+      sources: { Bold: { wght: 700 } },
+    });
     const regular = editor.fontOverview().sources[0]!.name;
-    await editor.addAxis(WEIGHT);
-    await editor.addSource("Bold", { wght: 700 });
     await editor.editSources([regular, "Bold"]);
 
     await editor.draw({ components: [{ glyph: "base" }] });
@@ -138,7 +120,7 @@ describe("component references become removable or editable local contours", () 
 
 describe("Decompose Components replaces selected components with outlines", () => {
   it("decomposes the selection as one undoable edit", async () => {
-    editor = await withBase();
+    editor = await startEditorWith(WITH_BASE);
     await editor.draw({ components: [{ glyph: "base" }] });
     const ids = await componentIds();
     editor.selectObjects(ids);
@@ -173,7 +155,7 @@ describe("Decompose Components replaces selected components with outlines", () =
 
 describe("components of glyphs not yet loaded this session", () => {
   it("draws a newly added component's outline as soon as it is added", async () => {
-    const setup = await withBase();
+    const setup = await startEditorWith(WITH_BASE);
     const reopened = await setup.reopen();
     await setup.close();
     editor = reopened;

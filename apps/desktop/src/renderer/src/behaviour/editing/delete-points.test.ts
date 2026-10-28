@@ -1,15 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { mintPointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import { square } from "@/testing/fixtures";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("deleting points", () => {
   it("joins an open contour's neighbours across a deleted corner", async () => {

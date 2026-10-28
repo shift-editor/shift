@@ -1,22 +1,12 @@
-import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { alphabetical } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor } from "@/testing/TestEditor";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
-const MUTATOR_SANS = resolve(
-  process.cwd(),
-  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
-);
 const MASTERS = ["LightCondensed", "BoldCondensed", "LightWide", "BoldWide"];
 
 // T then A kerns through T (a glyph) and A's second-position group at every
 // master: LightCondensed -75, BoldCondensed -65, LightWide -215, BoldWide -150.
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await openTestEditor(MUTATOR_SANS, "A");
-});
-afterEach(() => editor.close());
+const editor = useTestEditor({ file: FONTS.mutatorSans, glyph: "A" });
 
 /** T–A's kerning at one master, as shown now. */
 function kernTA(source: string): number {

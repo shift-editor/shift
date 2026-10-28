@@ -1,12 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { describe, expect, it } from "vitest";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("point handles show selection at a source and plain styling between sources", () => {
   it("draws the selected handle as selected and the rest as idle", async () => {
@@ -52,7 +47,7 @@ describe("point handles show selection at a source and plain styling between sou
     });
     editor.selectTool("select");
     editor.select([b]);
-    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis(WEIGHT);
 
     editor.setLocation({ wght: 550 });
     expect(editor.drawnHandles().map(({ state }) => state)).toEqual([

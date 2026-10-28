@@ -1,27 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
-
-let editor: EditorTestSurface;
-afterEach(() => editor.close());
+import { beforeEach, describe, expect, it } from "vitest";
+import { rect } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
 // The text is two A's, each a closed square from 100 to 300 in a 500 advance:
 // LSB 100, RSB 200. The first A is the open glyph, drawn from 0.
+const editor = useTestEditor({
+  glyphs: { A: { outline: { contours: [rect(100, 100, 200, 200)] } } },
+});
 beforeEach(async () => {
-  editor = await startTestEditor();
-  await editor.draw({
-    contours: [
-      {
-        closed: true,
-        points: [
-          [100, 100],
-          [300, 100],
-          [300, 300],
-          [100, 300],
-        ],
-      },
-    ],
-  });
   editor.selectTool("text");
   editor.typeText("A");
   await editor.pressKey("Escape");

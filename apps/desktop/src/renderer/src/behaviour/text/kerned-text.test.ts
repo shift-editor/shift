@@ -1,11 +1,7 @@
-import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { FONTS, type FontFile } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import { openTestEditor } from "@/testing/TestEditor";
-
-const FONTS = resolve(process.cwd(), "../../fixtures/fonts");
-const MUTATOR_SANS = resolve(FONTS, "mutatorsans-variable/MutatorSans.designspace");
-const MUTATOR_SANS_LIGHT = resolve(FONTS, "mutatorsans/MutatorSansLightCondensed.ufo");
 
 let editor: EditorTestSurface;
 afterEach(() => editor.close());
@@ -14,7 +10,7 @@ afterEach(() => editor.close());
 // LightCondensed -75, BoldCondensed -65, LightWide -215, BoldWide -150.
 
 /** Opens `font` on T and types `typed` after it. */
-async function typeAfterT(font: string, typed: string): Promise<EditorTestSurface> {
+async function typeAfterT(font: FontFile, typed: string): Promise<EditorTestSurface> {
   const opened = await openTestEditor(font, "T");
   opened.selectTool("text");
   opened.typeText(typed);
@@ -30,7 +26,7 @@ function pair() {
 
 describe("kerning in typed text", () => {
   it("moves the second glyph by the pair's kerning and keeps both advances", async () => {
-    editor = await typeAfterT(MUTATOR_SANS, "A");
+    editor = await typeAfterT(FONTS.mutatorSans, "A");
     const { first, second } = pair();
 
     expect(first.kern).toBe(-75);
@@ -39,7 +35,7 @@ describe("kerning in typed text", () => {
   });
 
   it("shows each master's own pairs", async () => {
-    editor = await typeAfterT(MUTATOR_SANS, "A");
+    editor = await typeAfterT(FONTS.mutatorSans, "A");
 
     editor.clickSource("BoldWide");
     expect(pair().first.kern).toBe(-150);
@@ -50,7 +46,7 @@ describe("kerning in typed text", () => {
   });
 
   it("blends the masters between them, including on a support layer without kerning", async () => {
-    editor = await typeAfterT(MUTATOR_SANS, "A");
+    editor = await typeAfterT(FONTS.mutatorSans, "A");
 
     editor.setLocation({ wdth: 500, wght: 500 });
     expect(pair().first.kern).toBeCloseTo(-126.25);
@@ -61,7 +57,7 @@ describe("kerning in typed text", () => {
   });
 
   it("uses the only source of a static font", async () => {
-    editor = await typeAfterT(MUTATOR_SANS_LIGHT, "AT");
+    editor = await typeAfterT(FONTS.mutatorSansLightCondensed, "AT");
 
     const [t, a] = editor.canvasText()!.glyphs;
     expect(t!.kern).toBe(-75);

@@ -1,15 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import { offCurve, onCurve } from "@/testing/outlineMatchers";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("pen");
 });
-afterEach(() => editor.close());
 
 describe("clicking with the Pen draws corners", () => {
   it("places an on-curve point where it is clicked, as one undoable step", async () => {
@@ -250,7 +247,7 @@ describe("drawing between sources", () => {
     await editor.clickAt({ x: 100, y: 100 });
     await editor.clickAt({ x: 300, y: 100 });
     const before = await editor.outline();
-    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis(WEIGHT);
     editor.setLocation({ wght: 550 });
 
     await editor.clickAt({ x: 300, y: 300 });

@@ -1,12 +1,9 @@
-import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { NONSPACING_MARK_EDITOR_ADVANCE } from "@shift/editor/text";
+import { triangle } from "@/testing/fixtures";
+import { FONTS, startEditorWith } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor, startTestEditor } from "@/testing/TestEditor";
-
-const FONTS = resolve(process.cwd(), "../../fixtures/fonts");
-const MUTATOR_SANS = resolve(FONTS, "mutatorsans-variable/MutatorSans.designspace");
-const ANCHOR_PROPAGATION = resolve(FONTS, "AnchorPropagation.glyphs");
+import { openTestEditor } from "@/testing/TestEditor";
 
 /** A new font's line height: ascender 800 less descender -200, with no line gap. */
 const LINE_HEIGHT = 1000;
@@ -23,28 +20,14 @@ afterEach(() => editor.close());
  * each glyph as typed, without the font's features.
  */
 async function startWithABC(): Promise<EditorTestSurface> {
-  const started = await startTestEditor("preview");
-  await started.draw({
-    contours: [
-      {
-        closed: true,
-        points: [
-          [0, 0],
-          [100, 0],
-          [50, 100],
-        ],
-      },
-    ],
+  const started = await startEditorWith({
+    mode: "preview",
+    glyphs: {
+      A: { outline: { contours: [triangle([0, 0], [100, 0], [50, 100])] } },
+      B: { unicode: 66, outline: { advance: 600 } },
+      C: { unicode: 67, outline: { advance: 700 } },
+    },
   });
-  for (const [name, unicode, advance] of [
-    ["B", 66, 600],
-    ["C", 67, 700],
-  ] as const) {
-    await started.addGlyph(name, unicode);
-    await started.openGlyph(name);
-    started.setAdvanceWidth(advance);
-  }
-  await started.openGlyph("A");
   started.selectTool("text");
   return started;
 }
@@ -240,7 +223,7 @@ describe("nonspacing marks in typed text", () => {
 describe("marks attach to their base's anchors", () => {
   // `aacute` has no anchors of its own: its `top` is `acutecomb`'s, copied in by propagation.
   it("attaches a mark to an anchor a composite takes from its components", async () => {
-    editor = await openTestEditor(ANCHOR_PROPAGATION, "a");
+    editor = await openTestEditor(FONTS.anchorPropagation, "a");
     editor.selectTool("text");
 
     editor.pasteText("/aacute/acutecomb");
@@ -253,7 +236,7 @@ describe("marks attach to their base's anchors", () => {
   });
 
   it("moves the mark with the anchor it sits on", async () => {
-    editor = await openTestEditor(ANCHOR_PROPAGATION, "a");
+    editor = await openTestEditor(FONTS.anchorPropagation, "a");
     // `a`'s first anchor is `top`, where `tildecomb` sits.
     const [top] = await editor.anchors();
     editor.selectTool("text");
@@ -270,7 +253,7 @@ describe("marks attach to their base's anchors", () => {
 
 describe("text follows the shown location", () => {
   it("interpolates the text's advance between masters", async () => {
-    editor = await openTestEditor(MUTATOR_SANS, "A");
+    editor = await openTestEditor(FONTS.mutatorSans, "A");
     editor.clickSource("LightCondensed");
     expect(text().advance).toBe(396);
     editor.clickSource("BoldCondensed");

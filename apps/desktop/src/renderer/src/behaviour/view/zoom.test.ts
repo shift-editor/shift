@@ -1,13 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { Bounds, type Point2D } from "@shift/geo";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { rect } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 function closeTo(actual: Point2D, expected: Point2D): void {
   expect(actual.x).toBeCloseTo(expected.x);
@@ -17,19 +13,7 @@ function closeTo(actual: Point2D, expected: Point2D): void {
 describe("zooming the viewport", () => {
   beforeEach(async () => {
     editor.resizeCanvas(1000, 800);
-    await editor.draw({
-      contours: [
-        {
-          closed: true,
-          points: [
-            [100, 100],
-            [300, 100],
-            [300, 300],
-            [100, 300],
-          ],
-        },
-      ],
-    });
+    await editor.draw({ contours: [rect(100, 100, 200, 200)] });
   });
 
   it("brings the whole outline into view, closer in, when zooming to fit", async () => {
@@ -83,20 +67,7 @@ describe("opening a glyph frames its metrics box in the viewport", () => {
       const advance = width ?? 500;
       await editor.draw({
         advance,
-        contours:
-          width === null
-            ? []
-            : [
-                {
-                  closed: true,
-                  points: [
-                    [0, -100],
-                    [width, -100],
-                    [width, 900],
-                    [0, 900],
-                  ],
-                },
-              ],
+        contours: width === null ? [] : [rect(0, -100, width, 1000)],
       });
 
       editor.frameGlyph();

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { startEditorWith } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import { startTestEditor } from "@/testing/TestEditor";
 
@@ -219,11 +220,9 @@ describe("clicking and dragging in Text mode", () => {
 
 describe("typing a glyph not loaded yet", () => {
   it("lays the glyph out at its advance once it loads", async () => {
-    const setup = await startTestEditor();
-    await setup.addGlyph("B", 66);
-    await setup.openGlyph("B");
-    setup.setAdvanceWidth(600);
-    await setup.openGlyph("A");
+    const setup = await startEditorWith({
+      glyphs: { B: { unicode: 66, outline: { advance: 600 } } },
+    });
     // The reopened document loads only A.
     editor = await setup.reopen();
     await setup.close();

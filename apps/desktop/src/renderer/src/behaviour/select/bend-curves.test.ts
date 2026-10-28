@@ -1,16 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { Vec2, type Point2D } from "@shift/geo";
 import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { cubic, line, triangle } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("select");
 });
-afterEach(() => editor.close());
 
 const third = (from: number, to: number, step: 1 | 2) => from + ((to - from) * step) / 3;
 
@@ -18,14 +16,12 @@ const third = (from: number, to: number, step: 1 | 2) => from + ((to - from) * s
 function flatCurve(start: Point2D, end: Point2D) {
   return editor.draw({
     contours: [
-      {
-        points: [
-          { ...start, name: "start" },
-          { x: third(start.x, end.x, 1), y: third(start.y, end.y, 1), off: true, name: "one" },
-          { x: third(start.x, end.x, 2), y: third(start.y, end.y, 2), off: true, name: "two" },
-          { ...end, name: "end" },
-        ],
-      },
+      cubic(
+        { ...start, name: "start" },
+        { x: third(start.x, end.x, 1), y: third(start.y, end.y, 1), name: "one" },
+        { x: third(start.x, end.x, 2), y: third(start.y, end.y, 2), name: "two" },
+        { ...end, name: "end" },
+      ),
     ],
   });
 }
@@ -46,14 +42,7 @@ async function position(id: PointId): Promise<Point2D> {
 describe("Cmd-clicking a line turns it into a curve", () => {
   it("puts the handles at the thirds, as one edit", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [100, 200],
-            [190, 230],
-          ],
-        },
-      ],
+      contours: [line([100, 200], [190, 230])],
     });
 
     await expectEdit(
@@ -76,16 +65,7 @@ describe("Cmd-clicking a line turns it into a curve", () => {
 
   it("keeps the contour's on-curve start when the closing line is curved", async () => {
     await editor.draw({
-      contours: [
-        {
-          closed: true,
-          points: [
-            [100, 100],
-            [400, 100],
-            [400, 400],
-          ],
-        },
-      ],
+      contours: [triangle([100, 100], [400, 100], [400, 400])],
     });
     const [before] = await editor.outline();
 
@@ -109,14 +89,7 @@ describe("Cmd-clicking a line turns it into a curve", () => {
 
   it("does not curve a line on Alt-click", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [100, 200],
-            [190, 230],
-          ],
-        },
-      ],
+      contours: [line([100, 200], [190, 230])],
     });
     const before = await editor.outline();
 
@@ -127,14 +100,7 @@ describe("Cmd-clicking a line turns it into a curve", () => {
 
   it("offers the bend cursor while Cmd is held over a line, without changing it", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [100, 200],
-            [190, 230],
-          ],
-        },
-      ],
+      contours: [line([100, 200], [190, 230])],
     });
     const before = await editor.outline();
 
@@ -148,17 +114,12 @@ describe("Cmd-clicking a line turns it into a curve", () => {
   });
 
   it("offers moving over a line inside the selection, and bending with Cmd", async () => {
-    const { first, second } = await editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 100, name: "first" },
-            { x: 200, y: 200, name: "second" },
-          ],
-        },
-      ],
-    });
-    editor.select([first, second]);
+    const { first, second } = await editor.draw(
+      {
+        contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })],
+      },
+      { select: true },
+    );
     const before = await editor.outline();
 
     editor.movePointerTo({ x: 150, y: 150 });

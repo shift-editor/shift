@@ -1,21 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { SourceId } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+// Adding Bold makes it the active source, which is never outlined.
+const editor = useTestEditor({ axes: [WEIGHT], sources: { Bold: { wght: 700 } } });
 let regular: SourceId;
 
-beforeEach(async () => {
-  editor = await startTestEditor();
-  await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
-  // Adding Bold makes it the active source, which is never outlined.
-  await editor.addSource("Bold", { wght: 700 });
+beforeEach(() => {
   const source = editor.source("Regular");
   if (!source) throw new Error("Expected the default source");
   regular = source.id;
 });
-afterEach(() => editor.close());
 
 describe("source outlines drawn around the glyph", () => {
   it("draws a source's outline once it is turned on from its row", () => {

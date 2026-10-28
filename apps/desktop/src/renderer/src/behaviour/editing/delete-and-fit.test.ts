@@ -1,15 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { Curve, Vec2, type CubicCurve } from "@shift/geo";
 import { expectEdit } from "@/testing/expectEdit";
 import type { OutlinePoint } from "@/testing/reads";
 import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 const ORIGINAL = Curve.cubic(
   { x: 0, y: 0 },
@@ -173,7 +169,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   it("does not delete while an interpolated location is shown", async () => {
     await editor.draw({ contours: [cubicContour([ORIGINAL])] });
     const before = await editor.outline();
-    await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
+    await editor.addAxis(WEIGHT);
     editor.selectAll();
     editor.setLocation({ wght: 550 });
 

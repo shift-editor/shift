@@ -1,14 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { offCurve, onCurve } from "@/testing/outlineMatchers";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
+const editor = useTestEditor();
+beforeEach(() => {
   editor.selectTool("pen");
 });
-afterEach(() => editor.close());
 
 async function drawLine(): Promise<void> {
   await editor.clickAt({ x: 100, y: 100 });
