@@ -61,7 +61,7 @@ import type {
   KerningPlace,
   WorkspaceEditCoordinator,
 } from "../../types/font";
-import type { InterpolatedMetrics } from "../wasm/engine";
+import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
 import { locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -227,8 +227,7 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
 };
 
-/** Where a pair's value comes from at a source that authors no pair for it; see {@link Font.missingPairOrigin}. */
-export type MissingKerningOrigin = "unkerned" | "interpolated";
+export type { MissingKerningOrigin };
 
 /** One page of a font's glyph directory, in font order. */
 export interface GlyphDirectoryPage {
@@ -1817,8 +1816,7 @@ export class Font {
    * value blends the sources that do author kerning.
    */
   missingPairOrigin(sourceId: SourceId): MissingKerningOrigin {
-    const ownsKerning = this.#kerningCell.peek().authors(sourceId) || this.sources.length === 1;
-    return ownsKerning ? "unkerned" : "interpolated";
+    return this.#store.engine?.missingKerningOrigin(sourceId) ?? "unkerned";
   }
 
   /** A kerning side as people know it: the group's name, or the glyph's; null when unknown. */

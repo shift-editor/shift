@@ -262,11 +262,7 @@ export class InteractionProbes {
 
   /** What the Select tool's segment upgrade preview draws; null when no preview is rendered. */
   upgradePreviewHandles(): unknown {
-    const tool = this.#editor.toolManager.activeTool;
-    if (tool?.id !== "select" || !("upgradePreview" in tool)) return null;
-
-    const preview = tool.upgradePreview as { propsSnapshot(): unknown };
-    return preview.propsSnapshot() ?? null;
+    return this.#editor.toolIf("select")?.upgradePreview.propsSnapshot() ?? null;
   }
 
   /** The two control points of the cubic segment `segmentId`; throws when it is not a cubic. */

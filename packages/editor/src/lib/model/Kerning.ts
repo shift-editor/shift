@@ -256,13 +256,7 @@ export class Kerning {
    * through its group at that side, in no set order.
    */
   pairsNaming(sourceId: SourceId, glyphId: GlyphId): ResolvedKerning[] {
-    const firstGroup = this.groupOf("first", glyphId);
-    const secondGroup = this.groupOf("second", glyphId);
-    const names = (side: KerningSideId, group: KerningGroupId | null) =>
-      side === glyphId || (group !== null && side === group);
-    return this.authoredPairs(sourceId).filter(
-      (pair) => names(pair.first, firstGroup) || names(pair.second, secondGroup),
-    );
+    return this.#engine?.kerningPairsNaming(sourceId, glyphId) ?? [];
   }
 
   /**

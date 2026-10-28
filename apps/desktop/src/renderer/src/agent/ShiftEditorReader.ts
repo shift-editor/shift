@@ -17,7 +17,7 @@ import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId, Source } from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
-import { KerningTool, SpacingTool, type KerningPair } from "@shift/editor/tools";
+import type { KerningPair, SpacingTool } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 /** One point handle the canvas draws, and how it is styled. */
@@ -219,8 +219,8 @@ export class ShiftEditorReader {
    * @returns null when the Spacing tool is not active.
    */
   spacingTool(): SpacingToolView | null {
-    const tool = this.#editor.toolManager.activeTool;
-    if (!(tool instanceof SpacingTool)) return null;
+    const tool = this.#editor.toolIf("spacing");
+    if (!tool) return null;
 
     const { hovered, selected, editing } = tool;
     return {
@@ -242,8 +242,8 @@ export class ShiftEditorReader {
    * @returns null when the Kerning tool is not active.
    */
   kerningTool(): KerningToolView | null {
-    const tool = this.#editor.toolManager.activeTool;
-    if (!(tool instanceof KerningTool)) return null;
+    const tool = this.#editor.toolIf("kerning");
+    if (!tool) return null;
 
     const { hovered, currentPair: selected, editing } = tool;
     return {
