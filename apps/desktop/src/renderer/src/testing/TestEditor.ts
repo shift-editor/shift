@@ -20,8 +20,6 @@ import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import {
   kerningValueEdit,
-  sourceMetricValue,
-  withSourceMetricValue,
   type Glyph,
   type GlyphRenderModel,
   type GlyphLayer,
@@ -44,13 +42,11 @@ import {
   mintLayerId,
   type AnchorId,
   type Axis,
-  type AxisId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
   type KerningGroupId,
   type KerningPosition,
-  type MetricId,
   type PointId,
   type SelectableId,
   type NamedInstance,
@@ -101,6 +97,7 @@ import type {
   Modifiers,
 } from "./surface";
 import { drawFixture } from "./drawFixture";
+import { SurfaceActions } from "./SurfaceActions";
 import type { AxisRef, DocumentSaveState, InstanceRef, Outline, SourceRef } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
@@ -169,6 +166,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     readonly kerning: ShiftKerningReader;
     readonly editor: ShiftEditorReader;
   };
+  /** The surface's actions, shared with the E2E hook. */
+  readonly #actions = new SurfaceActions(this);
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
   #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
@@ -964,17 +963,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async addAxis(axis: AxisFixture): Promise<void> {
-    this.font.createAxis({
-      tag: axis.tag,
-      name: axis.name ?? axis.tag,
-      role: axis.role ?? "external",
-      axisType: "continuous",
-      minimum: axis.minimum,
-      default: axis.default,
-      maximum: axis.maximum,
-      labels: [],
-      hidden: false,
-    });
+    this.#actions.addAxis(axis);
     await this.settle();
   }
 
@@ -998,38 +987,51 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async addSource(name: string, location: AxisLocation): Promise<void> {
-    this.createSource(name, externalAxisLocationFromRecord(this.#axisValueRecord(location)));
+    this.#actions.addSource(name, location);
     await this.settle();
   }
 
   async deleteSource(name: string): Promise<void> {
-    this.font.deleteSource(this.#sourceNamed(name));
+    this.#actions.deleteSource(name);
+    await this.settle();
+  }
+
+  async deleteAxis(tag: string): Promise<void> {
+    this.#actions.deleteAxis(tag);
+    await this.settle();
+  }
+
+  async renameSource(source: string, name: string): Promise<void> {
+    await this.#actions.renameSource(source, name);
+    await this.settle();
+  }
+
+  async setSourceItalicAngle(source: string, italicAngle: number): Promise<void> {
+    await this.#actions.setSourceItalicAngle(source, italicAngle);
+    await this.settle();
+  }
+
+  async setSourceLineGap(source: string, lineGap: number): Promise<void> {
+    await this.#actions.setSourceLineGap(source, lineGap);
     await this.settle();
   }
 
   async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
-    const current = this.font.source(this.#sourceNamed(source));
-    if (!current) throw new Error(`The font has no source named ${source}`);
-    const value = sourceMetricValue(current, this.#metricNamed(metric));
-    await this.font.updateSource(withSourceMetricValue(current, { ...value, position }));
+    await this.#actions.setSourceMetric(source, metric, position);
+    await this.settle();
   }
 
   addInstance(name: string, location: AxisLocation): void {
-    this.font.createNamedInstance({ name, location: { values: this.#axisValueRecord(location) } });
+    this.#actions.addInstance(name, location);
   }
 
   clickSource(name: string, mode?: SourceSelectionMode): void {
-    this.selectSourceForEditing(this.#sourceNamed(name), mode);
+    this.#actions.clickSource(name, mode);
   }
 
   async editSources(names: readonly string[]): Promise<void> {
-    const [first, ...rest] = names.map((name) => this.#sourceNamed(name));
-    if (!first) throw new Error("editSources needs at least one source");
-
-    this.selectSourceForEditing(first);
-    for (const sourceId of rest) this.selectSourceForEditing(sourceId, "toggle");
+    await this.#actions.editSources(names);
     await this.settle();
-    await this.editingLayersMatched();
   }
 
   toggleSourceOutline(name: string): void {
@@ -1040,7 +1042,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   setLocation(location: AxisLocation): void {
-    this.setExternalLocation(externalAxisLocationFromRecord(this.#axisValueRecord(location)));
+    this.#actions.setLocation(location);
   }
 
   kerning(first: string, second: string): readonly KerningMasterValue[] {
@@ -1084,23 +1086,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return axis;
   }
 
-  #axisValueRecord(location: AxisLocation): Record<AxisId, number> {
-    return Object.fromEntries(
-      Object.entries(location).map(([tag, value]) => [this.#axisTagged(tag).id, value]),
-    ) as Record<AxisId, number>;
-  }
-
   #axisCoordinates(location: AxisLocation): AxisCoordinate[] {
     return Object.entries(location).map(([tag, value]) => ({
       axisId: this.#axisTagged(tag).id,
       value,
     }));
-  }
-
-  #metricNamed(name: string): MetricId {
-    const definition = this.font.metricDefinitions.find((candidate) => candidate.name === name);
-    if (!definition) throw new Error(`The font has no metric named ${name}`);
-    return definition.id;
   }
 
   #kerningGroupNamed(position: KerningPosition, name: string): KerningGroupId {

@@ -354,6 +354,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** Deletes the source named `name`, as the sources settings panel's delete button does, and waits for it. */
   deleteSource(name: string): Promise<void>;
   /** Sets a source's metric named `metric` to `position`, as the source settings panel's metric field does. */
+  /** Deletes the axis tagged `tag`, as Settings › Axes does. */
+  deleteAxis(tag: string): Promise<void>;
+  /** Renames the source `source` to `name`, as Settings › Sources does. */
+  renameSource(source: string, name: string): Promise<void>;
+  /** Sets the source `source`'s italic angle, as Settings › Sources does. */
+  setSourceItalicAngle(source: string, italicAngle: number): Promise<void>;
+  /** Sets the source `source`'s line gap, as Settings › Sources does. */
+  setSourceLineGap(source: string, lineGap: number): Promise<void>;
   setSourceMetric(source: string, metric: string, position: number): Promise<void>;
   /** Adds a named instance at `location`, as the Create instance menu does. */
   addInstance(name: string, location: AxisLocation): void;
