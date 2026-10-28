@@ -24,6 +24,7 @@ import {
   type GlyphName,
   type NamedInstance,
   type Source,
+  type Unicode,
 } from "@shift/types";
 import type { Font } from "@shift/editor/model";
 import { ShiftLayer } from "./ShiftLayer";
@@ -126,6 +127,13 @@ export class ShiftFontReader {
   glyphNamed(name: GlyphName): GlyphSummary | null {
     const entry = this.#font.entryForName(name);
     return entry ? this.#glyphSummary(entry.id) : null;
+  }
+
+  /** The glyph the font shows for `unicode`, or null when it has none. */
+  glyphForUnicode(unicode: number): GlyphSummary | null {
+    const font = this.#font;
+    const record = font.recordForName(font.glyphHandleForUnicode(unicode as Unicode).name);
+    return record ? this.#glyphSummary(record.id) : null;
   }
 
   /** The font's default source: where every axis sits at its default. */

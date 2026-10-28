@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
-import { callHook } from "./appHooks";
+import { callHook, readAgent } from "./appHooks";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -110,7 +110,9 @@ export async function clickFirstCatalogGlyphName(page: Page): Promise<void> {
 export async function waitForEditorReady(page: Page, glyphId: string): Promise<void> {
   await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
   await expect(editorShell(page)).toBeVisible();
-  await expect.poll(() => callHook(page, "editor", "shownGlyphId")).toBe(glyphId);
+  await expect
+    .poll(async () => (await readAgent(page, "editor", "inspect", [""])).glyph?.glyphId)
+    .toBe(glyphId);
 }
 
 /**

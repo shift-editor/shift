@@ -2,6 +2,7 @@ import { expect, type ElectronApplication, type Locator, type Page } from "@play
 import type { Point2D, Rect2D } from "@shift/geo";
 import type {
   AuthoredAnchor,
+  AuthoredContour,
   AuthoredComponent,
   AuthoredLayer,
   AuthoredPoint,
@@ -19,6 +20,8 @@ import type {
   NamedInstance,
   Source,
 } from "@shift/types";
+import type { PositionGuide } from "@shift/editor/types";
+import type { SelectedObject } from "@/agent/ShiftEditorReader";
 import type {
   AgentReaderName,
   AgentReadArgs,
@@ -64,7 +67,9 @@ const TOOL_LABELS = {
 export type EditorTool = keyof typeof TOOL_LABELS;
 
 async function waitForActiveGlyph(page: Page, glyphId: GlyphId): Promise<void> {
-  await expect.poll(() => callHook(page, "editor", "glyphOpen", glyphId)).toBe(true);
+  await expect
+    .poll(async () => (await readAgent(page, "editor", "inspect", [""])).glyph?.glyphId)
+    .toBe(glyphId);
 }
 
 /**
@@ -107,10 +112,11 @@ export class EditorDriver implements EditorReads, EditorActions {
   async openGlyphByUnicode(hexCodepoint: string): Promise<void> {
     const unicode = Number.parseInt(hexCodepoint, 16);
     await expect
-      .poll(() => callHook(this.page, "editor", "glyphForUnicode", unicode), { timeout: 20_000 })
+      .poll(() => this.#read("font", "glyphForUnicode", unicode), { timeout: 20_000 })
       .not.toBeNull();
-    const glyphId = await callHook(this.page, "editor", "glyphForUnicode", unicode);
-    if (!glyphId) throw new Error(`No glyph found for U+${hexCodepoint}`);
+    const glyph = await this.#read("font", "glyphForUnicode", unicode);
+    if (!glyph) throw new Error(`No glyph found for U+${hexCodepoint}`);
+    const glyphId = glyph.id;
 
     await callHook(this.page, "session", "openGlyph", glyphId);
     await waitForEditorReady(this.page, glyphId);
@@ -433,7 +439,23 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns the glyph being edited, or null when none is (or its authored layer is not published). */
   async activeGlyph(): Promise<ActiveGlyph | null> {
-    return callHook(this.page, "editor", "editedGlyph");
+    const [[nodeId], { glyph }] = await Promise.all([
+      this.#read("editor", "editingNodeIds"),
+      this.editorView(),
+    ]);
+    if (!glyph || glyph.nodeId !== nodeId) return null;
+
+    const layer = await this.#read("font", "getLayer", {
+      glyph: { glyphId: glyph.glyphId },
+      source: { sourceId: glyph.sourceId },
+    });
+    return {
+      glyphId: glyph.glyphId,
+      nodeId: glyph.nodeId,
+      sourceId: glyph.sourceId,
+      pointCount: layer.contours.reduce((count, contour) => count + contour.points.length, 0),
+      contourCount: layer.contours.length,
+    };
   }
 
   /** Returns zero without an active glyph, otherwise its authored point count. */
@@ -448,32 +470,32 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns the canvas zoom level. */
   async zoomLevel(): Promise<number> {
-    return callHook(this.page, "editor", "zoom");
+    return (await this.#read("editor", "camera")).zoom;
   }
 
   /** Returns how far the canvas is panned, in screen pixels. */
   async canvasOffset(): Promise<Point2D> {
-    return callHook(this.page, "editor", "pan");
+    return (await this.#read("editor", "camera")).pan;
   }
 
   /** Returns the ids of the scene nodes being edited, in the order they were entered. */
   async editedNodeIds(): Promise<readonly string[]> {
-    return callHook(this.page, "editor", "editedNodeIds");
+    return this.#read("editor", "editingNodeIds");
   }
 
   /** Returns the hovered editor object identity, or null when nothing is hovered. */
   async hoverId(): Promise<string | null> {
-    return callHook(this.page, "editor", "hoverId");
+    return this.#read("editor", "hoveredId");
   }
 
   /** Returns the active tool's published state discriminator. */
   async toolState(): Promise<string | null> {
-    return callHook(this.page, "editor", "toolState");
+    return (await this.editorView()).tool?.state ?? null;
   }
 
   /** Returns fresh live selection bounds in glyph units; throws without a bounded selection. */
   async selectionBounds(): Promise<Rect2D> {
-    const b = await callHook(this.page, "editor", "selectionBounds");
+    const b = await this.#read("editor", "selectionBounds");
     if (!b) throw new Error("Expected selection bounds");
 
     return {
@@ -511,7 +533,11 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param pointId - Point in the active authored layer.
    */
   async livePointPosition(pointId: PointId): Promise<Point2D> {
-    return callHook(this.page, "editor", "livePointPosition", pointId);
+    const point = (await this.drawnOutline())
+      .flatMap((contour) => contour.points)
+      .find((candidate) => candidate.id === pointId);
+    if (!point) throw new Error(`Expected the drawn point ${pointId}`);
+    return { x: point.x, y: point.y };
   }
 
   /**
@@ -728,6 +754,21 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   async drawnHandles(): Promise<readonly CanvasHandle[]> {
     return this.#read("editor", "drawnHandles");
+  }
+
+  /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
+  async drawnOutline(): Promise<readonly AuthoredContour[]> {
+    return this.#read("editor", "drawnOutline");
+  }
+
+  /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
+  async drawnSnapGuides(): Promise<readonly PositionGuide[]> {
+    return this.#read("editor", "drawnSnapGuides");
+  }
+
+  /** The selected objects with their kinds, in selection order. */
+  async selectedObjects(): Promise<readonly SelectedObject[]> {
+    return this.#read("editor", "selectedObjects");
   }
 
   async drawnOutlineTargets(): Promise<readonly OutlineTarget[]> {

@@ -27,6 +27,24 @@ export interface DrawnHandle {
   state: "idle" | "hovered" | "selected" | "interpolated";
 }
 
+/** The canvas camera: its zoom level and how far it is panned, in screen pixels. */
+export interface CanvasCamera {
+  zoom: number;
+  pan: { x: number; y: number };
+}
+
+/** One selected object and its kind (`point`, `segment`, `contour`, `component`, `anchor`, …). */
+export interface SelectedObject {
+  id: string;
+  kind: string;
+}
+
+/** A rectangle in the open glyph's units. */
+export interface GlyphRect {
+  min: { x: number; y: number };
+  max: { x: number; y: number };
+}
+
 /**
  * Public reads of one editor's view: its open glyph, sources, location,
  * selection, tool, edit and save state.
@@ -77,6 +95,37 @@ export class ShiftEditorReader {
       editing: editor.isEditing,
       applyStatus: this.#edits?.applyStatusCell.peek() ?? null,
     };
+  }
+
+  /** The canvas camera: its zoom level and pan. */
+  camera(): CanvasCamera {
+    const { zoom, pan } = this.#editor;
+    return { zoom, pan: { x: pan.x, y: pan.y } };
+  }
+
+  /** The id of the object under the pointer, or null when nothing is hovered. */
+  hoveredId(): string | null {
+    return this.#editor.hover.id ?? null;
+  }
+
+  /** The selected objects with their kinds, in selection order; an id the glyph no longer has is left out. */
+  selectedObjects(): SelectedObject[] {
+    const editor = this.#editor;
+    return editor.selection.ids.flatMap((id) => {
+      const object = editor.object(id);
+      return object ? [{ id, kind: object.kind }] : [];
+    });
+  }
+
+  /** The selection's bounds in the open glyph's units, a gesture's preview included; null when nothing bounded is selected. */
+  selectionBounds(): GlyphRect | null {
+    const bounds = this.#editor.selectionBounds();
+    return bounds ? { min: { ...bounds.min }, max: { ...bounds.max } } : null;
+  }
+
+  /** The scene nodes being edited in place, in the order they were entered; empty when none is. */
+  editingNodeIds(): string[] {
+    return [...this.#editor.editing.nodeIds];
   }
 
   /** The source the editor shows and edits, or null between sources. */
