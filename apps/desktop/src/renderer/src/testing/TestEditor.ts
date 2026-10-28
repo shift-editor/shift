@@ -26,7 +26,7 @@ import {
   type GlyphRenderModel,
   type GlyphLayer,
 } from "@shift/editor/model";
-import { KerningTool, Select, SpacingTool, type ToolName } from "@shift/editor/tools";
+import type { KerningTool, SpacingTool, ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import {
@@ -916,14 +916,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   #spacing(): SpacingTool {
-    const tool = this.toolManager.activeTool;
-    if (!(tool instanceof SpacingTool)) throw new Error("The Spacing tool is not active");
+    const tool = this.toolIf("spacing");
+    if (!tool) throw new Error("The Spacing tool is not active");
     return tool;
   }
 
   #kerning(): KerningTool {
-    const tool = this.toolManager.activeTool;
-    if (!(tool instanceof KerningTool)) throw new Error("The Kerning tool is not active");
+    const tool = this.toolIf("kerning");
+    if (!tool) throw new Error("The Kerning tool is not active");
     return tool;
   }
 
@@ -1398,8 +1398,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   boundingBoxShown(): boolean {
-    const tool = this.toolManager.activeTool;
-    return tool instanceof Select && tool.boundingBox.visible;
+    return this.toolIf("select")?.boundingBox.visible ?? false;
   }
 
   toolDisabled(name: ToolName): boolean {
