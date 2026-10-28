@@ -170,7 +170,7 @@ describe("memory font editing", () => {
     });
     editor.toolManager.flushPointerMoves();
 
-    expect(select.peek()).toBe(editor.toolCell.peek());
+    expect(select.peek()).toBe(editor.toolManager.activeTool);
     expect(select.peek()?.state.type).not.toBe("idle");
     expect(toolId.peek()).toBe("select");
     expect(hand.peek()).toBeNull();
