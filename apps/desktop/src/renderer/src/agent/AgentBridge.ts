@@ -1,8 +1,14 @@
 import type { FontRevision, ShiftObservation } from "@shift/runtime";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { AgentCallMap, AgentEventMap } from "@shared/agent/protocol";
-import { domPortTransport, serveChannel, type ChannelServer } from "@shared/workspace/channel";
+import type { AgentCallMap, AgentE2ECallMap, AgentEventMap } from "@shared/agent/protocol";
+import {
+  domPortTransport,
+  serveChannel,
+  type ChannelHandlers,
+  type ChannelServer,
+} from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
+import type { E2EActions } from "@/testing/E2EActions";
 import type { AgentReaders } from "./AgentReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
@@ -18,6 +24,7 @@ export class AgentBridge {
   readonly #readers: AgentReaders;
   readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
+  #e2eActions: E2EActions | null = null;
   #disposed = false;
 
   constructor(host: ShiftHost, session: FontSession) {
@@ -37,7 +44,7 @@ export class AgentBridge {
     const port = nextAgentPort();
 
     try {
-      await this.#host.agent.connect();
+      const { e2eActions } = await this.#host.agent.connect();
       const received = await port.received;
       if (this.#disposed) {
         received.close();
@@ -45,7 +52,7 @@ export class AgentBridge {
       }
 
       this.#requests?.dispose();
-      this.#requests = serveChannel<AgentCallMap, AgentEventMap>(domPortTransport(received), {
+      const handlers: ChannelHandlers<AgentCallMap> = {
         "capture.editorBounds": () => this.#editorCaptureBounds(),
         "font.revision": ({ ifFontRevision }) => this.#readRevision(ifFontRevision),
         "editor.inspect": ({ ifFontRevision }) =>
@@ -84,7 +91,18 @@ export class AgentBridge {
           const { value } = await this.#observe(undefined, () => this.#read(reader, method, args));
           return value;
         },
-      });
+      };
+      // E2E actions exist only when main says this is an E2E launch; their
+      // builder is loaded on first use, so other launches never load it.
+      const e2e: Partial<ChannelHandlers<AgentE2ECallMap>> = e2eActions
+        ? { "e2e.act": ({ action, args }) => this.#act(action, args) }
+        : {};
+      this.#requests = serveChannel<AgentCallMap & AgentE2ECallMap, AgentEventMap>(
+        domPortTransport(received),
+        // The E2E handlers are absent outside E2E launches; the channel answers
+        // an unserved call with an error.
+        { ...handlers, ...e2e } as ChannelHandlers<AgentCallMap & AgentE2ECallMap>,
+      );
     } catch (error) {
       port.cancel();
       throw error;
@@ -96,6 +114,17 @@ export class AgentBridge {
     this.#disposed = true;
     this.#requests?.dispose();
     this.#requests = null;
+  }
+
+  /** @throws {Error} for an action the E2E actions do not have. */
+  async #act(action: string, args: unknown[]): Promise<unknown> {
+    const { E2EActions } = await import("@/testing/E2EActions");
+    this.#e2eActions ??= new E2EActions(this.#session.editor);
+    const target = this.#e2eActions;
+    const run: unknown =
+      action !== "constructor" ? Reflect.get(Object.getPrototypeOf(target), action) : null;
+    if (typeof run !== "function") throw new Error(`No E2E action ${action}`);
+    return Reflect.apply(run, target, args);
   }
 
   /** @throws {Error} for a reader or method the window does not serve. */

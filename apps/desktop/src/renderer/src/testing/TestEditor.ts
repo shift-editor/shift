@@ -37,7 +37,7 @@ import {
   rotateSelection,
 } from "@/lib/editor/sidebarActions";
 import type { EditorCommandId } from "@shared/commands";
-import { Bounds, Mat, Rect, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Rect, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintAxisMappingId,
   mintGlyphId,
@@ -45,7 +45,6 @@ import {
   type AnchorId,
   type Axis,
   type AxisId,
-  type ComponentId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
@@ -71,13 +70,7 @@ import type {
   TextRunNode,
 } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
-import {
-  contourContent,
-  pointNames,
-  type ComponentFixture,
-  type GlyphFixture,
-  type PointNames,
-} from "./fixtures";
+import type { GlyphFixture, PointNames } from "./fixtures";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -107,6 +100,7 @@ import type {
   EditorTestSurface,
   Modifiers,
 } from "./surface";
+import { drawFixture } from "./drawFixture";
 import type { AxisRef, DocumentSaveState, InstanceRef, Outline, SourceRef } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
@@ -604,54 +598,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this;
   }
 
-  async draw<const F extends GlyphFixture>(
+  draw<const F extends GlyphFixture>(
     fixture: F,
     options: DrawOptions = {},
   ): Promise<Record<PointNames<F>, PointId>> {
-    const names = {} as Record<PointNames<F>, PointId>;
-    if (fixture.advance !== undefined) this.setXAdvance(fixture.advance);
-
-    const contours = fixture.contours ?? [];
-    let drawn: readonly SelectableId[] = [];
-    if (contours.length > 0) {
-      const ids = this.insertContent(contourContent(contours));
-      if (!ids) throw new Error("draw needs one open glyph to draw into");
-      drawn = ids;
-      pointNames(contours).forEach((name, index) => {
-        if (name !== null) (names as Record<string, PointId>)[name] = ids[index] as PointId;
-      });
-    }
-
-    for (const anchor of fixture.anchors ?? []) {
-      if (!this.addAnchorAt({ x: anchor.x, y: anchor.y })) {
-        throw new Error(`draw could not add anchor ${anchor.name}`);
-      }
-      const [anchorId] = this.selection.ids;
-      if (anchorId) this.renameAnchor(anchorId as AnchorId, anchor.name);
-    }
-
-    for (const component of fixture.components ?? []) await this.#drawComponent(component);
-
-    if (options.select) this.selection.select(drawn);
-    else this.selection.clear();
-    await this.settle();
-    return names;
-  }
-
-  /** Adds a component and moves it as the sidebar's position fields do. */
-  async #drawComponent(component: ComponentFixture): Promise<void> {
-    const base = this.font.recordForName(component.glyph as GlyphName);
-    if (!base) throw new Error(`draw needs a glyph named ${component.glyph}`);
-
-    const id: ComponentId | null = await this.addComponent(base.id);
-    if (!id) throw new Error(`draw could not add component ${component.glyph}`);
-
-    const { x = 0, y = 0 } = component;
-    if (x === 0 && y === 0) return;
-    await this.settle();
-    const selection = this.componentTransformSelection([id]);
-    if (!selection) throw new Error(`draw could not move component ${component.glyph}`);
-    selection.layer.transformComponents(selection, "Move components", () => Mat.Translate(x, y));
+    return drawFixture(this, fixture, options);
   }
 
   select(ids: readonly PointId[]): void {

@@ -3,6 +3,7 @@ import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
 import type { FontSessionMode, FontStoreLocation } from "../workspace/protocol";
 import type { RecentDocument } from "../recents";
+import type { AgentConnection } from "../agent/protocol";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AppConfigState, ThemeSetting } from "../config/config";
 import type { DebugOverlays } from "../debug";
@@ -21,7 +22,7 @@ export interface ShiftHost {
   platform: NodeJS.Platform;
   /** Connects this renderer to main-owned live agent requests. */
   agent: {
-    connect: () => Promise<void>;
+    connect: () => Promise<AgentConnection>;
   };
   /** Runs app commands owned by the main process. */
   commands: {

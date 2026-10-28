@@ -11,7 +11,6 @@ import {
   setZoom,
   upgradePreviewHandles,
 } from "./fixtures/editorInteractions";
-import { addAnchor } from "./fixtures/fontSetup";
 import {
   expectCanvasSnapshot,
   expectPanelSnapshot,
@@ -361,7 +360,7 @@ test.describe("Editor view", () => {
     editor,
   }) => {
     await editor.openGlyphByName("E");
-    const anchorId = await addAnchor(page, "top", { x: 200, y: 700 });
+    const anchorId = await editor.setup.addAnchor("top", { x: 200, y: 700 });
     await editor.waitForIdle();
     const anchorRow = editorSidebar(page).getByTestId(`object-${anchorId}`);
     await expect(anchorRow).toBeVisible();

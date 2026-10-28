@@ -8,7 +8,6 @@ import {
   glyphCatalogViewport,
   waitForEditorReady,
 } from "./fixtures/appLocators";
-import { createGlyphsForUnicodes } from "./fixtures/fontSetup";
 
 test.use({ electronArgs: ["--disable-gpu"] });
 
@@ -27,8 +26,8 @@ test.describe("SVG glyph catalog fallback", () => {
     await waitForEditorReady(page, glyphId);
   });
 
-  test("shows the system character for an empty encoded glyph", async ({ page }) => {
-    const [name] = await createGlyphsForUnicodes(page, [0x3042]);
+  test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
+    const [name] = await editor.setup.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");
 
     await page.getByPlaceholder("Search glyphs...").fill(name);

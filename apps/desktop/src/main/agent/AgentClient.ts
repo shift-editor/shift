@@ -21,14 +21,19 @@ import type {
 } from "@shift/runtime";
 import type { GlyphId, NamedInstance, Source } from "@shift/types";
 import type { MessagePortMain } from "electron";
-import type { AgentCallMap, AgentEventMap, EditorCaptureBounds } from "../../shared/agent/protocol";
+import type {
+  AgentCallMap,
+  AgentE2ECallMap,
+  AgentEventMap,
+  EditorCaptureBounds,
+} from "../../shared/agent/protocol";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
 /** Calls the agent inspection lane served by one renderer window. */
 export class AgentClient {
   readonly #log: ShiftLogger;
-  #channel: Channel<AgentCallMap, AgentEventMap> | null = null;
+  #channel: Channel<AgentCallMap & AgentE2ECallMap, AgentEventMap> | null = null;
 
   constructor(log: ShiftLogger = createShiftLogger("agent.client")) {
     this.#log = log;
@@ -41,7 +46,9 @@ export class AgentClient {
   /** Replaces the inspection lane after a renderer connects or reloads. */
   connect(port: MessagePortMain): void {
     this.#channel?.dispose();
-    this.#channel = new Channel<AgentCallMap, AgentEventMap>(electronPortTransport(port));
+    this.#channel = new Channel<AgentCallMap & AgentE2ECallMap, AgentEventMap>(
+      electronPortTransport(port),
+    );
     this.#log.info("agent renderer connected");
   }
 
@@ -157,10 +164,18 @@ export class AgentClient {
     return this.#call("agent.read", { reader, method, args });
   }
 
-  #call<K extends keyof AgentCallMap>(
+  /**
+   * Runs the renderer's E2E setup action `action` with `args`, as the E2E
+   * actions hook does; the renderer serves it only for E2E launches.
+   */
+  act(action: string, args: unknown[]): Promise<unknown> {
+    return this.#call("e2e.act", { action, args });
+  }
+
+  #call<K extends keyof (AgentCallMap & AgentE2ECallMap)>(
     operation: K,
-    input: AgentCallMap[K]["request"],
-  ): Promise<AgentCallMap[K]["response"]> {
+    input: (AgentCallMap & AgentE2ECallMap)[K]["request"],
+  ): Promise<(AgentCallMap & AgentE2ECallMap)[K]["response"]> {
     if (!this.#channel) return Promise.reject(new Error("agent renderer is not connected"));
     return this.#channel.call(operation, input);
   }

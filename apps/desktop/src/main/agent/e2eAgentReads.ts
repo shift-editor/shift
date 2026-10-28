@@ -25,16 +25,37 @@ export interface E2EAgentReads {
   connected(windowId: number): boolean;
 }
 
+/**
+ * Setup actions in one window's renderer, for the Playwright `EditorDriver` and
+ * fixtures: the renderer's `testing/E2EActions.ts`, whose `draw` is the builder
+ * `TestEditor.draw` runs in-process, so both drivers set up alike.
+ *
+ * @remarks
+ * Published on `globalThis.shiftE2EActions` only for E2E launches, with
+ * {@link E2EAgentReads}. Each action settles before it resolves.
+ */
+export interface E2EActionsHook {
+  /**
+   * Runs `action` with `args` in window `windowId`'s renderer.
+   *
+   * @returns the action's plain result.
+   * @throws {Error} when the window has no font session, or the action is unknown.
+   */
+  act(windowId: number, action: string, args: unknown[]): Promise<unknown>;
+}
+
 declare global {
   var shiftAgentReads: E2EAgentReads | undefined;
+  var shiftE2EActions: E2EActionsHook | undefined;
 }
 
 /**
- * Publishes {@link E2EAgentReads} when this is an E2E launch; does nothing otherwise.
+ * Publishes {@link E2EAgentReads} and {@link E2EActionsHook} when this is an E2E
+ * launch; does nothing otherwise.
  *
  * @param agentFor - The agent lane of window `windowId`; throws for a window without a font session.
  */
-export function publishE2EAgentReads(agentFor: (windowId: number) => AgentClient): void {
+export function publishE2EHooks(agentFor: (windowId: number) => AgentClient): void {
   if (process.env.NODE_ENV !== "test") return;
 
   globalThis.shiftAgentReads = {
@@ -46,5 +67,8 @@ export function publishE2EAgentReads(agentFor: (windowId: number) => AgentClient
         return false;
       }
     },
+  };
+  globalThis.shiftE2EActions = {
+    act: (windowId, action, args) => agentFor(windowId).act(action, args),
   };
 }

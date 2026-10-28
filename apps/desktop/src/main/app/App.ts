@@ -51,7 +51,7 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
-import { publishE2EAgentReads } from "../agent/e2eAgentReads";
+import { publishE2EHooks } from "../agent/e2eAgentReads";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
 import { NO_DEBUG_OVERLAYS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
@@ -274,7 +274,7 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
-      publishE2EAgentReads((windowId) => this.#windowForAgentRequest(windowId).agent);
+      publishE2EHooks((windowId) => this.#windowForAgentRequest(windowId).agent);
       void this.#requireCommandLineTool()
         .refresh()
         .catch((error) => {
@@ -571,6 +571,7 @@ export class App {
       const { port1, port2 } = new MessageChannelMain();
       window.agent.connect(port1);
       event.sender.postMessage("agent.port", null, [port2]);
+      return { e2eActions: process.env.NODE_ENV === "test" };
     });
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       const window = this.#requireWindowForWebContents(event.sender);

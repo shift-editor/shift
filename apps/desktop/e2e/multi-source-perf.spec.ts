@@ -8,7 +8,6 @@ import {
   selectSourcesForEditing,
   zoomToFit,
 } from "./fixtures/editorInteractions";
-import { createAxis, createSource, offsetMatchedSourcePoints } from "./fixtures/fontSetup";
 import { test, expect, drawBenchmarkGlyph, computeStats } from "./fixtures/perfApp";
 
 const GLYPH_POINTS = 50_000;
@@ -28,7 +27,7 @@ async function prepareFourSourceGlyph(
   );
   await editor.waitForIdle();
 
-  const axisId = await createAxis(page, {
+  const axisId = await editor.setup.createAxis({
     tag: "bch1",
     name: "Benchmark Weight",
     role: "external",
@@ -48,7 +47,7 @@ async function prepareFourSourceGlyph(
     ["Benchmark Semibold", 700],
     ["Benchmark Bold", 900],
   ] as const) {
-    const sourceId = await createSource(page, name, { [axisId]: value });
+    const sourceId = await editor.setup.createSource(name, { [axisId]: value });
     await editor.waitForIdle();
     await expect.poll(() => editor.source({ sourceId })).not.toBeNull();
     sourceIds.push(sourceId);
@@ -67,7 +66,7 @@ async function prepareFourSourceGlyph(
     .poll(() => matchedSourceLayerCount(page, selectedPointIds), { timeout: 20_000 })
     .toBe(3);
 
-  await offsetMatchedSourcePoints(page, selectedPointIds, 3);
+  await editor.setup.offsetMatchedSourcePoints(selectedPointIds, 3);
   await selectObjects(page, selectedPointIds);
   await zoomToFit(page);
   await editor.waitForCanvasRender();

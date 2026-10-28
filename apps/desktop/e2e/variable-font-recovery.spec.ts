@@ -3,14 +3,6 @@ import type { Axis, AxisId, NamedInstance, NamedInstanceId, Source, SourceId } f
 import { expect, recoveryTest as test, type RecoveryApp } from "./fixtures/electronApp";
 import { runWindowCommand } from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  createAxis,
-  createNamedInstance,
-  createSource,
-  deleteAxis,
-  deleteSource,
-  editSource,
-} from "./fixtures/fontSetup";
 import { WEIGHT } from "@/testing/fonts";
 
 interface ObservedVariableFont {
@@ -53,7 +45,7 @@ test("persists source topology", async ({ recoveryApp }) => {
   ]);
   expectCanonicalFont(recoveryApp, baseline);
 
-  await deleteSource(recoveryApp.page, fixture.mediumSourceId);
+  await driverFor(recoveryApp, recoveryApp.page).setup.deleteSource(fixture.mediumSourceId);
   const deleted = await observeVariableFont(recoveryApp, recoveryApp.page);
   expect(deleted).toMatchObject({
     defaultSourceId: fixture.defaultSourceId,
@@ -89,7 +81,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   ]);
   expectCanonicalFont(recoveryApp, baseline);
 
-  await deleteAxis(recoveryApp.page, fixture.widthAxisId);
+  await driverFor(recoveryApp, recoveryApp.page).setup.deleteAxis(fixture.widthAxisId);
   const deleted = await observeVariableFont(recoveryApp, recoveryApp.page);
   expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
   expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
@@ -115,9 +107,9 @@ function driverFor(recoveryApp: RecoveryApp, page: Page): EditorDriver {
 }
 
 async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFixture> {
-  const page = recoveryApp.page;
-  const defaultSource = (await driverFor(recoveryApp, page).defaultSource()).id;
-  const axisId = await createAxis(page, {
+  const editor = driverFor(recoveryApp, recoveryApp.page);
+  const defaultSource = (await editor.defaultSource()).id;
+  const axisId = await editor.setup.createAxis({
     ...WEIGHT,
     name: "Weight",
     role: "external",
@@ -125,14 +117,14 @@ async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFix
     labels: [],
     hidden: false,
   });
-  const mediumSourceId = await createSource(page, "Medium", { [axisId]: 600 });
-  const boldSourceId = await createSource(page, "Bold", { [axisId]: 900 });
-  const instanceId = await createNamedInstance(page, {
+  const mediumSourceId = await editor.setup.createSource("Medium", { [axisId]: 600 });
+  const boldSourceId = await editor.setup.createSource("Bold", { [axisId]: 900 });
+  const instanceId = await editor.setup.createNamedInstance({
     name: "Display",
     postscriptName: "MutatorSans-Display",
     location: { [axisId]: 800 },
   });
-  await editSource(page, mediumSourceId, {
+  await editor.setup.editSource(mediumSourceId, {
     name: "Medium Master",
     italicAngle: -2,
     lineGap: 37,
@@ -143,9 +135,9 @@ async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFix
 }
 
 async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture> {
-  const page = recoveryApp.page;
-  const defaultSource = (await driverFor(recoveryApp, page).defaultSource()).id;
-  const weightAxisId = await createAxis(page, {
+  const editor = driverFor(recoveryApp, recoveryApp.page);
+  const defaultSource = (await editor.defaultSource()).id;
+  const weightAxisId = await editor.setup.createAxis({
     ...WEIGHT,
     name: "Weight",
     role: "external",
@@ -153,7 +145,7 @@ async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture
     labels: [],
     hidden: false,
   });
-  const widthAxisId = await createAxis(page, {
+  const widthAxisId = await editor.setup.createAxis({
     tag: "wdth",
     name: "Width",
     role: "external",
@@ -164,7 +156,7 @@ async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture
     labels: [],
     hidden: true,
   });
-  const slantAxisId = await createAxis(page, {
+  const slantAxisId = await editor.setup.createAxis({
     tag: "slnt",
     name: "Slant",
     role: "external",
@@ -175,12 +167,12 @@ async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture
     labels: [],
     hidden: false,
   });
-  const boldSourceId = await createSource(page, "Bold Slanted", {
+  const boldSourceId = await editor.setup.createSource("Bold Slanted", {
     [weightAxisId]: 900,
     [widthAxisId]: 150,
     [slantAxisId]: -8,
   });
-  const instanceId = await createNamedInstance(page, {
+  const instanceId = await editor.setup.createNamedInstance({
     name: "Display",
     postscriptName: "MutatorSans-Display",
     location: { [weightAxisId]: 700, [widthAxisId]: 120, [slantAxisId]: -4 },

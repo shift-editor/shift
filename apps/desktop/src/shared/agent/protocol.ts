@@ -139,4 +139,26 @@ export type AgentCallMap = {
   };
 };
 
+/**
+ * Test actions the renderer serves on the agent lane only when main enables
+ * them on connect, for E2E launches (`NODE_ENV=test`). Only the E2E actions
+ * hook sends them; agents and MCP never can.
+ */
+export type AgentE2ECallMap = {
+  /**
+   * Runs one of the renderer's E2E setup actions (`testing/E2EActions.ts`) with
+   * `args` and settles, returning its plain result.
+   */
+  "e2e.act": {
+    request: { action: string; args: unknown[] };
+    response: unknown;
+  };
+};
+
+/** What main tells a renderer when it connects the agent lane. */
+export interface AgentConnection {
+  /** Whether this is an E2E launch, so the renderer serves {@link AgentE2ECallMap}. */
+  readonly e2eActions: boolean;
+}
+
 export type AgentEventMap = Record<string, never>;

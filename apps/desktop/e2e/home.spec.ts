@@ -11,7 +11,6 @@ import {
   openFirstCatalogGlyph,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { deleteAxis } from "./fixtures/fontSetup";
 import { afterNextPaint, observeRenameTransition } from "./fixtures/glyphCatalogProbe";
 import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 import type { GlyphListing } from "@/testing/reads";
@@ -246,7 +245,7 @@ test.describe("Home view", () => {
   });
 
   test("keeps unavailable source creation discoverable without axes", async ({ editor, page }) => {
-    for (const axis of (await editor.fontOverview()).axes) await deleteAxis(page, axis.id);
+    for (const axis of (await editor.fontOverview()).axes) await editor.setup.deleteAxis(axis.id);
 
     const createSource = page.getByRole("button", { name: "Create source", exact: true });
     const tooltip = page.getByRole("tooltip");

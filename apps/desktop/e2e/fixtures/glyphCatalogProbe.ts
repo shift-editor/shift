@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { AxisId } from "@shift/types";
-import { setLocation } from "./fontSetup";
+import type { EditorDriver } from "./EditorDriver";
 
 // Instrumentation of the Home glyph catalog's resident GPU Grid: paint waits, published Grid
 // state, and DOM observers that record transitions between two reads.
@@ -155,15 +155,16 @@ export async function observedGridState(page: Page): Promise<{
  * @throws {Error} when the Grid does not render a value within 600 frames.
  */
 export async function scrubGridGeometry(
-  page: Page,
+  editor: EditorDriver,
   glyphCanvas: Locator,
   axisId: AxisId,
   values: readonly number[],
 ): Promise<{ previewHeight: number; scrollHeight: number }[]> {
+  const page = editor.page;
   const samples: { previewHeight: number; scrollHeight: number }[] = [];
   for (const value of values) {
     const previousLocation = await glyphCanvas.getAttribute("data-active-location");
-    await setLocation(page, { [axisId]: value });
+    await editor.setup.setLocation({ [axisId]: value });
     // Sample only once the Grid has rendered this location, never a stale frame.
     const rendered = await page.evaluate(async (previous) => {
       const canvas = document.querySelector<HTMLCanvasElement>(

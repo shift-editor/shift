@@ -3,14 +3,6 @@ import type { AxisId, SourceId } from "@shift/types";
 import { rect, square, triangle } from "@/testing/fixtures";
 import { test, expect } from "./fixtures/perfApp";
 import {
-  createAxis,
-  createSource,
-  deleteAxis,
-  deleteSource,
-  scaleSourceMetrics,
-  setLocation,
-} from "./fixtures/fontSetup";
-import {
   afterNextPaint,
   countGlyphCanvasHides,
   fontsReady,
@@ -29,6 +21,7 @@ import {
   glyphCatalogViewport,
   openCatalogGlyph,
 } from "./fixtures/appLocators";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
 
@@ -248,16 +241,16 @@ test.describe("Resident Glyph Grid", () => {
     expect(await paintsGlyphs(catalogSurface, glyphCanvas)).toBe(true);
   });
 
-  test("replaces a selected-source deletion atomically", async ({ electronApp, page }) => {
+  test("replaces a selected-source deletion atomically", async ({ editor, electronApp, page }) => {
     const glyphCanvas = await prepareCompleteGrid(electronApp, page);
-    const variable = await createVariableDesignspace(page);
+    const variable = await createVariableDesignspace(editor);
     // Arm the observer only after the setup edits have reached a settled frame, so every
     // recorded transition belongs to the mutation under test.
     await waitForSettledGrid(page, glyphCanvas);
     await trackGridTransitions(page);
 
-    await setLocation(page, { [variable.axisId]: 900 });
-    await deleteSource(page, variable.sourceId);
+    await editor.setup.setLocation({ [variable.axisId]: 900 });
+    await editor.setup.deleteSource(variable.sourceId);
 
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -273,15 +266,15 @@ test.describe("Resident Glyph Grid", () => {
     page,
   }) => {
     const glyphCanvas = await prepareCompleteGrid(electronApp, page);
-    const variable = await createVariableDesignspace(page);
+    const variable = await createVariableDesignspace(editor);
     // Arm the observer only after the setup edits have reached a settled frame, so every
     // recorded transition belongs to the mutation under test.
     await waitForSettledGrid(page, glyphCanvas);
     await trackGridTransitions(page);
 
-    await setLocation(page, { [variable.axisId]: 750 });
+    await editor.setup.setLocation({ [variable.axisId]: 750 });
     await afterNextPaint(page);
-    await deleteAxis(page, variable.axisId);
+    await editor.setup.deleteAxis(variable.axisId);
 
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -313,14 +306,14 @@ test.describe("Resident Glyph Grid", () => {
       timeout: 30_000,
     });
 
-    const variable = await createVariableDesignspace(page);
+    const variable = await createVariableDesignspace(editor);
     await waitForSettledGrid(page, glyphCanvas);
     const initialGeometry = {
       previewHeight: Number(await glyphCanvas.getAttribute("data-preview-height")),
       scrollHeight: await scrollViewport.evaluate((element) => element.scrollHeight),
     };
     const geometrySamples = await scrubGridGeometry(
-      page,
+      editor,
       glyphCanvas,
       variable.axisId,
       [500, 650, 800, 900, 650, 400],
@@ -335,9 +328,9 @@ test.describe("Resident Glyph Grid", () => {
 });
 
 async function createVariableDesignspace(
-  page: Page,
+  editor: EditorDriver,
 ): Promise<{ axisId: AxisId; sourceId: SourceId }> {
-  const axisId = await createAxis(page, {
+  const axisId = await editor.setup.createAxis({
     tag: "opsz",
     name: "Optical Size",
     role: "external",
@@ -348,8 +341,8 @@ async function createVariableDesignspace(
     labels: [],
     hidden: false,
   });
-  const sourceId = await createSource(page, "Bold", { [axisId]: 900 });
-  await scaleSourceMetrics(page, sourceId, 2);
+  const sourceId = await editor.setup.createSource("Bold", { [axisId]: 900 });
+  await editor.setup.scaleSourceMetrics(sourceId, 2);
   return { axisId, sourceId };
 }
 

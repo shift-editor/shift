@@ -1,12 +1,13 @@
-import type { Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { waitForPageClock, wheelZoomThenPan } from "./fixtures/editorInteractions";
-import { createGlyphWithOutline } from "./fixtures/fontSetup";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 import { rect } from "@/testing/fixtures";
 
 /** Four glyphs: one empty, and three with a box as wide as their advance (narrow, wide, extreme). */
-async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; name: string }[]> {
+async function createViewGlyphs(
+  editor: EditorDriver,
+): Promise<readonly { id: GlyphId; name: string }[]> {
   const definitions = [
     { name: "viewEmpty", width: null },
     { name: "viewNarrow", width: 20 },
@@ -16,16 +17,18 @@ async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; nam
   const glyphs: { id: GlyphId; name: string }[] = [];
   for (const { name, width } of definitions) {
     const box = width === null ? [] : [rect(0, -100, width, 1000)];
-    glyphs.push({ id: await createGlyphWithOutline(page, name, width ?? 500, box), name });
+    const id = await editor.setup.createGlyph(name, null);
+    await editor.openGlyph(id);
+    await editor.draw({ advance: width ?? 500, contours: box });
+    glyphs.push({ id, name });
   }
   return glyphs;
 }
 
 test("keeps the reported wheel position anchored across the full zoom range", async ({
-  page,
   editor,
 }) => {
-  const glyphs = await createViewGlyphs(page);
+  const glyphs = await createViewGlyphs(editor);
   const glyph = glyphs[2];
   if (!glyph) throw new Error("Expected a glyph with handles");
 
@@ -66,7 +69,7 @@ test("keeps the reported wheel position anchored across the full zoom range", as
 });
 
 test("does not turn released-modifier zoom momentum into pan", async ({ page, editor }) => {
-  const glyphs = await createViewGlyphs(page);
+  const glyphs = await createViewGlyphs(editor);
   const glyph = glyphs[2];
   if (!glyph) throw new Error("Expected a glyph with handles");
 

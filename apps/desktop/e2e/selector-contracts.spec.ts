@@ -1,4 +1,3 @@
-import type { Page } from "@playwright/test";
 import { expect, navigateToEditor, workspaceTest as test } from "./fixtures/electronApp";
 import {
   editorShell,
@@ -11,11 +10,11 @@ import {
   openVariationControls,
   settingsDetails,
 } from "./fixtures/appLocators";
-import { createAxis } from "./fixtures/fontSetup";
 import { WEIGHT } from "@/testing/fonts";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
-async function createWeightAxis(page: Page): Promise<void> {
-  await createAxis(page, {
+async function createWeightAxis(editor: EditorDriver): Promise<void> {
+  await editor.setup.createAxis({
     ...WEIGHT,
     name: "Weight",
     role: "external",
@@ -48,7 +47,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await settings.getByLabel("Close settings").click();
   await expect(settings).toBeHidden();
 
-  await createWeightAxis(page);
+  await createWeightAxis(editor);
   await navigation.getByRole("button", { name: "Axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
   await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();

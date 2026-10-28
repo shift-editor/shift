@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
-import { createAxis, createNamedInstance, createSource } from "./fixtures/fontSetup";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
 interface VariableFixture {
   axisId: AxisId;
@@ -21,8 +21,8 @@ async function selectCategory(dialog: Locator, category: "Axes" | "Sources" | "I
   await dialog.getByRole("button", { name: category, exact: true }).click();
 }
 
-async function createVariableFixture(page: Page): Promise<VariableFixture> {
-  const axisId = await createAxis(page, {
+async function createVariableFixture(editor: EditorDriver): Promise<VariableFixture> {
+  const axisId = await editor.setup.createAxis({
     tag: "opsz",
     name: "Optical Size",
     role: "external",
@@ -33,8 +33,8 @@ async function createVariableFixture(page: Page): Promise<VariableFixture> {
     labels: [],
     hidden: false,
   });
-  const sourceId = await createSource(page, "Bold", { [axisId]: 900 });
-  const instanceId = await createNamedInstance(page, {
+  const sourceId = await editor.setup.createSource("Bold", { [axisId]: 900 });
+  const instanceId = await editor.setup.createNamedInstance({
     name: "Black",
     location: { [axisId]: 800 },
   });
@@ -112,7 +112,7 @@ test.describe("variable-font authoring controls", () => {
   });
 
   test("edits and removes variable records through Settings", async ({ page, editor }) => {
-    const fixture = await createVariableFixture(page);
+    const fixture = await createVariableFixture(editor);
     const dialog = await openSettings(page, "Axes");
     const main = dialog.locator("main");
 

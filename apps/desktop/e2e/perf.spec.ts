@@ -30,7 +30,6 @@ import {
   selectSourcesForEditing,
   zoomToFit,
 } from "./fixtures/editorInteractions";
-import { createAxis, createSource } from "./fixtures/fontSetup";
 import {
   installFrameProbe,
   measureMove,
@@ -260,7 +259,7 @@ test.describe("Performance — 50K points", () => {
     await editor.undo();
     expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
 
-    const axisId = await createAxis(page, {
+    const axisId = await editor.setup.createAxis({
       tag: "bch1",
       name: "Benchmark Weight",
       role: "external",
@@ -273,7 +272,7 @@ test.describe("Performance — 50K points", () => {
     });
     await editor.waitForIdle();
     const referenceId = (await editor.defaultSource()).id;
-    const targetId = await createSource(page, "Benchmark Bold", { [axisId]: 900 });
+    const targetId = await editor.setup.createSource("Benchmark Bold", { [axisId]: 900 });
     const sourceIds = { referenceId, targetId };
     await editor.waitForIdle();
     await expect.poll(() => editor.source({ sourceId: sourceIds.targetId })).not.toBeNull();
