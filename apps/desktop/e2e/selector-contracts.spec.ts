@@ -34,7 +34,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await expect(glyphCatalogSurface(page)).toBeVisible();
   await expect(glyphCatalogCanvas(page)).toBeAttached();
 
-  const defaultSourceId = (await editor.defaultSource()).id;
+  const defaultSourceId = (await editor.source("default"))!.id;
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 

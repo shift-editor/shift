@@ -98,7 +98,13 @@ import type {
 } from "./surface";
 import { drawFixture } from "./drawFixture";
 import { SurfaceActions } from "./SurfaceActions";
-import type { AxisRef, DocumentSaveState, InstanceRef, Outline, SourceRef } from "./reads";
+import type {
+  AxisSelection,
+  DocumentSaveState,
+  InstanceSelection,
+  Outline,
+  SourceSelection,
+} from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -1218,24 +1224,28 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.font.getFont();
   }
 
-  source(source: SourceRef): Source | null {
-    return this.#reads.font.source(typeof source === "string" ? { name: source } : source);
+  source(selector: SourceSelection): Source | null {
+    switch (selector) {
+      case "default":
+        return this.#reads.font.defaultSource();
+      case "active":
+        return this.#reads.editor.activeSource();
+    }
+    return "id" in selector
+      ? this.#reads.font.source({ sourceId: selector.id })
+      : this.#reads.font.source({ name: selector.name });
   }
 
-  instance(instance: InstanceRef): NamedInstance | null {
-    return this.#reads.font.instance(typeof instance === "string" ? { name: instance } : instance);
+  instance(selector: InstanceSelection): NamedInstance | null {
+    return "id" in selector
+      ? this.#reads.font.instance({ instanceId: selector.id })
+      : this.#reads.font.instance({ name: selector.name });
   }
 
-  axis(axis: AxisRef): Axis | null {
-    return this.#reads.font.axis(typeof axis === "string" ? { tag: axis } : axis);
-  }
-
-  defaultSource(): Source {
-    return this.#reads.font.defaultSource();
-  }
-
-  currentSource(): Source | null {
-    return this.#reads.editor.activeSource();
+  axis(selector: AxisSelection): Axis | null {
+    return "id" in selector
+      ? this.#reads.font.axis({ axisId: selector.id })
+      : this.#reads.font.axis({ tag: selector.tag });
   }
 
   languages(): readonly string[] | null {

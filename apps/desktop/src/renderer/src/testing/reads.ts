@@ -69,12 +69,12 @@ export type SourceKerning = KerningMasterValue;
 export type KerningGroup = KerningGroupSummary;
 /** One glyph's authored layer at one source, as agents read it with `layers.get`. */
 export type SourceLayer = AuthoredLayer;
-/** A source by its exact name, or by stable id. */
-export type SourceRef = string | { readonly sourceId: SourceId };
-/** A named instance by its exact name, or by stable id. */
-export type InstanceRef = string | { readonly instanceId: NamedInstanceId };
-/** An axis by its tag, or by stable id. */
-export type AxisRef = string | { readonly axisId: AxisId };
+/** A source by its exact name or stable id, the font's default source, or the editor's active one. */
+export type SourceSelection = { name: string } | { id: SourceId } | "default" | "active";
+/** A named instance by its exact name or stable id. */
+export type InstanceSelection = { name: string } | { id: NamedInstanceId };
+/** An axis by its tag or stable id. */
+export type AxisSelection = { tag: string } | { id: AxisId };
 
 /** A glyph's identity and the layer each source holds. */
 export type GlyphListing = GlyphSummary;
@@ -126,19 +126,15 @@ export interface EditorReads {
   glyphNamed(name: string): Read<GlyphListing | null>;
   /** The authored layer of the glyph named `glyph` at the source named `source`, the default source when omitted. */
   layerOf(glyph: string, source?: string): Promise<SourceLayer>;
-  /** The font's source by name or id, or null when it has none. */
-  source(source: SourceRef): Read<Source | null>;
-  /** The font's named instance by name or id, or null when it has none. */
-  instance(instance: InstanceRef): Read<NamedInstance | null>;
-  /** The font's axis by tag or id, or null when it has none. */
-  axis(axis: AxisRef): Read<Axis | null>;
-  /** The font's default source: where every axis sits at its default. */
-  defaultSource(): Read<Source>;
   /**
-   * The source the editor shows and edits (the editor's active source), or null between
-   * sources. Named apart from `Editor.activeSource`, which `TestEditor` inherits.
+   * The source `selector` names: by name or id, the font's default source (`"default"`), or the
+   * one the editor shows and edits (`"active"`, null between sources); null when it has none.
    */
-  currentSource(): Read<Source | null>;
+  source(selector: SourceSelection): Read<Source | null>;
+  /** The font's named instance by name or id, or null when it has none. */
+  instance(selector: InstanceSelection): Read<NamedInstance | null>;
+  /** The font's axis by tag or id, or null when it has none. */
+  axis(selector: AxisSelection): Read<Axis | null>;
   /** The font's info, metrics, axes, sources and instances, and the session's mode, as agents read them. */
   fontOverview(): Read<FontSummary>;
   /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */

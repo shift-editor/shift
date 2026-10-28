@@ -40,7 +40,7 @@ async function prepareFourSourceGlyph(
   });
   await editor.waitForIdle();
 
-  const referenceId = (await editor.defaultSource()).id;
+  const referenceId = (await editor.source("default"))!.id;
   const sourceIds: SourceId[] = [];
   for (const [name, value] of [
     ["Benchmark Medium", 500],
@@ -49,7 +49,7 @@ async function prepareFourSourceGlyph(
   ] as const) {
     const sourceId = await editor.setup.createSource(name, { [axisId]: value });
     await editor.waitForIdle();
-    await expect.poll(() => editor.source({ sourceId })).not.toBeNull();
+    await expect.poll(() => editor.source({ id: sourceId })).not.toBeNull();
     sourceIds.push(sourceId);
   }
 

@@ -271,11 +271,11 @@ test.describe("Performance — 50K points", () => {
       hidden: false,
     });
     await editor.waitForIdle();
-    const referenceId = (await editor.defaultSource()).id;
+    const referenceId = (await editor.source("default"))!.id;
     const targetId = await editor.setup.createSource("Benchmark Bold", { [axisId]: 900 });
     const sourceIds = { referenceId, targetId };
     await editor.waitForIdle();
-    await expect.poll(() => editor.source({ sourceId: sourceIds.targetId })).not.toBeNull();
+    await expect.poll(() => editor.source({ id: sourceIds.targetId })).not.toBeNull();
     await selectSourcesForEditing(page, [
       { sourceId: sourceIds.targetId },
       { sourceId: sourceIds.referenceId },

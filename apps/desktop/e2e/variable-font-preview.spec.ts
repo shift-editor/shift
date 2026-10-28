@@ -24,7 +24,7 @@ test.describe("variable font preview projection", () => {
       "aria-disabled",
       "true",
     );
-    const regularSourceId = (await editor.source("Regular"))?.id;
+    const regularSourceId = (await editor.source({ name: "Regular" }))?.id;
     if (!regularSourceId) throw new Error("Expected Regular source");
     await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
@@ -35,7 +35,7 @@ test.describe("variable font preview projection", () => {
       await expect(action).toHaveAttribute("aria-disabled", "true");
     }
 
-    const mediumInstanceId = (await editor.instance("Medium"))?.id;
+    const mediumInstanceId = (await editor.instance({ name: "Medium" }))?.id;
     if (!mediumInstanceId) throw new Error("Expected Medium instance");
     await page.getByTestId(`instance-${mediumInstanceId}`).click();
     await expect.poll(async () => (await editor.editorView()).externalLocation[0]?.value).toBe(500);

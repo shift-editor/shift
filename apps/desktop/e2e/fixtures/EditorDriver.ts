@@ -27,12 +27,12 @@ import type {
 import type {
   CanvasHandle,
   CanvasText,
-  AxisRef,
+  AxisSelection,
   DocumentSaveState,
   EditorActions,
   EditorReads,
-  InstanceRef,
-  SourceRef,
+  InstanceSelection,
+  SourceSelection,
   EditorViewState,
   FontSummary,
   GlyphListing,
@@ -195,7 +195,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   async addSource(name: string, location: AxisLocation): Promise<void> {
     const values: Record<AxisId, number> = {};
     for (const [tag, value] of Object.entries(location)) {
-      const axis = await this.axis(tag);
+      const axis = await this.axis({ tag });
       if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
       values[axis.id] = value;
     }
@@ -607,35 +607,38 @@ export class EditorDriver implements EditorReads, EditorActions {
     return this.#read("font", "glyphNamed", name as GlyphName);
   }
 
-  async source(source: SourceRef): Promise<Source | null> {
-    return this.#read("font", "source", typeof source === "string" ? { name: source } : source);
+  async source(selector: SourceSelection): Promise<Source | null> {
+    switch (selector) {
+      case "default":
+        return this.#read("font", "defaultSource");
+      case "active":
+        return this.#read("editor", "activeSource");
+    }
+    return "id" in selector
+      ? this.#read("font", "source", { sourceId: selector.id })
+      : this.#read("font", "source", { name: selector.name });
   }
 
-  async instance(instance: InstanceRef): Promise<NamedInstance | null> {
-    const selector = typeof instance === "string" ? { name: instance } : instance;
-    return this.#read("font", "instance", selector);
+  async instance(selector: InstanceSelection): Promise<NamedInstance | null> {
+    return "id" in selector
+      ? this.#read("font", "instance", { instanceId: selector.id })
+      : this.#read("font", "instance", { name: selector.name });
   }
 
-  async axis(axis: AxisRef): Promise<Axis | null> {
-    return this.#read("font", "axis", typeof axis === "string" ? { tag: axis } : axis);
-  }
-
-  async defaultSource(): Promise<Source> {
-    return this.#read("font", "defaultSource");
-  }
-
-  async currentSource(): Promise<Source | null> {
-    return this.#read("editor", "activeSource");
+  async axis(selector: AxisSelection): Promise<Axis | null> {
+    return "id" in selector
+      ? this.#read("font", "axis", { axisId: selector.id })
+      : this.#read("font", "axis", { tag: selector.tag });
   }
 
   /** Clicks the row of the source named `name` in the Variations panel, opening the panel first. */
   async clickSource(name: string): Promise<void> {
-    const source = await this.source(name);
+    const source = await this.source({ name });
     if (!source) throw new Error(`The font has no source named ${name}`);
 
     const controls = await openVariationControls(this.page);
     await controls.getByTestId(`source-${source.id}`).click();
-    await expect.poll(async () => (await this.currentSource())?.id).toBe(source.id);
+    await expect.poll(async () => (await this.source("active"))?.id).toBe(source.id);
   }
 
   async layerOf(glyph: string, source?: string): Promise<SourceLayer> {

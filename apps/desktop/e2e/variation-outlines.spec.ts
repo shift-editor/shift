@@ -29,7 +29,7 @@ workspaceTest.describe("mapped weight interpolation", () => {
         ["ExtraLight", 50, 407.14285714285717],
         ["SemiBold", 110, 697.2972972972973],
       ] as const) {
-        const instance = await editor.instance(name);
+        const instance = await editor.instance({ name });
         if (!instance) throw new Error(`Expected ${name} instance`);
         await controls.getByTestId(`instance-${instance.id}`).click();
         await editor.waitForCanvasRender();
@@ -69,7 +69,7 @@ async function openOutlineFixture(page: Page, editor: EditorDriver): Promise<Out
 
   const [{ sources, instances }, activeSource] = await Promise.all([
     editor.fontOverview(),
-    editor.currentSource(),
+    editor.source("active"),
   ]);
   const comparisonSources = sources.filter(({ id }) => id !== activeSource?.id);
   const instance = instances[0];
@@ -129,8 +129,8 @@ test("moves matched points in every selected source as one edit", async ({ page,
   await navigateToEditor(page, "53");
   const controls = await openVariationControls(page);
   // LightCondensed is the open default source; BoldWide is the comparison source.
-  const source = await editor.source("BoldWide");
-  if (!source || source.id === (await editor.currentSource())?.id) {
+  const source = await editor.source({ name: "BoldWide" });
+  if (!source || source.id === (await editor.source("active"))?.id) {
     throw new Error("Expected BoldWide as a comparison source");
   }
 
@@ -311,7 +311,7 @@ async function interpolatedInstance(
   editor: EditorDriver,
 ): Promise<{ id: string; name: string }> {
   const instanceId = await instanceBetweenSources(page);
-  const instance = instanceId ? await editor.instance({ instanceId }) : null;
+  const instance = instanceId ? await editor.instance({ id: instanceId }) : null;
   if (!instance) throw new Error("Expected an instance between sources");
 
   return { id: instance.id, name: instance.name };

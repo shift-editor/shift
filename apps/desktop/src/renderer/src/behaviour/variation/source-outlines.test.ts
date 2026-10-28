@@ -7,7 +7,7 @@ const editor = useTestEditor({ axes: [WEIGHT], sources: { Bold: { wght: 700 } } 
 let regular: SourceId;
 
 beforeEach(() => {
-  const source = editor.source("Regular");
+  const source = editor.source({ name: "Regular" });
   if (!source) throw new Error("Expected the default source");
   regular = source.id;
 });

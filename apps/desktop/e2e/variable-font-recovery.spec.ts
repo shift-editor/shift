@@ -108,7 +108,7 @@ function driverFor(recoveryApp: RecoveryApp, page: Page): EditorDriver {
 
 async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFixture> {
   const editor = driverFor(recoveryApp, recoveryApp.page);
-  const defaultSource = (await editor.defaultSource()).id;
+  const defaultSource = (await editor.source("default"))!.id;
   const axisId = await editor.setup.createAxis({
     ...WEIGHT,
     name: "Weight",
@@ -136,7 +136,7 @@ async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFix
 
 async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture> {
   const editor = driverFor(recoveryApp, recoveryApp.page);
-  const defaultSource = (await editor.defaultSource()).id;
+  const defaultSource = (await editor.source("default"))!.id;
   const weightAxisId = await editor.setup.createAxis({
     ...WEIGHT,
     name: "Weight",
@@ -195,14 +195,14 @@ async function observeVariableFont(
   const editor = driverFor(recoveryApp, page);
   const [{ axes, sources, instances }, defaultSource, document] = await Promise.all([
     editor.fontOverview(),
-    editor.defaultSource(),
+    editor.source("default"),
     editor.documentState(),
   ]);
   return {
     axes,
     sources,
     namedInstances: instances,
-    defaultSourceId: defaultSource.id,
+    defaultSourceId: defaultSource!.id,
     dirty: document?.dirty ?? false,
   };
 }
