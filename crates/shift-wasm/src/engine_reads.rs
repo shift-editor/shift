@@ -92,9 +92,13 @@ mod exports {
     use std::collections::HashMap;
     use std::hash::Hash;
 
+    use serde::Serialize;
     use shift_font::naming::new_anchor_name;
-    use shift_font::{DesignLocation, Font, GlyphId, Kerning, KerningSide, LayerId, SourceId};
+    use shift_font::{
+        DesignLocation, Font, GlyphId, Kerning, KerningSide, LayerId, ResolvedKerning, SourceId,
+    };
     use shift_wire::intents::{self, WireParse};
+    use tsify::{Ts, Tsify};
     use wasm_bindgen::prelude::*;
 
     use super::{EditablePair, InterpolatedMetrics, KerningRun, SourceMetricsAt, SourcePairs};
@@ -140,9 +144,24 @@ mod exports {
                 })
                 .collect()
         }
+    }
 
+    impl<T: Copy> IdTable<T> {
         fn get(&self, number: usize) -> Option<&T> {
             self.ids.get(number)
+        }
+
+        /// The id interned as `number`.
+        ///
+        /// # Errors
+        ///
+        /// Fails when the session interned no id as `number`.
+        fn require(&self, number: u32) -> Result<T, JsError> {
+            usize::try_from(number)
+                .ok()
+                .and_then(|number| self.get(number))
+                .copied()
+                .ok_or_else(|| JsError::new(&format!("no id was interned as {number}")))
         }
     }
 
@@ -265,6 +284,105 @@ mod exports {
             second_group: matches!(resolved.pair.second, KerningSide::Group(_)),
             amount: resolved.value,
         }
+    }
+
+    /// An authored pair, its sides by id, and its value at a source.
+    #[derive(Serialize, Tsify)]
+    pub struct EngineKerningPair {
+        #[tsify(type = "GlyphId | KerningGroupId")]
+        first: String,
+        #[tsify(type = "GlyphId | KerningGroupId")]
+        second: String,
+        /// Font units added after the first glyph's advance.
+        amount: f64,
+    }
+
+    impl From<ResolvedKerning> for EngineKerningPair {
+        fn from(resolved: ResolvedKerning) -> Self {
+            Self {
+                first: side_id(&resolved.pair.first),
+                second: side_id(&resolved.pair.second),
+                amount: resolved.value,
+            }
+        }
+    }
+
+    fn side_id(side: &KerningSide) -> String {
+        match side {
+            KerningSide::Glyph(glyph_id) => glyph_id.to_string(),
+            KerningSide::Group(group_id) => group_id.to_string(),
+        }
+    }
+
+    /// Authored pairs, in the order the read returns them.
+    #[derive(Serialize, Tsify)]
+    #[serde(transparent)]
+    pub struct EngineKerningPairs(Vec<EngineKerningPair>);
+
+    /// The pairs authored at a source that name a glyph on a side, directly or
+    /// through its group at that side, as `Kerning::pairs_naming` finds them.
+    /// The source and glyph are numbers the session interned.
+    ///
+    /// # Errors
+    ///
+    /// Fails on an unknown handle, or a number the session never interned.
+    #[wasm_bindgen(js_name = engineKerningPairsNaming)]
+    pub fn engine_kerning_pairs_naming(
+        handle: u32,
+        source: u32,
+        glyph: u32,
+    ) -> Result<Ts<EngineKerningPairs>, JsError> {
+        let pairs = with_engine(handle, |engine| {
+            let source_id = engine.ids.sources.require(source)?;
+            let glyph_id = engine.ids.glyphs.require(glyph)?;
+            let kerning = engine.session.font().kerning();
+            Ok(EngineKerningPairs(
+                kerning
+                    .pairs_naming(source_id, glyph_id)
+                    .map(EngineKerningPair::from)
+                    .collect(),
+            ))
+        })?;
+        Ok(pairs.into_ts()?)
+    }
+
+    /// Where a pair's value comes from at a source that authors no pair for it.
+    #[derive(Serialize, Tsify)]
+    #[serde(rename_all = "lowercase")]
+    pub enum MissingKerningOrigin {
+        /// The source kerns on its own, or is the font's only one: the pair kerns zero.
+        Unkerned,
+        /// The pair's value blends the sources that author kerning.
+        Interpolated,
+    }
+
+    impl From<shift_font::MissingKerningOrigin> for MissingKerningOrigin {
+        fn from(origin: shift_font::MissingKerningOrigin) -> Self {
+            match origin {
+                shift_font::MissingKerningOrigin::Unkerned => Self::Unkerned,
+                shift_font::MissingKerningOrigin::Interpolated => Self::Interpolated,
+            }
+        }
+    }
+
+    /// Where a pair's value comes from at a source, by number, that authors
+    /// no pair for it: `Font::missing_kerning_origin`.
+    ///
+    /// # Errors
+    ///
+    /// Fails on an unknown handle, or a number the session never interned.
+    #[wasm_bindgen(js_name = engineMissingKerningOrigin)]
+    pub fn engine_missing_kerning_origin(
+        handle: u32,
+        source: u32,
+    ) -> Result<Ts<MissingKerningOrigin>, JsError> {
+        let origin = with_engine(handle, |engine| {
+            let source_id = engine.ids.sources.require(source)?;
+            Ok(MissingKerningOrigin::from(
+                engine.session.font().missing_kerning_origin(source_id),
+            ))
+        })?;
+        Ok(origin.into_ts()?)
     }
 
     /// Input: `SourceMetricsAt`. Output: the masters' metrics interpolated at

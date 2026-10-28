@@ -10,8 +10,8 @@ import {
 } from "@shift/ui";
 import { useSignalState } from "@shift/editor/signals";
 import KerningIcon from "@/assets/toolbar/kerning.svg";
-import { KerningTool } from "@shift/editor/tools";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useToolIf } from "@/hooks/useToolIf";
 
 interface KerningValuePopoverProps {
   /** The canvas stack the tool's screen pixels are measured from. */
@@ -29,13 +29,12 @@ interface KerningValuePopoverProps {
  */
 export function KerningValuePopover({ container }: KerningValuePopoverProps) {
   const editor = useEditor();
-  const tool = useSignalState(editor.toolCellIf("kerning"));
+  const kerning = useToolIf("kerning");
   useSignalState(editor.camera.viewCell);
   const cancelled = useRef(false);
 
-  const kerning = editor.toolManager.activeTool;
-  const pair = kerning instanceof KerningTool ? kerning.editing : null;
-  if (!tool || !(kerning instanceof KerningTool) || !pair) return null;
+  const pair = kerning?.editing ?? null;
+  if (!kerning || !pair) return null;
 
   const anchor = {
     getBoundingClientRect: () => {

@@ -3,6 +3,7 @@ export type { Behavior } from "./lib/tools/core/Behavior";
 export { GestureDetector, type ToolEvent } from "./lib/tools/core/GestureDetector";
 export type { ToolManifest, ToolMenuItem } from "./lib/tools/core/ToolManifest";
 export type { ToolName } from "./lib/tools/core/createContext";
+export type { ToolFor, ToolMap } from "./lib/tools/core/ToolStateMap";
 export { Hand } from "./lib/tools/hand";
 export { Pen } from "./lib/tools/pen";
 export { Select } from "./lib/tools/select";

@@ -59,7 +59,14 @@ import {
   cloneExternalAxisLocation,
   emptyExternalAxisLocation,
 } from "../variation/location";
-import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
+import type {
+  ActiveTool,
+  BaseTool,
+  ToolFor,
+  ToolName,
+  ToolRegistration,
+  ToolState,
+} from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Mat, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
@@ -212,7 +219,7 @@ export class Editor {
   #toolRegistry: Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
   #tool: Signal<ActiveTool | null>;
   #toolId: Signal<ToolName | null>;
-  readonly #toolCellsById = new Map<ToolName, Signal<ActiveTool | null>>();
+  readonly #toolCellsById = new Map<ToolName, Signal<BaseTool<ToolState> | null>>();
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
   /** The selection resolved once into one layer's points, when it is only that. */
@@ -486,44 +493,44 @@ export class Editor {
   }
 
   /**
-   * Exposes one tool's live state while that tool is active.
+   * Exposes one tool while that tool is active.
    *
    * @remarks
-   * Holds null while another tool is active, so readers that follow one tool
-   * ignore every other tool's state changes. The cell is created on first
-   * request and reused for the editor's lifetime.
+   * Holds null while another tool is active and changes only when the tool is
+   * switched, so readers that follow one tool ignore every other tool. Readers
+   * that follow the tool's state as well subscribe to its `stateCell`. The cell
+   * is created on first request and reused for the editor's lifetime.
    *
-   * @param id - Tool identity whose state the reader follows.
-   * @returns A cell holding the active tool snapshot when its identity matches; otherwise null.
+   * @param id - Tool identity the reader follows.
+   * @returns A cell holding the active tool when its identity matches; otherwise null.
    */
-  public toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null> {
+  public toolCellIf<Id extends ToolName>(id: Id): Signal<ToolFor<Id> | null> {
     let cell = this.#toolCellsById.get(id);
     if (!cell) {
       cell = computed(
         () => {
-          if (this.#toolId.value !== id) return null;
-
-          return this.#tool.value;
+          const tool = this.#toolManager.activeToolCell.value;
+          return tool?.id === id ? tool : null;
         },
         { name: `editor.tool.${id}` },
       );
       this.#toolCellsById.set(id, cell);
     }
 
-    return cell as Signal<ActiveTool<Id> | null>;
+    return cell as Signal<ToolFor<Id> | null>;
   }
 
   /**
    * Returns the active tool narrowed to the requested identity.
    *
-   * @param id - Tool identity whose current state the caller needs.
-   * @returns The active tool snapshot when its identity matches; otherwise null.
+   * @param id - Tool identity the caller needs.
+   * @returns The active tool, typed by its identity, when it matches; otherwise null.
    */
-  public toolIf<Id extends ToolName>(id: Id): ActiveTool<Id> | null {
-    const tool = this.#tool.peek();
+  public toolIf<Id extends ToolName>(id: Id): ToolFor<Id> | null {
+    const tool = this.#toolManager.activeTool;
     if (tool?.id !== id) return null;
 
-    return tool as ActiveTool<Id>;
+    return tool as ToolFor<Id>;
   }
 
   /** Returns whether a pointer drag gesture is currently in flight. */

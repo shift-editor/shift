@@ -91,7 +91,8 @@ apps/desktop/src/renderer/src/components/kerning/
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
 - `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
 - `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, semantic pointer-action history captures, replacement, removal, and temporary tool switching.
-- `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
+- `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot published by `Editor.toolCell`; built-in state narrows through `ToolStateMap`, runtime IDs fall back to `ToolState`.
+- `ToolFor<Id>` — the tool class for a built-in ID through `ToolMap`, else `BaseTool<ToolStateFor<Id>>`. `Editor.toolIf(id)` returns `ToolFor<Id> | null` and `Editor.toolCellIf(id)` a cell of it that changes only on tool switches; readers of the tool's state also follow its `stateCell` (the desktop `useToolIf` hook does both), so nothing reaches `toolManager.activeTool` with `instanceof`.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut?, hidden?, disabled? }`. Registration descriptor passed to `editor.registerTool`. Hidden tools are omitted from the toolbar; disabled tools render as non-interactive controls; both suppress user keyboard shortcuts while remaining programmatically activatable.
 - `ToolRegistration` — exclusive ownership handle returned by `editor.registerTool`; exposes `replace(manifest)` and idempotent `dispose()`.

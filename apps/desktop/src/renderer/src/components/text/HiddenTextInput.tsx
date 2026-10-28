@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useToolIf } from "@/hooks/useToolIf";
 import type { Editor } from "@shift/editor";
 import { useSignalState } from "@shift/editor/signals";
 import { lineBreakTextItem, type TextItem } from "@shift/editor/text";
@@ -9,7 +10,7 @@ export function TextInput() {
   const editor = useEditor();
   const ref = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
-  const tool = useSignalState(editor.toolCellIf("text"));
+  const tool = useToolIf("text");
   const editing = useSignalState(editor.textEditing.stateCell);
 
   const textareaRef = useCallback((node: HTMLTextAreaElement | null) => {
