@@ -469,6 +469,36 @@ impl Kerning {
         ResolvedKerning { pair, value: 0.0 }
     }
 
+    /// Returns the pairs authored at `source_id` that name `glyph_id` on a
+    /// side, directly or through its group at that side, each with its value,
+    /// ordered by pair.
+    ///
+    /// A group side names the glyph only when it is the glyph's group at the
+    /// position it occupies: its `First` group as the pair's first side, its
+    /// `Second` group as the second. Empty for a source without pairs.
+    pub fn pairs_naming(
+        &self,
+        source_id: SourceId,
+        glyph_id: GlyphId,
+    ) -> impl Iterator<Item = ResolvedKerning> + '_ {
+        let first_group = self.group_of(KerningPosition::First, glyph_id).copied();
+        let second_group = self.group_of(KerningPosition::Second, glyph_id).copied();
+        let names_glyph = move |side: &KerningSide, group: Option<KerningGroupId>| match side {
+            KerningSide::Glyph(side_glyph) => *side_glyph == glyph_id,
+            KerningSide::Group(group_id) => group == Some(*group_id),
+        };
+        self.source(source_id)
+            .into_iter()
+            .flat_map(SourceKerning::pairs)
+            .filter(move |(pair, _)| {
+                names_glyph(&pair.first, first_group) || names_glyph(&pair.second, second_group)
+            })
+            .map(|(pair, value)| ResolvedKerning {
+                pair: pair.clone(),
+                value,
+            })
+    }
+
     /// Returns the pairs that could supply the kerning between `first`
     /// followed by `second`, most specific first, in UFO order: glyph and
     /// glyph, then glyph and the second's group, then the first's group and
@@ -646,6 +676,43 @@ mod tests {
         assert_eq!(value("Aacute", "V"), Some(-30.0));
         assert_eq!(value("Aacute", "W"), Some(-40.0));
         assert_eq!(value("V", "A"), None);
+    }
+
+    #[test]
+    fn pairs_naming_a_glyph_include_its_groups_only_at_their_side() {
+        let (mut kerning, source_id) = sample();
+        let names_aacute = KerningPair::glyphs(glyph("T"), glyph("Aacute"));
+        let names_a = KerningPair::new(
+            KerningSide::Glyph(glyph("A")),
+            KerningSide::Group(group_id("V")),
+        );
+        let first_group_at_second_side = KerningPair::new(
+            KerningSide::Glyph(glyph("T")),
+            KerningSide::Group(group_id("A")),
+        );
+        kerning.set_value(source_id, names_aacute.clone(), -15.0);
+        kerning.set_value(source_id, names_a, -20.0);
+        kerning.set_value(source_id, first_group_at_second_side, -5.0);
+
+        let naming = kerning
+            .pairs_naming(source_id, glyph("Aacute"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            naming,
+            [
+                ResolvedKerning {
+                    pair: names_aacute,
+                    value: -15.0
+                },
+                ResolvedKerning {
+                    pair: KerningPair::groups(group_id("A"), group_id("V")),
+                    value: -40.0
+                },
+            ]
+        );
+        let bold = SourceId::from_raw("bold");
+        assert_eq!(kerning.pairs_naming(bold, glyph("Aacute")).count(), 0);
     }
 
     #[test]

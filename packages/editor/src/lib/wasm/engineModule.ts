@@ -6,7 +6,9 @@ import {
   engineDiscardRedo,
   engineEndEdit,
   engineGlyphNumbers,
+  engineKerningPairsNaming,
   engineMarkSaved,
+  engineMissingKerningOrigin,
   engineNewAnchorName,
   engineNextGlyphName,
   engineOpen,
@@ -19,9 +21,11 @@ import {
   engineStage,
   engineUndo,
   type EngineEdit,
+  type EngineKerningPair,
   type EngineLayer,
   type EngineLayerSource,
   type EngineStage,
+  type MissingKerningOrigin,
 } from "@shift/wasm/engine";
 import {
   engineKerningPairs,
@@ -160,6 +164,22 @@ export class EngineSession {
   }
 
   /**
+   * The pairs authored at `sourceId` in the session's font that name
+   * `glyphId` on a side, directly or through its group at that side.
+   */
+  kerningPairsNaming(sourceId: SourceId, glyphId: GlyphId): EngineKerningPair[] {
+    const [source] = this.#numbers([sourceId], this.#sourceNumbers, engineSourceNumbers);
+    const [glyph] = this.#numbers([glyphId], this.#glyphNumbers, engineGlyphNumbers);
+    return engineKerningPairsNaming(this.#handle, source!, glyph!);
+  }
+
+  /** Where a pair's value comes from at `sourceId` when that source authors no pair for it. */
+  missingKerningOrigin(sourceId: SourceId): MissingKerningOrigin {
+    const [source] = this.#numbers([sourceId], this.#sourceNumbers, engineSourceNumbers);
+    return engineMissingKerningOrigin(this.#handle, source!);
+  }
+
+  /**
    * Interpolates the session's font's source metrics at a design location.
    *
    * @param location - Design coordinates in the font's axis order, NaN for an axis default.
@@ -259,8 +279,10 @@ export class EngineSession {
 export type {
   EditablePair,
   EngineEdit,
+  EngineKerningPair,
   EngineLayer,
   EngineLayerSource,
   EngineStage,
   InterpolatedMetrics,
+  MissingKerningOrigin,
 };

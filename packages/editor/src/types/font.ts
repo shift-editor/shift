@@ -24,7 +24,12 @@ import type {
 import type { FontStore } from "../lib/model/FontStore";
 import type { LayerUpdate } from "../lib/model/GlyphLayerState";
 import type { Signal } from "../lib/signals/signal";
-import type { EditablePair, InterpolatedMetrics } from "../lib/wasm/engine";
+import type {
+  EditablePair,
+  EngineKerningPair,
+  InterpolatedMetrics,
+  MissingKerningOrigin,
+} from "../lib/wasm/engine";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -87,7 +92,10 @@ export type KerningPlace =
  * including when the engine opens, so reactive readers track them.
  */
 export interface FontEngine {
-  /** Changes whenever {@link kerningRun} or {@link kerningPairs} may answer differently. */
+  /**
+   * Changes whenever {@link kerningRun}, {@link kerningPairs},
+   * {@link kerningPairsNaming} or {@link missingKerningOrigin} may answer differently.
+   */
   readonly kerningRevisionCell: Signal<number>;
   /** Changes whenever {@link sourceMetricsAt} may answer differently. */
   readonly sourceMetricsRevisionCell: Signal<number>;
@@ -108,6 +116,23 @@ export interface FontEngine {
    * @returns One entry per pair; empty while the engine is not open.
    */
   kerningPairs(sourceId: SourceId, pairs: readonly GlyphId[]): readonly EditablePair[];
+
+  /**
+   * Reads the pairs authored at a source that name `glyphId` on a side,
+   * directly or through its group at that side, in no set order.
+   *
+   * @returns The pairs with their values; empty while the engine is not open.
+   */
+  kerningPairsNaming(sourceId: SourceId, glyphId: GlyphId): EngineKerningPair[];
+
+  /**
+   * Where a pair's value at a source comes from when that source authors no
+   * pair for it: zero where the source kerns on its own or is the font's
+   * only one, else the blend of the sources that author kerning.
+   *
+   * @returns `unkerned` while the engine is not open, since nothing kerns.
+   */
+  missingKerningOrigin(sourceId: SourceId): MissingKerningOrigin;
 
   /**
    * Interpolates the masters' source metrics at a design location.
