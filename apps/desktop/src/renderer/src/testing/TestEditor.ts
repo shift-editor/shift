@@ -1237,7 +1237,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   async layerOf(glyph: string, source?: string): Promise<AuthoredLayer> {
     return this.#reads.font.getLayer({
       glyph: { name: glyph as GlyphName },
-      ...(source === undefined ? {} : { source: { name: source } }),
+      source: source === undefined ? undefined : { name: source },
     });
   }
 

@@ -914,6 +914,7 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
     metadata: workspace.metadata,
     metrics: workspace.metrics,
     metricDefinitions: workspace.metricDefinitions,
+    // oxlint-disable-next-line shift/no-conditional-spread -- FontSnapshot is a stored snapshot; a font without interpolated source metrics has no key
     ...(workspace.sourceMetricsInterpolation
       ? { sourceMetricsInterpolation: workspace.sourceMetricsInterpolation }
       : {}),
@@ -923,6 +924,7 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
     axisMappings: workspace.axisMappings,
     axisMappingBases: workspace.axisMappingBases,
     namedInstances: workspace.namedInstances,
+    // oxlint-disable-next-line shift/no-conditional-spread -- FontSnapshot is a stored snapshot; a font without language ids has no key
     ...(workspace.languageIds ? { languageIds: workspace.languageIds } : {}),
     kerning: workspace.kerning,
   };

@@ -108,7 +108,7 @@ async function buildRenderer(): Promise<void> {
     },
     // Profiling builds also keep function names, so React fibers name their
     // components when render counts are read from the running app.
-    ...(isProfile ? { esbuild: { keepNames: true } } : {}),
+    esbuild: isProfile ? { keepNames: true } : undefined,
     define: {
       __PLAYWRIGHT__: JSON.stringify(isE2E),
     },

@@ -351,15 +351,11 @@ export class App {
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
       maximised,
-      ...(minWidth === undefined ? {} : { minWidth }),
-      ...(titleBarHeight === undefined ? {} : { titleBarHeight }),
-      ...(bounds
-        ? {
-            width: bounds.width,
-            height: bounds.height,
-            browserWindowOptions: { x: bounds.x, y: bounds.y },
-          }
-        : {}),
+      minWidth,
+      titleBarHeight,
+      width: bounds?.width,
+      height: bounds?.height,
+      browserWindowOptions: bounds === undefined ? undefined : { x: bounds.x, y: bounds.y },
     });
     this.#windows.add(window);
     window.window.webContents.on("render-process-gone", (_event, details) => {
@@ -541,7 +537,7 @@ export class App {
     this.#log.info("loading build file at", { path: source.source });
     window.window.loadFile(source.source, {
       hash,
-      ...(SLUG_ATLAS_PROFILING_ENABLED ? { query: { shiftProfileSlugAtlas: "1" } } : {}),
+      query: SLUG_ATLAS_PROFILING_ENABLED ? { shiftProfileSlugAtlas: "1" } : undefined,
     });
   }
 
