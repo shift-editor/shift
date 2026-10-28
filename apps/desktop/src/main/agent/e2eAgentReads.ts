@@ -26,31 +26,32 @@ export interface E2EAgentReads {
 }
 
 /**
- * Setup actions in one window's renderer, for the Playwright `EditorDriver` and
- * fixtures: the renderer's `testing/E2EActions.ts`, whose `draw` is the builder
- * `TestEditor.draw` runs in-process, so both drivers set up alike.
+ * Setup actions and test probes in one window's renderer, for the Playwright
+ * `EditorDriver` and fixtures: the hooks in the renderer's `testing/e2e/`.
+ * Their `actions.draw` is the builder `TestEditor.draw` runs in-process, so
+ * both drivers set up alike.
  *
  * @remarks
- * Published on `globalThis.shiftE2EActions` only for E2E launches, with
- * {@link E2EAgentReads}. Each action settles before it resolves.
+ * Published on `globalThis.shiftE2EHooks` only for E2E launches, with
+ * {@link E2EAgentReads}. Actions settle before they resolve.
  */
-export interface E2EActionsHook {
+export interface E2EHooksBridge {
   /**
-   * Runs `action` with `args` in window `windowId`'s renderer.
+   * Calls `hook`'s `method` with `args` in window `windowId`'s renderer.
    *
-   * @returns the action's plain result.
-   * @throws {Error} when the window has no font session, or the action is unknown.
+   * @returns the method's plain result.
+   * @throws {Error} when the window has no font session, or the hook or method is unknown.
    */
-  act(windowId: number, action: string, args: unknown[]): Promise<unknown>;
+  call(windowId: number, hook: string, method: string, args: unknown[]): Promise<unknown>;
 }
 
 declare global {
   var shiftAgentReads: E2EAgentReads | undefined;
-  var shiftE2EActions: E2EActionsHook | undefined;
+  var shiftE2EHooks: E2EHooksBridge | undefined;
 }
 
 /**
- * Publishes {@link E2EAgentReads} and {@link E2EActionsHook} when this is an E2E
+ * Publishes {@link E2EAgentReads} and {@link E2EHooksBridge} when this is an E2E
  * launch; does nothing otherwise.
  *
  * @param agentFor - The agent lane of window `windowId`; throws for a window without a font session.
@@ -68,7 +69,7 @@ export function publishE2EHooks(agentFor: (windowId: number) => AgentClient): vo
       }
     },
   };
-  globalThis.shiftE2EActions = {
-    act: (windowId, action, args) => agentFor(windowId).act(action, args),
+  globalThis.shiftE2EHooks = {
+    call: (windowId, hook, method, args) => agentFor(windowId).callHook(hook, method, args),
   };
 }

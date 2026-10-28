@@ -165,8 +165,6 @@ test.describe("variable-font authoring controls", () => {
 
     await selectCategory(dialog, "Axes");
     await dialog.getByLabel("Delete Optical Scale").click();
-    await expect
-      .poll(async () => (await editor.axis({ axisId: fixture.axisId })) !== undefined)
-      .toBe(false);
+    await expect.poll(() => editor.axis({ axisId: fixture.axisId })).toBeNull();
   });
 });

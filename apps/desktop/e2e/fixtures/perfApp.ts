@@ -22,6 +22,7 @@ import { EditorDriver } from "./EditorDriver";
 import { clearSelection } from "./editorInteractions";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 import type { RecordedDialog } from "./types";
+import { registerApp } from "./appHooks";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -77,6 +78,7 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
           },
         });
 
+        registerApp(app);
         const page = await app.firstWindow();
         const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
           electronApp.getPath("userData"),

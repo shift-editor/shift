@@ -165,11 +165,11 @@ export class AgentClient {
   }
 
   /**
-   * Runs the renderer's E2E setup action `action` with `args`, as the E2E
-   * actions hook does; the renderer serves it only for E2E launches.
+   * Calls `method` of the renderer's E2E hook `hook` with `args`, as the E2E
+   * hooks do; the renderer serves it only for E2E launches.
    */
-  act(action: string, args: unknown[]): Promise<unknown> {
-    return this.#call("e2e.act", { action, args });
+  callHook(hook: string, method: string, args: unknown[]): Promise<unknown> {
+    return this.#call("e2e.call", { hook, method, args });
   }
 
   #call<K extends keyof (AgentCallMap & AgentE2ECallMap)>(

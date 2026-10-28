@@ -146,11 +146,11 @@ export type AgentCallMap = {
  */
 export type AgentE2ECallMap = {
   /**
-   * Runs one of the renderer's E2E setup actions (`testing/E2EActions.ts`) with
-   * `args` and settles, returning its plain result.
+   * Calls `method` of the renderer's E2E hook named `hook` (`testing/e2e/hooks.ts`:
+   * setup actions, which settle, and probes) with `args`, returning its plain result.
    */
-  "e2e.act": {
-    request: { action: string; args: unknown[] };
+  "e2e.call": {
+    request: { hook: string; method: string; args: unknown[] };
     response: unknown;
   };
 };

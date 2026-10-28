@@ -1,4 +1,3 @@
-import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
 import { expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import type { Point2D, Rect2D } from "@shift/geo";
 import type {
@@ -18,7 +17,6 @@ import type {
   Axis,
   NamedInstance,
   Source,
-  Unicode,
 } from "@shift/types";
 import type {
   AgentReaderName,
@@ -45,7 +43,7 @@ import type {
   SpacingToolState,
 } from "@/testing/reads";
 import type { DrawOptions, GlyphFixture, PointNames } from "@/testing/fixtures";
-import { readAgent, setupActions, type E2ESetup } from "./appHooks";
+import { callHook, readAgent, registerApp, setupActions, type E2ESetup } from "./appHooks";
 import { openVariationControls, waitForEditorReady } from "./appLocators";
 import type { AxisFixture, AxisLocation } from "@/testing/fonts";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
@@ -63,30 +61,8 @@ const TOOL_LABELS = {
 /** Toolbar tool actions the driver can locate and activate. */
 export type EditorTool = keyof typeof TOOL_LABELS;
 
-async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
-  await page.waitForFunction((expectedGlyphId) => {
-    const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
-    if (!editor || !node || node.glyphId !== expectedGlyphId) return false;
-
-    return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
-  }, glyphId);
-}
-
-async function readLivePointPosition(page: Page, pointId: PointId): Promise<Point2D> {
-  return page.evaluate((id) => {
-    const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
-    const point = node
-      ? editor
-          ?.glyphForId(node.glyphId)
-          ?.layerForSource(node.sourceId)
-          ?.allPoints.find((candidate) => candidate.id === id)
-      : null;
-    if (!point) throw new Error("Expected editable point");
-
-    return { x: point.x, y: point.y };
-  }, pointId);
+async function waitForActiveGlyph(page: Page, glyphId: GlyphId): Promise<void> {
+  await expect.poll(() => callHook(page, "editor", "glyphOpen", glyphId)).toBe(true);
 }
 
 /**
@@ -100,17 +76,16 @@ async function readLivePointPosition(page: Page, pointId: PointId): Promise<Poin
  * available through methods such as {@link selectionBounds}.
  */
 export class EditorDriver implements EditorReads, EditorActions {
-  readonly #app: ElectronApplication | null;
-
   /**
    * Creates a driver for the editor owned by `page`.
-   * @param app - The app that owns `page`; the {@link EditorReads} reads need it.
+   * @param app - The app that owns `page`, when the E2E fixtures did not launch it; reads and
+   *   setup find a fixture-launched page's app on their own.
    */
   constructor(
     readonly page: Page,
     app: ElectronApplication | null = null,
   ) {
-    this.#app = app;
+    if (app) registerApp(app);
   }
 
   /**
@@ -118,7 +93,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * the editor's public commands, each waiting until the workspace confirms it.
    */
   get setup(): E2ESetup {
-    return setupActions(this.#requireApp(), this.page);
+    return setupActions(this.page);
   }
 
   /** Returns the interactive editor canvas locator. */
@@ -136,32 +111,14 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param hexCodepoint - Hexadecimal scalar value, such as `41` for `A`.
    */
   async openGlyphByUnicode(hexCodepoint: string): Promise<void> {
-    const unicode = Number.parseInt(hexCodepoint, 16) as Unicode;
-    await this.page.waitForFunction(
-      (codepoint) => {
-        const font = window.shift?.font;
-        if (!font) return false;
+    const unicode = Number.parseInt(hexCodepoint, 16);
+    await expect
+      .poll(() => callHook(this.page, "editor", "glyphForUnicode", unicode), { timeout: 20_000 })
+      .not.toBeNull();
+    const glyphId = await callHook(this.page, "editor", "glyphForUnicode", unicode);
+    if (!glyphId) throw new Error(`No glyph found for U+${hexCodepoint}`);
 
-        const handle = font.glyphHandleForUnicode(codepoint as Unicode);
-        return font.recordForName(handle.name) !== null;
-      },
-      unicode,
-      { timeout: 20_000 },
-    );
-
-    const glyphId = await this.page.evaluate(async (codepoint) => {
-      const workspace = window.shift;
-      if (!workspace) throw new Error("Expected workspace");
-
-      const handle = workspace.font.glyphHandleForUnicode(codepoint as Unicode);
-      const record = workspace.font.recordForName(handle.name);
-      if (!record) throw new Error(`No glyph found for U+${codepoint.toString(16)}`);
-
-      await workspace.font.loadGlyph(record.id);
-      window.location.hash = `#/editor/${encodeURIComponent(record.id)}`;
-      return record.id;
-    }, unicode);
-
+    await this.setup.openGlyph(glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
     await this.waitForCanvasRender();
@@ -183,13 +140,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param glyphId - Glyph identity in the loaded workspace.
    */
   async openGlyph(glyphId: GlyphId): Promise<void> {
-    await this.page.evaluate(async (id) => {
-      const font = window.shift?.font;
-      if (!font) throw new Error("Expected font workspace");
-
-      await font.loadGlyph(id);
-      window.location.hash = `#/editor/${encodeURIComponent(id)}`;
-    }, glyphId);
+    await this.setup.openGlyph(glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
   }
@@ -271,6 +222,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   async waitForCanvasRender(): Promise<void> {
     await this.#waitForEdits();
     await this.canvas.waitFor({ state: "visible" });
+    // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits for paint, not app state
     await this.page.evaluate(
       () =>
         new Promise<void>((resolve) => {
@@ -289,12 +241,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Projects a scene position into canvas-local coordinates. */
   async projectSceneToCanvas(position: Point2D): Promise<Point2D> {
-    return this.page.evaluate((scenePosition) => {
-      const editor = window.shiftSession?.editor;
-      if (!editor) throw new Error("Expected editor");
-
-      return editor.sceneToScreen(scenePosition as ScenePoint);
-    }, position);
+    return callHook(this.page, "editor", "sceneToCanvas", position);
   }
 
   /**
@@ -315,13 +262,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    */
   async projectGlyphToPage(position: Point2D): Promise<Point2D> {
     const [canvasPosition, bounds] = await Promise.all([
-      this.page.evaluate((localPosition) => {
-        const editor = window.shiftSession?.editor;
-        const node = editor?.scene.nodesOfKind("glyph")[0];
-        if (!editor || !node) throw new Error("Expected an open glyph node");
-
-        return editor.sceneToScreen(editor.toScene(node, localPosition as LocalPoint));
-      }, position),
+      callHook(this.page, "editor", "glyphToCanvas", position),
       this.canvasBounds(),
     ]);
     return { x: bounds.x + canvasPosition.x, y: bounds.y + canvasPosition.y };
@@ -332,12 +273,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param position - Point relative to the canvas origin.
    */
   async projectCanvasToScene(position: Point2D): Promise<Point2D> {
-    return this.page.evaluate((canvasPosition) => {
-      const editor = window.shiftSession?.editor;
-      if (!editor) throw new Error("Expected editor");
-
-      return editor.screenToScene(canvasPosition as ScreenPoint);
-    }, position);
+    return callHook(this.page, "editor", "canvasToScene", position);
   }
 
   /** Selects every editable object and waits for any resulting workspace edits. */
@@ -433,40 +369,18 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Flushes the latest coalesced pointer move into the active tool gesture. */
   async flushPointerMoves(): Promise<void> {
-    await this.page.evaluate(() => window.shift?.editor.toolManager.flushPointerMoves());
+    await this.setup.flushPointerMoves();
   }
 
   /** Waits until the current gesture and its workspace edits are complete. */
   async waitForIdle(): Promise<void> {
-    await this.shell.waitFor({ state: "visible" });
-    await this.page.waitForFunction(
-      () =>
-        document.querySelector("[data-testid='editor-shell']")?.getAttribute("data-gesture") ===
-        "idle",
-    );
+    await expect(this.shell).toHaveAttribute("data-gesture", "idle", { timeout: 30_000 });
     await this.#waitForEdits();
   }
 
   /** Returns the glyph being edited, or null when none is (or its authored layer is not published). */
   async activeGlyph(): Promise<ActiveGlyph | null> {
-    return this.page.evaluate(() => {
-      const editor = window.shiftSession?.editor;
-      const editingId = editor?.editing.nodeIds[0] ?? null;
-      const node = editor?.scene.nodeOfKind(editingId, "glyph");
-      if (!editor || !node) return null;
-
-      const glyph = editor.glyphForId(node.glyphId);
-      const layer = glyph?.layerForSource(node.sourceId);
-      if (!layer) return null;
-
-      return {
-        glyphId: node.glyphId,
-        nodeId: node.id,
-        sourceId: node.sourceId,
-        pointCount: layer.pointCount,
-        contourCount: layer.contours.length,
-      };
-    });
+    return callHook(this.page, "editor", "editedGlyph");
   }
 
   /** Returns zero without an active glyph, otherwise its authored point count. */
@@ -481,38 +395,32 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns the canvas zoom level. */
   async zoomLevel(): Promise<number> {
-    return this.page.evaluate(() => window.shiftSession?.editor.zoom ?? 0);
+    return callHook(this.page, "editor", "zoom");
   }
 
   /** Returns how far the canvas is panned, in screen pixels. */
   async canvasOffset(): Promise<Point2D> {
-    return this.page.evaluate(() => {
-      const editor = window.shiftSession?.editor;
-      if (!editor) throw new Error("Expected editor");
-      return { x: editor.pan.x, y: editor.pan.y };
-    });
+    return callHook(this.page, "editor", "pan");
   }
 
   /** Returns the ids of the scene nodes being edited, in the order they were entered. */
   async editedNodeIds(): Promise<readonly string[]> {
-    return this.page.evaluate(() => [...(window.shiftSession?.editor.editing.nodeIds ?? [])]);
+    return callHook(this.page, "editor", "editedNodeIds");
   }
 
   /** Returns the hovered editor object identity, or null when nothing is hovered. */
   async hoverId(): Promise<string | null> {
-    return this.page.evaluate(() => window.shiftSession?.editor.hover.id ?? null);
+    return callHook(this.page, "editor", "hoverId");
   }
 
   /** Returns the active tool's published state discriminator. */
   async toolState(): Promise<string | null> {
-    return this.page.evaluate(
-      () => window.shiftSession?.editor.toolManager.activeTool?.getState().type ?? null,
-    );
+    return callHook(this.page, "editor", "toolState");
   }
 
   /** Returns fresh live selection bounds in glyph units; throws without a bounded selection. */
   async selectionBounds(): Promise<Rect2D> {
-    const b = await this.page.evaluate(() => window.shift?.editor.selectionBounds());
+    const b = await callHook(this.page, "editor", "selectionBounds");
     if (!b) throw new Error("Expected selection bounds");
 
     return {
@@ -534,32 +442,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   async pointTargets(pointIds: readonly PointId[]): Promise<readonly PointTarget[]> {
     await this.#waitForEdits();
 
-    return this.page.evaluate((ids) => {
-      const editor = window.shift?.editor;
-      const node = editor?.scene.nodesOfKind("glyph")[0];
-      const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
-      const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-      if (!editor || !node || !layer || !canvas) throw new Error("Expected editable glyph");
-
-      const bounds = canvas.getBoundingClientRect();
-      return ids.map((id) => {
-        const point = layer.point(id);
-        if (!point) throw new Error(`Expected editable point ${id}`);
-
-        const canvasPosition = editor.sceneToScreen(
-          editor.toScene(node, { x: point.x, y: point.y } as LocalPoint),
-        );
-        return {
-          id,
-          glyphPosition: { x: point.x, y: point.y },
-          canvasPosition,
-          pagePosition: {
-            x: bounds.left + canvasPosition.x,
-            y: bounds.top + canvasPosition.y,
-          },
-        };
-      });
-    }, pointIds);
+    return callHook(this.page, "editor", "pointProjections", pointIds);
   }
 
   /**
@@ -575,7 +458,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param pointId - Point in the active authored layer.
    */
   async livePointPosition(pointId: PointId): Promise<Point2D> {
-    return readLivePointPosition(this.page, pointId);
+    return callHook(this.page, "editor", "livePointPosition", pointId);
   }
 
   /**
@@ -586,65 +469,15 @@ export class EditorDriver implements EditorReads, EditorActions {
     const [target] = await this.pointTargets([pointId]);
 
     await this.page.mouse.click(target.pagePosition.x, target.pagePosition.y);
-    await this.page.waitForFunction(
-      (id) =>
-        window.shift?.editor.selection.ids.length === 1 && window.shift.editor.selection.has(id),
-      pointId,
-    );
+    await expect.poll(() => this.selectionIds()).toEqual([pointId]);
   }
 
   /** Returns a safe drag for a visible on-curve point; throws when none exists. */
   async selectVisiblePoint(): Promise<PointDrag> {
-    const point = await this.page.evaluate(() => {
-      const workspace = window.shift;
-      const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-      const node = workspace?.editor.scene.nodesOfKind("glyph")[0];
-      const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
-      const layer = node ? glyph?.layerForSource(node.sourceId) : null;
-      if (!workspace || !canvas || !node || !layer) throw new Error("Expected editable glyph");
-
-      const bounds = canvas.getBoundingClientRect();
-      const candidates = layer.allPoints
-        .filter((candidate) => candidate.isOnCurve)
-        .map((candidate) => ({
-          point: candidate,
-          screen: workspace.editor.sceneToScreen(
-            workspace.editor.toScene(node, { x: candidate.x, y: candidate.y } as LocalPoint),
-          ),
-        }))
-        .filter(
-          ({ screen }) =>
-            screen.x >= 50 &&
-            screen.y >= 50 &&
-            screen.x <= bounds.width - 100 &&
-            screen.y <= bounds.height - 100,
-        )
-        .sort(
-          (a, b) =>
-            Math.hypot(a.screen.x - bounds.width / 2, a.screen.y - bounds.height / 2) -
-            Math.hypot(b.screen.x - bounds.width / 2, b.screen.y - bounds.height / 2),
-        );
-      const candidate = candidates[0];
-      if (!candidate) throw new Error("Expected visible on-curve point");
-
-      const endScreen = { x: candidate.screen.x + 40, y: candidate.screen.y + 30 };
-      const endScene = workspace.editor.screenToScene(endScreen as ScreenPoint);
-      return {
-        id: candidate.point.id,
-        startPagePosition: {
-          x: bounds.left + candidate.screen.x,
-          y: bounds.top + candidate.screen.y,
-        },
-        endPagePosition: { x: bounds.left + endScreen.x, y: bounds.top + endScreen.y },
-        expectedGlyphPosition: workspace.editor.toLocal(node, endScene),
-      };
-    });
+    const point = await callHook(this.page, "editor", "visiblePointDrag");
 
     await this.page.mouse.click(point.startPagePosition.x, point.startPagePosition.y);
-    await this.page.waitForFunction(
-      (pointId) => window.shift?.editor.selection.has(pointId),
-      point.id,
-    );
+    await expect.poll(() => this.selectionIds()).toContain(point.id);
 
     return point;
   }
@@ -663,31 +496,10 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns a hovered visible point identity; throws when none exists. */
   async hoverVisibleUnselectedPoint(): Promise<PointId> {
-    const target = await this.page.evaluate(() => {
-      const workspace = window.shift;
-      const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-      const node = workspace?.editor.scene.nodesOfKind("glyph")[0];
-      const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
-      const layer = node ? glyph?.layerForSource(node.sourceId) : null;
-      if (!workspace || !canvas || !node || !layer) throw new Error("Expected editable glyph");
-
-      const point = layer.allPoints.find(
-        (candidate) => candidate.isOnCurve && !workspace.editor.selection.has(candidate.id),
-      );
-      if (!point) throw new Error("Expected unselected point");
-
-      const screen = workspace.editor.sceneToScreen(
-        workspace.editor.toScene(node, { x: point.x, y: point.y } as LocalPoint),
-      );
-      const bounds = canvas.getBoundingClientRect();
-      return { id: point.id, x: bounds.left + screen.x, y: bounds.top + screen.y };
-    });
+    const target = await callHook(this.page, "editor", "unselectedPoint");
 
     await this.page.mouse.move(target.x, target.y);
-    await this.page.waitForFunction(
-      (pointId) => window.shift?.editor.hover.id === pointId,
-      target.id,
-    );
+    await expect.poll(() => this.hoverId()).toBe(target.id);
     return target.id;
   }
 
@@ -886,16 +698,10 @@ export class EditorDriver implements EditorReads, EditorActions {
     method: M,
     ...args: AgentReadArgs<R, M>
   ): Promise<AgentReadResult<R, M>> {
-    return readAgent(this.#requireApp(), this.page, reader, method, args);
-  }
-
-  #requireApp(): ElectronApplication {
-    if (!this.#app)
-      throw new Error("Reading the editor needs its app: pass it to the EditorDriver");
-    return this.#app;
+    return readAgent(this.page, reader, method, args);
   }
 
   async #waitForEdits(): Promise<void> {
-    await this.page.evaluate(async () => window.shift?.font.editCoordinator.settled());
+    await this.setup.settle();
   }
 }

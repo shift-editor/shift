@@ -8,7 +8,7 @@ import {
   type ChannelServer,
 } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
-import type { E2EActions } from "@/testing/E2EActions";
+import type { E2EHooks } from "@/testing/e2e/hooks";
 import type { AgentReaders } from "./AgentReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
@@ -24,7 +24,7 @@ export class AgentBridge {
   readonly #readers: AgentReaders;
   readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
-  #e2eActions: E2EActions | null = null;
+  #e2eHooks: E2EHooks | null = null;
   #disposed = false;
 
   constructor(host: ShiftHost, session: FontSession) {
@@ -95,7 +95,7 @@ export class AgentBridge {
       // E2E actions exist only when main says this is an E2E launch; their
       // builder is loaded on first use, so other launches never load it.
       const e2e: Partial<ChannelHandlers<AgentE2ECallMap>> = e2eActions
-        ? { "e2e.act": ({ action, args }) => this.#act(action, args) }
+        ? { "e2e.call": ({ hook, method, args }) => this.#callHook(hook, method, args) }
         : {};
       this.#requests = serveChannel<AgentCallMap & AgentE2ECallMap, AgentEventMap>(
         domPortTransport(received),
@@ -116,15 +116,19 @@ export class AgentBridge {
     this.#requests = null;
   }
 
-  /** @throws {Error} for an action the E2E actions do not have. */
-  async #act(action: string, args: unknown[]): Promise<unknown> {
-    const { E2EActions } = await import("@/testing/E2EActions");
-    this.#e2eActions ??= new E2EActions(this.#session.editor);
-    const target = this.#e2eActions;
-    const run: unknown =
-      action !== "constructor" ? Reflect.get(Object.getPrototypeOf(target), action) : null;
-    if (typeof run !== "function") throw new Error(`No E2E action ${action}`);
-    return Reflect.apply(run, target, args);
+  /** @throws {Error} for a hook or method the E2E hooks do not have. */
+  async #callHook(hook: string, method: string, args: unknown[]): Promise<unknown> {
+    const { createE2EHooks } = await import("@/testing/e2e/hooks");
+    const hooks = (this.#e2eHooks ??= createE2EHooks(this.#session));
+    const target: object | undefined = Object.hasOwn(hooks, hook)
+      ? hooks[hook as keyof E2EHooks]
+      : undefined;
+    const call: unknown =
+      target && method !== "constructor"
+        ? Reflect.get(Object.getPrototypeOf(target), method)
+        : null;
+    if (typeof call !== "function") throw new Error(`No E2E hook ${hook}.${method}`);
+    return Reflect.apply(call, target, args);
   }
 
   /** @throws {Error} for a reader or method the window does not serve. */
