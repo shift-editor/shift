@@ -13,6 +13,7 @@
  * returns exactly the names a fixture used.
  */
 import type { ContourContent } from "@shift/editor/clipboard";
+import { Curve, type CubicCurve } from "@shift/geo";
 import type { PointType } from "@shift/types";
 
 /** An on-curve corner as `[x, y]`, or a point with its kind and an optional name. */
@@ -193,6 +194,46 @@ export function cubic<const N extends string = never>(
 ): ShapeFixture<NoInfer<N>> {
   return {
     points: [onCurve(start), offCurve(control1), offCurve(control2), onCurve(end)],
+  };
+}
+
+/** A piece of {@link splitCubic}: 0 for the first. */
+type CubicPiece = 0 | 1 | 2;
+
+/** The names {@link splitCubic} gives: on-curve points `p0`…`p3`, each piece's controls `c0a`, `c0b`, `c1a`… */
+export type CubicPieceName = `p${CubicPiece | 3}` | `c${CubicPiece}a` | `c${CubicPiece}b`;
+
+/** What {@link splitCubic} makes: every point named, so each is a position. */
+export interface SplitCubicFixture extends ShapeFixture<CubicPieceName> {
+  readonly points: readonly NamedPointFixture<CubicPieceName>[];
+}
+
+/**
+ * An open contour of `curve` split at each of `ts` in turn, each `t` measured
+ * along what is left: up to three cubic pieces drawn exactly over `curve`.
+ * The on-curve points are named `p0`, `p1`… and each piece's controls `c0a`,
+ * `c0b`, `c1a`….
+ */
+export function splitCubic(curve: CubicCurve, ...ts: number[]): SplitCubicFixture {
+  const pieces: CubicCurve[] = [];
+  let rest = curve;
+  for (const t of ts) {
+    const [left, right] = Curve.splitAt(rest, t) as [CubicCurve, CubicCurve];
+    pieces.push(left);
+    rest = right;
+  }
+  pieces.push(rest);
+  if (pieces.length > 3) throw new Error("splitCubic names at most three pieces");
+
+  return {
+    points: [
+      { ...curve.p0, name: "p0" },
+      ...pieces.flatMap((piece, index): NamedPointFixture<CubicPieceName>[] => [
+        { ...piece.c0, off: true, name: `c${index as CubicPiece}a` },
+        { ...piece.c1, off: true, name: `c${index as CubicPiece}b` },
+        { ...piece.p1, name: `p${(index + 1) as CubicPiece | 3}` },
+      ]),
+    ],
   };
 }
 

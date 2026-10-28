@@ -103,7 +103,11 @@ export interface DrawnGlyph {
     readonly dy: number;
     readonly bounds: Bounds | null;
   }[];
-  /** The glyph's anchors with those it takes from its components, by name. */
+  /**
+   * The glyph's anchors with those it takes from its components, in the order
+   * export propagates them (`shift_font::anchor_propagation`): components in
+   * turn, an anchor a later one replaces by name keeping its place.
+   */
   readonly anchors: readonly { readonly name: string; readonly x: number; readonly y: number }[];
 }
 
