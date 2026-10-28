@@ -84,16 +84,19 @@ describe("fallbacks", () => {
 });
 
 describe("conditional-spread", () => {
-  it("reports a spread that chooses on a condition", () => {
+  it("reports an array spread that chooses on a condition", () => {
     const found = scan(
-      `const a = { ...(name ? { name } : {}) };\nconst b = { ...(open && { open }) };\nconst c = [...(isMac ? [] : [quit])];`,
+      `const a = [...(isMac ? [] : [quit])];\nconst b = [...(open && [item])];\nf(...(x ? [1] : []));`,
     );
     assert.equal(found.length, 3);
     assert.ok(found.every((finding) => finding.startsWith("conditional-spread")));
   });
 
-  it("ignores a plain spread", () => {
-    assert.deepEqual(scan(`const a = { ...defaults, ...options };`), []);
+  it("leaves object spreads to the lint rule and ignores a plain spread", () => {
+    assert.deepEqual(
+      scan(`const a = { ...(name ? { name } : {}) };\nconst b = { ...defaults, ...options };`),
+      [],
+    );
   });
 });
 
