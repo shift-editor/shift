@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorKind } from "./anchors";
+import { anchorKind } from "@shift/wasm";
 
 describe("anchorKind", () => {
   it("tells marks, bases, ligatures, carets, and cursive anchors apart", () => {

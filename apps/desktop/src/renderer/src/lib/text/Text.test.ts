@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { Mat } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
 import { localPoint, scenePoint } from "@shift/editor/spaces";
 import { effect } from "@shift/editor/signals";
-import { characterTextItem, glyphTextItem, type TextItem } from "@shift/editor/text";
+import { characterTextItem, glyphTextItem } from "@shift/editor/text";
 import { trackRunLayouts } from "@shift/editor/tools";
 import type { GlyphName } from "@shift/types";
 import { TestEditor } from "@/testing/TestEditor";
