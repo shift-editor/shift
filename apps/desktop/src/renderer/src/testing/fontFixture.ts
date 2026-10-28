@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach } from "vitest";
 import type { FontSessionMode } from "@shared/workspace/protocol";
 import type { GlyphFixture } from "./fixtures";
+import { FONT_FILES, WEIGHT, type FontName } from "./fonts";
 import type { AxisFixture, AxisLocation, EditorTestSurface } from "./surface";
 import { openTestEditor, startTestEditor } from "./TestEditor";
 
@@ -38,27 +39,15 @@ const FONTS_DIRECTORY = fileURLToPath(
   new URL("../../../../../../fixtures/fonts/", import.meta.url),
 );
 
-/** The font files in the repository's `fixtures/fonts` that tests open, by what they hold. */
-export const FONTS = {
-  /** MutatorSans as a designspace of four masters, with kerning. */
-  mutatorSans: `${FONTS_DIRECTORY}mutatorsans-variable/MutatorSans.designspace`,
-  /** MutatorSans's LightCondensed master on its own, as a UFO. */
-  mutatorSansLightCondensed: `${FONTS_DIRECTORY}mutatorsans/MutatorSansLightCondensed.ufo`,
-  /** Composites that take anchors from their components. */
-  anchorPropagation: `${FONTS_DIRECTORY}AnchorPropagation.glyphs`,
-  /** A weight axis whose user values map to other design values. */
-  mappedWeight: `${FONTS_DIRECTORY}MappedWeight.glyphs`,
-  /** Components scaled differently in each master. */
-  scaledComponent: `${FONTS_DIRECTORY}ScaledComponent.glyphs`,
-  /** Features that substitute and position glyphs, for shaping. */
-  shapingTest: `${FONTS_DIRECTORY}ShapingTest.ufo`,
-} as const;
+/** The font files in the repository's `fixtures/fonts` that tests open, by what they hold, as absolute paths. */
+export const FONTS = Object.fromEntries(
+  Object.entries(FONT_FILES).map(([name, file]) => [name, `${FONTS_DIRECTORY}${file}`]),
+) as { readonly [Name in FontName]: string };
 
 /** One of {@link FONTS}. */
-export type FontFile = (typeof FONTS)[keyof typeof FONTS];
+export type FontFile = (typeof FONTS)[FontName];
 
-/** A weight axis from 100 to 900, its default at 400. */
-export const WEIGHT = { tag: "wght", minimum: 100, default: 400, maximum: 900 } as const;
+export { WEIGHT };
 
 /** A glyph a {@link FontFixture} adds, or draws into when the font already has it. */
 export interface GlyphEntry {

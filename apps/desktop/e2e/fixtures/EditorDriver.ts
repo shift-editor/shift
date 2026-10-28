@@ -32,6 +32,13 @@ import type {
 } from "@/testing/reads";
 import type {} from "../../src/main/agent/e2eAgentReads";
 import { waitForEditorReady } from "./appLocators";
+import {
+  contourContent,
+  pointNames,
+  type DrawOptions,
+  type GlyphFixture,
+  type PointNames,
+} from "@/testing/fixtures";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
 
 const TOOL_LABELS = {
@@ -172,6 +179,91 @@ export class EditorDriver implements EditorReads {
     }, glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
+  }
+
+  /**
+   * Builds `fixture` into the open glyph through the editor's own commands, as the vitest
+   * surface's `draw` does.
+   *
+   * @remarks
+   * The drawing is undoable like any edit: the engine keeps its own undo
+   * stack, which setup cannot yet opt out of. Undo only what the test did.
+   *
+   * @param options - `select` selects every point drawn, in drawing order;
+   * otherwise nothing is selected afterwards.
+   * @returns the minted point ids, keyed by each point's `name`.
+   */
+  async draw<const F extends GlyphFixture>(
+    fixture: F,
+    options: DrawOptions = {},
+  ): Promise<Record<PointNames<F>, PointId>> {
+    const contours = fixture.contours ?? [];
+    const drawn = await this.page.evaluate(
+      async ({ advance, content, anchors, components, select }) => {
+        const workspace = window.shift;
+        if (!workspace) throw new Error("draw needs an authored workspace");
+        const { editor, font } = workspace;
+        if (advance !== undefined) editor.setXAdvance(advance);
+
+        let ids: readonly string[] = [];
+        if (content.contours.length > 0) {
+          const inserted = editor.insertContent(content);
+          if (!inserted) throw new Error("draw needs one open glyph to draw into");
+          ids = inserted;
+        }
+
+        for (const anchor of anchors) {
+          if (!editor.addAnchorAt({ x: anchor.x, y: anchor.y })) {
+            throw new Error(`draw could not add anchor ${anchor.name}`);
+          }
+          const [anchorId] = editor.selection.ids;
+          if (anchorId) editor.renameAnchor(anchorId as never, anchor.name);
+        }
+
+        // Adds each component and moves it as the sidebar's position fields do.
+        for (const component of components) {
+          const base = font.recordForName(component.glyph as never);
+          if (!base) throw new Error(`draw needs a glyph named ${component.glyph}`);
+
+          const id = await editor.addComponent(base.id);
+          if (!id) throw new Error(`draw could not add component ${component.glyph}`);
+
+          const { x = 0, y = 0 } = component;
+          if (x === 0 && y === 0) continue;
+          await font.editCoordinator.settled();
+          await editor.text.settled();
+          const selection = editor.componentTransformSelection([id]);
+          if (!selection) throw new Error(`draw could not move component ${component.glyph}`);
+          selection.layer.transformComponents(selection, "Move components", () => ({
+            a: 1,
+            b: 0,
+            c: 0,
+            d: 1,
+            e: x,
+            f: y,
+          }));
+        }
+
+        if (select) editor.selection.select(ids as never);
+        else editor.selection.clear();
+        await font.editCoordinator.settled();
+        await editor.text.settled();
+        return ids;
+      },
+      {
+        advance: fixture.advance,
+        content: contourContent(contours),
+        anchors: fixture.anchors ?? [],
+        components: fixture.components ?? [],
+        select: options.select ?? false,
+      },
+    );
+
+    const names: Record<string, PointId> = {};
+    pointNames(contours).forEach((name, index) => {
+      if (name !== null) names[name] = drawn[index] as PointId;
+    });
+    return names as Record<PointNames<F>, PointId>;
   }
 
   /**

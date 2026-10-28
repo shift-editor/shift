@@ -37,7 +37,7 @@ import type {
 } from "@shift/types";
 import type { EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
-import type { GlyphFixture, PointNames } from "./fixtures";
+import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type {
   CanvasHandle,
   CanvasText,
@@ -56,17 +56,13 @@ import type {
   SpacingToolState,
 } from "./reads";
 
+export type { DrawOptions } from "./fixtures";
+
 /** Keyboard modifiers held during a gesture. */
 export interface Modifiers {
   readonly shiftKey?: boolean;
   readonly altKey?: boolean;
   readonly metaKey?: boolean;
-}
-
-/** How {@link EditorTestSurface.draw} leaves the selection. */
-export interface DrawOptions {
-  /** Selects every point drawn, as if the test had then selected them all. */
-  readonly select?: boolean;
 }
 
 /** A new continuous axis, as the Axes panel creates one. */

@@ -56,6 +56,12 @@ export interface GlyphFixture<N extends string = string> {
   readonly components?: readonly ComponentFixture[];
 }
 
+/** How {@link EditorTestSurface.draw} leaves the selection. */
+export interface DrawOptions {
+  /** Selects every point drawn, as if the test had then selected them all. */
+  readonly select?: boolean;
+}
+
 /** The point names a fixture uses. */
 export type PointNames<F extends GlyphFixture> = NonNullable<
   F["contours"]
