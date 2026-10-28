@@ -724,7 +724,7 @@ export class EditorDriver implements EditorReads {
     return this.#read("font", "getGlyph", { name: name as GlyphName });
   }
 
-  async layerOf(glyph: string, source?: string): Promise<SourceLayer> {
+  async sourceLayer(glyph: string, source?: string): Promise<SourceLayer> {
     return this.#read("font", "getLayer", {
       glyph: { name: glyph as GlyphName },
       ...(source === undefined ? {} : { source: { name: source } }),

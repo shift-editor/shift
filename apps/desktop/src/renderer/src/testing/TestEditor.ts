@@ -1246,7 +1246,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return (await this.#authoredLayer(choice)).bounds;
   }
 
-  async layerOf(glyph: string, source?: string): Promise<AuthoredLayer> {
+  async sourceLayer(glyph: string, source?: string): Promise<AuthoredLayer> {
     return this.#reads.font.getLayer({
       glyph: { name: glyph as GlyphName },
       ...(source === undefined ? {} : { source: { name: source } }),

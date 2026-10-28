@@ -76,7 +76,7 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
   await editor.waitForIdle();
 
   const pointCount = async (glyph: string) =>
-    (await editor.layerOf(glyph)).contours.flatMap((contour) => contour.points).length;
+    (await editor.sourceLayer(glyph)).contours.flatMap((contour) => contour.points).length;
   const pointCounts = {
     first: await pointCount("navigationA"),
     second: await pointCount("navigationB"),

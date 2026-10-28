@@ -373,7 +373,7 @@ test.describe("Toolbar tools", () => {
       const text = await editor.canvasText();
       return {
         codepoints: text ? textCodepoints(text) : null,
-        edited: (await editor.editorView()).glyph?.name ?? null,
+        edited: (await editor.editorView()).glyphs[0]?.name ?? null,
       };
     };
     await editor.selectTool("text");
@@ -391,7 +391,7 @@ test.describe("Toolbar tools", () => {
     editor,
   }) => {
     const editedGlyph = async () => ({
-      child: (await editor.editorView()).glyph?.nodeId ?? null,
+      child: (await editor.editorView()).glyphs[0]?.nodeId ?? null,
       editing: await editor.editedNodeIds(),
     });
     const before = await editedGlyph();

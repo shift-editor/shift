@@ -282,7 +282,9 @@ test.describe("opening a font through the application shell", () => {
     await workspacePage.waitForURL(/#\/editor\//);
     const canvas = workspacePage.locator("#interactive-canvas");
     await expect(canvas).toBeVisible();
-    await expect.poll(async () => (await previewEditor.editorView()).glyph).not.toBeNull();
+    await expect
+      .poll(async () => (await previewEditor.editorView()).glyphs.length)
+      .toBeGreaterThan(0);
 
     const targets = await glyphClickTargets(workspacePage);
     const bounds = await previewEditor.canvasBounds();

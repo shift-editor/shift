@@ -119,7 +119,7 @@ export interface EditorReads {
   /** The glyph named `name`: its identity and the layer each source holds; null when the font has none. */
   glyphNamed(name: string): Read<GlyphListing | null>;
   /** The authored layer of the glyph named `glyph` at the source named `source`, the default source when omitted. */
-  layerOf(glyph: string, source?: string): Promise<SourceLayer>;
+  sourceLayer(glyph: string, source?: string): Promise<SourceLayer>;
   /** The font's info, metrics, axes, sources and instances, and the session's mode, as agents read them. */
   fontOverview(): Read<FontSummary>;
   /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */

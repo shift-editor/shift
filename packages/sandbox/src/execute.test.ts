@@ -89,6 +89,7 @@ const capabilities: ShiftCapabilities = {
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       });
@@ -436,6 +437,7 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       })),
