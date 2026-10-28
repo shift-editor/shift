@@ -105,10 +105,10 @@ export function rotateSelection(editor: Editor, degrees: number): boolean {
 }
 
 export function selectedBooleanContourIds(editor: Editor): readonly ContourId[] | null {
-  const glyphNode = editor.scene.only("glyph");
+  const glyphNode = editor.soleSubjectGlyphNode();
   if (!glyphNode) return null;
 
-  const layer = editor.layerForGlyph(glyphNode.glyphId, glyphNode.sourceId);
+  const layer = editor.layerOf(glyphNode, glyphNode.sourceId);
   if (!layer) return null;
 
   const selectedIds = new Set(editor.selection.ids);

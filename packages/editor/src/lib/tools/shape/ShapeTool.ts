@@ -62,7 +62,7 @@ export class ShapeTool extends BaseTool<ShapeState, ShapeTool> {
    * @returns False when there is no single editable glyph layer.
    */
   beginShape(state: ShapeState, ctx: ToolContext<ShapeState, ShapeTool>): boolean {
-    const node = this.editor.scene.only("glyph");
+    const node = this.editor.soleSubjectGlyphNode();
     if (!node) return false;
 
     const layer = this.editor.editableLayer(node);

@@ -81,17 +81,13 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     },
   });
 
-  /** Comparison outlines drawn around the scene's first glyph node. */
+  /** Comparison outlines drawn around the one subject glyph node. */
   readonly outlines = new GlyphOutlines({
     activeSourceIdCell: this.editor.activeSourceIdCell,
     editingSourceIdsCell: this.editor.editingSourceIdsCell,
-    outlinedNodeIdCell: computed(
-      () => {
-        track(this.editor.scene.cell);
-        return this.editor.scene.first("glyph")?.id ?? null;
-      },
-      { name: "glyphNode.outlinedNode" },
-    ),
+    outlinedNodeIdCell: computed(() => this.editor.soleSubjectGlyphNodeCell.value?.id ?? null, {
+      name: "glyphNode.outlinedNode",
+    }),
   });
 
   unitsTransform(_node: GlyphNode): Mat {
@@ -99,7 +95,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   bounds(node: GlyphNode): LocalBounds | null {
-    const bounds = this.#view(node)?.bounds;
+    const bounds = this.renderModel(node)?.bounds;
     if (!bounds) return null;
 
     return localBounds(bounds);
@@ -114,7 +110,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * frame. Metrics follow the active source, as the metric guides do.
    */
   frameBounds(node: GlyphNode): LocalBounds | null {
-    const view = this.#view(node);
+    const view = this.renderModel(node);
     if (!view) return null;
 
     const metrics = this.#metrics();
@@ -157,7 +153,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     // A run child you are not editing is plain text; its parent run answers the hit.
     if (node.parentId !== null && !this.#isEditing(node)) return null;
 
-    const geometry = this.#view(node);
+    const geometry = this.renderModel(node);
     if (!geometry) return null;
 
     const radius = this.editor.hitRadiusIn(node);
@@ -282,10 +278,24 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     };
   }
 
-  #view(node: GlyphNode): GlyphRenderModel | null {
+  /**
+   * Returns what a glyph node draws now: its glyph's layer at the active
+   * source, or its glyph interpolated at the current location between sources.
+   *
+   * @remarks
+   * The model is live: an edit in flight, such as a drag not yet released,
+   * shows in it before the workspace confirms it. Inside a computed or
+   * effect, readers of its cells rerun as the glyph, location, or active
+   * source change. At a source its own contours carry that layer's point
+   * ids; between sources they carry the ids of one of the layers they blend,
+   * so ids there identify a point, not the layer an edit would reach.
+   *
+   * @returns null while the node's glyph is not loaded.
+   */
+  renderModel(node: GlyphNode): GlyphRenderModel | null {
     return (
       this.editor
-        .glyphForId(node.glyphId)
+        .glyphOf(node)
         ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
     );
   }
@@ -295,7 +305,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawBackground(node: GlyphNode, ctx: RenderContext): void {
-    const view = this.#view(node);
+    const view = this.renderModel(node);
     if (!view) return;
 
     const advance = this.#displayAdvance(node, view);
@@ -332,7 +342,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawContent(node: GlyphNode, ctx: RenderContext, editing: boolean): void {
-    const view = this.#view(node);
+    const view = this.renderModel(node);
     if (!view) return;
 
     view.trackShape();
@@ -494,7 +504,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * @returns Handle state keyed by point; empty when the node has no render model.
    */
   handleStates(node: GlyphNode): ReadonlyMap<PointId, HandleState> {
-    const view = this.#view(node);
+    const view = this.renderModel(node);
     if (!view) return new Map();
 
     const { interpolated, rootContours } = this.#controlContours(view);
@@ -528,7 +538,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawControls(node: GlyphNode, ctx: RenderContext): void {
-    const view = this.#view(node);
+    const view = this.renderModel(node);
     if (!view) return;
 
     const { interpolated, rootContours } = this.#controlContours(view);
