@@ -1,11 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { AxisId, GlyphId, GlyphName, NamedInstanceId, SourceId } from "@shift/types";
-import {
-  DESIGNSPACE_FONT_PATH,
-  expect,
-  waitForWorkspaceReady,
-  workspaceTest,
-} from "./fixtures/electronApp";
+import { FONTS, expect, waitForWorkspaceReady, workspaceTest } from "./fixtures/electronApp";
 import {
   editorShell,
   fontNavigation,
@@ -165,7 +160,7 @@ async function hasLayerAt(
 
 // Navigation coherence is renderer-independent, so this runs on the software-rendered
 // visual project with the authored MutatorSans designspace.
-const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
+const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
 
 test("keeps variable preview and exact-source editability coherent across Grid navigation", async ({
   page,

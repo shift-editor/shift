@@ -12,16 +12,14 @@ import {
   settingsDetails,
 } from "./fixtures/appLocators";
 import { createAxis } from "./fixtures/fontSetup";
+import { WEIGHT } from "@/testing/fonts";
 
 async function createWeightAxis(page: Page): Promise<void> {
   await createAxis(page, {
-    tag: "wght",
+    ...WEIGHT,
     name: "Weight",
     role: "external",
     axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
     labels: [],
     hidden: false,
   });

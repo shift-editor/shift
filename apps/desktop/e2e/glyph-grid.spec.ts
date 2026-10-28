@@ -1,12 +1,12 @@
 import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { AxisId, SourceId } from "@shift/types";
+import { rect, square, triangle } from "@/testing/fixtures";
 import { test, expect } from "./fixtures/perfApp";
 import {
   createAxis,
   createSource,
   deleteAxis,
   deleteSource,
-  insertContours,
   scaleSourceMetrics,
   setLocation,
 } from "./fixtures/fontSetup";
@@ -195,17 +195,7 @@ test.describe("Resident Glyph Grid", () => {
     await editor.openGlyphByUnicode("53");
     await trackGridTransitions(page);
 
-    await insertContours(page, [
-      {
-        closed: true,
-        points: [
-          { x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { x: 100, y: 0, pointType: "onCurve", smooth: false },
-          { x: 100, y: 100, pointType: "onCurve", smooth: false },
-          { x: 0, y: 100, pointType: "onCurve", smooth: false },
-        ],
-      },
-    ]);
+    await editor.draw({ contours: [square(100)] });
 
     await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
@@ -235,16 +225,7 @@ test.describe("Resident Glyph Grid", () => {
       .toBe(true);
 
     await editor.openGlyphByUnicode("53");
-    await insertContours(page, [
-      {
-        closed: true,
-        points: [
-          { x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { x: 80, y: 0, pointType: "onCurve", smooth: false },
-          { x: 40, y: 80, pointType: "onCurve", smooth: false },
-        ],
-      },
-    ]);
+    await editor.draw({ contours: [triangle([0, 0], [80, 0], [40, 80])] });
 
     await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
@@ -325,17 +306,7 @@ test.describe("Resident Glyph Grid", () => {
     });
 
     await editor.openGlyphByUnicode("53");
-    await insertContours(page, [
-      {
-        closed: true,
-        points: [
-          { x: -600, y: -800, pointType: "onCurve", smooth: false },
-          { x: 1800, y: -800, pointType: "onCurve", smooth: false },
-          { x: 1800, y: 1800, pointType: "onCurve", smooth: false },
-          { x: -600, y: 1800, pointType: "onCurve", smooth: false },
-        ],
-      },
-    ]);
+    await editor.draw({ contours: [rect(-600, -800, 2400, 2600)] });
     await page.getByRole("button", { name: "Font overview" }).click();
     await page.waitForURL(/#\/home/);
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {

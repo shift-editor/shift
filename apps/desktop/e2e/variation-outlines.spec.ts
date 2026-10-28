@@ -1,12 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { PointId } from "@shift/types";
-import { resolve } from "node:path";
-import {
-  workspaceTest,
-  expect,
-  DESIGNSPACE_FONT_PATH,
-  navigateToEditor,
-} from "./fixtures/electronApp";
+import { workspaceTest, expect, FONTS, navigateToEditor } from "./fixtures/electronApp";
 import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import {
@@ -16,13 +10,13 @@ import {
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
-const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
+const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
 
 const toggleModifier = process.platform === "darwin" ? "Meta" : "Control";
 
 workspaceTest.describe("mapped weight interpolation", () => {
   workspaceTest.use({
-    startupFontPath: resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs"),
+    startupFontPath: FONTS.mappedWeight,
   });
 
   workspaceTest(

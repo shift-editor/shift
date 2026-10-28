@@ -3,6 +3,7 @@ import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { waitForPageClock, wheelZoomThenPan } from "./fixtures/editorInteractions";
 import { createGlyphWithOutline } from "./fixtures/fontSetup";
+import { rect } from "@/testing/fixtures";
 
 /** Four glyphs: one empty, and three with a box as wide as their advance (narrow, wide, extreme). */
 async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; name: string }[]> {
@@ -14,20 +15,7 @@ async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; nam
   ];
   const glyphs: { id: GlyphId; name: string }[] = [];
   for (const { name, width } of definitions) {
-    const box =
-      width === null
-        ? []
-        : [
-            {
-              closed: true,
-              points: [
-                { x: 0, y: -100 },
-                { x: width, y: -100 },
-                { x: width, y: 900 },
-                { x: 0, y: 900 },
-              ].map((point) => ({ ...point, pointType: "onCurve" as const, smooth: false })),
-            },
-          ];
+    const box = width === null ? [] : [rect(0, -100, width, 1000)];
     glyphs.push({ id: await createGlyphWithOutline(page, name, width ?? 500, box), name });
   }
   return glyphs;

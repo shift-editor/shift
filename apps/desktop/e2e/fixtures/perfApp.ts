@@ -16,7 +16,10 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { ContourContent } from "@shift/editor/clipboard";
+import type { PointId } from "@shift/types";
+import type { ContourFixture, PointFixture } from "@/testing/fixtures";
 import { EditorDriver } from "./EditorDriver";
+import { clearSelection } from "./editorInteractions";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 import type { RecordedDialog } from "./types";
 
@@ -242,6 +245,31 @@ export function generateContourData(targetPoints: number) {
   }
 
   return contours;
+}
+
+/** {@link generateContourData}'s contours as glyph fixtures, for {@link EditorDriver.draw}. */
+export function benchmarkContours(targetPoints: number): ContourFixture[] {
+  return generateContourData(targetPoints).map((contour) => ({
+    closed: contour.closed,
+    points: contour.points.map((point): PointFixture => {
+      if (point.pointType === "offCurve") return { x: point.x, y: point.y, off: true };
+      return point.smooth ? { x: point.x, y: point.y, smooth: true } : [point.x, point.y];
+    }),
+  }));
+}
+
+/**
+ * Draws {@link benchmarkContours} into the open glyph and returns its point ids in drawing
+ * order, leaving nothing selected, as pasting them would.
+ */
+export async function drawBenchmarkGlyph(
+  editor: EditorDriver,
+  targetPoints: number,
+): Promise<PointId[]> {
+  await editor.draw({ contours: benchmarkContours(targetPoints) }, { select: true });
+  const ids = [...(await editor.selectionIds())] as PointId[];
+  await clearSelection(editor.page);
+  return ids;
 }
 
 export interface PerfResult {

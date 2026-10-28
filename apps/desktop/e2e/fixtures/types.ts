@@ -1,15 +1,6 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
-import type {
-  Axis,
-  GlyphId,
-  NamedInstance,
-  NodeId,
-  PointId,
-  PointType,
-  Source,
-  SourceId,
-} from "@shift/types";
+import type { Axis, GlyphId, NamedInstance, NodeId, PointId, Source, SourceId } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
 import type { EditorDriver } from "./EditorDriver";
 import type { ElectronProcesses } from "./electronProcesses";
@@ -119,20 +110,6 @@ export type RecoveryApp = {
   canonicalGlyphNames: () => string[];
   canonicalVariableFont: () => CanonicalVariableFont;
 };
-
-/** Point inserted by a scratch-glyph fixture; the editor mints its identity. */
-export interface ScratchPoint {
-  readonly x: number;
-  readonly y: number;
-  readonly pointType: PointType;
-  readonly smooth: boolean;
-}
-
-/** Contour inserted into a scratch glyph. */
-export interface ScratchContour {
-  readonly closed: boolean;
-  readonly points: readonly ScratchPoint[];
-}
 
 /** One Electron launch owned by {@link ElectronProcesses}. */
 export interface ElectronLaunch {

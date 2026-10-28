@@ -13,7 +13,7 @@ import { createNewFont, glyphIdForName, quitApp, runCommand } from "./fixtures/d
 import { EditorDriver } from "./fixtures/EditorDriver";
 import type { RelaunchApp } from "./fixtures/types";
 import type { GlyphId } from "@shift/types";
-import { addSquare } from "./fixtures/editorInteractions";
+import { square } from "@/testing/fixtures";
 
 const platformTest = test.extend({
   saveShiftPath: async ({ testRoot }, use) => {
@@ -65,7 +65,8 @@ async function createEvidenceDocument(
   await expect.poll(async () => (await editor.editorView()).applyStatus).toBe("idle");
   await editor.openGlyph(glyphId);
   expect(await editor.pointCount()).toBe(0);
-  expect(await addSquare(workspacePage)).toBe(4);
+  await editor.draw({ contours: [square(100)] });
+  expect(await editor.pointCount()).toBe(4);
   await attachScreenshot(testInfo, "editor", workspacePage);
   return { workspacePage, glyphId };
 }

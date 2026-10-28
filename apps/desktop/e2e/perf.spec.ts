@@ -30,7 +30,7 @@ import {
   selectSourcesForEditing,
   zoomToFit,
 } from "./fixtures/editorInteractions";
-import { createAxis, createSource, insertContours } from "./fixtures/fontSetup";
+import { createAxis, createSource } from "./fixtures/fontSetup";
 import {
   installFrameProbe,
   measureMove,
@@ -43,6 +43,8 @@ import {
 import {
   test,
   expect,
+  benchmarkContours,
+  drawBenchmarkGlyph,
   generateContourData,
   computeStats,
   formatPerfTable,
@@ -111,7 +113,7 @@ async function selectInsertedPoints(
   editor: EditorDriver,
   count: number | null,
 ): Promise<PointId[]> {
-  const inserted = (await insertContours(page, generateContourData(TARGET_POINTS))) as PointId[];
+  const inserted = await drawBenchmarkGlyph(editor, TARGET_POINTS);
   const pointIds = count === null ? inserted : inserted.slice(-count);
   await selectObjects(page, pointIds);
   await zoomToFit(page);
@@ -243,9 +245,7 @@ test.describe("Performance — 50K points", () => {
     page,
     editor,
   }) => {
-    const pointIds = (
-      (await insertContours(page, generateContourData(TARGET_POINTS))) as PointId[]
-    ).slice(0, 5);
+    const pointIds = (await drawBenchmarkGlyph(editor, TARGET_POINTS)).slice(0, 5);
     expect(pointIds).toHaveLength(5);
     await editor.waitForIdle();
     await editor.waitForCanvasRender();
@@ -447,7 +447,7 @@ test.describe("Performance — 50K points", () => {
   });
 
   test("pen tool — real clicks reach rendered geometry", async ({ page, editor }) => {
-    await insertContours(page, generateContourData(TARGET_POINTS));
+    await editor.draw({ contours: benchmarkContours(TARGET_POINTS) });
     await editor.selectTool("pen");
     await editor.waitForCanvasRender();
 

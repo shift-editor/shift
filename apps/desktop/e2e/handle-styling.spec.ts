@@ -2,8 +2,7 @@ import {
   workspaceTest,
   documentTest,
   expect,
-  FONT_PATH,
-  DESIGNSPACE_FONT_PATH,
+  FONTS,
   navigateToEditor,
 } from "./fixtures/electronApp";
 import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
@@ -15,8 +14,8 @@ import {
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
-const authoredTest = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
-const previewTest = documentTest.extend({ openFontPath: FONT_PATH });
+const authoredTest = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
+const previewTest = documentTest.extend({ openFontPath: FONTS.mutatorSansTtf });
 
 interface DrawnHandles {
   /** Distinct handle states drawn, sorted. */

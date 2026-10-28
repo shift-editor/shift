@@ -11,6 +11,7 @@ import {
   deleteSource,
   editSource,
 } from "./fixtures/fontSetup";
+import { WEIGHT } from "@/testing/fonts";
 
 interface ObservedVariableFont {
   axes: Axis[];
@@ -122,13 +123,10 @@ async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFix
   const page = recoveryApp.page;
   const defaultSource = await defaultSourceId(driverFor(recoveryApp, page));
   const axisId = await createAxis(page, {
-    tag: "wght",
+    ...WEIGHT,
     name: "Weight",
     role: "external",
     axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
     labels: [],
     hidden: false,
   });
@@ -153,13 +151,10 @@ async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture
   const page = recoveryApp.page;
   const defaultSource = await defaultSourceId(driverFor(recoveryApp, page));
   const weightAxisId = await createAxis(page, {
-    tag: "wght",
+    ...WEIGHT,
     name: "Weight",
     role: "external",
     axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
     labels: [],
     hidden: false,
   });

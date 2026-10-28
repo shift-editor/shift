@@ -1,9 +1,9 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
+import { documentTest, expect, FONTS } from "./fixtures/electronApp";
 import { clickOpenRecentItem, openRecentLabels, sessionMode } from "./fixtures/documentLifecycle";
 
 const test = documentTest.extend({
-  openFontPath: FONT_PATH,
+  openFontPath: FONTS.mutatorSansTtf,
 });
 
 const FONT_NAME = "MutatorSans.ttf";

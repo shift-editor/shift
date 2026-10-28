@@ -8,13 +8,8 @@ import {
   selectSourcesForEditing,
   zoomToFit,
 } from "./fixtures/editorInteractions";
-import {
-  createAxis,
-  createSource,
-  insertContours,
-  offsetMatchedSourcePoints,
-} from "./fixtures/fontSetup";
-import { test, expect, generateContourData, computeStats } from "./fixtures/perfApp";
+import { createAxis, createSource, offsetMatchedSourcePoints } from "./fixtures/fontSetup";
+import { test, expect, drawBenchmarkGlyph, computeStats } from "./fixtures/perfApp";
 
 const GLYPH_POINTS = 50_000;
 const PREVIEW_FRAMES = 10;
@@ -25,7 +20,7 @@ async function prepareFourSourceGlyph(
   selectedPointCount: number,
 ): Promise<PointId[]> {
   await editor.openGlyphByUnicode("53");
-  const inserted = (await insertContours(page, generateContourData(GLYPH_POINTS))) as PointId[];
+  const inserted = await drawBenchmarkGlyph(editor, GLYPH_POINTS);
   if (inserted.length < selectedPointCount) throw new Error("Expected inserted points");
   const selectedPointIds = Array.from(
     { length: selectedPointCount },

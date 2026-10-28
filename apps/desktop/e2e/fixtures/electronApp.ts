@@ -14,6 +14,7 @@ import type {
   ShiftWorkerFixtures,
   SharedWorkspace,
 } from "./types";
+import { FONT_FILES, type FontName } from "@/testing/fonts";
 import { EditorDriver } from "./EditorDriver";
 import { ElectronProcesses, killApp } from "./electronProcesses";
 
@@ -21,27 +22,16 @@ export type { CanonicalVariableFont, RecoveryApp } from "./types";
 export { killApp, MAIN_JS } from "./electronProcesses";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
-export const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
-export const OTF_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/mutatorsans/MutatorSans.otf",
-);
-export const UFO_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
-);
-export const DESIGNSPACE_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
-);
-export const GLYPHS_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/MutatorSansVariable.glyphs",
-);
-export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/PackageFont.glyphspackage",
-);
+/**
+ * The font files in the repository's `fixtures/fonts` that tests open, by what they hold, as
+ * absolute paths: the same names vitest's `FONTS` has.
+ */
+export const FONTS = Object.fromEntries(
+  Object.entries(FONT_FILES).map(([name, file]) => [
+    name,
+    path.resolve(APP_ROOT, "../../fixtures/fonts", file),
+  ]),
+) as { readonly [Name in FontName]: string };
 
 /**
  * Builds a software-rendered test environment that inherits no Shift E2E settings.
@@ -79,7 +69,10 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
       const processes = new ElectronProcesses();
       let shared: Promise<SharedWorkspace> | undefined;
       const launch = async (): Promise<SharedWorkspace> => {
-        const workspacePath = createAuthoredDocument(FONT_PATH, path.join(root, "workspace"));
+        const workspacePath = createAuthoredDocument(
+          FONTS.mutatorSansTtf,
+          path.join(root, "workspace"),
+        );
         const app = await processes.launch({
           label: "shared",
           userDataDir: path.join(root, "user-data"),
@@ -189,7 +182,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     testInfo,
   ) => {
     if (sharedWorkspace) {
-      if (startupFontPath !== FONT_PATH || scriptedDialogs || electronArgs.length > 0) {
+      if (startupFontPath !== FONTS.mutatorSansTtf || scriptedDialogs || electronArgs.length > 0) {
         throw new Error("sharedWorkspace needs the default MutatorSans workspace fixture.");
       }
       const { app, processes } = await sharedWorkspaceApp();
@@ -309,7 +302,10 @@ export const documentTest = test.extend<ShiftOptions>({
 export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
   recoveryApp: async ({ electronProcesses, testRoot, windowSizing, deviceScaleFactor }, use) => {
     const userDataDir = path.join(testRoot, "user-data");
-    const documentPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "workspace"));
+    const documentPath = createAuthoredDocument(
+      FONTS.mutatorSansTtf,
+      path.join(testRoot, "workspace"),
+    );
     let launches = 0;
     const launch = async (openDocument: boolean): Promise<ElectronApplication> => {
       launches += 1;
@@ -362,7 +358,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
 
 /** Workspace fixture that starts directly with MutatorSans instead of visiting the launcher. */
 export const workspaceTest = test.extend<ShiftOptions>({
-  startupFontPath: FONT_PATH,
+  startupFontPath: FONTS.mutatorSansTtf,
 
   page: async ({ page }, use) => {
     await waitForWorkspaceReady(page);
@@ -372,7 +368,7 @@ export const workspaceTest = test.extend<ShiftOptions>({
 
 /** Authored workspace fixture with deterministic native dialog destinations. */
 export const documentWorkspaceTest = documentTest.extend<ShiftOptions>({
-  startupFontPath: FONT_PATH,
+  startupFontPath: FONTS.mutatorSansTtf,
 
   page: async ({ page }, use) => {
     await waitForWorkspaceReady(page);

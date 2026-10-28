@@ -1,6 +1,6 @@
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { handleSnapDrag } from "./fixtures/editorInteractions";
-import { openScratchGlyph } from "./fixtures/scratchGlyph";
+import { openScratchGlyph, SMOOTH_JOIN_CONTOUR } from "./fixtures/scratchGlyph";
 import { activeSnapGuides } from "./fixtures/snapGuides";
 
 // Geometry, guides, and mouseup modifier reporting are owned by SelectHandleSnap.test.ts.
@@ -9,20 +9,7 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
   page,
   editor,
 }) => {
-  await openScratchGlyph(page, editor, "snapHandles", [
-    {
-      closed: false,
-      points: [
-        { x: 100, y: 100, pointType: "onCurve", smooth: false },
-        { x: 200, y: 100, pointType: "offCurve", smooth: false },
-        { x: 300, y: 100, pointType: "offCurve", smooth: false },
-        { x: 400, y: 100, pointType: "onCurve", smooth: true },
-        { x: 500, y: 100, pointType: "offCurve", smooth: false },
-        { x: 600, y: 100, pointType: "offCurve", smooth: false },
-        { x: 700, y: 100, pointType: "onCurve", smooth: false },
-      ],
-    },
-  ]);
+  await openScratchGlyph(page, editor, "snapHandles", [SMOOTH_JOIN_CONTOUR]);
 
   const canvas = editor.canvas;
   const bounds = await editor.canvasBounds();

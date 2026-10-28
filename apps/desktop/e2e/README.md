@@ -109,6 +109,10 @@ SHIFT_E2E_PREVIEW_FONT_PATH=/path/to/font.ttf pnpm test:e2e:gpu e2e/font-preview
 SHIFT_E2E_VARIABLE_PREVIEW_FONT_PATH=/path/to/variable.ttf pnpm test:e2e:gpu e2e/variable-font-preview.spec.ts
 ```
 
+### Fixtures
+
+E2E shares vitest's fixture data. `editor.draw(fixture, options?)` builds a `GlyphFixture` (contours, anchors, components, advance) into the open glyph through the same editor commands `TestEditor.draw` uses, and returns the ids of the points the fixture names: `const { top } = await editor.draw({ contours: [rect(0, 0, 100, 200, { topLeft: "top" })] })`. Shapes (`rect`, `square`, `triangle`, `line`, `cubic`) and the fixture types come from `@/testing/fixtures`; name a point the spec needs instead of indexing `outline()`. `openScratchGlyph()` opens a new glyph and draws into it. Fonts are `FONTS` from `fixtures/electronApp.ts` (`FONTS.mutatorSans` is the designspace, `FONTS.mutatorSansTtf` the TrueType font, …), the same names as vitest's `FONTS`, built from `@/testing/fonts`; `WEIGHT` from `@/testing/fonts` is the shared 100–400–900 weight axis.
+
 ### Process and dialog ownership
 
 Every Electron process a test starts belongs to the `electronProcesses` fixture. The initial launch, `relaunch()`, and the recovery fixture's restarts verify the isolated user-data directory, prepare the first window with the project's sizing, and record main-process output and renderer failures. Teardown attaches `electron-diagnostics-<launch>` for failed tests and terminates every process tree, including launches left running by a timed-out test. Specs never kill applications they obtained from a fixture; use `killApp()` only to simulate a crash before a relaunch.

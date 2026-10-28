@@ -1,3 +1,4 @@
+import type { PointId } from "@shift/types";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { openCubicPointTypes, openScratchGlyph, WAVE_CONTOUR } from "./fixtures/scratchGlyph";
@@ -14,8 +15,10 @@ async function waveOnCurvePoints(editor: EditorDriver) {
 // and FreshReopen.test.ts; key-to-mode mapping, gap and handle deletion by
 // KeyboardRouter.test.ts. These tests keep the real keyboard route; the native menu route
 // is in application-menu.spec.ts, which runs with the OS focus to itself.
+let middle: PointId;
+
 test.beforeEach(async ({ page, editor }) => {
-  await openScratchGlyph(page, editor, "deletionWave", [WAVE_CONTOUR]);
+  ({ middle } = await openScratchGlyph(page, editor, "deletionWave", [WAVE_CONTOUR]));
   await expect.poll(() => wavePointTypes(editor)).toEqual(openCubicPointTypes(4));
 });
 
@@ -24,15 +27,14 @@ test("Delete fits a selected point and undo/redo restores the exact outline", as
 }) => {
   const before = await editor.outline();
   const onCurveBefore = await waveOnCurvePoints(editor);
-  const selected = onCurveBefore[2]!;
-  await editor.clickPoint(selected.id);
+  await editor.clickPoint(middle);
 
   await editor.press("Delete");
   await expect.poll(() => wavePointTypes(editor)).toEqual(openCubicPointTypes(3));
   const after = await editor.outline();
-  expect(after[0].points.some((point) => point.id === selected.id)).toBe(false);
+  expect(after[0].points.some((point) => point.id === middle)).toBe(false);
   expect(await waveOnCurvePoints(editor)).toEqual(
-    onCurveBefore.filter((point) => point.id !== selected.id),
+    onCurveBefore.filter((point) => point.id !== middle),
   );
 
   await editor.undo();

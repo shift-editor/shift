@@ -1,5 +1,4 @@
-import path from "node:path";
-import { workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
+import { FONTS, workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
 import { editorSidebar, glyphProperties, openVariationControls } from "./fixtures/appLocators";
 import {
   drawnAndAuthoredComponents,
@@ -9,12 +8,7 @@ import {
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
-const VARIABLE_FONT_PATH = path.resolve(
-  __dirname,
-  "../../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
-);
-
-test.use({ startupFontPath: VARIABLE_FONT_PATH });
+test.use({ startupFontPath: FONTS.mutatorSans });
 
 test(
   "exact sources keep ordered component transforms when authored IDs differ",

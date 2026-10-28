@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { openCatalogGlyph } from "./fixtures/appLocators";
-import { addSquare } from "./fixtures/editorInteractions";
+import { square } from "@/testing/fixtures";
 import { createGlyphs } from "./fixtures/fontSetup";
 
 interface NavigationGlyphs {
@@ -27,8 +27,8 @@ test("preserves confirmed edits and document history across glyph navigation", a
   const glyphs = await createNavigationGlyphs(page);
   await editor.openGlyph(glyphs.firstId);
 
-  const authored = await addSquare(page);
-  expect(authored).toBe(4);
+  await editor.draw({ contours: [square(100)] });
+  expect(await editor.pointCount()).toBe(4);
   await expect
     .poll(() => editor.activeGlyph())
     .toMatchObject({
@@ -87,7 +87,7 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
 test("clears transient editor state when navigating between glyphs", async ({ page, editor }) => {
   const glyphs = await createNavigationGlyphs(page);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);
-  await addSquare(page);
+  await editor.draw({ contours: [square(100)] });
   await editor.selectVisiblePoint();
   await editor.hoverVisibleUnselectedPoint();
 

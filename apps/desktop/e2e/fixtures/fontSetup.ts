@@ -9,11 +9,10 @@ import type {
   GlyphName,
   NamedInstanceId,
   PointId,
-  SelectableId,
   SourceId,
   Unicode,
 } from "@shift/types";
-import type { ScratchContour } from "./types";
+import { contourContent, type ContourFixture } from "@/testing/fixtures";
 
 // Setup edits for specs whose subject is something else (the Grid, recovery, navigation). Each
 // calls the public Font or Editor command the Settings, sources or canvas UI calls, then waits
@@ -163,23 +162,6 @@ export async function setLocation(page: Page, location: AxisValues): Promise<voi
   }, location);
 }
 
-/** Pastes `contours` into the open glyph, as Paste does, and returns the ids of the points it added. */
-export async function insertContours(
-  page: Page,
-  contours: readonly ScratchContour[],
-): Promise<readonly SelectableId[]> {
-  return page.evaluate(async (content) => {
-    const editor = window.shift!.editor;
-    const inserted = editor.insertContent({
-      contours: content.map((contour) => ({ ...contour, points: [...contour.points] })),
-    });
-    if (!inserted) throw new Error("Expected inserted contours");
-
-    await editor.font.editCoordinator.settled();
-    return inserted;
-  }, contours);
-}
-
 /** Adds an anchor named `name` at `position` to the open glyph's layer, and returns its id. */
 export async function addAnchor(page: Page, name: string, position: Point2D): Promise<AnchorId> {
   return page.evaluate(
@@ -233,7 +215,7 @@ export async function createGlyphWithOutline(
   page: Page,
   name: string,
   advance: number,
-  contours: readonly ScratchContour[],
+  contours: readonly ContourFixture[],
 ): Promise<GlyphId> {
   return page.evaluate(
     async ({ glyphName, width, content }) => {
@@ -254,7 +236,7 @@ export async function createGlyphWithOutline(
       await workspace.font.editCoordinator.settled();
       return record.id;
     },
-    { glyphName: name, width: advance, content: contours },
+    { glyphName: name, width: advance, content: contourContent(contours).contours },
   );
 }
 

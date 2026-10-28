@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
+import { line, type ShapeFixture } from "@/testing/fixtures";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { editorSidebar, editorToolbar, glyphProperties } from "./fixtures/appLocators";
@@ -10,13 +11,16 @@ import {
   setZoom,
   upgradePreviewHandles,
 } from "./fixtures/editorInteractions";
-import { addAnchor, insertContours } from "./fixtures/fontSetup";
+import { addAnchor } from "./fixtures/fontSetup";
 import {
   expectCanvasSnapshot,
   expectPanelSnapshot,
   expectPageSnapshot,
 } from "./fixtures/snapshots";
 import { resizeWindowContent } from "./fixtures/window";
+
+/** The points the object-tree test names among the lines it draws. */
+type TreePoint = "first" | "last" | "destination" | "focusedFirst";
 
 /** Opens A and returns three distinct fixture points for alignment scenarios. */
 async function alignmentFixture(editor: EditorDriver) {
@@ -269,19 +273,24 @@ test.describe("Editor view", () => {
     page,
     editor,
   }) => {
-    const inserted = await insertContours(
-      page,
-      Array.from({ length: 120 }, (_, index) => ({
-        closed: false,
-        points: [
-          { x: index * 20, y: 0, pointType: "onCurve" as const, smooth: false },
-          { x: index * 20 + 10, y: 10, pointType: "onCurve" as const, smooth: false },
-        ],
-      })),
+    // 120 open two-point lines; the 26th is the one keyboard navigation reaches.
+    const named = (name: TreePoint | null) => (name === null ? {} : { name });
+    const lines: ShapeFixture<TreePoint>[] = Array.from({ length: 120 }, (_, index) =>
+      line<TreePoint>(
+        {
+          x: index * 20,
+          y: 0,
+          ...named(index === 0 ? "first" : index === 25 ? "focusedFirst" : null),
+        },
+        {
+          x: index * 20 + 10,
+          y: 10,
+          ...named(index === 119 ? "last" : index === 25 ? "destination" : null),
+        },
+      ),
     );
-    const firstId = inserted[0];
-    const lastId = inserted.at(-1);
-    if (!firstId || !lastId) throw new Error("Expected inserted points");
+    const drawn = await editor.draw({ contours: lines });
+    const { first: firstId, last: lastId } = drawn;
     await editor.waitForIdle();
     await editor.waitForCanvasRender();
 
@@ -314,15 +323,16 @@ test.describe("Editor view", () => {
       if (!nav.parentElement) throw new Error("Objects scroll container is missing");
       nav.parentElement.scrollTop = 0;
     });
-    const destination = outline[start + 25]?.points[1]?.id;
-    if (!destination) throw new Error("Expected a point past the first visible rows");
+    const { destination } = drawn;
     await objects.getByTestId(`object-${firstId}`).click();
     const tree = objects.getByRole("tree", { name: "Contours" });
     await expect(tree).toBeFocused();
     for (let index = 0; index < 76; index++) await page.keyboard.press("ArrowDown");
     await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${destination}`);
     await expect(objects.getByTestId(`object-${destination}`)).toBeVisible();
-    const focusedContour = outline[start + 25];
+    const focusedContour = outline.find((contour) =>
+      contour.points.some((point) => point.id === destination),
+    );
     if (!focusedContour) throw new Error("Expected a contour containing the focused point");
     await page.keyboard.press("ArrowLeft");
     await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${focusedContour.id}`);
@@ -335,8 +345,7 @@ test.describe("Editor view", () => {
     await page.keyboard.press("ArrowRight");
     await expect(objects.getByTestId(`object-${focusedContour.id}`)).toBeVisible();
     await page.keyboard.press("ArrowRight");
-    const firstChildId = focusedContour.points[0]?.id;
-    if (!firstChildId) throw new Error("Expected a contour point");
+    const firstChildId = drawn.focusedFirst;
     await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${firstChildId}`);
     await page.keyboard.press(" ");
     await expect.poll(() => editor.selectionIds()).toEqual([firstId, firstChildId]);
