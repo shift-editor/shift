@@ -46,7 +46,7 @@ packages/runtime/
 - `shiftInputSchemas` -- reusable runtime validation of untrusted capability inputs before IPC.
 - `EditorView` -- renderer-owned portion of an editor observation.
 - `DocumentState` -- one window's document: where it came from, the file Save writes, and whether it is `dirty` or `needsSaveAs`. The desktop's editor reader serves it (`ShiftEditorReader.documentState`); it is not an MCP capability yet.
-- `EditorGlyph` -- active glyph occurrence using canonical domain identifiers.
+- `EditorGlyph` -- one glyph the editor works on (a glyph node and the glyph it shows), with whether it is entered for editing; `EditorView.glyphs` lists them.
 - `ShiftSessionMode` -- alias of the canonical `FontSessionMode`, including memory hosts.
 
 ## How it works

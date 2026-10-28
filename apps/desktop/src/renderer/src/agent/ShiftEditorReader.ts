@@ -1,6 +1,7 @@
 import type {
   AuthoredContour,
   DocumentState,
+  EditorGlyph,
   EditorView,
   KerningGapView,
   KerningPairSideView,
@@ -14,7 +15,7 @@ import type {
 } from "@shift/runtime";
 import type { Editor } from "@shift/editor";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
-import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
+import type { GlyphNode, GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId } from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
 import type { KerningPair, SpacingTool } from "@shift/editor/tools";
@@ -25,6 +26,22 @@ export interface DrawnHandle {
   pointId: PointId;
   /** `interpolated` between sources, where handles show no selection or hover. */
   state: "idle" | "hovered" | "selected" | "interpolated";
+}
+
+/** Which glyph on the canvas a read is about. */
+export interface GlyphTarget {
+  /**
+   * The name of the glyph a node on the canvas shows; an edited node first.
+   * Omitted, the one glyph the editor is working on (its subject).
+   */
+  glyph?: string;
+}
+
+/** A glyph as the canvas draws it now. */
+export interface DrawnGlyphView {
+  /** Its own contours, in drawing order; components' contours are left out. */
+  contours: AuthoredContour[];
+  advance: number;
 }
 
 /**
@@ -52,22 +69,11 @@ export class ShiftEditorReader {
    */
   inspect(route: string): EditorView {
     const editor = this.#editor;
-    const node = editor.scene.first("glyph");
-    const entry = node ? editor.font.entryForId(node.glyphId) : null;
-    const glyph =
-      node && entry
-        ? {
-            glyphId: node.glyphId,
-            name: entry.name,
-            nodeId: node.id,
-            sourceId: node.sourceId,
-          }
-        : null;
     const tool = editor.tool;
 
     return {
       route,
-      glyph,
+      glyphs: this.#workingGlyphs(),
       activeSourceId: editor.activeSourceId,
       editingSourceIds: [...editor.editingSourceIds],
       externalLocation: [...editor.externalLocation].map(([axisId, value]) => ({ axisId, value })),
@@ -95,54 +101,56 @@ export class ShiftEditorReader {
   }
 
   /**
-   * The open glyph's outline as the canvas draws it now, the uncommitted
-   * preview of a gesture in flight included.
+   * The glyph a read targets, from the glyphs {@link inspect} lists.
    *
-   * @returns the active source's contours; empty when no glyph is open or no
-   * source is active.
+   * @returns null when no glyph node shows that glyph, or, with no name,
+   * unless the editor works on exactly one glyph.
    */
-  drawnOutline(): AuthoredContour[] {
-    const editor = this.#editor;
-    const node = editor.scene.first("glyph");
-    const sourceId = editor.activeSourceId;
-    if (!node || !sourceId) return [];
-
-    const layer = editor.layerForGlyph(node.glyphId, sourceId);
-    if (!layer) return [];
-
-    return layer.contours.map((contour) => ({
-      id: contour.id,
-      closed: contour.closed,
-      points: contour.points.map(({ id, x, y, pointType, smooth }) => ({
-        id,
-        x,
-        y,
-        pointType,
-        smooth,
-      })),
-    }));
+  glyph(target: GlyphTarget = {}): EditorGlyph | null {
+    const node = this.#targetNode(target);
+    return node ? this.#editorGlyph(node) : null;
   }
 
   /**
-   * The point handles the canvas draws on the open glyph, in outline order.
+   * A glyph as the canvas draws it now: at the active source, the uncommitted
+   * preview of a gesture in flight included; between sources, interpolated.
+   *
+   * @returns null when the target glyph is not on the canvas or not loaded.
+   */
+  drawnGlyph(target: GlyphTarget = {}): DrawnGlyphView | null {
+    const editor = this.#editor;
+    const node = this.#targetNode(target);
+    const model = node ? editor.nodeDefinition("glyph").renderModel(node) : null;
+    if (!model) return null;
+
+    return {
+      contours: model.rootContours.map(({ contour, points }) => ({
+        id: contour.id,
+        closed: contour.closed,
+        points: points.map(({ id, x, y, pointType, smooth }) => ({ id, x, y, pointType, smooth })),
+      })),
+      advance: model.xAdvance,
+    };
+  }
+
+  /**
+   * The point handles the canvas draws on a glyph, in outline order.
    * Handles hidden while a gesture owns their contour are left out.
    */
-  drawnHandles(): DrawnHandle[] {
-    const editor = this.#editor;
-    const node = editor.scene.first("glyph");
+  drawnHandles(target: GlyphTarget = {}): DrawnHandle[] {
+    const node = this.#targetNode(target);
     if (!node) return [];
 
-    const states = editor.nodeDefinition("glyph").handleStates(node);
+    const states = this.#editor.nodeDefinition("glyph").handleStates(node);
     return [...states].map(([pointId, state]) => ({ pointId, state }));
   }
 
-  /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
-  drawnOutlineTargets(): GlyphOutlineTarget[] {
-    const editor = this.#editor;
-    const node = editor.scene.first("glyph");
+  /** The source and instance outlines the canvas draws around a glyph, in drawing order. */
+  drawnOutlineTargets(target: GlyphTarget = {}): GlyphOutlineTarget[] {
+    const node = this.#targetNode(target);
     if (!node) return [];
 
-    return [...editor.nodeDefinition("glyph").visibleOutlines(node.id)];
+    return [...this.#editor.nodeDefinition("glyph").visibleOutlines(node.id)];
   }
 
   /**
@@ -247,6 +255,49 @@ export class ShiftEditorReader {
         ? tool.runs.samePairs(hovered).map((pair) => this.#kerningGap(pair))
         : [],
     };
+  }
+
+  /** The glyph nodes being edited, or every glyph node when none is. */
+  #workingNodes(): readonly GlyphNode[] {
+    const editor = this.#editor;
+    const nodes = editor.scene.nodesOfKind("glyph");
+    const edited = nodes.filter((node) => editor.editing.has(node.id));
+    return edited.length > 0 ? edited : nodes;
+  }
+
+  #workingGlyphs(): EditorGlyph[] {
+    return this.#workingNodes().flatMap((node) => this.#editorGlyph(node) ?? []);
+  }
+
+  /** The node a read targets: the named glyph's (an edited one first), or the one subject. */
+  #targetNode({ glyph }: GlyphTarget): GlyphNode | null {
+    const editor = this.#editor;
+    if (glyph === undefined) return editor.soleSubjectGlyphNode();
+
+    const showing = editor.scene
+      .nodesOfKind("glyph")
+      .filter((node) => this.#glyphName(node) === glyph);
+    return showing.find((node) => editor.editing.has(node.id)) ?? showing[0] ?? null;
+  }
+
+  #editorGlyph(node: GlyphNode): EditorGlyph | null {
+    const editor = this.#editor;
+    const glyphId = editor.glyphIdOf(node);
+    const name = this.#glyphName(node);
+    if (!glyphId || name === null) return null;
+
+    return {
+      glyphId,
+      name,
+      nodeId: node.id,
+      sourceId: node.sourceId,
+      edited: editor.editing.has(node.id),
+    };
+  }
+
+  #glyphName(node: GlyphNode): string | null {
+    const glyphId = this.#editor.glyphIdOf(node);
+    return glyphId ? (this.#editor.font.glyphName(glyphId) ?? null) : null;
   }
 
   #textRunItem(item: TextItem): TextRunItem {

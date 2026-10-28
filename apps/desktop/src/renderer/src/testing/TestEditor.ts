@@ -84,6 +84,7 @@ import type {
   AuthoredPoint,
   AxisCoordinate,
   EditorTool,
+  EditorGlyph,
   EditorView,
   FontOverview,
   GlyphSummary,
@@ -106,7 +107,7 @@ import type {
   EditorTestSurface,
   Modifiers,
 } from "./surface";
-import type { DocumentSaveState, Outline } from "./reads";
+import type { DocumentSaveState, GlyphChoice, Outline } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -367,7 +368,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const node = this.glyphNode;
     if (!node) return null;
 
-    return this.layerForGlyph(node.glyphId, sourceId) ?? null;
+    return this.layerOf(node, sourceId);
   }
 
   requireGlyphLayer(): GlyphLayer {
@@ -405,27 +406,20 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return contour.points.map((point) => point.id);
   }
 
+  /** The one glyph node the editor works on; see {@link Editor.soleSubjectGlyphNode}. */
   get glyphNode(): GlyphNode | null {
-    return this.scene.first("glyph");
+    return this.soleSubjectGlyphNode();
   }
 
   get sceneGlyphRenderModel(): GlyphRenderModel | null {
     const node = this.glyphNode;
-    if (!node) return null;
-
-    return (
-      this.glyphForId(node.glyphId)?.renderModelAt(
-        this.externalLocationCell,
-        this.activeSourceIdCell,
-      ) ?? null
-    );
+    return node ? this.nodeDefinition("glyph").renderModel(node) : null;
   }
 
   get glyphRecord(): GlyphRecord | null {
     const node = this.glyphNode;
-    if (!node) return null;
-
-    return this.font.recordForId(node.glyphId);
+    const glyphId = node ? this.glyphIdOf(node) : null;
+    return glyphId ? this.font.recordForId(glyphId) : null;
   }
 
   get glyphContours(): readonly Contour[] {
@@ -927,8 +921,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return tool;
   }
 
-  async advanceWidth(): Promise<number> {
-    return (await this.#authoredLayer()).advanceWidth;
+  async advanceWidth(choice?: GlyphChoice): Promise<number> {
+    return (await this.#authoredLayer(choice)).advanceWidth;
   }
 
   setKerning(source: string, first: string, second: string, amount: number | null): void {
@@ -1160,25 +1154,28 @@ export class TestEditor extends Editor implements EditorTestSurface {
     if (!group) throw new Error(`The font has no ${position} kerning group named ${name}`);
     return group.id;
   }
-  async outline(): Promise<Outline> {
-    return (await this.#authoredLayer()).contours;
+  async outline(choice?: GlyphChoice): Promise<Outline> {
+    return (await this.#authoredLayer(choice)).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, choice?: GlyphChoice): Promise<AuthoredPoint | null> {
+    const outline = await this.outline(choice);
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
-  async anchors(): Promise<readonly AuthoredAnchor[]> {
-    return (await this.#authoredLayer()).anchors;
+  async anchors(choice?: GlyphChoice): Promise<readonly AuthoredAnchor[]> {
+    return (await this.#authoredLayer(choice)).anchors;
   }
 
-  async components(): Promise<readonly AuthoredComponent[]> {
-    return (await this.#authoredLayer()).components;
+  async components(choice?: GlyphChoice): Promise<readonly AuthoredComponent[]> {
+    return (await this.#authoredLayer(choice)).components;
   }
 
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
-    const outline = await this.outline();
+  async pointPositions(
+    ids: readonly PointId[],
+    choice?: GlyphChoice,
+  ): Promise<Record<PointId, Point2D>> {
+    const outline = await this.outline(choice);
     const points = new Map(
       outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
     );
@@ -1196,18 +1193,33 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   /**
-   * The open glyph's authored layer at its node's source, read as agents read it.
+   * A glyph's authored layer at its node's source, read as agents read it.
    *
-   * @throws {Error} while edits are pending, or when no glyph is open.
+   * @throws {Error} while edits are pending, or when the choice names no glyph on the canvas.
    */
-  async #authoredLayer(): Promise<AuthoredLayer> {
+  async #authoredLayer(choice: GlyphChoice = {}): Promise<AuthoredLayer> {
     this.#assertWorkspaceSettled();
-    const { glyph } = this.editorView();
-    if (!glyph) throw new Error("Expected an open glyph");
+    const glyph = this.#chosenGlyph(choice);
     return this.#reads.font.getLayer({
       glyph: { glyphId: glyph.glyphId },
       source: { sourceId: glyph.sourceId },
     });
+  }
+
+  /**
+   * The glyph on the canvas a read is about, as the agent reader resolves it.
+   *
+   * @throws {Error} when no glyph node shows the named glyph, or, unnamed,
+   * unless the editor works on exactly one glyph.
+   */
+  #chosenGlyph(choice: GlyphChoice): EditorGlyph {
+    const glyph = this.#reads.editor.glyph(choice);
+    if (glyph) return glyph;
+    throw new Error(
+      choice.glyph === undefined
+        ? "Expected one open glyph; pass { glyph } to choose one"
+        : `No glyph on the canvas shows ${choice.glyph}`,
+    );
   }
 
   shownCursor(): string {
@@ -1217,8 +1229,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   documentState(): Promise<DocumentSaveState | null> {
     return this.#reads.editor.documentState();
   }
-  async pointAt(position: Point2D): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async pointAt(position: Point2D, choice?: GlyphChoice): Promise<AuthoredPoint | null> {
+    const outline = await this.outline(choice);
     return (
       outline
         .flatMap((contour) => contour.points)
@@ -1226,12 +1238,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
     );
   }
 
-  async anchorNamed(name: string): Promise<AuthoredAnchor | null> {
-    return (await this.anchors()).find((anchor) => anchor.name === name) ?? null;
+  async anchorNamed(name: string, choice?: GlyphChoice): Promise<AuthoredAnchor | null> {
+    return (await this.anchors(choice)).find((anchor) => anchor.name === name) ?? null;
   }
 
-  async outlineBounds(): Promise<Bounds | null> {
-    return (await this.#authoredLayer()).bounds;
+  async outlineBounds(choice?: GlyphChoice): Promise<Bounds | null> {
+    return (await this.#authoredLayer(choice)).bounds;
   }
 
   async layerOf(glyph: string, source?: string): Promise<AuthoredLayer> {
@@ -1241,19 +1253,17 @@ export class TestEditor extends Editor implements EditorTestSurface {
     });
   }
 
-  async layerAt(source: string): Promise<AuthoredLayer> {
+  async layerAt(source: string, choice: GlyphChoice = {}): Promise<AuthoredLayer> {
     this.#assertWorkspaceSettled();
-    const { glyph } = this.editorView();
-    if (!glyph) throw new Error("layerAt needs an open glyph");
+    const glyph = this.#chosenGlyph(choice);
     return this.#reads.font.getLayer({
       glyph: { glyphId: glyph.glyphId },
       source: { name: source },
     });
   }
 
-  async glyphAt(location: AxisLocation): Promise<ResolvedGlyph | null> {
-    const glyphId = this.glyphRecord?.id;
-    if (!glyphId) throw new Error("glyphAt needs an open glyph");
+  async glyphAt(location: AxisLocation, choice: GlyphChoice = {}): Promise<ResolvedGlyph | null> {
+    const { glyphId } = this.#chosenGlyph(choice);
     const resolved = await this.#reads.font.resolveGlyphs(
       [glyphId],
       this.#axisCoordinates(location),
@@ -1321,25 +1331,25 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.editor.kerningTool();
   }
 
-  drawnOutline(): Outline {
-    return this.#reads.editor.drawnOutline();
+  drawnOutline(choice: GlyphChoice = {}): Outline {
+    return this.#reads.editor.drawnGlyph(choice)?.contours ?? [];
   }
 
-  drawnHandles(): readonly DrawnHandle[] {
-    return this.#reads.editor.drawnHandles();
+  drawnHandles(choice: GlyphChoice = {}): readonly DrawnHandle[] {
+    return this.#reads.editor.drawnHandles(choice);
   }
 
-  drawnOutlineTargets(): readonly GlyphOutlineTarget[] {
-    return this.#reads.editor.drawnOutlineTargets();
+  drawnOutlineTargets(choice: GlyphChoice = {}): readonly GlyphOutlineTarget[] {
+    return this.#reads.editor.drawnOutlineTargets(choice);
   }
 
   drawnSnapGuides(): readonly PositionGuide[] {
     return this.#reads.editor.drawnSnapGuides();
   }
 
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {
+  shownPointPositions(ids: readonly PointId[], choice?: GlyphChoice): Record<PointId, Point2D> {
     const points = new Map(
-      this.drawnOutline()
+      this.drawnOutline(choice)
         .flatMap((contour) => contour.points)
         .map((point) => [point.id, point]),
     );

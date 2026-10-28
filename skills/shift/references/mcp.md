@@ -74,6 +74,7 @@ async () => {
 ## Interpret what you read
 
 - `editor.inspect` reports the selection, tool, and location in one window. `dragging: true` or an `applyStatus` other than `"idle"` means the view is mid-change.
+- `editor.inspect`'s `glyphs` lists the glyphs the window works on, each `{ glyphId, name, nodeId, sourceId, edited }`: the glyphs being edited, or, when none is entered (Text, Spacing, Kerning, Hand), every glyph on the canvas with `edited: false`. It is empty when no glyph is on the canvas, and can hold several; read a layer with `layers.get({ glyph: { glyphId }, source: { sourceId } })` for each one you mean.
 - A font revision covers authored font data only, not selection, viewport, or focus.
 - Rendered SVG and captures are point-in-time proofs, not live views. Render again after changes.
 - Coordinates are font units with **Y pointing up**; SVG output flips Y for display.

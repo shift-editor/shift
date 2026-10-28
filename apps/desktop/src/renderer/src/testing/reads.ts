@@ -76,19 +76,32 @@ export type SpacingToolState = SpacingToolView;
 /** One point handle the canvas draws, and how it is styled. */
 export type CanvasHandle = DrawnHandle;
 
+/**
+ * Which glyph on the canvas a read is about.
+ *
+ * @remarks
+ * Omit it while the editor works on one glyph, as it does with one glyph
+ * open. With several on the canvas, `glyph` names the one to read; a read
+ * without it then throws rather than guessing.
+ */
+export interface GlyphChoice {
+  /** The name of the glyph a node on the canvas shows; an edited one first. */
+  readonly glyph?: string;
+}
+
 export interface EditorReads {
   /** The open glyph's authored outline, as agents read it. */
-  outline(): Promise<Outline>;
+  outline(choice?: GlyphChoice): Promise<Outline>;
   /** One authored point of the open glyph, or null when it has none with that id. */
-  point(id: PointId): Promise<OutlinePoint | null>;
+  point(id: PointId, choice?: GlyphChoice): Promise<OutlinePoint | null>;
   /** The open glyph's anchors, in order. */
-  anchors(): Promise<readonly GlyphAnchor[]>;
+  anchors(choice?: GlyphChoice): Promise<readonly GlyphAnchor[]>;
   /** The open glyph's components, in order. */
-  components(): Promise<readonly GlyphComponent[]>;
+  components(choice?: GlyphChoice): Promise<readonly GlyphComponent[]>;
   /** Where each point is now, as the open glyph's authored layer stores it. */
-  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>>;
+  pointPositions(ids: readonly PointId[], choice?: GlyphChoice): Promise<Record<PointId, Point2D>>;
   /** The open glyph's advance width. */
-  advanceWidth(): Promise<number>;
+  advanceWidth(choice?: GlyphChoice): Promise<number>;
   /** The kerning between two glyphs at every source, in font source order. */
   kerning(first: string, second: string): Read<readonly SourceKerning[]>;
   /** The kerning between two glyphs at the source named `source`. */

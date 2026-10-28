@@ -411,13 +411,13 @@ export class Editor {
 
 // @public
 export interface EditorGlyph {
+    edited: boolean;
     // (undocumented)
     glyphId: GlyphId;
     // (undocumented)
     name: string;
     // (undocumented)
     nodeId: NodeId;
-    // (undocumented)
     sourceId: SourceId;
 }
 
@@ -453,8 +453,7 @@ export interface EditorView {
     editingSourceIds: SourceId[];
     // (undocumented)
     externalLocation: AxisCoordinate[];
-    // (undocumented)
-    glyph: EditorGlyph | null;
+    glyphs: EditorGlyph[];
     // (undocumented)
     route: string;
     // (undocumented)
