@@ -1,25 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { cubic, line } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await startTestEditor();
-});
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 describe("adding a point on a segment with the Pen", () => {
   it("splits a line with one corner where it is clicked, as one undo step", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [0, 0],
-            [100, 0],
-          ],
-        },
-      ],
+      contours: [line([0, 0], [100, 0])],
     });
     editor.selectTool("pen");
 
@@ -36,14 +25,7 @@ describe("adding a point on a segment with the Pen", () => {
 
   it("splits a line at the clicked fraction of its length", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [
-            [0, 0],
-            [100, 100],
-          ],
-        },
-      ],
+      contours: [line([0, 0], [100, 100])],
     });
     editor.selectTool("pen");
 
@@ -54,11 +36,7 @@ describe("adding a point on a segment with the Pen", () => {
 
   it("splits a cubic into two with a smooth point between, as one undo step", async () => {
     await editor.draw({
-      contours: [
-        {
-          points: [[0, 0], { x: 25, y: 100, off: true }, { x: 75, y: 100, off: true }, [100, 0]],
-        },
-      ],
+      contours: [cubic([0, 0], [25, 100], [75, 100], [100, 0])],
     });
     editor.selectTool("pen");
 

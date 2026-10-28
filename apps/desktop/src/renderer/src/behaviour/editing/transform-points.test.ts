@@ -1,15 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 import type { PointId } from "@shift/types";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor();
 let a: PointId;
 let b: PointId;
 let c: PointId;
 beforeEach(async () => {
-  editor = await startTestEditor();
   ({ a, b, c } = await editor.draw({
     contours: [
       {
@@ -22,7 +20,6 @@ beforeEach(async () => {
     ],
   }));
 });
-afterEach(() => editor.close());
 
 describe("transforming selected points from the sidebar", () => {
   it("rotates the selection about its center as one undo step", async () => {
