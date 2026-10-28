@@ -1,9 +1,7 @@
 import type { Editor } from "@shift/editor";
-import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
-import type { PositionGuide } from "@shift/editor/types";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import { localPoint, type LocalPoint, type ScenePoint, type ScreenPoint } from "@shift/editor/spaces";
 import type { MatModel, Point2D } from "@shift/geo";
-import type { GlyphName, NamedInstanceId, PointId, SegmentId, TextItemId } from "@shift/types";
+import type { GlyphName, PointId, SegmentId, TextItemId } from "@shift/types";
 
 /** The Shape tool's draft while its gesture is in flight. */
 export interface ShapeDraft {
@@ -162,20 +160,6 @@ export class InteractionProbes {
     return { zoomPan, momentumPan: { x: editor.pan.x, y: editor.pan.y }, zoomedAt };
   }
 
-  /**
-   * The snap guides the Select tool's translate or the Pen's drag shows now, in glyph units;
-   * empty outside those gestures.
-   */
-  activeSnapGuides(): PositionGuide[] {
-    const editor = this.#editor;
-    const select = editor.toolIf("select")?.state;
-    if (select?.type === "translating") return [...select.translate.guides];
-
-    const pen = editor.toolIf("pen")?.state;
-    if (pen?.type === "dragging") return [...pen.guides];
-
-    return [];
-  }
 
   /** Whether the editor tracks a pointer over the canvas (or one it has captured). */
   hasCanvasPointer(): boolean {
@@ -302,98 +286,10 @@ export class InteractionProbes {
     return rsb === null || rsb === undefined ? null : Math.round(rsb);
   }
 
-  /** The open glyph's points as its layer holds them now, a gesture's preview included. */
-  livePoints(): { id: PointId; x: number; y: number }[] {
-    const editor = this.#editor;
-    const node = editor.scene.first("glyph")!;
-    const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
-    return layer.allPoints.map((point) => ({ id: point.id, x: point.x, y: point.y }));
-  }
 
-  /** Where the Pen's in-flight drag places the outgoing handle, in glyph units; throws outside a drag. */
-  penDragHandle(): Point2D {
-    const state = this.#editor.toolIf("pen")?.state;
-    if (state?.type !== "dragging") throw new Error("Expected Pen drag");
-    const { x, y } = state.curve.handlePosition;
-    return { x, y };
-  }
 
-  /**
-   * Where a Shift-constrained Pen drag from canvas-local `down` to `end` places its points in
-   * the open glyph: the anchor at `down`, and the handles snapped to 30 degrees at the
-   * pointer's distance.
-   */
-  penSnapExpectation(down: Point2D, end: Point2D): PenSnap {
-    const editor = this.#editor;
-    const node = editor.scene.first("glyph")!;
-    const anchor = editor.toLocal(node, editor.screenToScene(down as ScreenPoint));
-    const pointer = editor.toLocal(node, editor.screenToScene(end as ScreenPoint));
-    const length = Math.hypot(pointer.x - anchor.x, pointer.y - anchor.y);
-    return {
-      anchor,
-      incoming: {
-        x: anchor.x - length * Math.cos(Math.PI / 6),
-        y: anchor.y - length * Math.sin(Math.PI / 6),
-      },
-      outgoing: {
-        x: anchor.x + length * Math.cos(Math.PI / 6),
-        y: anchor.y + length * Math.sin(Math.PI / 6),
-      },
-    };
-  }
 
-  /**
-   * A drag of the first segment's outgoing handle to glyph position (180, 160), in whole canvas
-   * pixels, and where a Shift-constrained drag must leave it: snapped to 30 degrees around the
-   * segment's start at the dragged length.
-   */
-  handleSnapDrag(): HandleSnapDrag {
-    const editor = this.#editor;
-    const node = editor.scene.first("glyph")!;
-    const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
-    const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
-    const down = editor.sceneToScreen(
-      editor.toScene(node, { x: cubic.controlStart.x, y: cubic.controlStart.y } as LocalPoint),
-    );
-    const end = editor.sceneToScreen(editor.toScene(node, { x: 180, y: 160 } as LocalPoint));
-    down.x = Math.round(down.x);
-    down.y = Math.round(down.y);
-    end.x = Math.round(end.x);
-    end.y = Math.round(end.y);
-    const startPos = editor.screenToScene(down);
-    const endPos = editor.screenToScene(end);
-    const length = Math.hypot(
-      cubic.controlStart.x + endPos.x - startPos.x - cubic.start.x,
-      cubic.controlStart.y + endPos.y - startPos.y - cubic.start.y,
-    );
-    return {
-      id: cubic.controlStart.id,
-      pivot: cubic.start.id,
-      down,
-      end,
-      expected: {
-        x: cubic.start.x + length * Math.cos(Math.PI / 6),
-        y: cubic.start.y + length * Math.sin(Math.PI / 6),
-      },
-    };
-  }
 
-  /** The id of the font's first named instance that no source sits exactly at, or null. */
-  instanceBetweenSources(): NamedInstanceId | null {
-    const font = this.#editor.font;
-    const axes = font.getAxes();
-    const between = font.namedInstances.find(
-      (instance) =>
-        !font.sourceAt(
-          externalAxisLocationFromRecord(
-            Object.fromEntries(
-              axes.map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-            ),
-          ),
-        ),
-    );
-    return between?.id ?? null;
-  }
 
   /** How many points the open glyph draws at the editor's location, interpolated between sources. */
   drawnPointCount(): number {
@@ -451,61 +347,9 @@ export class InteractionProbes {
     };
   }
 
-  /** How many other sources' layers the editing selection has matched to the active layer. */
-  editingLayerMatchCount(): number {
-    return this.#editor.editingLayerMatchesCell.peek().size;
-  }
 
-  /**
-   * The point the editing selection's one layer match pairs with the active layer's point
-   * `referencePointId`: its layer, id, and position there; throws without a complete match.
-   */
-  matchedEditingPoint(referencePointId: PointId): {
-    layerId: string;
-    pointId: PointId;
-    position: Point2D;
-  } {
-    const editor = this.#editor;
-    const [layerMatch] = editor.editingLayerMatchesCell.peek().values();
-    if (!layerMatch?.complete) throw new Error("Expected complete layer match");
-    const targetPointId = layerMatch.points.find(
-      (match) => match.referenceId === referencePointId,
-    )?.targetId;
-    const node = editor.scene.first("glyph");
-    const targetLayer = node
-      ? editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)
-      : null;
-    const point = targetPointId ? targetLayer?.point(targetPointId) : null;
-    if (!targetPointId || !point) throw new Error("Expected matched target point");
 
-    return {
-      layerId: layerMatch.targetLayerId,
-      pointId: targetPointId,
-      position: { x: point.x, y: point.y },
-    };
-  }
 
-  /** How many other sources' layers an edit of the points `ids` also moves. */
-  matchedSourceLayerCount(ids: readonly PointId[]): number | null {
-    return this.#editor.positionSelection(ids)?.additionalLayers.length ?? null;
-  }
-
-  /**
-   * Where an edit of the points `ids` finds its first point in each layer it moves: the active
-   * layer first, then each other editing source's matched layer.
-   */
-  matchedFirstPointPositions(ids: readonly PointId[]): Point2D[] {
-    const selection = this.#editor.positionSelection(ids);
-    if (!selection) throw new Error("Expected an editable selection");
-    const groups = [selection, ...selection.additionalLayers];
-    return groups.map(({ layer, targets }) => {
-      const id = targets.points?.[0];
-      if (!id) throw new Error("Expected a matched point in each source");
-      const point = layer.point(id);
-      if (!point) throw new Error("Expected editable point geometry");
-      return { x: point.x, y: point.y };
-    });
-  }
 
   /**
    * Canvas-local positions over the canvas text run's glyphs 2 to 40 that hit-test as text and
@@ -552,7 +396,7 @@ export class InteractionProbes {
    * The live position of the `u` glyph's `top` anchor in its default-source layer, a drag's
    * uncommitted preview included.
    */
-  liveUTopAnchor(): Point2D {
+  liveUTopAnchor(): LocalPoint {
     const editor = this.#editor;
     const record = editor.font.recordForName("u" as GlyphName);
     const layer = record
@@ -561,7 +405,7 @@ export class InteractionProbes {
     const anchor = layer?.anchors.find((candidate) => candidate.name === "top");
     if (!anchor) throw new Error("Expected u's top anchor");
 
-    return { x: anchor.x, y: anchor.y };
+    return localPoint(anchor.x, anchor.y);
   }
   /** Delivers the latest coalesced pointer move to the active tool, as the next frame would. */
   flushPointerMoves(): void {

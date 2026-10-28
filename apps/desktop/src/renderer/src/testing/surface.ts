@@ -22,6 +22,7 @@ import type { GlyphOutlineTarget, PositionGuide, SourceSelectionMode } from "@sh
 import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
+import type { LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
 import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime";
 import type {
   AnchorId,
@@ -447,12 +448,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * Where the canvas shows each point now, including a gesture not yet
    * released, as {@link drawnOutline} draws them.
    */
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D>;
+  shownPointPositions(ids: readonly PointId[]): Record<PointId, LocalPoint>;
   /**
    * Where the faint pre-edit outline shows each point while a gesture is in
    * flight, or null when none is shown. Test-only: not agent data.
    */
-  editGhost(ids: readonly PointId[]): Record<PointId, Point2D> | null;
+  editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null;
   /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. Test-only. */
   drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
   /** The id selection uses for the segment from `start` to `end`. */
@@ -484,11 +485,11 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The zoom level. Test-only: not agent data. */
   zoomLevel(): number;
   /** How far the canvas is panned, in screen pixels. Test-only: not agent data. */
-  canvasOffset(): Point2D;
+  canvasOffset(): ScreenVector;
   /** Where a glyph-local position shows in the viewport, in screen pixels. Test-only: not agent data. */
-  screenPosition(position: Point2D): Point2D;
+  screenPosition(position: Point2D): ScreenPoint;
   /** The viewport's centre, in screen pixels. Test-only: not agent data. */
-  viewportCentre(): Point2D;
+  viewportCentre(): ScreenPoint;
   /** The document's save state behind every edit made so far, as agents read it; null without a document. */
   documentState(): Promise<DocumentSaveState | null>;
 

@@ -1,9 +1,9 @@
 import type { Page } from "@playwright/test";
 import type { PointId } from "@shift/types";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { matchedFirstPointPositions, matchedSourceLayerCount } from "./fixtures/editorInteractions";
 import { callHook } from "./fixtures/appHooks";
 import { test, expect, drawBenchmarkGlyph, computeStats } from "./fixtures/perfApp";
+import { localPoint } from "@shift/editor/spaces";
 
 const GLYPH_POINTS = 50_000;
 const PREVIEW_FRAMES = 10;
@@ -38,9 +38,6 @@ async function prepareFourSourceGlyph(
   for (const [name, value] of sources) await editor.addSource(name, { bch1: value });
   await editor.editSources([reference, ...sources.map(([name]) => name)]);
   await editor.waitForIdle();
-  await expect
-    .poll(() => matchedSourceLayerCount(page, selectedPointIds), { timeout: 20_000 })
-    .toBe(3);
 
   await callHook(page, "perf", "offsetMatchedSourcePoints", selectedPointIds, 3);
   await editor.selectObjects(selectedPointIds);
@@ -53,21 +50,24 @@ async function prepareFourSourceGlyph(
 async function measureTransformGesture(
   page: Page,
   editor: EditorDriver,
-  pointIds: readonly PointId[],
   operation: "scale" | "rotate",
   cancel: boolean,
 ) {
-  const positions = async () => {
-    const found = await matchedFirstPointPositions(page, pointIds);
-    if (found.length !== 4) throw new Error("Expected four editable source layers");
-    return found;
-  };
+  // Each source's points, in source order: the gesture moves the matched points in all four.
+  const glyph = (await editor.editorView()).glyph!.name;
+  const { sources } = await editor.fontOverview();
+  const positions = () =>
+    Promise.all(
+      sources.map(async ({ name }) =>
+        (await editor.layerOf(glyph, name)).contours.flatMap((contour) => contour.points),
+      ),
+    );
 
   const before = await positions();
   const bounds = await editor.selectionBounds();
   // Grab the upper-right corner: the floating tools dock to the canvas's bottom edge and cover
   // the lower corners of a zoomed-to-fit selection. Glyph y points up, so `bottom` is the top.
-  const upperRight = await editor.projectGlyphToPage({ x: bounds.right, y: bounds.bottom });
+  const upperRight = await editor.projectGlyphToPage(localPoint(bounds.right, bounds.bottom));
   const from = operation === "scale" ? upperRight : { x: upperRight.x + 8, y: upperRight.y - 8 };
   const state = operation === "scale" ? "resizing" : "rotating";
   const occludedByFloatingUi = await page
@@ -90,6 +90,7 @@ async function measureTransformGesture(
     previewTimes.push(performance.now() - start);
   }
   const preview = await positions();
+  expect(preview).toHaveLength(4);
   for (let index = 0; index < before.length; index++) {
     expect(preview[index]).not.toEqual(before[index]);
   }
@@ -124,9 +125,9 @@ for (const selectedPointCount of [1_000, 10_000, 50_000]) {
       page,
       editor,
     }) => {
-      const pointIds = await prepareFourSourceGlyph(page, editor, selectedPointCount);
-      const canceled = await measureTransformGesture(page, editor, pointIds, operation, true);
-      const committed = await measureTransformGesture(page, editor, pointIds, operation, false);
+      await prepareFourSourceGlyph(page, editor, selectedPointCount);
+      const canceled = await measureTransformGesture(page, editor, operation, true);
+      const committed = await measureTransformGesture(page, editor, operation, false);
       const preview = computeStats(`${operation} (${selectedPointCount} points, four sources)`, [
         ...canceled.previewTimes,
         ...committed.previewTimes,

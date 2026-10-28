@@ -20,7 +20,15 @@ import type {
   NamedInstance,
   Source,
 } from "@shift/types";
-import type { PositionGuide } from "@shift/editor/types";
+import {
+  localPoint,
+  screenVector,
+  type LocalPoint,
+  type ScenePoint,
+  type ScreenPoint,
+  type ScreenVector,
+} from "@shift/editor/spaces";
+import type { PositionGuide, SourceSelectionMode } from "@shift/editor/types";
 import type { SelectedObject } from "@/agent/ShiftEditorReader";
 import type {
   AgentReaderName,
@@ -299,7 +307,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   }
 
   /** Projects a scene position into canvas-local coordinates. */
-  async projectSceneToCanvas(position: Point2D): Promise<Point2D> {
+  async projectSceneToCanvas(position: ScenePoint): Promise<ScreenPoint> {
     return callHook(this.page, "editor", "sceneToCanvas", position);
   }
 
@@ -307,7 +315,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * Projects a scene position into Playwright page coordinates.
    * @param position - Editor scene position.
    */
-  async projectSceneToPage(position: Point2D): Promise<Point2D> {
+  async projectSceneToPage(position: ScenePoint): Promise<Point2D> {
     const [canvasPosition, bounds] = await Promise.all([
       this.projectSceneToCanvas(position),
       this.canvasBounds(),
@@ -319,7 +327,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * Projects a position in the open glyph's own units into Playwright page coordinates.
    * @param position - Glyph-local position, such as a value from {@link selectionBounds}.
    */
-  async projectGlyphToPage(position: Point2D): Promise<Point2D> {
+  async projectGlyphToPage(position: LocalPoint): Promise<Point2D> {
     const [canvasPosition, bounds] = await Promise.all([
       callHook(this.page, "editor", "glyphToCanvas", position),
       this.canvasBounds(),
@@ -327,11 +335,21 @@ export class EditorDriver implements EditorReads, EditorActions {
     return { x: bounds.x + canvasPosition.x, y: bounds.y + canvasPosition.y };
   }
 
+  /** Projects a position in the open glyph's own units into canvas-local coordinates. */
+  async projectGlyphToCanvas(position: LocalPoint): Promise<ScreenPoint> {
+    return callHook(this.page, "editor", "glyphToCanvas", position);
+  }
+
+  /** Projects a canvas-local position into the open glyph's own units. */
+  async projectCanvasToGlyph(position: ScreenPoint): Promise<LocalPoint> {
+    return callHook(this.page, "editor", "canvasToGlyph", position);
+  }
+
   /**
    * Projects a canvas-local position into scene coordinates.
    * @param position - Point relative to the canvas origin.
    */
-  async projectCanvasToScene(position: Point2D): Promise<Point2D> {
+  async projectCanvasToScene(position: ScreenPoint): Promise<ScenePoint> {
     return callHook(this.page, "editor", "canvasToScene", position);
   }
 
@@ -474,8 +492,9 @@ export class EditorDriver implements EditorReads, EditorActions {
   }
 
   /** Returns how far the canvas is panned, in screen pixels. */
-  async canvasOffset(): Promise<Point2D> {
-    return (await this.#read("editor", "camera")).pan;
+  async canvasOffset(): Promise<ScreenVector> {
+    const { pan } = await this.#read("editor", "camera");
+    return screenVector(pan.x, pan.y);
   }
 
   /** Returns the ids of the scene nodes being edited, in the order they were entered. */
@@ -524,7 +543,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * Returns a confirmed glyph-local position; throws when absent.
    * @param pointId - Point in the active authored layer.
    */
-  async pointPosition(pointId: PointId): Promise<Point2D> {
+  async pointPosition(pointId: PointId): Promise<LocalPoint> {
     return (await this.pointPositions([pointId]))[pointId];
   }
 
@@ -532,12 +551,12 @@ export class EditorDriver implements EditorReads, EditorActions {
    * Returns the current preview position without waiting for persistence.
    * @param pointId - Point in the active authored layer.
    */
-  async livePointPosition(pointId: PointId): Promise<Point2D> {
+  async livePointPosition(pointId: PointId): Promise<LocalPoint> {
     const point = (await this.drawnOutline())
       .flatMap((contour) => contour.points)
       .find((candidate) => candidate.id === pointId);
     if (!point) throw new Error(`Expected the drawn point ${pointId}`);
-    return { x: point.x, y: point.y };
+    return localPoint(point.x, point.y);
   }
 
   /**
@@ -620,7 +639,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     return (await this.#openLayer()).components;
   }
 
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
+  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, LocalPoint>> {
     const outline = await this.outline();
     const points = new Map(
       outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
@@ -629,9 +648,9 @@ export class EditorDriver implements EditorReads, EditorActions {
       ids.map((id) => {
         const point = points.get(id);
         if (!point) throw new Error(`The open glyph has no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
+        return [id, localPoint(point.x, point.y)];
       }),
-    ) as Record<PointId, Point2D>;
+    ) as Record<PointId, LocalPoint>;
   }
 
   async advanceWidth(): Promise<number> {
@@ -710,13 +729,23 @@ export class EditorDriver implements EditorReads, EditorActions {
       : this.#read("font", "axis", { tag: selector.tag });
   }
 
-  /** Clicks the row of the source named `name` in the Variations panel, opening the panel first. */
-  async clickSource(name: string): Promise<void> {
+  /**
+   * Clicks the row of the source named `name` in the Variations panel, opening the panel first.
+   * With `toggle` it Cmd-clicks (Ctrl-clicks off macOS) the row, adding the source to the ones
+   * being edited, and waits until their layers are matched to the active one.
+   */
+  async clickSource(name: string, mode?: SourceSelectionMode): Promise<void> {
     const source = await this.source({ name });
     if (!source) throw new Error(`The font has no source named ${name}`);
 
     const controls = await openVariationControls(this.page);
-    await controls.getByTestId(`source-${source.id}`).click();
+    const row = controls.getByTestId(`source-${source.id}`);
+    if (mode === "toggle") {
+      await row.click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
+      await callHook(this.page, "session", "editingLayersMatched");
+      return;
+    }
+    await row.click();
     await expect.poll(async () => (await this.source("active"))?.id).toBe(source.id);
   }
 

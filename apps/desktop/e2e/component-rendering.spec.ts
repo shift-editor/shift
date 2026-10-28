@@ -3,9 +3,9 @@ import { editorSidebar, glyphProperties, openVariationControls } from "./fixture
 import {
   drawnAndAuthoredComponents,
   drawnComponentCount,
-  instanceBetweenSources,
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
+import { localPoint } from "@shift/editor/spaces";
 
 test.use({ startupFontPath: FONTS.mutatorSans });
 
@@ -33,8 +33,8 @@ test(
   async ({ page, editor }) => {
     await navigateToEditor(page, "C1");
     const controls = await openVariationControls(page);
-    const instanceId = await instanceBetweenSources(page);
-    if (!instanceId) throw new Error("Expected an instance between sources");
+    // Medium_Narrow_I sits between MutatorSans's sources.
+    const instanceId = (await editor.instance({ name: "Medium_Narrow_I" }))!.id;
 
     await controls.getByTestId(`instance-${instanceId}`).click();
     await expect.poll(async () => (await editor.editorView()).activeSourceId).toBeNull();
@@ -62,10 +62,10 @@ test("selected components expose editable transforms in the properties sidebar",
   await expect(properties.getByLabel("Scale factor", { exact: true })).toBeVisible();
   await expect(xInput).toHaveValue(String(Math.round(initialBounds.x)));
 
-  const center = {
-    x: initialBounds.x + initialBounds.width / 2,
-    y: initialBounds.y + initialBounds.height / 2,
-  };
+  const center = localPoint(
+    initialBounds.x + initialBounds.width / 2,
+    initialBounds.y + initialBounds.height / 2,
+  );
   const dragStart = await editor.projectGlyphToPage(center);
   await editor.pointerDown(dragStart);
   try {

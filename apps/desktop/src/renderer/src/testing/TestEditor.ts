@@ -14,7 +14,15 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
+import {
+  localPoint,
+  scenePoint,
+  screenPoint,
+  screenVector,
+  type LocalPoint,
+  type ScreenPoint,
+  type ScreenVector,
+} from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
@@ -1121,7 +1129,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return (await this.#authoredLayer()).components;
   }
 
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
+  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, LocalPoint>> {
     const outline = await this.outline();
     const points = new Map(
       outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
@@ -1130,9 +1138,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
       ids.map((id) => {
         const point = points.get(id);
         if (!point) throw new Error(`The open glyph has no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
+        return [id, localPoint(point.x, point.y)];
       }),
-    ) as Record<PointId, Point2D>;
+    ) as Record<PointId, LocalPoint>;
   }
 
   selectionIds(): readonly string[] {
@@ -1300,7 +1308,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.editor.drawnSnapGuides();
   }
 
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {
+  shownPointPositions(ids: readonly PointId[]): Record<PointId, LocalPoint> {
     const points = new Map(
       this.drawnOutline()
         .flatMap((contour) => contour.points)
@@ -1310,21 +1318,21 @@ export class TestEditor extends Editor implements EditorTestSurface {
       ids.map((id) => {
         const point = points.get(id);
         if (!point) throw new Error(`The open glyph shows no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
+        return [id, localPoint(point.x, point.y)];
       }),
-    ) as Record<PointId, Point2D>;
+    ) as Record<PointId, LocalPoint>;
   }
 
-  editGhost(ids: readonly PointId[]): Record<PointId, Point2D> | null {
+  editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null {
     const ghost = this.requireGlyphLayer().editBaseGeometryCell.peek();
     if (!ghost) return null;
     return Object.fromEntries(
       ids.map((id) => {
         const point = ghost.point(id);
         if (!point) throw new Error(`The edit ghost shows no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
+        return [id, localPoint(point.x, point.y)];
       }),
-    ) as Record<PointId, Point2D>;
+    ) as Record<PointId, LocalPoint>;
   }
 
   async drawnGlyph(glyph?: string): Promise<DrawnGlyph> {
@@ -1394,18 +1402,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.zoom;
   }
 
-  canvasOffset(): Point2D {
-    return this.pan;
+  canvasOffset(): ScreenVector {
+    return screenVector(this.pan.x, this.pan.y);
   }
 
-  screenPosition(position: Point2D): Point2D {
+  screenPosition(position: Point2D): ScreenPoint {
     const { x, y } = this.localToScreen(position);
-    return { x, y };
+    return screenPoint(x, y);
   }
 
-  viewportCentre(): Point2D {
+  viewportCentre(): ScreenPoint {
     const { x, y } = this.camera.centre;
-    return { x, y };
+    return screenPoint(x, y);
   }
 
   async reopen(): Promise<EditorTestSurface> {

@@ -13,7 +13,7 @@
  *
  * This file imports types only, so `apps/desktop/e2e` can import it.
  */
-import type { Point2D } from "@shift/geo";
+import type { LocalPoint } from "@shift/editor/spaces";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -40,7 +40,7 @@ import type {
   Source,
   SourceId,
 } from "@shift/types";
-import type { GlyphOutlineTarget } from "@shift/editor/types";
+import type { GlyphOutlineTarget, SourceSelectionMode } from "@shift/editor/types";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 
 /**
@@ -105,7 +105,7 @@ export interface EditorReads {
   /** The open glyph's components, in order. */
   components(): Promise<readonly GlyphComponent[]>;
   /** Where each point is now, as the open glyph's authored layer stores it. */
-  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>>;
+  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, LocalPoint>>;
   /** The open glyph's advance width. */
   advanceWidth(): Promise<number>;
   /** The kerning between two glyphs at every source, in font source order. */
@@ -155,6 +155,9 @@ export interface EditorReads {
 
 /** What both drivers do the way a user does it, under the same names. */
 export interface EditorActions {
-  /** Shows and edits the source named `name`, as clicking its row in the Sources panel does. */
-  clickSource(name: string): Read<void>;
+  /**
+   * Shows and edits the source named `name`, as clicking its row in the Sources panel does;
+   * `toggle` adds it to (or removes it from) the sources being edited, as Cmd-clicking does.
+   */
+  clickSource(name: string, mode?: SourceSelectionMode): Read<void>;
 }

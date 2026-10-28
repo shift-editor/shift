@@ -1,13 +1,7 @@
 import type { Page } from "@playwright/test";
-import type { PointId } from "@shift/types";
 import { workspaceTest, expect, FONTS, navigateToEditor } from "./fixtures/electronApp";
 import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  editingLayerMatchCount,
-  instanceBetweenSources,
-  matchedEditingPoint,
-} from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
@@ -111,60 +105,46 @@ async function activeSourceId(editor: EditorDriver): Promise<string | null> {
   return (await editor.editorView()).activeSourceId;
 }
 
-/** Where the point `pointId` sits in the open glyph's layer at the source named `source`. */
-async function pointInSource(
-  editor: EditorDriver,
-  source: string,
-  pointId: PointId,
-): Promise<{ x: number; y: number } | null> {
-  const glyph = (await editor.editorView()).glyph;
-  if (!glyph) throw new Error("Expected an open glyph");
-  const point = (await editor.layerOf(glyph.name, source)).contours
-    .flatMap((contour) => contour.points)
-    .find((candidate) => candidate.id === pointId);
-  return point ? { x: point.x, y: point.y } : null;
-}
-
 test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
-  const controls = await openVariationControls(page);
-  // LightCondensed is the open default source; BoldWide is the comparison source.
-  const source = await editor.source({ name: "BoldWide" });
-  if (!source || source.id === (await editor.source("active"))?.id) {
-    throw new Error("Expected BoldWide as a comparison source");
-  }
-
-  await controls
-    .getByTestId(`source-${source.id}`)
-    .click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
-  await expect.poll(() => editingLayerMatchCount(page)).toBe(1);
+  // LightCondensed is the open default source; BoldWide joins it for editing.
+  await editor.clickSource("BoldWide", "toggle");
+  const glyph = (await editor.editorView()).glyph!.name;
+  const boldWidePoints = async () =>
+    (await editor.layerOf(glyph, "BoldWide")).contours.flatMap((contour) => contour.points);
 
   const drag = await editor.selectVisiblePoint();
-  const referenceBefore = await editor.pointPosition(drag.id);
-  const target = await matchedEditingPoint(page, drag.id);
-
+  const [referenceBefore, before] = await Promise.all([
+    editor.pointPosition(drag.id),
+    boldWidePoints(),
+  ]);
   await editor.dragPoint(drag);
-  const referenceAfter = await editor.pointPosition(drag.id);
-  const targetAfter = await pointInSource(editor, source.name, target.pointId);
-  expect(targetAfter).toEqual({
-    x: target.position.x + referenceAfter.x - referenceBefore.x,
-    y: target.position.y + referenceAfter.y - referenceBefore.y,
+  const [referenceAfter, after] = await Promise.all([
+    editor.pointPosition(drag.id),
+    boldWidePoints(),
+  ]);
+
+  // Exactly one BoldWide point moved, by the dragged point's delta.
+  const delta = { x: referenceAfter.x - referenceBefore.x, y: referenceAfter.y - referenceBefore.y };
+  const moved = after.flatMap((point, index) => {
+    const was = before[index]!;
+    return point.x === was.x && point.y === was.y
+      ? []
+      : [{ x: point.x - was.x, y: point.y - was.y }];
   });
+  expect(moved).toEqual([delta]);
 
   await editor.undo();
   await expect.poll(() => editor.pointPosition(drag.id)).toEqual(referenceBefore);
-  await expect
-    .poll(() => pointInSource(editor, source.name, target.pointId))
-    .toEqual(target.position);
+  await expect.poll(boldWidePoints).toEqual(before);
 });
 
 test("selects displayed objects at an interpolated instance", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
   const controls = await openVariationControls(page);
-  const instanceId = await instanceBetweenSources(page);
-  if (!instanceId) throw new Error("Expected an interpolated instance");
-
-  await controls.getByTestId(`instance-${instanceId}`).click();
+  // Medium_Narrow_I sits between MutatorSans's sources.
+  const instance = await editor.instance({ name: "Medium_Narrow_I" });
+  await controls.getByTestId(`instance-${instance!.id}`).click();
   await expect.poll(() => activeSourceId(editor)).toBeNull();
   // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   const pointId = await page.evaluate(() => {
@@ -305,18 +285,6 @@ test("show-all and hide-all keep explicitly shown source and instance outlines",
   await expect.poll(() => drawnOutlines(editor)).toEqual([]);
 });
 
-/** Returns a named instance whose location is not a source, so its outline has its own shape. */
-async function interpolatedInstance(
-  page: Page,
-  editor: EditorDriver,
-): Promise<{ id: string; name: string }> {
-  const instanceId = await instanceBetweenSources(page);
-  const instance = instanceId ? await editor.instance({ id: instanceId }) : null;
-  if (!instance) throw new Error("Expected an instance between sources");
-
-  return { id: instance.id, name: instance.name };
-}
-
 test(
   "a comparison source outline matches snapshot",
   { tag: "@golden" },
@@ -335,7 +303,7 @@ test(
   { tag: "@golden" },
   async ({ page, editor }) => {
     await openOutlineFixture(page, editor);
-    const instance = await interpolatedInstance(page, editor);
+    const instance = (await editor.instance({ name: "Medium_Narrow_I" }))!;
 
     await outlineToggle(page, "Show", "instance", instance.name).click();
     await expect.poll(() => drawnOutlines(editor)).toEqual([`instance:${instance.id}`]);

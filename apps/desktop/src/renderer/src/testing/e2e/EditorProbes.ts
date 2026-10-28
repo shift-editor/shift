@@ -1,5 +1,5 @@
 import type { Editor } from "@shift/editor";
-import type { LocalPoint, ScenePoint, ScreenPoint } from "@shift/editor/spaces";
+import { localPoint, type LocalPoint, type ScenePoint, type ScreenPoint } from "@shift/editor/spaces";
 import type { Point2D } from "@shift/geo";
 import {
   ascending,
@@ -23,8 +23,8 @@ export interface EditedGlyph {
 /** One point's position in glyph units, on the canvas, and on the page. */
 export interface PointProjection {
   readonly id: PointId;
-  readonly glyphPosition: Point2D;
-  readonly canvasPosition: Point2D;
+  readonly glyphPosition: LocalPoint;
+  readonly canvasPosition: ScreenPoint;
   readonly pagePosition: Point2D;
 }
 
@@ -33,7 +33,7 @@ export interface VisiblePointDrag {
   readonly id: PointId;
   readonly startPagePosition: Point2D;
   readonly endPagePosition: Point2D;
-  readonly expectedGlyphPosition: Point2D;
+  readonly expectedGlyphPosition: LocalPoint;
 }
 
 /** Selection bounds in glyph units. */
@@ -80,22 +80,31 @@ export class EditorProbes {
   }
 
   /** A scene position on the canvas, in canvas-local pixels. */
-  sceneToCanvas(position: Point2D): Point2D {
-    return this.#editor.sceneToScreen(position as ScenePoint);
+  sceneToCanvas(position: ScenePoint): ScreenPoint {
+    return this.#editor.sceneToScreen(position);
   }
 
   /** A canvas-local position in the scene. */
-  canvasToScene(position: Point2D): Point2D {
-    return this.#editor.screenToScene(position as ScreenPoint);
+  canvasToScene(position: ScreenPoint): ScenePoint {
+    return this.#editor.screenToScene(position);
   }
 
   /** A position in the open glyph's units on the canvas, in canvas-local pixels. */
-  glyphToCanvas(position: Point2D): Point2D {
+  glyphToCanvas(position: LocalPoint): ScreenPoint {
     const editor = this.#editor;
     const node = editor.scene.first("glyph");
     if (!node) throw new Error("Expected an open glyph node");
 
-    return editor.sceneToScreen(editor.toScene(node, position as LocalPoint));
+    return editor.sceneToScreen(editor.toScene(node, position));
+  }
+
+  /** A canvas-local position in the open glyph's units. */
+  canvasToGlyph(position: ScreenPoint): LocalPoint {
+    const editor = this.#editor;
+    const node = editor.scene.first("glyph");
+    if (!node) throw new Error("Expected an open glyph node");
+
+    return editor.toLocal(node, editor.screenToScene(position));
   }
 
   /** The glyph being edited, or null when none is (or its authored layer is not published). */
@@ -168,7 +177,7 @@ export class EditorProbes {
       );
       return {
         id,
-        glyphPosition: { x: point.x, y: point.y },
+        glyphPosition: localPoint(point.x, point.y),
         canvasPosition,
         pagePosition: { x: bounds.left + canvasPosition.x, y: bounds.top + canvasPosition.y },
       };

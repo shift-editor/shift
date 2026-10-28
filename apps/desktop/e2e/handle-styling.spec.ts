@@ -10,7 +10,6 @@ import { EditorDriver } from "./fixtures/EditorDriver";
 import {
   drawnPointCount,
   glyphClickTargets,
-  instanceBetweenSources,
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
@@ -90,8 +89,8 @@ authoredTest(
   { tag: "@golden" },
   async ({ page, editor }) => {
     await navigateToEditor(page, "53");
-    const instanceId = await instanceBetweenSources(page);
-    if (!instanceId) throw new Error("Expected an instance between sources");
+    // Medium_Narrow_I sits between MutatorSans's sources.
+    const instanceId = (await editor.instance({ name: "Medium_Narrow_I" }))!.id;
     const controls = await openVariationControls(page);
 
     await controls.getByTestId(`instance-${instanceId}`).click();

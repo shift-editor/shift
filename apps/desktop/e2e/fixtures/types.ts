@@ -1,3 +1,4 @@
+import type { LocalPoint, ScreenPoint } from "@shift/editor/spaces";
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
 import type { Axis, GlyphId, NamedInstance, NodeId, PointId, Source, SourceId } from "@shift/types";
@@ -92,8 +93,8 @@ export interface CanvasDrag {
 
 export interface PointTarget {
   readonly id: PointId;
-  readonly glyphPosition: Point2D;
-  readonly canvasPosition: Point2D;
+  readonly glyphPosition: LocalPoint;
+  readonly canvasPosition: ScreenPoint;
   readonly pagePosition: Point2D;
 }
 
@@ -101,7 +102,7 @@ export interface PointDrag {
   readonly id: PointId;
   readonly startPagePosition: Point2D;
   readonly endPagePosition: Point2D;
-  readonly expectedGlyphPosition: Point2D;
+  readonly expectedGlyphPosition: LocalPoint;
 }
 
 export type RecoveryApp = {

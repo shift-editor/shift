@@ -3,6 +3,7 @@ import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { waitForPageClock, wheelZoomThenPan } from "./fixtures/editorInteractions";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { rect } from "@/testing/fixtures";
+import { screenPoint } from "@shift/editor/spaces";
 
 /** Four glyphs: one empty, and three with a box as wide as their advance (narrow, wide, extreme). */
 async function createViewGlyphs(
@@ -40,10 +41,10 @@ test("keeps the reported wheel position anchored across the full zoom range", as
   if (!point) throw new Error("Expected glyph point");
   const target = (await editor.pointTargets([point.id]))[0];
   if (!target) throw new Error("Expected glyph point target");
-  const screen = {
-    x: Math.round(target.canvasPosition.x),
-    y: Math.round(target.canvasPosition.y),
-  };
+  const screen = screenPoint(
+    Math.round(target.canvasPosition.x),
+    Math.round(target.canvasPosition.y),
+  );
   const scene = await editor.projectCanvasToScene(screen);
   const anchor = {
     screen,

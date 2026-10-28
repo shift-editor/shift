@@ -1,5 +1,4 @@
 import type { Locator, Page } from "@playwright/test";
-import type { Point2D } from "@shift/geo";
 import type { AnchorId } from "@shift/types";
 import { line, type ShapeFixture } from "@/testing/fixtures";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
@@ -17,6 +16,7 @@ import {
   expectPageSnapshot,
 } from "./fixtures/snapshots";
 import { resizeWindowContent } from "./fixtures/window";
+import { localPoint } from "@shift/editor/spaces";
 
 /** The points the object-tree test names among the lines it draws. */
 type TreePoint = "first" | "last" | "destination" | "focusedFirst";
@@ -123,20 +123,27 @@ test("switches Alt during proportional resizing and preserves release geometry",
   await editor.selectAll();
   const canvas = editor.canvas;
   const initialBounds = await editor.selectionBounds();
-  const toPage = (point: Point2D) => editor.projectGlyphToPage(point);
-  const down = await toPage({ x: initialBounds.right, y: initialBounds.bottom });
-  const normal = await toPage({
-    x: initialBounds.right + initialBounds.width * 0.1,
-    y: initialBounds.bottom + initialBounds.height * 0.02,
-  });
-  const centered = await toPage({
-    x: initialBounds.right + initialBounds.width * 0.15,
-    y: initialBounds.bottom + initialBounds.height * 0.03,
-  });
-  const crossed = await toPage({
-    x: initialBounds.x + initialBounds.width * 0.25,
-    y: initialBounds.bottom + initialBounds.height * 0.03,
-  });
+  const down = await editor.projectGlyphToPage(
+    localPoint(initialBounds.right, initialBounds.bottom),
+  );
+  const normal = await editor.projectGlyphToPage(
+    localPoint(
+      initialBounds.right + initialBounds.width * 0.1,
+      initialBounds.bottom + initialBounds.height * 0.02,
+    ),
+  );
+  const centered = await editor.projectGlyphToPage(
+    localPoint(
+      initialBounds.right + initialBounds.width * 0.15,
+      initialBounds.bottom + initialBounds.height * 0.03,
+    ),
+  );
+  const crossed = await editor.projectGlyphToPage(
+    localPoint(
+      initialBounds.x + initialBounds.width * 0.25,
+      initialBounds.bottom + initialBounds.height * 0.03,
+    ),
+  );
 
   await page.mouse.move(down.x, down.y);
   await page.keyboard.down("Shift");
@@ -799,14 +806,15 @@ test.describe("Editor view", () => {
   }) => {
     await editor.selectAll();
     const initialBounds = await editor.selectionBounds();
-    const down = await editor.projectGlyphToPage({
-      x: initialBounds.right,
-      y: initialBounds.bottom,
-    });
-    const end = await editor.projectGlyphToPage({
-      x: initialBounds.right + initialBounds.width * 0.15,
-      y: initialBounds.bottom + initialBounds.height * 0.03,
-    });
+    const down = await editor.projectGlyphToPage(
+      localPoint(initialBounds.right, initialBounds.bottom),
+    );
+    const end = await editor.projectGlyphToPage(
+      localPoint(
+        initialBounds.right + initialBounds.width * 0.15,
+        initialBounds.bottom + initialBounds.height * 0.03,
+      ),
+    );
 
     await page.mouse.move(down.x, down.y);
     await page.keyboard.down("Shift");

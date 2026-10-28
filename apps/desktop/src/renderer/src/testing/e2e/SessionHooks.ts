@@ -162,6 +162,11 @@ export class SessionHooks {
     window.location.hash = `#/editor/${encodeURIComponent(glyphId)}`;
   }
 
+  /** Waits until the sources being edited have their layers matched to the active one. */
+  editingLayersMatched(): Promise<void> {
+    return this.#session.editor.editingLayersMatched();
+  }
+
   /** Waits until the workspace has confirmed every edit made so far. */
   async settle(): Promise<void> {
     const editor = this.#session.editor;

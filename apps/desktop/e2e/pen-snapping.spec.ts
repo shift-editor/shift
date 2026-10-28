@@ -1,7 +1,6 @@
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
-import { livePoints, penDragHandle, penSnapExpectation } from "./fixtures/editorInteractions";
 import { openScratchGlyph } from "./fixtures/scratchGlyph";
-import { activeSnapGuides } from "./fixtures/snapGuides";
+import { screenPoint } from "@shift/editor/spaces";
 
 // Geometry, guides, and mouseup modifier reporting are owned by PenSnap.test.ts.
 // This test keeps the browser-only ordering: Shift keyup arrives before mouseup.
@@ -12,9 +11,9 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
   await openScratchGlyph(editor, "snapPen");
   const canvas = editor.canvas;
   const bounds = await editor.canvasBounds();
-  const first = { x: Math.round(bounds.width / 4), y: Math.round(bounds.height / 2) };
-  const down = { x: Math.round(bounds.width / 2), y: first.y };
-  const end = { x: down.x + 80, y: down.y - 60 };
+  const first = screenPoint(Math.round(bounds.width / 4), Math.round(bounds.height / 2));
+  const down = screenPoint(Math.round(bounds.width / 2), first.y);
+  const end = screenPoint(down.x + 80, down.y - 60);
   for (const point of [first, down, end]) {
     expect(point.x).toBeGreaterThan(0);
     expect(point.y).toBeGreaterThan(0);
@@ -25,8 +24,25 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
   await canvas.click({ position: first });
   await editor.waitForIdle();
   await expect.poll(() => editor.pointCount()).toBe(1);
-  const expected = await penSnapExpectation(page, down, end);
-  const points = () => livePoints(page);
+  // A Shift-constrained drag from `down` to `end` leaves the anchor at `down` and snaps both
+  // handles to 30 degrees, at the pointer's distance.
+  const [anchor, pointer] = await Promise.all([
+    editor.projectCanvasToGlyph(down),
+    editor.projectCanvasToGlyph(end),
+  ]);
+  const length = Math.hypot(pointer.x - anchor.x, pointer.y - anchor.y);
+  const expected = {
+    anchor,
+    incoming: {
+      x: anchor.x - length * Math.cos(Math.PI / 6),
+      y: anchor.y - length * Math.sin(Math.PI / 6),
+    },
+    outgoing: {
+      x: anchor.x + length * Math.cos(Math.PI / 6),
+      y: anchor.y + length * Math.sin(Math.PI / 6),
+    },
+  };
+  const points = async () => (await editor.drawnOutline()).flatMap((contour) => contour.points);
   expect(await points()).toHaveLength(1);
   await page.keyboard.down("Shift");
   await editor.pointerDown({ x: bounds.x + down.x, y: bounds.y + down.y });
@@ -38,17 +54,21 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
     expect(preview[2]!.y).toBeCloseTo(expected.incoming.y, 4);
     expect(preview[3]!.x).toBeCloseTo(expected.anchor.x, 4);
     expect(preview[3]!.y).toBeCloseTo(expected.anchor.y, 4);
-    const handle = await penDragHandle(page);
-    expect(handle.x).toBeCloseTo(expected.outgoing.x, 4);
-    expect(handle.y).toBeCloseTo(expected.outgoing.y, 4);
     await expect
-      .poll(() => activeSnapGuides(page))
+      .poll(() => editor.drawnSnapGuides())
       .toEqual([expect.objectContaining({ kind: "direction" })]);
     await page.keyboard.up("Shift");
     await editor.pointerUp();
     expect(await points()).toEqual(preview);
     await expect(editor.shell).toHaveAttribute("data-gesture", "idle");
-    expect(await activeSnapGuides(page)).toEqual([]);
+    expect(await editor.drawnSnapGuides()).toEqual([]);
+
+    // The next segment starts from the outgoing handle the snapped drag left.
+    await canvas.click({ position: { x: down.x + 120, y: down.y } });
+    await editor.waitForIdle();
+    const next = await points();
+    expect(next[4]!.x).toBeCloseTo(expected.outgoing.x, 4);
+    expect(next[4]!.y).toBeCloseTo(expected.outgoing.y, 4);
   } finally {
     await page.mouse.up();
     await page.keyboard.up("Shift");

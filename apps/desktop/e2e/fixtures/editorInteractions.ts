@@ -1,6 +1,7 @@
+import type { LocalPoint } from "@shift/editor/spaces";
 import type { Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
-import type { NamedInstanceId, PointId, SegmentId, TextItemId } from "@shift/types";
+import type { SegmentId, TextItemId } from "@shift/types";
 import { callHook } from "./appHooks";
 
 /**
@@ -149,51 +150,10 @@ export async function activeRightSidebearing(page: Page): Promise<number | null>
   return callHook(page, "interactions", "activeRightSidebearing");
 }
 
-/**
- * The open glyph's points as its layer holds them now, a gesture's preview included, without
- * waiting for edits to settle.
- */
-export async function livePoints(page: Page): Promise<{ id: PointId; x: number; y: number }[]> {
-  return callHook(page, "interactions", "livePoints");
-}
 
-/** Where the Pen's in-flight drag places the outgoing handle, in glyph units; throws outside a drag. */
-export async function penDragHandle(page: Page): Promise<Point2D> {
-  return callHook(page, "interactions", "penDragHandle");
-}
 
-/**
- * Where a Shift-constrained Pen drag from canvas-local `down` to `end` places its points in the
- * open glyph: the anchor at `down`, and the incoming and outgoing handles snapped to 30 degrees
- * at the pointer's distance.
- */
-export async function penSnapExpectation(
-  page: Page,
-  down: Point2D,
-  end: Point2D,
-): Promise<{ anchor: Point2D; incoming: Point2D; outgoing: Point2D }> {
-  return callHook(page, "interactions", "penSnapExpectation", down, end);
-}
 
-/**
- * A drag of the first segment's outgoing handle to glyph position (180, 160), in whole canvas
- * pixels, and where a Shift-constrained drag must leave it: snapped to 30 degrees around the
- * segment's start at the dragged length.
- */
-export async function handleSnapDrag(page: Page): Promise<{
-  id: PointId;
-  pivot: PointId;
-  down: Point2D;
-  end: Point2D;
-  expected: Point2D;
-}> {
-  return callHook(page, "interactions", "handleSnapDrag");
-}
 
-/** The id of the font's first named instance that no source sits exactly at, or null. */
-export async function instanceBetweenSources(page: Page): Promise<NamedInstanceId | null> {
-  return callHook(page, "interactions", "instanceBetweenSources");
-}
 
 /** How many points the open glyph draws at the editor's location, interpolated between sources. */
 export async function drawnPointCount(page: Page): Promise<number> {
@@ -223,41 +183,9 @@ export async function drawnAndAuthoredComponents(
   return callHook(page, "interactions", "drawnAndAuthoredComponents", glyphName, sourceName);
 }
 
-/** How many other sources' layers the editing selection has matched to the active layer. */
-export async function editingLayerMatchCount(page: Page): Promise<number> {
-  return callHook(page, "interactions", "editingLayerMatchCount");
-}
 
-/**
- * The point the editing selection's one layer match pairs with the active layer's point
- * `referencePointId`: its layer, id, and position there; throws without a complete match.
- */
-export async function matchedEditingPoint(
-  page: Page,
-  referencePointId: PointId,
-): Promise<{ layerId: string; pointId: PointId; position: Point2D }> {
-  return callHook(page, "interactions", "matchedEditingPoint", referencePointId);
-}
 
-/** How many other sources' layers an edit of the points `ids` also moves. */
-export async function matchedSourceLayerCount(
-  page: Page,
-  ids: readonly PointId[],
-): Promise<number | null> {
-  return callHook(page, "interactions", "matchedSourceLayerCount", ids);
-}
 
-/**
- * Where an edit of the points `ids` finds its first point in each layer it moves: the active
- * layer first, then each other editing source's matched layer; throws when a layer has no
- * matched point.
- */
-export async function matchedFirstPointPositions(
-  page: Page,
-  ids: readonly PointId[],
-): Promise<Point2D[]> {
-  return callHook(page, "interactions", "matchedFirstPointPositions", ids);
-}
 
 /**
  * Canvas-local positions over the canvas text run's glyphs 2 to 40 that hit-test as text and lie
@@ -279,6 +207,6 @@ export async function loadedTextRunLength(page: Page): Promise<number | null> {
  * The live position of the `u` glyph's `top` anchor in its default-source layer, a drag's
  * uncommitted preview included, without waiting for edits to settle.
  */
-export async function liveUTopAnchor(page: Page): Promise<Point2D> {
+export async function liveUTopAnchor(page: Page): Promise<LocalPoint> {
   return callHook(page, "interactions", "liveUTopAnchor");
 }
