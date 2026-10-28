@@ -21,7 +21,7 @@ mod layer_match;
 mod metrics;
 mod values;
 
-pub use kerning::KerningBlend;
+pub use kerning::{KerningBlend, MissingKerningOrigin};
 pub use layer_match::{LayerDifference, LayerMatch};
 pub use metrics::{
     ResolvedSourceMetrics, SOURCE_METRIC_OVERSHOOT_OFFSET, SOURCE_METRIC_POSITION_OFFSET,

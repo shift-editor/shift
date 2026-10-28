@@ -23,6 +23,7 @@ export {
   loadEngine,
   type EditablePair,
   type EngineEdit,
+  type EngineKerningPair,
   type EngineLayer,
   type EngineLayerSource,
   type EngineSession,
