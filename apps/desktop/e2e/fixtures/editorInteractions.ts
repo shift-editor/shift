@@ -279,13 +279,9 @@ export async function lineSegmentUpgrade(page: Page): Promise<{
  * rendered.
  */
 export async function upgradePreviewHandles(page: Page): Promise<unknown> {
-  return page.evaluate(() => {
-    const tool = window.shift?.editor.toolManager.activeTool;
-    if (tool?.id !== "select" || !("upgradePreview" in tool)) return null;
-
-    const preview = tool.upgradePreview as { propsSnapshot(): unknown };
-    return preview.propsSnapshot() ?? null;
-  });
+  return page.evaluate(
+    () => window.shift?.editor.toolIf("select")?.upgradePreview.propsSnapshot() ?? null,
+  );
 }
 
 /** The two control points of the cubic segment `segmentId`; throws when it is not a cubic. */

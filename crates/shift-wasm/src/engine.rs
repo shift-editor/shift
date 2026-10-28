@@ -28,7 +28,9 @@ import type {
   ContourId,
   FontIntent,
   FontReplacement,
+  GlyphId,
   GlyphStructure,
+  KerningGroupId,
   LayerId,
 } from "@shift/types";
 

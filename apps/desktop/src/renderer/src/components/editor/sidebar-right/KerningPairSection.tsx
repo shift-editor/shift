@@ -1,5 +1,5 @@
 import { useSignalState } from "@shift/editor/signals";
-import { KerningTool, type KerningPair } from "@shift/editor/tools";
+import type { KerningPair } from "@shift/editor/tools";
 import {
   kerningValueEdit,
   type Kerning,
@@ -18,6 +18,7 @@ import { LockOpenIcon } from "@/components/icons/LockOpenIcon";
 import type { Editor } from "@shift/editor";
 import type { SourceId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useToolIf } from "@/hooks/useToolIf";
 import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarSection, SidebarSubsection } from "./SidebarSection";
 
@@ -31,14 +32,13 @@ import { SidebarSection, SidebarSubsection } from "./SidebarSection";
  */
 export const KerningPairSection = () => {
   const editor = useEditor();
-  useSignalState(editor.toolCellIf("kerning"));
+  const tool = useToolIf("kerning");
   const kerning = useSignalState(editor.font.kerningCell);
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
   const sources = useSignalState(editor.font.sourcesCell);
   const sectionRef = useRef<HTMLDivElement>(null);
 
-  const tool = editor.toolManager.activeTool;
-  const pair = tool instanceof KerningTool ? tool.currentPair : null;
+  const pair = tool?.currentPair ?? null;
   if (!pair) return null;
 
   const pairKey = `${pair.gap.left.itemId}:${pair.gap.right.itemId}`;

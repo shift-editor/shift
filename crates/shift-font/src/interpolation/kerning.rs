@@ -100,6 +100,38 @@ impl Font {
         }
         self.kerning_blend_at(source.location())
     }
+
+    /// Returns where the value of a pair `source_id` authors no pair for
+    /// comes from.
+    ///
+    /// [`MissingKerningOrigin::Unkerned`] when the source authors pairs of its
+    /// own, or the font has a single source, so the missing pair kerns zero
+    /// there; otherwise [`MissingKerningOrigin::Interpolated`], since the
+    /// source contributes no kerning and reads what the sources that do
+    /// author kerning blend to. A source the font lacks is answered the same
+    /// way, from the font's source count.
+    pub fn missing_kerning_origin(&self, source_id: SourceId) -> MissingKerningOrigin {
+        let authors_kerning = self
+            .kerning()
+            .source(source_id)
+            .is_some_and(|source| !source.is_empty());
+        if authors_kerning || self.sources().len() == 1 {
+            MissingKerningOrigin::Unkerned
+        } else {
+            MissingKerningOrigin::Interpolated
+        }
+    }
+}
+
+/// Where the value of a pair comes from at a source that authors no pair for
+/// it; see [`Font::missing_kerning_origin`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MissingKerningOrigin {
+    /// The source kerns on its own, so the missing pair kerns zero.
+    Unkerned,
+    /// The source authors no kerning, so the pair's value is the blend of the
+    /// sources that do.
+    Interpolated,
 }
 
 /// The sources kerning reads at one place, each with its weight.
@@ -163,6 +195,7 @@ impl KerningBlend {
 
 #[cfg(test)]
 mod tests {
+    use super::MissingKerningOrigin;
     use crate::test_support::sample_variable_font;
     use crate::{DesignLocation, Source};
 
@@ -264,6 +297,34 @@ mod tests {
                 .unwrap()
                 .source_ids()
                 .contains(&default_source_id)
+        );
+    }
+
+    #[test]
+    fn a_missing_pair_kerns_zero_only_where_the_source_kerns_on_its_own() {
+        let font = sample_variable_font();
+        let bold_id = font.sources()[2].id();
+        let medium_id = font
+            .sources()
+            .iter()
+            .find(|source| source.location() == &weight_location(&font, 600.0))
+            .map(Source::id)
+            .unwrap();
+
+        assert_eq!(
+            font.missing_kerning_origin(bold_id),
+            MissingKerningOrigin::Unkerned
+        );
+        assert_eq!(
+            font.missing_kerning_origin(medium_id),
+            MissingKerningOrigin::Interpolated
+        );
+
+        let single_source = crate::Font::new();
+        let only_source_id = single_source.default_source_id().unwrap();
+        assert_eq!(
+            single_source.missing_kerning_origin(only_source_id),
+            MissingKerningOrigin::Unkerned
         );
     }
 }
