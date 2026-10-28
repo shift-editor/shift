@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
 import { square } from "@/testing/fixtures";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
 
-/** A Regular square, and a Bold source at wght 900 (design 800) with its corner moved, a wider advance and taller metrics. */
+/**
+ * A Regular square, and a Bold source at wght 900 (design 800) with its corner moved, a wider advance and taller metrics.
+ *
+ * Kept: both tests author the same font through the user's steps, which a font fixture cannot express (a mapping, metrics, an instance, a dragged point).
+ */
 async function authorVariableFont(): Promise<void> {
   await editor.draw({
     advance: 400,
@@ -30,16 +33,6 @@ async function authorVariableFont(): Promise<void> {
   editor.clickSource("Regular");
 }
 
-/** Everything about the variable font a reopened document must give back unchanged. */
-async function variableFont(surface: EditorTestSurface) {
-  const middle = { wght: 650 };
-  return {
-    font: surface.fontOverview(),
-    glyph: surface.glyphNamed("A"),
-    middle: { location: surface.locationAt(middle), glyph: await surface.glyphAt(middle) },
-  };
-}
-
 describe("saving and reopening a variable font", () => {
   it("keeps the axes, sources, layers, instances and the glyph between sources", async () => {
     await authorVariableFont();
@@ -54,14 +47,20 @@ describe("saving and reopening a variable font", () => {
     });
     expect((await editor.glyphAt(middle))?.advanceWidth).toBe(550);
     await expect(editor.save()).resolves.toMatchObject({ dirty: false });
-    const saved = await variableFont(editor);
+    const font = editor.fontOverview();
+    const glyph = editor.glyphNamed("A");
+    const between = editor.locationAt(middle);
+    const drawnBetween = await editor.glyphAt(middle);
     editor.clickSource("Bold");
     const boldOutline = await editor.outline();
 
     const reopened = await editor.reopen();
     try {
       await expect(reopened.documentState()).resolves.toMatchObject({ dirty: false });
-      expect(await variableFont(reopened)).toEqual(saved);
+      expect(reopened.fontOverview()).toEqual(font);
+      expect(reopened.glyphNamed("A")).toEqual(glyph);
+      expect(reopened.locationAt(middle)).toEqual(between);
+      expect(await reopened.glyphAt(middle)).toEqual(drawnBetween);
       reopened.clickSource("Bold");
       expect(await reopened.outline()).toEqual(boldOutline);
     } finally {
