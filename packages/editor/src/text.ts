@@ -1,4 +1,4 @@
-export { TextEditing } from "./lib/text/TextEditing";
+export { TextEditing, type ShownCaret } from "./lib/text/TextEditing";
 export { TextBuffer } from "./lib/text/TextBuffer";
 export {
   GlyphNameParser,

@@ -16,7 +16,7 @@ import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId } from "@shift/types";
 import type { Signal } from "@shift/editor/signals";
-import { TextBuffer, type TextItem } from "@shift/editor/text";
+import type { TextItem } from "@shift/editor/text";
 import { KerningTool, SpacingTool, type KerningPair } from "@shift/editor/tools";
 import type { WorkspaceApplyStatus } from "@/types/workspace";
 
@@ -148,17 +148,14 @@ export class ShiftEditorReader {
     const editor = this.#editor;
     const node = editor.scene.first("textRun");
     const run = node ? editor.text.run(node.runId) : null;
-    const layout = node ? editor.text.layoutCell(node.runId).peek() : null;
+    const layout = node ? editor.text.layout(node.runId) : null;
     if (!node || !run || !layout) return null;
 
     const itemIds = new Set(run.items.map((item) => item.id));
     const open = editor.nodeDefinition("textRun").childGlyph(node);
     const edited = open && editor.editing.nodeIds.includes(open.id) ? (open.itemId ?? null) : null;
     const hovered = editor.hover.id;
-    const state = editor.textEditing.state;
-    const showsCaret = state?.active === true && state.nodeId === node.id;
-    const buffer = showsCaret ? new TextBuffer(run.items, state.focus, state.anchor) : null;
-    const caretPoint = buffer ? layout.caretAt(buffer.focusCluster).position() : null;
+    const caret = editor.textEditing.caretIn(node.id);
 
     return {
       items: run.items.map((item) => this.#textRunItem(item)),
@@ -181,15 +178,14 @@ export class ShiftEditorReader {
       openGlyph: open ? editor.font.glyphName(open.glyphId) : null,
       editedItemId: edited,
       hoveredItemId: hovered !== null && itemIds.has(hovered as never) ? hovered : null,
-      caret:
-        buffer && caretPoint
-          ? {
-              position: buffer.focusCluster,
-              selection: { ...buffer.selection },
-              x: caretPoint.x,
-              y: caretPoint.y,
-            }
-          : null,
+      caret: caret
+        ? {
+            position: caret.cluster,
+            selection: { ...caret.selection },
+            x: caret.position.x,
+            y: caret.position.y,
+          }
+        : null,
     };
   }
 
