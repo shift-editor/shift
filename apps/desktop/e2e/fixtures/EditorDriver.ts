@@ -9,7 +9,7 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
 } from "@shift/runtime";
-import type { GlyphId, KerningPosition, PointId, Unicode } from "@shift/types";
+import type { GlyphId, GlyphName, KerningPosition, PointId, Unicode } from "@shift/types";
 import type {
   AgentReaderName,
   AgentReadArgs,
@@ -21,8 +21,10 @@ import type {
   EditorReads,
   EditorViewState,
   FontSummary,
+  GlyphListing,
   LocationSummary,
   Outline,
+  SourceLayer,
 } from "@/testing/reads";
 import type {} from "../../src/main/agent/e2eAgentReads";
 import { waitForEditorReady } from "./appLocators";
@@ -401,6 +403,20 @@ export class EditorDriver implements EditorReads {
     return this.page.evaluate(() => window.shiftSession?.editor.zoom ?? 0);
   }
 
+  /** Returns how far the canvas is panned, in screen pixels. */
+  async canvasOffset(): Promise<Point2D> {
+    return this.page.evaluate(() => {
+      const editor = window.shiftSession?.editor;
+      if (!editor) throw new Error("Expected editor");
+      return { x: editor.pan.x, y: editor.pan.y };
+    });
+  }
+
+  /** Returns the ids of the scene nodes being edited, in the order they were entered. */
+  async editedNodeIds(): Promise<readonly string[]> {
+    return this.page.evaluate(() => [...(window.shiftSession?.editor.editing.nodeIds ?? [])]);
+  }
+
   /** Returns the hovered editor object identity, or null when nothing is hovered. */
   async hoverId(): Promise<string | null> {
     return this.page.evaluate(() => window.shiftSession?.editor.hover.id ?? null);
@@ -694,6 +710,18 @@ export class EditorDriver implements EditorReads {
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     return names;
+  }
+
+  async glyphNamed(name: string): Promise<GlyphListing | null> {
+    if (!(await this.glyphNames()).includes(name)) return null;
+    return this.#read("font", "getGlyph", { name: name as GlyphName });
+  }
+
+  async layerOf(glyph: string, source?: string): Promise<SourceLayer> {
+    return this.#read("font", "getLayer", {
+      glyph: { name: glyph as GlyphName },
+      ...(source === undefined ? {} : { source: { name: source } }),
+    });
   }
 
   async fontOverview(): Promise<FontSummary> {

@@ -1234,6 +1234,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return (await this.#authoredLayer()).bounds;
   }
 
+  async layerOf(glyph: string, source?: string): Promise<AuthoredLayer> {
+    return this.#reads.font.getLayer({
+      glyph: { name: glyph as GlyphName },
+      ...(source === undefined ? {} : { source: { name: source } }),
+    });
+  }
+
   async layerAt(source: string): Promise<AuthoredLayer> {
     this.#assertWorkspaceSettled();
     const { glyph } = this.editorView();
