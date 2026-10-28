@@ -631,7 +631,7 @@ authoredTest(
 authoredTest(
   "native Delete uses fitted deletion rather than raw point removal",
   async ({ page, editor, electronApp }) => {
-    const { middle } = await openScratchGlyph(page, editor, "deletionWave", [WAVE_CONTOUR]);
+    const { middle } = await openScratchGlyph(editor, "deletionWave", [WAVE_CONTOUR]);
     const pointTypes = async () => (await editor.outline())[0]?.points.map((p) => p.pointType);
     await expect.poll(pointTypes).toEqual(openCubicPointTypes(4));
     await editor.clickPoint(middle);

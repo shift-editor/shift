@@ -9,7 +9,7 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
   page,
   editor,
 }) => {
-  await openScratchGlyph(page, editor, "snapPen");
+  await openScratchGlyph(editor, "snapPen");
   const canvas = editor.canvas;
   const bounds = await editor.canvasBounds();
   const first = { x: Math.round(bounds.width / 4), y: Math.round(bounds.height / 2) };

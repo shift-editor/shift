@@ -135,7 +135,7 @@ export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
  * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
 export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void> {
-  await callHook(page, "actions", "openGlyph", glyphId);
+  await callHook(page, "session", "openGlyph", glyphId);
   await waitForEditorReady(page, glyphId);
 }
 

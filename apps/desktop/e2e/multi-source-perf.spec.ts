@@ -1,13 +1,8 @@
 import type { Page } from "@playwright/test";
-import type { PointId, SourceId } from "@shift/types";
+import type { PointId } from "@shift/types";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  matchedFirstPointPositions,
-  matchedSourceLayerCount,
-  selectObjects,
-  selectSourcesForEditing,
-  zoomToFit,
-} from "./fixtures/editorInteractions";
+import { matchedFirstPointPositions, matchedSourceLayerCount } from "./fixtures/editorInteractions";
+import { callHook } from "./fixtures/appHooks";
 import { test, expect, drawBenchmarkGlyph, computeStats } from "./fixtures/perfApp";
 
 const GLYPH_POINTS = 50_000;
@@ -27,48 +22,29 @@ async function prepareFourSourceGlyph(
   );
   await editor.waitForIdle();
 
-  const axisId = await editor.setup.createAxis({
+  await editor.addAxis({
     tag: "bch1",
     name: "Benchmark Weight",
-    role: "external",
-    axisType: "continuous",
     minimum: 100,
     default: 400,
     maximum: 900,
-    labels: [],
-    hidden: false,
   });
-  await editor.waitForIdle();
-
-  const referenceId = (await editor.source("default"))!.id;
-  const sourceIds: SourceId[] = [];
-  for (const [name, value] of [
+  const reference = (await editor.source("default"))!.name;
+  const sources = [
     ["Benchmark Medium", 500],
     ["Benchmark Semibold", 700],
     ["Benchmark Bold", 900],
-  ] as const) {
-    const sourceId = await editor.setup.createSource(name, { [axisId]: value });
-    await editor.waitForIdle();
-    await expect.poll(() => editor.source({ id: sourceId })).not.toBeNull();
-    sourceIds.push(sourceId);
-  }
-
-  for (const sourceId of sourceIds) {
-    await selectSourcesForEditing(page, [{ sourceId }]);
-    await editor.waitForIdle();
-  }
-  await selectSourcesForEditing(page, [
-    { sourceId: referenceId },
-    ...sourceIds.map((sourceId) => ({ sourceId, mode: "toggle" as const })),
-  ]);
+  ] as const;
+  for (const [name, value] of sources) await editor.addSource(name, { bch1: value });
+  await editor.editSources([reference, ...sources.map(([name]) => name)]);
   await editor.waitForIdle();
   await expect
     .poll(() => matchedSourceLayerCount(page, selectedPointIds), { timeout: 20_000 })
     .toBe(3);
 
-  await editor.setup.offsetMatchedSourcePoints(selectedPointIds, 3);
-  await selectObjects(page, selectedPointIds);
-  await zoomToFit(page);
+  await callHook(page, "perf", "offsetMatchedSourcePoints", selectedPointIds, 3);
+  await editor.selectObjects(selectedPointIds);
+  await editor.zoomToFit();
   await editor.waitForCanvasRender();
   expect(await editor.selectionIds()).toHaveLength(selectedPointCount);
   return selectedPointIds;

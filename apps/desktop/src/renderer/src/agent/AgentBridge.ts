@@ -128,7 +128,10 @@ export class AgentBridge {
         ? Reflect.get(Object.getPrototypeOf(target), method)
         : null;
     if (typeof call !== "function") throw new Error(`No E2E hook ${hook}.${method}`);
-    return Reflect.apply(call, target, args);
+    const result: unknown = await Reflect.apply(call, target, args);
+    // An action answers once the workspace has confirmed its edit, as TestEditor settles after one.
+    if (hook === "actions") await hooks.session.settle();
+    return result;
   }
 
   /** @throws {Error} for a reader or method the window does not serve. */

@@ -22,23 +22,22 @@ async function selectCategory(dialog: Locator, category: "Axes" | "Sources" | "I
 }
 
 async function createVariableFixture(editor: EditorDriver): Promise<VariableFixture> {
-  const axisId = await editor.setup.createAxis({
+  await editor.addAxis({
     tag: "opsz",
     name: "Optical Size",
-    role: "external",
-    axisType: "continuous",
     minimum: 100,
     default: 400,
     maximum: 900,
-    labels: [],
-    hidden: false,
   });
-  const sourceId = await editor.setup.createSource("Bold", { [axisId]: 900 });
-  const instanceId = await editor.setup.createNamedInstance({
-    name: "Black",
-    location: { [axisId]: 800 },
-  });
-  return { axisId, sourceId, instanceId };
+  await editor.addSource("Bold", { opsz: 900 });
+  await editor.addInstance("Black", { opsz: 800 });
+  await editor.setLocation({ opsz: 400 });
+  const [axis, source, instance] = await Promise.all([
+    editor.axis({ tag: "opsz" }),
+    editor.source({ name: "Bold" }),
+    editor.instance({ name: "Black" }),
+  ]);
+  return { axisId: axis!.id, sourceId: source!.id, instanceId: instance!.id };
 }
 
 test.describe("variable-font authoring controls", () => {

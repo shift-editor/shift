@@ -45,7 +45,7 @@ test("persists source topology", async ({ recoveryApp }) => {
   ]);
   expectCanonicalFont(recoveryApp, baseline);
 
-  await driverFor(recoveryApp, recoveryApp.page).setup.deleteSource(fixture.mediumSourceId);
+  await driverFor(recoveryApp, recoveryApp.page).deleteSource("Medium Master");
   const deleted = await observeVariableFont(recoveryApp, recoveryApp.page);
   expect(deleted).toMatchObject({
     defaultSourceId: fixture.defaultSourceId,
@@ -81,7 +81,7 @@ test("persists axis topology", async ({ recoveryApp }) => {
   ]);
   expectCanonicalFont(recoveryApp, baseline);
 
-  await driverFor(recoveryApp, recoveryApp.page).setup.deleteAxis(fixture.widthAxisId);
+  await driverFor(recoveryApp, recoveryApp.page).deleteAxis("wdth");
   const deleted = await observeVariableFont(recoveryApp, recoveryApp.page);
   expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
   expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
@@ -108,83 +108,57 @@ function driverFor(recoveryApp: RecoveryApp, page: Page): EditorDriver {
 
 async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFixture> {
   const editor = driverFor(recoveryApp, recoveryApp.page);
-  const defaultSource = (await editor.source("default"))!.id;
-  const axisId = await editor.setup.createAxis({
-    ...WEIGHT,
-    name: "Weight",
-    role: "external",
-    axisType: "continuous",
-    labels: [],
-    hidden: false,
-  });
-  const mediumSourceId = await editor.setup.createSource("Medium", { [axisId]: 600 });
-  const boldSourceId = await editor.setup.createSource("Bold", { [axisId]: 900 });
-  const instanceId = await editor.setup.createNamedInstance({
-    name: "Display",
-    postscriptName: "MutatorSans-Display",
-    location: { [axisId]: 800 },
-  });
-  await editor.setup.editSource(mediumSourceId, {
-    name: "Medium Master",
-    italicAngle: -2,
-    lineGap: 37,
-    metricOffsets: { ascender: 17 },
-  });
+  await editor.addAxis({ ...WEIGHT, name: "Weight" });
+  await editor.addSource("Medium", { wght: 600 });
+  const { metrics } = await editor.location();
+  await editor.addSource("Bold", { wght: 900 });
+  await editor.addInstance("Display", { wght: 800 });
+  await editor.renameSource("Medium", "Medium Master");
+  await editor.setSourceItalicAngle("Medium Master", -2);
+  await editor.setSourceLineGap("Medium Master", 37);
+  await editor.setSourceMetric("Medium Master", "Ascender", metrics.ascender + 17);
+  await editor.setLocation({ wght: WEIGHT.default });
 
-  return { axisId, defaultSourceId: defaultSource, mediumSourceId, boldSourceId, instanceId };
+  const [axis, defaultSource, medium, bold, instance] = await Promise.all([
+    editor.axis({ tag: "wght" }),
+    editor.source("default"),
+    editor.source({ name: "Medium Master" }),
+    editor.source({ name: "Bold" }),
+    editor.instance({ name: "Display" }),
+  ]);
+  return {
+    axisId: axis!.id,
+    defaultSourceId: defaultSource!.id,
+    mediumSourceId: medium!.id,
+    boldSourceId: bold!.id,
+    instanceId: instance!.id,
+  };
 }
 
 async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture> {
   const editor = driverFor(recoveryApp, recoveryApp.page);
-  const defaultSource = (await editor.source("default"))!.id;
-  const weightAxisId = await editor.setup.createAxis({
-    ...WEIGHT,
-    name: "Weight",
-    role: "external",
-    axisType: "continuous",
-    labels: [],
-    hidden: false,
-  });
-  const widthAxisId = await editor.setup.createAxis({
-    tag: "wdth",
-    name: "Width",
-    role: "external",
-    axisType: "continuous",
-    minimum: 50,
-    default: 100,
-    maximum: 200,
-    labels: [],
-    hidden: true,
-  });
-  const slantAxisId = await editor.setup.createAxis({
-    tag: "slnt",
-    name: "Slant",
-    role: "external",
-    axisType: "continuous",
-    minimum: -10,
-    default: 0,
-    maximum: 10,
-    labels: [],
-    hidden: false,
-  });
-  const boldSourceId = await editor.setup.createSource("Bold Slanted", {
-    [weightAxisId]: 900,
-    [widthAxisId]: 150,
-    [slantAxisId]: -8,
-  });
-  const instanceId = await editor.setup.createNamedInstance({
-    name: "Display",
-    postscriptName: "MutatorSans-Display",
-    location: { [weightAxisId]: 700, [widthAxisId]: 120, [slantAxisId]: -4 },
-  });
+  await editor.addAxis({ ...WEIGHT, name: "Weight" });
+  await editor.addAxis({ tag: "wdth", name: "Width", minimum: 50, default: 100, maximum: 200 });
+  await editor.addAxis({ tag: "slnt", name: "Slant", minimum: -10, default: 0, maximum: 10 });
+  await editor.addSource("Bold Slanted", { wght: 900, wdth: 150, slnt: -8 });
+  await editor.addInstance("Display", { wght: 700, wdth: 120, slnt: -4 });
+  await editor.setLocation({ wght: WEIGHT.default, wdth: 100, slnt: 0 });
 
+  const [weight, width, slant, defaultSource, bold, instance] = await Promise.all([
+    editor.axis({ tag: "wght" }),
+    editor.axis({ tag: "wdth" }),
+    editor.axis({ tag: "slnt" }),
+    editor.source("default"),
+    editor.source({ name: "Bold Slanted" }),
+    editor.instance({ name: "Display" }),
+  ]);
   return {
-    weightAxisId,
-    widthAxisId,
-    slantAxisId,
-    defaultSourceId: defaultSource,
-    boldSourceId,
-    instanceId,
+    weightAxisId: weight!.id,
+    widthAxisId: width!.id,
+    slantAxisId: slant!.id,
+    defaultSourceId: defaultSource!.id,
+    boldSourceId: bold!.id,
+    instanceId: instance!.id,
   };
 }
 

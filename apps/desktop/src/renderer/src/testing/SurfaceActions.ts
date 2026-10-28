@@ -12,13 +12,14 @@ import type { Editor } from "@shift/editor";
 import { sourceMetricValue, withSourceMetricValue } from "@shift/editor/model";
 import type { SourceSelectionMode } from "@shift/editor/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import type { Point2D } from "@shift/geo";
 import type {
+  AnchorId,
   AxisId,
   GlyphName,
   PointId,
   SelectableId,
   Source,
-  SourceId,
   Unicode,
 } from "@shift/types";
 import { drawFixture } from "./drawFixture";
@@ -76,6 +77,16 @@ export class SurfaceActions {
       labels: [],
       hidden: false,
     });
+  }
+
+  /** Adds an unnamed anchor at `position` in the open glyph and selects it, as the anchor tool does. */
+  addAnchorAt(position: Point2D): boolean {
+    return this.#editor.addAnchorAt(position);
+  }
+
+  /** Renames the anchor `anchorId`, as the sidebar's name field does. */
+  renameAnchor(anchorId: AnchorId, name: string): boolean {
+    return this.#editor.renameAnchor(anchorId, name);
   }
 
   /** Deletes the axis tagged `tag`, as Settings › Axes does. */
@@ -185,6 +196,3 @@ export class SurfaceActions {
     ) as Record<AxisId, number>;
   }
 }
-
-/** A source id, for callers that pass one on. */
-export type { SourceId };

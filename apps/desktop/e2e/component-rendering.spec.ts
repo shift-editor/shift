@@ -4,7 +4,6 @@ import {
   drawnAndAuthoredComponents,
   drawnComponentCount,
   instanceBetweenSources,
-  setZoom,
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
@@ -23,7 +22,7 @@ test(
     expect(sample.renderedTransforms).toEqual(sample.exactTransforms);
 
     // Keep the wide component's right edge inside the canvas.
-    await setZoom(page, (await editor.zoomLevel()) * 0.8);
+    await editor.setZoom((await editor.zoomLevel()) * 0.8);
     await expectCanvasSnapshot(editor, "canvas-Aacute-bold-wide-components.png");
   },
 );

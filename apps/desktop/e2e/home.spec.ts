@@ -245,7 +245,7 @@ test.describe("Home view", () => {
   });
 
   test("keeps unavailable source creation discoverable without axes", async ({ editor, page }) => {
-    for (const axis of (await editor.fontOverview()).axes) await editor.setup.deleteAxis(axis.id);
+    for (const axis of (await editor.fontOverview()).axes) await editor.deleteAxis(axis.tag);
 
     const createSource = page.getByRole("button", { name: "Create source", exact: true });
     const tooltip = page.getByRole("tooltip");

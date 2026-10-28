@@ -3,7 +3,7 @@ import { glyphProperties } from "./fixtures/appLocators";
 import { openScratchGlyph, SMOOTH_JOIN_CONTOUR } from "./fixtures/scratchGlyph";
 
 test("edits a selected cubic handle by angle and length", async ({ page, editor }) => {
-  const { incoming, join, outgoing } = await openScratchGlyph(page, editor, "handleProperties", [
+  const { incoming, join, outgoing } = await openScratchGlyph(editor, "handleProperties", [
     SMOOTH_JOIN_CONTOUR,
   ]);
 

@@ -1,5 +1,4 @@
 import type { ElectronApplication, Locator, Page } from "@playwright/test";
-import type { AxisId, SourceId } from "@shift/types";
 import { rect, square, triangle } from "@/testing/fixtures";
 import { test, expect } from "./fixtures/perfApp";
 import {
@@ -243,14 +242,14 @@ test.describe("Resident Glyph Grid", () => {
 
   test("replaces a selected-source deletion atomically", async ({ editor, electronApp, page }) => {
     const glyphCanvas = await prepareCompleteGrid(electronApp, page);
-    const variable = await createVariableDesignspace(editor);
+    await createVariableDesignspace(editor);
     // Arm the observer only after the setup edits have reached a settled frame, so every
     // recorded transition belongs to the mutation under test.
     await waitForSettledGrid(page, glyphCanvas);
     await trackGridTransitions(page);
 
-    await editor.setup.setLocation({ [variable.axisId]: 900 });
-    await editor.setup.deleteSource(variable.sourceId);
+    await editor.setLocation({ opsz: 900 });
+    await editor.deleteSource("Bold");
 
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
@@ -266,22 +265,20 @@ test.describe("Resident Glyph Grid", () => {
     page,
   }) => {
     const glyphCanvas = await prepareCompleteGrid(electronApp, page);
-    const variable = await createVariableDesignspace(editor);
+    await createVariableDesignspace(editor);
     // Arm the observer only after the setup edits have reached a settled frame, so every
     // recorded transition belongs to the mutation under test.
     await waitForSettledGrid(page, glyphCanvas);
     await trackGridTransitions(page);
 
-    await editor.setup.setLocation({ [variable.axisId]: 750 });
+    await editor.setLocation({ opsz: 750 });
     await afterNextPaint(page);
-    await editor.setup.deleteAxis(variable.axisId);
+    await editor.deleteAxis("opsz");
 
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
-    expect((await editor.fontOverview()).axes.map((axis) => axis.id)).not.toContain(
-      variable.axisId,
-    );
+    expect(await editor.axis({ tag: "opsz" })).toBeNull();
     const state = await observedGridState(page);
     expectAtomicGridReadiness(state.readiness);
     expect(state.hiddenTransitions).toBe(0);
@@ -306,7 +303,7 @@ test.describe("Resident Glyph Grid", () => {
       timeout: 30_000,
     });
 
-    const variable = await createVariableDesignspace(editor);
+    await createVariableDesignspace(editor);
     await waitForSettledGrid(page, glyphCanvas);
     const initialGeometry = {
       previewHeight: Number(await glyphCanvas.getAttribute("data-preview-height")),
@@ -315,7 +312,7 @@ test.describe("Resident Glyph Grid", () => {
     const geometrySamples = await scrubGridGeometry(
       editor,
       glyphCanvas,
-      variable.axisId,
+      "opsz",
       [500, 650, 800, 900, 650, 400],
     );
 
@@ -327,23 +324,24 @@ test.describe("Resident Glyph Grid", () => {
   });
 });
 
-async function createVariableDesignspace(
-  editor: EditorDriver,
-): Promise<{ axisId: AxisId; sourceId: SourceId }> {
-  const axisId = await editor.setup.createAxis({
+/**
+ * Adds an `opsz` axis and a Bold source at 900 whose ascender and descender are twice the
+ * default's, so scrubbing toward it grows every Grid cell. Adding a source moves to it, as the
+ * Create source menu does, so this moves back to the default location after.
+ */
+async function createVariableDesignspace(editor: EditorDriver): Promise<void> {
+  const { metrics } = await editor.location();
+  await editor.addAxis({
     tag: "opsz",
     name: "Optical Size",
-    role: "external",
-    axisType: "continuous",
     minimum: 100,
     default: 400,
     maximum: 900,
-    labels: [],
-    hidden: false,
   });
-  const sourceId = await editor.setup.createSource("Bold", { [axisId]: 900 });
-  await editor.setup.scaleSourceMetrics(sourceId, 2);
-  return { axisId, sourceId };
+  await editor.addSource("Bold", { opsz: 900 });
+  await editor.setSourceMetric("Bold", "Ascender", metrics.ascender * 2);
+  await editor.setSourceMetric("Bold", "Descender", metrics.descender * 2);
+  await editor.setLocation({ opsz: 400 });
 }
 
 async function prepareCompleteGrid(electronApp: ElectronApplication, page: Page): Promise<Locator> {

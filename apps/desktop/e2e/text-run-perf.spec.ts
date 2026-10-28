@@ -30,7 +30,6 @@ import type { EditorDriver } from "./fixtures/EditorDriver";
 import {
   liveUTopAnchor,
   loadedTextRunLength,
-  setZoom,
   textRunHoverTargets,
 } from "./fixtures/editorInteractions";
 import { installFrameProbe, measureMove } from "./fixtures/perfProbe";
@@ -122,7 +121,7 @@ test.describe("Performance — 10K-character text run", () => {
 
     await editor.press("Escape");
     await expect.poll(async () => (await editor.editedNodeIds()).length).toBe(1);
-    await setZoom(page, (await editor.zoomLevel()) * 0.5);
+    await editor.setZoom((await editor.zoomLevel()) * 0.5);
     await editor.waitForCanvasRender();
 
     // Hover: each move lands on another run glyph, so each frame redraws its outline.

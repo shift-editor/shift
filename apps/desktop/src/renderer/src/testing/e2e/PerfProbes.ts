@@ -165,4 +165,24 @@ export class PerfProbes {
     if (!layer) throw new Error("selected points have no editable layer");
     return layer;
   }
+  /**
+   * Moves the points matched to `ids` in each other source being edited by a different offset
+   * per source, so the sources disagree, and waits for the edit.
+   *
+   * @remarks
+   * No public command moves matched points in other sources apart from the active one, so this
+   * moves each matched layer's points directly. It is setup for multi-source drag benchmarks.
+   * @throws {Error} unless exactly `expectedSources` other layers match every point.
+   */
+  async offsetMatchedSourcePoints(ids: readonly PointId[], expectedSources: number): Promise<void> {
+    const targets = this.#editor.positionSelection(ids)?.additionalLayers;
+    if (targets?.length !== expectedSources) {
+      throw new Error(`Expected ${expectedSources} matched source layers`);
+    }
+    for (const [index, target] of targets.entries()) {
+      const points = target.targets.points;
+      if (points?.length !== ids.length) throw new Error("Expected a complete point match");
+      target.layer.movePoints(points, { x: 40 * (index + 1), y: 25 * (index + 1) });
+    }
+  }
 }

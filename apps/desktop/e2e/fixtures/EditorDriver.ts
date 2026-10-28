@@ -9,7 +9,8 @@ import type {
   KerningMasterValue,
 } from "@shift/runtime";
 import type {
-  AxisId,
+  AnchorId,
+  SelectableId,
   GlyphId,
   GlyphName,
   KerningPosition,
@@ -42,8 +43,9 @@ import type {
   SourceLayer,
   SpacingToolState,
 } from "@/testing/reads";
+import type { E2EHookArgs, E2EHookMethod, E2EHookResult } from "@/testing/e2e/hooks";
 import type { DrawOptions, GlyphFixture, PointNames } from "@/testing/fixtures";
-import { callHook, readAgent, registerApp, setupActions, type E2ESetup } from "./appHooks";
+import { callHook, readAgent, registerApp } from "./appHooks";
 import { openVariationControls, waitForEditorReady } from "./appLocators";
 import type { AxisFixture, AxisLocation } from "@/testing/fonts";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
@@ -88,14 +90,6 @@ export class EditorDriver implements EditorReads, EditorActions {
     if (app) registerApp(app);
   }
 
-  /**
-   * The window's setup actions (`testing/E2EActions.ts`): edits a spec isn't about, made through
-   * the editor's public commands, each waiting until the workspace confirms it.
-   */
-  get setup(): E2ESetup {
-    return setupActions(this.page);
-  }
-
   /** Returns the interactive editor canvas locator. */
   get canvas(): Locator {
     return this.page.locator("#interactive-canvas");
@@ -118,7 +112,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     const glyphId = await callHook(this.page, "editor", "glyphForUnicode", unicode);
     if (!glyphId) throw new Error(`No glyph found for U+${hexCodepoint}`);
 
-    await this.setup.openGlyph(glyphId);
+    await callHook(this.page, "session", "openGlyph", glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
     await this.waitForCanvasRender();
@@ -140,7 +134,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param glyphId - Glyph identity in the loaded workspace.
    */
   async openGlyph(glyphId: GlyphId): Promise<void> {
-    await this.setup.openGlyph(glyphId);
+    await callHook(this.page, "session", "openGlyph", glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
   }
@@ -161,8 +155,8 @@ export class EditorDriver implements EditorReads, EditorActions {
     fixture: F,
     options: DrawOptions = {},
   ): Promise<Record<PointNames<F>, PointId>> {
-    // The setup facade drops `draw`'s generic; the ids are keyed by the fixture's own names.
-    return (await this.setup.draw(fixture, options)) as Record<PointNames<F>, PointId>;
+    // The hook call drops `draw`'s generic; the ids are keyed by the fixture's own names.
+    return (await this.#act("draw", fixture, options)) as Record<PointNames<F>, PointId>;
   }
 
   /**
@@ -170,22 +164,22 @@ export class EditorDriver implements EditorReads, EditorActions {
    * does; throws when the font's glyph metadata would name or encode it otherwise.
    */
   async addGlyph(name: string, unicode: number | null): Promise<void> {
-    await this.setup.createGlyph(name, unicode);
+    await this.#act("addGlyph", name, unicode);
+  }
+
+  /** Adds the glyphs a language needs for `unicodes`, as the language panel does, and returns their names. */
+  async createGlyphsForUnicodes(unicodes: readonly number[]): Promise<string[]> {
+    return this.#act("createGlyphsForUnicodes", unicodes);
   }
 
   /** Adds a continuous axis, as the Create axis menu does, and waits for it. */
   async addAxis(axis: AxisFixture): Promise<void> {
-    await this.setup.createAxis({
-      tag: axis.tag,
-      name: axis.name ?? axis.tag,
-      role: axis.role ?? "external",
-      axisType: "continuous",
-      minimum: axis.minimum,
-      default: axis.default,
-      maximum: axis.maximum,
-      labels: [],
-      hidden: false,
-    });
+    await this.#act("addAxis", axis);
+  }
+
+  /** Deletes the axis tagged `tag`, as Settings › Axes does. */
+  async deleteAxis(tag: string): Promise<void> {
+    await this.#act("deleteAxis", tag);
   }
 
   /**
@@ -193,13 +187,72 @@ export class EditorDriver implements EditorReads, EditorActions {
    * and waits for it: the editor moves there and the new source becomes active.
    */
   async addSource(name: string, location: AxisLocation): Promise<void> {
-    const values: Record<AxisId, number> = {};
-    for (const [tag, value] of Object.entries(location)) {
-      const axis = await this.axis({ tag });
-      if (!axis) throw new Error(`The font has no axis tagged ${tag}`);
-      values[axis.id] = value;
-    }
-    await this.setup.createSourceHere(name, values);
+    await this.#act("addSource", name, location);
+  }
+
+  /** Deletes the source named `name`, as the Sources panel does. */
+  async deleteSource(name: string): Promise<void> {
+    await this.#act("deleteSource", name);
+  }
+
+  /** Renames the source `source` to `name`, as Settings › Sources does. */
+  async renameSource(source: string, name: string): Promise<void> {
+    await this.#act("renameSource", source, name);
+  }
+
+  /** Sets the source `source`'s italic angle, as Settings › Sources does. */
+  async setSourceItalicAngle(source: string, italicAngle: number): Promise<void> {
+    await this.#act("setSourceItalicAngle", source, italicAngle);
+  }
+
+  /** Sets the source `source`'s line gap, as Settings › Sources does. */
+  async setSourceLineGap(source: string, lineGap: number): Promise<void> {
+    await this.#act("setSourceLineGap", source, lineGap);
+  }
+
+  /** Moves the metric named `metric` in the source `source` to `position`, as Settings › Sources does. */
+  async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
+    await this.#act("setSourceMetric", source, metric, position);
+  }
+
+  /** Adds a named instance at `location`, keyed by axis tag, as Settings › Instances does. */
+  async addInstance(name: string, location: AxisLocation): Promise<void> {
+    await this.#act("addInstance", name, location);
+  }
+
+  /** Moves the editor to `location`, keyed by axis tag, as the location sliders do. */
+  async setLocation(location: AxisLocation): Promise<void> {
+    await this.#act("setLocation", location);
+  }
+
+  /** Edits the sources `names` together and waits until their layers are matched. */
+  async editSources(names: readonly string[]): Promise<void> {
+    await this.#act("editSources", names);
+  }
+
+  /** Selects the objects `ids`, replacing the selection, as clicking them in the Objects tab does. */
+  async selectObjects(ids: readonly SelectableId[]): Promise<void> {
+    await this.#act("selectObjects", ids);
+  }
+
+  /** Sets the canvas zoom level, as the zoom menu does. */
+  async setZoom(zoom: number): Promise<void> {
+    await this.#act("setZoom", zoom);
+  }
+
+  /** Fits the open glyph in the canvas, as View › Zoom to Fit does. */
+  async zoomToFit(): Promise<void> {
+    await this.#act("zoomToFit");
+  }
+
+  /** Adds an unnamed anchor at `position` in the open glyph and selects it, as the anchor tool does. */
+  async addAnchorAt(position: Point2D): Promise<boolean> {
+    return this.#act("addAnchorAt", position);
+  }
+
+  /** Renames the anchor `anchorId`, as the sidebar's name field does. */
+  async renameAnchor(anchorId: AnchorId, name: string): Promise<boolean> {
+    return this.#act("renameAnchor", anchorId, name);
   }
 
   /**
@@ -369,7 +422,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Flushes the latest coalesced pointer move into the active tool gesture. */
   async flushPointerMoves(): Promise<void> {
-    await this.setup.flushPointerMoves();
+    await callHook(this.page, "interactions", "flushPointerMoves");
   }
 
   /** Waits until the current gesture and its workspace edits are complete. */
@@ -704,7 +757,15 @@ export class EditorDriver implements EditorReads, EditorActions {
     return readAgent(this.page, reader, method, args);
   }
 
+  /** Runs the surface action `method` in this page's window; it answers once the edit is confirmed. */
+  async #act<M extends E2EHookMethod<"actions">>(
+    method: M,
+    ...args: E2EHookArgs<"actions", M>
+  ): Promise<E2EHookResult<"actions", M>> {
+    return callHook(this.page, "actions", method, ...args);
+  }
+
   async #waitForEdits(): Promise<void> {
-    await this.setup.settle();
+    await callHook(this.page, "session", "settle");
   }
 }

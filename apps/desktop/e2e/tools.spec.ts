@@ -5,7 +5,6 @@ import {
   canvasTextReadiness,
   hasCanvasPointer,
   liveShapeDraft,
-  setZoom,
 } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 import type { PointDrag } from "./fixtures/types";
@@ -341,7 +340,7 @@ test.describe("Toolbar tools", () => {
           glyphsLoaded: true,
         });
       // Keep the caret after the last glyph inside the canvas.
-      await setZoom(page, (await editor.zoomLevel()) * 0.8);
+      await editor.setZoom((await editor.zoomLevel()) * 0.8);
       await page.mouse.move(0, 0);
       await expectCanvasSnapshot(editor, "canvas-text-mode-AAB.png");
     },

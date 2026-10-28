@@ -17,8 +17,9 @@ async function createViewGlyphs(
   const glyphs: { id: GlyphId; name: string }[] = [];
   for (const { name, width } of definitions) {
     const box = width === null ? [] : [rect(0, -100, width, 1000)];
-    const id = await editor.setup.createGlyph(name, null);
-    await editor.openGlyph(id);
+    await editor.addGlyph(name, null);
+    await editor.openGlyphByName(name);
+    const { id } = (await editor.glyphNamed(name))!;
     await editor.draw({ advance: width ?? 500, contours: box });
     glyphs.push({ id, name });
   }

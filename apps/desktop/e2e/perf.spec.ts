@@ -23,13 +23,7 @@ import * as path from "path";
 import type { PointId } from "@shift/types";
 import type { Page } from "@playwright/test";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  matchedFirstPointPositions,
-  matchedSourceLayerCount,
-  selectObjects,
-  selectSourcesForEditing,
-  zoomToFit,
-} from "./fixtures/editorInteractions";
+import { matchedFirstPointPositions, matchedSourceLayerCount } from "./fixtures/editorInteractions";
 import {
   installFrameProbe,
   measureMove,
@@ -108,14 +102,13 @@ function saveBaseline(results: PerfResult[]): void {
  * floating tools docked to the canvas's bottom edge, so a drag can start on the last one.
  */
 async function selectInsertedPoints(
-  page: Page,
   editor: EditorDriver,
   count: number | null,
 ): Promise<PointId[]> {
   const inserted = await drawBenchmarkGlyph(editor, TARGET_POINTS);
   const pointIds = count === null ? inserted : inserted.slice(-count);
-  await selectObjects(page, pointIds);
-  await zoomToFit(page);
+  await editor.selectObjects(pointIds);
+  await editor.zoomToFit();
   await editor.waitForIdle();
   await editor.waitForCanvasRender();
   expect(await editor.selectionIds()).toHaveLength(count ?? pointIds.length);
@@ -250,7 +243,7 @@ test.describe("Performance — 50K points", () => {
     await editor.waitForCanvasRender();
 
     const before = await editor.pointPosition(pointIds[0]!);
-    await selectObjects(page, pointIds);
+    await editor.selectObjects(pointIds);
     const singleStart = performance.now();
     await editor.press("ArrowRight");
     await editor.waitForCanvasRender();
@@ -259,28 +252,16 @@ test.describe("Performance — 50K points", () => {
     await editor.undo();
     expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
 
-    const axisId = await editor.setup.createAxis({
+    await editor.addAxis({
       tag: "bch1",
       name: "Benchmark Weight",
-      role: "external",
-      axisType: "continuous",
       minimum: 100,
       default: 400,
       maximum: 900,
-      labels: [],
-      hidden: false,
     });
-    await editor.waitForIdle();
-    const referenceId = (await editor.source("default"))!.id;
-    const targetId = await editor.setup.createSource("Benchmark Bold", { [axisId]: 900 });
-    const sourceIds = { referenceId, targetId };
-    await editor.waitForIdle();
-    await expect.poll(() => editor.source({ id: sourceIds.targetId })).not.toBeNull();
-    await selectSourcesForEditing(page, [
-      { sourceId: sourceIds.targetId },
-      { sourceId: sourceIds.referenceId },
-      { sourceId: sourceIds.targetId, mode: "toggle" },
-    ]);
+    const reference = (await editor.source("default"))!.name;
+    await editor.addSource("Benchmark Bold", { bch1: 900 });
+    await editor.editSources([reference, "Benchmark Bold"]);
     await editor.waitForIdle();
     await expect.poll(() => matchedSourceLayerCount(page, pointIds)).toBe(1);
 
@@ -290,7 +271,7 @@ test.describe("Performance — 50K points", () => {
       return target;
     };
     const targetBefore = await targetPosition();
-    await selectObjects(page, pointIds);
+    await editor.selectObjects(pointIds);
     const multiStart = performance.now();
     await editor.press("ArrowRight");
     await editor.waitForCanvasRender();
@@ -361,7 +342,7 @@ test.describe("Performance — 50K points", () => {
     ["all pts", null],
   ] as const) {
     test(`drag — real pointer frames with ${label} selected`, async ({ page, editor }) => {
-      const pointIds = await selectInsertedPoints(page, editor, count);
+      const pointIds = await selectInsertedPoints(editor, count);
       const grabbed = pointIds.at(-1)!;
       const other = pointIds[0]!;
       const before = {

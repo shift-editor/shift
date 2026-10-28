@@ -9,7 +9,7 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
   page,
   editor,
 }) => {
-  await openScratchGlyph(page, editor, "snapHandles", [SMOOTH_JOIN_CONTOUR]);
+  await openScratchGlyph(editor, "snapHandles", [SMOOTH_JOIN_CONTOUR]);
 
   const canvas = editor.canvas;
   const bounds = await editor.canvasBounds();

@@ -1,8 +1,6 @@
-import type { Page } from "@playwright/test";
 import type { PointId, PointType } from "@shift/types";
 import type { ContourFixture, GlyphFixture, PointNames } from "@/testing/fixtures";
 import type { EditorDriver } from "./EditorDriver";
-import { zoomToFit } from "./editorInteractions";
 
 /**
  * Creates an empty glyph, opens it, and optionally draws `fixture` into it framed in the viewport.
@@ -19,25 +17,22 @@ import { zoomToFit } from "./editorInteractions";
  * @returns the drawn point ids, keyed by each point's `name`.
  */
 export async function openScratchGlyph<const C extends readonly ContourFixture[]>(
-  page: Page,
   editor: EditorDriver,
   name: string,
   contours: C,
 ): Promise<Record<PointNames<{ contours: C }>, PointId>>;
 export async function openScratchGlyph<const F extends GlyphFixture>(
-  page: Page,
   editor: EditorDriver,
   name: string,
   fixture?: F,
 ): Promise<Record<PointNames<F>, PointId>>;
 export async function openScratchGlyph(
-  page: Page,
   editor: EditorDriver,
   name: string,
   fixture?: GlyphFixture | readonly ContourFixture[],
 ): Promise<Record<string, PointId>> {
-  const glyphId = await editor.setup.createGlyph(name, null);
-  await editor.openGlyph(glyphId);
+  await editor.addGlyph(name, null);
+  await editor.openGlyphByName(name);
 
   const glyph: GlyphFixture = isContourList(fixture) ? { contours: fixture } : (fixture ?? {});
   const draws =
@@ -46,7 +41,7 @@ export async function openScratchGlyph(
     (glyph.anchors ?? []).length > 0 ||
     (glyph.components ?? []).length > 0;
   const names: Record<string, PointId> = draws ? await editor.draw(glyph) : {};
-  if ((glyph.contours ?? []).length > 0) await zoomToFit(page);
+  if ((glyph.contours ?? []).length > 0) await editor.zoomToFit();
 
   await editor.waitForCanvasRender();
   return names;

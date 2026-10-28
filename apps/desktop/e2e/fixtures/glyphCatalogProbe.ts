@@ -39,7 +39,7 @@ export async function viewportHeight(page: Page): Promise<number> {
 
 /** Waits until the Grid has rendered its current target location with complete residency. */
 export async function waitForSettledGrid(page: Page, glyphCanvas: Locator): Promise<void> {
-  await callHook(page, "actions", "settle");
+  await callHook(page, "session", "settle");
   await afterNextPaint(page);
   await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
@@ -164,14 +164,14 @@ export async function observedGridState(page: Page): Promise<{
 export async function scrubGridGeometry(
   editor: EditorDriver,
   glyphCanvas: Locator,
-  axisId: AxisId,
+  axisTag: string,
   values: readonly number[],
 ): Promise<{ previewHeight: number; scrollHeight: number }[]> {
   const page = editor.page;
   const samples: { previewHeight: number; scrollHeight: number }[] = [];
   for (const value of values) {
     const previousLocation = await glyphCanvas.getAttribute("data-active-location");
-    await editor.setup.setLocation({ [axisId]: value });
+    await editor.setLocation({ [axisTag]: value });
     // Sample only once the Grid has rendered this location, never a stale frame.
     // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
     const rendered = await page.evaluate(async (previous) => {

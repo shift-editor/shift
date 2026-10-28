@@ -563,4 +563,45 @@ export class InteractionProbes {
 
     return { x: anchor.x, y: anchor.y };
   }
+  /** Delivers the latest coalesced pointer move to the active tool, as the next frame would. */
+  flushPointerMoves(): void {
+    this.#editor.toolManager.flushPointerMoves();
+  }
+  /** Pans the canvas to `offset`, in screen pixels, as the Hand tool does. */
+  setPan(offset: Point2D): void {
+    this.#editor.setPan(offset);
+  }
+  /** Clears the selection without a key or pointer event, as an undo or agent edit can. */
+  clearSelection(): void {
+    this.#editor.selection.clear();
+  }
+  /**
+   * Moves the open glyph's placement to (200, -300), zooms in one step, and pastes an open
+   * contour of four points across the canvas's vertical middle, two of them just past its left
+   * and right edges and one 2px inside the left edge.
+   */
+  async insertEdgeOverlappingContour(): Promise<void> {
+    const editor = this.#editor;
+    const node = editor.scene.first("glyph")!;
+    // A glyph inside a text run is placed by the run, so move the run.
+    const placement = editor.scene.node(node.parentId) ?? node;
+    editor.scene.updateNode({ id: placement.id, position: { x: 200, y: -300 } });
+    const placed = editor.scene.node(node.id)!;
+    editor.zoomIn();
+    const camera = editor.getCameraTransform();
+    const width = camera.logicalWidth;
+    const inserted = editor.insertContent({
+      contours: [
+        {
+          closed: false,
+          points: [-100, -2, width / 2, width + 100].map((x) => {
+            const scene = editor.screenToScene({ x, y: camera.logicalHeight / 2 } as ScreenPoint);
+            const local = editor.toLocal(placed, scene);
+            return { x: local.x, y: local.y, pointType: "onCurve" as const, smooth: false };
+          }),
+        },
+      ],
+    });
+    if (!inserted) throw new Error("Expected inserted points");
+  }
 }

@@ -156,4 +156,16 @@ export class SessionHooks {
       throw new Error("variation scrub attempted glyph acquisition");
     };
   }
+  /** Loads the glyph `glyphId` and opens it in the editor route, as a catalog double-click does. */
+  async openGlyph(glyphId: GlyphId): Promise<void> {
+    await this.#session.font.loadGlyph(glyphId);
+    window.location.hash = `#/editor/${encodeURIComponent(glyphId)}`;
+  }
+
+  /** Waits until the workspace has confirmed every edit made so far. */
+  async settle(): Promise<void> {
+    const editor = this.#session.editor;
+    await editor.font.editCoordinator.settled();
+    await editor.text.settled();
+  }
 }

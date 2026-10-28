@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
+import type { AnchorId } from "@shift/types";
 import { line, type ShapeFixture } from "@/testing/fixtures";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
@@ -8,7 +9,6 @@ import {
   cubicSegmentControls,
   firstSegmentMidpoint,
   lineSegmentUpgrade,
-  setZoom,
   upgradePreviewHandles,
 } from "./fixtures/editorInteractions";
 import {
@@ -360,7 +360,10 @@ test.describe("Editor view", () => {
     editor,
   }) => {
     await editor.openGlyphByName("E");
-    const anchorId = await editor.setup.addAnchor("top", { x: 200, y: 700 });
+    await editor.addAnchorAt({ x: 200, y: 700 });
+    const [anchorId] = (await editor.selectionIds()) as AnchorId[];
+    if (!anchorId) throw new Error("Expected the added anchor to be selected");
+    await editor.renameAnchor(anchorId, "top");
     await editor.waitForIdle();
     const anchorRow = editorSidebar(page).getByTestId(`object-${anchorId}`);
     await expect(anchorRow).toBeVisible();
@@ -696,12 +699,13 @@ test.describe("Editor view", () => {
 
   test("keeps the zoom button the same width while the zoom percentage changes", async ({
     page,
+    editor,
   }) => {
     const zoomButton = page.getByRole("button", { name: /^Zoom options, / });
     const widths: number[] = [];
 
     for (const zoom of [0.53, 0.57, 0.64]) {
-      await setZoom(page, zoom);
+      await editor.setZoom(zoom);
       await expect(zoomButton).toHaveAccessibleName(`Zoom options, ${Math.round(zoom * 100)}%`);
       widths.push(await elementWidth(zoomButton));
     }

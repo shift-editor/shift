@@ -11,18 +11,6 @@ import {
   settingsDetails,
 } from "./fixtures/appLocators";
 import { WEIGHT } from "@/testing/fonts";
-import type { EditorDriver } from "./fixtures/EditorDriver";
-
-async function createWeightAxis(editor: EditorDriver): Promise<void> {
-  await editor.setup.createAxis({
-    ...WEIGHT,
-    name: "Weight",
-    role: "external",
-    axisType: "continuous",
-    labels: [],
-    hidden: false,
-  });
-}
 
 test("exposes stable semantic selectors for major application surfaces", async ({
   page,
@@ -47,7 +35,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await settings.getByLabel("Close settings").click();
   await expect(settings).toBeHidden();
 
-  await createWeightAxis(editor);
+  await editor.addAxis({ ...WEIGHT, name: "Weight" });
   await navigation.getByRole("button", { name: "Axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
   await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();

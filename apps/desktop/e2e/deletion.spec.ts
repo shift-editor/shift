@@ -17,8 +17,8 @@ async function waveOnCurvePoints(editor: EditorDriver) {
 // is in application-menu.spec.ts, which runs with the OS focus to itself.
 let middle: PointId;
 
-test.beforeEach(async ({ page, editor }) => {
-  ({ middle } = await openScratchGlyph(page, editor, "deletionWave", [WAVE_CONTOUR]));
+test.beforeEach(async ({ editor }) => {
+  ({ middle } = await openScratchGlyph(editor, "deletionWave", [WAVE_CONTOUR]));
   await expect.poll(() => wavePointTypes(editor)).toEqual(openCubicPointTypes(4));
 });
 

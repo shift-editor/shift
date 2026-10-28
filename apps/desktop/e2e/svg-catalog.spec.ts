@@ -27,7 +27,7 @@ test.describe("SVG glyph catalog fallback", () => {
   });
 
   test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
-    const [name] = await editor.setup.createGlyphsForUnicodes([0x3042]);
+    const [name] = await editor.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");
 
     await page.getByPlaceholder("Search glyphs...").fill(name);

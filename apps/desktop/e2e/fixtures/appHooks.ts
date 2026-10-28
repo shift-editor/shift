@@ -101,20 +101,3 @@ export async function callHook<H extends E2EHookName, M extends E2EHookMethod<H>
   }, call);
   return value as E2EHookResult<H, M>;
 }
-
-/** The setup actions of one window, as methods that run them there. */
-export type E2ESetup = {
-  readonly [M in E2EHookMethod<"actions">]: (
-    ...args: E2EHookArgs<"actions", M>
-  ) => Promise<E2EHookResult<"actions", M>>;
-};
-
-/** The setup actions of `page`'s window (`testing/e2e/E2EActions.ts`). */
-export function setupActions(page: Page): E2ESetup {
-  return new Proxy({} as E2ESetup, {
-    get:
-      (_target, method) =>
-      (...args: unknown[]) =>
-        callHook(page, "actions", method as E2EHookMethod<"actions">, ...(args as never)),
-  });
-}

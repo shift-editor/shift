@@ -1,13 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
-import type {
-  NamedInstanceId,
-  PointId,
-  SegmentId,
-  SelectableId,
-  SourceId,
-  TextItemId,
-} from "@shift/types";
+import type { NamedInstanceId, PointId, SegmentId, TextItemId } from "@shift/types";
 import { callHook } from "./appHooks";
 
 /**
@@ -49,19 +42,14 @@ export async function waitForPageClock(page: Page, since: number, ms: number): P
   });
 }
 
-/** Sets the canvas zoom level, as the zoom menu does. */
-export async function setZoom(page: Page, zoom: number): Promise<void> {
-  await callHook(page, "actions", "setZoom", zoom);
-}
-
 /** Pans the canvas to `offset`, in screen pixels, as the Hand tool does. */
 export async function setCanvasOffset(page: Page, offset: Point2D): Promise<void> {
-  await callHook(page, "actions", "setPan", offset);
+  await callHook(page, "interactions", "setPan", offset);
 }
 
 /** Clears the selection without a key or pointer event, as an undo or agent edit can. */
 export async function clearSelection(page: Page): Promise<void> {
-  await callHook(page, "actions", "clearSelection");
+  await callHook(page, "interactions", "clearSelection");
 }
 
 /** Whether the editor tracks a pointer over the canvas (or one it has captured). */
@@ -140,7 +128,7 @@ export async function cubicSegmentControls(page: Page, segmentId: SegmentId): Pr
  * and right edges and one 2px inside the left edge.
  */
 export async function insertEdgeOverlappingContour(page: Page): Promise<void> {
-  await callHook(page, "actions", "insertEdgeOverlappingContour");
+  await callHook(page, "interactions", "insertEdgeOverlappingContour");
 }
 
 /**
@@ -249,28 +237,6 @@ export async function matchedEditingPoint(
   referencePointId: PointId,
 ): Promise<{ layerId: string; pointId: PointId; position: Point2D }> {
   return callHook(page, "interactions", "matchedEditingPoint", referencePointId);
-}
-
-/** Selects the objects `ids`, replacing the selection, as clicking them in the Objects tab does. */
-export async function selectObjects(page: Page, ids: readonly SelectableId[]): Promise<void> {
-  await callHook(page, "actions", "selectObjects", ids);
-}
-
-/** Fits the open glyph in the canvas, as View › Zoom to Fit does. */
-export async function zoomToFit(page: Page): Promise<void> {
-  await callHook(page, "actions", "zoomToFit");
-}
-
-/**
- * Selects sources for editing in one page task, in order, as clicking their rows in the Sources
- * panel does: alone each source becomes the active one; with `toggle` it joins or leaves the
- * editing selection.
- */
-export async function selectSourcesForEditing(
-  page: Page,
-  steps: readonly { sourceId: SourceId; mode?: "toggle" }[],
-): Promise<void> {
-  await callHook(page, "actions", "selectSourcesForEditing", steps);
 }
 
 /** How many other sources' layers an edit of the points `ids` also moves. */
