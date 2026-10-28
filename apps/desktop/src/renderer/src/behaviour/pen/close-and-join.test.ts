@@ -10,7 +10,7 @@ beforeEach(() => {
   editor.selectTool("pen");
 });
 
-/** Clicks out an open corner contour with the Pen, leaving its stroke active. */
+/** Clicks out an open corner contour with the Pen, leaving its stroke active. Kept: a fixture cannot leave a Pen stroke in progress. */
 async function drawStroke(): Promise<void> {
   await editor.clickAt({ x: 100, y: 100 });
   await editor.clickAt({ x: 300, y: 100 });

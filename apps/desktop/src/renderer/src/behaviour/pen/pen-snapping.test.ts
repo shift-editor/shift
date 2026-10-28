@@ -1,18 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Point2D } from "@shift/geo";
 import { expectEdit } from "@/testing/expectEdit";
-import { offCurve, onCurve } from "@/testing/outlineMatchers";
+import { near, offCurve, onCurve } from "@/testing/outlineMatchers";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
 beforeEach(() => {
   editor.selectTool("pen");
 });
-
-/** The handle mirrored through the anchor at (300, 100), as a curve drag pulls it. */
-function mirroredThroughAnchor(control: Point2D): Point2D {
-  return { x: 600 - control.x, y: 200 - control.y };
-}
 
 describe("the Pen snaps new points to metrics and existing points", () => {
   it("snaps the first point of a contour to the x-height", async () => {
@@ -85,7 +79,8 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
         x: 300 - length * Math.cos(radians),
         y: 100 - length * Math.sin(radians),
       };
-      const outgoing = mirroredThroughAnchor(incoming);
+      // The pulled handle, mirroring the incoming one through the anchor at 300,100.
+      const outgoing = { x: 600 - incoming.x, y: 200 - incoming.y };
       expect(editor.drawnOutline()[0]?.points).toMatchObject([
         onCurve(100, 100),
         { pointType: "offCurve" },
@@ -96,7 +91,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
         {
           kind: "direction",
           from: { x: 300, y: 100 },
-          to: { x: expect.closeTo(outgoing.x, 6), y: expect.closeTo(outgoing.y, 6) },
+          to: near(outgoing, 6),
         },
       ]);
 
