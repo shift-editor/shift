@@ -1,12 +1,7 @@
-import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor } from "@/testing/TestEditor";
+import { beforeEach, describe, expect, it } from "vitest";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
-const SHAPING_TEST = resolve(process.cwd(), "../../fixtures/fonts/ShapingTest.ufo");
-
-let editor: EditorTestSurface;
-afterEach(() => editor.close());
+const editor = useTestEditor({ file: FONTS.shapingTest, glyph: "f" });
 
 /** The canvas text, which every test here has. */
 function text() {
@@ -19,8 +14,7 @@ const names = () => text().glyphs.map((glyph) => glyph.name);
 
 describe("typed text is shaped with the font's feature code", () => {
   // The canvas text starts as the open glyph, f; each test types over it.
-  beforeEach(async () => {
-    editor = await openTestEditor(SHAPING_TEST, "f");
+  beforeEach(() => {
     editor.selectTool("text");
     editor.deleteBackward();
   });
@@ -85,7 +79,6 @@ describe("typed text is shaped with the font's feature code", () => {
 describe("double-clicking a character the font draws with several glyphs", () => {
   // Noon is drawn as a dotless body and a dot: the text is f, then noon's dot and body.
   beforeEach(async () => {
-    editor = await openTestEditor(SHAPING_TEST, "f");
     editor.selectTool("text");
     editor.typeText("ن");
     await editor.pressKey("Escape");

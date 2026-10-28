@@ -1,8 +1,6 @@
-import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Bounds } from "@shift/geo";
-import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor } from "@/testing/TestEditor";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
 // `bullet` places `period` at scale 1 in Light (wght 100) and 3 in Bold
 // (wght 700); `bar` mirrors it and doubles its height in Bold. Compiled fonts
@@ -13,13 +11,7 @@ import { openTestEditor } from "@/testing/TestEditor";
 // compiler reverses that master's contour. `wedgenest` mirrors `wedgeflip`
 // in Bold, so Bold's wedge is mirrored twice and keeps its order. The
 // expected bounds are the exported font's.
-const SCALED_COMPONENT = resolve(process.cwd(), "../../fixtures/fonts/ScaledComponent.glyphs");
-
-let editor: EditorTestSurface;
-beforeEach(async () => {
-  editor = await openTestEditor(SCALED_COMPONENT, "bullet");
-});
-afterEach(() => editor.close());
+const editor = useTestEditor({ file: FONTS.scaledComponent, glyph: "bullet" });
 
 async function drawnAt(glyph: string, weight: number) {
   editor.setLocation({ wght: weight });

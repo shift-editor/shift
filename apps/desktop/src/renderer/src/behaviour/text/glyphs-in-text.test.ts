@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { rect } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
-afterEach(() => editor.close());
+const editor = useTestEditor();
 
 /** The canvas text, which every test here has. */
 function text() {
@@ -16,19 +15,7 @@ function text() {
 const itemId = (index: number) => text().items[index]!.id;
 
 /** A closed square from 100 to 300 in a glyph advancing 500: LSB 100, RSB 200. */
-const SQUARE_100_TO_300 = {
-  contours: [
-    {
-      closed: true,
-      points: [
-        [100, 100],
-        [300, 100],
-        [300, 300],
-        [100, 300],
-      ],
-    },
-  ],
-} as const;
+const SQUARE_100_TO_300 = { contours: [rect(100, 100, 200, 200)] };
 
 /** The open glyph's sidebearings, as its bounds and advance give them. */
 async function sidebearings() {
@@ -40,7 +27,6 @@ async function sidebearings() {
 // second starts at 500, so its square spans 600 to 800.
 describe("glyphs in the text around the edited glyph", () => {
   beforeEach(async () => {
-    editor = await startTestEditor();
     await editor.draw(SQUARE_100_TO_300);
     editor.selectTool("text");
     editor.typeText("A");
@@ -192,7 +178,6 @@ describe("glyphs in the text around the edited glyph", () => {
 
 describe("double-clicking a component", () => {
   it("opens its base glyph next to the edited glyph, as one undo step", async () => {
-    editor = await startTestEditor();
     await editor.addGlyph("B", 66);
     await editor.openGlyph("B");
     await editor.draw(SQUARE_100_TO_300);

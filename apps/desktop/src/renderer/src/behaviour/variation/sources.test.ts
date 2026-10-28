@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { AxisId, SourceId } from "@shift/types";
-import type { EditorTestSurface } from "@/testing/surface";
-import { startTestEditor } from "@/testing/TestEditor";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
-let editor: EditorTestSurface;
+const editor = useTestEditor({ axes: [WEIGHT] });
 let reference: SourceId;
 let weight: AxisId;
-beforeEach(async () => {
-  editor = await startTestEditor();
+beforeEach(() => {
   reference = editor.editorView().activeSourceId!;
-  await editor.addAxis({ tag: "wght", minimum: 100, default: 400, maximum: 900 });
   weight = editor.fontOverview().axes[0]!.id;
 });
-
-async function addSource(name: string, wght: number): Promise<SourceId> {
-  await editor.addSource(name, { wght });
-  return editor.source(name)!.id;
-}
-afterEach(() => editor.close());
 
 describe("adding a source", () => {
   it("shows the new source with a copy of the open glyph", async () => {
@@ -35,7 +26,8 @@ describe("adding a source", () => {
     });
     const [original] = await editor.outline();
 
-    const bold = await addSource("Bold", 700);
+    await editor.addSource("Bold", { wght: 700 });
+    const bold = editor.source("Bold")!.id;
 
     expect(editor.editorView()).toMatchObject({
       activeSourceId: bold,
@@ -53,7 +45,8 @@ describe("adding a source", () => {
 
 describe("choosing sources", () => {
   it("keeps the shown source and the axis location in step", async () => {
-    const bold = await addSource("Bold", 700);
+    await editor.addSource("Bold", { wght: 700 });
+    const bold = editor.source("Bold")!.id;
 
     editor.clickSource("Regular");
     expect(editor.editorView().externalLocation).toEqual([{ axisId: weight, value: 400 }]);
@@ -71,9 +64,11 @@ describe("choosing sources", () => {
   });
 
   it("edits a range or a hand-picked set of sources around the shown one", async () => {
-    const thin = await addSource("Thin", 100);
-    const bold = await addSource("Bold", 700);
-    await addSource("Black", 900);
+    await editor.addSource("Thin", { wght: 100 });
+    const thin = editor.source("Thin")!.id;
+    await editor.addSource("Bold", { wght: 700 });
+    const bold = editor.source("Bold")!.id;
+    await editor.addSource("Black", { wght: 900 });
     const everySource = editor.fontOverview().sources.map(({ id }) => id);
 
     editor.clickSource("Regular");
@@ -93,7 +88,7 @@ describe("choosing sources", () => {
   });
 
   it("switches editing between every source and the shown one", async () => {
-    await addSource("Bold", 700);
+    await editor.addSource("Bold", { wght: 700 });
     editor.clickSource("Regular");
 
     expect(editor.toggleAllSourcesForEditing()).toBe(true);

@@ -1,27 +1,19 @@
-import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { square } from "@/testing/fixtures";
+import { FONTS, useTestEditor, WEIGHT } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import { openTestEditor, startTestEditor } from "@/testing/TestEditor";
-
-const WEIGHT = { tag: "wght", name: "Weight", minimum: 100, default: 400, maximum: 900 };
-const MAPPED_WEIGHT = resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs");
-
-let editor: EditorTestSurface;
-afterEach(() => editor.close());
 
 /** The rightmost edge of what the canvas draws. */
-async function drawnRight(): Promise<number> {
+async function drawnRight(editor: EditorTestSurface): Promise<number> {
   const { bounds } = await editor.drawnGlyph();
   if (!bounds) throw new Error("Expected a drawn outline");
   return bounds.max.x;
 }
 
 describe("sources on a mapped axis", () => {
+  const editor = useTestEditor({ glyphs: { A: { outline: { advance: 300 } } }, axes: [WEIGHT] });
+
   it("places a new source at the mapped location and activates it there", async () => {
-    editor = await startTestEditor();
-    editor.setAdvanceWidth(300);
-    await editor.addAxis(WEIGHT);
     await editor.setAxisMapping("wght", [
       [100, 100],
       [400, 400],
@@ -51,9 +43,7 @@ describe("sources on a mapped axis", () => {
 });
 
 describe("mapped weights keep design-space interpolation", () => {
-  beforeEach(async () => {
-    editor = await openTestEditor(MAPPED_WEIGHT, "A");
-  });
+  const editor = useTestEditor({ file: FONTS.mappedWeight, glyph: "A" });
 
   it.each([
     [100, 30, 300, 700],
@@ -66,7 +56,7 @@ describe("mapped weights keep design-space interpolation", () => {
     async (weight, right, advance, ascender) => {
       editor.setLocation({ wght: weight });
 
-      expect(await drawnRight()).toBeCloseTo(right);
+      expect(await drawnRight(editor)).toBeCloseTo(right);
       expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(advance);
       expect(editor.location().metrics.ascender).toBeCloseTo(ascender);
     },
@@ -100,7 +90,7 @@ describe("mapped weights keep design-space interpolation", () => {
     ]);
 
     expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(900);
-    expect(await drawnRight()).toBeCloseTo(160);
+    expect(await drawnRight(editor)).toBeCloseTo(160);
     expect(editor.location().metrics.ascender).toBeCloseTo(900);
 
     await editor.undo();
@@ -114,12 +104,13 @@ describe("editing a variable glyph across sources", () => {
   let regular: string;
 
   /** Regular: a 100-unit square, advance 300. Bold (wght 700): a 200-unit-wide box, advance 500, taller ascender and x-height. */
+  const editor = useTestEditor({
+    glyphs: { A: { outline: { advance: 300, contours: [square(100)] } } },
+    axes: [WEIGHT],
+    sources: { Bold: { wght: 700 } },
+  });
   beforeEach(async () => {
-    editor = await startTestEditor();
     regular = editor.fontOverview().sources[0]!.name;
-    await editor.draw({ advance: 300, contours: [square(100)] });
-    await editor.addAxis(WEIGHT);
-    await editor.addSource("Bold", { wght: 700 });
     await editor.setSourceMetric("Bold", "Ascender", 900);
     await editor.setSourceMetric("Bold", "x-Height", 600);
     await editor.editSources(["Bold"]);
@@ -158,7 +149,7 @@ describe("editing a variable glyph across sources", () => {
 
     expect(editor.location().sourceId).toBeNull();
     expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(400);
-    expect(await drawnRight()).toBeCloseTo(150);
+    expect(await drawnRight(editor)).toBeCloseTo(150);
     expect(editor.location().metrics.ascender).toBeCloseTo(850);
     expect(editor.location().metrics.xHeight).toBeCloseTo(550);
   });
