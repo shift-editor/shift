@@ -244,7 +244,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     use,
   ) => {
     let launches = 0;
-    await use(async (options = {}) => {
+    await use(async (options = { args: [] }) => {
       launches += 1;
       return electronProcesses.launch({
         label: `relaunch-${launches}`,
@@ -317,6 +317,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
       return electronProcesses.launch({
         label: launches === 1 ? "initial" : `recovery-${launches - 1}`,
         userDataDir,
+        args: [],
         env: shiftTestEnvironment(openDocument ? { SHIFT_E2E_FONT_PATH: documentPath } : {}),
         windowSizing,
         deviceScaleFactor,

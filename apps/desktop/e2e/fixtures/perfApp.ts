@@ -253,11 +253,13 @@ export interface PerfResult {
   mean: number;
 }
 
+const smallestFirst = (a: number, b: number) => a - b;
+
 /**
  * Compute percentile stats from an array of timing samples.
  */
 export function computeStats(label: string, samples: number[]): PerfResult {
-  const sorted = samples.toSorted((a, b) => a - b);
+  const sorted = samples.toSorted(smallestFirst);
   const p = (pct: number) => sorted[Math.floor(sorted.length * pct)] ?? 0;
   const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
 

@@ -58,7 +58,7 @@ export async function createNamedInstance(
     const font = window.shift!.font;
     const instanceId = font.createNamedInstance({
       name,
-      ...(postscriptName === undefined ? {} : { postscriptName }),
+      postscriptName,
       location: { values: { ...location } },
     });
     await font.editCoordinator.settled();
@@ -95,9 +95,9 @@ export async function editSource(
       );
       await font.updateSource({
         ...source,
-        ...(change.name === undefined ? {} : { name: change.name }),
-        ...(change.italicAngle === undefined ? {} : { italicAngle: change.italicAngle }),
-        ...(change.lineGap === undefined ? {} : { lineGap: change.lineGap }),
+        name: change.name ?? source.name,
+        italicAngle: change.italicAngle ?? source.italicAngle,
+        lineGap: change.lineGap ?? source.lineGap,
         metricValues: source.metricValues.map((value) => {
           const offset = offsets.get(value.metricId);
           return offset === undefined ? value : { ...value, position: value.position + offset };
@@ -185,7 +185,7 @@ export async function addAnchor(page: Page, name: string, position: Point2D): Pr
     async ({ anchorName, at }) => {
       const workspace = window.shift!;
       const editor = workspace.editor;
-      const node = editor.scene.nodesOfKind("glyph")[0];
+      const node = editor.scene.first("glyph");
       if (!node) throw new Error("Expected glyph node");
       const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
       if (!layer) throw new Error("Expected editable glyph layer");

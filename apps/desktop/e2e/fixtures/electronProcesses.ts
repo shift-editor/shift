@@ -1,5 +1,9 @@
-import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import type { TestInfo } from "@playwright/test";
+import {
+  _electron as electron,
+  type ElectronApplication,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 import { execFile, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -51,7 +55,7 @@ export class ElectronProcesses {
         // runner, which fails exact interface goldens; the CPU rasterizer is deterministic.
         // Canvas content renders through WebGPU and is unaffected.
         "--disable-gpu-rasterization",
-        ...(launch.args ?? []),
+        ...launch.args,
       ],
       env: launch.env,
     });

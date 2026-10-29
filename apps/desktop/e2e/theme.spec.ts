@@ -245,6 +245,7 @@ test.describe("Theme", () => {
       // Clear of the sidebar dividers, whose grab areas reach 8px into the canvas.
       from: { x: 12, y: 12 },
       to: { x: bounds.width - 12, y: bounds.height - 12 },
+      modifiers: [],
       steps: 5,
     });
     await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);

@@ -829,7 +829,14 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, POINT_TYPE_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        // E2E specs run as CommonJS in Playwright and cannot load @shift/glyph-state.
+        if (
+          filename.includes(".test.") ||
+          filename.includes(".spec.") ||
+          filename.includes("testing/")
+        ) {
+          return {};
+        }
 
         return {
           /**

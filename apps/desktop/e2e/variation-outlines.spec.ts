@@ -45,7 +45,7 @@ workspaceTest.describe("mapped weight interpolation", () => {
             // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
             page.evaluate(() => {
               const editor = window.shiftSession!.editor;
-              const node = editor.scene.nodesOfKind("glyph")[0]!;
+              const node = editor.scene.first("glyph")!;
               const model = editor
                 .glyphForId(node.glyphId)!
                 .renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
@@ -178,7 +178,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
   // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   const pointId = await page.evaluate(() => {
     const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     const point = node
       ? editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation).allPoints[0]
       : null;
