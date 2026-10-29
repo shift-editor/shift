@@ -167,10 +167,13 @@ export class SessionHooks {
     return this.#session.editor.editingLayersMatched();
   }
 
-  /** Waits until the workspace has confirmed every edit made so far. */
+  /**
+   * Waits until the workspace has confirmed every edit made so far and the canvas text has laid
+   * out; a preview session has no workspace, so only its text settles.
+   */
   async settle(): Promise<void> {
-    const editor = this.#session.editor;
-    await editor.font.editCoordinator.settled();
+    const { workspace, editor } = this.#session;
+    if (workspace) await workspace.font.editCoordinator.settled();
     await editor.text.settled();
   }
 }
