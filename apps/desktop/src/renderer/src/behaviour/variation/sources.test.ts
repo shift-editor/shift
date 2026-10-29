@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AxisId, SourceId } from "@shift/types";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import { shape } from "@/testing/outline";
 
 const editor = useTestEditor({ axes: [WEIGHT] });
 let reference: SourceId;
@@ -36,7 +35,7 @@ describe("adding a source", () => {
     });
     const [copy] = await editor.outline();
     expect(await editor.advanceWidth()).toBe(520);
-    expect(shape([copy!])).toEqual(shape([original!]));
+    expect([copy!]).toDrawLike([original!]);
     expect(copy!.points.map(({ id }) => id)).not.toEqual(original!.points.map(({ id }) => id));
   });
 });

@@ -3,7 +3,7 @@ import { Curve, Vec2 } from "@shift/geo";
 import { expectEdit } from "@/testing/expectEdit";
 import { splitCubic } from "@/testing/fixtures";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import { pointTypes, shape } from "@/testing/outline";
+import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 
@@ -44,27 +44,27 @@ describe("deleting an on-curve point fits a curve across its span", () => {
     const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.4)] });
     editor.select([names.p1]);
     await editor.deleteSelection();
-    const fitted = shape(await editor.outline());
+    const fitted = await editor.outline();
     await editor.undo();
 
     editor.select([names.c0a, names.p1]);
     await editor.deleteSelection();
 
-    expect(shape(await editor.outline())).toEqual(fitted);
+    expect(await editor.outline()).toDrawLike(fitted);
   });
 
   it("fits adjacent selected points once, whatever order they were selected in", async () => {
     const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.3, 0.6)] });
     editor.select([names.p1, names.p2]);
     await editor.deleteSelection();
-    const fitted = shape(await editor.outline());
+    const fitted = await editor.outline();
     await editor.undo();
 
     editor.select([names.p2, names.p1]);
     await editor.deleteSelection();
 
     expect(fitted[0]?.points).toHaveLength(4);
-    expect(shape(await editor.outline())).toEqual(fitted);
+    expect(await editor.outline()).toDrawLike(fitted);
   });
 
   it("treats a clicked segment like all of its points selected", async () => {
@@ -73,13 +73,13 @@ describe("deleting an on-curve point fits a curve across its span", () => {
     const [, , , p1, c1a, c1b, p2] = contour.points;
     editor.select([names.p1, names.c1a, names.c1b, names.p2]);
     await editor.deleteSelection();
-    const fitted = shape(await editor.outline());
+    const fitted = await editor.outline();
     await editor.undo();
 
     await editor.clickAt(Curve.pointAt(Curve.cubic(p1!, c1a!, c1b!, p2!), 0.5));
     await editor.deleteSelection();
 
-    expect(shape(await editor.outline())).toEqual(fitted);
+    expect(await editor.outline()).toDrawLike(fitted);
   });
 
   it("leaves the two endpoints apart when a gap removes the only two segments", async () => {

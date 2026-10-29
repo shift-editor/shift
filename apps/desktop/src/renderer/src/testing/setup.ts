@@ -7,15 +7,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect } from "vitest";
 import type { Point2D } from "@shift/geo";
+import type { Outline } from "./reads";
 import { toBeNear } from "./toBeNear";
+import { toDrawLike } from "./toDrawLike";
 
-expect.extend({ toBeNear });
+expect.extend({ toBeNear, toDrawLike });
 
 declare module "vitest" {
   // oxlint-disable-next-line typescript/no-explicit-any -- merging with vitest's `Matchers<T = any>` needs identical type parameters
   interface Matchers<T = any> {
     /** Passes when the position's `x` and `y` each round to `expected`'s at `digits` decimal places, 2 by default. */
     toBeNear(expected: Point2D, digits?: number): void;
+    /** Passes when the outline draws `expected`'s contours and points in order, ids aside. */
+    toDrawLike(expected: Outline): void;
   }
 }
 

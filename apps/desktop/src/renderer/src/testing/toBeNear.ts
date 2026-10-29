@@ -16,7 +16,7 @@
 import type { Point2D } from "@shift/geo";
 
 /** What a matcher returns to vitest's and Playwright's `expect`. */
-export interface NearResult {
+export interface MatcherResult {
   readonly pass: boolean;
   readonly message: () => string;
 }
@@ -27,7 +27,7 @@ export interface NearResult {
  *
  * @param digits - decimal places both coordinates must agree to; 2 by default.
  */
-export function toBeNear(received: unknown, expected: Point2D, digits = 2): NearResult {
+export function toBeNear(received: unknown, expected: Point2D, digits = 2): MatcherResult {
   const tolerance = 10 ** -digits / 2;
   const pass =
     isPosition(received) &&
