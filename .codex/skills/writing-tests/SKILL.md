@@ -214,6 +214,27 @@ Before committing a test, run through these. Any miss means the test is wrong.
 - Do not add one-off scene-node, glyph-layer, canvas-offset, or projection helpers when `EditorDriver` can express the same reusable boundary.
 - Use raw Playwright gestures only when the low-level browser lifecycle is itself under test; otherwise use `pointerDown()`, `pointerMove()`, `pointerUp()`, `dragCanvas()`, or `cancelGesture()`.
 
+## Test helpers
+
+These hold for behaviour tests (`apps/desktop/src/renderer/src/behaviour/`) and E2E specs alike.
+
+1. **Setup returns the ids the test needs, by the fixture's own names.** Never search the outline afterwards for a point you drew.
+   `const { first, middle, last } = await editor.draw({ contours: [CORNER] });`
+2. **A question about a read's result is a shared pure function in `testing/`**, not a method on the read (reads are plain data; in E2E they arrive as JSON) and not a per-file helper.
+   `expect(shape(await editor.outline())).toEqual(fitted);`
+3. **Builders return plain data; domain math stays on the domain type** (`Curve`, `Vec2`). A builder only names the result, and takes the points a test writes, not a `@shift/geo` value.
+   `splitCubic([0, 0], [50, 100], [200, 100], [200, 0], 0.4)`
+4. **A read every driver needs goes on the shared surface**, `EditorReads`, implemented by `TestEditor` and `EditorDriver` alike — not a per-file `position(id)`.
+   `expect(await editor.pointPosition(corner)).toEqual({ x: 100, y: 0 });`
+5. **Shared assertions are matchers**, one implementation in `testing/` registered with vitest's and Playwright's `expect` — not a per-file `expectNear`.
+   `expect(await editor.pointPosition(corner)).toBeNear({ x: 186.6, y: 150 });`
+6. **A file's own scenario helpers stay local.** `drawStroke()` names the stroke `close-and-join.test.ts` closes, so it lives there.
+   `async function drawStroke(): Promise<void> { … }`
+7. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
+   `pointTypes(contour.points)` lives in `testing/outline.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
+
+Positions in test code use the editor's coordinate spaces from `@shift/editor/spaces` (`LocalPoint`, `ScenePoint`, `ScreenPoint`) where a read or driver input already has one.
+
 ## Naming
 
 - `describe()` names should explain the behavior or contract under test, not just repeat a class or file name.
