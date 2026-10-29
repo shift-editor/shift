@@ -1755,6 +1755,55 @@ export default {
     },
 
     /**
+     * Ban spreading a conditional object to leave a key out:
+     * `{ ...(v === undefined ? {} : { x: v }) }` or `{ ...(cond && { x }) }`.
+     *
+     * The spread exists only because an optional field won't take `undefined`.
+     * Declare an input or options field `x?: T | undefined` and pass the value
+     * through (`x: v === undefined ? undefined : f(v)`). A stored shape where an
+     * absent key differs from `undefined` keeps the spread with a disable comment
+     * saying why.
+     */
+    "no-conditional-spread": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          passThrough:
+            "Do not spread a conditional object to omit a key. Declare the field `?: T | undefined` and pass the value through (`x: v === undefined ? undefined : f(v)`); a stored shape that must omit the key says why in a disable comment.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const unwrap = (node) =>
+          node.type === "ParenthesizedExpression" ? unwrap(node.expression) : node;
+        const isEmptyObject = (node) => {
+          const inner = unwrap(node);
+          return inner.type === "ObjectExpression" && inner.properties.length === 0;
+        };
+        const isObject = (node) => unwrap(node).type === "ObjectExpression";
+
+        const omitsKey = (argument) => {
+          const inner = unwrap(argument);
+          if (inner.type === "ConditionalExpression") {
+            return isEmptyObject(inner.consequent) || isEmptyObject(inner.alternate);
+          }
+          return (
+            inner.type === "LogicalExpression" && inner.operator === "&&" && isObject(inner.right)
+          );
+        };
+
+        return {
+          ObjectExpression(node) {
+            for (const property of node.properties) {
+              if (property.type !== "SpreadElement" || !omitsKey(property.argument)) continue;
+              context.report({ node: property, messageId: "passThrough" });
+            }
+          },
+        };
+      },
+    },
+
+    /**
      * Ban `@shift/runtime` and agent-reader imports in behaviour tests and E2E specs.
      *
      * Those tests read through the test surface, which owns its read types

@@ -2020,6 +2020,10 @@ function memberIntent(
 ): FontIntent {
   return {
     kind: "setKerningGroupMember",
-    setKerningGroupMember: { position, glyphId, ...(groupId === null ? {} : { groupId }) },
+    setKerningGroupMember: {
+      position,
+      glyphId,
+      groupId: groupId === null ? undefined : groupId,
+    },
   };
 }

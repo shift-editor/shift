@@ -372,7 +372,7 @@ export class Editor {
                 shortcut,
                 selected,
                 onSelect,
-                ...(toolId ? { toolId } : {}),
+                toolId,
               }),
             );
           }

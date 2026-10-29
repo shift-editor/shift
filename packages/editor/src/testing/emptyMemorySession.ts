@@ -25,7 +25,7 @@ class MemoryClipboard implements SystemClipboard {
 export function startEmptyMemorySession(tools?: readonly MemoryToolName[]): MemoryFontSession {
   return createMemoryFontSession({
     clipboard: new MemoryClipboard(),
-    ...(tools ? { tools } : {}),
+    tools,
     source: {
       font: {
         metadata: { familyName: "Empty" },

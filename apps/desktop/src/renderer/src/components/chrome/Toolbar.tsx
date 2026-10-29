@@ -27,16 +27,12 @@ export const Toolbar = ({ toggleLeftSidebar, toggleRightSidebar }: ToolbarProps)
       documentEdited: dirty && !isMac,
       navigation: <NavigationPane />,
       windowControls: <Titlebar edited={dirty} />,
-      ...(isMac
-        ? {}
-        : {
-            menuBar: (
-              <>
-                <WindowMenuBar collapsible />
-                <Separator orientation="vertical" variant="strong" className="mx-2 h-4" />
-              </>
-            ),
-          }),
+      menuBar: isMac ? undefined : (
+        <>
+          <WindowMenuBar collapsible />
+          <Separator orientation="vertical" variant="strong" className="mx-2 h-4" />
+        </>
+      ),
     }),
     [dirty, filename, isMac],
   );

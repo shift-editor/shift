@@ -4,8 +4,8 @@
  * free functions whose first argument is a class of the codebase (maybe a method), classes named
  * as Manager, Store or Cache wrappers, and the `typescript` skill's signs of a type missing a
  * method: `?.` chains across two objects, the same `filter`/`find` in several files, and files
- * leaning on `?? null` / `?? []`, spreads of a condition (`...(x ? { a } : {})`, `...(x && { a })`),
- * and inline functions nested three or more deep. Tests are scanned like other code, except that
+ * leaning on `?? null` / `?? []`, array spreads of a condition (`[...(x ? [a] : [])]`; the object
+ * form is `shift/no-conditional-spread`'s), and inline functions nested three or more deep. Tests are scanned like other code, except that
  * `rust-twin` skips them (a test recomputing a rule is an oracle, not a port).
  *
  * `model-rule` reads only `packages/editor/src/lib/model/**` outside tests: a function, method or
@@ -229,8 +229,8 @@ class FileScan {
         (ts.isArrayLiteralExpression(node.right) && node.right.elements.length === 0));
     if (fallsBack) this.#fallbacks.push(node);
 
-    const spread =
-      (ts.isSpreadAssignment(node) || ts.isSpreadElement(node)) && conditionOf(node.expression);
+    // An object spread that omits a key is the lint rule `shift/no-conditional-spread`'s.
+    const spread = ts.isSpreadElement(node) && conditionOf(node.expression);
     if (spread) {
       this.#report("conditional-spread", node, node.getText(this.#source).slice(0, 80));
     }
@@ -327,7 +327,7 @@ function computesOverData(body) {
   return loops > 0 || branches >= MODEL_BRANCHES || predicates > 0;
 }
 
-/** The condition a spread chooses on: `x ? {..} : {}` or `x && {..}`; null otherwise. */
+/** The condition a spread chooses on: `x ? [..] : []` or `x && [..]`; null otherwise. */
 function conditionOf(expression) {
   let inner = expression;
   while (ts.isParenthesizedExpression(inner)) inner = inner.expression;

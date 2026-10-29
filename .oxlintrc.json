@@ -55,6 +55,7 @@
     "shift/prefer-scene-only": "error",
     "shift/no-optional-collection-field": "error",
     "shift/no-map-get-to-null": "error",
+    "shift/no-conditional-spread": "error",
     "shift/no-inline-comparator": "error",
     "shift/no-page-evaluate-in-specs": "error",
     "shift/no-agent-types-in-behaviour-tests": "error"
