@@ -90,10 +90,7 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
       name: "Navigation Preview",
       location: {
         values: Object.fromEntries(
-          font
-            .getAxes()
-            .filter((axis) => axis.role === "external")
-            .map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
+          font.getAxes().map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
         ),
       },
     });
@@ -146,16 +143,6 @@ const BOLD = "Navigation Bold";
 
 async function activeSourceId(editor: EditorDriver): Promise<SourceId | null> {
   return (await editor.editorView()).activeSourceId;
-}
-
-/** Whether the glyph named `glyph` has its own layer at the source `sourceId`. */
-async function hasLayerAt(
-  editor: EditorDriver,
-  glyph: string,
-  sourceId: SourceId,
-): Promise<boolean> {
-  const listing = await editor.glyphNamed(glyph);
-  return listing?.layers.some((layer) => layer.sourceId === sourceId) ?? false;
 }
 
 // Navigation coherence is renderer-independent, so this runs on the software-rendered
@@ -227,11 +214,15 @@ test("keeps variable preview and exact-source editability coherent across Grid n
 
   await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId);
   await openVariationControls(page);
-  await expect.poll(() => hasLayerAt(editor, "navigationSparse", fixture.boldSourceId)).toBe(false);
+  await expect
+    .poll(async () => (await editor.glyphNamed("navigationSparse"))?.layers)
+    .not.toContainEqual(expect.objectContaining({ sourceId: fixture.boldSourceId }));
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeDisabled();
 
   await page.getByTestId(`source-${fixture.boldSourceId}`).click();
-  await expect.poll(() => hasLayerAt(editor, "navigationSparse", fixture.boldSourceId)).toBe(true);
+  await expect
+    .poll(async () => (await editor.glyphNamed("navigationSparse"))?.layers)
+    .toContainEqual(expect.objectContaining({ sourceId: fixture.boldSourceId }));
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeEnabled();
 
   const editorAxisInput = variationControls.getByLabel("Navigation Weight value", {
