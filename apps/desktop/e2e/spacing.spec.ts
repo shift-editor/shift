@@ -28,14 +28,11 @@ async function halfPagePoint(
   return { x: bounds.x + canvas.x, y: bounds.y + canvas.y };
 }
 
-/** The selected half as `side:itemIndex`, or null. */
-async function selectedHalf(editor: EditorDriver): Promise<string | null> {
+/** The half arrow keys nudge: its side and the text item whose sidebearing it is; null for none. */
+async function selectedHalf(editor: EditorDriver): Promise<{ side: Half; itemId: string } | null> {
   const selected = (await editor.spacingTool())?.selected;
   const half = selected?.gap[selected.side];
-  if (!selected || !half) return null;
-  const text = await editor.canvasText();
-  if (!text) throw new Error("Expected the canvas text run");
-  return `${selected.side}:${text.items.findIndex((item) => item.id === half.itemId)}`;
+  return selected && half ? { side: selected.side, itemId: half.itemId } : null;
 }
 
 /** A short description of the element that has keyboard focus. */
@@ -75,12 +72,13 @@ test.describe("Spacing tool", () => {
     const point = await halfPagePoint(page, editor, BETWEEN, "left", 0.2);
     await hover(editor, point);
     await page.mouse.click(point.x, point.y);
-    await expect.poll(() => selectedHalf(editor)).toBe("left:0");
+    const [first, second] = (await editor.canvasText())!.items;
+    await expect.poll(() => selectedHalf(editor)).toEqual({ side: "left", itemId: first!.id });
     const focusedBefore = await focusedElement(page);
 
     await page.keyboard.press("Tab");
 
-    await expect.poll(() => selectedHalf(editor)).toBe("right:1");
+    await expect.poll(() => selectedHalf(editor)).toEqual({ side: "right", itemId: second!.id });
     expect(await focusedElement(page)).toBe(focusedBefore);
   });
 
