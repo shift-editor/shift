@@ -86,7 +86,7 @@ export type PointerModifier = "Alt" | "Control" | "ControlOrMeta" | "Meta" | "Sh
 export interface CanvasDrag {
   readonly from: Point2D;
   readonly to: Point2D;
-  readonly modifiers?: readonly PointerModifier[];
+  readonly modifiers: readonly PointerModifier[];
   readonly steps?: number;
 }
 
@@ -140,8 +140,8 @@ export interface ElectronLaunch {
   readonly label: string;
   /** Isolated user-data directory the application must adopt. */
   readonly userDataDir: string;
-  /** Arguments after the main script, such as a document path. */
-  readonly args?: readonly string[];
+  /** Arguments after the main script, such as a document path; empty for none. */
+  readonly args: readonly string[];
   /** Environment for the launch; build it with `shiftTestEnvironment()`. */
   readonly env: Record<string, string>;
   /** Window geometry policy applied to the first window. */
@@ -156,8 +156,8 @@ export interface ElectronLaunch {
 
 /** Launches the application again with the test's user-data directory and dialog script. */
 export type RelaunchApp = (options?: {
-  /** Additional arguments, such as a document to open on launch. */
-  readonly args?: readonly string[];
+  /** Additional arguments, such as a document to open on launch; empty for none. */
+  readonly args: readonly string[];
   /** Additional Shift E2E variables for this launch. */
   readonly env?: Record<string, string>;
 }) => Promise<ElectronApplication>;

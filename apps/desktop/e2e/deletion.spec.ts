@@ -30,7 +30,9 @@ test("Delete fits a selected point and undo/redo restores the exact outline", as
   await editor.press("Delete");
   await expect.poll(() => wavePointTypes(editor)).toEqual(openCubicPointTypes(3));
   const after = await editor.outline();
-  expect(after[0].points.some((point) => point.id === selected.id)).toBe(false);
+  expect(after).toMatchObject([
+    { points: expect.not.arrayContaining([expect.objectContaining({ id: selected.id })]) },
+  ]);
   expect(await waveOnCurvePoints(editor)).toEqual(
     onCurveBefore.filter((point) => point.id !== selected.id),
   );

@@ -9,15 +9,13 @@ beforeEach(() => {
 });
 
 /** An open line from 100,100 to 200,200. */
-function drawLine() {
-  return editor.draw({
-    contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })],
-  });
-}
+const LINE = {
+  contours: [line({ x: 100, y: 100, name: "first" }, { x: 200, y: 200, name: "second" })],
+};
 
 describe("clicking selects", () => {
   it("selects a point clicked on", async () => {
-    const { first } = await drawLine();
+    const { first } = await editor.draw(LINE);
 
     await editor.clickAt({ x: 100, y: 100 });
 
@@ -25,7 +23,7 @@ describe("clicking selects", () => {
   });
 
   it("clears the selection on a click on empty canvas", async () => {
-    await drawLine();
+    await editor.draw(LINE);
     await editor.clickAt({ x: 100, y: 100 });
 
     await editor.clickAt({ x: 900, y: 900 });
@@ -50,7 +48,7 @@ describe("Shift-click adds to and removes from the selection", () => {
   let second: PointId;
 
   beforeEach(async () => {
-    ({ first, second } = await drawLine());
+    ({ first, second } = await editor.draw(LINE));
   });
 
   it("adds an unselected point and keeps the rest", async () => {
@@ -118,7 +116,7 @@ describe("the cursor offers adding to the selection", () => {
   let second: PointId;
 
   beforeEach(async () => {
-    ({ first, second } = await drawLine());
+    ({ first, second } = await editor.draw(LINE));
   });
 
   it("only while Shift is held over an unselected point", async () => {
@@ -200,14 +198,12 @@ describe("the cursor offers adding to the selection", () => {
 
 describe("a marquee selects what it covers", () => {
   /** A horizontal line from 100,200 to 180,200. */
-  function flatLine() {
-    return editor.draw({
-      contours: [line({ x: 100, y: 200, name: "start" }, { x: 180, y: 200, name: "end" })],
-    });
-  }
+  const FLAT_LINE = {
+    contours: [line({ x: 100, y: 200, name: "start" }, { x: 180, y: 200, name: "end" })],
+  };
 
   it("selects points inside it", async () => {
-    const { start } = await flatLine();
+    const { start } = await editor.draw(FLAT_LINE);
 
     await editor.dragFrom({ x: 80, y: 180 }, { x: 130, y: 230 });
 
@@ -215,7 +211,7 @@ describe("a marquee selects what it covers", () => {
   });
 
   it("finishes when its threshold-crossing move is still queued at release", async () => {
-    const { start } = await flatLine();
+    const { start } = await editor.draw(FLAT_LINE);
 
     editor.pressAt({ x: 80, y: 180 });
     editor.queuePointerMove({ x: 130, y: 230 });
@@ -225,7 +221,7 @@ describe("a marquee selects what it covers", () => {
   });
 
   it("selects a segment it crosses anywhere along its length", async () => {
-    const { start, end } = await flatLine();
+    const { start, end } = await editor.draw(FLAT_LINE);
 
     await editor.dragFrom({ x: 130, y: 180 }, { x: 150, y: 220 });
 
@@ -233,7 +229,7 @@ describe("a marquee selects what it covers", () => {
   });
 
   it("selects a segment with both of its points", async () => {
-    const { start, end } = await flatLine();
+    const { start, end } = await editor.draw(FLAT_LINE);
 
     await editor.dragFrom({ x: 80, y: 180 }, { x: 200, y: 220 });
 

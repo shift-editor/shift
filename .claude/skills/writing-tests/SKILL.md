@@ -179,19 +179,19 @@ import { workspaceTest as test, expect } from "./fixtures/electronApp";
 test("moves a point and supports undo", async ({ editor }) => {
   await editor.openGlyphByName("A");
   const point = await editor.selectVisiblePoint();
-  const before = await editor.pointPosition(point.id);
+  const before = await editor.point(point.id);
 
   await editor.dragPoint(point);
-  expect(await editor.pointPosition(point.id)).toEqual(point.expectedGlyphPosition);
+  expect(await editor.point(point.id)).toMatchObject(point.expectedGlyphPosition);
 
   await editor.undo();
-  expect(await editor.pointPosition(point.id)).toEqual(before);
+  expect(await editor.point(point.id)).toEqual(before);
 });
 ```
 
-Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `pointPosition()` must not be preceded by direct `editCoordinator.settled()` calls.
+Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `point()` must not be preceded by direct `editCoordinator.settled()` calls.
 
-Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. After setup changes geometry or camera state, call `waitForCanvasRender()` before projections or pointer input; authored-layer readiness does not guarantee current canvas transforms or hit regions. Use `livePointPosition()` and `selectionBounds()` for gesture previews; keep `pointPosition()` for confirmed geometry.
+Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. After setup changes geometry or camera state, call `waitForCanvasRender()` before projections or pointer input; authored-layer readiness does not guarantee current canvas transforms or hit regions. Use `livePointPosition()` and `selectionBounds()` for gesture previews; keep `point()` for confirmed geometry.
 
 Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, variable-font construction, GPU residency, performance loops, and screenshot assertions remain at their owning fixture or spec boundary.
 
@@ -213,6 +213,29 @@ Before committing a test, run through these. Any miss means the test is wrong.
 - In E2E specs, prefer the shared `editor` fixture over constructing `EditorDriver` for the primary page. Construct a driver directly only for additional workspace windows.
 - Do not add one-off scene-node, glyph-layer, canvas-offset, or projection helpers when `EditorDriver` can express the same reusable boundary.
 - Use raw Playwright gestures only when the low-level browser lifecycle is itself under test; otherwise use `pointerDown()`, `pointerMove()`, `pointerUp()`, `dragCanvas()`, or `cancelGesture()`.
+
+## Test helpers
+
+These hold for behaviour tests (`apps/desktop/src/renderer/src/behaviour/`) and E2E specs alike.
+
+1. **Setup returns the ids the test needs, by the fixture's own names.** Never search the outline afterwards for a point you drew.
+   `const { first, middle, last } = await editor.draw({ contours: [CORNER] });`
+2. **A question about a read's result is a shared pure function or matcher in `testing/`**, not a method on the read (reads are plain data; in E2E they arrive as JSON) and not a per-file helper.
+   `expect(await editor.outline()).toDrawLike(fitted);`
+3. **Builders return plain data; domain math stays on the domain type** (`Curve`, `Vec2`). A builder only names the result, and takes the points a test writes, not a `@shift/geo` value.
+   `splitCubic([0, 0], [50, 100], [200, 100], [200, 0], 0.4)`
+4. **A read every driver needs goes on the shared surface**, `EditorReads`, implemented by `TestEditor` and `EditorDriver` alike — not a per-file `position(id)`. One stored point is `point(id)`; mid-gesture, `drawnPoint(id)` reads it as the canvas draws it now; `point(id, { source: { name: "Bold" } })` reads its counterpart in another source's layer, as the engine matches the layers.
+   `expect(await editor.point(corner)).toMatchObject({ x: 100, y: 0 });`
+5. **Shared assertions are matchers**, one implementation in `testing/` registered with vitest's and Playwright's `expect` — not a per-file `expectNear`.
+   `expect(await editor.point(corner)).toBeNear({ x: 186.6, y: 150 });`
+6. **A file's own scenario helpers stay local.** `drawStroke()` names the stroke `close-and-join.test.ts` closes, so it lives there.
+   `async function drawStroke(): Promise<void> { … }`
+7. **Assert the read whole; pick from it only to act on it.** Inside `expect(…)`, give the read itself and match only the fields the test is about; merge checks of the same read in the same state into one shape. Arrays inside `toMatchObject` match exact length (`expect.arrayContaining` for membership), and `?.` behind `toBeNull()` passes vacuously when the read itself is null. `shift/no-drill-into-reads` flags `?.`, `[n]!`, `read()!.x` and `.map(…)` on a read inside `expect`.
+   `expect(editor.spacingTool()?.hovered?.side).toBe("left")` → `expect(editor.spacingTool()).toMatchObject({ hovered: { side: "left" } })`
+8. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
+   `splitCubic(…)` lives in `testing/fixtures.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
+
+Positions in test code use the editor's coordinate spaces from `@shift/editor/spaces` (`LocalPoint`, `ScenePoint`, `ScreenPoint`) where a read or driver input already has one.
 
 ## Naming
 

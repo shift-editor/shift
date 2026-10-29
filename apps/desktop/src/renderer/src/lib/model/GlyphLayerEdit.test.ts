@@ -79,14 +79,14 @@ describe("glyph layer edits preserve committed preview bases", () => {
     const edit = layer.beginEdit();
 
     edit.setPositions([{ kind: "point", id: pointId, x: 125, y: 90 }]);
-    expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 90 });
+    expect(layer.point(pointId)).toMatchObject({ x: 125, y: 90 });
 
     edit.finish("Move point");
     await editor.settle();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 90 });
+    expect(layer.point(pointId)).toMatchObject({ x: 125, y: 90 });
 
     await editor.undo();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("cancels every previewed position in an arbitrary patch", () => {
@@ -100,8 +100,8 @@ describe("glyph layer edits preserve committed preview bases", () => {
     ]);
     edit.cancel();
 
-    expect(editor.pointPosition(first!.id)).toEqual({ x: 100, y: 100 });
-    expect(editor.pointPosition(second!.id)).toEqual({ x: 300, y: 200 });
+    expect(layer.point(first!.id)).toMatchObject({ x: 100, y: 100 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 300, y: 200 });
   });
 
   it("uses every position in a finished patch as the next cancellation base", async () => {
@@ -122,9 +122,7 @@ describe("glyph layer edits preserve committed preview bases", () => {
     ]);
     secondEdit.cancel();
 
-    expect([editor.pointPosition(first!.id), editor.pointPosition(second!.id)]).toEqual([
-      { x: 110, y: 100 },
-      { x: 320, y: 200 },
-    ]);
+    expect(layer.point(first!.id)).toMatchObject({ x: 110, y: 100 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 320, y: 200 });
   });
 });

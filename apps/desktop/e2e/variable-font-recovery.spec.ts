@@ -248,6 +248,6 @@ async function save(recoveryApp: RecoveryApp, page: Page): Promise<void> {
   await runWindowCommand(page, "file.save");
   const editor = driverFor(recoveryApp, page);
   await expect
-    .poll(async () => (await editor.documentState())?.dirty, { timeout: 20_000 })
-    .toBe(false);
+    .poll(() => editor.documentState(), { timeout: 20_000 })
+    .toMatchObject({ dirty: false });
 }

@@ -39,7 +39,7 @@ describe("a glyph edited in text a tenth of the font's size", () => {
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 300, y: near });
 
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: 300, y: xHeight } });
+    expect(await editor.point(middle)).toMatchObject({ x: 300, y: xHeight });
   });
 
   it("closes a contour when its end drops within the on-screen distance of its start", async () => {

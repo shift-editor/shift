@@ -44,7 +44,7 @@ describe("dragging points snaps them to the font's metrics", () => {
 
     await editor.dragFrom({ x: 300, y: top }, { x: 340, y: far });
 
-    expect(await editor.pointPositions([topLeft])).toEqual({ [topLeft]: { x: 340, y: far } });
+    expect(await editor.point(topLeft)).toMatchObject({ x: 340, y: far });
   });
 
   it("lands both corners of a dragged edge on the metric", async () => {
@@ -52,10 +52,8 @@ describe("dragging points snaps them to the font's metrics", () => {
 
     await editor.dragFrom({ x: 400, y: top }, { x: 400, y: top + lift });
 
-    expect(await editor.pointPositions([topLeft, topRight])).toEqual({
-      [topLeft]: { x: 300, y: xHeight },
-      [topRight]: { x: 500, y: xHeight },
-    });
+    expect(await editor.point(topLeft)).toMatchObject({ x: 300, y: xHeight });
+    expect(await editor.point(topRight)).toMatchObject({ x: 500, y: xHeight });
   });
 
   it("suspends snapping while Cmd is held", async () => {
@@ -63,7 +61,7 @@ describe("dragging points snaps them to the font's metrics", () => {
 
     await editor.dragFrom({ x: 300, y: top }, { x: 340, y: near }, { metaKey: true });
 
-    expect(await editor.pointPositions([topLeft])).toEqual({ [topLeft]: { x: 340, y: near } });
+    expect(await editor.point(topLeft)).toMatchObject({ x: 340, y: near });
   });
 
   it("snaps again once Cmd is released mid-drag", async () => {
@@ -76,6 +74,6 @@ describe("dragging points snaps them to the font's metrics", () => {
     editor.movePointerTo(target);
     await editor.releaseAt(target);
 
-    expect(await editor.pointPositions([topLeft])).toEqual({ [topLeft]: { x: 340, y: xHeight } });
+    expect(await editor.point(topLeft)).toMatchObject({ x: 340, y: xHeight });
   });
 });

@@ -72,7 +72,7 @@ export async function selectedComponentHitPoint(page: Page): Promise<Point2D> {
 export async function glyphClickTargets(page: Page): Promise<Point2D[]> {
   return page.evaluate(() => {
     const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0]!;
+    const node = editor.scene.first("glyph")!;
     const glyph = editor.glyphForId(node.glyphId)!;
     const geometry = glyph.geometryAt(editor.externalLocation);
     const point = geometry.allPoints[0]!;
@@ -205,7 +205,7 @@ export async function canvasTextReadiness(page: Page): Promise<{
 } | null> {
   return page.evaluate(() => {
     const editor = window.shift!.editor;
-    const run = editor.scene.nodesOfKind("textRun")[0];
+    const run = editor.scene.first("textRun");
     const items = run ? editor.text.run(run.runId)?.items : null;
     const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
     return items && layout
@@ -227,7 +227,7 @@ export async function canvasTextReadiness(page: Page): Promise<{
 export async function firstSegmentMidpoint(page: Page): Promise<Point2D> {
   return page.evaluate(() => {
     const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     if (!node) throw new Error("Expected glyph node");
     const layer = editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId);
     const segment = layer?.contours[0]?.segments()[0];
@@ -251,7 +251,7 @@ export async function lineSegmentUpgrade(page: Page): Promise<{
 }> {
   return page.evaluate(() => {
     const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph")!;
     const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
     const segment = layer.contours[0].segments().find((segment) => segment.type === "line");
     if (!segment) throw new Error("Expected line segment");
@@ -296,7 +296,7 @@ export async function cubicSegmentControls(page: Page, segmentId: SegmentId): Pr
 export async function insertEdgeOverlappingContour(page: Page): Promise<void> {
   await page.evaluate(() => {
     const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0]!;
+    const node = editor.scene.first("glyph")!;
     // A glyph inside a text run is placed by the run, so move the run.
     const placement = editor.scene.node(node.parentId) ?? node;
     editor.scene.updateNode({ id: placement.id, position: { x: 200, y: -300 } });
@@ -341,7 +341,7 @@ export async function spacingHalfCanvasPoint(
   return page.evaluate(
     ({ gapIndex, side, height }) => {
       const editor = window.shift!.editor;
-      const run = editor.scene.nodesOfKind("textRun")[0]!;
+      const run = editor.scene.first("textRun")!;
       const gap = editor.nodeDefinition("textRun").spacingGaps(run)[gapIndex]!;
       const half = gap[side]!;
       const point = {
@@ -359,7 +359,7 @@ export async function activeRightSidebearing(page: Page): Promise<number | null>
   return page.evaluate(() => {
     const editor = window.shift!.editor;
     const sourceId = editor.activeSourceId;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     const rsb =
       node && sourceId
         ? editor.glyphForId(node.glyphId)?.layerForSource(sourceId)?.sidebearings.rsb
@@ -375,7 +375,7 @@ export async function activeRightSidebearing(page: Page): Promise<number | null>
 export async function livePoints(page: Page): Promise<{ id: PointId; x: number; y: number }[]> {
   return page.evaluate(() => {
     const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0]!;
+    const node = editor.scene.first("glyph")!;
     const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
     return layer.allPoints.map((point) => ({ id: point.id, x: point.x, y: point.y }));
   });
@@ -403,7 +403,7 @@ export async function penSnapExpectation(
   return page.evaluate(
     ({ down, end }) => {
       const editor = window.shift!.editor;
-      const node = editor.scene.nodesOfKind("glyph")[0]!;
+      const node = editor.scene.first("glyph")!;
       const anchor = editor.toLocal(node, editor.screenToScene(down as ScreenPoint));
       const pointer = editor.toLocal(node, editor.screenToScene(end as ScreenPoint));
       const length = Math.hypot(pointer.x - anchor.x, pointer.y - anchor.y);
@@ -437,7 +437,7 @@ export async function handleSnapDrag(page: Page): Promise<{
 }> {
   return page.evaluate(() => {
     const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0]!;
+    const node = editor.scene.first("glyph")!;
     const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
     const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
     const down = editor.sceneToScreen(
@@ -490,7 +490,7 @@ export async function instanceBetweenSources(page: Page): Promise<string | null>
 export async function drawnPointCount(page: Page): Promise<number> {
   return page.evaluate(() => {
     const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     if (!node) return 0;
 
     const geometry = editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation);
@@ -502,7 +502,7 @@ export async function drawnPointCount(page: Page): Promise<number> {
 export async function drawnComponentCount(page: Page): Promise<number> {
   return page.evaluate(() => {
     const { editor } = window.shift!;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     const glyph = node ? editor.glyphForId(node.glyphId) : null;
     if (!glyph) throw new Error("Expected loaded Aacute glyph");
 
@@ -588,7 +588,7 @@ export async function matchedEditingPoint(
     const targetPointId = layerMatch.points.find(
       (match) => match.referenceId === referenceId,
     )?.targetId;
-    const node = session.editor.scene.nodesOfKind("glyph")[0];
+    const node = session.editor.scene.first("glyph");
     const targetLayer = node
       ? session.editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)
       : null;

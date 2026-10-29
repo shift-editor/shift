@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { Bounds } from "@shift/geo";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
 // `bullet` places `period` at scale 1 in Light (wght 100) and 3 in Bold
@@ -13,47 +12,39 @@ import { FONTS, useTestEditor } from "@/testing/fontFixture";
 // expected bounds are the exported font's.
 const editor = useTestEditor({ file: FONTS.scaledComponent, glyph: "bullet" });
 
-async function drawnAt(glyph: string, weight: number) {
-  editor.setLocation({ wght: weight });
-  return editor.drawnGlyph(glyph);
-}
-
-async function boundsAt(glyph: string, weight: number): Promise<Bounds> {
-  const { bounds } = await drawnAt(glyph, weight);
-  if (!bounds) throw new Error(`Expected ${glyph} to draw an outline`);
-  return bounds;
-}
-
-function expectBounds(bounds: Bounds, [minX, minY, maxX, maxY]: number[]): void {
-  expect(bounds.min.x).toBeCloseTo(minX!);
-  expect(bounds.min.y).toBeCloseTo(minY!);
-  expect(bounds.max.x).toBeCloseTo(maxX!);
-  expect(bounds.max.y).toBeCloseTo(maxY!);
-}
-
 describe("components that change scale between masters interpolate like the compiled font", () => {
   it("draws a scaled component's outline as the exported font does halfway", async () => {
-    expect(await boundsAt("bullet", 400)).toEqual({
+    editor.setLocation({ wght: 400 });
+
+    expect((await editor.drawnGlyph("bullet")).bounds).toEqual({
       min: { x: 50, y: 100 },
       max: { x: 400, y: 450 },
     });
   });
 
   it("draws a mirrored component's outline as the exported font does halfway", async () => {
-    expect(await boundsAt("bar", 400)).toEqual({ min: { x: 250, y: 0 }, max: { x: 400, y: 250 } });
+    editor.setLocation({ wght: 400 });
+
+    expect((await editor.drawnGlyph("bar")).bounds).toEqual({
+      min: { x: 250, y: 0 },
+      max: { x: 400, y: 250 },
+    });
   });
 
   it("keeps a component's intermediate master in the decomposed outline", async () => {
     // Samples at wght 100 (ring 100 wide, scale 1) and 250 (ring 250 wide,
     // scale 1.25), two thirds of the way: 150 + (362.5 - 150) * 2 / 3.
-    const ringbig = await boundsAt("ringbig", 200);
+    editor.setLocation({ wght: 200 });
 
-    expect(ringbig.max.x).toBeCloseTo(291.667, 2);
-    expect(ringbig.max.y).toBeCloseTo(241.667, 2);
+    expect(await editor.drawnGlyph("ringbig")).toMatchObject({
+      bounds: { max: expect.toBeNear({ x: 291.667, y: 241.667 }) },
+    });
   });
 
   it("pairs points as the compiler does when one master mirrors its component", async () => {
-    expect(await boundsAt("wedgeflip", 400)).toEqual({
+    editor.setLocation({ wght: 400 });
+
+    expect((await editor.drawnGlyph("wedgeflip")).bounds).toEqual({
       min: { x: 150, y: 0 },
       max: { x: 300, y: 150 },
     });
@@ -61,21 +52,33 @@ describe("components that change scale between masters interpolate like the comp
 
   // A nested composite drawn before its middle component draws nothing, so
   // these draw `wedgeflip` first.
-  async function nestedAt(weight: number): Promise<Bounds> {
-    await drawnAt("wedgeflip", weight);
-    return boundsAt("wedgenest", weight);
-  }
-
   it("pairs points as the compiler does when nested mirrors cancel", async () => {
     // Light places the wedge at (50,0) (150,0) (50,200); Bold mirrors it
     // twice, to (50,0) (250,0) (50,300) in order. Reversing it once would
     // pair (250,0) with (50,200) and stop at x 150.
-    expectBounds(await nestedAt(400), [50, 0, 200, 250]);
+    editor.setLocation({ wght: 400 });
+    await editor.drawnGlyph("wedgeflip");
+
+    expect((await editor.drawnGlyph("wedgenest")).bounds).toEqual({
+      min: expect.toBeNear({ x: 50, y: 0 }),
+      max: expect.toBeNear({ x: 200, y: 250 }),
+    });
   });
 
   it("draws each master of a nested component exactly as authored", async () => {
-    expectBounds(await nestedAt(100), [50, 0, 150, 200]);
-    expectBounds(await nestedAt(700), [50, 0, 250, 300]);
+    editor.setLocation({ wght: 100 });
+    await editor.drawnGlyph("wedgeflip");
+    expect((await editor.drawnGlyph("wedgenest")).bounds).toEqual({
+      min: expect.toBeNear({ x: 50, y: 0 }),
+      max: expect.toBeNear({ x: 150, y: 200 }),
+    });
+
+    editor.setLocation({ wght: 700 });
+    await editor.drawnGlyph("wedgeflip");
+    expect((await editor.drawnGlyph("wedgenest")).bounds).toEqual({
+      min: expect.toBeNear({ x: 50, y: 0 }),
+      max: expect.toBeNear({ x: 250, y: 300 }),
+    });
   });
 
   it("follows an edit to a component's master between masters", async () => {
@@ -89,18 +92,23 @@ describe("components that change scale between masters interpolate like the comp
     // (150,200) that is (550,450).
     await editor.dragPoint(corner!.id, { x: 100, y: 0 });
 
-    expect((await boundsAt("bullet", 400)).max).toEqual({ x: 550, y: 450 });
+    editor.setLocation({ wght: 400 });
+    expect(await editor.drawnGlyph("bullet")).toMatchObject({
+      bounds: { max: { x: 550, y: 450 } },
+    });
   });
 
   it("keeps the occurrence a component of its base glyph between masters", async () => {
-    const bullet = await drawnAt("bullet", 400);
+    editor.setLocation({ wght: 400 });
+    const bullet = await editor.drawnGlyph("bullet");
 
-    expect(bullet.components.map(({ glyph }) => glyph)).toEqual(["period"]);
-    expect(bullet.components[0]!.bounds).toEqual(bullet.bounds);
+    expect(bullet).toMatchObject({ components: [{ glyph: "period", bounds: bullet.bounds }] });
   });
 
   it("draws a master exactly as authored", async () => {
-    expect(await boundsAt("bullet", 700)).toEqual({
+    editor.setLocation({ wght: 700 });
+
+    expect((await editor.drawnGlyph("bullet")).bounds).toEqual({
       min: { x: 50, y: 100 },
       max: { x: 650, y: 700 },
     });

@@ -1,4 +1,4 @@
-import { test as base, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, type ElectronApplication, type Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -15,6 +15,7 @@ import type {
   SharedWorkspace,
 } from "./types";
 import { EditorDriver } from "./EditorDriver";
+import { expect } from "./matchers";
 import { ElectronProcesses, killApp } from "./electronProcesses";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";
@@ -243,7 +244,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     use,
   ) => {
     let launches = 0;
-    await use(async (options = {}) => {
+    await use(async (options = { args: [] }) => {
       launches += 1;
       return electronProcesses.launch({
         label: `relaunch-${launches}`,
@@ -316,6 +317,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
       return electronProcesses.launch({
         label: launches === 1 ? "initial" : `recovery-${launches - 1}`,
         userDataDir,
+        args: [],
         env: shiftTestEnvironment(openDocument ? { SHIFT_E2E_FONT_PATH: documentPath } : {}),
         windowSizing,
         deviceScaleFactor,

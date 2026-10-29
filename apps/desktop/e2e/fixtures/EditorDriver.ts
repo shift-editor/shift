@@ -27,6 +27,7 @@ import type {
   LocationSummary,
   Outline,
   OutlineTarget,
+  PointReadOptions,
   SourceLayer,
   SpacingToolState,
 } from "@/testing/reads";
@@ -50,7 +51,7 @@ export type EditorTool = keyof typeof TOOL_LABELS;
 async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
   await page.waitForFunction((expectedGlyphId) => {
     const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
+    const node = editor?.scene.first("glyph");
     if (!editor || !node || node.glyphId !== expectedGlyphId) return false;
 
     return Boolean(editor.glyphForId(node.glyphId)?.layerForSource(node.sourceId));
@@ -60,7 +61,7 @@ async function waitForActiveGlyph(page: Page, glyphId: string): Promise<void> {
 async function readLivePointPosition(page: Page, pointId: PointId): Promise<Point2D> {
   return page.evaluate((id) => {
     const editor = window.shift?.editor;
-    const node = editor?.scene.nodesOfKind("glyph")[0];
+    const node = editor?.scene.first("glyph");
     const point = node
       ? editor
           ?.glyphForId(node.glyphId)
@@ -240,7 +241,7 @@ export class EditorDriver implements EditorReads {
     const [canvasPosition, bounds] = await Promise.all([
       this.page.evaluate((localPosition) => {
         const editor = window.shiftSession?.editor;
-        const node = editor?.scene.nodesOfKind("glyph")[0];
+        const node = editor?.scene.first("glyph");
         if (!editor || !node) throw new Error("Expected an open glyph node");
 
         return editor.sceneToScreen(editor.toScene(node, localPosition as LocalPoint));
@@ -331,7 +332,7 @@ export class EditorDriver implements EditorReads {
     const bounds = await this.canvasBounds();
     const from = { x: bounds.x + input.from.x, y: bounds.y + input.from.y };
     const to = { x: bounds.x + input.to.x, y: bounds.y + input.to.y };
-    const modifiers = input.modifiers ?? [];
+    const modifiers = input.modifiers;
 
     let pressed = false;
     for (const modifier of modifiers) await this.page.keyboard.down(modifier);
@@ -459,7 +460,7 @@ export class EditorDriver implements EditorReads {
 
     return this.page.evaluate((ids) => {
       const editor = window.shift?.editor;
-      const node = editor?.scene.nodesOfKind("glyph")[0];
+      const node = editor?.scene.first("glyph");
       const layer = node ? editor?.glyphForId(node.glyphId)?.layerForSource(node.sourceId) : null;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
       if (!editor || !node || !layer || !canvas) throw new Error("Expected editable glyph");
@@ -483,14 +484,6 @@ export class EditorDriver implements EditorReads {
         };
       });
     }, pointIds);
-  }
-
-  /**
-   * Returns a confirmed glyph-local position; throws when absent.
-   * @param pointId - Point in the active authored layer.
-   */
-  async pointPosition(pointId: PointId): Promise<Point2D> {
-    return (await this.pointPositions([pointId]))[pointId];
   }
 
   /**
@@ -521,12 +514,17 @@ export class EditorDriver implements EditorReads {
     const point = await this.page.evaluate(() => {
       const workspace = window.shift;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-      const node = workspace?.editor.scene.nodesOfKind("glyph")[0];
+      const node = workspace?.editor.scene.first("glyph");
       const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
       const layer = node ? glyph?.layerForSource(node.sourceId) : null;
       if (!workspace || !canvas || !node || !layer) throw new Error("Expected editable glyph");
 
       const bounds = canvas.getBoundingClientRect();
+      type Candidate = { readonly screen: { readonly x: number; readonly y: number } };
+      const distanceFromCentre = ({ screen }: Candidate) =>
+        Math.hypot(screen.x - bounds.width / 2, screen.y - bounds.height / 2);
+      const nearestCanvasCentreFirst = (a: Candidate, b: Candidate) =>
+        distanceFromCentre(a) - distanceFromCentre(b);
       const candidates = layer.allPoints
         .filter((candidate) => candidate.isOnCurve)
         .map((candidate) => ({
@@ -542,11 +540,7 @@ export class EditorDriver implements EditorReads {
             screen.x <= bounds.width - 100 &&
             screen.y <= bounds.height - 100,
         )
-        .sort(
-          (a, b) =>
-            Math.hypot(a.screen.x - bounds.width / 2, a.screen.y - bounds.height / 2) -
-            Math.hypot(b.screen.x - bounds.width / 2, b.screen.y - bounds.height / 2),
-        );
+        .sort(nearestCanvasCentreFirst);
       const candidate = candidates[0];
       if (!candidate) throw new Error("Expected visible on-curve point");
 
@@ -589,7 +583,7 @@ export class EditorDriver implements EditorReads {
     const target = await this.page.evaluate(() => {
       const workspace = window.shift;
       const canvas = document.querySelector<HTMLCanvasElement>("#interactive-canvas");
-      const node = workspace?.editor.scene.nodesOfKind("glyph")[0];
+      const node = workspace?.editor.scene.first("glyph");
       const glyph = node ? workspace?.editor.glyphForId(node.glyphId) : null;
       const layer = node ? glyph?.layerForSource(node.sourceId) : null;
       if (!workspace || !canvas || !node || !layer) throw new Error("Expected editable glyph");
@@ -639,8 +633,23 @@ export class EditorDriver implements EditorReads {
     return (await this.#openLayer()).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, { source }: PointReadOptions = {}): Promise<AuthoredPoint | null> {
+    if (source === undefined) return this.#pointIn(await this.outline(), id);
+
+    const { glyph } = await this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
+    const other = { glyph: { glyphId: glyph.glyphId }, source };
+    const match = await this.#read("font", "matchLayers", shown, other);
+    if (!match.complete) return null;
+
+    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    if (!counterpart) return null;
+    const layer = await this.#read("font", "getLayer", other);
+    return this.#pointIn(layer.contours, counterpart.targetId);
+  }
+
+  #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
@@ -650,20 +659,6 @@ export class EditorDriver implements EditorReads {
 
   async components(): Promise<readonly AuthoredComponent[]> {
     return (await this.#openLayer()).components;
-  }
-
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
-    const outline = await this.outline();
-    const points = new Map(
-      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
-    );
-    return Object.fromEntries(
-      ids.map((id) => {
-        const point = points.get(id);
-        if (!point) throw new Error(`The open glyph has no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
-      }),
-    ) as Record<PointId, Point2D>;
   }
 
   async advanceWidth(): Promise<number> {

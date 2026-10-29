@@ -305,9 +305,9 @@ test.describe("Resident Glyph Grid", () => {
     await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
       timeout: 30_000,
     });
-    expect((await editor.fontOverview()).axes.map((axis) => axis.id)).not.toContain(
-      variable.axisId,
-    );
+    expect(await editor.fontOverview()).toMatchObject({
+      axes: expect.not.arrayContaining([expect.objectContaining({ id: variable.axisId })]),
+    });
     const state = await observedGridState(page);
     expectAtomicGridReadiness(state.readiness);
     expect(state.hiddenTransitions).toBe(0);

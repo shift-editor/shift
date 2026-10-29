@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { Bounds } from "@shift/geo";
 import { cursorToCSS } from "@shift/editor/rendering";
-import type { OutlineContour } from "@/testing/reads";
 import { expectEdit } from "@/testing/expectEdit";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
@@ -8,21 +8,6 @@ const editor = useTestEditor();
 beforeEach(() => {
   editor.selectTool("shape");
 });
-
-/** The box a contour's points span, which for a drawn shape is the box it was dragged out to. */
-function extent(contour: OutlineContour | undefined) {
-  const xs = contour?.points.map(({ x }) => x) ?? [];
-  const ys = contour?.points.map(({ y }) => y) ?? [];
-  return {
-    min: { x: Math.min(...xs), y: Math.min(...ys) },
-    max: { x: Math.max(...xs), y: Math.max(...ys) },
-  };
-}
-
-function size(contour: OutlineContour | undefined) {
-  const { min, max } = extent(contour);
-  return { width: max.x - min.x, height: max.y - min.y };
-}
 
 describe("drawing a shape by dragging", () => {
   it("is ready when chosen and hands over to the next tool chosen", () => {
@@ -48,10 +33,9 @@ describe("drawing a shape by dragging", () => {
       editor,
       (e) => e.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 }),
       async (e) => {
-        const outline = await e.outline();
-        expect(outline).toHaveLength(1);
-        expect(outline[0]?.closed).toBe(true);
-        expect(outline[0]?.points).toHaveLength(4);
+        expect(await e.outline()).toMatchObject([
+          { closed: true, points: Array(4).fill(expect.anything()) },
+        ]);
       },
     );
   });
@@ -80,12 +64,18 @@ describe("drawing a shape by dragging", () => {
     await editor.dragFrom({ x: 10, y: 20 }, { x: 210, y: 120 });
 
     const [created] = await editor.outline();
-    expect(created?.closed).toBe(true);
-    expect(created?.points.map(({ pointType }) => pointType)).toEqual(
-      Array.from({ length: 4 }, () => ["onCurve", "offCurve", "offCurve"]).flat(),
-    );
-    expect(created?.points.filter(({ smooth }) => smooth)).toHaveLength(4);
-    expect(extent(created)).toEqual({ min: { x: 10, y: 20 }, max: { x: 210, y: 120 } });
+    expect(created).toMatchObject({
+      closed: true,
+      points: Array.from({ length: 4 }, () => [
+        { pointType: "onCurve", smooth: true },
+        { pointType: "offCurve", smooth: false },
+        { pointType: "offCurve", smooth: false },
+      ]).flat(),
+    });
+    expect(await editor.outlineBounds()).toEqual({
+      min: { x: 10, y: 20 },
+      max: { x: 210, y: 120 },
+    });
     expect(editor.selectionIds()).toEqual([created?.id]);
     expect(editor.toolState()).toEqual({ id: "select", state: "ready" });
   });
@@ -126,7 +116,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   ])("fills exactly the box dragged out, in any direction: %j", async (end) => {
     await editor.dragFrom({ x: 10, y: 20 }, end);
 
-    expect(extent((await editor.outline())[0])).toEqual({
+    expect(await editor.outlineBounds()).toEqual({
       min: { x: Math.min(10, end.x), y: Math.min(20, end.y) },
       max: { x: Math.max(10, end.x), y: Math.max(20, end.y) },
     });
@@ -158,9 +148,9 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
         { shiftKey: true },
       );
 
-      const { width, height } = size((await editor.outline())[0]);
-      expect(width).toBeCloseTo(200);
-      expect(height).toBeCloseTo(200);
+      const drawn = (await editor.outlineBounds())!;
+      expect(Bounds.width(drawn)).toBeCloseTo(200);
+      expect(Bounds.height(drawn)).toBeCloseTo(200);
     },
   );
 
@@ -180,31 +170,31 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
   it("grows with the drag and keeps the same contour, with its handles shown, on release", async () => {
     editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     const [draft] = editor.drawnOutline();
-    const draftWidth = size(draft).width;
+    const draftWidth = Bounds.width(Bounds.fromPoints(draft!.points)!);
     expect(draftWidth).toBeGreaterThan(0);
 
     editor.movePointerTo({ x: 200, y: 90 });
     const [grown] = editor.drawnOutline();
-    expect(size(grown).width).toBeGreaterThan(draftWidth);
+    expect(Bounds.width(Bounds.fromPoints(grown!.points)!)).toBeGreaterThan(draftWidth);
 
     await editor.releaseAt({ x: 200, y: 90 });
     const [committed] = await editor.outline();
     expect(committed).toEqual(grown);
-    expect(committed?.id).toBe(draft?.id);
-    expect(editor.drawnHandles().map(({ pointId }) => pointId)).toEqual(
-      committed?.points.map(({ id }) => id),
+    expect(committed).toMatchObject({ id: draft!.id });
+    expect(editor.drawnHandles()).toMatchObject(
+      committed!.points.map(({ id }) => ({ pointId: id })),
     );
   });
 
   it("squares the shape up when Shift goes down without the pointer moving", async () => {
     editor.holdDragFrom({ x: 10, y: 10 }, { x: 110, y: 60 });
-    const loose = size(editor.drawnOutline()[0]);
-    expect(loose.width).not.toBeCloseTo(loose.height);
+    const loose = Bounds.fromPoints(editor.drawnOutline()[0]!.points)!;
+    expect(Bounds.width(loose)).not.toBeCloseTo(Bounds.height(loose));
 
     await editor.pressKey("Shift", { shiftKey: true });
 
-    const constrained = size(editor.drawnOutline()[0]);
-    expect(constrained.width).toBeCloseTo(constrained.height);
+    const constrained = Bounds.fromPoints(editor.drawnOutline()[0]!.points)!;
+    expect(Bounds.width(constrained)).toBeCloseTo(Bounds.height(constrained));
     await editor.pressKey("Escape");
   });
 
@@ -216,8 +206,8 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
     editor.selectTool("shape");
     editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     expect(editor.drawnOutline()).toHaveLength(2);
-    expect(editor.drawnHandles().map(({ pointId }) => pointId)).toEqual(
-      original?.points.map(({ id }) => id),
+    expect(editor.drawnHandles()).toMatchObject(
+      original!.points.map(({ id }) => ({ pointId: id })),
     );
 
     await editor.pressKey("Escape");

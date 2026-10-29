@@ -113,6 +113,8 @@ async function openSelectedPreview(page: Page, electronApp: ElectronApplication)
   return workspacePage;
 }
 
+const byEntryName = (left: fs.Dirent, right: fs.Dirent) => left.name.localeCompare(right.name);
+
 function sourceTreeSnapshot(rootPath: string): [string, string][] {
   if (fs.statSync(rootPath).isFile()) {
     return [[path.basename(rootPath), fs.readFileSync(rootPath, "base64")]];
@@ -120,9 +122,7 @@ function sourceTreeSnapshot(rootPath: string): [string, string][] {
 
   const snapshot: [string, string][] = [];
   const visit = (directoryPath: string) => {
-    for (const entry of fs
-      .readdirSync(directoryPath, { withFileTypes: true })
-      .sort((left, right) => left.name.localeCompare(right.name))) {
+    for (const entry of fs.readdirSync(directoryPath, { withFileTypes: true }).sort(byEntryName)) {
       const entryPath = path.join(directoryPath, entry.name);
       if (entry.isDirectory()) {
         visit(entryPath);

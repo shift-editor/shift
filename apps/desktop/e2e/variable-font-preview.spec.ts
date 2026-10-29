@@ -39,7 +39,12 @@ test.describe("variable font preview projection", () => {
     const mediumInstanceId = instances.find(({ name }) => name === "Medium")?.id;
     if (!mediumInstanceId) throw new Error("Expected Medium instance");
     await page.getByTestId(`instance-${mediumInstanceId}`).click();
-    await expect.poll(async () => (await editor.editorView()).externalLocation[0]?.value).toBe(500);
+    await expect
+      .poll(async () => {
+        const [location] = (await editor.editorView()).externalLocation;
+        return location;
+      })
+      .toMatchObject({ value: 500 });
   });
 
   test("scrubs retained glyph geometry without source reads or projection acquisition", async ({

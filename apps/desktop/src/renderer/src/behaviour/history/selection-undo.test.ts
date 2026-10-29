@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { line } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import type { EditorTestSurface } from "@/testing/surface";
 
 const editor = useTestEditor();
 let first: PointId;
@@ -13,10 +12,6 @@ beforeEach(async () => {
   }));
   editor.selectTool("select");
 });
-
-async function pointCount(e: EditorTestSurface): Promise<number> {
-  return (await e.outline()).flatMap(({ points }) => points).length;
-}
 
 describe("selection changes share the undo timeline with edits", () => {
   it("leaves the document untouched when a selection is undone and redone", async () => {
@@ -112,21 +107,21 @@ describe("selection changes share the undo timeline with edits", () => {
     await editor.undo();
     await released;
 
-    expect(await pointCount(editor)).toBe(2);
+    expect(await editor.outline()).toMatchObject([{ points: [{ id: first }, { id: second }] }]);
   });
 
   it("undoes selecting and moving an unselected point together", async () => {
     await editor.dragPoint(first, { x: 40, y: 30 });
     expect(editor.selectionIds()).toEqual([first]);
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 140, y: 130 } });
+    expect(await editor.point(first)).toMatchObject({ x: 140, y: 130 });
 
     await editor.undo();
     expect(editor.selectionIds()).toEqual([]);
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 100 } });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
 
     await editor.redo();
     expect(editor.selectionIds()).toEqual([first]);
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 140, y: 130 } });
+    expect(await editor.point(first)).toMatchObject({ x: 140, y: 130 });
   });
 
   it("undoes a deletion together with the selection it cleared", async () => {
@@ -160,13 +155,13 @@ describe("selection changes share the undo timeline with edits", () => {
     editor.selectTool("pen");
     await editor.clickAt({ x: 300, y: 300 });
     await editor.undo();
-    expect(await pointCount(editor)).toBe(2);
+    expect(await editor.outline()).toMatchObject([{ points: [{ id: first }, { id: second }] }]);
 
     editor.selectTool("select");
     await editor.clickAt({ x: 100, y: 100 });
     await editor.redo();
 
-    expect(await pointCount(editor)).toBe(2);
+    expect(await editor.outline()).toMatchObject([{ points: [{ id: first }, { id: second }] }]);
     expect(editor.selectionIds()).toEqual([first]);
   });
 });

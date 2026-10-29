@@ -829,7 +829,14 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, POINT_TYPE_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        // E2E specs run as CommonJS in Playwright and cannot load @shift/glyph-state.
+        if (
+          filename.includes(".test.") ||
+          filename.includes(".spec.") ||
+          filename.includes("testing/")
+        ) {
+          return {};
+        }
 
         return {
           /**
@@ -1919,6 +1926,129 @@ export default {
               return;
             if (isCallArgument(node)) return;
             context.report({ node, messageId: "argumentOnly" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Assert a read whole instead of drilling into it inside `expect(…)`.
+     *
+     * `expect(editor.spacingTool()?.hovered?.side).toBe("left")` passes vacuously when the read is
+     * null and the expected value is too, and `read()[0]!.x` or `read().map(pick)` assert a
+     * projection the reader has to rebuild. `expect(editor.spacingTool()).toMatchObject({ hovered:
+     * { side: "left" } })` asserts the read itself. Flags, inside the first argument of `expect`,
+     * `expect.soft` or `expect.poll(() => …)` only: a `?.` member, a `[n]!` index, a `read()!.x`
+     * member or a `.map(…)` whose chain starts at a call. Picks made to act on a read (outside `expect`) are not flagged.
+     */
+    "no-drill-into-reads": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          drill:
+            "Do not drill into a read inside expect(…). Assert the read whole with toMatchObject({ …only the fields this test is about }). See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const startsAtCall = (node) => {
+          let current = node;
+          while (current) {
+            switch (current.type) {
+              case "CallExpression":
+                return true;
+              case "MemberExpression":
+                current = current.object;
+                break;
+              case "AwaitExpression":
+                current = current.argument;
+                break;
+              case "TSNonNullExpression":
+              case "ChainExpression":
+              case "ParenthesizedExpression":
+              case "TSAsExpression":
+                current = current.expression;
+                break;
+              default:
+                return false;
+            }
+          }
+          return false;
+        };
+
+        const drillsIntoRead = (node) => {
+          if (node.type === "MemberExpression" && node.optional) return startsAtCall(node.object);
+          if (node.type === "TSNonNullExpression") {
+            const inner = node.expression;
+            if (inner.type === "MemberExpression" && inner.computed)
+              return startsAtCall(inner.object);
+            return node.parent.type === "MemberExpression" && startsAtCall(inner);
+          }
+          if (node.type !== "CallExpression") return false;
+          const callee = node.callee;
+          return (
+            callee.type === "MemberExpression" &&
+            !callee.computed &&
+            callee.property.type === "Identifier" &&
+            callee.property.name === "map" &&
+            startsAtCall(callee.object)
+          );
+        };
+
+        const isFunction = (node) =>
+          node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression";
+
+        const visit = (node) => {
+          if (drillsIntoRead(node)) {
+            context.report({ node, messageId: "drill" });
+            return;
+          }
+          if (isFunction(node)) return;
+          for (const key of Object.keys(node)) {
+            if (key === "parent") continue;
+            const value = node[key];
+            const children = Array.isArray(value) ? value : [value];
+            for (const child of children) {
+              if (child && typeof child.type === "string") visit(child);
+            }
+          }
+        };
+
+        const subjectOf = (node) => {
+          const callee = node.callee;
+          if (callee.type === "Identifier" && callee.name === "expect") return node.arguments[0];
+          if (
+            callee.type !== "MemberExpression" ||
+            callee.computed ||
+            callee.object.type !== "Identifier" ||
+            callee.object.name !== "expect" ||
+            callee.property.type !== "Identifier"
+          ) {
+            return undefined;
+          }
+          const subject = node.arguments[0];
+          if (callee.property.name === "soft") return subject;
+          if (callee.property.name !== "poll" || subject === undefined) return undefined;
+          return isFunction(subject) ? subject.body : subject;
+        };
+
+        const visitSubject = (subject) => {
+          if (subject.type !== "BlockStatement") {
+            visit(subject);
+            return;
+          }
+          for (const statement of subject.body) {
+            if (statement.type === "ReturnStatement" && statement.argument) {
+              visit(statement.argument);
+            }
+          }
+        };
+
+        return {
+          CallExpression(node) {
+            const subject = subjectOf(node);
+            if (subject === undefined || subject === null) return;
+            visitSubject(subject);
           },
         };
       },

@@ -377,3 +377,50 @@ describe("shift/no-conditional-spread", () => {
     assert.deepEqual(lines, []);
   });
 });
+
+describe("shift/no-drill-into-reads", () => {
+  const reads = [
+    "declare const editor: {",
+    "  spacingTool(): { hovered: { side: string } | null } | null;",
+    "  outline(): Promise<{ points: { x: number }[] }[]>;",
+    "  canvasText(): { items: { id: string }[]; caret: object | null } | null;",
+    "};",
+    "declare function expect(value: unknown, message?: string): any;",
+  ];
+
+  it("flags ?. chains, [n]! and read()!.x picks and .map projections of a read inside expect", () => {
+    const lines = reportedLines(
+      "no-drill-into-reads",
+      [
+        ...reads,
+        'expect(editor.spacingTool()?.hovered?.side).toBe("left");',
+        "expect((await editor.outline())[0]!.points).toHaveLength(3);",
+        "expect(editor.canvasText()!.items).toHaveLength(1);",
+        "expect(editor.canvasText()!.items.map(({ id }) => id)).toEqual([]);",
+        'expect.soft(editor.canvasText()?.caret, "caret").toBeNull();',
+        "await expect.poll(async () => (await editor.outline())[0]?.points).toHaveLength(3);",
+        "await expect.poll(() => { return editor.canvasText()?.caret; }).toBeNull();",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [7, 8, 9, 10, 11, 12, 13]);
+  });
+
+  it("allows whole reads, picks made to act on a read, and picks in the expected value", () => {
+    const lines = reportedLines(
+      "no-drill-into-reads",
+      [
+        ...reads,
+        'expect(editor.spacingTool()).toMatchObject({ hovered: { side: "left" } });',
+        "expect(await editor.outline()).toMatchObject([{ points: [{ x: 1 }] }]);",
+        "const [contour] = await editor.outline();",
+        "const id = editor.canvasText()!.items[0]!.id;",
+        "expect(editor.canvasText()).toMatchObject({ items: [{ id: editor.canvasText()?.items[0]?.id }] });",
+        "expect(editor.spacingTool()).toBeNull();",
+        "await expect.poll(() => editor.canvasText()).toMatchObject({ caret: null });",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, []);
+  });
+});

@@ -103,7 +103,11 @@ export interface DrawnGlyph {
     readonly dy: number;
     readonly bounds: Bounds | null;
   }[];
-  /** The glyph's anchors with those it takes from its components, by name. */
+  /**
+   * The glyph's anchors with those it takes from its components, in the order
+   * export propagates them (`shift_font::anchor_propagation`): components in
+   * turn, an anchor a later one replaces by name keeping its place.
+   */
   readonly anchors: readonly { readonly name: string; readonly x: number; readonly y: number }[];
 }
 
@@ -448,10 +452,11 @@ export interface EditorTestSurface extends EditorReads {
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   drawnSnapGuides(): readonly PositionGuide[];
   /**
-   * Where the canvas shows each point now, including a gesture not yet
-   * released, as {@link drawnOutline} draws them.
+   * One point of the open glyph as the canvas draws it now, a gesture not yet
+   * released included, as {@link drawnOutline} draws it; null when it draws no
+   * point with that id.
    */
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D>;
+  drawnPoint(id: PointId): OutlinePoint | null;
   /**
    * Where the faint pre-edit outline shows each point while a gesture is in
    * flight, or null when none is shown. Test-only: not agent data.

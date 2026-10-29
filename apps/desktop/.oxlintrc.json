@@ -256,6 +256,12 @@
       "rules": {
         "shadcn/no-raw-colors": "off"
       }
+    },
+    {
+      "files": ["e2e/**/*.ts"],
+      "rules": {
+        "eslint/no-empty-pattern": ["warn", { "allowObjectPatternsAsParameters": true }]
+      }
     }
   ]
 }

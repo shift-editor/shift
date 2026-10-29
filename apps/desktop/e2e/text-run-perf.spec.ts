@@ -73,7 +73,7 @@ async function hoverTargets(
   const bounds = await editor.canvasBounds();
   const targets = await page.evaluate((size) => {
     const editor = window.shift!.editor;
-    const run = editor.scene.nodesOfKind("textRun")[0];
+    const run = editor.scene.first("textRun");
     const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
     if (!run || !layout) throw new Error("Expected the canvas run");
 
@@ -150,7 +150,7 @@ test.describe("Performance — 10K-character text run", () => {
         () =>
           page.evaluate(() => {
             const editor = window.shift!.editor;
-            const run = editor.scene.nodesOfKind("textRun")[0];
+            const run = editor.scene.first("textRun");
             const items = run ? editor.text.run(run.runId)?.items : null;
             const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
             const loaded = layout?.placedGlyphs.every(

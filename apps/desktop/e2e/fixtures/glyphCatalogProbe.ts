@@ -241,7 +241,7 @@ export async function observeRenameTransition(
 
 /** The location the catalog previews glyphs at, one coordinate per axis in font axis order. */
 export async function catalogLocation(page: Page): Promise<readonly number[] | undefined> {
-  return page.evaluate(() => window.shiftSession?.catalog.locationCell.value);
+  return page.evaluate(() => window.shiftSession?.catalog.locationCell.peek());
 }
 
 /**
@@ -255,8 +255,8 @@ export async function catalogLocationOn(
   return page.evaluate((id) => {
     const axisIndex = window.shift?.font.getAxes().findIndex((axis) => axis.id === id) ?? -1;
     return {
-      location: window.shiftSession?.catalog.locationCell.value[axisIndex],
-      sourceId: window.shiftSession?.catalog.sourceIdCell.value,
+      location: window.shiftSession?.catalog.locationCell.peek()[axisIndex],
+      sourceId: window.shiftSession?.catalog.sourceIdCell.peek(),
     };
   }, axisId);
 }

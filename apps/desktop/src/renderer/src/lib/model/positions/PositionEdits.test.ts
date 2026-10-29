@@ -28,26 +28,28 @@ describe("fluent position edits preserve one frozen interaction base", () => {
   });
 
   it("recomputes movement previews from the original position and discards them", () => {
-    const edit = editor.requireGlyphLayer().positions.move(PositionTargets.points([pointId]));
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.positions.move(PositionTargets.points([pointId]));
 
     edit.preview({ x: 10, y: 0 });
     edit.preview({ x: 25, y: 0 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 125, y: 100 });
 
     edit.discard();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("commits one preview through the workspace ledger and undoes it", async () => {
-    const edit = editor.requireGlyphLayer().positions.move(PositionTargets.points([pointId]));
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.positions.move(PositionTargets.points([pointId]));
 
     edit.preview({ x: 25, y: -10 });
     edit.commit();
     await editor.settle();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 90 });
+    expect(layer.point(pointId)).toMatchObject({ x: 125, y: 90 });
 
     await editor.undo();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("discards structural changes with movement scoped within their layer edit", () => {
@@ -59,7 +61,7 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     const move = layer.positions.within(layerEdit).move(PositionTargets.points([addedPointId]));
 
     move.preview({ x: 25, y: -10 });
-    expect(editor.pointPosition(addedPointId)).toEqual({ x: 225, y: 90 });
+    expect(layer.point(addedPointId)).toMatchObject({ x: 225, y: 90 });
     move.discard();
     expect(layer.contour(contourId)).toBeNull();
   });
@@ -75,7 +77,7 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     move.preview({ x: 25, y: -10 });
     move.commit();
     await editor.settle();
-    expect(editor.pointPosition(addedPointId)).toEqual({ x: 225, y: 90 });
+    expect(layer.point(addedPointId)).toMatchObject({ x: 225, y: 90 });
 
     await editor.undo();
     expect(layer.contour(contourId)).toBeNull();
@@ -109,7 +111,7 @@ describe("fluent position edits preserve one frozen interaction base", () => {
     const feedback = edit.preview({ x: 20, y: 397 });
 
     expect(feedback.delta).toEqual({ x: 20, y: 400 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 120, y: 500 });
+    expect(layer.point(pointId)).toMatchObject({ x: 120, y: 500 });
     expect(feedback.guides).toEqual([{ kind: "metric", metric: "xHeight", x: 120, y: 500 }]);
     edit.discard();
   });
@@ -160,7 +162,7 @@ describe("fluent position edits preserve one frozen interaction base", () => {
 
     const feedback = edit.preview({ x: 197, y: 396 });
 
-    expect(editor.pointPosition(pointId)).toEqual({ x: 300, y: 500 });
+    expect(layer.point(pointId)).toMatchObject({ x: 300, y: 500 });
     expect(feedback.guides).toEqual([
       { kind: "alignment", target: { x: 300, y: 0 }, point: { x: 300, y: 500 } },
       { kind: "metric", metric: "xHeight", x: 300, y: 500 },
@@ -169,43 +171,41 @@ describe("fluent position edits preserve one frozen interaction base", () => {
   });
 
   it("scales from one frozen layer-local origin and discards the preview", () => {
-    const edit = editor
-      .requireGlyphLayer()
-      .positions.scale(PositionTargets.points([pointId]), { x: 0, y: 0 });
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.positions.scale(PositionTargets.points([pointId]), { x: 0, y: 0 });
 
     edit.preview({ x: 2, y: 0.5 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 200, y: 50 });
+    expect(layer.point(pointId)).toMatchObject({ x: 200, y: 50 });
 
     edit.discard();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("changes the scale pivot per preview without accumulating or replacing the default origin", () => {
-    const edit = editor
-      .requireGlyphLayer()
-      .positions.scale(PositionTargets.points([pointId]), { x: 0, y: 0 });
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.positions.scale(PositionTargets.points([pointId]), { x: 0, y: 0 });
 
     edit.preview({ x: 2, y: 2 }, { x: 50, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 150, y: 150 });
+    expect(layer.point(pointId)).toMatchObject({ x: 150, y: 150 });
     edit.preview({ x: 2, y: 2 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 200, y: 200 });
+    expect(layer.point(pointId)).toMatchObject({ x: 200, y: 200 });
     edit.preview({ x: 2, y: 2 }, { x: 100, y: 100 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
     edit.discard();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("quantizes rotation independently from movement modifiers", () => {
-    const edit = editor
-      .requireGlyphLayer()
-      .positions.rotate(PositionTargets.points([pointId]), { x: 0, y: 0 })
+    const layer = editor.requireGlyphLayer();
+    const edit = layer.positions
+      .rotate(PositionTargets.points([pointId]), { x: 0, y: 0 })
       .angleSnappedBy(AngleSnap.everyDegrees(15));
 
     const angle = edit.preview((44 * Math.PI) / 180);
 
     expect(angle).toBeCloseTo(Math.PI / 4);
-    expect(editor.pointPosition(pointId).x).toBeCloseTo(0);
-    expect(editor.pointPosition(pointId).y).toBeCloseTo(Math.sqrt(20_000));
+    expect(layer.point(pointId)!.x).toBeCloseTo(0);
+    expect(layer.point(pointId)!.y).toBeCloseTo(Math.sqrt(20_000));
     edit.discard();
   });
 

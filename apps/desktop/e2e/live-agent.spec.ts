@@ -248,9 +248,11 @@ test.describe("sparse source reads", () => {
       missingAdvertised: boolean;
     } | null;
     expect(sparse).not.toBeNull();
-    expect(sparse?.layerSourceId).toBe(sparse?.sourceId);
-    expect(sparse?.advertised).toBe(true);
-    expect(sparse?.missingAdvertised).toBe(false);
+    expect(sparse).toMatchObject({
+      layerSourceId: sparse?.sourceId,
+      advertised: true,
+      missingAdvertised: false,
+    });
   });
 
   test("reads kerning groups, a master's pairs, and a pair at every master", async ({ page }) => {

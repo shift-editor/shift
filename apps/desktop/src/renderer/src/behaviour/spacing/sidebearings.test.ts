@@ -1,18 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Point2D } from "@shift/geo";
 import { line, rect } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import type { EditorTestSurface } from "@/testing/surface";
-
-async function spacing(e: EditorTestSurface) {
-  const bounds = await e.outlineBounds();
-  const advance = await e.advanceWidth();
-  return { advance, left: bounds!.min.x, right: advance - bounds!.max.x };
-}
-
-async function positions(e: EditorTestSurface): Promise<Point2D[]> {
-  return (await e.outline()).flatMap(({ points }) => points.map(({ x, y }) => ({ x, y })));
-}
 
 describe("setting the glyph's metrics from the sidebar", () => {
   const editor = useTestEditor({
@@ -31,13 +19,14 @@ describe("setting the glyph's metrics from the sidebar", () => {
   });
 
   it("sets the right sidebearing without moving the outline", async () => {
-    const outline = await positions(editor);
+    const outline = await editor.outline();
 
     editor.setRightSidebearing(380);
     await editor.settle();
 
-    expect(await spacing(editor)).toEqual({ advance: 530, left: 100, right: 380 });
-    expect(await positions(editor)).toEqual(outline);
+    expect((await editor.drawnGlyph()).sidebearings).toEqual({ lsb: 100, rsb: 380 });
+    expect(await editor.advanceWidth()).toBe(530);
+    expect(await editor.outline()).toEqual(outline);
   });
 
   it("undoes and redoes the right sidebearing as one advance change", async () => {
@@ -45,31 +34,41 @@ describe("setting the glyph's metrics from the sidebar", () => {
     await editor.settle();
 
     await editor.undo();
-    expect(await spacing(editor)).toEqual({ advance: 500, left: 100, right: 350 });
+    expect((await editor.drawnGlyph()).sidebearings).toEqual({ lsb: 100, rsb: 350 });
+    expect(await editor.advanceWidth()).toBe(500);
     await editor.redo();
-    expect(await spacing(editor)).toEqual({ advance: 530, left: 100, right: 380 });
+    expect((await editor.drawnGlyph()).sidebearings).toEqual({ lsb: 100, rsb: 380 });
+    expect(await editor.advanceWidth()).toBe(530);
   });
 
   it("sets the left sidebearing by moving the outline and keeping the right sidebearing", async () => {
-    const outline = await positions(editor);
+    const outline = await editor.outline();
 
     editor.setLeftSidebearing(125);
     await editor.settle();
 
-    expect(await spacing(editor)).toEqual({ advance: 525, left: 125, right: 350 });
-    expect(await positions(editor)).toEqual(outline.map(({ x, y }) => ({ x: x + 25, y })));
+    expect((await editor.drawnGlyph()).sidebearings).toEqual({ lsb: 125, rsb: 350 });
+    expect(await editor.advanceWidth()).toBe(525);
+    expect(await editor.outline()).toEqual(
+      outline.map((contour) => ({
+        ...contour,
+        points: contour.points.map((point) => ({ ...point, x: point.x + 25 })),
+      })),
+    );
   });
 
   it("undoes and redoes the left sidebearing as one outline and advance change", async () => {
-    const outline = await positions(editor);
+    const outline = await editor.outline();
     editor.setLeftSidebearing(125);
     await editor.settle();
 
     await editor.undo();
-    expect(await spacing(editor)).toEqual({ advance: 500, left: 100, right: 350 });
-    expect(await positions(editor)).toEqual(outline);
+    expect((await editor.drawnGlyph()).sidebearings).toEqual({ lsb: 100, rsb: 350 });
+    expect(await editor.advanceWidth()).toBe(500);
+    expect(await editor.outline()).toEqual(outline);
     await editor.redo();
-    expect(await spacing(editor)).toEqual({ advance: 525, left: 125, right: 350 });
+    expect((await editor.drawnGlyph()).sidebearings).toEqual({ lsb: 125, rsb: 350 });
+    expect(await editor.advanceWidth()).toBe(525);
   });
 
   it("moves anchors and components with the outline when the left sidebearing changes", async () => {
@@ -80,7 +79,7 @@ describe("setting the glyph's metrics from the sidebar", () => {
     await editor.settle();
 
     expect(await editor.anchorNamed("top")).toMatchObject({ x: 60, y: 500 });
-    expect((await editor.components())[0]?.transformation).toMatchObject({ dx: 20, dy: 0 });
+    expect(await editor.components()).toMatchObject([{ transformation: { dx: 20, dy: 0 } }]);
   });
 });
 

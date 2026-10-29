@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
+import type { PointId } from "@shift/types";
+import type { GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
@@ -7,23 +9,22 @@ beforeEach(() => {
   editor.selectTool("select");
 });
 
-describe("dragging points aligns them with points that stay put", () => {
-  async function drawZigzag() {
-    return editor.draw({
-      contours: [
-        {
-          points: [
-            { x: 100, y: 120, name: "left" },
-            { x: 240, y: 260, name: "middle" },
-            { x: 380, y: 160, name: "right" },
-          ],
-        },
+/** An open zigzag, 100,120 → 240,260 → 380,160. */
+const ZIGZAG = {
+  contours: [
+    {
+      points: [
+        { x: 100, y: 120, name: "left" },
+        { x: 240, y: 260, name: "middle" },
+        { x: 380, y: 160, name: "right" },
       ],
-    });
-  }
+    },
+  ],
+} as const satisfies GlyphFixture;
 
+describe("dragging points aligns them with points that stay put", () => {
   it("lines a point up vertically with another point's x", async () => {
-    const { middle } = await drawZigzag();
+    const { middle } = await editor.draw(ZIGZAG);
     const nearX = 100 + editor.hitDistance() / 2;
 
     await expectEdit(editor, (e) => e.dragFrom({ x: 240, y: 260 }, { x: nearX, y: 300 }), {
@@ -32,25 +33,23 @@ describe("dragging points aligns them with points that stay put", () => {
   });
 
   it("aligns each axis with a different point in one drag", async () => {
-    const { left, middle, right } = await drawZigzag();
+    const { left, middle, right } = await editor.draw(ZIGZAG);
     const near = editor.hitDistance() / 2;
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: 380 - near, y: 120 + near });
 
-    expect(await editor.pointPositions([left, middle, right])).toEqual({
-      [left]: { x: 100, y: 120 },
-      [middle]: { x: 380, y: 120 },
-      [right]: { x: 380, y: 160 },
-    });
+    expect(await editor.point(left)).toMatchObject({ x: 100, y: 120 });
+    expect(await editor.point(middle)).toMatchObject({ x: 380, y: 120 });
+    expect(await editor.point(right)).toMatchObject({ x: 380, y: 160 });
   });
 
   it("does not align beyond the hit distance", async () => {
-    const { middle } = await drawZigzag();
+    const { middle } = await editor.draw(ZIGZAG);
     const farX = 100 + editor.hitDistance() * 2;
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: farX, y: 300 });
 
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: farX, y: 300 } });
+    expect(await editor.point(middle)).toMatchObject({ x: farX, y: 300 });
   });
 
   it("lets a rectangle's top edge shift sideways off its own bottom corners", async () => {
@@ -71,15 +70,15 @@ describe("dragging points aligns them with points that stay put", () => {
 
     await editor.dragFrom({ x: 200, y: 300 }, { x: 200 + shift, y: 260 });
 
-    expect(await editor.pointPositions([topLeft, topRight])).toEqual({
-      [topLeft]: { x: 100 + shift, y: 260 },
-      [topRight]: { x: 300 + shift, y: 260 },
-    });
+    expect(await editor.point(topLeft)).toMatchObject({ x: 100 + shift, y: 260 });
+    expect(await editor.point(topRight)).toMatchObject({ x: 300 + shift, y: 260 });
   });
 });
 
 describe("dragging points aligns only with points on screen", () => {
-  async function drawTallContour() {
+  // A contour whose last point, at 180,6000, is scrolled out of view.
+  let middle: PointId;
+  beforeEach(async () => {
     editor.resizeCanvas(1000, 800);
     const names = await editor.draw({
       contours: [
@@ -92,31 +91,25 @@ describe("dragging points aligns only with points on screen", () => {
         },
       ],
     });
+    ({ middle } = names);
     editor.select([names.left, names.middle]);
     editor.zoomToSelection();
     editor.select([]);
-    return names;
-  }
+  });
 
   it("ignores a point scrolled out of view", async () => {
-    const { middle } = await drawTallContour();
     const nearOffscreenX = 180 + editor.hitDistance() / 2;
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: nearOffscreenX, y: 200 });
 
-    const moved = (await editor.pointPositions([middle]))[middle]!;
-    expect(moved.x).toBeCloseTo(nearOffscreenX);
-    expect(moved.y).toBeCloseTo(200);
+    expect(await editor.point(middle)).toBeNear({ x: nearOffscreenX, y: 200 });
   });
 
   it("still aligns with a point in view", async () => {
-    const { middle } = await drawTallContour();
     const nearLeftX = 100 + editor.hitDistance() / 2;
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: nearLeftX, y: 200 });
 
-    const moved = (await editor.pointPositions([middle]))[middle]!;
-    expect(moved.x).toBe(100);
-    expect(moved.y).toBeCloseTo(200);
+    expect(await editor.point(middle)).toMatchObject({ x: 100, y: expect.closeTo(200) });
   });
 });
