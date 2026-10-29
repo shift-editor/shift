@@ -279,19 +279,19 @@ test.describe("Editor view", () => {
     editor,
   }) => {
     // 120 open two-point lines; the 26th is the one keyboard navigation reaches.
-    const named = (name: TreePoint | null) => (name === null ? {} : { name });
+    // The names the test needs, by line index: each line's start point, then its end point.
+    const startNames = new Map<number, TreePoint>([
+      [0, "first"],
+      [25, "focusedFirst"],
+    ]);
+    const endNames = new Map<number, TreePoint>([
+      [25, "destination"],
+      [119, "last"],
+    ]);
     const lines: ShapeFixture<TreePoint>[] = Array.from({ length: 120 }, (_, index) =>
       line<TreePoint>(
-        {
-          x: index * 20,
-          y: 0,
-          ...named(index === 0 ? "first" : index === 25 ? "focusedFirst" : null),
-        },
-        {
-          x: index * 20 + 10,
-          y: 10,
-          ...named(index === 119 ? "last" : index === 25 ? "destination" : null),
-        },
+        { x: index * 20, y: 0, name: startNames.get(index) },
+        { x: index * 20 + 10, y: 10, name: endNames.get(index) },
       ),
     );
     const drawn = await editor.draw({ contours: lines });

@@ -23,8 +23,7 @@ function fontBuilder(driver: EditorDriver): FontBuilder {
     draw: driver.draw.bind(driver),
     addAxis: (axis) => driver.addAxis(axis),
     addSource: (name, location) => driver.addSource(name, location),
-    setSourceMetric: (source, metric, position) =>
-      driver.setSourceMetric(source, metric, position),
+    setSourceMetric: (source, metric, position) => driver.setSourceMetric(source, metric, position),
     addInstance: (name, location) => driver.addInstance(name, location),
     setLocation: (location) => driver.setLocation(location),
   };
