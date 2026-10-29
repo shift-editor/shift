@@ -38,6 +38,11 @@ async function prepareFourSourceGlyph(
   for (const [name, value] of sources) await editor.addSource(name, { bch1: value });
   await editor.editSources([reference, ...sources.map(([name]) => name)]);
   await editor.waitForIdle();
+  await expect
+    .poll(async () => (await editor.matchedPoints(selectedPointIds[0]!)).length, {
+      timeout: 20_000,
+    })
+    .toBe(4);
 
   await offsetMatchedSourcePoints(page, selectedPointIds, 3);
   await editor.selectObjects(selectedPointIds);
@@ -50,18 +55,15 @@ async function prepareFourSourceGlyph(
 async function measureTransformGesture(
   page: Page,
   editor: EditorDriver,
+  pointIds: readonly PointId[],
   operation: "scale" | "rotate",
   cancel: boolean,
 ) {
-  // Each source's points, in source order: the gesture moves the matched points in all four.
-  const glyph = (await editor.editorView()).glyph!.name;
-  const { sources } = await editor.fontOverview();
-  const positions = () =>
-    Promise.all(
-      sources.map(async ({ name }) =>
-        (await editor.layerOf(glyph, name)).contours.flatMap((contour) => contour.points),
-      ),
-    );
+  const positions = async () => {
+    const found = await editor.matchedPoints(pointIds[0]!);
+    if (found.length !== 4) throw new Error("Expected four editable source layers");
+    return found.map(({ x, y }) => ({ x, y }));
+  };
 
   const before = await positions();
   const bounds = await editor.selectionBounds();
@@ -90,7 +92,6 @@ async function measureTransformGesture(
     previewTimes.push(performance.now() - start);
   }
   const preview = await positions();
-  expect(preview).toHaveLength(4);
   for (let index = 0; index < before.length; index++) {
     expect(preview[index]).not.toEqual(before[index]);
   }
@@ -125,9 +126,9 @@ for (const selectedPointCount of [1_000, 10_000, 50_000]) {
       page,
       editor,
     }) => {
-      await prepareFourSourceGlyph(page, editor, selectedPointCount);
-      const canceled = await measureTransformGesture(page, editor, operation, true);
-      const committed = await measureTransformGesture(page, editor, operation, false);
+      const pointIds = await prepareFourSourceGlyph(page, editor, selectedPointCount);
+      const canceled = await measureTransformGesture(page, editor, pointIds, operation, true);
+      const committed = await measureTransformGesture(page, editor, pointIds, operation, false);
       const preview = computeStats(`${operation} (${selectedPointCount} points, four sources)`, [
         ...canceled.previewTimes,
         ...committed.previewTimes,

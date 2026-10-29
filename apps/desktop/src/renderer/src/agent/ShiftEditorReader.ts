@@ -15,7 +15,7 @@ import type {
 import type { Editor } from "@shift/editor";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
-import type { PointId, Source } from "@shift/types";
+import type { PointId, Source, SourceId } from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
 import type { KerningPair, SpacingTool } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -43,6 +43,14 @@ export interface SelectedObject {
 export interface GlyphRect {
   min: { x: number; y: number };
   max: { x: number; y: number };
+}
+
+/** A point an edit also moves: the source whose layer holds it, its id, and where it is now. */
+export interface MatchedPoint {
+  sourceId: SourceId;
+  pointId: PointId;
+  x: number;
+  y: number;
 }
 
 /**
@@ -126,6 +134,32 @@ export class ShiftEditorReader {
   /** The scene nodes being edited in place, in the order they were entered; empty when none is. */
   editingNodeIds(): string[] {
     return [...this.#editor.editing.nodeIds];
+  }
+
+  /**
+   * Where an edit of the active layer's point `pointId` moves a point in each source being
+   * edited: the active source first, then each other one, a gesture's preview included.
+   *
+   * @returns one entry per layer the edit moves; empty when the point is not editable.
+   */
+  matchedPoints(pointId: PointId): MatchedPoint[] {
+    const selection = this.#editor.positionSelection([pointId]);
+    if (!selection) return [];
+
+    return [selection, ...selection.additionalLayers].flatMap(({ layer, targets }) => {
+      const id = targets.points?.[0];
+      const point = id ? layer.point(id) : null;
+      return id && point ? [{ sourceId: layer.source.id, pointId: id, x: point.x, y: point.y }] : [];
+    });
+  }
+
+  /** Where the Pen's drag places the outgoing handle now, in glyph units; null outside a Pen drag. */
+  drawnPenHandle(): { x: number; y: number } | null {
+    const state = this.#editor.toolIf("pen")?.state;
+    if (state?.type !== "dragging") return null;
+
+    const { x, y } = state.curve.handlePosition;
+    return { x, y };
   }
 
   /** The source the editor shows and edits, or null between sources. */

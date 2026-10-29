@@ -29,7 +29,7 @@ import {
   type ScreenVector,
 } from "@shift/editor/spaces";
 import type { PositionGuide, SourceSelectionMode } from "@shift/editor/types";
-import type { SelectedObject } from "@/agent/ShiftEditorReader";
+import type { MatchedPoint, SelectedObject } from "@/agent/ShiftEditorReader";
 import type { AppReaders } from "@/agent/AppReaders";
 import type {
   CanvasHandle,
@@ -788,6 +788,20 @@ export class EditorDriver implements EditorReads, EditorActions {
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   async drawnSnapGuides(): Promise<readonly PositionGuide[]> {
     return this.#reads.editor.drawnSnapGuides();
+  }
+
+  /**
+   * Where an edit of the active layer's point `pointId` moves a point in each source being
+   * edited: the active source first, a gesture's preview included.
+   */
+  async matchedPoints(pointId: PointId): Promise<readonly MatchedPoint[]> {
+    return this.#reads.editor.matchedPoints(pointId);
+  }
+
+  /** Where the Pen's drag places the outgoing handle now, in glyph units; null outside a Pen drag. */
+  async drawnPenHandle(): Promise<LocalPoint | null> {
+    const handle = await this.#reads.editor.drawnPenHandle();
+    return handle ? localPoint(handle.x, handle.y) : null;
   }
 
   /** The selected objects with their kinds, in selection order. */

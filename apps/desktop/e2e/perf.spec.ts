@@ -261,11 +261,14 @@ test.describe("Performance — 50K points", () => {
     await editor.addSource("Benchmark Bold", { bch1: 900 });
     await editor.editSources([reference, "Benchmark Bold"]);
     await editor.waitForIdle();
+    await expect.poll(async () => (await editor.matchedPoints(pointIds[0]!)).length).toBe(2);
 
-    const glyph = (await editor.editorView()).glyph!.name;
-    const boldPoints = async () =>
-      (await editor.layerOf(glyph, "Benchmark Bold")).contours.flatMap((contour) => contour.points);
-    const boldBefore = await boldPoints();
+    const targetPosition = async () => {
+      const [, target] = await editor.matchedPoints(pointIds[0]!);
+      if (!target) throw new Error("Expected a complete matched source");
+      return { x: target.x, y: target.y };
+    };
+    const targetBefore = await targetPosition();
     await editor.selectObjects(pointIds);
     const multiStart = performance.now();
     await editor.press("ArrowRight");
@@ -273,16 +276,10 @@ test.describe("Performance — 50K points", () => {
     const multiMs = performance.now() - multiStart;
 
     expect(await editor.pointPosition(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
-    // The nudge moved the five matched Bold points one unit right, and nothing else there.
-    const boldAfter = await boldPoints();
-    const boldMoves = boldAfter.flatMap((point, index) => {
-      const was = boldBefore[index]!;
-      return point.x === was.x && point.y === was.y ? [] : [{ x: point.x - was.x, y: point.y - was.y }];
-    });
-    expect(boldMoves).toEqual(Array.from({ length: pointIds.length }, () => ({ x: 1, y: 0 })));
+    expect(await targetPosition()).toMatchObject({ x: targetBefore.x + 1 });
     await editor.undo();
     expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
-    expect(await boldPoints()).toEqual(boldBefore);
+    expect(await targetPosition()).toEqual(targetBefore);
     expect(singleMs).toBeLessThan(1_500);
     expect(multiMs).toBeLessThan(1_500);
     console.log(

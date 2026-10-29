@@ -325,8 +325,7 @@ test.describe("Resident Glyph Grid", () => {
 });
 
 /**
- * Adds an `opsz` axis and a Bold source at 900 whose ascender and descender are twice the
- * default's, so scrubbing toward it grows every Grid cell. Adding a source moves to it, as the
+ * Adds an `opsz` axis and a Bold source at 900 whose every metric is twice the default's, so scrubbing toward it grows every Grid cell. Adding a source moves to it, as the
  * Create source menu does, so this moves back to the default location after.
  */
 async function createVariableDesignspace(editor: EditorDriver): Promise<void> {
@@ -340,6 +339,9 @@ async function createVariableDesignspace(editor: EditorDriver): Promise<void> {
   });
   await editor.addSource("Bold", { opsz: 900 });
   await editor.setSourceMetric("Bold", "Ascender", metrics.ascender * 2);
+  await editor.setSourceMetric("Bold", "Cap Height", metrics.capHeight! * 2);
+  await editor.setSourceMetric("Bold", "x-Height", metrics.xHeight! * 2);
+  await editor.setSourceMetric("Bold", "Baseline", metrics.baseline * 2);
   await editor.setSourceMetric("Bold", "Descender", metrics.descender * 2);
   await editor.setLocation({ opsz: 400 });
 }
