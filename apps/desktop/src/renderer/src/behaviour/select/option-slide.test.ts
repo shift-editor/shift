@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import type { GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 const editor = useTestEditor();
 beforeEach(() => {
@@ -35,9 +34,9 @@ describe("Option slides a smooth point along its handles", () => {
       (e) => e.dragFrom({ x: 400, y: 100 }, { x: 450, y: 100 }, { altKey: true }),
       async (e) =>
         expect(await e.pointPositions([junction, incoming, outgoing])).toEqual({
-          [junction]: near({ x: 425, y: 125 }),
-          [incoming]: near({ x: 300, y: 0 }),
-          [outgoing]: near({ x: 500, y: 200 }),
+          [junction]: expect.toBeNear({ x: 425, y: 125 }),
+          [incoming]: expect.toBeNear({ x: 300, y: 0 }),
+          [outgoing]: expect.toBeNear({ x: 500, y: 200 }),
         }),
     );
   });
@@ -48,8 +47,8 @@ describe("Option slides a smooth point along its handles", () => {
     await editor.dragFrom({ x: 400, y: 100 }, { x: 450, y: 100 });
 
     expect(await editor.pointPositions([junction, outgoing])).toEqual({
-      [junction]: near({ x: 450, y: 100 }),
-      [outgoing]: near({ x: 550, y: 200 }),
+      [junction]: expect.toBeNear({ x: 450, y: 100 }),
+      [outgoing]: expect.toBeNear({ x: 550, y: 200 }),
     });
   });
 
@@ -59,8 +58,8 @@ describe("Option slides a smooth point along its handles", () => {
     await editor.dragFrom({ x: 500, y: 200 }, { x: 550, y: 200 }, { altKey: true });
 
     expect(await editor.pointPositions([outgoing, junction])).toEqual({
-      [outgoing]: near({ x: 525, y: 225 }),
-      [junction]: near({ x: 400, y: 100 }),
+      [outgoing]: expect.toBeNear({ x: 525, y: 225 }),
+      [junction]: expect.toBeNear({ x: 400, y: 100 }),
     });
   });
 
@@ -71,8 +70,8 @@ describe("Option slides a smooth point along its handles", () => {
     await editor.pressKey("ArrowRight", { altKey: true, shiftKey: true });
 
     expect(await editor.pointPositions([outgoing, junction])).toEqual({
-      [outgoing]: near({ x: 505, y: 205 }),
-      [junction]: near({ x: 400, y: 100 }),
+      [outgoing]: expect.toBeNear({ x: 505, y: 205 }),
+      [junction]: expect.toBeNear({ x: 400, y: 100 }),
     });
   });
 
@@ -83,9 +82,9 @@ describe("Option slides a smooth point along its handles", () => {
     await editor.pressKey("ArrowUp", { altKey: true, shiftKey: true });
 
     expect(await editor.pointPositions([junction, incoming, outgoing])).toEqual({
-      [junction]: near({ x: 405, y: 105 }),
-      [incoming]: near({ x: 300, y: 0 }),
-      [outgoing]: near({ x: 500, y: 200 }),
+      [junction]: expect.toBeNear({ x: 405, y: 105 }),
+      [incoming]: expect.toBeNear({ x: 300, y: 0 }),
+      [outgoing]: expect.toBeNear({ x: 500, y: 200 }),
     });
   });
 });
@@ -98,7 +97,7 @@ describe("Option on a corner between two lines", () => {
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 350, y: 140 }, { altKey: true });
 
-    expect(await editor.pointPositions([corner])).toEqual({ [corner]: near({ x: 350, y: 140 }) });
+    expect(await editor.pointPosition(corner)).toBeNear({ x: 350, y: 140 });
     expect(await editor.outline()).toHaveLength(1);
   });
 });

@@ -3,6 +3,7 @@ import { Curve, Vec2 } from "@shift/geo";
 import { expectEdit } from "@/testing/expectEdit";
 import { splitCubic } from "@/testing/fixtures";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
+import { pointTypes, shape } from "@/testing/outline";
 
 const editor = useTestEditor();
 
@@ -26,12 +27,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
       },
       async (e) => {
         const points = (await e.outline())[0]!.points;
-        expect(points.map(({ pointType }) => pointType)).toEqual([
-          "onCurve",
-          "offCurve",
-          "offCurve",
-          "onCurve",
-        ]);
+        expect(pointTypes(points)).toEqual(["onCurve", "offCurve", "offCurve", "onCurve"]);
         expect([points[0]!.id, points[3]!.id]).toEqual([names.p0, names.p2]);
         // The furthest any of 40 samples along the original lies from the same parameter on the fit.
         const fit = Curve.cubic(points[0]!, points[1]!, points[2]!, points[3]!);
@@ -48,33 +44,27 @@ describe("deleting an on-curve point fits a curve across its span", () => {
     const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.4)] });
     editor.select([names.p1]);
     await editor.deleteSelection();
-    const fitted = (await editor.outline())[0]!.points.map((point) => ({
-      ...point,
-      id: expect.any(String),
-    }));
+    const fitted = shape(await editor.outline());
     await editor.undo();
 
     editor.select([names.c0a, names.p1]);
     await editor.deleteSelection();
 
-    expect((await editor.outline())[0]?.points).toEqual(fitted);
+    expect(shape(await editor.outline())).toEqual(fitted);
   });
 
   it("fits adjacent selected points once, whatever order they were selected in", async () => {
     const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.3, 0.6)] });
     editor.select([names.p1, names.p2]);
     await editor.deleteSelection();
-    const fitted = (await editor.outline())[0]!.points.map((point) => ({
-      ...point,
-      id: expect.any(String),
-    }));
+    const fitted = shape(await editor.outline());
     await editor.undo();
 
     editor.select([names.p2, names.p1]);
     await editor.deleteSelection();
 
-    expect(fitted).toHaveLength(4);
-    expect((await editor.outline())[0]?.points).toEqual(fitted);
+    expect(fitted[0]?.points).toHaveLength(4);
+    expect(shape(await editor.outline())).toEqual(fitted);
   });
 
   it("treats a clicked segment like all of its points selected", async () => {
@@ -83,16 +73,13 @@ describe("deleting an on-curve point fits a curve across its span", () => {
     const [, , , p1, c1a, c1b, p2] = contour.points;
     editor.select([names.p1, names.c1a, names.c1b, names.p2]);
     await editor.deleteSelection();
-    const fitted = (await editor.outline())[0]!.points.map((point) => ({
-      ...point,
-      id: expect.any(String),
-    }));
+    const fitted = shape(await editor.outline());
     await editor.undo();
 
     await editor.clickAt(Curve.pointAt(Curve.cubic(p1!, c1a!, c1b!, p2!), 0.5));
     await editor.deleteSelection();
 
-    expect((await editor.outline())[0]?.points).toEqual(fitted);
+    expect(shape(await editor.outline())).toEqual(fitted);
   });
 
   it("leaves the two endpoints apart when a gap removes the only two segments", async () => {
@@ -172,13 +159,7 @@ describe("deleting a point never raises the degree of the span it joins", () => 
     await editor.deleteSelection();
 
     const points = (await editor.outline())[0]?.points;
-    expect(points.map(({ pointType }) => pointType)).toEqual([
-      "onCurve",
-      "onCurve",
-      "offCurve",
-      "offCurve",
-      "onCurve",
-    ]);
+    expect(pointTypes(points)).toEqual(["onCurve", "onCurve", "offCurve", "offCurve", "onCurve"]);
     expect(points.slice(1)).toEqual(untouched);
   });
 
@@ -250,7 +231,7 @@ describe("deleting a point never raises the degree of the span it joins", () => 
       },
       async (e) => {
         const points = (await e.outline())[0]?.points;
-        expect(points.map(({ pointType }) => pointType)).toEqual(result);
+        expect(pointTypes(points)).toEqual(result);
         expect([points[0]!.id, points.at(-1)!.id]).toEqual([start, end]);
       },
     );

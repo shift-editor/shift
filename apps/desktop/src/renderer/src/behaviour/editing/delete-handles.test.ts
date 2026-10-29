@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import { useTestEditor } from "@/testing/fontFixture";
+import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 
@@ -113,7 +114,7 @@ describe("deleting handles around a closed contour's start", () => {
 
     const [contour] = await editor.outline();
     expect(contour?.closed).toBe(true);
-    expect(contour?.points.map(({ pointType }) => pointType)).toEqual([
+    expect(pointTypes(contour?.points)).toEqual([
       "onCurve",
       "onCurve",
       "onCurve",
@@ -142,7 +143,7 @@ describe("deleting handles around a closed contour's start", () => {
 
     const [contour] = await editor.outline();
     expect(contour?.closed).toBe(true);
-    expect(contour?.points.map(({ pointType }) => pointType)).toEqual(Array(5).fill("onCurve"));
+    expect(pointTypes(contour?.points)).toEqual(Array(5).fill("onCurve"));
   });
 
   it("removes a closing cubic's handles without moving the contour's start", async () => {

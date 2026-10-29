@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import type { ContourFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
+import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 
@@ -56,7 +57,7 @@ describe("saving and reopening a document", () => {
         expect(points[0]?.id).toBe(a);
         if (mode === "fit") {
           expect(outline).toHaveLength(1);
-          expect(points.map(({ pointType }) => pointType)).toEqual(kept[span]);
+          expect(pointTypes(points)).toEqual(kept[span]);
         } else {
           expect(outline.every((each) => each.points.length < 2)).toBe(true);
         }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
-import { near, offCurve, onCurve } from "@/testing/outlineMatchers";
+import { offCurve, onCurve } from "@/testing/outlineMatchers";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
@@ -91,7 +91,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
         {
           kind: "direction",
           from: { x: 300, y: 100 },
-          to: near(outgoing, 6),
+          to: expect.toBeNear(outgoing, 6),
         },
       ]);
 

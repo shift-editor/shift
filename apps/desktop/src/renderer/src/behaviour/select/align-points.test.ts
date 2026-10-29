@@ -3,7 +3,6 @@ import { expectEdit } from "@/testing/expectEdit";
 import type { PointId } from "@shift/types";
 import type { GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 const editor = useTestEditor();
 beforeEach(() => {
@@ -52,7 +51,7 @@ describe("dragging points aligns them with points that stay put", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: farX, y: 300 });
 
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: farX, y: 300 } });
+    expect(await editor.pointPosition(middle)).toEqual({ x: farX, y: 300 });
   });
 
   it("lets a rectangle's top edge shift sideways off its own bottom corners", async () => {
@@ -107,9 +106,7 @@ describe("dragging points aligns only with points on screen", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: nearOffscreenX, y: 200 });
 
-    expect(await editor.pointPositions([middle])).toEqual({
-      [middle]: near({ x: nearOffscreenX, y: 200 }),
-    });
+    expect(await editor.pointPosition(middle)).toBeNear({ x: nearOffscreenX, y: 200 });
   });
 
   it("still aligns with a point in view", async () => {
@@ -117,8 +114,6 @@ describe("dragging points aligns only with points on screen", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: nearLeftX, y: 200 });
 
-    expect(await editor.pointPositions([middle])).toEqual({
-      [middle]: { x: 100, y: expect.closeTo(200) },
-    });
+    expect(await editor.pointPosition(middle)).toEqual({ x: 100, y: expect.closeTo(200) });
   });
 });

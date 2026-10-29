@@ -3,6 +3,7 @@ import { Bounds } from "@shift/geo";
 import { cursorToCSS } from "@shift/editor/rendering";
 import { expectEdit } from "@/testing/expectEdit";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
+import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 beforeEach(() => {
@@ -66,7 +67,7 @@ describe("drawing a shape by dragging", () => {
 
     const [created] = await editor.outline();
     expect(created?.closed).toBe(true);
-    expect(created?.points.map(({ pointType }) => pointType)).toEqual(
+    expect(pointTypes(created?.points)).toEqual(
       Array.from({ length: 4 }, () => ["onCurve", "offCurve", "offCurve"]).flat(),
     );
     expect(created?.points.filter(({ smooth }) => smooth)).toHaveLength(4);

@@ -127,7 +127,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 260, y: 280 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 160, y: 180 } });
+    expect(await editor.pointPosition(first)).toEqual({ x: 160, y: 180 });
     expect(await editor.anchors()).toMatchObject([{ name: "top", x: 560, y: 580 }]);
   });
 
@@ -158,7 +158,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
     expect(editor.toolState()?.state).toBe("resizing");
     await editor.pressKey("Escape");
 
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 100 } });
+    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 100 });
   });
 
   it("moves a segment freely without Shift", async () => {

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import type { GlyphFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 const ROOT_3 = Math.sqrt(3);
 
@@ -37,13 +36,11 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
     async ({ handle, pivot, to, side }) => {
       const points = await editor.draw(TWO_CURVES);
       const id = points[handle];
-      const from = (await editor.point(id))!;
+      const from = await editor.pointPosition(id);
 
       await editor.dragFrom(from, to, { shiftKey: true });
 
-      expect(await editor.pointPositions([id])).toEqual({
-        [id]: near({ x: pivot.x + side * 50 * ROOT_3, y: 150 }),
-      });
+      expect(await editor.pointPosition(id)).toBeNear({ x: pivot.x + side * 50 * ROOT_3, y: 150 });
       expect(editor.selectionIds()).toEqual([id]);
     },
   );
@@ -58,12 +55,14 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       const id = points[handle];
       const snapped = { x: pivot.x + side * 50 * ROOT_3, y: 150 };
 
-      editor.pressAt((await editor.point(id))!);
+      editor.pressAt(await editor.pointPosition(id));
       editor.movePointerTo(to, { shiftKey: true });
 
       expect(editor.toolState()?.state).toBe("translating");
-      expect(editor.shownPointPositions([id])).toEqual({ [id]: near(snapped) });
-      expect(editor.drawnSnapGuides()).toMatchObject([{ from: pivot, to: near(snapped) }]);
+      expect(editor.shownPointPositions([id])).toEqual({ [id]: expect.toBeNear(snapped) });
+      expect(editor.drawnSnapGuides()).toMatchObject([
+        { from: pivot, to: expect.toBeNear(snapped) },
+      ]);
       await editor.pressKey("Escape");
       expect(editor.toolState()?.state).toBe("ready");
     },
@@ -74,9 +73,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 });
 
-    expect(await editor.pointPositions([controlStart])).toEqual({
-      [controlStart]: { x: 180, y: 160 },
-    });
+    expect(await editor.pointPosition(controlStart)).toEqual({ x: 180, y: 160 });
   });
 
   it("follows Shift on each sample of the drag", async () => {
@@ -111,9 +108,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       await editor.releaseAt(to, { shiftKey });
 
       expect(editor.toolState()?.state).toBe("ready");
-      expect(await editor.pointPositions([controlStart])).toEqual({
-        [controlStart]: near({ x: 100 + 50 * ROOT_3, y: 150 }),
-      });
+      expect(await editor.pointPosition(controlStart)).toBeNear({ x: 100 + 50 * ROOT_3, y: 150 });
     },
   );
 
@@ -126,9 +121,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
     editor.queuePointerMove(end, { shiftKey: true });
     await editor.releaseAt(end);
 
-    expect(await editor.pointPositions([controlStart])).toEqual({
-      [controlStart]: near({ x: 100 + 75 * ROOT_3, y: 175 }),
-    });
+    expect(await editor.pointPosition(controlStart)).toBeNear({ x: 100 + 75 * ROOT_3, y: 175 });
   });
 
   it("drops the preview when another tool is chosen, and the next drag starts without Shift", async () => {
@@ -148,9 +141,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 });
 
-    expect(await editor.pointPositions([controlStart])).toEqual({
-      [controlStart]: { x: 180, y: 160 },
-    });
+    expect(await editor.pointPosition(controlStart)).toEqual({ x: 180, y: 160 });
   });
 
   it("commits a snapped handle move as one edit", async () => {
@@ -160,9 +151,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       editor,
       (e) => e.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 }, { shiftKey: true }),
       async (e) =>
-        expect(await e.pointPositions([controlStart])).toEqual({
-          [controlStart]: near({ x: 100 + 50 * ROOT_3, y: 150 }),
-        }),
+        expect(await e.pointPosition(controlStart)).toBeNear({ x: 100 + 50 * ROOT_3, y: 150 }),
     );
   });
 
@@ -183,9 +172,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 130, y: 140 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([start])).toEqual({
-      [start]: near({ x: 125, y: 100 + 25 * ROOT_3 }),
-    });
+    expect(await editor.pointPosition(start)).toBeNear({ x: 125, y: 100 + 25 * ROOT_3 });
   });
 
   it("keeps the opposite handle's length and the smooth tangent after snapping", async () => {
@@ -193,13 +180,9 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 320, y: 160 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([controlEnd])).toEqual({
-      [controlEnd]: near({ x: 400 - 50 * ROOT_3, y: 150 }),
-    });
-    expect(await editor.pointPositions([outgoing])).toEqual({
-      [outgoing]: near({ x: 400 + 50 * ROOT_3, y: 50 }),
-    });
-    expect(await editor.pointPositions([junction])).toEqual({ [junction]: { x: 400, y: 100 } });
+    expect(await editor.pointPosition(controlEnd)).toBeNear({ x: 400 - 50 * ROOT_3, y: 150 });
+    expect(await editor.pointPosition(outgoing)).toBeNear({ x: 400 + 50 * ROOT_3, y: 50 });
+    expect(await editor.pointPosition(junction)).toEqual({ x: 400, y: 100 });
   });
 });
 

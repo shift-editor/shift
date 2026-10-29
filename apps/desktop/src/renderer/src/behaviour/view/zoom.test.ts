@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Bounds } from "@shift/geo";
 import { rect } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 const editor = useTestEditor();
 
@@ -35,7 +34,7 @@ describe("zooming the viewport", () => {
 
     editor.zoomToSelection();
 
-    expect(editor.screenPosition(centre)).toEqual(near(editor.viewportCentre()));
+    expect(editor.screenPosition(centre)).toBeNear(editor.viewportCentre());
   });
 
   it("sets an absolute zoom level around the viewport centre", () => {
@@ -46,12 +45,10 @@ describe("zooming the viewport", () => {
     editor.setZoom(2);
 
     expect(editor.zoomLevel()).toBe(2);
-    expect(editor.screenPosition({ x: 100, y: 100 })).toEqual(
-      near({
-        x: centre.x + ((before.x - centre.x) * 2) / zoom,
-        y: centre.y + ((before.y - centre.y) * 2) / zoom,
-      }),
-    );
+    expect(editor.screenPosition({ x: 100, y: 100 })).toBeNear({
+      x: centre.x + ((before.x - centre.x) * 2) / zoom,
+      y: centre.y + ((before.y - centre.y) * 2) / zoom,
+    });
   });
 });
 

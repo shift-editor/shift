@@ -41,9 +41,7 @@ describe("arrow keys nudge the selected points", () => {
   ] as const)("moves by %s", async (_step, modifiers, distance) => {
     await editor.pressKey("ArrowRight", modifiers);
 
-    expect(await editor.pointPositions([first])).toEqual({
-      [first]: { x: 100 + distance, y: 100 },
-    });
+    expect(await editor.pointPosition(first)).toEqual({ x: 100 + distance, y: 100 });
   });
 
   it("moves every selected point by the same step, as one edit", async () => {
@@ -71,7 +69,7 @@ describe("arrow keys nudge the selected points", () => {
 
     await editor.pressKey("ArrowUp", { shiftKey: true });
 
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 110 } });
+    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 110 });
     expect(await editor.anchors()).toMatchObject([{ name: "top", x: 300, y: 310 }]);
   });
 });

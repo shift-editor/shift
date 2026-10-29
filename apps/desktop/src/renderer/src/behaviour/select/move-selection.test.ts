@@ -115,7 +115,7 @@ describe("dragging moves the selection", () => {
     await editor.releaseAt({ x: 210, y: 230 });
 
     expect(editor.selectionIds()).toEqual([lone]);
-    expect(await editor.pointPositions([lone])).toEqual({ [lone]: { x: 210, y: 230 } });
+    expect(await editor.pointPosition(lone)).toEqual({ x: 210, y: 230 });
   });
 
   it("moves a curve's handle without its point", async () => {
@@ -221,7 +221,7 @@ describe("a drag in flight", () => {
     await editor.pressKey("Escape");
 
     expect(secondSample!.x - firstSample!.x).toBeCloseTo(10);
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 100 } });
+    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 100 });
   });
 
   it("commits the last move even when it is still queued at release", async () => {
@@ -235,7 +235,7 @@ describe("a drag in flight", () => {
     editor.queuePointerMove({ x: 150, y: 230 });
     await editor.releaseAt({ x: 150, y: 230 });
 
-    expect(await editor.pointPositions([lone])).toEqual({ [lone]: { x: 150, y: 230 } });
+    expect(await editor.pointPosition(lone)).toEqual({ x: 150, y: 230 });
   });
 
   it("commits a drag whose only move crosses the threshold while still queued", async () => {
@@ -248,7 +248,7 @@ describe("a drag in flight", () => {
     editor.queuePointerMove({ x: 150, y: 230 });
     await editor.releaseAt({ x: 150, y: 230 });
 
-    expect(await editor.pointPositions([lone])).toEqual({ [lone]: { x: 150, y: 230 } });
+    expect(await editor.pointPosition(lone)).toEqual({ x: 150, y: 230 });
   });
 });
 

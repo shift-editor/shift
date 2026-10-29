@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 // `bullet` places `period` at scale 1 in Light (wght 100) and 3 in Bold
 // (wght 700); `bar` mirrors it and doubles its height in Bold. Compiled fonts
@@ -37,9 +36,7 @@ describe("components that change scale between masters interpolate like the comp
     // scale 1.25), two thirds of the way: 150 + (362.5 - 150) * 2 / 3.
     editor.setLocation({ wght: 200 });
 
-    expect((await editor.drawnGlyph("ringbig")).bounds?.max).toEqual(
-      near({ x: 291.667, y: 241.667 }),
-    );
+    expect((await editor.drawnGlyph("ringbig")).bounds?.max).toBeNear({ x: 291.667, y: 241.667 });
   });
 
   it("pairs points as the compiler does when one master mirrors its component", async () => {
@@ -61,8 +58,8 @@ describe("components that change scale between masters interpolate like the comp
     await editor.drawnGlyph("wedgeflip");
 
     expect((await editor.drawnGlyph("wedgenest")).bounds).toEqual({
-      min: near({ x: 50, y: 0 }),
-      max: near({ x: 200, y: 250 }),
+      min: expect.toBeNear({ x: 50, y: 0 }),
+      max: expect.toBeNear({ x: 200, y: 250 }),
     });
   });
 
@@ -70,15 +67,15 @@ describe("components that change scale between masters interpolate like the comp
     editor.setLocation({ wght: 100 });
     await editor.drawnGlyph("wedgeflip");
     expect((await editor.drawnGlyph("wedgenest")).bounds).toEqual({
-      min: near({ x: 50, y: 0 }),
-      max: near({ x: 150, y: 200 }),
+      min: expect.toBeNear({ x: 50, y: 0 }),
+      max: expect.toBeNear({ x: 150, y: 200 }),
     });
 
     editor.setLocation({ wght: 700 });
     await editor.drawnGlyph("wedgeflip");
     expect((await editor.drawnGlyph("wedgenest")).bounds).toEqual({
-      min: near({ x: 50, y: 0 }),
-      max: near({ x: 250, y: 300 }),
+      min: expect.toBeNear({ x: 50, y: 0 }),
+      max: expect.toBeNear({ x: 250, y: 300 }),
     });
   });
 

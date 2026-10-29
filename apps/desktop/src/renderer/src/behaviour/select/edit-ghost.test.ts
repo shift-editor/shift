@@ -24,7 +24,7 @@ describe("dragging shows the outline as it was before the drag", () => {
     editor.holdDrag(middle, { x: 40, y: 60 });
     await editor.releaseAt({ x: 240, y: 160 });
 
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: 240, y: 160 } });
+    expect(await editor.pointPosition(middle)).toEqual({ x: 240, y: 160 });
     expect(editor.editGhost([middle])).toBeNull();
   });
 

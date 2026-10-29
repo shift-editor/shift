@@ -74,19 +74,19 @@ describe("saving and reopening a variable font", () => {
     try {
       reopened.clickSource("Bold");
       const corner = (await reopened.outline())[0]!.points[0]!.id;
-      const saved = await reopened.pointPositions([corner]);
+      const saved = await reopened.pointPosition(corner);
 
       await reopened.dragPoint(corner, { x: 20, y: 30 });
-      const edited = { [corner]: { x: saved[corner]!.x + 20, y: saved[corner]!.y + 30 } };
-      expect(await reopened.pointPositions([corner])).toEqual(edited);
+      const edited = { x: saved.x + 20, y: saved.y + 30 };
+      expect(await reopened.pointPosition(corner)).toEqual(edited);
       await expect(reopened.documentState()).resolves.toMatchObject({ dirty: true });
 
       await reopened.undo();
-      expect(await reopened.pointPositions([corner])).toEqual(saved);
+      expect(await reopened.pointPosition(corner)).toEqual(saved);
       await expect(reopened.documentState()).resolves.toMatchObject({ dirty: false });
 
       await reopened.redo();
-      expect(await reopened.pointPositions([corner])).toEqual(edited);
+      expect(await reopened.pointPosition(corner)).toEqual(edited);
     } finally {
       await reopened.close();
     }

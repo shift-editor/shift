@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import type { ContourFixture } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 const ROOT_3 = Math.sqrt(3);
 
@@ -42,10 +41,8 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 220, y: 160 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first])).toEqual({
-      [first]: near({ x: 300 - 50 * ROOT_3, y: 150 }),
-    });
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: 300, y: 100 } });
+    expect(await editor.pointPosition(first)).toBeNear({ x: 300 - 50 * ROOT_3, y: 150 });
+    expect(await editor.pointPosition(middle)).toEqual({ x: 300, y: 100 });
   });
 
   it("snaps an open contour's last line endpoint around its previous point", async () => {
@@ -53,10 +50,8 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 360, y: 180 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([last])).toEqual({
-      [last]: near({ x: 350, y: 100 + 50 * ROOT_3 }),
-    });
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: 300, y: 100 } });
+    expect(await editor.pointPosition(last)).toBeNear({ x: 350, y: 100 + 50 * ROOT_3 });
+    expect(await editor.pointPosition(middle)).toEqual({ x: 300, y: 100 });
   });
 
   it("snaps a two-line junction around itself", async () => {
@@ -64,11 +59,9 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 330, y: 140 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([middle])).toEqual({
-      [middle]: near({ x: 325, y: 100 + 25 * ROOT_3 }),
-    });
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 100, y: 100 } });
-    expect(await editor.pointPositions([last])).toEqual({ [last]: { x: 300, y: 300 } });
+    expect(await editor.pointPosition(middle)).toBeNear({ x: 325, y: 100 + 25 * ROOT_3 });
+    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 100 });
+    expect(await editor.pointPosition(last)).toEqual({ x: 300, y: 300 });
   });
 
   it("recognises both lines at a closed contour's first point", async () => {
@@ -76,9 +69,7 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 130, y: 140 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first])).toEqual({
-      [first]: near({ x: 125, y: 100 + 25 * ROOT_3 }),
-    });
+    expect(await editor.pointPosition(first)).toBeNear({ x: 125, y: 100 + 25 * ROOT_3 });
   });
 
   it("pivots on the next line point when a curve enters the dragged point", async () => {
@@ -86,10 +77,8 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 240, y: 220 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([middle])).toEqual({
-      [middle]: near({ x: 250, y: 300 - 50 * ROOT_3 }),
-    });
-    expect(await editor.pointPositions([last])).toEqual({ [last]: { x: 300, y: 300 } });
+    expect(await editor.pointPosition(middle)).toBeNear({ x: 250, y: 300 - 50 * ROOT_3 });
+    expect(await editor.pointPosition(last)).toEqual({ x: 300, y: 300 });
   });
 
   it("pivots on itself when an incoming line is followed by a curve", async () => {
@@ -97,9 +86,7 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 330, y: 140 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([middle])).toEqual({
-      [middle]: near({ x: 325, y: 100 + 25 * ROOT_3 }),
-    });
+    expect(await editor.pointPosition(middle)).toBeNear({ x: 325, y: 100 + 25 * ROOT_3 });
   });
 
   it("pivots on itself at the last point of an open curve", async () => {
@@ -107,9 +94,7 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 330, y: 340 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([last])).toEqual({
-      [last]: near({ x: 325, y: 300 + 25 * ROOT_3 }),
-    });
+    expect(await editor.pointPosition(last)).toBeNear({ x: 325, y: 300 + 25 * ROOT_3 });
   });
 
   it("leaves movement free without Shift", async () => {
@@ -117,7 +102,7 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 220, y: 160 });
 
-    expect(await editor.pointPositions([first])).toEqual({ [first]: { x: 220, y: 160 } });
+    expect(await editor.pointPosition(first)).toEqual({ x: 220, y: 160 });
   });
 
   it("does not snap a selection of several points", async () => {
@@ -181,10 +166,7 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
     await expectEdit(
       editor,
       (e) => e.dragFrom({ x: 100, y: 100 }, { x: 220, y: 160 }, { shiftKey: true }),
-      async (e) =>
-        expect(await e.pointPositions([first])).toEqual({
-          [first]: near({ x: 300 - 50 * ROOT_3, y: 150 }),
-        }),
+      async (e) => expect(await e.pointPosition(first)).toBeNear({ x: 300 - 50 * ROOT_3, y: 150 }),
     );
   });
 });

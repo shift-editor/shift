@@ -203,8 +203,8 @@ describe("dragging a curve bends it", () => {
   it("snaps each handle to the nearest 45° while Shift bends a flat curve", async () => {
     await editor.dragFrom(middle, { x: 150, y: 240 }, { shiftKey: true });
 
-    const handleOne = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
-    const handleTwo = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
+    const handleOne = Vec2.sub(await editor.pointPosition(one), { x: 100, y: 200 });
+    const handleTwo = Vec2.sub(await editor.pointPosition(two), { x: 200, y: 200 });
     expect(handleOne.x).toBeGreaterThan(0);
     expect(handleOne.y).toBeCloseTo(handleOne.x);
     expect(handleTwo.x).toBeLessThan(0);
@@ -229,15 +229,15 @@ describe("dragging a curve bends it", () => {
 
   it("keeps each handle's direction and changes only its length while Alt is held", async () => {
     await editor.dragFrom(middle, { x: 170, y: 240 });
-    const oneBefore = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
-    const twoBefore = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
+    const oneBefore = Vec2.sub(await editor.pointPosition(one), { x: 100, y: 200 });
+    const twoBefore = Vec2.sub(await editor.pointPosition(two), { x: 200, y: 200 });
     const [p0, p1, p2, p3] = (await editor.outline())[0]!.points;
     const bent = Curve.pointAt(Curve.cubic(p0!, p1!, p2!, p3!), 0.5);
 
     await editor.dragFrom(bent, { x: bent.x - 10, y: bent.y + 30 }, { altKey: true });
 
-    const oneAfter = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
-    const twoAfter = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
+    const oneAfter = Vec2.sub(await editor.pointPosition(one), { x: 100, y: 200 });
+    const twoAfter = Vec2.sub(await editor.pointPosition(two), { x: 200, y: 200 });
     expect(Vec2.cross(Vec2.unit(oneAfter), Vec2.unit(oneBefore))).toBeCloseTo(0);
     expect(Vec2.cross(Vec2.unit(twoAfter), Vec2.unit(twoBefore))).toBeCloseTo(0);
     expect(Vec2.dot(oneAfter, oneBefore)).toBeGreaterThan(0);

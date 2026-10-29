@@ -4,7 +4,6 @@ import type { PointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import { line } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import { near } from "@/testing/outlineMatchers";
 
 /** How far diagonally outside a selection corner the user presses to rotate, in screen pixels. */
 const ROTATE_GRAB_OFFSET_PX = 8;
@@ -35,8 +34,8 @@ describe("dragging just outside a selection corner rotates it", () => {
       (e) => e.dragFrom(grab, halfTurnEnd),
       async (e) =>
         expect(await e.pointPositions([first, second])).toEqual({
-          [first]: near({ x: 200, y: 100 }),
-          [second]: near({ x: 100, y: 200 }),
+          [first]: expect.toBeNear({ x: 200, y: 100 }),
+          [second]: expect.toBeNear({ x: 100, y: 200 }),
         }),
     );
   });
@@ -48,8 +47,8 @@ describe("dragging just outside a selection corner rotates it", () => {
     await editor.releaseAt(halfTurnEnd);
 
     expect(await editor.pointPositions([first, second])).toEqual({
-      [first]: near({ x: 200, y: 100 }),
-      [second]: near({ x: 100, y: 200 }),
+      [first]: expect.toBeNear({ x: 200, y: 100 }),
+      [second]: expect.toBeNear({ x: 100, y: 200 }),
     });
   });
 
@@ -65,7 +64,7 @@ describe("dragging just outside a selection corner rotates it", () => {
     editor.movePointerTo(to);
     const free = editor.shownPointPositions([first]);
     editor.movePointerTo(to, { shiftKey: true });
-    expect(editor.shownPointPositions([first])).toEqual({ [first]: near(snapped) });
+    expect(editor.shownPointPositions([first])).toEqual({ [first]: expect.toBeNear(snapped) });
     editor.movePointerTo(to);
     expect(editor.shownPointPositions([first])).toEqual(free);
     await editor.pressKey("Escape");
@@ -77,8 +76,8 @@ describe("dragging just outside a selection corner rotates it", () => {
     await editor.dragFrom(grab, halfTurnEnd);
 
     expect(await editor.pointPositions([first, second])).toEqual({
-      [first]: near({ x: 200, y: 100 }),
-      [second]: near({ x: 100, y: 200 }),
+      [first]: expect.toBeNear({ x: 200, y: 100 }),
+      [second]: expect.toBeNear({ x: 100, y: 200 }),
     });
   });
 
@@ -106,6 +105,6 @@ describe("dragging just outside a selection corner rotates it", () => {
     const [anchor] = await editor.anchors();
     expect(anchor?.x).toBeCloseTo(175);
     expect(anchor?.y).toBeCloseTo(125);
-    expect(await editor.pointPositions([first])).toEqual({ [first]: near({ x: 200, y: 100 }) });
+    expect(await editor.pointPosition(first)).toBeNear({ x: 200, y: 100 });
   });
 });
