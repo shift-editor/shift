@@ -458,11 +458,6 @@ export interface EditorTestSurface extends EditorReads {
    */
   drawnPoint(id: PointId): OutlinePoint | null;
   /**
-   * Where the canvas shows each point now, including a gesture not yet
-   * released, as {@link drawnOutline} draws them.
-   */
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D>;
-  /**
    * Where the faint pre-edit outline shows each point while a gesture is in
    * flight, or null when none is shown. Test-only: not agent data.
    */

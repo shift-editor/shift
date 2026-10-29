@@ -28,11 +28,9 @@ describe("dragging moves the selection", () => {
     await editor.dragFrom({ x: 125, y: 125 }, { x: 160, y: 150 });
 
     expect(editor.selectionIds()).toEqual([first, middle, last]);
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 135, y: 125 },
-      [middle]: { x: 185, y: 175 },
-      [last]: { x: 235, y: 225 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 135, y: 125 });
+    expect(await editor.point(middle)).toMatchObject({ x: 185, y: 175 });
+    expect(await editor.point(last)).toMatchObject({ x: 235, y: 225 });
   });
 
   it("moves the selection, not an unselected point dragged inside its bounds", async () => {
@@ -42,11 +40,9 @@ describe("dragging moves the selection", () => {
     await editor.dragFrom({ x: 150, y: 150 }, { x: 190, y: 180 });
 
     expect(editor.selectionIds()).toEqual([first, last]);
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 140, y: 130 },
-      [middle]: { x: 150, y: 150 },
-      [last]: { x: 240, y: 230 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 140, y: 130 });
+    expect(await editor.point(middle)).toMatchObject({ x: 150, y: 150 });
+    expect(await editor.point(last)).toMatchObject({ x: 240, y: 230 });
   });
 
   it("moves the selection when dragged from inside its bounding box", async () => {
@@ -55,10 +51,8 @@ describe("dragging moves the selection", () => {
 
     await editor.dragFrom({ x: 120, y: 180 }, { x: 150, y: 220 });
 
-    expect(await editor.pointPositions([first, last])).toEqual({
-      [first]: { x: 130, y: 140 },
-      [last]: { x: 230, y: 240 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 130, y: 140 });
+    expect(await editor.point(last)).toMatchObject({ x: 230, y: 240 });
   });
 
   it("selects and moves an anchor dragged directly", async () => {
@@ -81,10 +75,8 @@ describe("dragging moves the selection", () => {
 
     await editor.dragFrom({ x: 150, y: 150 }, { x: 180, y: 170 });
 
-    expect(await editor.pointPositions([first, middle])).toEqual({
-      [first]: { x: 130, y: 120 },
-      [middle]: { x: 180, y: 170 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 130, y: 120 });
+    expect(await editor.point(middle)).toMatchObject({ x: 180, y: 170 });
     expect(await editor.anchors()).toMatchObject([{ x: 330, y: 320 }]);
   });
 
@@ -97,11 +89,9 @@ describe("dragging moves the selection", () => {
 
     await editor.dragFrom({ x: 150, y: 150 }, { x: 180, y: 170 });
 
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 130, y: 120 },
-      [middle]: { x: 180, y: 170 },
-      [last]: { x: 230, y: 220 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 130, y: 120 });
+    expect(await editor.point(middle)).toMatchObject({ x: 180, y: 170 });
+    expect(await editor.point(last)).toMatchObject({ x: 230, y: 220 });
   });
 
   it("drags an unselected point from where the pointer went down, not where the drag began", async () => {
@@ -115,7 +105,7 @@ describe("dragging moves the selection", () => {
     await editor.releaseAt({ x: 210, y: 230 });
 
     expect(editor.selectionIds()).toEqual([lone]);
-    expect(await editor.pointPosition(lone)).toEqual({ x: 210, y: 230 });
+    expect(await editor.point(lone)).toMatchObject({ x: 210, y: 230 });
   });
 
   it("moves a curve's handle without its point", async () => {
@@ -132,10 +122,8 @@ describe("dragging moves the selection", () => {
 
     await editor.dragFrom({ x: 170, y: 100 }, { x: 230, y: 130 });
 
-    expect(await editor.pointPositions([corner, control])).toEqual({
-      [corner]: { x: 100, y: 100 },
-      [control]: { x: 230, y: 130 },
-    });
+    expect(await editor.point(corner)).toMatchObject({ x: 100, y: 100 });
+    expect(await editor.point(control)).toMatchObject({ x: 230, y: 130 });
   });
 
   it("moves a line by both of its points", async () => {
@@ -145,10 +133,8 @@ describe("dragging moves the selection", () => {
 
     await editor.dragFrom({ x: 140, y: 200 }, { x: 170, y: 220 });
 
-    expect(await editor.pointPositions([start, end])).toEqual({
-      [start]: { x: 130, y: 220 },
-      [end]: { x: 210, y: 220 },
-    });
+    expect(await editor.point(start)).toMatchObject({ x: 130, y: 220 });
+    expect(await editor.point(end)).toMatchObject({ x: 210, y: 220 });
   });
 
   it("moves both handles of a dragged smooth point", async () => {
@@ -183,10 +169,8 @@ describe("dragging moves the selection", () => {
     editor.movePointerTo(nudge);
     await editor.releaseAt(nudge);
 
-    expect(await editor.pointPositions([first, last])).toEqual({
-      [first]: { x: 100, y: 100 },
-      [last]: { x: 200, y: 200 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
+    expect(await editor.point(last)).toMatchObject({ x: 200, y: 200 });
   });
 });
 
@@ -197,15 +181,13 @@ describe("a drag in flight", () => {
     editor.select([first, middle, last]);
 
     editor.holdDrag(middle, { x: 40, y: 30 });
-    expect(editor.shownPointPositions([middle])).toEqual({ [middle]: { x: 190, y: 180 } });
+    expect(editor.drawnPoint(middle)).toMatchObject({ x: 190, y: 180 });
     await editor.pressKey("Escape");
 
     expect(await editor.outline()).toEqual(before);
-    expect(editor.shownPointPositions([first, middle, last])).toEqual({
-      [first]: { x: 100, y: 100 },
-      [middle]: { x: 150, y: 150 },
-      [last]: { x: 200, y: 200 },
-    });
+    expect(editor.drawnPoint(first)).toMatchObject({ x: 100, y: 100 });
+    expect(editor.drawnPoint(middle)).toMatchObject({ x: 150, y: 150 });
+    expect(editor.drawnPoint(last)).toMatchObject({ x: 200, y: 200 });
   });
 
   it("previews each sample from where the drag began", async () => {
@@ -221,7 +203,7 @@ describe("a drag in flight", () => {
     await editor.pressKey("Escape");
 
     expect(secondSample!.x - firstSample!.x).toBeCloseTo(10);
-    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 100 });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("commits the last move even when it is still queued at release", async () => {
@@ -235,7 +217,7 @@ describe("a drag in flight", () => {
     editor.queuePointerMove({ x: 150, y: 230 });
     await editor.releaseAt({ x: 150, y: 230 });
 
-    expect(await editor.pointPosition(lone)).toEqual({ x: 150, y: 230 });
+    expect(await editor.point(lone)).toMatchObject({ x: 150, y: 230 });
   });
 
   it("commits a drag whose only move crosses the threshold while still queued", async () => {
@@ -248,7 +230,7 @@ describe("a drag in flight", () => {
     editor.queuePointerMove({ x: 150, y: 230 });
     await editor.releaseAt({ x: 150, y: 230 });
 
-    expect(await editor.pointPosition(lone)).toEqual({ x: 150, y: 230 });
+    expect(await editor.point(lone)).toMatchObject({ x: 150, y: 230 });
   });
 });
 

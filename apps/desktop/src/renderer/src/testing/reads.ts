@@ -13,8 +13,6 @@
  *
  * This file imports types only, so `apps/desktop/e2e` can import it.
  */
-import type { Point2D } from "@shift/geo";
-import type { LocalPoint } from "@shift/editor/spaces";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -106,10 +104,6 @@ export interface EditorReads {
   anchors(): Promise<readonly GlyphAnchor[]>;
   /** The open glyph's components, in order. */
   components(): Promise<readonly GlyphComponent[]>;
-  /** Where each point is now, as the open glyph's authored layer stores it. */
-  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>>;
-  /** Where one point is now, in the open glyph's units; throws when the glyph has no point `id`. */
-  pointPosition(id: PointId): Promise<LocalPoint>;
   /** The open glyph's advance width. */
   advanceWidth(): Promise<number>;
   /** The kerning between two glyphs at every source, in font source order. */

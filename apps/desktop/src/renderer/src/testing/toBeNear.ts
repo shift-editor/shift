@@ -4,8 +4,8 @@
  * number.
  *
  * @example
- * expect(await editor.pointPosition(corner)).toBeNear({ x: 186.6, y: 150 });
- * expect(await editor.pointPositions([corner])).toEqual({ [corner]: expect.toBeNear({ x: 186.6, y: 150 }) });
+ * expect(await editor.point(corner)).toBeNear({ x: 186.6, y: 150 });
+ * expect(editor.drawnSnapGuides()).toMatchObject([{ to: expect.toBeNear({ x: 186.6, y: 150 }) }]);
  *
  * @remarks
  * One implementation for both drivers: vitest registers it in `setup.ts`, and

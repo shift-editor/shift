@@ -149,11 +149,11 @@ test("moves matched points in every selected source as one edit", async ({ page,
   await expect.poll(() => editingLayerMatchCount(page)).toBe(1);
 
   const drag = await editor.selectVisiblePoint();
-  const referenceBefore = await editor.pointPosition(drag.id);
+  const referenceBefore = (await editor.point(drag.id))!;
   const target = await matchedEditingPoint(page, drag.id);
 
   await editor.dragPoint(drag);
-  const referenceAfter = await editor.pointPosition(drag.id);
+  const referenceAfter = (await editor.point(drag.id))!;
   const targetAfter = await pointInSource(editor, source.name, target.pointId);
   expect(targetAfter).toEqual({
     x: target.position.x + referenceAfter.x - referenceBefore.x,
@@ -161,7 +161,7 @@ test("moves matched points in every selected source as one edit", async ({ page,
   });
 
   await editor.undo();
-  await expect.poll(() => editor.pointPosition(drag.id)).toEqual(referenceBefore);
+  await expect.poll(() => editor.point(drag.id)).toEqual(referenceBefore);
   await expect
     .poll(() => pointInSource(editor, source.name, target.pointId))
     .toEqual(target.position);

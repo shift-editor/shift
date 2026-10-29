@@ -34,11 +34,9 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 150, y: 100 }, { x: 210, y: 180 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 100, y: 200 },
-      [middle]: { x: 300, y: 200 },
-      [last]: { x: 300, y: 300 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 200 });
+    expect(await editor.point(middle)).toMatchObject({ x: 300, y: 200 });
+    expect(await editor.point(last)).toMatchObject({ x: 300, y: 300 });
   });
 
   it("moves several selected segments together without moving their shared point twice", async () => {
@@ -52,11 +50,9 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 260, y: 280 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 100, y: 200 },
-      [middle]: { x: 300, y: 200 },
-      [last]: { x: 300, y: 400 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 200 });
+    expect(await editor.point(middle)).toMatchObject({ x: 300, y: 200 });
+    expect(await editor.point(last)).toMatchObject({ x: 300, y: 400 });
   });
 
   it("moves the selected segments when dragging inside their combined bounds", async () => {
@@ -66,11 +62,9 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 280, y: 260 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 200, y: 100 },
-      [middle]: { x: 400, y: 100 },
-      [last]: { x: 400, y: 300 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 200, y: 100 });
+    expect(await editor.point(middle)).toMatchObject({ x: 400, y: 100 });
+    expect(await editor.point(last)).toMatchObject({ x: 400, y: 300 });
   });
 
   it("shows no guide for a horizontal or vertical segment move", async () => {
@@ -96,12 +90,10 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 260, y: 180 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first, controlStart, controlEnd, middle])).toEqual({
-      [first]: { x: 100, y: 200 },
-      [controlStart]: { x: 167, y: 200 },
-      [controlEnd]: { x: 233, y: 200 },
-      [middle]: { x: 300, y: 200 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 200 });
+    expect(await editor.point(controlStart)).toMatchObject({ x: 167, y: 200 });
+    expect(await editor.point(controlEnd)).toMatchObject({ x: 233, y: 200 });
+    expect(await editor.point(middle)).toMatchObject({ x: 300, y: 200 });
   });
 
   it("moves freely when a point is selected alongside the segment", async () => {
@@ -112,11 +104,9 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 260, y: 280 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 160, y: 180 },
-      [middle]: { x: 360, y: 180 },
-      [last]: { x: 360, y: 380 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 160, y: 180 });
+    expect(await editor.point(middle)).toMatchObject({ x: 360, y: 180 });
+    expect(await editor.point(last)).toMatchObject({ x: 360, y: 380 });
   });
 
   it("moves freely when an anchor is selected alongside the segment", async () => {
@@ -127,7 +117,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 260, y: 280 }, { shiftKey: true });
 
-    expect(await editor.pointPosition(first)).toEqual({ x: 160, y: 180 });
+    expect(await editor.point(first)).toMatchObject({ x: 160, y: 180 });
     expect(await editor.anchors()).toMatchObject([{ name: "top", x: 560, y: 580 }]);
   });
 
@@ -141,11 +131,9 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
     expect(editor.toolState()?.state).toBe("resizing");
     await editor.releaseAt({ x: 210, y: 180 });
 
-    expect(await editor.pointPositions([first, middle, last])).toEqual({
-      [first]: { x: 100, y: 180 },
-      [middle]: { x: 300, y: 180 },
-      [last]: { x: 300, y: 300 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 180 });
+    expect(await editor.point(middle)).toMatchObject({ x: 300, y: 180 });
+    expect(await editor.point(last)).toMatchObject({ x: 300, y: 300 });
   });
 
   it("resizes from a selection corner even where a selected segment ends on it", async () => {
@@ -158,7 +146,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
     expect(editor.toolState()?.state).toBe("resizing");
     await editor.pressKey("Escape");
 
-    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 100 });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("moves a segment freely without Shift", async () => {
@@ -166,10 +154,8 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     await editor.dragFrom({ x: 150, y: 100 }, { x: 210, y: 180 });
 
-    expect(await editor.pointPositions([first, middle])).toEqual({
-      [first]: { x: 160, y: 180 },
-      [middle]: { x: 360, y: 180 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 160, y: 180 });
+    expect(await editor.point(middle)).toMatchObject({ x: 360, y: 180 });
   });
 
   it("recomputes from where the drag began as Shift toggles, and Escape puts it back", async () => {
@@ -178,18 +164,16 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     editor.pressAt({ x: 150, y: 100 });
     editor.movePointerTo(to, { shiftKey: true });
-    expect(editor.shownPointPositions([first])).toEqual({ [first]: { x: 100, y: 200 } });
+    expect(editor.drawnPoint(first)).toMatchObject({ x: 100, y: 200 });
     editor.movePointerTo(to);
-    expect(editor.shownPointPositions([first])).toEqual({ [first]: { x: 160, y: 180 } });
+    expect(editor.drawnPoint(first)).toMatchObject({ x: 160, y: 180 });
     expect(editor.drawnSnapGuides()).toEqual([]);
     editor.movePointerTo(to, { shiftKey: true });
-    expect(editor.shownPointPositions([first])).toEqual({ [first]: { x: 100, y: 200 } });
+    expect(editor.drawnPoint(first)).toMatchObject({ x: 100, y: 200 });
     await editor.pressKey("Escape");
 
-    expect(await editor.pointPositions([first, middle])).toEqual({
-      [first]: { x: 100, y: 100 },
-      [middle]: { x: 300, y: 100 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
+    expect(await editor.point(middle)).toMatchObject({ x: 300, y: 100 });
   });
 
   it("commits the last Shift sample, even when still queued at release, as one edit", async () => {

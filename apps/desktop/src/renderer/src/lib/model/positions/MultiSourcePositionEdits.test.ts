@@ -65,6 +65,7 @@ describe("multi-source position edits", () => {
   });
 
   it("scales each source around its corresponding pivot and undoes both atomically", async () => {
+    const layer = editor.requireGlyphLayer();
     const targetOffset = targetLayer.positions.move(
       PositionTargets.points([targetFirstId, targetLastId]),
     );
@@ -79,18 +80,19 @@ describe("multi-source position edits", () => {
     });
     scale.preview({ x: 2, y: 1 });
 
-    expect(editor.layerPointPosition(firstId)).toEqual({ x: 50, y: 100 });
+    expect(layer.point(firstId)).toMatchObject({ x: 50, y: 100 });
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 150, y: 150 });
 
     scale.commit();
     await editor.settle();
     await editor.undo();
 
-    expect(editor.layerPointPosition(firstId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(firstId)).toMatchObject({ x: 100, y: 100 });
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 200, y: 150 });
   });
 
   it("rotates around corresponding pivots and discards every source preview", async () => {
+    const layer = editor.requireGlyphLayer();
     const targetOffset = targetLayer.positions.move(
       PositionTargets.points([targetFirstId, targetLastId]),
     );
@@ -105,14 +107,14 @@ describe("multi-source position edits", () => {
     });
     rotate.preview(Math.PI / 2);
 
-    const referencePreview = editor.layerPointPosition(firstId);
+    const referencePreview = layer.point(firstId)!;
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({
       x: referencePreview.x + 100,
       y: referencePreview.y + 50,
     });
 
     rotate.discard();
-    expect(editor.layerPointPosition(firstId)).toEqual({ x: 100, y: 100 });
+    expect(layer.point(firstId)).toMatchObject({ x: 100, y: 100 });
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 200, y: 150 });
   });
 

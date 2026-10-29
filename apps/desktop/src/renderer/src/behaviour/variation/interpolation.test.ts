@@ -103,15 +103,16 @@ describe("editing a variable glyph across sources", () => {
   });
   beforeEach(async () => {
     regular = editor.fontOverview().sources[0]!.name;
+    const bold = { source: { name: "Bold" } };
+    const right = [
+      await editor.point((await editor.pointAt({ x: 100, y: 0 }))!.id, bold),
+      await editor.point((await editor.pointAt({ x: 100, y: 100 }))!.id, bold),
+    ];
     await editor.setSourceMetric("Bold", "Ascender", 900);
     await editor.setSourceMetric("Bold", "x-Height", 600);
     await editor.editSources(["Bold"]);
     editor.setAdvanceWidth(500);
     await editor.settle();
-    const right = [
-      await editor.pointAt({ x: 100, y: 0 }),
-      await editor.pointAt({ x: 100, y: 100 }),
-    ];
     editor.select(right.map((point) => point!.id));
     await editor.dragPoint(right[0]!.id, { x: 100, y: 0 });
   });

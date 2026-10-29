@@ -487,15 +487,6 @@ export class EditorDriver implements EditorReads {
   }
 
   /**
-   * Returns a confirmed glyph-local position; throws when absent.
-   * @param pointId - Point in the active authored layer.
-   */
-  async pointPosition(pointId: PointId): Promise<LocalPoint> {
-    const { x, y } = (await this.pointPositions([pointId]))[pointId];
-    return { x, y } as LocalPoint;
-  }
-
-  /**
    * Returns the current preview position without waiting for persistence.
    * @param pointId - Point in the active authored layer.
    */
@@ -667,20 +658,6 @@ export class EditorDriver implements EditorReads {
 
   async components(): Promise<readonly AuthoredComponent[]> {
     return (await this.#openLayer()).components;
-  }
-
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, Point2D>> {
-    const outline = await this.outline();
-    const points = new Map(
-      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
-    );
-    return Object.fromEntries(
-      ids.map((id) => {
-        const point = points.get(id);
-        if (!point) throw new Error(`The open glyph has no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
-      }),
-    ) as Record<PointId, Point2D>;
   }
 
   async advanceWidth(): Promise<number> {

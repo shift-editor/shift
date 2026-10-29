@@ -113,15 +113,15 @@ describe("selection changes share the undo timeline with edits", () => {
   it("undoes selecting and moving an unselected point together", async () => {
     await editor.dragPoint(first, { x: 40, y: 30 });
     expect(editor.selectionIds()).toEqual([first]);
-    expect(await editor.pointPosition(first)).toEqual({ x: 140, y: 130 });
+    expect(await editor.point(first)).toMatchObject({ x: 140, y: 130 });
 
     await editor.undo();
     expect(editor.selectionIds()).toEqual([]);
-    expect(await editor.pointPosition(first)).toEqual({ x: 100, y: 100 });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
 
     await editor.redo();
     expect(editor.selectionIds()).toEqual([first]);
-    expect(await editor.pointPosition(first)).toEqual({ x: 140, y: 130 });
+    expect(await editor.point(first)).toMatchObject({ x: 140, y: 130 });
   });
 
   it("undoes a deletion together with the selection it cleared", async () => {

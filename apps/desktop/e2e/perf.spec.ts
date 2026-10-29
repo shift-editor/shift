@@ -245,15 +245,15 @@ test.describe("Performance — 50K points", () => {
     await editor.waitForIdle();
     await editor.waitForCanvasRender();
 
-    const before = await editor.pointPosition(pointIds[0]!);
+    const before = (await editor.point(pointIds[0]!))!;
     await page.evaluate((ids) => window.shift!.editor.selection.select(ids), pointIds);
     const singleStart = performance.now();
     await editor.press("ArrowRight");
     await editor.waitForCanvasRender();
     const singleMs = performance.now() - singleStart;
-    expect(await editor.pointPosition(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
+    expect(await editor.point(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
     await editor.undo();
-    expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
+    expect(await editor.point(pointIds[0]!)).toEqual(before);
 
     const axisId = await page.evaluate(() =>
       window.shift!.editor.font.createAxis({
@@ -315,10 +315,10 @@ test.describe("Performance — 50K points", () => {
     await editor.waitForCanvasRender();
     const multiMs = performance.now() - multiStart;
 
-    expect(await editor.pointPosition(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
+    expect(await editor.point(pointIds[0]!)).toMatchObject({ x: before.x + 1 });
     expect(await targetPosition()).toMatchObject({ x: targetBefore.x + 1 });
     await editor.undo();
-    expect(await editor.pointPosition(pointIds[0]!)).toEqual(before);
+    expect(await editor.point(pointIds[0]!)).toEqual(before);
     expect(await targetPosition()).toEqual(targetBefore);
     expect(singleMs).toBeLessThan(1_500);
     expect(multiMs).toBeLessThan(1_500);
@@ -480,8 +480,8 @@ test.describe("Performance — 50K points", () => {
       const grabbed = pointIds.at(-1)!;
       const other = pointIds[0]!;
       const before = {
-        grabbed: await editor.pointPosition(grabbed),
-        other: await editor.pointPosition(other),
+        grabbed: (await editor.point(grabbed))!,
+        other: (await editor.point(other))!,
       };
 
       const from = await editor.projectGlyphToPage(before.grabbed);
@@ -509,8 +509,8 @@ test.describe("Performance — 50K points", () => {
 
       await editor.pointerUp();
       const after = {
-        grabbed: await editor.pointPosition(grabbed),
-        other: await editor.pointPosition(other),
+        grabbed: (await editor.point(grabbed))!,
+        other: (await editor.point(other))!,
       };
       const delta = {
         x: after.grabbed.x - before.grabbed.x,
@@ -518,9 +518,12 @@ test.describe("Performance — 50K points", () => {
       };
       expect(delta.x, "the drag moved the grabbed point").toBeGreaterThan(0);
       // The whole selection moved by the grabbed point's delta.
-      expect(after.other).toEqual({ x: before.other.x + delta.x, y: before.other.y + delta.y });
+      expect(after.other).toMatchObject({
+        x: before.other.x + delta.x,
+        y: before.other.y + delta.y,
+      });
       await editor.undo();
-      expect(await editor.pointPosition(grabbed)).toEqual(before.grabbed);
+      expect(await editor.point(grabbed)).toEqual(before.grabbed);
 
       for (const stats of [
         computeStats(`drag work (${label})`, work),

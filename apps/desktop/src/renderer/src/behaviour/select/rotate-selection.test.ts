@@ -32,11 +32,10 @@ describe("dragging just outside a selection corner rotates it", () => {
     await expectEdit(
       editor,
       (e) => e.dragFrom(grab, halfTurnEnd),
-      async (e) =>
-        expect(await e.pointPositions([first, second])).toEqual({
-          [first]: expect.toBeNear({ x: 200, y: 100 }),
-          [second]: expect.toBeNear({ x: 100, y: 200 }),
-        }),
+      async (e) => {
+        expect(await e.point(first)).toBeNear({ x: 200, y: 100 });
+        expect(await e.point(second)).toBeNear({ x: 100, y: 200 });
+      },
     );
   });
 
@@ -46,10 +45,8 @@ describe("dragging just outside a selection corner rotates it", () => {
     editor.movePointerTo(halfTurnEnd);
     await editor.releaseAt(halfTurnEnd);
 
-    expect(await editor.pointPositions([first, second])).toEqual({
-      [first]: expect.toBeNear({ x: 200, y: 100 }),
-      [second]: expect.toBeNear({ x: 100, y: 200 }),
-    });
+    expect(await editor.point(first)).toBeNear({ x: 200, y: 100 });
+    expect(await editor.point(second)).toBeNear({ x: 100, y: 200 });
   });
 
   it("snaps to 15° steps on each sample Shift is held", async () => {
@@ -62,11 +59,11 @@ describe("dragging just outside a selection corner rotates it", () => {
 
     editor.pressAt(grab);
     editor.movePointerTo(to);
-    const free = editor.shownPointPositions([first]);
+    const free = editor.drawnPoint(first);
     editor.movePointerTo(to, { shiftKey: true });
-    expect(editor.shownPointPositions([first])).toEqual({ [first]: expect.toBeNear(snapped) });
+    expect(editor.drawnPoint(first)).toBeNear(snapped);
     editor.movePointerTo(to);
-    expect(editor.shownPointPositions([first])).toEqual(free);
+    expect(editor.drawnPoint(first)).toEqual(free);
     await editor.pressKey("Escape");
   });
 
@@ -75,23 +72,19 @@ describe("dragging just outside a selection corner rotates it", () => {
 
     await editor.dragFrom(grab, halfTurnEnd);
 
-    expect(await editor.pointPositions([first, second])).toEqual({
-      [first]: expect.toBeNear({ x: 200, y: 100 }),
-      [second]: expect.toBeNear({ x: 100, y: 200 }),
-    });
+    expect(await editor.point(first)).toBeNear({ x: 200, y: 100 });
+    expect(await editor.point(second)).toBeNear({ x: 100, y: 200 });
   });
 
   it("puts the points back when Escape cancels the rotation", async () => {
     editor.pressAt(grab);
     editor.movePointerTo({ x: grab.x + 4, y: grab.y + 4 });
     editor.movePointerTo({ x: 50, y: 250 });
-    expect(editor.shownPointPositions([first])).not.toEqual({ [first]: { x: 100, y: 100 } });
+    expect(editor.drawnPoint(first)).not.toMatchObject({ x: 100, y: 100 });
     await editor.pressKey("Escape");
 
-    expect(await editor.pointPositions([first, second])).toEqual({
-      [first]: { x: 100, y: 100 },
-      [second]: { x: 200, y: 200 },
-    });
+    expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
+    expect(await editor.point(second)).toMatchObject({ x: 200, y: 200 });
   });
 
   it("rotates selected points and anchors alike", async () => {
@@ -105,6 +98,6 @@ describe("dragging just outside a selection corner rotates it", () => {
     const [anchor] = await editor.anchors();
     expect(anchor?.x).toBeCloseTo(175);
     expect(anchor?.y).toBeCloseTo(125);
-    expect(await editor.pointPosition(first)).toBeNear({ x: 200, y: 100 });
+    expect(await editor.point(first)).toBeNear({ x: 200, y: 100 });
   });
 });

@@ -63,6 +63,7 @@ async function check(
     await expected(editor);
     return;
   }
-  const ids = Object.keys(expected) as PointId[];
-  expect(await editor.pointPositions(ids), `point positions ${when}`).toEqual(expected);
+  for (const [id, position] of Object.entries(expected)) {
+    expect(await editor.point(id as PointId), `point ${id} ${when}`).toMatchObject(position);
+  }
 }

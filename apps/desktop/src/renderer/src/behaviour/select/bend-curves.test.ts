@@ -181,7 +181,7 @@ describe("dragging a curve bends it", () => {
     editor.pressAt(middle);
     editor.movePointerTo({ x: 154, y: 200 });
     editor.movePointerTo({ x: 154, y: 240 });
-    expect(editor.shownPointPositions([one])).not.toEqual({ [one]: { x: 100 + 100 / 3, y: 200 } });
+    expect(editor.drawnPoint(one)).not.toMatchObject({ x: 100 + 100 / 3, y: 200 });
     await editor.pressKey("Escape");
 
     expect(editor.toolCursor()).toBe("default");
@@ -193,9 +193,8 @@ describe("dragging a curve bends it", () => {
       editor,
       (e) => e.dragFrom(middle, { x: 154, y: 240 }),
       async (e) => {
-        const shown = await e.pointPositions([one, two]);
-        expect(shown[one]!.y).toBeGreaterThan(200);
-        expect(shown[two]!.y).toBeGreaterThan(200);
+        expect((await e.point(one))!.y).toBeGreaterThan(200);
+        expect((await e.point(two))!.y).toBeGreaterThan(200);
       },
     );
   });
@@ -203,8 +202,8 @@ describe("dragging a curve bends it", () => {
   it("snaps each handle to the nearest 45° while Shift bends a flat curve", async () => {
     await editor.dragFrom(middle, { x: 150, y: 240 }, { shiftKey: true });
 
-    const handleOne = Vec2.sub(await editor.pointPosition(one), { x: 100, y: 200 });
-    const handleTwo = Vec2.sub(await editor.pointPosition(two), { x: 200, y: 200 });
+    const handleOne = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
+    const handleTwo = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
     expect(handleOne.x).toBeGreaterThan(0);
     expect(handleOne.y).toBeCloseTo(handleOne.x);
     expect(handleTwo.x).toBeLessThan(0);
@@ -229,15 +228,15 @@ describe("dragging a curve bends it", () => {
 
   it("keeps each handle's direction and changes only its length while Alt is held", async () => {
     await editor.dragFrom(middle, { x: 170, y: 240 });
-    const oneBefore = Vec2.sub(await editor.pointPosition(one), { x: 100, y: 200 });
-    const twoBefore = Vec2.sub(await editor.pointPosition(two), { x: 200, y: 200 });
+    const oneBefore = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
+    const twoBefore = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
     const [p0, p1, p2, p3] = (await editor.outline())[0]!.points;
     const bent = Curve.pointAt(Curve.cubic(p0!, p1!, p2!, p3!), 0.5);
 
     await editor.dragFrom(bent, { x: bent.x - 10, y: bent.y + 30 }, { altKey: true });
 
-    const oneAfter = Vec2.sub(await editor.pointPosition(one), { x: 100, y: 200 });
-    const twoAfter = Vec2.sub(await editor.pointPosition(two), { x: 200, y: 200 });
+    const oneAfter = Vec2.sub((await editor.point(one))!, { x: 100, y: 200 });
+    const twoAfter = Vec2.sub((await editor.point(two))!, { x: 200, y: 200 });
     expect(Vec2.cross(Vec2.unit(oneAfter), Vec2.unit(oneBefore))).toBeCloseTo(0);
     expect(Vec2.cross(Vec2.unit(twoAfter), Vec2.unit(twoBefore))).toBeCloseTo(0);
     expect(Vec2.dot(oneAfter, oneBefore)).toBeGreaterThan(0);
@@ -252,10 +251,8 @@ describe("Shift-bending a diagonal curve", () => {
 
     await editor.dragFrom({ x: 200, y: 200 }, { x: 260, y: 140 }, { shiftKey: true });
 
-    expect(await editor.pointPositions([one, two])).toEqual({
-      [one]: { x: 260, y: 100 },
-      [two]: { x: 300, y: 140 },
-    });
+    expect(await editor.point(one)).toMatchObject({ x: 260, y: 100 });
+    expect(await editor.point(two)).toMatchObject({ x: 300, y: 140 });
   });
 });
 
@@ -265,11 +262,10 @@ describe("dragging an unselected curve", () => {
 
     await editor.dragFrom({ x: 145, y: 215 }, { x: 149, y: 255 });
 
-    const moved = await editor.pointPositions([start, one, two, end]);
-    expect(moved[one]!.y).toBeGreaterThan(210);
-    expect(moved[two]!.y).toBeGreaterThan(220);
-    expect(moved[start]).toEqual({ x: 100, y: 200 });
-    expect(moved[end]).toEqual({ x: 190, y: 230 });
+    expect((await editor.point(one))!.y).toBeGreaterThan(210);
+    expect((await editor.point(two))!.y).toBeGreaterThan(220);
+    expect(await editor.point(start)).toMatchObject({ x: 100, y: 200 });
+    expect(await editor.point(end)).toMatchObject({ x: 190, y: 230 });
   });
 
   it("moves it whole once it is selected by a click", async () => {
@@ -278,11 +274,9 @@ describe("dragging an unselected curve", () => {
 
     await editor.dragFrom({ x: 145, y: 215 }, { x: 149, y: 255 });
 
-    expect(await editor.pointPositions([start, one, two, end])).toEqual({
-      [start]: { x: 104, y: 240 },
-      [one]: { x: 134, y: 250 },
-      [two]: { x: 164, y: 260 },
-      [end]: { x: 194, y: 270 },
-    });
+    expect(await editor.point(start)).toMatchObject({ x: 104, y: 240 });
+    expect(await editor.point(one)).toMatchObject({ x: 134, y: 250 });
+    expect(await editor.point(two)).toMatchObject({ x: 164, y: 260 });
+    expect(await editor.point(end)).toMatchObject({ x: 194, y: 270 });
   });
 });

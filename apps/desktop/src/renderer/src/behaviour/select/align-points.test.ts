@@ -38,11 +38,9 @@ describe("dragging points aligns them with points that stay put", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: 380 - near, y: 120 + near });
 
-    expect(await editor.pointPositions([left, middle, right])).toEqual({
-      [left]: { x: 100, y: 120 },
-      [middle]: { x: 380, y: 120 },
-      [right]: { x: 380, y: 160 },
-    });
+    expect(await editor.point(left)).toMatchObject({ x: 100, y: 120 });
+    expect(await editor.point(middle)).toMatchObject({ x: 380, y: 120 });
+    expect(await editor.point(right)).toMatchObject({ x: 380, y: 160 });
   });
 
   it("does not align beyond the hit distance", async () => {
@@ -51,7 +49,7 @@ describe("dragging points aligns them with points that stay put", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: farX, y: 300 });
 
-    expect(await editor.pointPosition(middle)).toEqual({ x: farX, y: 300 });
+    expect(await editor.point(middle)).toMatchObject({ x: farX, y: 300 });
   });
 
   it("lets a rectangle's top edge shift sideways off its own bottom corners", async () => {
@@ -72,10 +70,8 @@ describe("dragging points aligns them with points that stay put", () => {
 
     await editor.dragFrom({ x: 200, y: 300 }, { x: 200 + shift, y: 260 });
 
-    expect(await editor.pointPositions([topLeft, topRight])).toEqual({
-      [topLeft]: { x: 100 + shift, y: 260 },
-      [topRight]: { x: 300 + shift, y: 260 },
-    });
+    expect(await editor.point(topLeft)).toMatchObject({ x: 100 + shift, y: 260 });
+    expect(await editor.point(topRight)).toMatchObject({ x: 300 + shift, y: 260 });
   });
 });
 
@@ -106,7 +102,7 @@ describe("dragging points aligns only with points on screen", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: nearOffscreenX, y: 200 });
 
-    expect(await editor.pointPosition(middle)).toBeNear({ x: nearOffscreenX, y: 200 });
+    expect(await editor.point(middle)).toBeNear({ x: nearOffscreenX, y: 200 });
   });
 
   it("still aligns with a point in view", async () => {
@@ -114,6 +110,6 @@ describe("dragging points aligns only with points on screen", () => {
 
     await editor.dragFrom({ x: 240, y: 260 }, { x: nearLeftX, y: 200 });
 
-    expect(await editor.pointPosition(middle)).toEqual({ x: 100, y: expect.closeTo(200) });
+    expect(await editor.point(middle)).toMatchObject({ x: 100, y: expect.closeTo(200) });
   });
 });

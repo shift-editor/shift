@@ -97,6 +97,6 @@ describe("dropping an open end onto another open end joins them", () => {
     const [contour] = await editor.outline();
     expect(contour?.closed).toBe(false);
     expect(contour?.points).toHaveLength(3);
-    expect(await editor.pointPosition(end)).toEqual({ x: 300, y: 250 });
+    expect(await editor.point(end)).toMatchObject({ x: 300, y: 250 });
   });
 });

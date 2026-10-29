@@ -32,12 +32,11 @@ describe("Option slides a smooth point along its handles", () => {
     await expectEdit(
       editor,
       (e) => e.dragFrom({ x: 400, y: 100 }, { x: 450, y: 100 }, { altKey: true }),
-      async (e) =>
-        expect(await e.pointPositions([junction, incoming, outgoing])).toEqual({
-          [junction]: expect.toBeNear({ x: 425, y: 125 }),
-          [incoming]: expect.toBeNear({ x: 300, y: 0 }),
-          [outgoing]: expect.toBeNear({ x: 500, y: 200 }),
-        }),
+      async (e) => {
+        expect(await e.point(junction)).toBeNear({ x: 425, y: 125 });
+        expect(await e.point(incoming)).toBeNear({ x: 300, y: 0 });
+        expect(await e.point(outgoing)).toBeNear({ x: 500, y: 200 });
+      },
     );
   });
 
@@ -46,10 +45,8 @@ describe("Option slides a smooth point along its handles", () => {
 
     await editor.dragFrom({ x: 400, y: 100 }, { x: 450, y: 100 });
 
-    expect(await editor.pointPositions([junction, outgoing])).toEqual({
-      [junction]: expect.toBeNear({ x: 450, y: 100 }),
-      [outgoing]: expect.toBeNear({ x: 550, y: 200 }),
-    });
+    expect(await editor.point(junction)).toBeNear({ x: 450, y: 100 });
+    expect(await editor.point(outgoing)).toBeNear({ x: 550, y: 200 });
   });
 
   it("drags a handle along its own direction, changing only its length", async () => {
@@ -57,10 +54,8 @@ describe("Option slides a smooth point along its handles", () => {
 
     await editor.dragFrom({ x: 500, y: 200 }, { x: 550, y: 200 }, { altKey: true });
 
-    expect(await editor.pointPositions([outgoing, junction])).toEqual({
-      [outgoing]: expect.toBeNear({ x: 525, y: 225 }),
-      [junction]: expect.toBeNear({ x: 400, y: 100 }),
-    });
+    expect(await editor.point(outgoing)).toBeNear({ x: 525, y: 225 });
+    expect(await editor.point(junction)).toBeNear({ x: 400, y: 100 });
   });
 
   it("nudges a handle along its own direction", async () => {
@@ -69,10 +64,8 @@ describe("Option slides a smooth point along its handles", () => {
 
     await editor.pressKey("ArrowRight", { altKey: true, shiftKey: true });
 
-    expect(await editor.pointPositions([outgoing, junction])).toEqual({
-      [outgoing]: expect.toBeNear({ x: 505, y: 205 }),
-      [junction]: expect.toBeNear({ x: 400, y: 100 }),
-    });
+    expect(await editor.point(outgoing)).toBeNear({ x: 505, y: 205 });
+    expect(await editor.point(junction)).toBeNear({ x: 400, y: 100 });
   });
 
   it("nudges the point along the handle line without moving the handles", async () => {
@@ -81,11 +74,9 @@ describe("Option slides a smooth point along its handles", () => {
 
     await editor.pressKey("ArrowUp", { altKey: true, shiftKey: true });
 
-    expect(await editor.pointPositions([junction, incoming, outgoing])).toEqual({
-      [junction]: expect.toBeNear({ x: 405, y: 105 }),
-      [incoming]: expect.toBeNear({ x: 300, y: 0 }),
-      [outgoing]: expect.toBeNear({ x: 500, y: 200 }),
-    });
+    expect(await editor.point(junction)).toBeNear({ x: 405, y: 105 });
+    expect(await editor.point(incoming)).toBeNear({ x: 300, y: 0 });
+    expect(await editor.point(outgoing)).toBeNear({ x: 500, y: 200 });
   });
 });
 
@@ -97,7 +88,7 @@ describe("Option on a corner between two lines", () => {
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 350, y: 140 }, { altKey: true });
 
-    expect(await editor.pointPosition(corner)).toBeNear({ x: 350, y: 140 });
+    expect(await editor.point(corner)).toBeNear({ x: 350, y: 140 });
     expect(await editor.outline()).toHaveLength(1);
   });
 });
