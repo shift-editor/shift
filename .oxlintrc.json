@@ -74,6 +74,12 @@
         "shift/no-test-type-escapes": "off",
         "shift/no-wire-shapes-in-tests": "off"
       }
+    },
+    {
+      "files": ["**/renderer/src/behaviour/**/*.test.ts", "**/desktop/e2e/**/*.spec.ts"],
+      "rules": {
+        "shift/no-drill-into-reads": "error"
+      }
     }
   ]
 }
