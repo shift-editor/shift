@@ -34,11 +34,6 @@ export class SessionHooks {
     return this.#host.commands.run(command);
   }
 
-  /** The platform the host bridge reports to the page. */
-  hostPlatform(): string {
-    return this.#host.platform;
-  }
-
   /** Whether the authored workspace has published its loaded font; false without a workspace. */
   workspaceLoaded(): boolean {
     return this.#session.workspace?.font.loaded === true;

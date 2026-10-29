@@ -480,7 +480,8 @@ export async function appRuntime(app: ElectronApplication): Promise<{
 
 /** The platform the renderer's host bridge reports to the page. */
 export async function rendererHostPlatform(page: Page): Promise<string | undefined> {
-  return hooksOf(page).session.hostPlatform();
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads the preload bridge's platform, in windows (the launcher) with no font session to serve E2E hooks
+  return page.evaluate(() => window.shiftHost?.platform);
 }
 
 /**
