@@ -9,7 +9,7 @@ import { execFile, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
 import { promisify } from "node:util";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 import { EditorDriver } from "./EditorDriver";
 import { MAIN_JS, shiftTestEnvironment, waitForWorkspaceReady } from "./electronApp";
 
@@ -81,7 +81,7 @@ export async function launchSecondInstance(
 
 /** Creates the glyph named `name` in one transaction, so one undo removes it. */
 export async function createGlyphNamed(page: Page, name: string): Promise<void> {
-  await callHook(page, "session", "createGlyphInOneStep", name);
+  await hooksOf(page).session.createGlyphInOneStep(name);
 }
 
 /** Waits for a named glyph in the page's authored workspace and returns its identity. */
@@ -114,7 +114,7 @@ export async function runCommand(
 
 /** Runs `command` in `page`'s window as its menu item does, without focusing the window first. */
 export async function runWindowCommand(page: Page, command: CommandId): Promise<void> {
-  await callHook(page, "session", "runCommand", command);
+  await hooksOf(page).session.runCommand(command);
 }
 
 /** What the native application menu holds: its top-level menus, roles and chosen items. */
@@ -283,7 +283,7 @@ export async function startAppQuit(electronApp: ElectronApplication): Promise<vo
  * for tests that run without scripted dialogs.
  */
 export async function saveDocumentAs(page: Page, savePath: string): Promise<void> {
-  await callHook(page, "session", "saveDocumentAs", savePath);
+  await hooksOf(page).session.saveDocumentAs(savePath);
 }
 
 /**
@@ -335,5 +335,5 @@ export async function quitApp(
  * closure of the glyph, and the glyph's id.
  */
 export async function readFirstLayerThroughPreload(page: Page): Promise<PreloadLayerRead> {
-  return callHook(page, "session", "firstLayerThroughPreload");
+  return hooksOf(page).session.firstLayerThroughPreload();
 }

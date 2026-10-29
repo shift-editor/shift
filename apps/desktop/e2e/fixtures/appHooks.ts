@@ -1,21 +1,16 @@
 import { expect, type ElectronApplication, type Page } from "@playwright/test";
-import type {
-  AgentReaderName,
-  AgentReadArgs,
-  AgentReadMethod,
-  AgentReadResult,
-} from "@/agent/AgentReaders";
-import type { E2EHookArgs, E2EHookMethod, E2EHookName, E2EHookResult } from "@/testing/e2e/hooks";
-import type {} from "../../src/main/agent/e2eAgentReads";
+import type { AppReaders } from "@/agent/AppReaders";
+import type { E2EHooks } from "@/testing/e2e/hooks";
+import type {} from "../../src/main/agent/e2eHooks";
 
-// The one file where specs and fixtures reach into the running app: the E2E
-// hooks main publishes for test launches. `shiftAgentReads` calls the window's
-// agent readers, the ones agents read through MCP; `shiftE2EHooks` calls the
-// renderer's test hooks (`testing/e2e/`): setup actions, whose `draw` is the
-// builder `TestEditor` runs in-process, and probes of state agents do not read.
-// Both are typed from the app's own code, so a renamed method or a changed
-// signature fails typecheck here. `shift/no-page-evaluate-in-specs` exempts
-// this file and no other.
+// The one file where the test process reaches into the running app, through
+// the E2E hooks main publishes for test launches. `readsOf(page)` calls the
+// window's app readers, the read layer MCP agents read too; `hooksOf(page)`
+// calls the renderer's test hooks (`testing/e2e/`): the test surface's actions,
+// shared with `TestEditor`, and the few canvas and session facts no reader
+// serves. Both are typed from the app's own classes, so a call reads like a
+// method call and a renamed method fails typecheck. `shift/no-page-evaluate-in-specs`
+// exempts this file and no other.
 
 const apps = new WeakMap<Page, ElectronApplication>();
 const registered = new WeakSet<ElectronApplication>();
@@ -50,54 +45,81 @@ async function connectedWindowId(page: Page): Promise<number> {
   // A window that just opened or reloaded answers once its renderer connects the agent lane.
   await expect
     .poll(() =>
-      app.evaluate((_electron, id) => globalThis.shiftAgentReads?.connected(id) ?? false, id),
+      app.evaluate((_electron, id) => globalThis.shiftAppReads?.connected(id) ?? false, id),
     )
     .toBe(true);
   return id;
 }
 
 /**
- * Calls `reader`'s `method` in `page`'s window once its pending edits settle.
- *
- * @throws {Error} when the app was not launched for E2E, or the read fails in the renderer.
+ * `T`'s objects as seen from the test process: each method takes the same arguments and
+ * resolves to what it returns, once the call has run in the window.
  */
-export async function readAgent<R extends AgentReaderName, M extends AgentReadMethod<R>>(
-  page: Page,
-  reader: R,
-  method: M,
-  args: AgentReadArgs<R, M>,
-): Promise<AgentReadResult<R, M>> {
-  const windowId = await connectedWindowId(page);
-  const call = { windowId, reader, method: String(method), args };
-  const value = await appFor(page).evaluate(
-    async (_electron, { windowId, reader, method, args }) => {
-      const reads = globalThis.shiftAgentReads;
-      if (!reads) throw new Error("The app has no E2E agent reads; is NODE_ENV test?");
-      return reads.read(windowId, reader, method, args);
-    },
-    call,
+export type Remote<T> = {
+  readonly [K in keyof T]: {
+    readonly [M in keyof T[K] as T[K][M] extends (...args: never[]) => unknown
+      ? M
+      : never]: T[K][M] extends (...args: infer A) => infer R
+      ? (...args: A) => Promise<Awaited<R>>
+      : never;
+  };
+};
+
+/**
+ * The app's readers (`agent/AppReaders.ts`) in `page`'s window: the read layer MCP agents read
+ * too. Each read runs once the window's pending edits settle.
+ *
+ * @throws {Error} on a call, when the app was not launched for E2E or the read fails in the renderer.
+ */
+export function readsOf(page: Page): Remote<AppReaders> {
+  return remote(page, async (windowId, reader, method, args) =>
+    appFor(page).evaluate(
+      async (_electron, call) => {
+        const reads = globalThis.shiftAppReads;
+        if (!reads) throw new Error("The app has no E2E reads; is NODE_ENV test?");
+        return reads.read(call.windowId, call.reader, call.method, call.args);
+      },
+      { windowId, reader, method, args },
+    ),
   );
-  return value as AgentReadResult<R, M>;
 }
 
 /**
- * Calls `hook`'s `method` (`testing/e2e/hooks.ts`) in `page`'s window. Setup actions wait until
- * the workspace confirms their edits; probes answer at once.
+ * The renderer's E2E hooks (`testing/e2e/hooks.ts`) in `page`'s window. Actions answer once the
+ * workspace confirms their edits; the rest answer at once.
  *
- * @throws {Error} when the app was not launched for E2E, or the call fails in the renderer.
+ * @throws {Error} on a call, when the app was not launched for E2E or the call fails in the renderer.
  */
-export async function callHook<H extends E2EHookName, M extends E2EHookMethod<H>>(
+export function hooksOf(page: Page): Remote<E2EHooks> {
+  return remote(page, async (windowId, hook, method, args) =>
+    appFor(page).evaluate(
+      async (_electron, call) => {
+        const hooks = globalThis.shiftE2EHooks;
+        if (!hooks) throw new Error("The app has no E2E hooks; is NODE_ENV test?");
+        return hooks.call(call.windowId, call.hook, call.method, call.args);
+      },
+      { windowId, hook, method, args },
+    ),
+  );
+}
+
+/** Turns `object.method(...args)` into `send(windowId, object, method, args)` for `page`'s window. */
+function remote<T>(
   page: Page,
-  hook: H,
-  method: M,
-  ...args: E2EHookArgs<H, M>
-): Promise<E2EHookResult<H, M>> {
-  const windowId = await connectedWindowId(page);
-  const call = { windowId, hook, method: String(method), args };
-  const value = await appFor(page).evaluate(async (_electron, { windowId, hook, method, args }) => {
-    const hooks = globalThis.shiftE2EHooks;
-    if (!hooks) throw new Error("The app has no E2E hooks; is NODE_ENV test?");
-    return hooks.call(windowId, hook, method, args);
-  }, call);
-  return value as E2EHookResult<H, M>;
+  send: (windowId: number, object: string, method: string, args: unknown[]) => Promise<unknown>,
+): Remote<T> {
+  return new Proxy({} as Remote<T>, {
+    get: (_target, object) =>
+      new Proxy(
+        {},
+        {
+          // Answer `then` with nothing, so awaiting a reader by mistake does not send a call.
+          get: (_methods, method) =>
+            method === "then"
+              ? undefined
+              : async (...args: unknown[]) =>
+                  send(await connectedWindowId(page), String(object), String(method), args),
+        },
+      ),
+  });
 }

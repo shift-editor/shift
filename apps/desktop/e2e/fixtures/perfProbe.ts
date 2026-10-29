@@ -18,8 +18,9 @@
  */
 import type { Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
+import type { PointId } from "@shift/types";
 import type { generateContourData } from "./perfApp";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 
 export interface FrameSample {
   work: number;
@@ -160,7 +161,7 @@ export async function timeContourInsertion(
   page: Page,
   contours: PerfContours,
 ): Promise<{ count: number; lastId: string | undefined; ms: number }> {
-  return callHook(page, "perf", "timeContourInsertion", contours);
+  return hooksOf(page).perf.timeContourInsertion(contours);
 }
 
 /**
@@ -178,7 +179,7 @@ export async function measurePositionPatch(
     warmup: number;
   },
 ): Promise<Samples> {
-  return callHook(page, "perf", "measurePositionPatch", options);
+  return hooksOf(page).perf.measurePositionPatch(options);
 }
 
 /**
@@ -189,7 +190,7 @@ export async function measureNudge(
   page: Page,
   options: { contours: PerfContours; frames: number; warmup: number },
 ): Promise<Samples> {
-  return callHook(page, "perf", "measureNudge", options);
+  return hooksOf(page).perf.measureNudge(options);
 }
 
 /**
@@ -200,7 +201,7 @@ export async function measureUndoRedo(
   page: Page,
   options: { contours: PerfContours; sampleCount: number },
 ): Promise<{ undo: Samples; redo: Samples }> {
-  return callHook(page, "perf", "measureUndoRedo", options);
+  return hooksOf(page).perf.measureUndoRedo(options);
 }
 
 /**
@@ -211,5 +212,18 @@ export async function measurePanZoom(
   page: Page,
   options: { contours: PerfContours; frames: number },
 ): Promise<{ pan: Samples; zoom: Samples }> {
-  return callHook(page, "perf", "measurePanZoom", options);
+  return hooksOf(page).perf.measurePanZoom(options);
+}
+
+/**
+ * Moves the points matched to `ids` in each other source being edited by a different offset per
+ * source, so the sources disagree before a multi-source benchmark; throws unless exactly
+ * `expectedSources` other layers match every point.
+ */
+export async function offsetMatchedSourcePoints(
+  page: Page,
+  ids: readonly PointId[],
+  expectedSources: number,
+): Promise<void> {
+  await hooksOf(page).perf.offsetMatchedSourcePoints(ids, expectedSources);
 }

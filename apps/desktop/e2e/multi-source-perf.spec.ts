@@ -1,8 +1,8 @@
 import type { Page } from "@playwright/test";
 import type { PointId } from "@shift/types";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { callHook } from "./fixtures/appHooks";
 import { test, expect, drawBenchmarkGlyph, computeStats } from "./fixtures/perfApp";
+import { offsetMatchedSourcePoints } from "./fixtures/perfProbe";
 import { localPoint } from "@shift/editor/spaces";
 
 const GLYPH_POINTS = 50_000;
@@ -39,7 +39,7 @@ async function prepareFourSourceGlyph(
   await editor.editSources([reference, ...sources.map(([name]) => name)]);
   await editor.waitForIdle();
 
-  await callHook(page, "perf", "offsetMatchedSourcePoints", selectedPointIds, 3);
+  await offsetMatchedSourcePoints(page, selectedPointIds, 3);
   await editor.selectObjects(selectedPointIds);
   await editor.zoomToFit();
   await editor.waitForCanvasRender();

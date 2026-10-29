@@ -2,14 +2,14 @@ import type { LocalPoint } from "@shift/editor/spaces";
 import type { Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
 import type { SegmentId, TextItemId } from "@shift/types";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 
 /**
  * A page position where the canvas hit-tests the selected component, searched on a grid
  * inside its bounds; throws when no component is selected or none of the grid hits it.
  */
 export async function selectedComponentHitPoint(page: Page): Promise<Point2D> {
-  return callHook(page, "interactions", "selectedComponentHitPoint");
+  return hooksOf(page).interactions.selectedComponentHitPoint();
 }
 
 /**
@@ -18,7 +18,7 @@ export async function selectedComponentHitPoint(page: Page): Promise<Point2D> {
  * canvas 15px below the glyph's descender at half its advance.
  */
 export async function glyphClickTargets(page: Page): Promise<Point2D[]> {
-  return callHook(page, "interactions", "glyphClickTargets");
+  return hooksOf(page).interactions.glyphClickTargets();
 }
 
 /**
@@ -31,7 +31,7 @@ export async function glyphClickTargets(page: Page): Promise<Point2D[]> {
 export async function wheelZoomThenPan(
   page: Page,
 ): Promise<{ zoomPan: Point2D; momentumPan: Point2D; zoomedAt: number }> {
-  return callHook(page, "interactions", "wheelZoomThenPan");
+  return hooksOf(page).interactions.wheelZoomThenPan();
 }
 
 /** Waits until the page clock (`performance.now()`) is more than `ms` past `since`. */
@@ -45,22 +45,22 @@ export async function waitForPageClock(page: Page, since: number, ms: number): P
 
 /** Pans the canvas to `offset`, in screen pixels, as the Hand tool does. */
 export async function setCanvasOffset(page: Page, offset: Point2D): Promise<void> {
-  await callHook(page, "interactions", "setPan", offset);
+  await hooksOf(page).interactions.setPan(offset);
 }
 
 /** Clears the selection without a key or pointer event, as an undo or agent edit can. */
 export async function clearSelection(page: Page): Promise<void> {
-  await callHook(page, "interactions", "clearSelection");
+  await hooksOf(page).interactions.clearSelection();
 }
 
 /** Whether the editor tracks a pointer over the canvas (or one it has captured). */
 export async function hasCanvasPointer(page: Page): Promise<boolean> {
-  return callHook(page, "interactions", "hasCanvasPointer");
+  return hooksOf(page).interactions.hasCanvasPointer();
 }
 
 /** The kind of the first selected object (`point`, `segment`, `contour`, …), or null. */
 export async function selectedObjectKind(page: Page): Promise<string | null | undefined> {
-  return callHook(page, "interactions", "selectedObjectKind");
+  return hooksOf(page).interactions.selectedObjectKind();
 }
 
 /**
@@ -74,7 +74,7 @@ export async function liveShapeDraft(page: Page): Promise<{
   points: number;
   handles: boolean;
 }> {
-  return callHook(page, "interactions", "liveShapeDraft");
+  return hooksOf(page).interactions.liveShapeDraft();
 }
 
 /**
@@ -88,12 +88,12 @@ export async function canvasTextReadiness(page: Page): Promise<{
   caretAtEnd: boolean;
   glyphsLoaded: boolean;
 } | null> {
-  return callHook(page, "interactions", "canvasTextReadiness");
+  return hooksOf(page).interactions.canvasTextReadiness();
 }
 
 /** The canvas-local position of the middle of the open glyph's first segment. */
 export async function firstSegmentMidpoint(page: Page): Promise<Point2D> {
-  return callHook(page, "interactions", "firstSegmentMidpoint");
+  return hooksOf(page).interactions.firstSegmentMidpoint();
 }
 
 /**
@@ -107,7 +107,7 @@ export async function lineSegmentUpgrade(page: Page): Promise<{
   sceneControls: Point2D[];
   hover: Point2D;
 }> {
-  return callHook(page, "interactions", "lineSegmentUpgrade");
+  return hooksOf(page).interactions.lineSegmentUpgrade();
 }
 
 /**
@@ -115,12 +115,12 @@ export async function lineSegmentUpgrade(page: Page): Promise<{
  * rendered.
  */
 export async function upgradePreviewHandles(page: Page): Promise<unknown> {
-  return callHook(page, "interactions", "upgradePreviewHandles");
+  return hooksOf(page).interactions.upgradePreviewHandles();
 }
 
 /** The two control points of the cubic segment `segmentId`; throws when it is not a cubic. */
 export async function cubicSegmentControls(page: Page, segmentId: SegmentId): Promise<Point2D[]> {
-  return callHook(page, "interactions", "cubicSegmentControls", segmentId);
+  return hooksOf(page).interactions.cubicSegmentControls(segmentId);
 }
 
 /**
@@ -129,7 +129,7 @@ export async function cubicSegmentControls(page: Page, segmentId: SegmentId): Pr
  * and right edges and one 2px inside the left edge.
  */
 export async function insertEdgeOverlappingContour(page: Page): Promise<void> {
-  await callHook(page, "interactions", "insertEdgeOverlappingContour");
+  await hooksOf(page).interactions.insertEdgeOverlappingContour();
 }
 
 /**
@@ -142,27 +142,22 @@ export async function spacingHalfCanvasPoint(
   side: "left" | "right",
   height: number,
 ): Promise<Point2D> {
-  return callHook(page, "interactions", "spacingHalfCanvasPoint", gapIndex, side, height);
+  return hooksOf(page).interactions.spacingHalfCanvasPoint(gapIndex, side, height);
 }
 
 /** The edited glyph's right sidebearing at the active source, in whole units; null without one. */
 export async function activeRightSidebearing(page: Page): Promise<number | null> {
-  return callHook(page, "interactions", "activeRightSidebearing");
+  return hooksOf(page).interactions.activeRightSidebearing();
 }
-
-
-
-
-
 
 /** How many points the open glyph draws at the editor's location, interpolated between sources. */
 export async function drawnPointCount(page: Page): Promise<number> {
-  return callHook(page, "interactions", "drawnPointCount");
+  return hooksOf(page).interactions.drawnPointCount();
 }
 
 /** How many components the open glyph draws at the editor's location, interpolated between sources. */
 export async function drawnComponentCount(page: Page): Promise<number> {
-  return callHook(page, "interactions", "drawnComponentCount");
+  return hooksOf(page).interactions.drawnComponentCount();
 }
 
 /**
@@ -180,12 +175,8 @@ export async function drawnAndAuthoredComponents(
   renderedTransforms: number[][];
   exactTransforms: number[][];
 }> {
-  return callHook(page, "interactions", "drawnAndAuthoredComponents", glyphName, sourceName);
+  return hooksOf(page).interactions.drawnAndAuthoredComponents(glyphName, sourceName);
 }
-
-
-
-
 
 /**
  * Canvas-local positions over the canvas text run's glyphs 2 to 40 that hit-test as text and lie
@@ -195,12 +186,12 @@ export async function textRunHoverTargets(
   page: Page,
   size: { width: number; height: number },
 ): Promise<{ itemId: TextItemId; position: Point2D }[]> {
-  return callHook(page, "interactions", "textRunHoverTargets", size);
+  return hooksOf(page).interactions.textRunHoverTargets(size);
 }
 
 /** How many items the canvas text run has once every glyph it lays out is loaded; null before. */
 export async function loadedTextRunLength(page: Page): Promise<number | null> {
-  return callHook(page, "interactions", "loadedTextRunLength");
+  return hooksOf(page).interactions.loadedTextRunLength();
 }
 
 /**
@@ -208,5 +199,5 @@ export async function loadedTextRunLength(page: Page): Promise<number | null> {
  * uncommitted preview included, without waiting for edits to settle.
  */
 export async function liveUTopAnchor(page: Page): Promise<LocalPoint> {
-  return callHook(page, "interactions", "liveUTopAnchor");
+  return hooksOf(page).interactions.liveUTopAnchor();
 }

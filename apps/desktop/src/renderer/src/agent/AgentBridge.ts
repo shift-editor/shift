@@ -9,7 +9,7 @@ import {
 } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
 import type { E2EHooks } from "@/testing/e2e/hooks";
-import type { AgentReaders } from "./AgentReaders";
+import type { AppReaders } from "./AppReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
 import { ShiftKerningReader } from "./ShiftKerningReader";
@@ -21,7 +21,7 @@ export class AgentBridge {
   readonly #reader: ShiftFontReader;
   readonly #kerning: ShiftKerningReader;
   readonly #editor: ShiftEditorReader;
-  readonly #readers: AgentReaders;
+  readonly #readers: AppReaders;
   readonly #revisionNamespace = crypto.randomUUID();
   #requests: ChannelServer<AgentEventMap> | null = null;
   #e2eHooks: E2EHooks | null = null;
@@ -137,7 +137,7 @@ export class AgentBridge {
   /** @throws {Error} for a reader or method the window does not serve. */
   #read(reader: string, method: string, args: unknown[]): unknown {
     const target: object | undefined = Object.hasOwn(this.#readers, reader)
-      ? this.#readers[reader as keyof AgentReaders]
+      ? this.#readers[reader as keyof AppReaders]
       : undefined;
     const read: unknown =
       target && method !== "constructor"

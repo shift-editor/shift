@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 
 // What a preview session keeps in memory, for specs that check a preview stays light: it opens
 // no authored workspace and loads no glyph models until one is opened. Agents never see these.
@@ -9,7 +9,7 @@ import { callHook } from "./appHooks";
 export async function previewLoadState(
   page: Page,
 ): Promise<{ authoredWorkspace: boolean; loadedGlyphCount: number }> {
-  return callHook(page, "session", "previewLoadState");
+  return hooksOf(page).session.previewLoadState();
 }
 
 /** Whether the preview font lists `glyphId`, has an authored record for it, and how many layers its model has. */
@@ -17,7 +17,7 @@ export async function previewGlyphState(
   page: Page,
   glyphId: GlyphId,
 ): Promise<{ hasEntry: boolean; hasAuthoredRecord: boolean; layerCount: number }> {
-  return callHook(page, "session", "previewGlyphState", glyphId);
+  return hooksOf(page).session.previewGlyphState(glyphId);
 }
 
 /**
@@ -25,5 +25,5 @@ export async function previewGlyphState(
  * load or rebuild a glyph model fails instead of quietly reading the source again.
  */
 export async function rejectGlyphAcquisition(page: Page): Promise<void> {
-  await callHook(page, "session", "rejectGlyphAcquisition");
+  await hooksOf(page).session.rejectGlyphAcquisition();
 }

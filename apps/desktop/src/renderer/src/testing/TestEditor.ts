@@ -172,7 +172,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   /** Temporary directories this editor's document was saved into, removed on {@link close}. */
   readonly #temporaryDirectories: string[] = [];
   /**
-   * The agent readers MCP serves, over this editor: every surface read goes
+   * the app readers (the read layer MCP serves too), over this editor: every surface read goes
    * through them, so a test sees what an agent sees.
    */
   readonly #reads: {

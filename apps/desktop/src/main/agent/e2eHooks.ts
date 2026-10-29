@@ -1,16 +1,16 @@
 import type { AgentClient } from "./AgentClient";
 
 /**
- * Direct reads of one window's agent readers, for the Playwright `EditorDriver`.
+ * Direct reads of one window's app readers (`AppReaders`), for the Playwright `EditorDriver`.
  *
  * @remarks
- * Published on `globalThis.shiftAgentReads` only for E2E launches
- * (`NODE_ENV=test`), so tests read what agents read without the local MCP
- * server: no agent connection, no script runtime. A call reaches the window's
+ * Published on `globalThis.shiftAppReads` only for E2E launches
+ * (`NODE_ENV=test`), so tests read through the same read layer MCP agents use,
+ * without the local MCP server: no agent connection, no script runtime. A call reaches the window's
  * `AgentClient`, and the renderer's `AgentBridge` answers it from the reader
  * named `reader` once pending edits settle.
  */
-export interface E2EAgentReads {
+export interface E2EAppReads {
   /**
    * Calls `reader`'s `method` with `args` in window `windowId`'s renderer.
    *
@@ -33,7 +33,7 @@ export interface E2EAgentReads {
  *
  * @remarks
  * Published on `globalThis.shiftE2EHooks` only for E2E launches, with
- * {@link E2EAgentReads}. Actions settle before they resolve.
+ * {@link E2EAppReads}. Actions settle before they resolve.
  */
 export interface E2EHooksBridge {
   /**
@@ -46,12 +46,12 @@ export interface E2EHooksBridge {
 }
 
 declare global {
-  var shiftAgentReads: E2EAgentReads | undefined;
+  var shiftAppReads: E2EAppReads | undefined;
   var shiftE2EHooks: E2EHooksBridge | undefined;
 }
 
 /**
- * Publishes {@link E2EAgentReads} and {@link E2EHooksBridge} when this is an E2E
+ * Publishes {@link E2EAppReads} and {@link E2EHooksBridge} when this is an E2E
  * launch; does nothing otherwise.
  *
  * @param agentFor - The agent lane of window `windowId`; throws for a window without a font session.
@@ -59,7 +59,7 @@ declare global {
 export function publishE2EHooks(agentFor: (windowId: number) => AgentClient): void {
   if (process.env.NODE_ENV !== "test") return;
 
-  globalThis.shiftAgentReads = {
+  globalThis.shiftAppReads = {
     read: (windowId, reader, method, args) => agentFor(windowId).read(reader, method, args),
     connected: (windowId) => {
       try {

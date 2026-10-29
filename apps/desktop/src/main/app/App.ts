@@ -51,7 +51,7 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
-import { publishE2EHooks } from "../agent/e2eAgentReads";
+import { publishE2EHooks } from "../agent/e2eHooks";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
 import { NO_DEBUG_OVERLAYS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";

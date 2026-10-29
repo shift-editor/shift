@@ -23,7 +23,7 @@ import {
 } from "@/testing/fonts";
 import { EditorDriver } from "./EditorDriver";
 import { ElectronProcesses, killApp } from "./electronProcesses";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";
 export { killApp, MAIN_JS } from "./electronProcesses";
@@ -440,12 +440,12 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
   }
   const page = windows[0]!;
   // config.toml and themes/ outlive a reload, so a theme from one test would leak into the next.
-  const { directory } = await callHook(page, "session", "configState");
+  const { directory } = await hooksOf(page).session.configState();
   fs.rmSync(path.join(directory, "config.toml"), { force: true });
   fs.rmSync(path.join(directory, "themes"), { recursive: true, force: true });
   await expect
     .poll(async () => {
-      const state = await callHook(page, "session", "configState");
+      const state = await hooksOf(page).session.configState();
       return state.exists || state.themes.length > 0;
     })
     .toBe(false);
@@ -491,7 +491,7 @@ export async function appRuntime(app: ElectronApplication): Promise<{
 
 /** The platform the renderer's host bridge reports to the page. */
 export async function rendererHostPlatform(page: Page): Promise<string | undefined> {
-  return callHook(page, "session", "hostPlatform");
+  return hooksOf(page).session.hostPlatform();
 }
 
 /**
@@ -501,9 +501,7 @@ export async function rendererHostPlatform(page: Page): Promise<string | undefin
  */
 export async function waitForWorkspaceReady(page: Page): Promise<void> {
   await page.waitForURL(/#\/home/, { timeout: 20_000 });
-  await expect
-    .poll(() => callHook(page, "session", "workspaceLoaded"), { timeout: 20_000 })
-    .toBe(true);
+  await expect.poll(() => hooksOf(page).session.workspaceLoaded(), { timeout: 20_000 }).toBe(true);
   await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
 }
 

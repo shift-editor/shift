@@ -6,7 +6,7 @@ import type { Font } from "@shift/editor/model";
  * Resolves the runtime's glyph, source and layer selectors against one font.
  *
  * @remarks
- * Every agent reader resolves selectors here, so a name means the same glyph
+ * Every app reader resolves selectors here, so a name means the same glyph
  * or source in every read, and an unknown one fails with the same error.
  */
 export class ShiftSelectors {

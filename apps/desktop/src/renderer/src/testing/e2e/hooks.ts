@@ -35,25 +35,3 @@ export function createE2EHooks(session: FontSession, host: ShiftHost): E2EHooks 
     perf: new PerfProbes(session.editor),
   };
 }
-
-export type E2EHookName = keyof E2EHooks;
-
-/** The methods of the hook named `H`. */
-export type E2EHookMethod<H extends E2EHookName> = {
-  [M in keyof E2EHooks[H]]: E2EHooks[H][M] extends (...args: never[]) => unknown ? M : never;
-}[keyof E2EHooks[H]];
-
-type HookFunction<H extends E2EHookName, M extends E2EHookMethod<H>> = Extract<
-  E2EHooks[H][M],
-  (...args: never[]) => unknown
->;
-
-/** The arguments `hook.method` takes. */
-export type E2EHookArgs<H extends E2EHookName, M extends E2EHookMethod<H>> = Parameters<
-  HookFunction<H, M>
->;
-
-/** What `hook.method` returns, awaited. */
-export type E2EHookResult<H extends E2EHookName, M extends E2EHookMethod<H>> = Awaited<
-  ReturnType<HookFunction<H, M>>
->;

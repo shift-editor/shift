@@ -1,17 +1,17 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 
 // Theme setup and checks for the Appearance specs. Writing the theme goes through the host's
 // config API, the one Settings › Appearance calls.
 
 /** Selects the theme `themeId` in config.toml, as Settings › Appearance does. */
 export async function setTheme(page: Page, themeId: string): Promise<void> {
-  await callHook(page, "session", "setTheme", themeId);
+  await hooksOf(page).session.setTheme(themeId);
 }
 
 /** The directory this build's config.toml lives in, in the test's isolated user data. */
 export async function configDirectory(page: Page): Promise<string> {
-  const { directory } = await callHook(page, "session", "configState");
+  const { directory } = await hooksOf(page).session.configState();
   return directory;
 }
 

@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { AxisId, GlyphId } from "@shift/types";
 import type { EditorDriver } from "./EditorDriver";
-import { callHook } from "./appHooks";
+import { hooksOf } from "./appHooks";
 
 // Instrumentation of the Home glyph catalog's resident GPU Grid: paint waits, published Grid
 // state, and DOM observers that record transitions between two reads.
@@ -39,7 +39,7 @@ export async function viewportHeight(page: Page): Promise<number> {
 
 /** Waits until the Grid has rendered its current target location with complete residency. */
 export async function waitForSettledGrid(page: Page, glyphCanvas: Locator): Promise<void> {
-  await callHook(page, "session", "settle");
+  await hooksOf(page).session.settle();
   await afterNextPaint(page);
   await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
@@ -213,12 +213,12 @@ export async function observeRenameTransition(
   glyphId: string,
   nextName: string,
 ): Promise<boolean> {
-  return callHook(page, "catalog", "observeRenameTransition", glyphId as GlyphId, nextName);
+  return hooksOf(page).catalog.observeRenameTransition(glyphId as GlyphId, nextName);
 }
 
 /** The location the catalog previews glyphs at, one coordinate per axis in font axis order. */
 export async function catalogLocation(page: Page): Promise<readonly number[] | undefined> {
-  return callHook(page, "catalog", "location");
+  return hooksOf(page).catalog.location();
 }
 
 /**
@@ -229,5 +229,5 @@ export async function catalogLocationOn(
   page: Page,
   axisId: AxisId,
 ): Promise<{ location: number | undefined; sourceId: string | null | undefined }> {
-  return callHook(page, "catalog", "locationOn", axisId);
+  return hooksOf(page).catalog.locationOn(axisId);
 }

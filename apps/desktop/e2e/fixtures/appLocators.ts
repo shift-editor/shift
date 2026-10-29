@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
-import { callHook, readAgent } from "./appHooks";
+import { hooksOf, readsOf } from "./appHooks";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -66,7 +66,7 @@ export function settingsDetails(page: Page) {
 }
 
 export async function firstAxisSlider(page: Page) {
-  const axisName = await callHook(page, "session", "firstCatalogAxisName");
+  const axisName = await hooksOf(page).session.firstCatalogAxisName();
   if (!axisName) throw new Error("Expected a variable axis");
 
   return page.getByRole("slider", { name: axisName, exact: true });
@@ -111,7 +111,7 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
   await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
   await expect(editorShell(page)).toBeVisible();
   await expect
-    .poll(async () => (await readAgent(page, "editor", "inspect", [""])).glyph?.glyphId)
+    .poll(async () => (await readsOf(page).editor.inspect("")).glyph?.glyphId)
     .toBe(glyphId);
 }
 
@@ -137,7 +137,7 @@ export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
  * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
 export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void> {
-  await callHook(page, "session", "openGlyph", glyphId);
+  await hooksOf(page).session.openGlyph(glyphId);
   await waitForEditorReady(page, glyphId);
 }
 
@@ -149,7 +149,7 @@ export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void
  * @throws {Error} when the session has no glyph named `name`.
  */
 export async function openSessionGlyphNamed(page: Page, name: string): Promise<GlyphId> {
-  const glyphId = await callHook(page, "session", "openGlyphNamed", name);
+  const glyphId = await hooksOf(page).session.openGlyphNamed(name);
   await waitForEditorReady(page, glyphId);
   return glyphId;
 }

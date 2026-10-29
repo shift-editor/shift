@@ -12,7 +12,7 @@
  * agent read API (`@shift/runtime`, served to MCP by the window's agent
  * readers), so a test observes exactly what an agent can, and the harness has
  * no read logic of its own to bend. When a test needs a read that is not
- * there, add it to the agent readers, not here. Actions are named for what a
+ * there, add it to the app readers, not here. Actions are named for what a
  * user does, never one that forwards an internal. {@link EditorTestSurface.asEditor} is the one escape hatch, and
  * lint allows it only as a call argument, for code under test that takes an
  * `Editor`.
@@ -95,7 +95,7 @@ export interface DrawnGlyph {
 }
 
 // The read types tests see beyond {@link EditorReads}'s. Each aliases the
-// `@shift/runtime` (or agent reader) type agents read; tests import these,
+// `@shift/runtime` (or app reader) type agents read; tests import these,
 // never the runtime or `agent/`.
 
 /** A glyph drawn at a designspace location: its path and advance. */

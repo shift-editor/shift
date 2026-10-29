@@ -30,12 +30,7 @@ import {
 } from "@shift/editor/spaces";
 import type { PositionGuide, SourceSelectionMode } from "@shift/editor/types";
 import type { SelectedObject } from "@/agent/ShiftEditorReader";
-import type {
-  AgentReaderName,
-  AgentReadArgs,
-  AgentReadMethod,
-  AgentReadResult,
-} from "@/agent/AgentReaders";
+import type { AppReaders } from "@/agent/AppReaders";
 import type {
   CanvasHandle,
   CanvasText,
@@ -54,9 +49,9 @@ import type {
   SourceLayer,
   SpacingToolState,
 } from "@/testing/reads";
-import type { E2EHookArgs, E2EHookMethod, E2EHookResult } from "@/testing/e2e/hooks";
+import type { E2EHooks } from "@/testing/e2e/hooks";
 import type { DrawOptions, GlyphFixture, PointNames } from "@/testing/fixtures";
-import { callHook, readAgent, registerApp } from "./appHooks";
+import { hooksOf, readsOf, registerApp, type Remote } from "./appHooks";
 import { openVariationControls, waitForEditorReady } from "./appLocators";
 import type { AxisFixture, AxisLocation } from "@/testing/fonts";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
@@ -76,7 +71,7 @@ export type EditorTool = keyof typeof TOOL_LABELS;
 
 async function waitForActiveGlyph(page: Page, glyphId: GlyphId): Promise<void> {
   await expect
-    .poll(async () => (await readAgent(page, "editor", "inspect", [""])).glyph?.glyphId)
+    .poll(async () => (await readsOf(page).editor.inspect("")).glyph?.glyphId)
     .toBe(glyphId);
 }
 
@@ -85,8 +80,8 @@ async function waitForActiveGlyph(page: Page, glyphId: GlyphId): Promise<void> {
  *
  * @remarks
  * User actions that can persist geometry wait for the workspace edit pipeline before returning.
- * The {@link EditorReads} reads call the window's agent readers, the ones agents read through
- * MCP, over the app's E2E read hook (`globalThis.shiftAgentReads`), with the same reader calls
+ * The {@link EditorReads} reads call the window's app readers, the read layer agents read too, through
+ * MCP, over the app's E2E read hook (`globalThis.shiftAppReads`), with the same reader calls
  * and selectors as the vitest surface makes in-process. Live gesture observations remain
  * available through methods such as {@link selectionBounds}.
  */
@@ -120,13 +115,13 @@ export class EditorDriver implements EditorReads, EditorActions {
   async openGlyphByUnicode(hexCodepoint: string): Promise<void> {
     const unicode = Number.parseInt(hexCodepoint, 16);
     await expect
-      .poll(() => this.#read("font", "glyphForUnicode", unicode), { timeout: 20_000 })
+      .poll(() => this.#reads.font.glyphForUnicode(unicode), { timeout: 20_000 })
       .not.toBeNull();
-    const glyph = await this.#read("font", "glyphForUnicode", unicode);
+    const glyph = await this.#reads.font.glyphForUnicode(unicode);
     if (!glyph) throw new Error(`No glyph found for U+${hexCodepoint}`);
     const glyphId = glyph.id;
 
-    await callHook(this.page, "session", "openGlyph", glyphId);
+    await this.#hooks.session.openGlyph(glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
     await this.waitForCanvasRender();
@@ -148,7 +143,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param glyphId - Glyph identity in the loaded workspace.
    */
   async openGlyph(glyphId: GlyphId): Promise<void> {
-    await callHook(this.page, "session", "openGlyph", glyphId);
+    await this.#hooks.session.openGlyph(glyphId);
     await waitForEditorReady(this.page, glyphId);
     await waitForActiveGlyph(this.page, glyphId);
   }
@@ -170,7 +165,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     options: DrawOptions = {},
   ): Promise<Record<PointNames<F>, PointId>> {
     // The hook call drops `draw`'s generic; the ids are keyed by the fixture's own names.
-    return (await this.#act("draw", fixture, options)) as Record<PointNames<F>, PointId>;
+    return (await this.#hooks.actions.draw(fixture, options)) as Record<PointNames<F>, PointId>;
   }
 
   /**
@@ -178,22 +173,22 @@ export class EditorDriver implements EditorReads, EditorActions {
    * does; throws when the font's glyph metadata would name or encode it otherwise.
    */
   async addGlyph(name: string, unicode: number | null): Promise<void> {
-    await this.#act("addGlyph", name, unicode);
+    await this.#hooks.actions.addGlyph(name, unicode);
   }
 
   /** Adds the glyphs a language needs for `unicodes`, as the language panel does, and returns their names. */
   async createGlyphsForUnicodes(unicodes: readonly number[]): Promise<string[]> {
-    return this.#act("createGlyphsForUnicodes", unicodes);
+    return this.#hooks.actions.createGlyphsForUnicodes(unicodes);
   }
 
   /** Adds a continuous axis, as the Create axis menu does, and waits for it. */
   async addAxis(axis: AxisFixture): Promise<void> {
-    await this.#act("addAxis", axis);
+    await this.#hooks.actions.addAxis(axis);
   }
 
   /** Deletes the axis tagged `tag`, as Settings › Axes does. */
   async deleteAxis(tag: string): Promise<void> {
-    await this.#act("deleteAxis", tag);
+    await this.#hooks.actions.deleteAxis(tag);
   }
 
   /**
@@ -201,72 +196,72 @@ export class EditorDriver implements EditorReads, EditorActions {
    * and waits for it: the editor moves there and the new source becomes active.
    */
   async addSource(name: string, location: AxisLocation): Promise<void> {
-    await this.#act("addSource", name, location);
+    await this.#hooks.actions.addSource(name, location);
   }
 
   /** Deletes the source named `name`, as the Sources panel does. */
   async deleteSource(name: string): Promise<void> {
-    await this.#act("deleteSource", name);
+    await this.#hooks.actions.deleteSource(name);
   }
 
   /** Renames the source `source` to `name`, as Settings › Sources does. */
   async renameSource(source: string, name: string): Promise<void> {
-    await this.#act("renameSource", source, name);
+    await this.#hooks.actions.renameSource(source, name);
   }
 
   /** Sets the source `source`'s italic angle, as Settings › Sources does. */
   async setSourceItalicAngle(source: string, italicAngle: number): Promise<void> {
-    await this.#act("setSourceItalicAngle", source, italicAngle);
+    await this.#hooks.actions.setSourceItalicAngle(source, italicAngle);
   }
 
   /** Sets the source `source`'s line gap, as Settings › Sources does. */
   async setSourceLineGap(source: string, lineGap: number): Promise<void> {
-    await this.#act("setSourceLineGap", source, lineGap);
+    await this.#hooks.actions.setSourceLineGap(source, lineGap);
   }
 
   /** Moves the metric named `metric` in the source `source` to `position`, as Settings › Sources does. */
   async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
-    await this.#act("setSourceMetric", source, metric, position);
+    await this.#hooks.actions.setSourceMetric(source, metric, position);
   }
 
   /** Adds a named instance at `location`, keyed by axis tag, as Settings › Instances does. */
   async addInstance(name: string, location: AxisLocation): Promise<void> {
-    await this.#act("addInstance", name, location);
+    await this.#hooks.actions.addInstance(name, location);
   }
 
   /** Moves the editor to `location`, keyed by axis tag, as the location sliders do. */
   async setLocation(location: AxisLocation): Promise<void> {
-    await this.#act("setLocation", location);
+    await this.#hooks.actions.setLocation(location);
   }
 
   /** Edits the sources `names` together and waits until their layers are matched. */
   async editSources(names: readonly string[]): Promise<void> {
-    await this.#act("editSources", names);
+    await this.#hooks.actions.editSources(names);
   }
 
   /** Selects the objects `ids`, replacing the selection, as clicking them in the Objects tab does. */
   async selectObjects(ids: readonly SelectableId[]): Promise<void> {
-    await this.#act("selectObjects", ids);
+    await this.#hooks.actions.selectObjects(ids);
   }
 
   /** Sets the canvas zoom level, as the zoom menu does. */
   async setZoom(zoom: number): Promise<void> {
-    await this.#act("setZoom", zoom);
+    await this.#hooks.actions.setZoom(zoom);
   }
 
   /** Fits the open glyph in the canvas, as View › Zoom to Fit does. */
   async zoomToFit(): Promise<void> {
-    await this.#act("zoomToFit");
+    await this.#hooks.actions.zoomToFit();
   }
 
   /** Adds an unnamed anchor at `position` in the open glyph and selects it, as the anchor tool does. */
   async addAnchorAt(position: Point2D): Promise<boolean> {
-    return this.#act("addAnchorAt", position);
+    return this.#hooks.actions.addAnchorAt(position);
   }
 
   /** Renames the anchor `anchorId`, as the sidebar's name field does. */
   async renameAnchor(anchorId: AnchorId, name: string): Promise<boolean> {
-    return this.#act("renameAnchor", anchorId, name);
+    return this.#hooks.actions.renameAnchor(anchorId, name);
   }
 
   /**
@@ -308,7 +303,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Projects a scene position into canvas-local coordinates. */
   async projectSceneToCanvas(position: ScenePoint): Promise<ScreenPoint> {
-    return callHook(this.page, "editor", "sceneToCanvas", position);
+    return this.#hooks.editor.sceneToCanvas(position);
   }
 
   /**
@@ -329,7 +324,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    */
   async projectGlyphToPage(position: LocalPoint): Promise<Point2D> {
     const [canvasPosition, bounds] = await Promise.all([
-      callHook(this.page, "editor", "glyphToCanvas", position),
+      this.#hooks.editor.glyphToCanvas(position),
       this.canvasBounds(),
     ]);
     return { x: bounds.x + canvasPosition.x, y: bounds.y + canvasPosition.y };
@@ -337,12 +332,12 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Projects a position in the open glyph's own units into canvas-local coordinates. */
   async projectGlyphToCanvas(position: LocalPoint): Promise<ScreenPoint> {
-    return callHook(this.page, "editor", "glyphToCanvas", position);
+    return this.#hooks.editor.glyphToCanvas(position);
   }
 
   /** Projects a canvas-local position into the open glyph's own units. */
   async projectCanvasToGlyph(position: ScreenPoint): Promise<LocalPoint> {
-    return callHook(this.page, "editor", "canvasToGlyph", position);
+    return this.#hooks.editor.canvasToGlyph(position);
   }
 
   /**
@@ -350,7 +345,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param position - Point relative to the canvas origin.
    */
   async projectCanvasToScene(position: ScreenPoint): Promise<ScenePoint> {
-    return callHook(this.page, "editor", "canvasToScene", position);
+    return this.#hooks.editor.canvasToScene(position);
   }
 
   /** Selects every editable object and waits for any resulting workspace edits. */
@@ -446,7 +441,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Flushes the latest coalesced pointer move into the active tool gesture. */
   async flushPointerMoves(): Promise<void> {
-    await callHook(this.page, "interactions", "flushPointerMoves");
+    await this.#hooks.interactions.flushPointerMoves();
   }
 
   /** Waits until the current gesture and its workspace edits are complete. */
@@ -458,12 +453,12 @@ export class EditorDriver implements EditorReads, EditorActions {
   /** Returns the glyph being edited, or null when none is (or its authored layer is not published). */
   async activeGlyph(): Promise<ActiveGlyph | null> {
     const [[nodeId], { glyph }] = await Promise.all([
-      this.#read("editor", "editingNodeIds"),
+      this.#reads.editor.editingNodeIds(),
       this.editorView(),
     ]);
     if (!glyph || glyph.nodeId !== nodeId) return null;
 
-    const layer = await this.#read("font", "getLayer", {
+    const layer = await this.#reads.font.getLayer({
       glyph: { glyphId: glyph.glyphId },
       source: { sourceId: glyph.sourceId },
     });
@@ -488,23 +483,23 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns the canvas zoom level. */
   async zoomLevel(): Promise<number> {
-    return (await this.#read("editor", "camera")).zoom;
+    return (await this.#reads.editor.camera()).zoom;
   }
 
   /** Returns how far the canvas is panned, in screen pixels. */
   async canvasOffset(): Promise<ScreenVector> {
-    const { pan } = await this.#read("editor", "camera");
+    const { pan } = await this.#reads.editor.camera();
     return screenVector(pan.x, pan.y);
   }
 
   /** Returns the ids of the scene nodes being edited, in the order they were entered. */
   async editedNodeIds(): Promise<readonly string[]> {
-    return this.#read("editor", "editingNodeIds");
+    return this.#reads.editor.editingNodeIds();
   }
 
   /** Returns the hovered editor object identity, or null when nothing is hovered. */
   async hoverId(): Promise<string | null> {
-    return this.#read("editor", "hoveredId");
+    return this.#reads.editor.hoveredId();
   }
 
   /** Returns the active tool's published state discriminator. */
@@ -514,7 +509,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns fresh live selection bounds in glyph units; throws without a bounded selection. */
   async selectionBounds(): Promise<Rect2D> {
-    const b = await this.#read("editor", "selectionBounds");
+    const b = await this.#reads.editor.selectionBounds();
     if (!b) throw new Error("Expected selection bounds");
 
     return {
@@ -536,7 +531,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   async pointTargets(pointIds: readonly PointId[]): Promise<readonly PointTarget[]> {
     await this.#waitForEdits();
 
-    return callHook(this.page, "editor", "pointProjections", pointIds);
+    return this.#hooks.editor.pointProjections(pointIds);
   }
 
   /**
@@ -572,7 +567,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns a safe drag for a visible on-curve point; throws when none exists. */
   async selectVisiblePoint(): Promise<PointDrag> {
-    const point = await callHook(this.page, "editor", "visiblePointDrag");
+    const point = await this.#hooks.editor.visiblePointDrag();
 
     await this.page.mouse.click(point.startPagePosition.x, point.startPagePosition.y);
     await expect.poll(() => this.selectionIds()).toContain(point.id);
@@ -594,7 +589,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns a hovered visible point identity; throws when none exists. */
   async hoverVisibleUnselectedPoint(): Promise<PointId> {
-    const target = await callHook(this.page, "editor", "unselectedPoint");
+    const target = await this.#hooks.editor.unselectedPoint();
 
     await this.page.mouse.move(target.x, target.y);
     await expect.poll(() => this.hoverId()).toBe(target.id);
@@ -659,12 +654,12 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   async kerning(first: string, second: string): Promise<readonly KerningMasterValue[]> {
     const pair = { first: { name: first }, second: { name: second } };
-    const resolved = await this.#read("kerning", "resolve", [pair], {});
+    const resolved = await this.#reads.kerning.resolve([pair], {});
     return resolved.items[0]!.masters;
   }
 
   async kerningAt(source: string, first: string, second: string): Promise<KerningMasterValue> {
-    return this.#read("kerning", "at", {
+    return this.#reads.kerning.at({
       first: { name: first },
       second: { name: second },
       source: { name: source },
@@ -672,18 +667,18 @@ export class EditorDriver implements EditorReads, EditorActions {
   }
 
   async kerningGroups(position: KerningPosition): Promise<readonly KerningGroupSummary[]> {
-    return this.#read("kerning", "groups", position);
+    return this.#reads.kerning.groups(position);
   }
 
   async kerningGroup(position: KerningPosition, name: string): Promise<KerningGroupSummary | null> {
-    return this.#read("kerning", "group", position, name);
+    return this.#reads.kerning.group(position, name);
   }
 
   async kerningGroupOf(
     position: KerningPosition,
     glyph: string,
   ): Promise<KerningGroupSummary | null> {
-    return this.#read("kerning", "groupOf", position, { name: glyph as GlyphName });
+    return this.#reads.kerning.groupOf(position, { name: glyph as GlyphName });
   }
 
   async selectionIds(): Promise<readonly string[]> {
@@ -694,7 +689,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     const names: string[] = [];
     let cursor: string | undefined;
     do {
-      const page = await this.#read("font", "listGlyphs", { limit: 100, cursor });
+      const page = await this.#reads.font.listGlyphs({ limit: 100, cursor });
       names.push(...page.items.map((glyph) => glyph.name));
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
@@ -702,31 +697,31 @@ export class EditorDriver implements EditorReads, EditorActions {
   }
 
   async glyphNamed(name: string): Promise<GlyphListing | null> {
-    return this.#read("font", "glyphNamed", name as GlyphName);
+    return this.#reads.font.glyphNamed(name as GlyphName);
   }
 
   async source(selector: SourceSelection): Promise<Source | null> {
     switch (selector) {
       case "default":
-        return this.#read("font", "defaultSource");
+        return this.#reads.font.defaultSource();
       case "active":
-        return this.#read("editor", "activeSource");
+        return this.#reads.editor.activeSource();
     }
     return "id" in selector
-      ? this.#read("font", "source", { sourceId: selector.id })
-      : this.#read("font", "source", { name: selector.name });
+      ? this.#reads.font.source({ sourceId: selector.id })
+      : this.#reads.font.source({ name: selector.name });
   }
 
   async instance(selector: InstanceSelection): Promise<NamedInstance | null> {
     return "id" in selector
-      ? this.#read("font", "instance", { instanceId: selector.id })
-      : this.#read("font", "instance", { name: selector.name });
+      ? this.#reads.font.instance({ instanceId: selector.id })
+      : this.#reads.font.instance({ name: selector.name });
   }
 
   async axis(selector: AxisSelection): Promise<Axis | null> {
     return "id" in selector
-      ? this.#read("font", "axis", { axisId: selector.id })
-      : this.#read("font", "axis", { tag: selector.tag });
+      ? this.#reads.font.axis({ axisId: selector.id })
+      : this.#reads.font.axis({ tag: selector.tag });
   }
 
   /**
@@ -742,7 +737,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     const row = controls.getByTestId(`source-${source.id}`);
     if (mode === "toggle") {
       await row.click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
-      await callHook(this.page, "session", "editingLayersMatched");
+      await this.#hooks.session.editingLayersMatched();
       return;
     }
     await row.click();
@@ -750,92 +745,81 @@ export class EditorDriver implements EditorReads, EditorActions {
   }
 
   async layerOf(glyph: string, source?: string): Promise<SourceLayer> {
-    return this.#read("font", "getLayer", {
+    return this.#reads.font.getLayer({
       glyph: { name: glyph as GlyphName },
       ...(source === undefined ? {} : { source: { name: source } }),
     });
   }
 
   async fontOverview(): Promise<FontSummary> {
-    return this.#read("font", "getFont");
+    return this.#reads.font.getFont();
   }
 
   async editorView(): Promise<EditorViewState> {
-    return this.#read("editor", "inspect", new URL(this.page.url()).hash.slice(1));
+    return this.#reads.editor.inspect(new URL(this.page.url()).hash.slice(1));
   }
 
   async location(): Promise<LocationSummary> {
     const { externalLocation } = await this.editorView();
-    return this.#read("font", "resolveLocation", externalLocation);
+    return this.#reads.font.resolveLocation(externalLocation);
   }
 
   async documentState(): Promise<DocumentSaveState | null> {
-    return this.#read("editor", "documentState");
+    return this.#reads.editor.documentState();
   }
 
   async canvasText(): Promise<CanvasText | null> {
-    return this.#read("editor", "textRun");
+    return this.#reads.editor.textRun();
   }
 
   async spacingTool(): Promise<SpacingToolState | null> {
-    return this.#read("editor", "spacingTool");
+    return this.#reads.editor.spacingTool();
   }
 
   async drawnHandles(): Promise<readonly CanvasHandle[]> {
-    return this.#read("editor", "drawnHandles");
+    return this.#reads.editor.drawnHandles();
   }
 
   /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
   async drawnOutline(): Promise<readonly AuthoredContour[]> {
-    return this.#read("editor", "drawnOutline");
+    return this.#reads.editor.drawnOutline();
   }
 
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   async drawnSnapGuides(): Promise<readonly PositionGuide[]> {
-    return this.#read("editor", "drawnSnapGuides");
+    return this.#reads.editor.drawnSnapGuides();
   }
 
   /** The selected objects with their kinds, in selection order. */
   async selectedObjects(): Promise<readonly SelectedObject[]> {
-    return this.#read("editor", "selectedObjects");
+    return this.#reads.editor.selectedObjects();
   }
 
   async drawnOutlineTargets(): Promise<readonly OutlineTarget[]> {
-    return this.#read("editor", "drawnOutlineTargets");
+    return this.#reads.editor.drawnOutlineTargets();
   }
 
   /** The open glyph's authored layer at its node's source, as `layers.get` returns it. */
   async #openLayer(): Promise<AuthoredLayer> {
     const { glyph } = await this.editorView();
     if (!glyph) throw new Error("Expected an open glyph");
-    return this.#read("font", "getLayer", {
+    return this.#reads.font.getLayer({
       glyph: { glyphId: glyph.glyphId },
       source: { sourceId: glyph.sourceId },
     });
   }
 
-  /**
-   * Calls `reader`'s `method` in this page's window once its pending edits settle.
-   *
-   * @throws {Error} when the driver has no app, or the read fails in the renderer.
-   */
-  async #read<R extends AgentReaderName, M extends AgentReadMethod<R>>(
-    reader: R,
-    method: M,
-    ...args: AgentReadArgs<R, M>
-  ): Promise<AgentReadResult<R, M>> {
-    return readAgent(this.page, reader, method, args);
+  /** The app's readers in this page's window; each read runs once its pending edits settle. */
+  get #reads(): Remote<AppReaders> {
+    return readsOf(this.page);
   }
 
-  /** Runs the surface action `method` in this page's window; it answers once the edit is confirmed. */
-  async #act<M extends E2EHookMethod<"actions">>(
-    method: M,
-    ...args: E2EHookArgs<"actions", M>
-  ): Promise<E2EHookResult<"actions", M>> {
-    return callHook(this.page, "actions", method, ...args);
+  /** The renderer's E2E hooks in this page's window; an action answers once its edit is confirmed. */
+  get #hooks(): Remote<E2EHooks> {
+    return hooksOf(this.page);
   }
 
   async #waitForEdits(): Promise<void> {
-    await callHook(this.page, "session", "settle");
+    await this.#hooks.session.settle();
   }
 }

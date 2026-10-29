@@ -4,7 +4,7 @@
  *
  * @remarks
  * Every read is the agent read API (`@shift/runtime`): vitest calls the
- * window's agent readers in-process, and Playwright calls the same readers,
+ * window's app readers in-process, and Playwright calls the same readers,
  * with the same methods and selectors, through the app's E2E read hook.
  * Both drivers implement this interface,
  * so a read cannot exist in one without the other. A read returns either a
