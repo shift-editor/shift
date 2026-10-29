@@ -22,6 +22,7 @@ import {
   type Axis,
   type GlyphId,
   type GlyphName,
+  type LayerMatch,
   type NamedInstance,
   type Source,
   type Unicode,
@@ -215,6 +216,16 @@ export class ShiftFontReader {
   /** @throws {Error} for an unknown layer, glyph or source, or a glyph with no layer at that source. */
   async getLayer(selector: LayerSelector): Promise<AuthoredLayer> {
     return (await ShiftLayer.readAuthored(this.#font, this.#select.layerId(selector))).authored();
+  }
+
+  /**
+   * How the `target` layer's contours, points, anchors and components
+   * correspond to the `reference` layer's, as the engine matches them.
+   *
+   * @throws {Error} as {@link getLayer} does, for either layer.
+   */
+  async matchLayers(reference: LayerSelector, target: LayerSelector): Promise<LayerMatch> {
+    return this.#font.matchLayers(this.#select.layerId(reference), this.#select.layerId(target));
   }
 
   /** @throws {Error} as {@link getLayer} does, or when a component cannot resolve. */

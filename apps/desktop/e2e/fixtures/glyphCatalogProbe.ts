@@ -210,10 +210,10 @@ export async function scrubGridGeometry(
  */
 export async function observeRenameTransition(
   page: Page,
-  glyphId: string,
+  glyphId: GlyphId,
   nextName: string,
 ): Promise<boolean> {
-  return hooksOf(page).catalog.observeRenameTransition(glyphId as GlyphId, nextName);
+  return hooksOf(page).catalog.observeRenameTransition(glyphId, nextName);
 }
 
 /** The location the catalog previews glyphs at, one coordinate per axis in font axis order. */

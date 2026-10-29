@@ -13,7 +13,6 @@
  *
  * This file imports types only, so `apps/desktop/e2e` can import it.
  */
-import type { LocalPoint } from "@shift/editor/spaces";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -27,6 +26,7 @@ import type {
   KerningGroupSummary,
   KerningMasterValue,
   ResolvedLocation,
+  SourceSelector,
   SpacingToolView,
   TextRunView,
 } from "@shift/runtime";
@@ -95,17 +95,31 @@ export type CanvasHandle = DrawnHandle;
 /** A source or instance outline the canvas draws around the open glyph for comparison. */
 export type OutlineTarget = GlyphOutlineTarget;
 
+/** Where a point read looks for the point. */
+export interface PointReadOptions {
+  /**
+   * Read the counterpart of the shown source's point `id` in this source's
+   * layer of the open glyph, as the engine matches the two layers.
+   */
+  readonly source?: SourceSelector;
+}
+
 export interface EditorReads {
   /** The open glyph's authored outline, as agents read it. */
   outline(): Promise<Outline>;
-  /** One authored point of the open glyph, or null when it has none with that id. */
-  point(id: PointId): Promise<OutlinePoint | null>;
+  /**
+   * One authored point of the open glyph at the shown source, or null when it
+   * has none with that id.
+   *
+   * @param options - with `source`, the point's counterpart in that source's
+   * layer instead; null when the two layers do not match completely or `id`
+   * has no counterpart there.
+   */
+  point(id: PointId, options?: PointReadOptions): Promise<OutlinePoint | null>;
   /** The open glyph's anchors, in order. */
   anchors(): Promise<readonly GlyphAnchor[]>;
   /** The open glyph's components, in order. */
   components(): Promise<readonly GlyphComponent[]>;
-  /** Where each point is now, as the open glyph's authored layer stores it. */
-  pointPositions(ids: readonly PointId[]): Promise<Record<PointId, LocalPoint>>;
   /** The open glyph's advance width. */
   advanceWidth(): Promise<number>;
   /** The kerning between two glyphs at every source, in font source order. */

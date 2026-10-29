@@ -16,7 +16,7 @@ describe("dragging shows the outline as it was before the drag", () => {
   it("keeps the pre-drag outline while a point is dragged", () => {
     editor.holdDrag(middle, { x: 40, y: 60 });
 
-    expect(editor.shownPointPositions([middle])).toEqual({ [middle]: { x: 240, y: 160 } });
+    expect(editor.drawnPoint(middle)).toMatchObject({ x: 240, y: 160 });
     expect(editor.editGhost([middle])).toEqual({ [middle]: { x: 200, y: 100 } });
   });
 
@@ -24,7 +24,7 @@ describe("dragging shows the outline as it was before the drag", () => {
     editor.holdDrag(middle, { x: 40, y: 60 });
     await editor.releaseAt({ x: 240, y: 160 });
 
-    expect(await editor.pointPositions([middle])).toEqual({ [middle]: { x: 240, y: 160 } });
+    expect(await editor.point(middle)).toMatchObject({ x: 240, y: 160 });
     expect(editor.editGhost([middle])).toBeNull();
   });
 
@@ -32,7 +32,7 @@ describe("dragging shows the outline as it was before the drag", () => {
     editor.holdDrag(middle, { x: 40, y: 60 });
     await editor.pressKey("Escape");
 
-    expect(editor.shownPointPositions([middle])).toEqual({ [middle]: { x: 200, y: 100 } });
+    expect(editor.drawnPoint(middle)).toMatchObject({ x: 200, y: 100 });
     expect(editor.editGhost([middle])).toBeNull();
   });
 });

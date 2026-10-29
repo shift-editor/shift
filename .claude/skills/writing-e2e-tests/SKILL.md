@@ -46,7 +46,7 @@ Never count or sample hard-coded colours from a canvas. Colour oracles break und
 
 Use published state instead:
 
-- geometry: `editor.outline()`, `pointPosition()`, `selectionIds()`, `selectionBounds()`;
+- geometry: `editor.outline()`, `point()`, `selectionIds()`, `selectionBounds()`;
 - interaction: `toolState()`, `hoverId()`, `activeSnapGuides()`;
 - rendering decisions: `visibleOutlines(nodeId)` and `handleStates(node)` on the glyph node definition;
 - UI state: roles, accessible names, `aria-pressed`, `aria-checked`, `aria-disabled`, `data-*` state published for tests;
@@ -57,6 +57,7 @@ If the state you need is not published, publish it from the production code that
 Assertions must be exact enough to fail on the wrong answer:
 
 - assert the exact set or order, not `count() > N` or `not.toEqual(before)`;
+- assert a read whole, as behaviour tests do: `await expect.poll(() => editor.documentState()).toMatchObject({ dirty: true })`, not `.poll(async () => (await editor.documentState())?.dirty)` (see `writing-tests` Test helpers; `shift/no-drill-into-reads` lints it);
 - derive expectations from the fixture or the UI (for example, read the ordered category buttons and compute the expected range) instead of hard-coding one neighbour;
 - run the mental-deletion check: if the feature were a no-op, would this assertion fail?
 

@@ -115,18 +115,18 @@ test.describe("Canvas pointer lifecycle", () => {
 
     await dragWithSyntheticPointerEnd(page, point, "lostpointercapture");
 
-    const after = await editor.pointPosition(point.id);
+    const after = (await editor.point(point.id))!;
     expect(after.x).toBeCloseTo(point.expectedGlyphPosition.x);
     expect(after.y).toBeCloseTo(point.expectedGlyphPosition.y);
   });
 
   test("rolls back a point drag canceled by the DOM", async ({ page, editor }) => {
     const point = await editor.selectVisiblePoint();
-    const before = await editor.pointPosition(point.id);
+    const before = (await editor.point(point.id))!;
 
     await dragWithSyntheticPointerEnd(page, point, "pointercancel");
 
-    expect(await editor.pointPosition(point.id)).toEqual(before);
+    expect(await editor.point(point.id)).toEqual(before);
     await expect(page.getByTestId("editor-shell")).toHaveAttribute("data-gesture", "idle");
   });
 });

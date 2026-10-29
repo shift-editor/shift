@@ -24,8 +24,8 @@ describe("a preview session only looks", () => {
 
     await editor.typeText("AA");
 
-    expect(editor.toolState()?.state).toBe("editing");
-    expect(editor.canvasText()?.items.length).toBe(3);
+    expect(editor.toolState()).toMatchObject({ state: "editing" });
+    expect(editor.canvasText()).toMatchObject({ items: Array(3).fill(expect.anything()) });
   });
 
   it("neither hovers, selects nor marquees", async () => {
@@ -37,7 +37,7 @@ describe("a preview session only looks", () => {
 
     await editor.dragFrom({ x: 80, y: 80 }, { x: 150, y: 150 });
     expect(editor.selectionIds()).toEqual([]);
-    expect(editor.toolState()?.state).toBe("ready");
+    expect(editor.toolState()).toMatchObject({ state: "ready" });
   });
 
   it("treats a click on the preview lock as a click on empty canvas", async () => {
@@ -51,6 +51,6 @@ describe("a preview session only looks", () => {
     await editor.clickAt(lock);
 
     expect(editor.selectionIds()).toEqual([]);
-    expect(editor.toolState()?.state).toBe("ready");
+    expect(editor.toolState()).toMatchObject({ state: "ready" });
   });
 });

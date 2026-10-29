@@ -49,14 +49,16 @@ test("keeps snapped Pen creation handles when Shift is released before mouseup",
   try {
     await editor.pointerMove({ x: bounds.x + end.x, y: bounds.y + end.y });
     const preview = await points();
-    expect(preview).toHaveLength(4);
-    expect(preview[2]!.x).toBeCloseTo(expected.incoming.x, 4);
-    expect(preview[2]!.y).toBeCloseTo(expected.incoming.y, 4);
-    expect(preview[3]!.x).toBeCloseTo(expected.anchor.x, 4);
-    expect(preview[3]!.y).toBeCloseTo(expected.anchor.y, 4);
-    const handle = await editor.drawnPenHandle();
-    expect(handle!.x).toBeCloseTo(expected.outgoing.x, 4);
-    expect(handle!.y).toBeCloseTo(expected.outgoing.y, 4);
+    expect(preview).toMatchObject([
+      {},
+      {},
+      { x: expect.closeTo(expected.incoming.x, 4), y: expect.closeTo(expected.incoming.y, 4) },
+      { x: expect.closeTo(expected.anchor.x, 4), y: expect.closeTo(expected.anchor.y, 4) },
+    ]);
+    expect(await editor.drawnPenHandle()).toMatchObject({
+      x: expect.closeTo(expected.outgoing.x, 4),
+      y: expect.closeTo(expected.outgoing.y, 4),
+    });
     await expect
       .poll(() => editor.drawnSnapGuides())
       .toEqual([expect.objectContaining({ kind: "direction" })]);

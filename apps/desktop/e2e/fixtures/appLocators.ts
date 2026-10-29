@@ -138,9 +138,11 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
 export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
   await clickFirstCatalogGlyph(page);
   await page.waitForURL(/#\/editor\//);
-  const glyphId = decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)) as GlyphId;
-  await waitForEditorReady(page, glyphId);
-  return glyphId;
+  await waitForEditorReady(
+    page,
+    decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)),
+  );
+  return (await readsOf(page).editor.inspect("")).glyph!.glyphId;
 }
 
 /**

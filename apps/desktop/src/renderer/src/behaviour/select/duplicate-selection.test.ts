@@ -18,11 +18,15 @@ describe("duplicating the selection", () => {
 
     expect(await editor.duplicate()).toBe(true);
 
-    const [original, copy] = await editor.outline();
-    expect(original?.points.map(({ id }) => id)).toEqual([first, second]);
-    expect(copy?.points).toMatchObject([
-      { x: 100, y: 100 },
-      { x: 200, y: 100 },
+    const [, copy] = await editor.outline();
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: first }, { id: second }] },
+      {
+        points: [
+          { x: 100, y: 100 },
+          { x: 200, y: 100 },
+        ],
+      },
     ]);
     expect(editor.selectionIds()).toEqual(copy?.points.map(({ id }) => id));
   });

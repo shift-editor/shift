@@ -35,10 +35,7 @@ describe("adding a source", () => {
     });
     const [copy] = await editor.outline();
     expect(await editor.advanceWidth()).toBe(520);
-    expect(copy).toMatchObject({
-      closed: original!.closed,
-      points: original!.points.map(({ x, y, pointType, smooth }) => ({ x, y, pointType, smooth })),
-    });
+    expect([copy!]).toDrawLike([original!]);
     expect(copy!.points.map(({ id }) => id)).not.toEqual(original!.points.map(({ id }) => id));
   });
 });

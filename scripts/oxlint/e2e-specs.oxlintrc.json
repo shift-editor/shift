@@ -1,9 +1,0 @@
-{
-  "$schema": "../../node_modules/oxlint/configuration_schema.json",
-  "jsPlugins": ["./shift-plugin.mjs"],
-  "categories": { "correctness": "off" },
-  "rules": {
-    "shift/no-page-evaluate-in-specs": "error",
-    "shift/no-agent-types-in-behaviour-tests": "error"
-  }
-}

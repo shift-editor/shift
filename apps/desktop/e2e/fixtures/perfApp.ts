@@ -178,7 +178,7 @@ export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImp
 /** Authored `AnchorDragBench`: `a`–`z`, combining marks, and composites on `u`. */
 export const anchorDragTest = createAppTest(ANCHOR_DRAG_FONT_PATH, createAuthoredDocument);
 
-export { expect } from "@playwright/test";
+export { expect } from "./matchers";
 
 /**
  * MutatorSans "S" contour data (44 points) for generating 50K-point glyphs.
@@ -266,6 +266,7 @@ export function benchmarkContours(targetPoints: number): ContourFixture[] {
   return generateContourData(targetPoints).map((contour) => ({
     closed: contour.closed,
     points: contour.points.map((point): PointFixture => {
+      // oxlint-disable-next-line shift/no-raw-point-type-check -- generated benchmark data in the test process, where @shift/glyph-state does not load
       if (point.pointType === "offCurve") return { x: point.x, y: point.y, off: true };
       return point.smooth ? { x: point.x, y: point.y, smooth: true } : [point.x, point.y];
     }),
@@ -295,11 +296,13 @@ export interface PerfResult {
   mean: number;
 }
 
+const smallestFirst = (a: number, b: number) => a - b;
+
 /**
  * Compute percentile stats from an array of timing samples.
  */
 export function computeStats(label: string, samples: number[]): PerfResult {
-  const sorted = samples.toSorted((a, b) => a - b);
+  const sorted = samples.toSorted(smallestFirst);
   const p = (pct: number) => sorted[Math.floor(sorted.length * pct)] ?? 0;
   const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
 

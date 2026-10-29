@@ -21,22 +21,32 @@ const SQUARE_WITH_HOLE: GlyphFixture = {
   ],
 };
 
-const editor = useTestEditor();
+// The glyphs the tests place as components in A, which is open.
+const editor = useTestEditor({
+  glyphs: {
+    base: { outline: { contours: [square(100)] } },
+    leaf: { outline: { contours: [square(100)] } },
+    middle: { outline: { components: [{ glyph: "leaf" }] } },
+    counter: { outline: SQUARE_WITH_HOLE },
+    open: { outline: { contours: [line([0, 0], [100, 0])] } },
+    curve: {
+      outline: {
+        contours: [
+          {
+            closed: true,
+            points: [[0, 0], { x: 50, y: 100, off: true }, [100, 0], [100, -10], [0, -10]],
+          },
+        ],
+      },
+    },
+  },
+});
 beforeEach(() => {
   editor.selectTool("select");
 });
 
-/** Adds a glyph named `name` drawn as `fixture`, then reopens A. */
-async function drawGlyph(name: string, fixture: GlyphFixture): Promise<void> {
-  await editor.addGlyph(name, null);
-  await editor.openGlyph(name);
-  await editor.draw(fixture);
-  await editor.openGlyph("A");
-}
-
 describe("clicking a component's fill selects the component", () => {
   it("selects the frontmost of two overlapping components", async () => {
-    await drawGlyph("base", { contours: [square(100)] });
     await editor.draw({ components: [{ glyph: "base" }, { glyph: "base" }] });
     const [, front] = await editor.components();
 
@@ -46,8 +56,6 @@ describe("clicking a component's fill selects the component", () => {
   });
 
   it("selects the component placed in this glyph, not one nested inside it", async () => {
-    await drawGlyph("leaf", { contours: [square(100)] });
-    await drawGlyph("middle", { components: [{ glyph: "leaf" }] });
     await editor.draw({ components: [{ glyph: "middle" }] });
     const [direct] = await editor.components();
 
@@ -59,7 +67,6 @@ describe("clicking a component's fill selects the component", () => {
   });
 
   it("does not select through an opposite-winding hole", async () => {
-    await drawGlyph("counter", SQUARE_WITH_HOLE);
     await editor.draw({ components: [{ glyph: "counter" }] });
     const [component] = await editor.components();
 
@@ -71,9 +78,6 @@ describe("clicking a component's fill selects the component", () => {
   });
 
   it("selects an open component by nearness to its line", async () => {
-    await drawGlyph("open", {
-      contours: [line([0, 0], [100, 0])],
-    });
     await editor.draw({ components: [{ glyph: "open" }] });
     const [component] = await editor.components();
 
@@ -83,14 +87,6 @@ describe("clicking a component's fill selects the component", () => {
   });
 
   it("follows the component's curves", async () => {
-    await drawGlyph("curve", {
-      contours: [
-        {
-          closed: true,
-          points: [[0, 0], { x: 50, y: 100, off: true }, [100, 0], [100, -10], [0, -10]],
-        },
-      ],
-    });
     await editor.draw({ components: [{ glyph: "curve" }] });
     const [component] = await editor.components();
 
@@ -104,8 +100,7 @@ describe("clicking a component's fill selects the component", () => {
 
 describe("dragging a selected component transforms it", () => {
   beforeEach(async () => {
-    await drawGlyph("base", SQUARE_WITH_HOLE);
-    await editor.draw({ components: [{ glyph: "base" }] });
+    await editor.draw({ components: [{ glyph: "counter" }] });
     await editor.clickAt({ x: 10, y: 10 });
   });
 
@@ -145,8 +140,8 @@ describe("dragging a selected component transforms it", () => {
 
     await editor.dragFrom(down, quarterTurn);
 
-    const [component] = await editor.components();
-    expect(component?.transformation.xx).toBeCloseTo(0);
-    expect(Math.abs(component?.transformation.xy ?? 0)).toBeCloseTo(1);
+    expect(await editor.components()).toMatchObject([
+      { transformation: { xx: expect.closeTo(0), xy: expect.closeTo(1) } },
+    ]);
   });
 });

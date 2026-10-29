@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { mintPointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
 import { square } from "@/testing/fixtures";
-import type { EditorTestSurface } from "@/testing/surface";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
@@ -46,12 +45,15 @@ describe("deleting points", () => {
         await e.deleteSelection();
       },
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.closed).toBe(true);
-        expect(contour?.points.map(({ x, y }) => ({ x, y }))).toEqual([
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
+        expect(await e.outline()).toMatchObject([
+          {
+            closed: true,
+            points: [
+              { x: 100, y: 0 },
+              { x: 100, y: 100 },
+              { x: 0, y: 100 },
+            ],
+          },
         ]);
       },
     );
@@ -73,10 +75,6 @@ const PENTAGON = [
   { x: 100, y: 200, name: "p3" },
   { x: 0, y: 100, name: "p4" },
 ] as const;
-
-async function pointIdsByContour(e: EditorTestSurface): Promise<string[][]> {
-  return (await e.outline()).map((contour) => contour.points.map(({ id }) => id));
-}
 
 describe("deleting from an open contour keeps the surviving runs", () => {
   it("splits around a gap without joining the two runs", async () => {
@@ -113,7 +111,9 @@ describe("deleting from an open contour keeps the surviving runs", () => {
         ],
       },
     ]);
-    expect(await pointIdsByContour(editor)).toEqual([[p0, p2, p4]]);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: p0 }, { id: p2 }, { id: p4 }] },
+    ]);
   });
 
   it("keeps each surviving point between several gaps", async () => {
@@ -122,7 +122,11 @@ describe("deleting from an open contour keeps the surviving runs", () => {
 
     await editor.deleteSelection("gap");
 
-    expect(await pointIdsByContour(editor)).toEqual([[p0], [p2], [p4]]);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: p0 }] },
+      { points: [{ id: p2 }] },
+      { points: [{ id: p4 }] },
+    ]);
   });
 
   it.each(["fit", "gap"] as const)("trims the ends without fitting in %s mode", async (mode) => {
@@ -132,7 +136,9 @@ describe("deleting from an open contour keeps the surviving runs", () => {
     await editor.deleteSelection(mode);
 
     expect(await editor.outline()).toMatchObject([{ closed: false }]);
-    expect(await pointIdsByContour(editor)).toEqual([[p1, p2, p3]]);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: p1 }, { id: p2 }, { id: p3 }] },
+    ]);
   });
 
   it("leaves other contours and their order alone", async () => {
@@ -167,7 +173,9 @@ describe("deleting from a closed contour wraps around its start", () => {
         ],
       },
     ]);
-    expect(await pointIdsByContour(editor)).toEqual([[p1, p2, p3]]);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: p1 }, { id: p2 }, { id: p3 }] },
+    ]);
   });
 
   it("opens around an interior gap, keeping the run that wraps the start", async () => {
@@ -179,7 +187,9 @@ describe("deleting from a closed contour wraps around its start", () => {
     await editor.deleteSelection("gap");
 
     expect(await editor.outline()).toMatchObject([{ closed: false }]);
-    expect(await pointIdsByContour(editor)).toEqual([[p3, p4, p0, p1]]);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: p3 }, { id: p4 }, { id: p0 }, { id: p1 }] },
+    ]);
   });
 
   it("opens a gap across the start", async () => {
@@ -191,7 +201,9 @@ describe("deleting from a closed contour wraps around its start", () => {
     await editor.deleteSelection("gap");
 
     expect(await editor.outline()).toMatchObject([{ closed: false }]);
-    expect(await pointIdsByContour(editor)).toEqual([[p1, p2, p3]]);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ id: p1 }, { id: p2 }, { id: p3 }] },
+    ]);
   });
 
   it("keeps two surviving points as a closed contour of two straight sides", async () => {
@@ -211,7 +223,7 @@ describe("deleting from a closed contour wraps around its start", () => {
         ],
       },
     ]);
-    expect(await pointIdsByContour(editor)).toEqual([[p1, p3]]);
+    expect(await editor.outline()).toMatchObject([{ points: [{ id: p1 }, { id: p3 }] }]);
   });
 
   it.each(["fit", "gap"] as const)(
@@ -225,7 +237,7 @@ describe("deleting from a closed contour wraps around its start", () => {
       await editor.deleteSelection(mode);
 
       expect(await editor.outline()).toMatchObject([{ closed: false, points: [{ id: p0 }] }]);
-      expect(await pointIdsByContour(editor)).toEqual([[p0]]);
+      expect(await editor.outline()).toMatchObject([{ points: [{ id: p0 }] }]);
     },
   );
 

@@ -45,10 +45,7 @@ test.describe("retained font source Grid preview", () => {
 
     const readOnlyGlyphInputs = glyphProperties(page).locator("input:disabled");
     await expect(readOnlyGlyphInputs).toHaveCount(3);
-    const readOnlyGlyphValues = await readOnlyGlyphInputs.evaluateAll((inputs) =>
-      inputs.map((input) => (input as HTMLInputElement).value),
-    );
-    expect(readOnlyGlyphValues.every((value) => value !== "")).toBe(true);
+    for (const input of await readOnlyGlyphInputs.all()) await expect(input).not.toHaveValue("");
 
     expect(await previewGlyphState(page, glyphId)).toEqual({
       hasEntry: true,

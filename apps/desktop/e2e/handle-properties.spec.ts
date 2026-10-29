@@ -40,19 +40,19 @@ test("edits a selected cubic handle by angle and length", async ({ page, editor 
   await editor.commitInputValue(angleInput, 45);
 
   const diagonal = Math.SQRT1_2;
-  const angled = await editor.pointPosition(handle.pointId);
+  const angled = (await editor.point(handle.pointId))!;
   expect(angled.x).toBeCloseTo(handle.anchor.x + handle.length * diagonal);
   expect(angled.y).toBeCloseTo(handle.anchor.y + handle.length * diagonal);
-  const opposite = await editor.pointPosition(handle.oppositeId);
+  const opposite = (await editor.point(handle.oppositeId))!;
   expect(opposite.x).toBeCloseTo(handle.anchor.x - handle.oppositeLength * diagonal);
   expect(opposite.y).toBeCloseTo(handle.anchor.y - handle.oppositeLength * diagonal);
 
   await editor.commitInputValue(lengthInput, 50);
 
-  const shortened = await editor.pointPosition(handle.pointId);
+  const shortened = (await editor.point(handle.pointId))!;
   expect(shortened.x).toBeCloseTo(handle.anchor.x + 50 * diagonal);
   expect(shortened.y).toBeCloseTo(handle.anchor.y + 50 * diagonal);
-  const oppositeAfterLength = await editor.pointPosition(handle.oppositeId);
+  const oppositeAfterLength = (await editor.point(handle.oppositeId))!;
   expect(oppositeAfterLength.x).toBeCloseTo(opposite.x);
   expect(oppositeAfterLength.y).toBeCloseTo(opposite.y);
 

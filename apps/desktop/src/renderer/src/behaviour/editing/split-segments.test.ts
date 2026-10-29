@@ -16,8 +16,7 @@ describe("adding a point on a segment with the Pen", () => {
       editor,
       (e) => e.clickAt({ x: 50, y: 0 }),
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.points).toHaveLength(3);
+        expect(await e.outline()).toMatchObject([{ points: Array(3).fill({}) }]);
         expect(await e.pointAt({ x: 50, y: 0 })).toMatchObject({ pointType: "onCurve" });
       },
     );
@@ -44,17 +43,19 @@ describe("adding a point on a segment with the Pen", () => {
       editor,
       (e) => e.clickAt({ x: 50, y: 75 }),
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.points.map(({ pointType }) => pointType)).toEqual([
-          "onCurve",
-          "offCurve",
-          "offCurve",
-          "onCurve",
-          "offCurve",
-          "offCurve",
-          "onCurve",
+        expect(await e.outline()).toMatchObject([
+          {
+            points: [
+              { pointType: "onCurve" },
+              { pointType: "offCurve" },
+              { pointType: "offCurve" },
+              { pointType: "onCurve", smooth: true },
+              { pointType: "offCurve" },
+              { pointType: "offCurve" },
+              { pointType: "onCurve" },
+            ],
+          },
         ]);
-        expect(contour?.points[3]).toMatchObject({ smooth: true });
       },
     );
   });
@@ -65,10 +66,8 @@ describe("adding a point on a segment with the Pen", () => {
         { points: [[0, 0], { x: 50, y: 100, off: true }, { x: 100, y: 0, qCurve: true }] },
       ],
     });
-    expect((await editor.outline())[0]?.points.map(({ pointType }) => pointType)).toEqual([
-      "onCurve",
-      "offCurve",
-      "qCurve",
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ pointType: "onCurve" }, { pointType: "offCurve" }, { pointType: "qCurve" }] },
     ]);
     editor.selectTool("pen");
 
@@ -76,13 +75,16 @@ describe("adding a point on a segment with the Pen", () => {
       editor,
       (e) => e.clickAt({ x: 50, y: 50 }),
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.points.map(({ pointType }) => pointType)).toEqual([
-          "onCurve",
-          "offCurve",
-          "qCurve",
-          "offCurve",
-          "qCurve",
+        expect(await e.outline()).toMatchObject([
+          {
+            points: [
+              { pointType: "onCurve" },
+              { pointType: "offCurve" },
+              { pointType: "qCurve" },
+              { pointType: "offCurve" },
+              { pointType: "qCurve" },
+            ],
+          },
         ]);
       },
     );

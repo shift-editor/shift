@@ -13,10 +13,10 @@ describe("undoing and redoing edits", () => {
     await editor.dragPoint(id, { x: 0, y: 20 });
 
     await editor.undo();
-    expect(await editor.pointPositions([id])).toEqual({ [id]: { x: 10, y: 0 } });
+    expect(await editor.point(id)).toMatchObject({ x: 10, y: 0 });
 
     await editor.undo();
-    expect(await editor.pointPositions([id])).toEqual({ [id]: { x: 0, y: 0 } });
+    expect(await editor.point(id)).toMatchObject({ x: 0, y: 0 });
   });
 
   it("redoes undone edits in the order they were made", async () => {
@@ -27,10 +27,10 @@ describe("undoing and redoing edits", () => {
     await editor.undo();
 
     await editor.redo();
-    expect(await editor.pointPositions([id])).toEqual({ [id]: { x: 10, y: 0 } });
+    expect(await editor.point(id)).toMatchObject({ x: 10, y: 0 });
 
     await editor.redo();
-    expect(await editor.pointPositions([id])).toEqual({ [id]: { x: 10, y: 20 } });
+    expect(await editor.point(id)).toMatchObject({ x: 10, y: 20 });
   });
 
   it("drops the undone edits once a new edit is made", async () => {
@@ -42,7 +42,7 @@ describe("undoing and redoing edits", () => {
     await editor.dragPoint(id, { x: 30, y: 40 });
     await editor.redo();
 
-    expect(await editor.pointPositions([id])).toEqual({ [id]: { x: 40, y: 40 } });
+    expect(await editor.point(id)).toMatchObject({ x: 40, y: 40 });
   });
 
   it("undoes the glyph's creation, then does nothing with no edits left", async () => {

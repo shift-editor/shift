@@ -46,6 +46,7 @@ import type {
   LocationSummary,
   Outline,
   OutlineTarget,
+  PointReadOptions,
   SourceLayer,
   SpacingToolState,
 } from "@/testing/reads";
@@ -416,7 +417,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     const bounds = await this.canvasBounds();
     const from = { x: bounds.x + input.from.x, y: bounds.y + input.from.y };
     const to = { x: bounds.x + input.to.x, y: bounds.y + input.to.y };
-    const modifiers = input.modifiers ?? [];
+    const modifiers = input.modifiers;
 
     let pressed = false;
     for (const modifier of modifiers) await this.page.keyboard.down(modifier);
@@ -535,14 +536,6 @@ export class EditorDriver implements EditorReads, EditorActions {
   }
 
   /**
-   * Returns a confirmed glyph-local position; throws when absent.
-   * @param pointId - Point in the active authored layer.
-   */
-  async pointPosition(pointId: PointId): Promise<LocalPoint> {
-    return (await this.pointPositions([pointId]))[pointId];
-  }
-
-  /**
    * Returns the current preview position without waiting for persistence.
    * @param pointId - Point in the active authored layer.
    */
@@ -621,8 +614,23 @@ export class EditorDriver implements EditorReads, EditorActions {
     return (await this.#openLayer()).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, { source }: PointReadOptions = {}): Promise<AuthoredPoint | null> {
+    if (source === undefined) return this.#pointIn(await this.outline(), id);
+
+    const { glyph } = await this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
+    const other = { glyph: { glyphId: glyph.glyphId }, source };
+    const match = await this.#reads.font.matchLayers(shown, other);
+    if (!match.complete) return null;
+
+    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    if (!counterpart) return null;
+    const layer = await this.#reads.font.getLayer(other);
+    return this.#pointIn(layer.contours, counterpart.targetId);
+  }
+
+  #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
@@ -637,20 +645,6 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   async components(): Promise<readonly AuthoredComponent[]> {
     return (await this.#openLayer()).components;
-  }
-
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, LocalPoint>> {
-    const outline = await this.outline();
-    const points = new Map(
-      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
-    );
-    return Object.fromEntries(
-      ids.map((id) => {
-        const point = points.get(id);
-        if (!point) throw new Error(`The open glyph has no point ${id}`);
-        return [id, localPoint(point.x, point.y)];
-      }),
-    ) as Record<PointId, LocalPoint>;
   }
 
   async advanceWidth(): Promise<number> {

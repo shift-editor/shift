@@ -30,12 +30,9 @@ describe("transforming selected points from the sidebar", () => {
         expect(e.rotateSelection(180)).toBe(true);
       },
       async (e) => {
-        const positions = await e.pointPositions([a, b, c]);
-        expect(positions[a]!.x).toBeCloseTo(30);
-        expect(positions[a]!.y).toBeCloseTo(40);
-        expect(positions[b]!.x).toBeCloseTo(10);
-        expect(positions[b]!.y).toBeCloseTo(20);
-        expect(positions[c]).toEqual({ x: 90, y: 0 });
+        expect(await e.point(a)).toBeNear({ x: 30, y: 40 });
+        expect(await e.point(b)).toBeNear({ x: 10, y: 20 });
+        expect(await e.point(c)).toMatchObject({ x: 90, y: 0 });
       },
     );
   });
@@ -78,8 +75,9 @@ describe("transforming selected points from the sidebar", () => {
         expect(e.distributeSelection("horizontal")).toBe(true);
       },
       async (e) => {
-        const positions = await e.pointPositions([a, b, c]);
-        expect([positions[a]!.x, positions[b]!.x, positions[c]!.x]).toEqual([10, 50, 90]);
+        expect(await e.point(a)).toMatchObject({ x: 10 });
+        expect(await e.point(b)).toMatchObject({ x: 50 });
+        expect(await e.point(c)).toMatchObject({ x: 90 });
       },
     );
   });

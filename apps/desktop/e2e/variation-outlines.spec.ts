@@ -37,7 +37,7 @@ workspaceTest.describe("mapped weight interpolation", () => {
             // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
             page.evaluate(() => {
               const editor = window.shiftSession!.editor;
-              const node = editor.scene.nodesOfKind("glyph")[0]!;
+              const node = editor.scene.first("glyph")!;
               const model = editor
                 .glyphForId(node.glyphId)!
                 .renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
@@ -129,13 +129,13 @@ test("moves matched points in every selected source as one edit", async ({ page,
 
   const drag = await editor.selectVisiblePoint();
   const [referenceBefore, activeBefore, boldWideBefore] = await Promise.all([
-    editor.pointPosition(drag.id),
+    editor.point(drag.id),
     pointsIn(active),
     pointsIn("BoldWide"),
   ]);
   await editor.dragPoint(drag);
   const [referenceAfter, activeAfter, boldWideAfter] = await Promise.all([
-    editor.pointPosition(drag.id),
+    editor.point(drag.id),
     pointsIn(active),
     pointsIn("BoldWide"),
   ]);
@@ -147,12 +147,12 @@ test("moves matched points in every selected source as one edit", async ({ page,
     activeMoves.map((move) => move !== null),
   );
   expect(boldWideMoves).toContainEqual({
-    x: referenceAfter.x - referenceBefore.x,
-    y: referenceAfter.y - referenceBefore.y,
+    x: referenceAfter!.x - referenceBefore!.x,
+    y: referenceAfter!.y - referenceBefore!.y,
   });
 
   await editor.undo();
-  await expect.poll(() => editor.pointPosition(drag.id)).toEqual(referenceBefore);
+  await expect.poll(() => editor.point(drag.id)).toEqual(referenceBefore);
   await expect.poll(() => pointsIn("BoldWide")).toEqual(boldWideBefore);
 });
 
@@ -165,7 +165,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
   // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   const pointId = await page.evaluate(() => {
     const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     const point = node
       ? editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation).allPoints[0]
       : null;

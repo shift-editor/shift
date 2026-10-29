@@ -111,6 +111,7 @@ import type {
   DocumentSaveState,
   InstanceSelection,
   Outline,
+  PointReadOptions,
   SourceSelection,
 } from "./reads";
 
@@ -385,15 +386,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return layer;
   }
 
-  pointPosition(pointId: PointId): Point2D {
-    this.#assertWorkspaceSettled();
-    const point = this.requireGlyphLayer().point(pointId);
-    if (!point) throw new Error("Expected source point");
-
-    return { x: point.x, y: point.y };
-  }
-
-  anchorPosition(anchorId: AnchorId): Point2D {
+  #anchorPosition(anchorId: AnchorId): Point2D {
     this.#assertWorkspaceSettled();
     const anchor = this.requireGlyphLayer().anchor(anchorId);
     if (!anchor) throw new Error("Expected source anchor");
@@ -643,7 +636,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   /** A drag from point `id` by `by`, crossing the drag threshold on a first sample a few units along. */
   #pointDrag(id: PointId, by: Point2D, options?: Modifiers): DragInput {
-    const down = this.pointPosition(id);
+    this.#assertWorkspaceSettled();
+    const point = this.requireGlyphLayer().point(id);
+    if (!point) throw new Error(`The open glyph has no point ${id}`);
+    const down = { x: point.x, y: point.y };
     const length = Math.hypot(by.x, by.y) || 1;
     const lead = Math.min(4, length);
     return {
@@ -703,12 +699,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async dragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): Promise<void> {
-    const from = this.anchorPosition(id);
+    const from = this.#anchorPosition(id);
     await this.dragFrom(from, { x: from.x + by.x, y: from.y + by.y }, modifiers);
   }
 
   holdDragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): void {
-    const from = this.anchorPosition(id);
+    const from = this.#anchorPosition(id);
     this.holdDragFrom(from, { x: from.x + by.x, y: from.y + by.y }, modifiers);
   }
 
@@ -1116,8 +1112,23 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return (await this.#authoredLayer()).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, { source }: PointReadOptions = {}): Promise<AuthoredPoint | null> {
+    if (source === undefined) return this.#pointIn(await this.outline(), id);
+
+    this.#assertWorkspaceSettled();
+    const { glyph } = this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
+    const other = { glyph: { glyphId: glyph.glyphId }, source };
+    const match = await this.#reads.font.matchLayers(shown, other);
+    if (!match.complete) return null;
+
+    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    if (!counterpart) return null;
+    return this.#pointIn((await this.#reads.font.getLayer(other)).contours, counterpart.targetId);
+  }
+
+  #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
@@ -1127,20 +1138,6 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   async components(): Promise<readonly AuthoredComponent[]> {
     return (await this.#authoredLayer()).components;
-  }
-
-  async pointPositions(ids: readonly PointId[]): Promise<Record<PointId, LocalPoint>> {
-    const outline = await this.outline();
-    const points = new Map(
-      outline.flatMap((contour) => contour.points).map((point) => [point.id, point]),
-    );
-    return Object.fromEntries(
-      ids.map((id) => {
-        const point = points.get(id);
-        if (!point) throw new Error(`The open glyph has no point ${id}`);
-        return [id, localPoint(point.x, point.y)];
-      }),
-    ) as Record<PointId, LocalPoint>;
   }
 
   selectionIds(): readonly string[] {
@@ -1308,19 +1305,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.editor.drawnSnapGuides();
   }
 
-  shownPointPositions(ids: readonly PointId[]): Record<PointId, LocalPoint> {
-    const points = new Map(
-      this.drawnOutline()
-        .flatMap((contour) => contour.points)
-        .map((point) => [point.id, point]),
-    );
-    return Object.fromEntries(
-      ids.map((id) => {
-        const point = points.get(id);
-        if (!point) throw new Error(`The open glyph shows no point ${id}`);
-        return [id, localPoint(point.x, point.y)];
-      }),
-    ) as Record<PointId, LocalPoint>;
+  drawnPoint(id: PointId): AuthoredPoint | null {
+    return this.#pointIn(this.drawnOutline(), id);
   }
 
   editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null {

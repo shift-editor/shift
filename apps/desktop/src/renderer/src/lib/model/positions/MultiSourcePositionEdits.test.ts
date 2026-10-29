@@ -56,15 +56,16 @@ describe("multi-source position edits", () => {
     const move = PositionEdits.fromSelection(selection).move(selection.targets);
 
     move.preview({ x: 20, y: -10 });
-    expect(editor.anchorPosition(anchorId)).toEqual({ x: 170, y: 240 });
-    expect(anchorPosition(targetSelection.layer, targetAnchorId)).toEqual({ x: 170, y: 240 });
+    expect(editor.requireGlyphLayer().anchor(anchorId)).toMatchObject({ x: 170, y: 240 });
+    expect(targetSelection.layer.anchor(targetAnchorId)).toMatchObject({ x: 170, y: 240 });
 
     move.discard();
-    expect(editor.anchorPosition(anchorId)).toEqual({ x: 150, y: 250 });
-    expect(anchorPosition(targetSelection.layer, targetAnchorId)).toEqual({ x: 150, y: 250 });
+    expect(editor.requireGlyphLayer().anchor(anchorId)).toMatchObject({ x: 150, y: 250 });
+    expect(targetSelection.layer.anchor(targetAnchorId)).toMatchObject({ x: 150, y: 250 });
   });
 
   it("scales each source around its corresponding pivot and undoes both atomically", async () => {
+    const layer = editor.requireGlyphLayer();
     const targetOffset = targetLayer.positions.move(
       PositionTargets.points([targetFirstId, targetLastId]),
     );
@@ -79,18 +80,19 @@ describe("multi-source position edits", () => {
     });
     scale.preview({ x: 2, y: 1 });
 
-    expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 100 });
-    expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 150, y: 150 });
+    expect(layer.point(firstId)).toMatchObject({ x: 50, y: 100 });
+    expect(targetLayer.point(targetFirstId)).toMatchObject({ x: 150, y: 150 });
 
     scale.commit();
     await editor.settle();
     await editor.undo();
 
-    expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
-    expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 200, y: 150 });
+    expect(layer.point(firstId)).toMatchObject({ x: 100, y: 100 });
+    expect(targetLayer.point(targetFirstId)).toMatchObject({ x: 200, y: 150 });
   });
 
   it("rotates around corresponding pivots and discards every source preview", async () => {
+    const layer = editor.requireGlyphLayer();
     const targetOffset = targetLayer.positions.move(
       PositionTargets.points([targetFirstId, targetLastId]),
     );
@@ -105,15 +107,15 @@ describe("multi-source position edits", () => {
     });
     rotate.preview(Math.PI / 2);
 
-    const referencePreview = editor.pointPosition(firstId);
-    expect(pointPosition(targetLayer, targetFirstId)).toEqual({
+    const referencePreview = layer.point(firstId)!;
+    expect(targetLayer.point(targetFirstId)).toMatchObject({
       x: referencePreview.x + 100,
       y: referencePreview.y + 50,
     });
 
     rotate.discard();
-    expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
-    expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 200, y: 150 });
+    expect(layer.point(firstId)).toMatchObject({ x: 100, y: 100 });
+    expect(targetLayer.point(targetFirstId)).toMatchObject({ x: 200, y: 150 });
   });
 
   it("publishes only matches for the latest editing source set", async () => {
@@ -159,20 +161,6 @@ function requirePositionSelection(
   if (!selection) throw new Error("Expected position selection");
 
   return selection;
-}
-
-function pointPosition(layer: GlyphLayer, pointId: PointId) {
-  const point = layer.point(pointId);
-  if (!point) throw new Error("Expected layer point");
-
-  return { x: point.x, y: point.y };
-}
-
-function anchorPosition(layer: GlyphLayer, anchorId: AnchorId) {
-  const anchor = layer.anchor(anchorId);
-  if (!anchor) throw new Error("Expected layer anchor");
-
-  return { x: anchor.x, y: anchor.y };
 }
 
 function weightAxis() {

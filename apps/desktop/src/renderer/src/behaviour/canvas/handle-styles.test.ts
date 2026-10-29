@@ -33,12 +33,7 @@ describe("point handles show selection at a source and plain styling between sou
     const [shape] = await editor.outline();
     expect(editor.selectionIds()).toEqual([shape?.id]);
 
-    expect(editor.drawnHandles().map(({ state }) => state)).toEqual([
-      "selected",
-      "selected",
-      "selected",
-      "selected",
-    ]);
+    expect(editor.drawnHandles()).toMatchObject(Array(4).fill({ state: "selected" }));
   });
 
   it("draws every handle as interpolated between sources, and selection again back at a source", async () => {
@@ -50,11 +45,7 @@ describe("point handles show selection at a source and plain styling between sou
     await editor.addAxis(WEIGHT);
 
     editor.setLocation({ wght: 550 });
-    expect(editor.drawnHandles().map(({ state }) => state)).toEqual([
-      "interpolated",
-      "interpolated",
-      "interpolated",
-    ]);
+    expect(editor.drawnHandles()).toMatchObject(Array(3).fill({ state: "interpolated" }));
 
     editor.clickSource("Regular");
     expect(editor.drawnHandles()).toContainEqual({ pointId: b, state: "selected" });

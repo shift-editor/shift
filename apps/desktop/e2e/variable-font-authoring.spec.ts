@@ -20,14 +20,14 @@ test.describe("variable-font authoring controls", () => {
 
     await dialog.getByLabel("Create axis").click();
     await page.getByRole("menuitem").filter({ hasText: "Weight" }).click();
-    await expect.poll(async () => (await editor.fontOverview()).axes[0]?.tag).toBe("wght");
+    await expect.poll(() => editor.fontOverview()).toMatchObject({ axes: [{ tag: "wght" }] });
 
     const axisName = dialog.locator("main").getByLabel("Name", { exact: true });
     await axisName.fill("Weight Class");
     await axisName.press("Tab");
     const axisId = (await editor.fontOverview()).axes[0]?.id;
     if (!axisId) throw new Error("Expected created axis");
-    await expect.poll(async () => (await editor.axis({ id: axisId }))?.name).toBe("Weight Class");
+    await expect.poll(() => editor.axis({ id: axisId })).toMatchObject({ name: "Weight Class" });
 
     await selectCategory(dialog, "Sources");
     const defaultSourceName = (await editor.fontOverview()).sources[0]?.name;

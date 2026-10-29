@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { ComponentId, GlyphName } from "@shift/types";
+import type { GlyphName } from "@shift/types";
 import { square, triangle } from "@/testing/fixtures";
 import { startEditorWith, WEIGHT, type FontFixture } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
@@ -13,10 +13,6 @@ const WITH_BASE = {
   glyphs: { base: { outline: { contours: [square(100)] } }, root: {} },
   open: "root",
 } satisfies FontFixture;
-
-async function componentIds(): Promise<ComponentId[]> {
-  return (await editor.components()).map(({ id }) => id);
-}
 
 describe("component references become removable or editable local contours", () => {
   it("removes a nested component, restores it, and decomposes it into its outline", async () => {
@@ -39,7 +35,7 @@ describe("component references become removable or editable local contours", () 
 
     await editor.undo();
     await editor.settle();
-    expect(await componentIds()).toEqual([component!.id]);
+    expect(await editor.components()).toMatchObject([{ id: component!.id }]);
     expect((await editor.drawnGlyph()).bounds).toEqual(drawn);
 
     editor.selectObjects([component!.id]);
@@ -53,7 +49,7 @@ describe("component references become removable or editable local contours", () 
 
     await editor.undo();
     await editor.settle();
-    expect(await componentIds()).toEqual([component!.id]);
+    expect(await editor.components()).toMatchObject([{ id: component!.id }]);
     expect(await editor.outline()).toEqual([]);
     expect((await editor.drawnGlyph()).bounds).toEqual(drawn);
   });
@@ -64,8 +60,8 @@ describe("component references become removable or editable local contours", () 
     const componentId = await editor.createGlyphAndAddComponent("aacute" as GlyphName);
     const created = editor.glyphNamed("aacute");
     expect(componentId).not.toBeNull();
-    expect(created?.unicodes).toEqual([0x00e1]);
-    expect((await editor.components())[0]?.baseGlyphId).toBe(created?.id);
+    expect(created).toMatchObject({ unicodes: [0x00e1] });
+    expect(await editor.components()).toMatchObject([{ baseGlyphId: created?.id }]);
 
     await editor.undo();
     await editor.settle();
@@ -74,14 +70,14 @@ describe("component references become removable or editable local contours", () 
 
     await editor.redo();
     await editor.settle();
-    expect(editor.glyphNamed("aacute")?.id).toBe(created?.id);
-    expect((await editor.components())[0]?.baseGlyphId).toBe(created?.id);
+    expect(editor.glyphNamed("aacute")).toMatchObject({ id: created?.id });
+    expect(await editor.components()).toMatchObject([{ baseGlyphId: created?.id }]);
   });
 
   it("deletes a selected component of an empty glyph, which has no bounds", async () => {
     editor = await startEditorWith({ glyphs: { "empty-base": {} } });
     await editor.draw({ components: [{ glyph: "empty-base" }] });
-    editor.selectObjects(await componentIds());
+    editor.selectObjects((await editor.components()).map(({ id }) => id));
 
     expect(await editor.deleteSelection()).toBe(true);
     expect(await editor.components()).toEqual([]);
@@ -101,7 +97,7 @@ describe("component references become removable or editable local contours", () 
     expect((await editor.layerAt("Bold")).components).toHaveLength(1);
 
     await editor.editSources([regular, "Bold"]);
-    editor.selectObjects(await componentIds());
+    editor.selectObjects((await editor.components()).map(({ id }) => id));
     expect(await editor.deleteSelection()).toBe(true);
     expect((await editor.layerAt(regular)).components).toEqual([]);
     expect((await editor.layerAt("Bold")).components).toEqual([]);
@@ -122,22 +118,26 @@ describe("Decompose Components replaces selected components with outlines", () =
   it("decomposes the selection as one undoable edit", async () => {
     editor = await startEditorWith(WITH_BASE);
     await editor.draw({ components: [{ glyph: "base" }] });
-    const ids = await componentIds();
+    const ids = (await editor.components()).map(({ id }) => id);
     editor.selectObjects(ids);
 
     expect(editor.canDecomposeSelection()).toBe(true);
     expect(await editor.runCommand("glyph.decomposeComponents")).toBe(true);
     expect(await editor.components()).toEqual([]);
-    expect((await editor.outline())[0]?.points.map(({ x, y }) => [x, y])).toEqual([
-      [0, 0],
-      [100, 0],
-      [100, 100],
-      [0, 100],
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+          { x: 0, y: 100 },
+        ],
+      },
     ]);
 
     await editor.undo();
     await editor.settle();
-    expect(await componentIds()).toEqual(ids);
+    expect(await editor.components()).toMatchObject(ids.map((id) => ({ id })));
     expect(await editor.outline()).toEqual([]);
   });
 
@@ -163,7 +163,9 @@ describe("components of glyphs not yet loaded this session", () => {
     await editor.draw({ components: [{ glyph: "base" }] });
 
     const drawn = await editor.drawnGlyph();
-    expect(drawn.components).toHaveLength(1);
-    expect(drawn.bounds).toEqual({ min: { x: 0, y: 0 }, max: { x: 100, y: 100 } });
+    expect(drawn).toMatchObject({
+      components: [expect.anything()],
+      bounds: { min: { x: 0, y: 0 }, max: { x: 100, y: 100 } },
+    });
   });
 });

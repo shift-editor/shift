@@ -110,6 +110,7 @@ export function renderCounterScript(): void {
   const CLASS_COMPONENT = 1;
   const PERFORMED_WORK = 1;
   const starts = new Map<string, number>();
+  const mostFrequentFirst = (a: [string, number], b: [string, number]) => b[1] - a[1];
   const state = { active: false, commits: 0, renders: 0 };
 
   const nameOf = (fiber: Fiber): string | null => {
@@ -206,7 +207,7 @@ export function renderCounterScript(): void {
       return {
         commits: state.commits,
         perCommit: Math.round(state.renders / Math.max(1, state.commits)),
-        starts: [...starts].sort((a, b) => b[1] - a[1]).slice(0, 25),
+        starts: [...starts].sort(mostFrequentFirst).slice(0, 25),
       };
     },
   };

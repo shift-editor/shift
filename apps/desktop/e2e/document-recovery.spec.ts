@@ -101,10 +101,10 @@ async function expectGlyphsAndState(
         const glyphs = await editor.glyphNames();
         return {
           present: glyphNames.map((name) => glyphs.includes(name)),
-          dirty: (await editor.documentState())?.dirty,
+          document: await editor.documentState(),
         };
       },
       { timeout: 20_000 },
     )
-    .toEqual({ present: glyphNames.map(() => present), dirty });
+    .toMatchObject({ present: glyphNames.map(() => present), document: { dirty } });
 }

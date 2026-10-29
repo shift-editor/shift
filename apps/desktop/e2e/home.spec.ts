@@ -218,7 +218,9 @@ test.describe("Home view", () => {
       expect(current!.panelWidth).toBeGreaterThanOrEqual(previous!.panelWidth - 1);
       expect(Math.abs(current!.catalogWidth - current!.panelWidth)).toBeLessThanOrEqual(1);
     }
-    expect(catalogSamples.at(-1)!.panelWidth - catalogSamples[0]!.panelWidth).toBeGreaterThan(10);
+    const [first] = catalogSamples;
+    const last = catalogSamples.at(-1);
+    expect(last!.panelWidth - first!.panelWidth).toBeGreaterThan(10);
     await expect.poll(() => elementWidth(rightPanel)).toBe(0);
     await expect
       .poll(async () => Math.abs((await elementWidth(rightContent)) - rightWidth))

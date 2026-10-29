@@ -112,8 +112,8 @@ test.describe("Performance — 10K-character text run", () => {
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.insertText(text);
     await expect
-      .poll(async () => (await editor.canvasText())?.glyphs.length, { timeout: 60_000 })
-      .toBe(1 + [...text].length);
+      .poll(() => editor.canvasText(), { timeout: 60_000 })
+      .toMatchObject({ glyphs: { length: 1 + [...text].length } });
 
     await editor.press("Escape");
     await expect.poll(async () => (await editor.editedNodeIds()).length).toBe(1);
