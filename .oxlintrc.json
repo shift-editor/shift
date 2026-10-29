@@ -78,7 +78,8 @@
     {
       "files": ["**/renderer/src/behaviour/**/*.test.ts", "**/desktop/e2e/**/*.spec.ts"],
       "rules": {
-        "shift/no-drill-into-reads": "error"
+        "shift/no-drill-into-reads": "error",
+        "shift/no-lookup-in-tests": "error"
       }
     }
   ]

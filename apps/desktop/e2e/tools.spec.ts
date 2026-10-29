@@ -161,6 +161,7 @@ test.describe("Toolbar tools", () => {
     const session = await page.context().newCDPSession(page);
     const { frameTree } = await session.send("Page.getResourceTree");
     await session.detach();
+    // oxlint-disable-next-line shift/no-lookup-in-tests -- picks image resources from the CDP resource tree, not an app read
     const loaded = frameTree.resources
       .filter((resource) => resource.type === "Image")
       .map((resource) => new URL(resource.url).pathname.split("/").at(-1));

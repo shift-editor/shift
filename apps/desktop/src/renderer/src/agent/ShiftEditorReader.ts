@@ -16,7 +16,7 @@ import type { Editor } from "@shift/editor";
 import type { ScenePoint } from "@shift/editor/spaces";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
-import type { PointId, Source, SourceId } from "@shift/types";
+import { ascending, comparing, type PointId, type Source, type SourceId } from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
 import type { KerningPair, SpacingTool } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -250,13 +250,28 @@ export class ShiftEditorReader {
     return [...states].map(([pointId, state]) => ({ pointId, state }));
   }
 
-  /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
+  /**
+   * The source and instance outlines the canvas draws around the open glyph: sources first, in
+   * the font's source order, then instances, in the font's instance order.
+   */
   drawnOutlineTargets(): GlyphOutlineTarget[] {
     const editor = this.#editor;
     const node = editor.scene.first("glyph");
     if (!node) return [];
 
-    return [...editor.nodeDefinition("glyph").visibleOutlines(node.id)];
+    const { sources, namedInstances } = editor.font;
+    const sourceOrder = new Map(sources.map((source, index) => [source.id, index]));
+    const instanceOrder = new Map(
+      namedInstances.map((instance, index) => [instance.id, sources.length + index]),
+    );
+    const rank = (target: GlyphOutlineTarget) =>
+      target.kind === "source"
+        ? (sourceOrder.get(target.sourceId) ?? -1)
+        : (instanceOrder.get(target.instanceId) ?? -1);
+    return editor
+      .nodeDefinition("glyph")
+      .visibleOutlines(node.id)
+      .toSorted(comparing(rank, ascending));
   }
 
   /**

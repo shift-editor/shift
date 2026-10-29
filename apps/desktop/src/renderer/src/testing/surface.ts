@@ -43,24 +43,25 @@ import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { AxisFixture, AxisLocation, FontBuilder } from "./fonts";
 import type {
+  AnchorReadOptions,
+  AxisSelection,
   CanvasHandle,
   CanvasText,
   DocumentSaveState,
-  AxisSelection,
   EditorActions,
   EditorReads,
-  InstanceSelection,
-  SourceSelection,
   EditorViewState,
   FontSummary,
-  GlyphListing,
-  LocationSummary,
-  SourceLayer,
   GlyphAnchor,
+  GlyphListing,
+  InstanceSelection,
   KerningGroup,
+  LocationSummary,
   Outline,
   OutlinePoint,
   SourceKerning,
+  SourceLayer,
+  SourceSelection,
   SpacingToolState,
 } from "./reads";
 
@@ -394,7 +395,7 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The open glyph's point at a position in the active source, or null. */
   pointAt(position: Point2D): Promise<OutlinePoint | null>;
   /** The open glyph's anchor named `name` in the active source, or null. */
-  anchorNamed(name: string): Promise<GlyphAnchor | null>;
+  anchorNamed(name: string, options?: AnchorReadOptions): Promise<GlyphAnchor | null>;
   /** The open glyph's outline bounds, as agents read them; null when it has no outline. */
   outlineBounds(): Promise<Bounds | null>;
   /** The open glyph's authored layer at the source named `source`, as agents read it. */

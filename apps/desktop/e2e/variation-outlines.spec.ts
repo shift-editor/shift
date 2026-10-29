@@ -1,3 +1,4 @@
+import type { NamedInstanceId, SourceId } from "@shift/types";
 import type { Page } from "@playwright/test";
 import { workspaceTest, expect, FONTS, navigateToEditor } from "./fixtures/electronApp";
 import {
@@ -8,7 +9,7 @@ import {
   variationControls,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import type { OutlinePoint } from "@/testing/reads";
+import type { OutlinePoint, OutlineTarget } from "@/testing/reads";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
@@ -55,10 +56,12 @@ workspaceTest.describe("mapped weight interpolation", () => {
 
 interface OutlineFixture {
   readonly activeSource: { readonly id: string; readonly name: string };
-  readonly source: { readonly id: string; readonly name: string };
-  readonly comparisonSourceIds: readonly string[];
-  readonly instance: { readonly id: string; readonly name: string };
-  readonly instanceIds: readonly string[];
+  readonly source: { readonly id: SourceId; readonly name: string };
+  /** The outline each comparison source draws, in the font's source order. */
+  readonly comparisonSources: readonly OutlineTarget[];
+  readonly instance: { readonly id: NamedInstanceId; readonly name: string };
+  /** The outline each instance draws, in the font's instance order. */
+  readonly instances: readonly OutlineTarget[];
 }
 
 /** Opens S with the Variations tab and returns the sources and instances it can outline. */
@@ -70,8 +73,10 @@ async function openOutlineFixture(page: Page, editor: EditorDriver): Promise<Out
     editor.fontOverview(),
     editor.source("active"),
   ]);
-  const comparisonSources = sources.filter(({ id }) => id !== activeSource?.id);
-  const instance = instances[0];
+  // The default source comes first and is the one open; the rest are comparison sources.
+  const [first, ...comparisonSources] = sources;
+  const [instance] = instances;
+  expect(first).toEqual(activeSource);
   if (!activeSource || !comparisonSources[0] || !instance) {
     throw new Error("Expected variable sources and an instance");
   }
@@ -79,19 +84,10 @@ async function openOutlineFixture(page: Page, editor: EditorDriver): Promise<Out
   return {
     activeSource: { id: activeSource.id, name: activeSource.name },
     source: { id: comparisonSources[0].id, name: comparisonSources[0].name },
-    comparisonSourceIds: comparisonSources.map(({ id }) => `source:${id}`).sort(),
+    comparisonSources: comparisonSources.map(({ id }) => ({ kind: "source", sourceId: id })),
     instance: { id: instance.id, name: instance.name },
-    instanceIds: instances.map(({ id }) => `instance:${id}`).sort(),
+    instances: instances.map(({ id }) => ({ kind: "instance", instanceId: id })),
   };
-}
-
-/** Returns the comparison outlines the glyph node draws, as sorted `kind:id` keys. */
-async function drawnOutlines(editor: EditorDriver): Promise<readonly string[]> {
-  return (await editor.drawnOutlineTargets())
-    .map((target) =>
-      target.kind === "source" ? `source:${target.sourceId}` : `instance:${target.instanceId}`,
-    )
-    .sort();
 }
 
 function outlineToggle(
@@ -186,17 +182,17 @@ test("row visibility outlines one comparison source without changing the active 
 }) => {
   const fixture = await openOutlineFixture(page, editor);
   const controls = variationControls(page);
-  const sourceKey = `source:${fixture.source.id}`;
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
   await expect(outlineToggle(page, "Show", "source", fixture.activeSource.name)).toHaveCount(0);
 
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
   await expect(sourceRow(controls, fixture.source.name)).toHaveAttribute("aria-pressed", "false");
   expect(await activeSourceId(editor)).toBe(fixture.activeSource.id);
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test("editing-selection sources stay outlined until hidden, panning, or deselected", async ({
@@ -205,34 +201,34 @@ test("editing-selection sources stay outlined until hidden, panning, or deselect
 }) => {
   const fixture = await openOutlineFixture(page, editor);
   const sourceButton = sourceRow(variationControls(page), fixture.source.name);
-  const sourceKey = `source:${fixture.source.id}`;
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
 
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
   expect(await activeSourceId(editor)).toBe(fixture.activeSource.id);
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 
   // Leaving and rejoining the editing selection forgets the per-row hide.
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   // Holding Space over the canvas pans with the hand tool, which hides comparison outlines.
   await editor.canvas.hover();
   await page.keyboard.down("Space");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
   await page.keyboard.up("Space");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await page.keyboard.press("Escape");
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test("an explicitly shown source outline survives leaving the editing selection", async ({
@@ -241,16 +237,16 @@ test("an explicitly shown source outline survives leaving the editing selection"
 }) => {
   const fixture = await openOutlineFixture(page, editor);
   const sourceButton = sourceRow(variationControls(page), fixture.source.name);
-  const sourceKey = `source:${fixture.source.id}`;
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
 
   await sourceButton.click({ modifiers: [toggleModifier] });
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await page.keyboard.press("Escape");
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 });
 
 test("the edit-all-sources shortcut outlines every comparison source", async ({ page, editor }) => {
@@ -260,11 +256,11 @@ test("the edit-all-sources shortcut outlines every comparison source", async ({ 
 
   await page.keyboard.press(toggleAllSources);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(() => drawnOutlines(editor)).toEqual(fixture.comparisonSourceIds);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.comparisonSources);
 
   await page.keyboard.press(toggleAllSources);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test("show-all and hide-all keep explicitly shown source and instance outlines", async ({
@@ -273,29 +269,27 @@ test("show-all and hide-all keep explicitly shown source and instance outlines",
 }) => {
   const fixture = await openOutlineFixture(page, editor);
   const controls = variationControls(page);
-  const sourceKey = `source:${fixture.source.id}`;
-  const instanceKey = `instance:${fixture.instance.id}`;
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
+  const instanceKey = { kind: "instance", instanceId: fixture.instance.id } as const;
 
   await controls.getByRole("button", { name: "Show all source outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual(fixture.comparisonSourceIds);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.comparisonSources);
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
-  await expect
-    .poll(() => drawnOutlines(editor))
-    .toEqual(fixture.comparisonSourceIds.filter((key) => key !== sourceKey));
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.comparisonSources.slice(1));
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
   await controls.getByRole("button", { name: "Hide all source outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 
   await outlineToggle(page, "Show", "instance", fixture.instance.name).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([instanceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([instanceKey]);
   await controls.getByRole("button", { name: "Show all instance outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual(fixture.instanceIds);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.instances);
   await controls.getByRole("button", { name: "Hide all instance outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([instanceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([instanceKey]);
   await outlineToggle(page, "Hide", "instance", fixture.instance.name).click();
-  await expect.poll(() => drawnOutlines(editor)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test(
@@ -305,7 +299,9 @@ test(
     const fixture = await openOutlineFixture(page, editor);
 
     await outlineToggle(page, "Show", "source", fixture.source.name).click();
-    await expect.poll(() => drawnOutlines(editor)).toEqual([`source:${fixture.source.id}`]);
+    await expect
+      .poll(() => editor.drawnOutlineTargets())
+      .toEqual([{ kind: "source", sourceId: fixture.source.id }]);
 
     await expectCanvasSnapshot(editor, "outline-source.png");
   },
@@ -319,7 +315,9 @@ test(
     const instance = (await editor.instance({ name: "Medium_Narrow_I" }))!;
 
     await outlineToggle(page, "Show", "instance", instance.name).click();
-    await expect.poll(() => drawnOutlines(editor)).toEqual([`instance:${instance.id}`]);
+    await expect
+      .poll(() => editor.drawnOutlineTargets())
+      .toEqual([{ kind: "instance", instanceId: instance.id }]);
 
     await expectCanvasSnapshot(editor, "outline-interpolated-instance.png");
   },

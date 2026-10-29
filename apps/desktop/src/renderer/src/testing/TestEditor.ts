@@ -107,6 +107,7 @@ import type {
 import { drawFixture } from "./drawFixture";
 import { SurfaceActions } from "./SurfaceActions";
 import type {
+  AnchorReadOptions,
   AxisSelection,
   DocumentSaveState,
   InstanceSelection,
@@ -1175,8 +1176,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
     );
   }
 
-  async anchorNamed(name: string): Promise<AuthoredAnchor | null> {
-    return (await this.anchors()).find((anchor) => anchor.name === name) ?? null;
+  async anchorNamed(
+    name: string,
+    { source }: AnchorReadOptions = {},
+  ): Promise<AuthoredAnchor | null> {
+    const anchors =
+      source === undefined ? await this.anchors() : (await this.layerAt(source)).anchors;
+    return anchors.find((anchor) => anchor.name === name) ?? null;
   }
 
   async outlineBounds(): Promise<Bounds | null> {

@@ -32,22 +32,23 @@ import type { PositionGuide, SourceSelectionMode } from "@shift/editor/types";
 import type { MatchedPoint, SelectedObject } from "@/agent/ShiftEditorReader";
 import type { AppReaders } from "@/agent/AppReaders";
 import type {
+  AnchorReadOptions,
+  AxisSelection,
   CanvasHandle,
   CanvasText,
-  AxisSelection,
   DocumentSaveState,
   EditorActions,
   EditorReads,
-  InstanceSelection,
-  SourceSelection,
   EditorViewState,
   FontSummary,
   GlyphListing,
+  InstanceSelection,
   LocationSummary,
   Outline,
   OutlineTarget,
   PointReadOptions,
   SourceLayer,
+  SourceSelection,
   SpacingToolState,
 } from "@/testing/reads";
 import type { E2EHooks } from "@/testing/e2e/hooks";
@@ -535,16 +536,9 @@ export class EditorDriver implements EditorReads, EditorActions {
     return this.#hooks.canvas.pointProjections(pointIds);
   }
 
-  /**
-   * Returns the current preview position without waiting for persistence.
-   * @param pointId - Point in the active authored layer.
-   */
-  async livePointPosition(pointId: PointId): Promise<LocalPoint> {
-    const point = (await this.drawnOutline())
-      .flatMap((contour) => contour.points)
-      .find((candidate) => candidate.id === pointId);
-    if (!point) throw new Error(`Expected the drawn point ${pointId}`);
-    return localPoint(point.x, point.y);
+  /** The open glyph's point `id` as the canvas draws it now, a gesture's preview included; null when it draws none. */
+  async drawnPoint(id: PointId): Promise<AuthoredPoint | null> {
+    return this.#pointIn(await this.drawnOutline(), id);
   }
 
   /**
@@ -634,9 +628,16 @@ export class EditorDriver implements EditorReads, EditorActions {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
-  /** The open glyph's anchor named `name`, or null when it has none. */
-  async anchorNamed(name: string): Promise<AuthoredAnchor | null> {
-    return (await this.anchors()).find((anchor) => anchor.name === name) ?? null;
+  /** The open glyph's anchor named `name`, in the shown source or `source`; null when it has none. */
+  async anchorNamed(
+    name: string,
+    { source }: AnchorReadOptions = {},
+  ): Promise<AuthoredAnchor | null> {
+    const { glyph } = await this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    const { anchors } =
+      source === undefined ? await this.#openLayer() : await this.layerOf(glyph.name, source);
+    return anchors.find((anchor) => anchor.name === name) ?? null;
   }
 
   async anchors(): Promise<readonly AuthoredAnchor[]> {

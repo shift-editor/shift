@@ -96,6 +96,12 @@ export type CanvasHandle = DrawnHandle;
 export type OutlineTarget = GlyphOutlineTarget;
 
 /** Where a point read looks for the point. */
+/** Where {@link EditorTestSurface.anchorNamed} reads. */
+export interface AnchorReadOptions {
+  /** The source, by name, whose layer of the open glyph to read; the shown one when omitted. */
+  readonly source?: string;
+}
+
 export interface PointReadOptions {
   /**
    * Read the counterpart of the shown source's point `id` in this source's

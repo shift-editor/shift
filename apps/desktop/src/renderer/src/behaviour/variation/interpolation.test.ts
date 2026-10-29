@@ -16,15 +16,15 @@ describe("sources on a mapped axis", () => {
     editor.setAdvanceWidth(500);
     await editor.settle();
 
-    const black = editor.fontOverview().sources.filter(({ name }) => name === "Black");
-    expect(black).toHaveLength(1);
-    expect(Object.values(black[0]!.location.values)[0]).toBeCloseTo(800);
-    expect(editor.location().sourceId).toBe(black[0]!.id);
+    const black = editor.source({ name: "Black" });
+    expect(black).not.toBeNull();
+    expect(Object.values(black!.location.values)[0]).toBeCloseTo(800);
+    expect(editor.location()).toMatchObject({ sourceId: black!.id });
 
     const regular = editor.fontOverview().sources[0]!.name;
     await editor.editSources([regular]);
     editor.setLocation({ wght: 900 });
-    expect(editor.location().sourceId).toBe(black[0]!.id);
+    expect(editor.location()).toMatchObject({ sourceId: black!.id });
     expect((await editor.drawnGlyph()).advanceWidth).toBe(500);
 
     await editor.editSources([regular]);
@@ -176,8 +176,7 @@ describe("editing a variable glyph across sources", () => {
     await editor.editSources([regular]);
     editor.setLocation({ wght: 700 });
 
-    const bold = editor.fontOverview().sources.filter(({ name }) => name === "Bold");
-    expect(editor.location().sourceId).toBe(bold[0]?.id);
+    expect(editor.location()).toMatchObject({ sourceId: editor.source({ name: "Bold" })!.id });
     expect((await editor.drawnGlyph()).advanceWidth).toBe(500);
   });
 

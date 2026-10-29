@@ -48,16 +48,16 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
   await editor.pointerDown({ x: bounds.x + drag.down.x, y: bounds.y + drag.down.y });
   try {
     await editor.pointerMove({ x: bounds.x + drag.end.x, y: bounds.y + drag.end.y }, 3);
-    const preview = await editor.livePointPosition(drag.id);
+    const preview = (await editor.drawnPoint(drag.id))!;
     expect(preview.x).toBeCloseTo(drag.expected.x, 4);
     expect(preview.y).toBeCloseTo(drag.expected.y, 4);
-    expect(await editor.livePointPosition(drag.pivot)).toEqual({ x: 100, y: 100 });
+    expect(await editor.drawnPoint(drag.pivot)).toMatchObject({ x: 100, y: 100 });
     await expect
       .poll(() => editor.drawnSnapGuides())
       .toEqual([expect.objectContaining({ kind: "direction" })]);
     await page.keyboard.up("Shift");
     await editor.pointerUp();
-    expect(await editor.point(drag.id)).toMatchObject(preview);
+    expect(await editor.point(drag.id)).toMatchObject({ x: preview.x, y: preview.y });
     await expect(editor.shell).toHaveAttribute("data-gesture", "idle");
     expect(await editor.drawnSnapGuides()).toEqual([]);
   } finally {
