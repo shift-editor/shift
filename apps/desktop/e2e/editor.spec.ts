@@ -4,12 +4,7 @@ import { line, type ShapeFixture } from "@/testing/fixtures";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { editorSidebar, editorToolbar, glyphProperties } from "./fixtures/appLocators";
-import {
-  cubicSegmentControls,
-  firstSegmentMidpoint,
-  lineSegmentUpgrade,
-  upgradePreviewHandles,
-} from "./fixtures/editorInteractions";
+import { firstSegmentMidpoint, lineSegmentUpgrade } from "./fixtures/editorInteractions";
 import {
   expectCanvasSnapshot,
   expectPanelSnapshot,
@@ -597,34 +592,40 @@ test.describe("Editor view", () => {
     async ({ page, editor }) => {
       const canvas = editor.canvas;
       const preview = await lineSegmentUpgrade(page);
-      // The Select tool's upgrade preview item publishes the scene positions it draws;
-      // null means no preview is rendered.
-      const previewHandles = () => upgradePreviewHandles(page);
+      // The handles the Select tool previews, in glyph units; null means none is drawn.
+      const previewHandles = () => editor.drawnUpgradePreview();
 
       await canvas.hover({ position: preview.hover });
       await expect.poll(previewHandles).toBeNull();
       await page.keyboard.down("Meta");
       try {
         await expect(canvas).toHaveCSS("cursor", /cursor@32-bend\.svg/);
-        await expect.poll(previewHandles).toEqual(preview.sceneControls);
+        await expect.poll(previewHandles).toEqual(preview.controls);
         await expectCanvasSnapshot(editor, "segment-upgrade-preview.png");
 
         await page.keyboard.up("Meta");
         await expect.poll(previewHandles).toBeNull();
         await page.keyboard.down("Meta");
-        await expect.poll(previewHandles).toEqual(preview.sceneControls);
+        await expect.poll(previewHandles).toEqual(preview.controls);
         await glyphProperties(page).hover({ position: { x: 10, y: 10 } });
         await expect.poll(previewHandles).toBeNull();
         await canvas.hover({ position: preview.hover });
-        await expect.poll(previewHandles).toEqual(preview.sceneControls);
+        await expect.poll(previewHandles).toEqual(preview.controls);
 
         await canvas.click({ position: preview.hover });
         await editor.waitForIdle();
-        const controls = await cubicSegmentControls(page, preview.id);
-        controls.forEach((point, index) => {
-          expect(point.x).toBeCloseTo(preview.controls[index].x, 6);
-          expect(point.y).toBeCloseTo(preview.controls[index].y, 6);
-        });
+        // The committed curve's controls sit where the preview drew them.
+        expect((await editor.outline())[0]!.points).toEqual(
+          expect.arrayContaining(
+            preview.controls.map(({ x, y }) =>
+              expect.objectContaining({
+                x: expect.closeTo(x, 6),
+                y: expect.closeTo(y, 6),
+                pointType: "offCurve",
+              }),
+            ),
+          ),
+        );
         await expect.poll(previewHandles).toBeNull();
         await expect(canvas).toHaveCSS("cursor", /cursor@32\.svg/);
       } finally {

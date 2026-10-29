@@ -303,7 +303,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Projects a scene position into canvas-local coordinates. */
   async projectSceneToCanvas(position: ScenePoint): Promise<ScreenPoint> {
-    return this.#hooks.editor.sceneToCanvas(position);
+    return this.#hooks.canvas.sceneToCanvas(position);
   }
 
   /**
@@ -324,7 +324,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    */
   async projectGlyphToPage(position: LocalPoint): Promise<Point2D> {
     const [canvasPosition, bounds] = await Promise.all([
-      this.#hooks.editor.glyphToCanvas(position),
+      this.#hooks.canvas.glyphToCanvas(position),
       this.canvasBounds(),
     ]);
     return { x: bounds.x + canvasPosition.x, y: bounds.y + canvasPosition.y };
@@ -332,12 +332,12 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Projects a position in the open glyph's own units into canvas-local coordinates. */
   async projectGlyphToCanvas(position: LocalPoint): Promise<ScreenPoint> {
-    return this.#hooks.editor.glyphToCanvas(position);
+    return this.#hooks.canvas.glyphToCanvas(position);
   }
 
   /** Projects a canvas-local position into the open glyph's own units. */
   async projectCanvasToGlyph(position: ScreenPoint): Promise<LocalPoint> {
-    return this.#hooks.editor.canvasToGlyph(position);
+    return this.#hooks.canvas.canvasToGlyph(position);
   }
 
   /**
@@ -345,7 +345,7 @@ export class EditorDriver implements EditorReads, EditorActions {
    * @param position - Point relative to the canvas origin.
    */
   async projectCanvasToScene(position: ScreenPoint): Promise<ScenePoint> {
-    return this.#hooks.editor.canvasToScene(position);
+    return this.#hooks.canvas.canvasToScene(position);
   }
 
   /** Selects every editable object and waits for any resulting workspace edits. */
@@ -441,7 +441,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Flushes the latest coalesced pointer move into the active tool gesture. */
   async flushPointerMoves(): Promise<void> {
-    await this.#hooks.interactions.flushPointerMoves();
+    await this.#hooks.canvas.flushPointerMoves();
   }
 
   /** Waits until the current gesture and its workspace edits are complete. */
@@ -531,7 +531,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   async pointTargets(pointIds: readonly PointId[]): Promise<readonly PointTarget[]> {
     await this.#waitForEdits();
 
-    return this.#hooks.editor.pointProjections(pointIds);
+    return this.#hooks.canvas.pointProjections(pointIds);
   }
 
   /**
@@ -567,7 +567,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns a safe drag for a visible on-curve point; throws when none exists. */
   async selectVisiblePoint(): Promise<PointDrag> {
-    const point = await this.#hooks.editor.visiblePointDrag();
+    const point = await this.#hooks.canvas.visiblePointDrag();
 
     await this.page.mouse.click(point.startPagePosition.x, point.startPagePosition.y);
     await expect.poll(() => this.selectionIds()).toContain(point.id);
@@ -589,7 +589,7 @@ export class EditorDriver implements EditorReads, EditorActions {
 
   /** Returns a hovered visible point identity; throws when none exists. */
   async hoverVisibleUnselectedPoint(): Promise<PointId> {
-    const target = await this.#hooks.editor.unselectedPoint();
+    const target = await this.#hooks.canvas.unselectedPoint();
 
     await this.page.mouse.move(target.x, target.y);
     await expect.poll(() => this.hoverId()).toBe(target.id);
@@ -796,6 +796,22 @@ export class EditorDriver implements EditorReads, EditorActions {
    */
   async matchedPoints(pointId: PointId): Promise<readonly MatchedPoint[]> {
     return this.#reads.editor.matchedPoints(pointId);
+  }
+
+  /** Whether the editor tracks a pointer over the canvas, or one a gesture has captured. */
+  async hasPointer(): Promise<boolean> {
+    return this.#reads.editor.hasPointer();
+  }
+
+  /** The handles the Select tool previews on the Cmd-hovered line segment, in glyph units; null while none. */
+  async drawnUpgradePreview(): Promise<readonly LocalPoint[] | null> {
+    const preview = await this.#reads.editor.drawnUpgradePreview();
+    return preview?.map(({ x, y }) => localPoint(x, y)) ?? null;
+  }
+
+  /** The drawn contour `contourId`, a gesture's preview included; null when the open glyph draws none. */
+  async drawnContour(contourId: string): Promise<AuthoredContour | null> {
+    return (await this.drawnOutline()).find((contour) => contour.id === contourId) ?? null;
   }
 
   /** Where the Pen's drag places the outgoing handle now, in glyph units; null outside a Pen drag. */

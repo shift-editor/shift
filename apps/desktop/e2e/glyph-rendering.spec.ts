@@ -13,11 +13,7 @@
 import type { Point2D } from "@shift/geo";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  insertEdgeOverlappingContour,
-  selectedObjectKind,
-  setCanvasOffset,
-} from "./fixtures/editorInteractions";
+import { insertEdgeOverlappingContour, setCanvasOffset } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 // MutatorSans glyph codepoints (hex).
@@ -263,7 +259,7 @@ test.describe("Segment selection rendering", () => {
       const middle = { x: 0.675, y: 0.625 };
       const middlePage = await editor.canvasPagePoint(middle);
       await page.mouse.click(middlePage.x, middlePage.y);
-      await expect.poll(() => selectedObjectKind(page)).toBe("segment");
+      await expect.poll(async () => (await editor.selectedObjects())[0]?.kind).toBe("segment");
       await expectCanvasSnapshot(editor, "segment-selected.png");
 
       await editor.pointerDown(middlePage);

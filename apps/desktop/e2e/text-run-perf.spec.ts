@@ -27,11 +27,7 @@ import type { Point2D } from "@shift/geo";
 import type { TextItemId } from "@shift/types";
 import { proofText } from "../src/renderer/src/testing/proofText";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  liveUTopAnchor,
-  loadedTextRunLength,
-  textRunHoverTargets,
-} from "./fixtures/editorInteractions";
+import { liveUTopAnchor, textRunHoverTargets } from "./fixtures/editorInteractions";
 import { installFrameProbe, measureMove } from "./fixtures/perfProbe";
 import {
   anchorDragTest as test,
@@ -116,7 +112,7 @@ test.describe("Performance — 10K-character text run", () => {
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.insertText(text);
     await expect
-      .poll(() => loadedTextRunLength(page), { timeout: 60_000 })
+      .poll(async () => (await editor.canvasText())?.glyphs.length, { timeout: 60_000 })
       .toBe(1 + [...text].length);
 
     await editor.press("Escape");

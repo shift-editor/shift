@@ -13,6 +13,7 @@ import type {
   TextRunView,
 } from "@shift/runtime";
 import type { Editor } from "@shift/editor";
+import type { ScenePoint } from "@shift/editor/spaces";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
 import type { PointId, Source, SourceId } from "@shift/types";
@@ -149,7 +150,30 @@ export class ShiftEditorReader {
     return [selection, ...selection.additionalLayers].flatMap(({ layer, targets }) => {
       const id = targets.points?.[0];
       const point = id ? layer.point(id) : null;
-      return id && point ? [{ sourceId: layer.source.id, pointId: id, x: point.x, y: point.y }] : [];
+      return id && point
+        ? [{ sourceId: layer.source.id, pointId: id, x: point.x, y: point.y }]
+        : [];
+    });
+  }
+
+  /** Whether the editor tracks a pointer over the canvas, or one a gesture has captured. */
+  hasPointer(): boolean {
+    return this.#editor.input.pointer !== null;
+  }
+
+  /**
+   * The two handles the Select tool previews on the Cmd-hovered line segment, at one and two
+   * thirds of it, in the open glyph's units; null while it previews none.
+   */
+  drawnUpgradePreview(): { x: number; y: number }[] | null {
+    const editor = this.#editor;
+    const preview = editor.toolIf("select")?.upgradePreview.propsSnapshot() ?? null;
+    const node = editor.scene.first("glyph");
+    if (!preview || !node) return null;
+
+    return preview.map((scene) => {
+      const { x, y } = editor.toLocal(node, scene as ScenePoint);
+      return { x, y };
     });
   }
 

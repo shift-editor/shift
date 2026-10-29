@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { activeRightSidebearing, spacingHalfCanvasPoint } from "./fixtures/editorInteractions";
+import { spacingHalfCanvasPoint } from "./fixtures/editorInteractions";
 
 type Half = "left" | "right";
 
@@ -88,7 +88,7 @@ test.describe("Spacing tool", () => {
     page,
     editor,
   }) => {
-    const before = await activeRightSidebearing(page);
+    const before = await rightSidebearing(editor);
     if (before === null) throw new Error("Expected the edited glyph's right sidebearing");
     const pill = await halfPagePoint(page, editor, BETWEEN, "left");
     await hover(editor, pill);
@@ -99,7 +99,7 @@ test.describe("Spacing tool", () => {
     await field.fill(String(before + 37));
     await editor.press("Enter");
 
-    await expect.poll(() => activeRightSidebearing(page)).toBe(before + 37);
+    await expect.poll(() => rightSidebearing(editor)).toBe(before + 37);
     await expect(field).toBeHidden();
   });
 
@@ -107,7 +107,7 @@ test.describe("Spacing tool", () => {
     page,
     editor,
   }) => {
-    const before = await activeRightSidebearing(page);
+    const before = await rightSidebearing(editor);
     const pill = await halfPagePoint(page, editor, BETWEEN, "left");
     await hover(editor, pill);
     await page.mouse.click(pill.x, pill.y);
@@ -118,6 +118,16 @@ test.describe("Spacing tool", () => {
     await editor.press("Escape");
 
     await expect(field).toBeHidden();
-    expect(await activeRightSidebearing(page)).toBe(before);
+    expect(await rightSidebearing(editor)).toBe(before);
   });
 });
+
+/** The open glyph's right sidebearing at the active source, in whole units; the field edits it. */
+async function rightSidebearing(editor: EditorDriver): Promise<number | null> {
+  const { glyph, activeSourceId } = await editor.editorView();
+  const source = activeSourceId ? await editor.source({ id: activeSourceId }) : null;
+  if (!glyph || !source) return null;
+
+  const { advanceWidth, bounds } = await editor.layerOf(glyph.name, source.name);
+  return bounds ? Math.round(advanceWidth - bounds.max.x) : null;
+}

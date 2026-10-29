@@ -1,11 +1,6 @@
 import type { Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  canvasTextReadiness,
-  hasCanvasPointer,
-  liveShapeDraft,
-} from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 import type { PointDrag } from "./fixtures/types";
 import type { CanvasText } from "@/testing/reads";
@@ -101,7 +96,7 @@ test.describe("Canvas pointer lifecycle", () => {
       x: inside.x,
       y: bounds.y - 10,
     };
-    const hasPointer = () => hasCanvasPointer(page);
+    const hasPointer = () => editor.hasPointer();
 
     await page.mouse.move(inside.x, inside.y);
     await expect.poll(hasPointer).toBe(true);
@@ -246,9 +241,16 @@ test.describe("Toolbar tools", () => {
       editor,
     }) => {
       await startShapeDraft(editor, kind);
-      const draft = await liveShapeDraft(page);
-      expect(draft.points).toBe(kind === "Ellipse" ? 12 : 4);
-      expect(draft.handles).toBe(false);
+      const [{ id }] = await editor.selectedObjects();
+      const [contour, bounds, handles] = await Promise.all([
+        editor.drawnContour(id!),
+        editor.selectionBounds(),
+        editor.drawnHandles(),
+      ]);
+      const pointIds = contour!.points.map((point) => point.id);
+      const draft = { id: id!, bounds };
+      expect(pointIds).toHaveLength(kind === "Ellipse" ? 12 : 4);
+      expect(handles.map((handle) => handle.pointId)).not.toEqual(expect.arrayContaining(pointIds));
 
       const properties = page.getByRole("complementary", { name: "Glyph properties" });
       await expect(properties.getByLabel("X position", { exact: true })).toHaveValue(
@@ -332,13 +334,16 @@ test.describe("Toolbar tools", () => {
       await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
       await page.keyboard.type("AB");
       await expect
-        .poll(() => canvasTextReadiness(page))
-        .toEqual({
-          codepoints: [65, 65, 66],
-          editingNodes: 0,
-          caretAtEnd: true,
-          glyphsLoaded: true,
-        });
+        .poll(async () => {
+          const text = await editor.canvasText();
+          return {
+            codepoints: text && textCodepoints(text),
+            edited: text?.editedItemId,
+            caret: text?.caret?.position,
+            drawn: text?.glyphs.map((glyph) => glyph.name),
+          };
+        })
+        .toEqual({ codepoints: [65, 65, 66], edited: null, caret: 3, drawn: ["A", "A", "B"] });
       // Keep the caret after the last glyph inside the canvas.
       await editor.setZoom((await editor.zoomLevel()) * 0.8);
       await page.mouse.move(0, 0);

@@ -1,24 +1,25 @@
 import type { FontSession } from "@/types/fontSession";
 import { SurfaceActions } from "../SurfaceActions";
-import { EditorProbes } from "./EditorProbes";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import { CatalogProbes } from "./CatalogProbes";
-import { InteractionProbes } from "./InteractionProbes";
+import { CanvasTargets } from "./CanvasTargets";
+import { InterpolatedReads } from "./InterpolatedReads";
 import { PerfProbes } from "./PerfProbes";
 import { SessionHooks } from "./SessionHooks";
 
 /**
  * What the E2E hook serves in one window, by the name an `e2e.call` gives
- * each: the test surface's actions (shared with vitest's `TestEditor`), and
- * probes of state agents do not read.
+ * each: the test surface's actions (shared with vitest's `TestEditor`), canvas targets
+ * for aiming the pointer, the session and catalog facts no reader serves, the drawn-glyph
+ * reads waiting on `drawnGlyph`, and perf instrumentation.
  *
  * @remarks
  * Built on the first E2E call, only for E2E launches; see `AgentBridge`.
  */
 export interface E2EHooks {
   actions: SurfaceActions;
-  editor: EditorProbes;
-  interactions: InteractionProbes;
+  canvas: CanvasTargets;
+  interpolated: InterpolatedReads;
   session: SessionHooks;
   catalog: CatalogProbes;
   perf: PerfProbes;
@@ -28,8 +29,8 @@ export interface E2EHooks {
 export function createE2EHooks(session: FontSession, host: ShiftHost): E2EHooks {
   return {
     actions: new SurfaceActions(session.editor),
-    editor: new EditorProbes(session.editor),
-    interactions: new InteractionProbes(session.editor),
+    canvas: new CanvasTargets(session.editor),
+    interpolated: new InterpolatedReads(session.editor),
     session: new SessionHooks(session, host),
     catalog: new CatalogProbes(session),
     perf: new PerfProbes(session.editor),
