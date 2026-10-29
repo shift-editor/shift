@@ -1,13 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
-import type { EditorDriver } from "./fixtures/EditorDriver";
-
-interface VariableFixture {
-  axisId: AxisId;
-  sourceId: SourceId;
-  instanceId: NamedInstanceId;
-}
 
 async function openSettings(page: Page, category: "Axes" | "Sources" | "Instances") {
   await page.getByRole("button", { name: "Settings" }).click();
@@ -19,25 +11,6 @@ async function openSettings(page: Page, category: "Axes" | "Sources" | "Instance
 
 async function selectCategory(dialog: Locator, category: "Axes" | "Sources" | "Instances") {
   await dialog.getByRole("button", { name: category, exact: true }).click();
-}
-
-async function createVariableFixture(editor: EditorDriver): Promise<VariableFixture> {
-  await editor.addAxis({
-    tag: "opsz",
-    name: "Optical Size",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-  });
-  await editor.addSource("Bold", { opsz: 900 });
-  await editor.addInstance("Black", { opsz: 800 });
-  await editor.setLocation({ opsz: 400 });
-  const [axis, source, instance] = await Promise.all([
-    editor.axis({ tag: "opsz" }),
-    editor.source({ name: "Bold" }),
-    editor.instance({ name: "Black" }),
-  ]);
-  return { axisId: axis!.id, sourceId: source!.id, instanceId: instance!.id };
 }
 
 test.describe("variable-font authoring controls", () => {
@@ -108,61 +81,78 @@ test.describe("variable-font authoring controls", () => {
     });
   });
 
-  test("edits and removes variable records through Settings", async ({ page, editor }) => {
-    const fixture = await createVariableFixture(editor);
-    const dialog = await openSettings(page, "Axes");
-    const main = dialog.locator("main");
+  test.describe("with an opsz axis, a Bold source and a Black instance", () => {
+    test.use({
+      font: {
+        axes: [{ tag: "opsz", name: "Optical Size", minimum: 100, default: 400, maximum: 900 }],
+        sources: { Bold: { opsz: 900 } },
+        instances: { Black: { opsz: 800 } },
+        location: { opsz: 400 },
+      },
+    });
 
-    const axisName = main.getByLabel("Name", { exact: true });
-    await axisName.fill("Optical Scale");
-    await axisName.press("Tab");
-    await expect
-      .poll(async () => (await editor.axis({ id: fixture.axisId }))?.name)
-      .toBe("Optical Scale");
+    test("edits and removes variable records through Settings", async ({ page, editor }) => {
+      // The edits rename and move these records, so follow each by id from here on.
+      const [axis, source, instance] = await Promise.all([
+        editor.axis({ tag: "opsz" }),
+        editor.source({ name: "Bold" }),
+        editor.instance({ name: "Black" }),
+      ]);
+      const fixture = { axisId: axis!.id, sourceId: source!.id, instanceId: instance!.id };
+      const dialog = await openSettings(page, "Axes");
+      const main = dialog.locator("main");
 
-    await selectCategory(dialog, "Sources");
-    const defaultSource = (await editor.source("default"))!.name;
-    await expect(dialog.getByLabel(`Delete ${defaultSource}`)).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
-    await dialog.getByRole("button", { name: "Bold", exact: true }).click();
-    const sourceName = main.getByLabel("Name", { exact: true });
-    await sourceName.fill("Display Bold");
-    await sourceName.press("Tab");
-    const sourceLocation = main.getByLabel("Optical Scale", { exact: true });
-    await sourceLocation.fill("850");
-    await sourceLocation.press("Tab");
-    await expect
-      .poll(
-        async () =>
-          (await editor.source({ name: "Display Bold" }))?.location.values[fixture.axisId],
-      )
-      .toBe(850);
+      const axisName = main.getByLabel("Name", { exact: true });
+      await axisName.fill("Optical Scale");
+      await axisName.press("Tab");
+      await expect
+        .poll(async () => (await editor.axis({ id: fixture.axisId }))?.name)
+        .toBe("Optical Scale");
 
-    await selectCategory(dialog, "Instances");
-    await dialog.getByRole("button", { name: "Black", exact: true }).click();
-    const instanceName = main.getByLabel("Name", { exact: true });
-    await instanceName.fill("Display Black");
-    await instanceName.press("Tab");
-    const instanceLocation = main.getByLabel("Optical Scale", { exact: true });
-    await instanceLocation.fill("750");
-    await instanceLocation.press("Tab");
-    await expect
-      .poll(
-        async () =>
-          (await editor.instance({ id: fixture.instanceId }))?.location.values[fixture.axisId],
-      )
-      .toBe(750);
+      await selectCategory(dialog, "Sources");
+      const defaultSource = (await editor.source("default"))!.name;
+      await expect(dialog.getByLabel(`Delete ${defaultSource}`)).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      await dialog.getByRole("button", { name: "Bold", exact: true }).click();
+      const sourceName = main.getByLabel("Name", { exact: true });
+      await sourceName.fill("Display Bold");
+      await sourceName.press("Tab");
+      const sourceLocation = main.getByLabel("Optical Scale", { exact: true });
+      await sourceLocation.fill("850");
+      await sourceLocation.press("Tab");
+      await expect
+        .poll(
+          async () =>
+            (await editor.source({ name: "Display Bold" }))?.location.values[fixture.axisId],
+        )
+        .toBe(850);
 
-    await dialog.getByLabel("Delete Display Black").click();
-    await expect.poll(() => editor.instance({ id: fixture.instanceId })).toBeNull();
-    await selectCategory(dialog, "Sources");
-    await dialog.getByLabel("Delete Display Bold").click();
-    await expect.poll(() => editor.source({ id: fixture.sourceId })).toBeNull();
+      await selectCategory(dialog, "Instances");
+      await dialog.getByRole("button", { name: "Black", exact: true }).click();
+      const instanceName = main.getByLabel("Name", { exact: true });
+      await instanceName.fill("Display Black");
+      await instanceName.press("Tab");
+      const instanceLocation = main.getByLabel("Optical Scale", { exact: true });
+      await instanceLocation.fill("750");
+      await instanceLocation.press("Tab");
+      await expect
+        .poll(
+          async () =>
+            (await editor.instance({ id: fixture.instanceId }))?.location.values[fixture.axisId],
+        )
+        .toBe(750);
 
-    await selectCategory(dialog, "Axes");
-    await dialog.getByLabel("Delete Optical Scale").click();
-    await expect.poll(() => editor.axis({ id: fixture.axisId })).toBeNull();
+      await dialog.getByLabel("Delete Display Black").click();
+      await expect.poll(() => editor.instance({ id: fixture.instanceId })).toBeNull();
+      await selectCategory(dialog, "Sources");
+      await dialog.getByLabel("Delete Display Bold").click();
+      await expect.poll(() => editor.source({ id: fixture.sourceId })).toBeNull();
+
+      await selectCategory(dialog, "Axes");
+      await dialog.getByLabel("Delete Optical Scale").click();
+      await expect.poll(() => editor.axis({ id: fixture.axisId })).toBeNull();
+    });
   });
 });
