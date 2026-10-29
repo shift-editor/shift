@@ -377,7 +377,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return layer;
   }
 
-  anchorPosition(anchorId: AnchorId): Point2D {
+  #anchorPosition(anchorId: AnchorId): Point2D {
     this.#assertWorkspaceSettled();
     const anchor = this.requireGlyphLayer().anchor(anchorId);
     if (!anchor) throw new Error("Expected source anchor");
@@ -733,12 +733,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async dragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): Promise<void> {
-    const from = this.anchorPosition(id);
+    const from = this.#anchorPosition(id);
     await this.dragFrom(from, { x: from.x + by.x, y: from.y + by.y }, modifiers);
   }
 
   holdDragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): void {
-    const from = this.anchorPosition(id);
+    const from = this.#anchorPosition(id);
     this.holdDragFrom(from, { x: from.x + by.x, y: from.y + by.y }, modifiers);
   }
 

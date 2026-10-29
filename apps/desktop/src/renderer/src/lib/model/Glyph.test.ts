@@ -54,13 +54,6 @@ async function addTriangle(editor: TestEditor, layer: GlyphLayer): Promise<reado
   return contour.points;
 }
 
-function pointPosition(layer: GlyphLayer, pointId: PointId): { x: number; y: number } {
-  const point = layer.point(pointId);
-  if (!point) throw new Error("Expected point");
-
-  return { x: point.x, y: point.y };
-}
-
 function sourcePosition(layer: GlyphLayer, pointId: PointId): { x: number; y: number } {
   const position = layer.positionsFor([{ kind: "point", id: pointId }])[0];
   if (!position) throw new Error("Expected source position");
@@ -284,8 +277,8 @@ describe("Glyph", () => {
       second!.id,
       third!.id,
     ]);
-    expect(pointPosition(layer, inserted)).toEqual({ x: 40, y: 0 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 110, y: 0 });
+    expect(layer.point(inserted)).toMatchObject({ x: 40, y: 0 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 110, y: 0 });
   });
 
   it("moves the point it names after earlier points are removed", async () => {
@@ -295,8 +288,8 @@ describe("Glyph", () => {
     await editor.settle();
 
     expect(layer.point(first!.id)).toBeNull();
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 100, y: 0 });
-    expect(pointPosition(layer, third!.id)).toEqual({ x: 60, y: 120 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 100, y: 0 });
+    expect(layer.point(third!.id)).toMatchObject({ x: 60, y: 120 });
   });
 
   it("moves the point it names after the contour is reversed", async () => {
@@ -306,8 +299,8 @@ describe("Glyph", () => {
     layer.movePointTo(first!.id, { x: -10, y: 0 });
     await editor.settle();
 
-    expect(pointPosition(layer, first!.id)).toEqual({ x: -10, y: 0 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 100, y: 0 });
+    expect(layer.point(first!.id)).toMatchObject({ x: -10, y: 0 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 100, y: 0 });
   });
 
   it("discards every transaction intent when its body throws", async () => {
@@ -435,7 +428,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(layer.contours.at(-1)?.points[1]).toMatchObject({ x: 25, y: 75 });
     expect(layer.allPoints.find((point) => point.id === second!.id)).toMatchObject({
       x: 25,
@@ -451,7 +444,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     await editor.settle();
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(editor.sceneGlyphRenderModel?.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
@@ -463,7 +456,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     await editor.settle();
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 25, y: 75 });
 
     const committed = layer.positionsFor([{ kind: "point", id: second!.id }])[0];
     if (!committed) throw new Error("Expected committed position");
@@ -477,7 +470,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
       },
     ]);
 
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 35, y: 80 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 35, y: 80 });
   });
 
   it("keeps the source-independent RenderGlyph view live", async () => {

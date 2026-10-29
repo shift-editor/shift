@@ -68,12 +68,12 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     edit.preview({ x: 20, y: 50 });
     const feedback = edit.preview({ x: 20, y: 50 });
     expect(layer.point(pointId)).toMatchObject({ x: 130, y: 100 });
-    expect(editor.anchorPosition(pivot)).toEqual({ x: 30, y: 100 });
+    expect(editor.requireGlyphLayer().anchor(pivot)).toMatchObject({ x: 30, y: 100 });
     expect(feedback.guides).toEqual([
       { kind: "direction", from: { x: 0, y: 100 }, to: { x: 130, y: 100 } },
     ]);
     edit.discard();
-    expect(editor.anchorPosition(pivot)).toEqual({ x: 0, y: 100 });
+    expect(editor.requireGlyphLayer().anchor(pivot)).toMatchObject({ x: 0, y: 100 });
   });
 
   it("uses the explicit moving reference rather than a target position", () => {
