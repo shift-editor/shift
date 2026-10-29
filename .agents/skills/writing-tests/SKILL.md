@@ -230,7 +230,9 @@ These hold for behaviour tests (`apps/desktop/src/renderer/src/behaviour/`) and 
    `expect(await editor.point(corner)).toBeNear({ x: 186.6, y: 150 });`
 6. **A file's own scenario helpers stay local.** `drawStroke()` names the stroke `close-and-join.test.ts` closes, so it lives there.
    `async function drawStroke(): Promise<void> { … }`
-7. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
+7. **Assert the read whole; pick from it only to act on it.** Inside `expect(…)`, give the read itself and match only the fields the test is about; merge checks of the same read in the same state into one shape. Arrays inside `toMatchObject` match exact length (`expect.arrayContaining` for membership), and `?.` behind `toBeNull()` passes vacuously when the read itself is null. `shift/no-drill-into-reads` flags `?.`, `[n]!`, `read()!.x` and `.map(…)` on a read inside `expect`.
+   `expect(editor.spacingTool()?.hovered?.side).toBe("left")` → `expect(editor.spacingTool()).toMatchObject({ hovered: { side: "left" } })`
+8. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
    `splitCubic(…)` lives in `testing/fixtures.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
 
 Positions in test code use the editor's coordinate spaces from `@shift/editor/spaces` (`LocalPoint`, `ScenePoint`, `ScreenPoint`) where a read or driver input already has one.
