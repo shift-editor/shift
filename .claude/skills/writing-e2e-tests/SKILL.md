@@ -46,7 +46,7 @@ Never count or sample hard-coded colours from a canvas. Colour oracles break und
 
 Use published state instead:
 
-- geometry: `editor.outline()`, `pointPosition()`, `selectionIds()`, `selectionBounds()`;
+- geometry: `editor.outline()`, `point()`, `selectionIds()`, `selectionBounds()`;
 - interaction: `toolState()`, `hoverId()`, `activeSnapGuides()`;
 - rendering decisions: `visibleOutlines(nodeId)` and `handleStates(node)` on the glyph node definition;
 - UI state: roles, accessible names, `aria-pressed`, `aria-checked`, `aria-disabled`, `data-*` state published for tests;
