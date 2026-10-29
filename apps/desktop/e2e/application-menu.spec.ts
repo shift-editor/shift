@@ -192,13 +192,13 @@ authoredTest(
     await expect
       .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
-    await expect
-      .poll(async () => {
-        const [selectedId] = await editor.selectionIds();
-        const components = await editor.components();
-        return components.find((component) => component.id === selectedId)?.baseGlyphName ?? null;
-      })
-      .toBe(candidate.name);
+    // The new component is selected, and it is the candidate glyph.
+    await expect(async () => {
+      const [selectedId] = await editor.selectionIds();
+      expect(await editor.components()).toContainEqual(
+        expect.objectContaining({ id: selectedId, baseGlyphName: candidate.name }),
+      );
+    }).toPass();
 
     const [componentId] = await editor.selectionIds();
     const contextTarget = { componentId, ...(await selectedComponentHitPoint(page)) };
@@ -282,15 +282,11 @@ authoredTest(
     await expect(confirmation).toBeVisible();
     await confirmation.getByRole("button", { name: "Create", exact: true }).click();
 
-    await expect
-      .poll(async () => {
-        const components = await editor.components();
-        return {
-          count: components.length,
-          added: components.some(({ baseGlyphName }) => baseGlyphName === candidate.name),
-        };
-      })
-      .toEqual({ count: candidate.initialCount + 1, added: true });
+    await expect(async () => {
+      const components = await editor.components();
+      expect(components).toHaveLength(candidate.initialCount + 1);
+      expect(components).toContainEqual(expect.objectContaining({ baseGlyphName: candidate.name }));
+    }).toPass();
 
     await clickApplicationMenuItem(page, electronApp, "edit.undo");
     await expect
@@ -639,6 +635,8 @@ authoredTest(
     await clickApplicationMenuItem(page, electronApp, "edit.deleteSelection");
 
     await expect.poll(pointTypes).toEqual(openCubicPointTypes(3));
-    expect((await editor.outline())[0].points.some((point) => point.id === middle)).toBe(false);
+    expect((await editor.outline())[0].points).not.toContainEqual(
+      expect.objectContaining({ id: middle }),
+    );
   },
 );

@@ -626,6 +626,11 @@ export class EditorDriver implements EditorReads, EditorActions {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
+  /** The open glyph's anchor named `name`, or null when it has none. */
+  async anchorNamed(name: string): Promise<AuthoredAnchor | null> {
+    return (await this.anchors()).find((anchor) => anchor.name === name) ?? null;
+  }
+
   async anchors(): Promise<readonly AuthoredAnchor[]> {
     return (await this.#openLayer()).anchors;
   }

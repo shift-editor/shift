@@ -33,6 +33,7 @@ async function runShiftCode(url: string, code: string): Promise<unknown> {
     await client.connect(transport);
     const result = await client.callTool({ name: "shift.execute", arguments: { code } });
     const text = result.content
+      // oxlint-disable-next-line shift/no-lookup-in-tests -- picks the MCP response's text parts, a protocol shape, not an app read
       .filter((item) => item.type === "text")
       .map((item) => item.text)
       .join("\n");

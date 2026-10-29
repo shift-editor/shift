@@ -22,7 +22,10 @@ async function alignmentFixture(editor: EditorDriver) {
   const outline = await editor.outline();
   const available = outline.flatMap((contour) => contour.points);
   const first = available[0];
+  // The golden shows A, so pick three of its own points that differ in x and y.
+  // oxlint-disable-next-line shift/no-lookup-in-tests -- picks a point by position for the golden, not a record by key
   const second = available.find((point) => point.x !== first?.x && point.y !== first?.y);
+  // oxlint-disable-next-line shift/no-lookup-in-tests -- picks a point by position for the golden, not a record by key
   const third = available.find((point) => point.id !== first?.id && point.id !== second?.id);
   if (!first || !second || !third) throw new Error("Expected three distinct fixture points");
 
@@ -331,10 +334,9 @@ test.describe("Editor view", () => {
     for (let index = 0; index < 76; index++) await page.keyboard.press("ArrowDown");
     await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${destination}`);
     await expect(objects.getByTestId(`object-${destination}`)).toBeVisible();
-    const focusedContour = outline.find((contour) =>
-      contour.points.some((point) => point.id === destination),
-    );
-    if (!focusedContour) throw new Error("Expected a contour containing the focused point");
+    // destination ends the 26th line drawn.
+    const focusedContour = outline[start + 25]!;
+    expect(focusedContour.points.map((point) => point.id)).toContain(destination);
     await page.keyboard.press("ArrowLeft");
     await expect(tree).toHaveAttribute("aria-activedescendant", `object-tree-${focusedContour.id}`);
     await page.keyboard.press("ArrowLeft");
@@ -373,7 +375,7 @@ test.describe("Editor view", () => {
 
     expect(await editor.selectionIds()).toEqual([anchorId]);
     const anchorPosition = async () => {
-      const anchor = (await editor.anchors()).find((candidate) => candidate.id === anchorId);
+      const anchor = await editor.anchorNamed("top");
       if (!anchor) throw new Error("Expected the added anchor");
 
       return { x: anchor.x, y: anchor.y };
