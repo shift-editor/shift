@@ -52,7 +52,7 @@ import type {
 import type { E2EHooks } from "@/testing/e2e/hooks";
 import type { DrawOptions, GlyphFixture, PointNames } from "@/testing/fixtures";
 import { hooksOf, readsOf, registerApp, type Remote } from "./appHooks";
-import { openVariationControls, waitForEditorReady } from "./appLocators";
+import { openVariationControls, sourceRow, waitForEditorReady } from "./appLocators";
 import type { AxisFixture, AxisLocation } from "@/testing/fonts";
 import type { ActiveGlyph, CanvasBounds, CanvasDrag, PointDrag, PointTarget } from "./types";
 
@@ -733,8 +733,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     const source = await this.source({ name });
     if (!source) throw new Error(`The font has no source named ${name}`);
 
-    const controls = await openVariationControls(this.page);
-    const row = controls.getByTestId(`source-${source.id}`);
+    const row = sourceRow(await openVariationControls(this.page), name);
     if (mode === "toggle") {
       await row.click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
       await this.#hooks.session.editingLayersMatched();

@@ -72,10 +72,11 @@ glyphsPreviewTest(
       exact: true,
     });
     await expect(sourceButtons).toHaveCount(2);
-    const targetSourceId = (await editor.fontOverview()).sources[1]?.id;
-    if (!targetSourceId) throw new Error("Expected a second source");
-    await page.getByTestId(`source-${targetSourceId}`).click();
-    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBe(targetSourceId);
+    // Both sources are named Regular, so pick the second row and follow its source by id.
+    const target = (await editor.fontOverview()).sources[1];
+    if (!target) throw new Error("Expected a second source");
+    await sourceButtons.nth(1).click();
+    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBe(target.id);
     await expect.poll(() => catalogLocation(page)).not.toEqual(beforeLocation);
     await expect
       .poll(async () => (await sceneCanvas.screenshot()).equals(beforeSourceFrame))

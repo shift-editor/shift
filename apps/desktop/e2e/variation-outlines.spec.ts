@@ -1,6 +1,12 @@
 import type { Page } from "@playwright/test";
 import { workspaceTest, expect, FONTS, navigateToEditor } from "./fixtures/electronApp";
-import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
+import {
+  editorSidebar,
+  instanceRow,
+  openVariationControls,
+  sourceRow,
+  variationControls,
+} from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import type { OutlinePoint } from "@/testing/reads";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
@@ -24,9 +30,7 @@ workspaceTest.describe("mapped weight interpolation", () => {
         ["ExtraLight", 50, 407.14285714285717],
         ["SemiBold", 110, 697.2972972972973],
       ] as const) {
-        const instance = await editor.instance({ name });
-        if (!instance) throw new Error(`Expected ${name} instance`);
-        await controls.getByTestId(`instance-${instance.id}`).click();
+        await instanceRow(controls, name).click();
         await editor.waitForCanvasRender();
         await expect
           .poll(() =>
@@ -156,8 +160,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
   await navigateToEditor(page, "53");
   const controls = await openVariationControls(page);
   // Medium_Narrow_I sits between MutatorSans's sources.
-  const instance = await editor.instance({ name: "Medium_Narrow_I" });
-  await controls.getByTestId(`instance-${instance!.id}`).click();
+  await instanceRow(controls, "Medium_Narrow_I").click();
   await expect.poll(() => activeSourceId(editor)).toBeNull();
   // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   const pointId = await page.evaluate(() => {
@@ -189,10 +192,7 @@ test("row visibility outlines one comparison source without changing the active 
 
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
   await expect.poll(() => drawnOutlines(editor)).toEqual([sourceKey]);
-  await expect(controls.getByTestId(`source-${fixture.source.id}`)).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  await expect(sourceRow(controls, fixture.source.name)).toHaveAttribute("aria-pressed", "false");
   expect(await activeSourceId(editor)).toBe(fixture.activeSource.id);
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
@@ -204,7 +204,7 @@ test("editing-selection sources stay outlined until hidden, panning, or deselect
   editor,
 }) => {
   const fixture = await openOutlineFixture(page, editor);
-  const sourceButton = variationControls(page).getByTestId(`source-${fixture.source.id}`);
+  const sourceButton = sourceRow(variationControls(page), fixture.source.name);
   const sourceKey = `source:${fixture.source.id}`;
 
   await sourceButton.click({ modifiers: [toggleModifier] });
@@ -240,7 +240,7 @@ test("an explicitly shown source outline survives leaving the editing selection"
   editor,
 }) => {
   const fixture = await openOutlineFixture(page, editor);
-  const sourceButton = variationControls(page).getByTestId(`source-${fixture.source.id}`);
+  const sourceButton = sourceRow(variationControls(page), fixture.source.name);
   const sourceKey = `source:${fixture.source.id}`;
 
   await sourceButton.click({ modifiers: [toggleModifier] });
@@ -255,7 +255,7 @@ test("an explicitly shown source outline survives leaving the editing selection"
 
 test("the edit-all-sources shortcut outlines every comparison source", async ({ page, editor }) => {
   const fixture = await openOutlineFixture(page, editor);
-  const sourceButton = variationControls(page).getByTestId(`source-${fixture.source.id}`);
+  const sourceButton = sourceRow(variationControls(page), fixture.source.name);
   const toggleAllSources = `${toggleModifier}+e`;
 
   await page.keyboard.press(toggleAllSources);

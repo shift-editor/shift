@@ -5,8 +5,11 @@ import { variablePreviewTest as test, expect } from "./fixtures/perfApp";
 import {
   firstAxisSlider,
   glyphCatalogCanvas,
-  openVariationControls,
+  instanceRow,
   openSessionGlyphNamed,
+  openVariationControls,
+  sourceRow,
+  variationControls,
 } from "./fixtures/appLocators";
 import { sessionMode } from "./fixtures/documentLifecycle";
 import { rejectGlyphAcquisition } from "./fixtures/previewSession";
@@ -24,9 +27,7 @@ test.describe("variable font preview projection", () => {
       "aria-disabled",
       "true",
     );
-    const regularSourceId = (await editor.source({ name: "Regular" }))?.id;
-    if (!regularSourceId) throw new Error("Expected Regular source");
-    await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
+    await expect(sourceRow(variationControls(page), "Regular")).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     // Source and instance rows both expose actions; every one is unavailable in a preview.
     const rowActions = variationSidebar.getByLabel(/^Actions for (Regular|Medium)$/);
@@ -35,9 +36,7 @@ test.describe("variable font preview projection", () => {
       await expect(action).toHaveAttribute("aria-disabled", "true");
     }
 
-    const mediumInstanceId = (await editor.instance({ name: "Medium" }))?.id;
-    if (!mediumInstanceId) throw new Error("Expected Medium instance");
-    await page.getByTestId(`instance-${mediumInstanceId}`).click();
+    await instanceRow(variationControls(page), "Medium").click();
     await expect.poll(async () => (await editor.editorView()).externalLocation[0]?.value).toBe(500);
   });
 

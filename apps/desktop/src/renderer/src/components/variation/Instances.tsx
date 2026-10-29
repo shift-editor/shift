@@ -33,7 +33,11 @@ export const Instances = ({ canAuthor, outlineControls }: InstancesProps) => {
   };
 
   return (
-    <div className="flex flex-col items-start justify-start gap-1">
+    <div
+      role="group"
+      aria-label="Instances"
+      className="flex flex-col items-start justify-start gap-1"
+    >
       {instances.map((instance) => {
         const target = { kind: "instance", instanceId: instance.id } as const;
         const visible = outlineControls?.targets.hasInstance(instance.id) ?? false;

@@ -5,12 +5,9 @@ import {
   FONTS,
   navigateToEditor,
 } from "./fixtures/electronApp";
-import { clickFirstCatalogGlyph, openVariationControls } from "./fixtures/appLocators";
+import { clickFirstCatalogGlyph, instanceRow, openVariationControls } from "./fixtures/appLocators";
 import { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  drawnPointCount,
-  glyphClickTargets,
-} from "./fixtures/editorInteractions";
+import { drawnPointCount, glyphClickTargets } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const authoredTest = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
@@ -90,10 +87,9 @@ authoredTest(
   async ({ page, editor }) => {
     await navigateToEditor(page, "53");
     // Medium_Narrow_I sits between MutatorSans's sources.
-    const instanceId = (await editor.instance({ name: "Medium_Narrow_I" }))!.id;
     const controls = await openVariationControls(page);
 
-    await controls.getByTestId(`instance-${instanceId}`).click();
+    await instanceRow(controls, "Medium_Narrow_I").click();
 
     await expectEveryHandleDrawnAs(editor, ["interpolated"]);
     await expectCanvasSnapshot(editor, "handles-interpolated-instance.png");

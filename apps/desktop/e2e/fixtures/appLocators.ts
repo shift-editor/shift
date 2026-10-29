@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { hooksOf, readsOf } from "./appHooks";
 
@@ -49,6 +49,20 @@ export function editorSidebar(page: Page) {
 
 export function variationControls(page: Page) {
   return editorSidebar(page).getByRole("tabpanel", { name: "Variations" });
+}
+
+/** The Variations panel's row for the source named `name`, as a screen reader finds it. */
+export function sourceRow(controls: Locator, name: string): Locator {
+  return controls
+    .getByRole("group", { name: "Sources" })
+    .getByRole("button", { name, exact: true });
+}
+
+/** The Variations panel's row for the named instance `name`, as a screen reader finds it. */
+export function instanceRow(controls: Locator, name: string): Locator {
+  return controls
+    .getByRole("group", { name: "Instances" })
+    .getByRole("button", { name, exact: true });
 }
 
 export async function openVariationControls(page: Page) {

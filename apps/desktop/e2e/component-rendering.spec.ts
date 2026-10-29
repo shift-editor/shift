@@ -1,9 +1,11 @@
 import { FONTS, workspaceTest as test, expect, navigateToEditor } from "./fixtures/electronApp";
-import { editorSidebar, glyphProperties, openVariationControls } from "./fixtures/appLocators";
 import {
-  drawnAndAuthoredComponents,
-  drawnComponentCount,
-} from "./fixtures/editorInteractions";
+  editorSidebar,
+  glyphProperties,
+  instanceRow,
+  openVariationControls,
+} from "./fixtures/appLocators";
+import { drawnAndAuthoredComponents, drawnComponentCount } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 import { localPoint } from "@shift/editor/spaces";
 
@@ -34,9 +36,8 @@ test(
     await navigateToEditor(page, "C1");
     const controls = await openVariationControls(page);
     // Medium_Narrow_I sits between MutatorSans's sources.
-    const instanceId = (await editor.instance({ name: "Medium_Narrow_I" }))!.id;
 
-    await controls.getByTestId(`instance-${instanceId}`).click();
+    await instanceRow(controls, "Medium_Narrow_I").click();
     await expect.poll(async () => (await editor.editorView()).activeSourceId).toBeNull();
     const componentCount = await drawnComponentCount(page);
     expect(componentCount).toBeGreaterThan(0);
