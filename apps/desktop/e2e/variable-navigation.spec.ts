@@ -227,12 +227,12 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   await editorShell(page).getByLabel("Font overview").click();
   await page.waitForURL(/#\/home$/);
   await expect
-    .poll(
-      async () =>
-        (await editor.editorView()).externalLocation.find(({ axisId }) => axisId === fixture.axisId)
-          ?.value,
-    )
-    .toBe(900);
+    .poll(() => editor.editorView())
+    .toMatchObject({
+      externalLocation: expect.arrayContaining([
+        expect.objectContaining({ axisId: fixture.axisId, value: 900 }),
+      ]),
+    });
 
   await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId);
   await openVariationControls(page);

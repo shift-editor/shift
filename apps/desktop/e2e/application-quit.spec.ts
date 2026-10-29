@@ -122,7 +122,7 @@ test.describe("terminal termination", () => {
         const secondSaved = await saveThenDirty(secondPage, secondPath);
         for (const workspacePage of [firstPage, secondPage]) {
           const workspace = new EditorDriver(workspacePage, electronApp);
-          await expect.poll(async () => (await workspace.documentState())?.dirty).toBe(true);
+          await expect.poll(() => workspace.documentState()).toMatchObject({ dirty: true });
         }
 
         const childProcess = electronApp.process();
@@ -145,9 +145,9 @@ test.describe("terminal termination", () => {
           await expect
             .poll(async () => ({
               recovered: (await recovered.glyphNames()).includes("newGlyph.1"),
-              dirty: (await recovered.documentState())?.dirty,
+              document: await recovered.documentState(),
             }))
-            .toEqual({ recovered: true, dirty: true });
+            .toMatchObject({ recovered: true, document: { dirty: true } });
         }
       },
     );

@@ -95,10 +95,10 @@ async function expectDirtyWithGlyph(
   await expect
     .poll(
       async () => ({
-        dirty: (await editor.documentState())?.dirty,
+        document: await editor.documentState(),
         hasGlyph: (await editor.glyphNames()).includes(glyphName),
       }),
       { timeout: 20_000 },
     )
-    .toEqual({ dirty: true, hasGlyph: true });
+    .toMatchObject({ document: { dirty: true }, hasGlyph: true });
 }
