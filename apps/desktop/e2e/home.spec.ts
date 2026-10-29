@@ -4,6 +4,7 @@ import {
   clickFirstCatalogGlyph,
   clickFirstCatalogGlyphName,
   editorToolbar,
+  elementWidth,
   fontNavigation,
   glyphCatalogRenderer,
   glyphCatalogSurface,
@@ -317,10 +318,6 @@ test.describe("Home view", () => {
       .toEqual(initialSize);
   });
 });
-
-async function elementWidth(element: Locator): Promise<number> {
-  return (await element.boundingBox())?.width ?? 0;
-}
 
 /** Creates a glyph with the catalog's Create glyph button and returns it once the font has it. */
 async function createQuickGlyph(page: Page, editor: EditorDriver): Promise<GlyphListing> {

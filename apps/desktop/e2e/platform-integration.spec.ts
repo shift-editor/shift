@@ -9,7 +9,13 @@ import {
   rendererHostPlatform,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
-import { createNewFont, glyphIdForName, quitApp, runCommand } from "./fixtures/documentLifecycle";
+import {
+  createNewFont,
+  glyphIdForName,
+  openFontFromLauncher,
+  quitApp,
+  runCommand,
+} from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
 import type { RelaunchApp } from "./fixtures/types";
 import type { GlyphId } from "@shift/types";
@@ -105,9 +111,7 @@ async function reopenAndVerify(
 
   const launcherPage = await relaunchedApp.firstWindow();
   await launcherPage.waitForURL(/#\/launcher$/);
-  const workspaceWindow = relaunchedApp.waitForEvent("window");
-  await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
-  const workspacePage = await workspaceWindow;
+  const workspacePage = await openFontFromLauncher(launcherPage, relaunchedApp);
   await waitForWorkspaceReady(workspacePage);
   const editor = new EditorDriver(workspacePage, relaunchedApp);
   await editor.openGlyph(glyphId);

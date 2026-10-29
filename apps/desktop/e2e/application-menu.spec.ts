@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { ElectronApplication, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
   documentTest as launcherTest,
   documentWorkspaceTest as authoredTest,
@@ -12,6 +12,7 @@ import {
   applicationMenuSummary,
   clickApplicationMenuItem,
   clipboardText,
+  openFontFromLauncher,
   sessionMode,
   writeClipboardText,
 } from "./fixtures/documentLifecycle";
@@ -25,16 +26,6 @@ const binaryPreviewTest = launcherTest.extend({
 const convertiblePreviewTest = launcherTest.extend({
   openFontPath: FONTS.mutatorSansLightCondensed,
 });
-
-async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
-
-  const workspacePage = await workspaceWindow;
-  await workspacePage.waitForURL(/#\/home$/);
-  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-  return workspacePage;
-}
 
 async function expectCloseOnlyWindowControls(page: Page): Promise<void> {
   const windowControls = page.getByRole("toolbar", { name: "Window controls" });
@@ -448,7 +439,7 @@ authoredTest(
 convertiblePreviewTest(
   "View menu distinguishes canvas zoom from interface size",
   async ({ electronApp, page }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+    const workspacePage = await openFontFromLauncher(page, electronApp);
     await clickApplicationMenuItem(workspacePage, electronApp, "file.save");
     await waitForWorkspaceReady(workspacePage);
 
@@ -522,7 +513,7 @@ launcherTest(
 binaryPreviewTest(
   "application menu keeps binary previews read-only",
   async ({ electronApp, page }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+    const workspacePage = await openFontFromLauncher(page, electronApp);
 
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "app.showSettings"))
@@ -545,7 +536,7 @@ binaryPreviewTest(
 convertiblePreviewTest(
   "application menu converts a preview and refreshes authored capabilities",
   async ({ electronApp, page, saveShiftPath }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+    const workspacePage = await openFontFromLauncher(page, electronApp);
 
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.save"))

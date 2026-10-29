@@ -337,3 +337,17 @@ export async function quitApp(
 export async function readFirstLayerThroughPreload(page: Page): Promise<PreloadLayerRead> {
   return hooksOf(page).session.firstLayerThroughPreload();
 }
+
+/** Clicks the launcher's Open Font… (with a scripted dialog) and returns the workspace window once its Grid shows. */
+export async function openFontFromLauncher(
+  launcher: Page,
+  electronApp: ElectronApplication,
+): Promise<Page> {
+  const workspaceWindow = electronApp.waitForEvent("window");
+  await launcher.getByRole("button", { name: "Open Font…", exact: true }).click();
+
+  const workspacePage = await workspaceWindow;
+  await workspacePage.waitForURL(/#\/home$/);
+  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+  return workspacePage;
+}

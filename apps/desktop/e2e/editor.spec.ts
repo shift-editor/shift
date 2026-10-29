@@ -3,7 +3,12 @@ import type { AnchorId } from "@shift/types";
 import { line, type ShapeFixture } from "@/testing/fixtures";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { editorSidebar, editorToolbar, glyphProperties } from "./fixtures/appLocators";
+import {
+  editorSidebar,
+  editorToolbar,
+  elementWidth,
+  glyphProperties,
+} from "./fixtures/appLocators";
 import { firstSegmentMidpoint, lineSegmentUpgrade } from "./fixtures/editorInteractions";
 import {
   expectCanvasSnapshot,
@@ -197,10 +202,6 @@ test("switches Alt during proportional resizing and preserves release geometry",
 async function selectionCenter(editor: EditorDriver) {
   const bounds = await editor.selectionBounds();
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-}
-
-async function elementWidth(element: Locator): Promise<number> {
-  return (await element.boundingBox())?.width ?? 0;
 }
 
 /** True when the element is the topmost hit target at `offsetX` from its left edge. */

@@ -1,22 +1,17 @@
-import type { ElectronApplication, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { documentTest, expect, FONTS } from "./fixtures/electronApp";
-import { clickOpenRecentItem, openRecentLabels, sessionMode } from "./fixtures/documentLifecycle";
+import {
+  clickOpenRecentItem,
+  openFontFromLauncher,
+  openRecentLabels,
+  sessionMode,
+} from "./fixtures/documentLifecycle";
 
 const test = documentTest.extend({
   openFontPath: FONTS.mutatorSansTtf,
 });
 
 const FONT_NAME = "MutatorSans.ttf";
-
-async function openFontFromLauncher(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
-
-  const workspacePage = await workspaceWindow;
-  await workspacePage.waitForURL(/#\/home$/);
-  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-  return workspacePage;
-}
 
 function recentFile(launcher: Page) {
   return launcher

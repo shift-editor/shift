@@ -5,6 +5,7 @@ import { test, expect } from "./fixtures/perfApp";
 import {
   afterNextPaint,
   countGlyphCanvasHides,
+  expectCompleteResidency,
   fontsReady,
   gpuAvailable,
   hiddenGlyphCanvasCount,
@@ -382,17 +383,4 @@ function expectAtomicGridReadiness(readiness: readonly string[]): void {
   expect(staleIndex).toBeGreaterThanOrEqual(0);
   expect(completeIndex).toBeGreaterThan(staleIndex);
   expect(readiness).not.toContain("Visible");
-}
-
-async function expectCompleteResidency(glyphCanvas: Locator): Promise<void> {
-  await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-    timeout: 30_000,
-  });
-  await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
-  const residency = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
-    resident: Number(canvas.dataset.residentGlyphCount),
-    target: Number(canvas.dataset.targetGlyphCount),
-  }));
-  expect(residency.target).toBeGreaterThan(0);
-  expect(residency.resident).toBe(residency.target);
 }

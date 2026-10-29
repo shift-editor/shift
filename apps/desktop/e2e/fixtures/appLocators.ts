@@ -184,3 +184,8 @@ export async function openCatalogGlyph(
   await clickFirstCatalogGlyph(page);
   await waitForEditorReady(page, glyphId);
 }
+
+/** The width `element` takes on the page now, in CSS pixels; 0 while it is not rendered. */
+export async function elementWidth(element: Locator): Promise<number> {
+  return (await element.boundingBox())?.width ?? 0;
+}

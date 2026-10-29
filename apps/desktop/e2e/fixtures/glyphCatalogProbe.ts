@@ -231,3 +231,20 @@ export async function catalogLocationOn(
 ): Promise<{ location: number | undefined; sourceId: string | null | undefined }> {
   return hooksOf(page).catalog.locationOn(axisId);
 }
+
+/**
+ * Waits until the Grid reports itself complete and fully resident, then checks that it holds
+ * every glyph it targets, and at least one.
+ */
+export async function expectCompleteResidency(glyphCanvas: Locator): Promise<void> {
+  await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
+  await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
+  const residency = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+    resident: Number(canvas.dataset.residentGlyphCount),
+    target: Number(canvas.dataset.targetGlyphCount),
+  }));
+  expect(residency.target).toBeGreaterThan(0);
+  expect(residency.resident).toBe(residency.target);
+}

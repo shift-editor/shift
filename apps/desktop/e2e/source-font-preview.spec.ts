@@ -10,7 +10,11 @@ import {
   openVariationControls,
 } from "./fixtures/appLocators";
 import { sessionMode } from "./fixtures/documentLifecycle";
-import { catalogLocation } from "./fixtures/glyphCatalogProbe";
+import {
+  catalogLocation,
+  expectCompleteResidency,
+  paintsGlyphs,
+} from "./fixtures/glyphCatalogProbe";
 
 async function expectRenderedGrid(page: Page, electronApp: ElectronApplication): Promise<void> {
   await expect.poll(() => sessionMode(page, electronApp)).toBe("preview");
@@ -18,34 +22,9 @@ async function expectRenderedGrid(page: Page, electronApp: ElectronApplication):
   const viewport = glyphCatalogViewport(page);
   await viewport.waitFor({ state: "visible" });
   const canvas: Locator = glyphCatalogCanvas(page);
-  await expect(canvas).toHaveAttribute("data-grid-readiness", "Complete", { timeout: 30_000 });
-  await expect(canvas).toHaveAttribute("data-fully-resident", "true");
+  await expectCompleteResidency(canvas);
 
-  const counts = await canvas.evaluate((element) => ({
-    resident: Number(element.dataset.residentGlyphCount),
-    target: Number(element.dataset.targetGlyphCount),
-  }));
-  expect(counts.resident).toBeGreaterThan(0);
-  expect(counts.resident).toBe(counts.target);
-
-  const surface = glyphCatalogSurface(page);
-  await expect
-    .poll(async () => {
-      const rendered = await surface.screenshot();
-      const visibility = await canvas.evaluate((element) => element.style.visibility);
-      try {
-        await canvas.evaluate((element) => {
-          element.style.visibility = "hidden";
-        });
-        const withoutGlyphs = await surface.screenshot();
-        return rendered.equals(withoutGlyphs);
-      } finally {
-        await canvas.evaluate((element, value) => {
-          element.style.visibility = value;
-        }, visibility);
-      }
-    })
-    .toBe(false);
+  await expect.poll(() => paintsGlyphs(glyphCatalogSurface(page), canvas)).toBe(true);
 }
 
 ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page, electronApp }) => {

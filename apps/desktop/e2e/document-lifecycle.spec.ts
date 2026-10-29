@@ -13,6 +13,7 @@ import {
   createNewFont,
   dirtyDocumentDecisions,
   launchSecondInstance,
+  openFontFromLauncher,
   quitApp,
   requestAppQuit,
   runCommand,
@@ -97,13 +98,9 @@ const failedPreviewSaveTest = convertiblePreviewTest.extend({
   },
 });
 
+/** Opens the scripted font from the launcher as a preview and returns its window. */
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
-
-  const workspacePage = await workspaceWindow;
-  await workspacePage.waitForURL(/#\/home$/);
-  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+  const workspacePage = await openFontFromLauncher(page, electronApp);
   await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("preview");
   return workspacePage;
 }
