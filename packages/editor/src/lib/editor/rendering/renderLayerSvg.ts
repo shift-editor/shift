@@ -92,8 +92,8 @@ export function renderLayerSvg({
     guides: {
       fontMetrics: {
         ascender: metrics.ascender,
-        ...(metrics.capHeight === undefined ? {} : { capHeight: metrics.capHeight }),
-        ...(metrics.xHeight === undefined ? {} : { xHeight: metrics.xHeight }),
+        capHeight: metrics.capHeight,
+        xHeight: metrics.xHeight,
         baseline: metrics.baseline,
         descender: metrics.descender,
       },

@@ -374,7 +374,7 @@ class GlyphLayerWriter {
     this.#workspaceIntents.addPoints({
       contourId,
       points: [...points],
-      ...(before === undefined ? {} : { before }),
+      before,
     });
   }
 
@@ -460,7 +460,7 @@ class GlyphLayerWriter {
         id: anchorId,
         x: position.x,
         y: position.y,
-        ...(name === null ? {} : { name }),
+        name: name === null ? undefined : name,
       },
     ]);
     return anchorId;

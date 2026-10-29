@@ -340,3 +340,40 @@ describe("shift/no-wire-shapes-in-tests", () => {
     assert.deepEqual(lines, []);
   });
 });
+
+describe("shift/no-conditional-spread", () => {
+  it("flags a spread that picks an object or nothing", () => {
+    const lines = reportedLines(
+      "no-conditional-spread",
+      [
+        "declare const name: string | undefined;",
+        "declare const open: boolean;",
+        "const a = { ...(name === undefined ? {} : { name }) };",
+        "const b = { ...(open ? { open } : {}) };",
+        "const c = { ...(open && { open }) };",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, [3, 4, 5]);
+  });
+
+  it("allows plain spreads, passed-through values, array spreads and a justified disable", () => {
+    const lines = reportedLines(
+      "no-conditional-spread",
+      [
+        "declare const name: string | undefined;",
+        "declare const defaults: { name: string };",
+        "declare const other: { name: string };",
+        "declare const isMac: boolean;",
+        "declare const quit: string;",
+        "const a = { ...defaults, name: name === undefined ? undefined : name.trim() };",
+        "const b = { ...(isMac ? defaults : other) };",
+        "const c = [...(isMac ? [] : [quit])];",
+        "// oxlint-disable-next-line shift/no-conditional-spread -- stored record omits the key",
+        "const d = { ...(name === undefined ? {} : { name }) };",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(lines, []);
+  });
+});

@@ -7,7 +7,6 @@
     "types": ["node", "vitest/globals", "react"],
     "strict": true,
     "noImplicitAny": true,
-    "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "useUnknownInCatchVariables": true,
     "skipLibCheck": true

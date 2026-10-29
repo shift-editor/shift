@@ -68,7 +68,7 @@ export class GlyphLayerEdit {
         id: mintAnchorId(),
         x: position.x,
         y: position.y,
-        ...(name === null ? {} : { name }),
+        name: name === null ? undefined : name,
       };
       this.#anchors.set(anchor.id, anchor);
       return anchor.id;

@@ -104,12 +104,12 @@ export class RegisteredShaper {
     return {
       start: run.start,
       end: run.end,
-      ...(script ? { script } : {}),
+      script,
       direction: run.rightToLeft ? "rtl" : "ltr",
       glyphs: run.glyphs.map((glyph) => {
         const glyphId = glyph.glyph == null ? null : (this.#glyphIds[glyph.glyph] ?? null);
         return {
-          ...(glyphId ? { glyphId } : {}),
+          glyphId: glyphId === null ? undefined : glyphId,
           cluster: glyph.cluster,
           xAdvance: glyph.xAdvance,
           yAdvance: glyph.yAdvance,

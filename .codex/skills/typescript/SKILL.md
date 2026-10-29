@@ -19,6 +19,7 @@ TypeScript makes `{ points?: … }`, `?.` and `?? []` free to write, so a vague 
 - **Prove "at least one" in the type.** When a list is never empty, type it `readonly [T, ...T[]]` and read `list[0]` without a fallback.
 - **Use the built-ins before spreading.** Query an iterator directly (`map.values().filter(…).toArray()`; `.some`/`.every`/`.find` need no array), copy-sort with `toSorted`, merge sets with `union`/`intersection`/`difference`, group with `Map.groupBy`. Enforced by `shift/prefer-iterator-helpers`.
 - **A combined collection used in several places is a type.** `ThemeCatalog` builds the shipped-then-user theme list once; `KerningGroups.atPosition` sorts once per change. Spread to build a value once, not at every read.
+- **Pass a maybe-value straight through.** Write `x: v === undefined ? undefined : f(v)`; never spread conditionally to leave a key out, and don't add a helper function to build it. Where a stored shape must tell a missing key from an undefined one, keep the spread with a disable comment giving the reason. Enforced by `shift/no-conditional-spread`.
 
 ## Order and subsets
 
