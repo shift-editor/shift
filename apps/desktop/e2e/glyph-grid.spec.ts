@@ -1,5 +1,6 @@
 import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import { rect, square, triangle } from "@/testing/fixtures";
+import type { FontFixture } from "@/testing/fonts";
 import { test, expect } from "./fixtures/perfApp";
 import {
   afterNextPaint,
@@ -20,9 +21,22 @@ import {
   glyphCatalogViewport,
   openCatalogGlyph,
 } from "./fixtures/appLocators";
-import type { EditorDriver } from "./fixtures/EditorDriver";
 
 const RESIDENT_GPU_ERROR = /resident glyph (device lost|frame failed|initialization failed)/i;
+
+/**
+ * An `opsz` axis and a Bold source at 900 whose every metric is twice MutatorSans's (Ascender
+ * 700, Cap Height 700, x-Height 500, Baseline 0, Descender -200), so scrubbing toward it grows
+ * every Grid cell; the editor stays at the default location.
+ */
+const TALL_BOLD = {
+  axes: [{ tag: "opsz", name: "Optical Size", minimum: 100, default: 400, maximum: 900 }],
+  sources: { Bold: { opsz: 900 } },
+  metrics: {
+    Bold: { Ascender: 1400, "Cap Height": 1400, "x-Height": 1000, Baseline: 0, Descender: -400 },
+  },
+  location: { opsz: 400 },
+} as const satisfies FontFixture;
 
 test.describe("Resident Glyph Grid", () => {
   test("redraws the resident viewport without rebuilding it after editor navigation", async ({
@@ -240,111 +254,98 @@ test.describe("Resident Glyph Grid", () => {
     expect(await paintsGlyphs(catalogSurface, glyphCanvas)).toBe(true);
   });
 
-  test("replaces a selected-source deletion atomically", async ({ editor, electronApp, page }) => {
-    const glyphCanvas = await prepareCompleteGrid(electronApp, page);
-    await createVariableDesignspace(editor);
-    // Arm the observer only after the setup edits have reached a settled frame, so every
-    // recorded transition belongs to the mutation under test.
-    await waitForSettledGrid(page, glyphCanvas);
-    await trackGridTransitions(page);
+  test.describe("with a Bold source twice as tall", () => {
+    test.use({ font: TALL_BOLD });
 
-    await editor.setLocation({ opsz: 900 });
-    await editor.deleteSource("Bold");
-
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
-    const state = await observedGridState(page);
-    expectAtomicGridReadiness(state.readiness);
-    expect(state.hiddenTransitions).toBe(0);
-  });
-
-  test("replaces a non-default design location atomically after deleting its axis", async ({
-    editor,
-    electronApp,
-    page,
-  }) => {
-    const glyphCanvas = await prepareCompleteGrid(electronApp, page);
-    await createVariableDesignspace(editor);
-    // Arm the observer only after the setup edits have reached a settled frame, so every
-    // recorded transition belongs to the mutation under test.
-    await waitForSettledGrid(page, glyphCanvas);
-    await trackGridTransitions(page);
-
-    await editor.setLocation({ opsz: 750 });
-    await afterNextPaint(page);
-    await editor.deleteAxis("opsz");
-
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
-    expect(await editor.axis({ tag: "opsz" })).toBeNull();
-    const state = await observedGridState(page);
-    expectAtomicGridReadiness(state.readiness);
-    expect(state.hiddenTransitions).toBe(0);
-  });
-
-  test("keeps cell geometry stable while scrubbing an axis with oversized outlines", async ({
-    page,
-    editor,
-  }) => {
-    const scrollViewport: Locator = glyphCatalogViewport(page);
-    const catalogSurface = glyphCatalogSurface(page);
-    const glyphCanvas: Locator = glyphCatalogCanvas(page);
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
-
-    await editor.openGlyphByUnicode("53");
-    await editor.draw({ contours: [rect(-600, -800, 2400, 2600)] });
-    await page.getByRole("button", { name: "Font overview" }).click();
-    await page.waitForURL(/#\/home/);
-    await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-      timeout: 30_000,
-    });
-
-    await createVariableDesignspace(editor);
-    await waitForSettledGrid(page, glyphCanvas);
-    const initialGeometry = {
-      previewHeight: Number(await glyphCanvas.getAttribute("data-preview-height")),
-      scrollHeight: await scrollViewport.evaluate((element) => element.scrollHeight),
-    };
-    const geometrySamples = await scrubGridGeometry(
+    test("replaces a selected-source deletion atomically", async ({
       editor,
-      glyphCanvas,
-      "opsz",
-      [500, 650, 800, 900, 650, 400],
-    );
+      electronApp,
+      page,
+    }) => {
+      const glyphCanvas = await prepareCompleteGrid(electronApp, page);
+      // Arm the observer only after the setup edits have reached a settled frame, so every
+      // recorded transition belongs to the mutation under test.
+      await waitForSettledGrid(page, glyphCanvas);
+      await trackGridTransitions(page);
 
-    expect(geometrySamples).toEqual(
-      Array.from({ length: geometrySamples.length }, () => initialGeometry),
-    );
-    await expect(glyphCanvas).toBeVisible();
-    expect(await paintsGlyphs(catalogSurface, glyphCanvas)).toBe(true);
+      await editor.setLocation({ opsz: 900 });
+      await editor.deleteSource("Bold");
+
+      await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+        timeout: 30_000,
+      });
+      const state = await observedGridState(page);
+      expectAtomicGridReadiness(state.readiness);
+      expect(state.hiddenTransitions).toBe(0);
+    });
+
+    test("replaces a non-default design location atomically after deleting its axis", async ({
+      editor,
+      electronApp,
+      page,
+    }) => {
+      const glyphCanvas = await prepareCompleteGrid(electronApp, page);
+      // Arm the observer only after the setup edits have reached a settled frame, so every
+      // recorded transition belongs to the mutation under test.
+      await waitForSettledGrid(page, glyphCanvas);
+      await trackGridTransitions(page);
+
+      await editor.setLocation({ opsz: 750 });
+      await afterNextPaint(page);
+      await editor.deleteAxis("opsz");
+
+      await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+        timeout: 30_000,
+      });
+      expect(await editor.axis({ tag: "opsz" })).toBeNull();
+      const state = await observedGridState(page);
+      expectAtomicGridReadiness(state.readiness);
+      expect(state.hiddenTransitions).toBe(0);
+    });
+  });
+
+  test.describe("with an S outline larger than the em and a Bold source twice as tall", () => {
+    test.use({
+      font: {
+        ...TALL_BOLD,
+        glyphs: { S: { outline: { contours: [rect(-600, -800, 2400, 2600)] } } },
+      },
+    });
+
+    test("keeps cell geometry stable while scrubbing an axis with oversized outlines", async ({
+      page,
+      editor,
+    }) => {
+      const scrollViewport: Locator = glyphCatalogViewport(page);
+      const catalogSurface = glyphCatalogSurface(page);
+      const glyphCanvas: Locator = glyphCatalogCanvas(page);
+      // Drawing S opened the editor; the Grid is on Home.
+      await page.getByRole("button", { name: "Font overview" }).click();
+      await page.waitForURL(/#\/home/);
+      await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+        timeout: 30_000,
+      });
+
+      await waitForSettledGrid(page, glyphCanvas);
+      const initialGeometry = {
+        previewHeight: Number(await glyphCanvas.getAttribute("data-preview-height")),
+        scrollHeight: await scrollViewport.evaluate((element) => element.scrollHeight),
+      };
+      const geometrySamples = await scrubGridGeometry(
+        editor,
+        glyphCanvas,
+        "opsz",
+        [500, 650, 800, 900, 650, 400],
+      );
+
+      expect(geometrySamples).toEqual(
+        Array.from({ length: geometrySamples.length }, () => initialGeometry),
+      );
+      await expect(glyphCanvas).toBeVisible();
+      expect(await paintsGlyphs(catalogSurface, glyphCanvas)).toBe(true);
+    });
   });
 });
-
-/**
- * Adds an `opsz` axis and a Bold source at 900 whose every metric is twice the default's, so scrubbing toward it grows every Grid cell. Adding a source moves to it, as the
- * Create source menu does, so this moves back to the default location after.
- */
-async function createVariableDesignspace(editor: EditorDriver): Promise<void> {
-  const { metrics } = await editor.location();
-  await editor.addAxis({
-    tag: "opsz",
-    name: "Optical Size",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-  });
-  await editor.addSource("Bold", { opsz: 900 });
-  await editor.setSourceMetric("Bold", "Ascender", metrics.ascender * 2);
-  await editor.setSourceMetric("Bold", "Cap Height", metrics.capHeight! * 2);
-  await editor.setSourceMetric("Bold", "x-Height", metrics.xHeight! * 2);
-  await editor.setSourceMetric("Bold", "Baseline", metrics.baseline * 2);
-  await editor.setSourceMetric("Bold", "Descender", metrics.descender * 2);
-  await editor.setLocation({ opsz: 400 });
-}
 
 async function prepareCompleteGrid(electronApp: ElectronApplication, page: Page): Promise<Locator> {
   await expect.poll(() => gpuAvailable(page)).toBe(true);

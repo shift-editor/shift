@@ -15,12 +15,11 @@ import type {
   SharedWorkspace,
 } from "./types";
 import {
-  buildFont,
   FONT_FILES,
-  type FontBuilder,
   type FontFixture,
   type FontName,
 } from "@/testing/fonts";
+import { buildFontFixture } from "./buildFontFixture";
 import { EditorDriver } from "./EditorDriver";
 import { ElectronProcesses, killApp } from "./electronProcesses";
 import { hooksOf } from "./appHooks";
@@ -308,7 +307,10 @@ export const documentTest = test.extend<ShiftOptions>({
 
 /** Real Electron lifecycle fixture for sparse native recovery tests. */
 export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
-  recoveryApp: async ({ electronProcesses, testRoot, windowSizing, deviceScaleFactor }, use) => {
+  recoveryApp: async (
+    { electronProcesses, testRoot, windowSizing, deviceScaleFactor, font },
+    use,
+  ) => {
     const userDataDir = path.join(testRoot, "user-data");
     const documentPath = createAuthoredDocument(
       FONTS.mutatorSansTtf,
@@ -328,10 +330,14 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
 
     let app = await launch(true);
     let page = await readyWorkspacePage(app);
+    await applyFontFixture(page, app, font, false);
     await use({
       page,
       get app() {
         return app;
+      },
+      get editor() {
+        return new EditorDriver(page, app);
       },
       documentPath,
       crashAndRecover: async () => {
@@ -400,22 +406,7 @@ async function applyFontFixture(
   if (font.mode !== undefined) {
     throw new Error("The `font` option builds into the launched workspace; it has no `mode`.");
   }
-  await buildFont(fontBuilder(new EditorDriver(page, electronApp)), font);
-}
-
-/**
- * The driver as {@link buildFont} needs it: the vitest surface's `openGlyph(name)` is the
- * driver's `openGlyphByName`, since the driver's own `openGlyph` takes a glyph id.
- */
-function fontBuilder(driver: EditorDriver): FontBuilder {
-  return {
-    glyphNamed: (name) => driver.glyphNamed(name),
-    addGlyph: (name, unicode) => driver.addGlyph(name, unicode),
-    openGlyph: (name) => driver.openGlyphByName(name),
-    draw: driver.draw.bind(driver),
-    addAxis: (axis) => driver.addAxis(axis),
-    addSource: (name, location) => driver.addSource(name, location),
-  };
+  await buildFontFixture(page, electronApp, font);
 }
 
 /** Makes `page` render and report focus as if its window held the OS focus. */

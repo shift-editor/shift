@@ -23,6 +23,8 @@ import { clearSelection } from "./editorInteractions";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 import type { RecordedDialog } from "./types";
 import { registerApp } from "./appHooks";
+import { buildFontFixture } from "./buildFontFixture";
+import type { FontFixture } from "@/testing/fonts";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -53,6 +55,8 @@ export type PerfFixtures = {
   page: Page;
   editor: EditorDriver;
   sourcePath: string;
+  /** What to build into the opened font before the test starts; nothing when unset. */
+  font: FontFixture | undefined;
 };
 
 /**
@@ -60,6 +64,8 @@ export type PerfFixtures = {
  */
 function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDocument) {
   return base.extend<PerfFixtures>({
+    font: [undefined, { option: true }],
+
     electronApp: async ({}, use) => {
       const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
       const userDataDir = path.join(testRoot, "user-data");
@@ -138,10 +144,11 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
       await use(sourcePath);
     },
 
-    page: async ({ electronApp }, use) => {
+    page: async ({ electronApp, font }, use) => {
       const page = await electronApp.firstWindow();
       await page.waitForLoadState("domcontentloaded");
       await page.waitForURL(/#\/home/, { timeout: 20_000 });
+      if (font) await buildFontFixture(page, electronApp, font);
 
       const dialogs: RecordedDialog[] = [];
       page.on("dialog", async (dialog) => {

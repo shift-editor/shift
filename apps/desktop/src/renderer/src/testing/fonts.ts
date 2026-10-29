@@ -81,7 +81,13 @@ export interface GlyphEntry {
  * 3. each of `axes` is added;
  * 4. each of `sources` is added, in order. Each new source becomes the active
  *    one and gives the open glyph a layer there, so the last source is active
- *    when the test starts.
+ *    when the test starts;
+ * 5. each source's `metrics` are set;
+ * 6. each of `instances` is added;
+ * 7. the editor moves to `location`, when set; it stays at the last source otherwise.
+ *
+ * It returns nothing: a test that needs an id reads it through the surface's selectors
+ * (`source({ name })`, `axis({ tag })`, `instance({ name })`).
  */
 export interface FontFixture {
   /** The editor's session capability; `workspace` when omitted. */
@@ -92,6 +98,15 @@ export interface FontFixture {
   readonly axes?: readonly AxisFixture[];
   /** Sources to add, by name, at a location keyed by axis tag. */
   readonly sources?: Readonly<Record<string, AxisLocation>>;
+  /**
+   * Metric positions to set, by source name (`Regular` for a new font's default source), then
+   * metric name (`Ascender`, `Cap Height`, `x-Height`, `Baseline`, `Descender`).
+   */
+  readonly metrics?: Readonly<Record<string, Readonly<Record<string, number>>>>;
+  /** Named instances to add, by name, at a location keyed by axis tag. */
+  readonly instances?: Readonly<Record<string, AxisLocation>>;
+  /** Where the editor is when the test starts, keyed by axis tag; the last source when omitted. */
+  readonly location?: AxisLocation;
   /** Never set: a fixture with a `file` opens that file instead (vitest's `OpenFontFixture`). */
   readonly file?: never;
 }
@@ -116,6 +131,12 @@ export interface FontBuilder {
   addAxis(axis: AxisFixture): Promise<void>;
   /** Adds a source at `location`, as the Create source menu does, and waits for it. */
   addSource(name: string, location: AxisLocation): Promise<void>;
+  /** Moves the metric named `metric` in the source `source` to `position`. */
+  setSourceMetric(source: string, metric: string, position: number): Promise<void>;
+  /** Adds a named instance at `location`, as Settings › Instances does. */
+  addInstance(name: string, location: AxisLocation): Read<void>;
+  /** Moves the editor to `location`, as the location sliders do. */
+  setLocation(location: AxisLocation): Read<void>;
 }
 
 /**
@@ -142,4 +163,13 @@ export async function buildFont(editor: FontBuilder, fixture: FontFixture): Prom
   for (const [name, location] of Object.entries(fixture.sources ?? {})) {
     await editor.addSource(name, location);
   }
+  for (const [source, metrics] of Object.entries(fixture.metrics ?? {})) {
+    for (const [metric, position] of Object.entries(metrics)) {
+      await editor.setSourceMetric(source, metric, position);
+    }
+  }
+  for (const [name, location] of Object.entries(fixture.instances ?? {})) {
+    await editor.addInstance(name, location);
+  }
+  if (fixture.location) await editor.setLocation(fixture.location);
 }
