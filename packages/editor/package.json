@@ -40,7 +40,8 @@
     },
     "./spaces": {
       "types": "./src/spaces.ts",
-      "import": "./src/spaces.ts"
+      "import": "./src/spaces.ts",
+      "default": "./src/spaces.ts"
     },
     "./text": {
       "types": "./src/text.ts",

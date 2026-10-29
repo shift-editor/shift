@@ -56,6 +56,8 @@ export class SurfaceActions {
     const made = `${record.name} at ${record.unicodes.join() || "no Unicode"}`;
     const wanted = `${name} at ${unicode === null ? "no Unicode" : String(unicode)}`;
     if (made !== wanted) throw new Error(`Expected glyph ${wanted}; the font made ${made}`);
+    // The glyph loads once the workspace has confirmed it exists.
+    await font.editCoordinator.settled();
     await font.loadGlyph(record.id);
   }
 

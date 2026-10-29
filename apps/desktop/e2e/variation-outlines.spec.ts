@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { workspaceTest, expect, FONTS, navigateToEditor } from "./fixtures/electronApp";
 import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
+import type { OutlinePoint } from "@/testing/reads";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
@@ -108,35 +109,47 @@ async function activeSourceId(editor: EditorDriver): Promise<string | null> {
 test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
   // LightCondensed is the open default source; BoldWide joins it for editing.
+  const active = (await editor.source("active"))!.name;
   await editor.clickSource("BoldWide", "toggle");
   const glyph = (await editor.editorView()).glyph!.name;
-  const boldWidePoints = async () =>
-    (await editor.layerOf(glyph, "BoldWide")).contours.flatMap((contour) => contour.points);
+  const pointsIn = async (source: string) =>
+    (await editor.layerOf(glyph, source)).contours.flatMap((contour) => contour.points);
+  // Which points moved between two reads of a layer, by how much; null for one that stayed.
+  const moves = (before: readonly OutlinePoint[], after: readonly OutlinePoint[]) =>
+    after.map((point, index) => {
+      const was = before[index]!;
+      return point.x === was.x && point.y === was.y
+        ? null
+        : { x: point.x - was.x, y: point.y - was.y };
+    });
 
   const drag = await editor.selectVisiblePoint();
-  const [referenceBefore, before] = await Promise.all([
+  const [referenceBefore, activeBefore, boldWideBefore] = await Promise.all([
     editor.pointPosition(drag.id),
-    boldWidePoints(),
+    pointsIn(active),
+    pointsIn("BoldWide"),
   ]);
   await editor.dragPoint(drag);
-  const [referenceAfter, after] = await Promise.all([
+  const [referenceAfter, activeAfter, boldWideAfter] = await Promise.all([
     editor.pointPosition(drag.id),
-    boldWidePoints(),
+    pointsIn(active),
+    pointsIn("BoldWide"),
   ]);
 
-  // Exactly one BoldWide point moved, by the dragged point's delta.
-  const delta = { x: referenceAfter.x - referenceBefore.x, y: referenceAfter.y - referenceBefore.y };
-  const moved = after.flatMap((point, index) => {
-    const was = before[index]!;
-    return point.x === was.x && point.y === was.y
-      ? []
-      : [{ x: point.x - was.x, y: point.y - was.y }];
+  // The same points move in both sources, and BoldWide's match moves by the dragged delta.
+  const activeMoves = moves(activeBefore, activeAfter);
+  const boldWideMoves = moves(boldWideBefore, boldWideAfter);
+  expect(boldWideMoves.map((move) => move !== null)).toEqual(
+    activeMoves.map((move) => move !== null),
+  );
+  expect(boldWideMoves).toContainEqual({
+    x: referenceAfter.x - referenceBefore.x,
+    y: referenceAfter.y - referenceBefore.y,
   });
-  expect(moved).toEqual([delta]);
 
   await editor.undo();
   await expect.poll(() => editor.pointPosition(drag.id)).toEqual(referenceBefore);
-  await expect.poll(boldWidePoints).toEqual(before);
+  await expect.poll(() => pointsIn("BoldWide")).toEqual(boldWideBefore);
 });
 
 test("selects displayed objects at an interpolated instance", async ({ page, editor }) => {
