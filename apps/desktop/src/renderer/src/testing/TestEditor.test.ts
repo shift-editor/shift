@@ -43,7 +43,7 @@ describe("TestEditor", () => {
       const point = editor.openContour?.points[0];
       if (!point) throw new Error("Expected point");
 
-      expect(editor.pointPosition(point.id)).toEqual({ x: 100, y: 200 });
+      expect(editor.layerPointPosition(point.id)).toEqual({ x: 100, y: 200 });
     });
 
     it("rejects confirmed geometry reads while a raw action is pending", async () => {
@@ -53,9 +53,9 @@ describe("TestEditor", () => {
       const point = editor.openContour?.points[0];
       if (!point) throw new Error("Expected point");
 
-      expect(() => editor.pointPosition(point.id)).toThrow("Workspace edits are pending");
+      expect(() => editor.layerPointPosition(point.id)).toThrow("Workspace edits are pending");
       await editor.settle();
-      expect(editor.pointPosition(point.id)).toEqual({ x: 100, y: 200 });
+      expect(editor.layerPointPosition(point.id)).toEqual({ x: 100, y: 200 });
     });
 
     it("waits for editing key presses before returning", async () => {
@@ -68,7 +68,7 @@ describe("TestEditor", () => {
 
       await editor.pressKey("ArrowRight");
 
-      expect(editor.pointPosition(point.id)).toEqual({ x: 101, y: 200 });
+      expect(editor.layerPointPosition(point.id)).toEqual({ x: 101, y: 200 });
     });
   });
 

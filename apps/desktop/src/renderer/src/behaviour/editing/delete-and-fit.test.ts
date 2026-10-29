@@ -6,16 +6,17 @@ import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
 
-const ORIGINAL = Curve.cubic(
+/** The curve the split fixtures draw: from 0,0 to 200,0, pulled up by controls at 50,100 and 200,100. */
+const ORIGINAL = [
   { x: 0, y: 0 },
   { x: 50, y: 100 },
   { x: 200, y: 100 },
   { x: 200, y: 0 },
-);
+] as const;
 
 describe("deleting an on-curve point fits a curve across its span", () => {
   it("recovers a split cubic and keeps its endpoints", async () => {
-    const names = await editor.draw({ contours: [splitCubic(ORIGINAL, 0.4)] });
+    const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.4)] });
 
     await expectEdit(
       editor,
@@ -34,7 +35,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
         expect([points[0]!.id, points[3]!.id]).toEqual([names.p0, names.p2]);
         // The furthest any of 40 samples along the original lies from the same parameter on the fit.
         const fit = Curve.cubic(points[0]!, points[1]!, points[2]!, points[3]!);
-        const distances = Curve.sample(ORIGINAL, 40).map((point, index) =>
+        const distances = Curve.sample(Curve.cubic(...ORIGINAL), 40).map((point, index) =>
           Vec2.dist(point, Curve.pointAt(fit, index / 40)),
         );
         expect(Math.max(...distances)).toBeLessThan(0.1);
@@ -44,7 +45,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   });
 
   it("fits the same curve when the point's handles are selected with it", async () => {
-    const names = await editor.draw({ contours: [splitCubic(ORIGINAL, 0.4)] });
+    const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.4)] });
     editor.select([names.p1]);
     await editor.deleteSelection();
     const fitted = (await editor.outline())[0]!.points.map((point) => ({
@@ -60,7 +61,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   });
 
   it("fits adjacent selected points once, whatever order they were selected in", async () => {
-    const names = await editor.draw({ contours: [splitCubic(ORIGINAL, 0.3, 0.6)] });
+    const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.3, 0.6)] });
     editor.select([names.p1, names.p2]);
     await editor.deleteSelection();
     const fitted = (await editor.outline())[0]!.points.map((point) => ({
@@ -77,7 +78,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   });
 
   it("treats a clicked segment like all of its points selected", async () => {
-    const contour = splitCubic(ORIGINAL, 0.25, 0.65);
+    const contour = splitCubic(...ORIGINAL, 0.25, 0.65);
     const names = await editor.draw({ contours: [contour] });
     const [, , , p1, c1a, c1b, p2] = contour.points;
     editor.select([names.p1, names.c1a, names.c1b, names.p2]);
@@ -95,7 +96,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   });
 
   it("leaves the two endpoints apart when a gap removes the only two segments", async () => {
-    const names = await editor.draw({ contours: [splitCubic(ORIGINAL, 0.4)] });
+    const names = await editor.draw({ contours: [splitCubic(...ORIGINAL, 0.4)] });
     editor.select([names.p1]);
 
     await editor.deleteSelection("gap");
@@ -107,7 +108,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
   });
 
   it("does not delete while an interpolated location is shown", async () => {
-    await editor.draw({ contours: [splitCubic(ORIGINAL)] });
+    await editor.draw({ contours: [splitCubic(...ORIGINAL)] });
     const before = await editor.outline();
     await editor.addAxis(WEIGHT);
     editor.selectAll();

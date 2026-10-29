@@ -489,8 +489,9 @@ export class EditorDriver implements EditorReads {
    * Returns a confirmed glyph-local position; throws when absent.
    * @param pointId - Point in the active authored layer.
    */
-  async pointPosition(pointId: PointId): Promise<Point2D> {
-    return (await this.pointPositions([pointId]))[pointId];
+  async pointPosition(pointId: PointId): Promise<LocalPoint> {
+    const { x, y } = (await this.pointPositions([pointId]))[pointId];
+    return { x, y } as LocalPoint;
   }
 
   /**

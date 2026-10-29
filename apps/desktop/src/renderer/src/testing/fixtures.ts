@@ -13,7 +13,7 @@
  * returns exactly the names a fixture used.
  */
 import type { ContourContent } from "@shift/editor/clipboard";
-import { Curve, type CubicCurve } from "@shift/geo";
+import { Curve, type CubicCurve, type Point2D } from "@shift/geo";
 import type { PointType } from "@shift/types";
 
 /** An on-curve corner as `[x, y]`, or a point with its kind and an optional name. */
@@ -209,14 +209,23 @@ export interface SplitCubicFixture extends ShapeFixture<CubicPieceName> {
 }
 
 /**
- * An open contour of `curve` split at each of `ts` in turn, each `t` measured
- * along what is left: up to three cubic pieces drawn exactly over `curve`.
- * The on-curve points are named `p0`, `p1`… and each piece's controls `c0a`,
- * `c0b`, `c1a`….
+ * An open cubic curve from `start` to `end`, as {@link cubic} draws it, split
+ * at each of `ts` in turn, each `t` measured along what is left: up to three
+ * cubic pieces drawn exactly over the one curve. The on-curve points are named
+ * `p0`, `p1`… and each piece's controls `c0a`, `c0b`, `c1a`….
+ *
+ * @example
+ * const { p1 } = await editor.draw({ contours: [splitCubic([0, 0], [50, 100], [200, 100], [200, 0], 0.4)] });
  */
-export function splitCubic(curve: CubicCurve, ...ts: number[]): SplitCubicFixture {
+export function splitCubic(
+  start: ShapePoint,
+  control1: ShapePoint,
+  control2: ShapePoint,
+  end: ShapePoint,
+  ...ts: number[]
+): SplitCubicFixture {
   const pieces: CubicCurve[] = [];
-  let rest = curve;
+  let rest = Curve.cubic(position(start), position(control1), position(control2), position(end));
   for (const t of ts) {
     const [left, right] = Curve.splitAt(rest, t) as [CubicCurve, CubicCurve];
     pieces.push(left);
@@ -227,7 +236,7 @@ export function splitCubic(curve: CubicCurve, ...ts: number[]): SplitCubicFixtur
 
   return {
     points: [
-      { ...curve.p0, name: "p0" },
+      { ...position(start), name: "p0" },
       ...pieces.flatMap((piece, index): NamedPointFixture<CubicPieceName>[] => [
         { ...piece.c0, off: true, name: `c${index as CubicPiece}a` },
         { ...piece.c1, off: true, name: `c${index as CubicPiece}b` },
@@ -235,6 +244,10 @@ export function splitCubic(curve: CubicCurve, ...ts: number[]): SplitCubicFixtur
       ]),
     ],
   };
+}
+
+function position(point: ShapePoint): Point2D {
+  return isCorner(point) ? { x: point[0], y: point[1] } : { x: point.x, y: point.y };
 }
 
 function corner<N extends string>(

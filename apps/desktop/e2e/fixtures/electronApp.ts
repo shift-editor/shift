@@ -1,4 +1,4 @@
-import { test as base, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, type ElectronApplication, type Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -15,6 +15,7 @@ import type {
   SharedWorkspace,
 } from "./types";
 import { EditorDriver } from "./EditorDriver";
+import { expect } from "./matchers";
 import { ElectronProcesses, killApp } from "./electronProcesses";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";

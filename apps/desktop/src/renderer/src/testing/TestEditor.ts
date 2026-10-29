@@ -14,7 +14,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
+import {
+  localPoint,
+  scenePoint,
+  screenPoint,
+  type LocalPoint,
+  type ScreenPoint,
+} from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
@@ -377,7 +383,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return layer;
   }
 
-  pointPosition(pointId: PointId): Point2D {
+  layerPointPosition(pointId: PointId): Point2D {
     this.#assertWorkspaceSettled();
     const point = this.requireGlyphLayer().point(pointId);
     if (!point) throw new Error("Expected source point");
@@ -678,7 +684,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   /** A drag from point `id` by `by`, crossing the drag threshold on a first sample a few units along. */
   #pointDrag(id: PointId, by: Point2D, options?: Modifiers): DragInput {
-    const down = this.pointPosition(id);
+    const down = this.layerPointPosition(id);
     const length = Math.hypot(by.x, by.y) || 1;
     const lead = Math.min(4, length);
     return {
@@ -1189,6 +1195,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
         return [id, { x: point.x, y: point.y }];
       }),
     ) as Record<PointId, Point2D>;
+  }
+
+  async pointPosition(id: PointId): Promise<LocalPoint> {
+    const { x, y } = (await this.pointPositions([id]))[id]!;
+    return localPoint(x, y);
   }
 
   selectionIds(): readonly string[] {

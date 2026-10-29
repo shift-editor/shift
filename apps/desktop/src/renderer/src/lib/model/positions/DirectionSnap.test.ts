@@ -26,15 +26,15 @@ describe("direction snapping distinguishes the moving reference from its fixed p
 
     const feedback = edit.preview({ x: -20, y: 60 });
     const component = 100 / Math.sqrt(2);
-    expect(editor.pointPosition(pointId).x).toBeCloseTo(component);
-    expect(editor.pointPosition(pointId).y).toBeCloseTo(100 + component);
+    expect(editor.layerPointPosition(pointId).x).toBeCloseTo(component);
+    expect(editor.layerPointPosition(pointId).y).toBeCloseTo(100 + component);
     expect(feedback.delta.x).toBeCloseTo(component - 100);
     expect(feedback.delta.y).toBeCloseTo(component);
     expect(feedback.guides).toEqual([
-      { kind: "direction", from: { x: 0, y: 100 }, to: editor.pointPosition(pointId) },
+      { kind: "direction", from: { x: 0, y: 100 }, to: editor.layerPointPosition(pointId) },
     ]);
     edit.discard();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 100, y: 100 });
   });
 
   it("keeps a point pivot frozen even when it is also a movement target", async () => {
@@ -48,11 +48,11 @@ describe("direction snapping distinguishes the moving reference from its fixed p
 
     edit.preview({ x: 20, y: 50 });
     edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
-    expect(editor.pointPosition(pivot)).toEqual({ x: 30, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pivot)).toEqual({ x: 30, y: 100 });
     edit.discard();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
-    expect(editor.pointPosition(pivot)).toEqual({ x: 0, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(editor.layerPointPosition(pivot)).toEqual({ x: 0, y: 100 });
   });
 
   it("resolves an anchor pivot and applies the same correction to point and anchor targets", async () => {
@@ -66,7 +66,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
 
     edit.preview({ x: 20, y: 50 });
     const feedback = edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     expect(editor.anchorPosition(pivot)).toEqual({ x: 30, y: 100 });
     expect(feedback.guides).toEqual([
       { kind: "direction", from: { x: 0, y: 100 }, to: { x: 130, y: 100 } },
@@ -85,7 +85,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       );
 
     const feedback = edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     expect(feedback.guides).toEqual([
       { kind: "direction", from: { x: 0, y: 200 }, to: { x: 130, y: 200 } },
     ]);
@@ -104,7 +104,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       );
 
     const feedback = edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     expect(feedback.guides).toEqual([]);
     edit.discard();
   });
@@ -122,13 +122,13 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       );
 
     edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     enabled = false;
     expect(edit.preview({ x: 20, y: 50 }).guides).toEqual([]);
-    expect(editor.pointPosition(pointId)).toEqual({ x: 120, y: 150 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 120, y: 150 });
     enabled = true;
     edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     edit.discard();
   });
 
@@ -144,11 +144,11 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     edit.preview({ x: 20, y: 50 });
     edit.commit();
     await editor.settle();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     await editor.undo();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 100, y: 100 });
     await editor.redo();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
   });
 
   it("requires a moving reference before a pivoted preview without consuming configuration", () => {
@@ -160,10 +160,10 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       );
 
     expect(() => edit.preview({ x: 20, y: 50 })).toThrow(/MoveEdit.from/);
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 100, y: 100 });
     edit.from(PositionReference.point(pointId));
     edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     edit.discard();
   });
 
@@ -193,7 +193,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       );
 
     const feedback = edit.preview({ x: -100, y: 0 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 0, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 0, y: 100 });
     expect(feedback.delta).toEqual({ x: -100, y: 0 });
     edit.discard();
   });
@@ -210,7 +210,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
 
     snap.around(PositionReference.position({ x: 100, y: 0 }));
     edit.preview({ x: 20, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 130, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 130, y: 100 });
     edit.discard();
   });
 
@@ -232,8 +232,8 @@ describe("direction snapping distinguishes the moving reference from its fixed p
     expect(nextGuide.from).toEqual({ x: 0, y: 100 });
     expect(nextGuide.to.x).toBeCloseTo(100);
     expect(nextGuide.to.y).toBeCloseTo(200);
-    expect(editor.pointPosition(pointId).x).toBeCloseTo(100);
-    expect(editor.pointPosition(pointId).y).toBeCloseTo(200);
+    expect(editor.layerPointPosition(pointId).x).toBeCloseTo(100);
+    expect(editor.layerPointPosition(pointId).y).toBeCloseTo(200);
     edit.discard();
   });
 
@@ -244,7 +244,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
       .directionSnappedBy(DirectionSnap.everyDegrees(90));
 
     const feedback = edit.preview({ x: 120, y: 50 });
-    expect(editor.pointPosition(pointId)).toEqual({ x: 230, y: 100 });
+    expect(editor.layerPointPosition(pointId)).toEqual({ x: 230, y: 100 });
     expect(feedback.delta).toEqual({ x: 130, y: 0 });
     expect(feedback.guides).toEqual([]);
     edit.discard();

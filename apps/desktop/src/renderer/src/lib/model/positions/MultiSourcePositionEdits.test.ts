@@ -79,14 +79,14 @@ describe("multi-source position edits", () => {
     });
     scale.preview({ x: 2, y: 1 });
 
-    expect(editor.pointPosition(firstId)).toEqual({ x: 50, y: 100 });
+    expect(editor.layerPointPosition(firstId)).toEqual({ x: 50, y: 100 });
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 150, y: 150 });
 
     scale.commit();
     await editor.settle();
     await editor.undo();
 
-    expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+    expect(editor.layerPointPosition(firstId)).toEqual({ x: 100, y: 100 });
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 200, y: 150 });
   });
 
@@ -105,14 +105,14 @@ describe("multi-source position edits", () => {
     });
     rotate.preview(Math.PI / 2);
 
-    const referencePreview = editor.pointPosition(firstId);
+    const referencePreview = editor.layerPointPosition(firstId);
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({
       x: referencePreview.x + 100,
       y: referencePreview.y + 50,
     });
 
     rotate.discard();
-    expect(editor.pointPosition(firstId)).toEqual({ x: 100, y: 100 });
+    expect(editor.layerPointPosition(firstId)).toEqual({ x: 100, y: 100 });
     expect(pointPosition(targetLayer, targetFirstId)).toEqual({ x: 200, y: 150 });
   });
 

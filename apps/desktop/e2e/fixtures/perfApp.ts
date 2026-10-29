@@ -161,7 +161,7 @@ export const glyphsPreviewTest = createAppTest(GLYPHS_PREVIEW_FONT_PATH, copyImp
 /** Authored `AnchorDragBench`: `a`–`z`, combining marks, and composites on `u`. */
 export const anchorDragTest = createAppTest(ANCHOR_DRAG_FONT_PATH, createAuthoredDocument);
 
-export { expect } from "@playwright/test";
+export { expect } from "./matchers";
 
 /**
  * MutatorSans "S" contour data (44 points) for generating 50K-point glyphs.
