@@ -3,7 +3,6 @@ import { Bounds } from "@shift/geo";
 import { cursorToCSS } from "@shift/editor/rendering";
 import { expectEdit } from "@/testing/expectEdit";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 beforeEach(() => {
@@ -34,10 +33,9 @@ describe("drawing a shape by dragging", () => {
       editor,
       (e) => e.dragFrom({ x: 10, y: 10 }, { x: 110, y: 90 }),
       async (e) => {
-        const outline = await e.outline();
-        expect(outline).toHaveLength(1);
-        expect(outline[0]?.closed).toBe(true);
-        expect(outline[0]?.points).toHaveLength(4);
+        expect(await e.outline()).toMatchObject([
+          { closed: true, points: Array(4).fill(expect.anything()) },
+        ]);
       },
     );
   });
@@ -66,10 +64,14 @@ describe("drawing a shape by dragging", () => {
     await editor.dragFrom({ x: 10, y: 20 }, { x: 210, y: 120 });
 
     const [created] = await editor.outline();
-    expect(created?.closed).toBe(true);
-    expect(pointTypes(created?.points)).toEqual(
-      Array.from({ length: 4 }, () => ["onCurve", "offCurve", "offCurve"]).flat(),
-    );
+    expect(created).toMatchObject({
+      closed: true,
+      points: Array.from({ length: 4 }, () => [
+        { pointType: "onCurve" },
+        { pointType: "offCurve" },
+        { pointType: "offCurve" },
+      ]).flat(),
+    });
     expect(created?.points.filter(({ smooth }) => smooth)).toHaveLength(4);
     expect(await editor.outlineBounds()).toEqual({
       min: { x: 10, y: 20 },

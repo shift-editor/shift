@@ -231,7 +231,7 @@ These hold for behaviour tests (`apps/desktop/src/renderer/src/behaviour/`) and 
 6. **A file's own scenario helpers stay local.** `drawStroke()` names the stroke `close-and-join.test.ts` closes, so it lives there.
    `async function drawStroke(): Promise<void> { … }`
 7. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
-   `pointTypes(contour.points)` lives in `testing/outline.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
+   `splitCubic(…)` lives in `testing/fixtures.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
 
 Positions in test code use the editor's coordinate spaces from `@shift/editor/spaces` (`LocalPoint`, `ScenePoint`, `ScreenPoint`) where a read or driver input already has one.
 

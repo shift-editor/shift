@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import { offCurve, onCurve } from "@/testing/outlineMatchers";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 beforeEach(() => {
@@ -148,14 +147,18 @@ describe("dragging with the Pen draws curves", () => {
     editor.holdDragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
     await previous;
 
-    expect(pointTypes(editor.drawnOutline()[0]?.points)).toEqual([
-      "onCurve",
-      "offCurve",
-      "offCurve",
-      "onCurve",
-      "offCurve",
-      "offCurve",
-      "onCurve",
+    expect(editor.drawnOutline()).toMatchObject([
+      {
+        points: [
+          { pointType: "onCurve" },
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { pointType: "onCurve" },
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { pointType: "onCurve" },
+        ],
+      },
     ]);
 
     await editor.pressKey("Escape");

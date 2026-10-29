@@ -3,7 +3,6 @@ import { Curve, Vec2 } from "@shift/geo";
 import { expectEdit } from "@/testing/expectEdit";
 import { splitCubic } from "@/testing/fixtures";
 import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
-import { pointTypes } from "@/testing/outline";
 
 const editor = useTestEditor();
 
@@ -27,8 +26,12 @@ describe("deleting an on-curve point fits a curve across its span", () => {
       },
       async (e) => {
         const points = (await e.outline())[0]!.points;
-        expect(pointTypes(points)).toEqual(["onCurve", "offCurve", "offCurve", "onCurve"]);
-        expect([points[0]!.id, points[3]!.id]).toEqual([names.p0, names.p2]);
+        expect(points).toMatchObject([
+          { pointType: "onCurve", id: names.p0 },
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { pointType: "onCurve", id: names.p2 },
+        ]);
         // The furthest any of 40 samples along the original lies from the same parameter on the fit.
         const fit = Curve.cubic(points[0]!, points[1]!, points[2]!, points[3]!);
         const distances = Curve.sample(Curve.cubic(...ORIGINAL), 40).map((point, index) =>
@@ -158,9 +161,9 @@ describe("deleting a point never raises the degree of the span it joins", () => 
 
     await editor.deleteSelection();
 
-    const points = (await editor.outline())[0]?.points;
-    expect(pointTypes(points)).toEqual(["onCurve", "onCurve", "offCurve", "offCurve", "onCurve"]);
-    expect(points.slice(1)).toEqual(untouched);
+    expect(await editor.outline()).toMatchObject([
+      { points: [{ pointType: "onCurve" }, ...untouched] },
+    ]);
   });
 
   it("still fits a cubic when the removed span mixes a line and a cubic", async () => {
@@ -230,9 +233,16 @@ describe("deleting a point never raises the degree of the span it joins", () => 
         await e.deleteSelection();
       },
       async (e) => {
-        const points = (await e.outline())[0]?.points;
-        expect(pointTypes(points)).toEqual(result);
-        expect([points[0]!.id, points.at(-1)!.id]).toEqual([start, end]);
+        const controls = result.slice(1, -1).map((pointType) => ({ pointType }));
+        expect(await e.outline()).toMatchObject([
+          {
+            points: [
+              { pointType: "onCurve", id: start },
+              ...controls,
+              { pointType: "qCurve", id: end },
+            ],
+          },
+        ]);
       },
     );
   });
