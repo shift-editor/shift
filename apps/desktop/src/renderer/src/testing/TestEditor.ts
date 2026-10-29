@@ -112,7 +112,7 @@ import type {
   EditorTestSurface,
   Modifiers,
 } from "./surface";
-import type { DocumentSaveState, Outline } from "./reads";
+import type { DocumentSaveState, Outline, PointReadOptions } from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -1170,8 +1170,23 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return (await this.#authoredLayer()).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, { source }: PointReadOptions = {}): Promise<AuthoredPoint | null> {
+    if (source === undefined) return this.#pointIn(await this.outline(), id);
+
+    this.#assertWorkspaceSettled();
+    const { glyph } = this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
+    const other = { glyph: { glyphId: glyph.glyphId }, source };
+    const match = await this.#reads.font.matchLayers(shown, other);
+    if (!match.complete) return null;
+
+    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    if (!counterpart) return null;
+    return this.#pointIn((await this.#reads.font.getLayer(other)).contours, counterpart.targetId);
+  }
+
+  #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 
@@ -1346,6 +1361,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   drawnSnapGuides(): readonly PositionGuide[] {
     return this.#reads.editor.drawnSnapGuides();
+  }
+
+  drawnPoint(id: PointId): AuthoredPoint | null {
+    return this.#pointIn(this.drawnOutline(), id);
   }
 
   shownPointPositions(ids: readonly PointId[]): Record<PointId, Point2D> {

@@ -27,6 +27,7 @@ import type {
   LocationSummary,
   Outline,
   OutlineTarget,
+  PointReadOptions,
   SourceLayer,
   SpacingToolState,
 } from "@/testing/reads";
@@ -640,8 +641,23 @@ export class EditorDriver implements EditorReads {
     return (await this.#openLayer()).contours;
   }
 
-  async point(id: PointId): Promise<AuthoredPoint | null> {
-    const outline = await this.outline();
+  async point(id: PointId, { source }: PointReadOptions = {}): Promise<AuthoredPoint | null> {
+    if (source === undefined) return this.#pointIn(await this.outline(), id);
+
+    const { glyph } = await this.editorView();
+    if (!glyph) throw new Error("Expected an open glyph");
+    const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
+    const other = { glyph: { glyphId: glyph.glyphId }, source };
+    const match = await this.#read("font", "matchLayers", shown, other);
+    if (!match.complete) return null;
+
+    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    if (!counterpart) return null;
+    const layer = await this.#read("font", "getLayer", other);
+    return this.#pointIn(layer.contours, counterpart.targetId);
+  }
+
+  #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {
     return outline.flatMap((contour) => contour.points).find((point) => point.id === id) ?? null;
   }
 

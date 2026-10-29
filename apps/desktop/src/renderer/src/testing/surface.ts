@@ -452,6 +452,12 @@ export interface EditorTestSurface extends EditorReads {
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   drawnSnapGuides(): readonly PositionGuide[];
   /**
+   * One point of the open glyph as the canvas draws it now, a gesture not yet
+   * released included, as {@link drawnOutline} draws it; null when it draws no
+   * point with that id.
+   */
+  drawnPoint(id: PointId): OutlinePoint | null;
+  /**
    * Where the canvas shows each point now, including a gesture not yet
    * released, as {@link drawnOutline} draws them.
    */
