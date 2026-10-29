@@ -389,3 +389,44 @@ describe("shift/no-conditional-spread", () => {
     assert.deepEqual(lines, []);
   });
 });
+
+describe("shift/no-lookup-in-tests", () => {
+  const spec = "apps/desktop/e2e/lookups.spec.ts";
+  const behaviour = "apps/desktop/src/renderer/src/behaviour/variation/lookups.test.ts";
+
+  it("flags find, filter and some that compare a member or destructured key", () => {
+    const source = [
+      "declare const sources: { id: string; name: string }[];",
+      "declare const id: string;",
+      'sources.find((source) => source.name === "Bold");',
+      "sources.filter(({ name }) => name !== id);",
+      "sources.some(function (source) { return id === source.id; });",
+    ].join("\n");
+
+    assert.deepEqual(reportedLines("no-lookup-in-tests", source, spec), [3, 4, 5]);
+    assert.deepEqual(reportedLines("no-lookup-in-tests", source, behaviour), [3, 4, 5]);
+  });
+
+  it("allows other predicates, other files and a justified disable", () => {
+    const source = [
+      "declare const values: number[];",
+      "declare const sources: { name: string }[];",
+      "values.filter((value) => value > 0);",
+      "values.some((value) => value === 3);",
+      "sources.map((source) => source.name === \"Bold\");",
+      "// oxlint-disable-next-line shift/no-lookup-in-tests -- the read has no selector for this",
+      'sources.find((source) => source.name === "Bold");',
+    ].join("\n");
+
+    assert.deepEqual(reportedLines("no-lookup-in-tests", source, spec), []);
+    assert.deepEqual(
+      reportedLines(
+        "no-lookup-in-tests",
+        'declare const s: { name: string }[];\ns.find((x) => x.name === "B");',
+        "apps/desktop/e2e/fixtures/helpers.ts",
+      ),
+      [],
+    );
+  });
+});
+

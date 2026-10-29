@@ -1804,6 +1804,82 @@ export default {
     },
 
     /**
+     * Ban looking an object up by key over a read in behaviour tests and E2E specs.
+     *
+     * `(await editor.fontOverview()).sources.find((source) => source.name === "Bold")`
+     * and its kin wrapped in little helpers (`axisWithId`, `nameOfDefaultSource`)
+     * re-implement a selector in every test. The test surface has selector reads
+     * for these (`source({ name })`, `axis({ tag })`, `instance({ id })`, …); add
+     * one there when a test needs another. Shape-based: flags `.find`, `.filter`
+     * and `.some` whose callback compares a member, or a destructured parameter,
+     * with `===` or `!==`. Genuine cases take a reasoned disable.
+     */
+    "no-lookup-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useSelector:
+            "Do not look an object up by key over a read in a test. Use the test surface's selector reads (source({ name }), axis({ tag }), instance({ id }), …) and add one there if it is missing.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        const behaviourTest =
+          filename.includes("/apps/desktop/src/renderer/src/behaviour/") &&
+          filename.endsWith(".test.ts");
+        const e2eSpec = filename.includes("/apps/desktop/e2e/") && filename.endsWith(".spec.ts");
+        if (!behaviourTest && !e2eSpec) return {};
+
+        const lookups = new Set(["find", "filter", "some"]);
+        const isFunction = (node) =>
+          node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression";
+        // Names a callback's object pattern binds, as in `({ name }) => name === "Bold"`.
+        const destructured = (params) =>
+          new Set(
+            params.flatMap((param) =>
+              param.type === "ObjectPattern"
+                ? param.properties.flatMap((property) =>
+                    property.type === "Property" && property.value.type === "Identifier"
+                      ? [property.value.name]
+                      : [],
+                  )
+                : [],
+            ),
+          );
+        const isKey = (node, keys) =>
+          node.type === "MemberExpression" || (node.type === "Identifier" && keys.has(node.name));
+        const comparesKey = (node, keys) => {
+          if (!node || typeof node !== "object") return false;
+          if (Array.isArray(node)) return node.some((child) => comparesKey(child, keys));
+          if (
+            node.type === "BinaryExpression" &&
+            (node.operator === "===" || node.operator === "!==") &&
+            (isKey(node.left, keys) || isKey(node.right, keys))
+          ) {
+            return true;
+          }
+          return Object.entries(node).some(
+            ([key, child]) => key !== "parent" && child && typeof child === "object" && comparesKey(child, keys),
+          );
+        };
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (callee.type !== "MemberExpression" || callee.computed) return;
+            if (callee.property.type !== "Identifier" || !lookups.has(callee.property.name)) return;
+            const [callback] = node.arguments;
+            if (!callback || !isFunction(callback)) return;
+            if (comparesKey(callback.body, destructured(callback.params))) {
+              context.report({ node, messageId: "useSelector" });
+            }
+          },
+        };
+      },
+    },
+
+    /**
      * Ban `@shift/runtime` and agent-reader imports in behaviour tests and E2E specs.
      *
      * Those tests read through the test surface, which owns its read types
