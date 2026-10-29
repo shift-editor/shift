@@ -9,7 +9,6 @@ import {
   openCatalogGlyph,
   openVariationControls,
 } from "./fixtures/appLocators";
-import type { EditorDriver } from "./fixtures/EditorDriver";
 import { catalogLocationOn } from "./fixtures/glyphCatalogProbe";
 import type { ExternalAxisLocation } from "@shift/editor/types";
 
@@ -141,10 +140,6 @@ async function expectPreview(
 /** The name of the fixture's bold source. */
 const BOLD = "Navigation Bold";
 
-async function activeSourceId(editor: EditorDriver): Promise<SourceId | null> {
-  return (await editor.editorView()).activeSourceId;
-}
-
 // Navigation coherence is renderer-independent, so this runs on the software-rendered
 // visual project with the authored MutatorSans designspace.
 const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
@@ -189,7 +184,9 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   });
 
   await page.getByTestId(`source-${fixture.boldSourceId}`).click();
-  await expect.poll(() => activeSourceId(editor)).toBe(fixture.boldSourceId);
+  await expect
+    .poll(() => editor.editorView())
+    .toMatchObject({ activeSourceId: fixture.boldSourceId });
   const advanceInput = glyphProperties(page).getByLabel("Advance width", { exact: true });
   await expect(advanceInput).toBeEnabled();
   await advanceInput.click();
@@ -235,7 +232,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   await editorAxisInput.click();
   await editorAxisInput.fill("650");
   await editorAxisInput.press("Enter");
-  await expect.poll(() => activeSourceId(editor)).toBeNull();
+  await expect.poll(() => editor.editorView()).toMatchObject({ activeSourceId: null });
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeDisabled();
 
   await editorShell(page).getByLabel("Font overview").click();

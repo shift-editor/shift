@@ -102,10 +102,6 @@ function outlineToggle(
   });
 }
 
-async function activeSourceId(editor: EditorDriver): Promise<string | null> {
-  return (await editor.editorView()).activeSourceId;
-}
-
 test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
   // LightCondensed is the open default source; BoldWide joins it for editing.
@@ -157,7 +153,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
   const controls = await openVariationControls(page);
   // Medium_Narrow_I sits between MutatorSans's sources.
   await instanceRow(controls, "Medium_Narrow_I").click();
-  await expect.poll(() => activeSourceId(editor)).toBeNull();
+  await expect.poll(() => editor.editorView()).toMatchObject({ activeSourceId: null });
   // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   const pointId = await page.evaluate(() => {
     const editor = window.shiftSession!.editor;
@@ -189,7 +185,7 @@ test("row visibility outlines one comparison source without changing the active 
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
   await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
   await expect(sourceRow(controls, fixture.source.name)).toHaveAttribute("aria-pressed", "false");
-  expect(await activeSourceId(editor)).toBe(fixture.activeSource.id);
+  expect(await editor.editorView()).toMatchObject({ activeSourceId: fixture.activeSource.id });
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
   await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
@@ -205,7 +201,7 @@ test("editing-selection sources stay outlined until hidden, panning, or deselect
 
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  expect(await activeSourceId(editor)).toBe(fixture.activeSource.id);
+  expect(await editor.editorView()).toMatchObject({ activeSourceId: fixture.activeSource.id });
   await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
