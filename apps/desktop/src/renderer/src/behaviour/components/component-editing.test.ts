@@ -163,7 +163,9 @@ describe("components of glyphs not yet loaded this session", () => {
     await editor.draw({ components: [{ glyph: "base" }] });
 
     const drawn = await editor.drawnGlyph();
-    expect(drawn.components).toHaveLength(1);
-    expect(drawn.bounds).toEqual({ min: { x: 0, y: 0 }, max: { x: 100, y: 100 } });
+    expect(drawn).toMatchObject({
+      components: [expect.anything()],
+      bounds: { min: { x: 0, y: 0 }, max: { x: 100, y: 100 } },
+    });
   });
 });

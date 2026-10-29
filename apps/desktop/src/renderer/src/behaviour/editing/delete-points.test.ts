@@ -45,12 +45,15 @@ describe("deleting points", () => {
         await e.deleteSelection();
       },
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.closed).toBe(true);
-        expect(contour?.points.map(({ x, y }) => ({ x, y }))).toEqual([
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
+        expect(await e.outline()).toMatchObject([
+          {
+            closed: true,
+            points: [
+              { x: 100, y: 0 },
+              { x: 100, y: 100 },
+              { x: 0, y: 100 },
+            ],
+          },
         ]);
       },
     );

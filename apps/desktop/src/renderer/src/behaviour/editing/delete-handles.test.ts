@@ -79,8 +79,7 @@ describe("deleting a cubic's handle turns the segment into a line", () => {
         await e.deleteSelection();
       },
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.points.map(({ id }) => id)).toEqual([a, b]);
+        expect(await e.outline()).toMatchObject([{ points: [{ id: a }, { id: b }] }]);
       },
     );
   });

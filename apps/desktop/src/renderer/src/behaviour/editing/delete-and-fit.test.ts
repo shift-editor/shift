@@ -66,7 +66,7 @@ describe("deleting an on-curve point fits a curve across its span", () => {
     editor.select([names.p2, names.p1]);
     await editor.deleteSelection();
 
-    expect(fitted[0]?.points).toHaveLength(4);
+    expect(fitted).toMatchObject([{ points: Array(4).fill({}) }]);
     expect(await editor.outline()).toDrawLike(fitted);
   });
 

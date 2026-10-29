@@ -53,9 +53,12 @@ describe("dropping an open end onto another open end joins them", () => {
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 299, y: 299 });
 
-    const [contour] = await editor.outline();
-    expect(contour?.closed).toBe(true);
-    expect(contour?.points[0]).toMatchObject({ x: 300, y: 300, pointType: "onCurve" });
+    expect(await editor.outline()).toMatchObject([
+      {
+        closed: true,
+        points: [{ x: 300, y: 300, pointType: "onCurve" }, ...Array(5).fill({})],
+      },
+    ]);
   });
 
   it("joins two contours when an end lands on the other's end", async () => {
@@ -94,9 +97,7 @@ describe("dropping an open end onto another open end joins them", () => {
 
     await editor.dragFrom({ x: 300, y: 300 }, { x: 300, y: 250 });
 
-    const [contour] = await editor.outline();
-    expect(contour?.closed).toBe(false);
-    expect(contour?.points).toHaveLength(3);
+    expect(await editor.outline()).toMatchObject([{ closed: false, points: Array(3).fill({}) }]);
     expect(await editor.point(end)).toMatchObject({ x: 300, y: 250 });
   });
 });

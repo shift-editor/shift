@@ -125,8 +125,19 @@ describe("dragging with the Pen draws curves", () => {
     await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
     await editor.dragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
 
-    const [contour] = await editor.outline();
-    expect(contour?.points[4]).toMatchObject(offCurve(380, 180));
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          offCurve(380, 180),
+          expect.anything(),
+          expect.anything(),
+        ],
+      },
+    ]);
   });
 
   it("starts the next curve from the pulled handle even when the drags come faster than the workspace confirms them", async () => {
@@ -136,8 +147,19 @@ describe("dragging with the Pen draws curves", () => {
       editor.dragFrom({ x: 500, y: 100 }, { x: 580, y: 180 }),
     ]);
 
-    const [contour] = await editor.outline();
-    expect(contour?.points[4]).toMatchObject(offCurve(380, 180));
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          offCurve(380, 180),
+          expect.anything(),
+          expect.anything(),
+        ],
+      },
+    ]);
   });
 
   it("keeps the held curve showing while the curve before it is confirmed, and drops only the held one on Escape", async () => {
@@ -245,13 +267,11 @@ describe("panning with Space while drawing", () => {
     editor.releaseSpace();
     await editor.clickAt({ x: 500, y: 200 });
 
-    const outline = await editor.outline();
-    expect(outline).toHaveLength(1);
-    expect(outline[0]?.id).toBe(before?.id);
-    expect(outline[0]?.points).toMatchObject([
-      onCurve(100, 200),
-      onCurve(300, 200),
-      onCurve(500, 200),
+    expect(await editor.outline()).toMatchObject([
+      {
+        id: before!.id,
+        points: [onCurve(100, 200), onCurve(300, 200), onCurve(500, 200)],
+      },
     ]);
   });
 });

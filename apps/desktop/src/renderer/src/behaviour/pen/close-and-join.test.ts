@@ -48,12 +48,20 @@ describe("closing a contour by dragging off its first point", () => {
 
     await editor.dragFrom({ x: 100, y: 100 }, { x: 100, y: 160 });
 
-    const [contour] = await editor.outline();
-    expect(contour?.closed).toBe(true);
-    expect(contour?.points.filter(({ pointType }) => pointType === "onCurve")).toHaveLength(3);
-    expect(contour?.points[0]).toMatchObject({ ...onCurve(100, 100), smooth: true });
-    expect(contour?.points[1]).toMatchObject(offCurve(100, 160));
-    expect(contour?.points.at(-1)).toMatchObject(offCurve(100, 40));
+    expect(await editor.outline()).toMatchObject([
+      {
+        closed: true,
+        points: [
+          { ...onCurve(100, 100), smooth: true },
+          offCurve(100, 160),
+          { pointType: "offCurve" },
+          { pointType: "onCurve" },
+          { pointType: "onCurve" },
+          { pointType: "offCurve" },
+          offCurve(100, 40),
+        ],
+      },
+    ]);
   });
 
   it("leaves the contour open and the stroke going when Escape cancels the closing drag", async () => {

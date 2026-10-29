@@ -13,18 +13,19 @@ describe("kerning in typed text", () => {
   });
 
   it("moves the second glyph by the pair's kerning and keeps both advances", () => {
-    const [first, second] = editor.canvasText()!.glyphs;
+    const [first] = editor.canvasText()!.glyphs;
 
-    expect(first!.kern).toBe(-75);
-    expect(second!.kern).toBe(0);
-    expect(second!.left).toBe(first!.left + first!.advance - 75);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ kern: -75 }, { kern: 0, left: first!.left + first!.advance - 75 }],
+    });
   });
 
   it("shows each master's own pairs", () => {
     editor.clickSource("BoldWide");
-    const [first, second] = editor.canvasText()!.glyphs;
-    expect(first!.kern).toBe(-150);
-    expect(second!.left).toBe(first!.left + first!.advance - 150);
+    const [first] = editor.canvasText()!.glyphs;
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ kern: -150 }, { left: first!.left + first!.advance - 150 }],
+    });
 
     editor.setLocation({ wdth: 1000, wght: 0 });
     expect(editor.canvasText()).toMatchObject({ glyphs: [{ kern: -215 }, expect.anything()] });
@@ -52,8 +53,8 @@ describe("kerning in typed text", () => {
     editor.typeText("AT");
     await editor.pressKey("Escape");
 
-    const [t, a] = editor.canvasText()!.glyphs;
-    expect(t!.kern).toBe(-75);
-    expect(a!.kern).toBe(0);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ kern: -75 }, { kern: 0 }, expect.anything()],
+    });
   });
 });

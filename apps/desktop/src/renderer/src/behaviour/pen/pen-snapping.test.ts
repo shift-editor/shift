@@ -55,9 +55,10 @@ describe("the Pen snaps new points to metrics and existing points", () => {
 
     await editor.clickAt({ x: 300 - near, y: 300 - near });
 
-    const [square, started] = await editor.outline();
-    expect(square?.points).toHaveLength(4);
-    expect(started?.points).toMatchObject([onCurve(300, 300)]);
+    expect(await editor.outline()).toMatchObject([
+      { points: Array(4).fill({}) },
+      { points: [onCurve(300, 300)] },
+    ]);
   });
 });
 

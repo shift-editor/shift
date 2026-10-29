@@ -140,8 +140,8 @@ describe("dragging a selected component transforms it", () => {
 
     await editor.dragFrom(down, quarterTurn);
 
-    const [component] = await editor.components();
-    expect(component?.transformation.xx).toBeCloseTo(0);
-    expect(Math.abs(component?.transformation.xy ?? 0)).toBeCloseTo(1);
+    expect(await editor.components()).toMatchObject([
+      { transformation: { xx: expect.closeTo(0), xy: expect.closeTo(1) } },
+    ]);
   });
 });

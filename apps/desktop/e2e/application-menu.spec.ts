@@ -645,8 +645,8 @@ authoredTest(
     await expect
       .poll(() => editor.outline())
       .toMatchObject([{ points: openCubicPointTypes(3).map((pointType) => ({ pointType })) }]);
-    expect((await editor.outline())[0].points.some((point) => point.id === selected.id)).toBe(
-      false,
-    );
+    expect(await editor.outline()).toMatchObject([
+      { points: expect.not.arrayContaining([expect.objectContaining({ id: selected.id })]) },
+    ]);
   },
 );

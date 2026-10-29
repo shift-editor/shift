@@ -67,12 +67,11 @@ describe("drawing a shape by dragging", () => {
     expect(created).toMatchObject({
       closed: true,
       points: Array.from({ length: 4 }, () => [
-        { pointType: "onCurve" },
-        { pointType: "offCurve" },
-        { pointType: "offCurve" },
+        { pointType: "onCurve", smooth: true },
+        { pointType: "offCurve", smooth: false },
+        { pointType: "offCurve", smooth: false },
       ]).flat(),
     });
-    expect(created?.points.filter(({ smooth }) => smooth)).toHaveLength(4);
     expect(await editor.outlineBounds()).toEqual({
       min: { x: 10, y: 20 },
       max: { x: 210, y: 120 },
@@ -181,7 +180,7 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
     await editor.releaseAt({ x: 200, y: 90 });
     const [committed] = await editor.outline();
     expect(committed).toEqual(grown);
-    expect(committed?.id).toBe(draft?.id);
+    expect(committed).toMatchObject({ id: draft!.id });
     expect(editor.drawnHandles()).toMatchObject(
       committed!.points.map(({ id }) => ({ pointId: id })),
     );

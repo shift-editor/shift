@@ -137,8 +137,10 @@ describe("adding, renaming, and deleting anchors", () => {
     editor.holdDragAnchor((await editor.anchorNamed("top"))!.id, { x: 30, y: 10 });
 
     const dragging = await editor.drawnGlyph("aacute");
-    expect(dragging.components[1]?.dx).toBe(before.components[1]!.dx + 30);
-    expect(dragging.anchors).toContainEqual({ name: "top", x: 280, y: expect.any(Number) });
+    expect(dragging).toMatchObject({
+      components: [expect.anything(), { dx: before.components[1]!.dx + 30 }],
+      anchors: expect.arrayContaining([{ name: "top", x: 280, y: expect.any(Number) }]),
+    });
 
     editor.cancelGesture();
     expect((await editor.drawnGlyph("aacute")).components).toEqual(before.components);

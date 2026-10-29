@@ -16,8 +16,7 @@ describe("adding a point on a segment with the Pen", () => {
       editor,
       (e) => e.clickAt({ x: 50, y: 0 }),
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.points).toHaveLength(3);
+        expect(await e.outline()).toMatchObject([{ points: Array(3).fill({}) }]);
         expect(await e.pointAt({ x: 50, y: 0 })).toMatchObject({ pointType: "onCurve" });
       },
     );

@@ -199,10 +199,13 @@ describe("a drag in flight", () => {
     editor.movePointerTo({ x: 120, y: 100 });
     const [firstSample] = editor.drawnOutline()[0]!.points;
     editor.movePointerTo({ x: 130, y: 100 });
-    const [secondSample] = editor.drawnOutline()[0]!.points;
+    expect(editor.drawnOutline()).toMatchObject([
+      {
+        points: [{ x: expect.closeTo(firstSample!.x + 10) }, expect.anything(), expect.anything()],
+      },
+    ]);
     await editor.pressKey("Escape");
 
-    expect(secondSample!.x - firstSample!.x).toBeCloseTo(10);
     expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });
   });
 

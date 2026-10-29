@@ -102,8 +102,7 @@ describe("components that change scale between masters interpolate like the comp
     editor.setLocation({ wght: 400 });
     const bullet = await editor.drawnGlyph("bullet");
 
-    expect(bullet.components.map(({ glyph }) => glyph)).toEqual(["period"]);
-    expect(bullet.components[0]!.bounds).toEqual(bullet.bounds);
+    expect(bullet).toMatchObject({ components: [{ glyph: "period", bounds: bullet.bounds }] });
   });
 
   it("draws a master exactly as authored", async () => {

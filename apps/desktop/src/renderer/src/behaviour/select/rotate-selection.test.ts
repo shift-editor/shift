@@ -95,9 +95,9 @@ describe("dragging just outside a selection corner rotates it", () => {
 
     await editor.dragFrom(grab, halfTurnEnd);
 
-    const [anchor] = await editor.anchors();
-    expect(anchor?.x).toBeCloseTo(175);
-    expect(anchor?.y).toBeCloseTo(125);
+    expect(await editor.anchors()).toMatchObject([
+      { x: expect.closeTo(175), y: expect.closeTo(125) },
+    ]);
     expect(await editor.point(first)).toBeNear({ x: 200, y: 100 });
   });
 });

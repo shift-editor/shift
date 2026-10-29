@@ -126,9 +126,11 @@ describe("editing a variable glyph across sources", () => {
   it("shows the glyph's own layer at a non-default source", async () => {
     const bold = await editor.layerAt("Bold");
 
-    expect(bold.contours).toHaveLength(1);
-    expect(bold.advanceWidth).toBe(500);
-    expect(bold.bounds).toMatchObject({ max: { x: 200, y: 100 } });
+    expect(bold).toMatchObject({
+      contours: [expect.anything()],
+      advanceWidth: 500,
+      bounds: { max: { x: 200, y: 100 } },
+    });
   });
 
   it("edits a non-default source and undoes it", async () => {
@@ -159,8 +161,10 @@ describe("editing a variable glyph across sources", () => {
     await editor.addSource("Medium", { wght: 550 });
 
     const medium = await editor.layerAt("Medium");
-    expect(medium.advanceWidth).toBeCloseTo(400);
-    expect(medium.bounds?.max.x).toBeCloseTo(150);
+    expect(medium).toMatchObject({
+      advanceWidth: expect.closeTo(400),
+      bounds: { max: { x: expect.closeTo(150) } },
+    });
     const regularIds = (await editor.layerAt(regular)).contours[0]?.points.map(({ id }) => id);
     expect(medium.contours[0]?.points.map(({ id }) => id)).not.toEqual(regularIds);
     expect(editor.location().sourceId).not.toBeNull();

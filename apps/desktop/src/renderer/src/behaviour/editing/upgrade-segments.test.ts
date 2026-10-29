@@ -16,12 +16,15 @@ describe("turning a line into a curve", () => {
       editor,
       (e) => e.clickAt({ x: 45, y: 15 }, { metaKey: true }),
       async (e) => {
-        const [contour] = await e.outline();
-        expect(contour?.points).toMatchObject([
-          { x: 0, y: 0, pointType: "onCurve" },
-          { x: 30, y: 10, pointType: "offCurve" },
-          { x: 60, y: 20, pointType: "offCurve" },
-          { x: 90, y: 30, pointType: "onCurve" },
+        expect(await e.outline()).toMatchObject([
+          {
+            points: [
+              { x: 0, y: 0, pointType: "onCurve" },
+              { x: 30, y: 10, pointType: "offCurve" },
+              { x: 60, y: 20, pointType: "offCurve" },
+              { x: 90, y: 30, pointType: "onCurve" },
+            ],
+          },
         ]);
       },
     );
