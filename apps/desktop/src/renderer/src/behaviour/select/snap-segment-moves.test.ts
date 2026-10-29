@@ -76,10 +76,10 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
     editor.movePointerTo({ x: 280, y: 260 }, { shiftKey: true });
     editor.movePointerTo({ x: 280, y: 260 }, { shiftKey: true });
 
-    expect(editor.toolState()?.state).toBe("translating");
+    expect(editor.toolState()).toMatchObject({ state: "translating" });
     expect(editor.drawnSnapGuides()).toEqual([]);
     await editor.pressKey("Escape");
-    expect(editor.toolState()?.state).toBe("ready");
+    expect(editor.toolState()).toMatchObject({ state: "ready" });
   });
 
   it("moves a curve segment without changing its shape", async () => {
@@ -128,7 +128,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     editor.pressAt({ x: 150, y: 100 });
     editor.movePointerTo({ x: 210, y: 180 }, { shiftKey: true });
-    expect(editor.toolState()?.state).toBe("resizing");
+    expect(editor.toolState()).toMatchObject({ state: "resizing" });
     await editor.releaseAt({ x: 210, y: 180 });
 
     expect(await editor.point(first)).toMatchObject({ x: 100, y: 180 });
@@ -143,7 +143,7 @@ describe("Shift-dragging segments moves them in 90-degree steps", () => {
 
     editor.pressAt({ x: 100, y: 100 });
     editor.movePointerTo({ x: 130, y: 140 }, { shiftKey: true });
-    expect(editor.toolState()?.state).toBe("resizing");
+    expect(editor.toolState()).toMatchObject({ state: "resizing" });
     await editor.pressKey("Escape");
 
     expect(await editor.point(first)).toMatchObject({ x: 100, y: 100 });

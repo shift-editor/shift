@@ -181,25 +181,33 @@ describe("dragging with the Pen draws curves", () => {
     await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
 
     editor.holdDragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
-    expect(editor.drawnOutline()[0]?.points).toMatchObject([
-      onCurve(100, 100),
-      { pointType: "offCurve" },
-      { pointType: "offCurve" },
-      { ...onCurve(300, 100), smooth: true },
-      { pointType: "offCurve" },
-      { pointType: "offCurve" },
-      { ...onCurve(500, 100), smooth: false },
+    expect(editor.drawnOutline()).toMatchObject([
+      {
+        points: [
+          onCurve(100, 100),
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { ...onCurve(300, 100), smooth: true },
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { ...onCurve(500, 100), smooth: false },
+        ],
+      },
     ]);
 
     await editor.releaseAt({ x: 580, y: 180 });
-    expect((await editor.outline())[0]?.points).toMatchObject([
-      onCurve(100, 100),
-      { pointType: "offCurve" },
-      { pointType: "offCurve" },
-      { ...onCurve(300, 100), smooth: true },
-      { pointType: "offCurve" },
-      { pointType: "offCurve" },
-      { ...onCurve(500, 100), smooth: false },
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          onCurve(100, 100),
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { ...onCurve(300, 100), smooth: true },
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { ...onCurve(500, 100), smooth: false },
+        ],
+      },
     ]);
   });
 
@@ -210,7 +218,9 @@ describe("dragging with the Pen draws curves", () => {
 
     await editor.dragFrom({ x: 300, y: 100 }, { x: 340, y: 140 });
 
-    expect((await editor.outline())[0]?.points[1]).toMatchObject(offCurve(160, 180));
+    expect(await editor.outline()).toMatchObject([
+      { points: [expect.anything(), offCurve(160, 180), expect.anything(), expect.anything()] },
+    ]);
   });
 
   it("keeps showing the curve between releasing the drag and the workspace confirming it", async () => {
@@ -218,10 +228,10 @@ describe("dragging with the Pen draws curves", () => {
     editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 180 });
 
     const released = editor.releaseAt({ x: 380, y: 180 });
-    expect(editor.drawnOutline()[0]?.points).toHaveLength(4);
+    expect(editor.drawnOutline()).toMatchObject([{ points: Array(4).fill(expect.anything()) }]);
 
     await released;
-    expect(editor.drawnOutline()[0]?.points).toHaveLength(4);
+    expect(editor.drawnOutline()).toMatchObject([{ points: Array(4).fill(expect.anything()) }]);
   });
 });
 

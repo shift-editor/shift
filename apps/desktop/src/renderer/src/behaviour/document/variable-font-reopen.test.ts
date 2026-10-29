@@ -46,15 +46,13 @@ describe("saving and reopening a variable font", () => {
   it("keeps the axes, sources, layers, instances and the glyph between sources", async () => {
     await authorVariableFont();
     const middle = { wght: 650 };
-    expect(editor.locationAt({ wght: 900 }).designLocation.map(({ value }) => value)).toEqual([
-      800,
-    ]);
+    expect(editor.locationAt({ wght: 900 })).toMatchObject({ designLocation: [{ value: 800 }] });
     expect(editor.locationAt(middle)).toMatchObject({
       designLocation: [{ value: 600 }],
       sourceId: null,
       metrics: { ascender: 860, xHeight: 560 },
     });
-    expect((await editor.glyphAt(middle))?.advanceWidth).toBe(550);
+    expect(await editor.glyphAt(middle)).toMatchObject({ advanceWidth: 550 });
     await expect(editor.save()).resolves.toMatchObject({ dirty: false });
     const font = editor.fontOverview();
     const glyph = editor.glyphNamed("A");

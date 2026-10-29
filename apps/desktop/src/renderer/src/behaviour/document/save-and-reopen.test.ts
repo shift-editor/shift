@@ -94,7 +94,7 @@ describe("saving and reopening a document", () => {
     await expect(editor.documentState()).resolves.toMatchObject({ dirty: true });
     await expect(editor.save()).resolves.toMatchObject({ dirty: false });
     const saved = await editor.outline();
-    expect((await editor.point(curve))?.smooth).toBe(true);
+    expect(await editor.point(curve)).toMatchObject({ smooth: true });
 
     const reopened = await editor.reopen();
     try {

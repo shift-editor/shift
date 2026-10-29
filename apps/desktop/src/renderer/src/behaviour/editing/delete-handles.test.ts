@@ -56,7 +56,6 @@ describe("deleting a cubic's handle turns the segment into a line", () => {
         ],
       },
     ]);
-    expect((await editor.outline())[0]!.points).toHaveLength(2);
   });
 
   it("removes a segment's handles once when both are selected", async () => {
@@ -93,7 +92,7 @@ describe("deleting a cubic's handle turns the segment into a line", () => {
 
     await editor.deleteSelection();
 
-    expect((await editor.outline())[0]!.points.slice(1)).toEqual(next);
+    expect(await editor.outline()).toMatchObject([{ points: [expect.anything(), ...next] }]);
   });
 });
 
@@ -171,7 +170,6 @@ describe("deleting handles around a closed contour's start", () => {
       },
       async (e) => {
         expect(await e.outline()).toMatchObject([{ closed: true, points: corners }]);
-        expect((await e.outline())[0]!.points).toHaveLength(5);
       },
     );
   });

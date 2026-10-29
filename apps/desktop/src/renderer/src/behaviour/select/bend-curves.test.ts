@@ -193,8 +193,8 @@ describe("dragging a curve bends it", () => {
       editor,
       (e) => e.dragFrom(middle, { x: 154, y: 240 }),
       async (e) => {
-        expect((await e.point(one))!.y).toBeGreaterThan(200);
-        expect((await e.point(two))!.y).toBeGreaterThan(200);
+        expect(await e.point(one)).toMatchObject({ y: expect.toSatisfy((y: number) => y > 200) });
+        expect(await e.point(two)).toMatchObject({ y: expect.toSatisfy((y: number) => y > 200) });
       },
     );
   });
@@ -262,8 +262,8 @@ describe("dragging an unselected curve", () => {
 
     await editor.dragFrom({ x: 145, y: 215 }, { x: 149, y: 255 });
 
-    expect((await editor.point(one))!.y).toBeGreaterThan(210);
-    expect((await editor.point(two))!.y).toBeGreaterThan(220);
+    expect(await editor.point(one)).toMatchObject({ y: expect.toSatisfy((y: number) => y > 210) });
+    expect(await editor.point(two)).toMatchObject({ y: expect.toSatisfy((y: number) => y > 220) });
     expect(await editor.point(start)).toMatchObject({ x: 100, y: 200 });
     expect(await editor.point(end)).toMatchObject({ x: 190, y: 230 });
   });

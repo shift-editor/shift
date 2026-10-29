@@ -107,6 +107,6 @@ describe("joining another open contour", () => {
   it("leaves the joined contour open", async () => {
     await editor.clickAt({ x: 100, y: 100 });
 
-    expect((await editor.outline()).map(({ closed }) => closed)).toEqual([false]);
+    expect(await editor.outline()).toMatchObject([{ closed: false }]);
   });
 });

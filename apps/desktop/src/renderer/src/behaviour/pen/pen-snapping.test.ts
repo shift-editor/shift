@@ -15,14 +15,16 @@ describe("the Pen snaps new points to metrics and existing points", () => {
 
     await editor.clickAt({ x: 200, y: xHeight - editor.hitDistance() / 2 });
 
-    expect((await editor.outline())[0]?.points).toMatchObject([onCurve(200, xHeight)]);
+    expect(await editor.outline()).toMatchObject([{ points: [onCurve(200, xHeight)] }]);
   });
 
   it("lines a new point up with an earlier one", async () => {
     await editor.clickAt({ x: 100, y: 120 });
     await editor.clickAt({ x: 300, y: 120 + editor.hitDistance() / 2 });
 
-    expect((await editor.outline())[0]?.points[1]).toMatchObject(onCurve(300, 120));
+    expect(await editor.outline()).toMatchObject([
+      { points: [expect.anything(), onCurve(300, 120)] },
+    ]);
   });
 
   it("places the point exactly where clicked while Cmd is held", async () => {
@@ -32,7 +34,7 @@ describe("the Pen snaps new points to metrics and existing points", () => {
 
     await editor.clickAt({ x: 200, y: near }, { metaKey: true });
 
-    expect((await editor.outline())[0]?.points).toMatchObject([onCurve(200, near)]);
+    expect(await editor.outline()).toMatchObject([{ points: [onCurve(200, near)] }]);
   });
 
   it("lands a new point exactly on a nearby point instead of splitting its segment", async () => {
@@ -81,11 +83,15 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
       };
       // The pulled handle, mirroring the incoming one through the anchor at 300,100.
       const outgoing = { x: 600 - incoming.x, y: 200 - incoming.y };
-      expect(editor.drawnOutline()[0]?.points).toMatchObject([
-        onCurve(100, 100),
-        { pointType: "offCurve" },
-        offCurve(incoming.x, incoming.y),
-        onCurve(300, 100),
+      expect(editor.drawnOutline()).toMatchObject([
+        {
+          points: [
+            onCurve(100, 100),
+            { pointType: "offCurve" },
+            offCurve(incoming.x, incoming.y),
+            onCurve(300, 100),
+          ],
+        },
       ]);
       expect(editor.drawnSnapGuides()).toMatchObject([
         {
@@ -96,21 +102,34 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
       ]);
 
       await editor.pressKey("Escape");
-      expect(editor.drawnOutline()[0]?.points).toHaveLength(1);
+      expect(editor.drawnOutline()).toMatchObject([{ points: [expect.anything()] }]);
       expect(editor.toolState()).toEqual({ id: "pen", state: "ready" });
     },
   );
 
   it("follows Shift on the current pointer sample without stacking previews", async () => {
     editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 });
-    expect(editor.drawnOutline()[0]?.points[2]).toMatchObject(offCurve(220, 40));
+    expect(editor.drawnOutline()).toMatchObject([
+      { points: [expect.anything(), expect.anything(), offCurve(220, 40), expect.anything()] },
+    ]);
 
     editor.movePointerTo({ x: 380, y: 160 }, { shiftKey: true });
-    expect(editor.drawnOutline()[0]?.points[2]?.y).toBeCloseTo(50);
+    expect(editor.drawnOutline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          { y: expect.closeTo(50) },
+          expect.anything(),
+        ],
+      },
+    ]);
 
     editor.movePointerTo({ x: 380, y: 160 });
     expect(editor.drawnSnapGuides()).toEqual([]);
-    expect(editor.drawnOutline()[0]?.points[2]).toMatchObject(offCurve(220, 40));
+    expect(editor.drawnOutline()).toMatchObject([
+      { points: [expect.anything(), expect.anything(), offCurve(220, 40), expect.anything()] },
+    ]);
     await editor.pressKey("Escape");
   });
 
@@ -149,7 +168,9 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
       await editor.releaseAt({ x: 380, y: 160 }, { shiftKey });
 
       expect(editor.toolState()).toEqual({ id: "pen", state: "ready" });
-      expect((await editor.outline())[0]?.points[2]).toEqual(preview);
+      expect(await editor.outline()).toMatchObject([
+        { points: [expect.anything(), expect.anything(), preview, expect.anything()] },
+      ]);
     },
   );
 
@@ -158,11 +179,15 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
 
     await editor.releaseAt({ x: 420, y: 190 });
 
-    expect((await editor.outline())[0]?.points).toMatchObject([
-      onCurve(100, 100),
-      offCurve(100 + 200 / 3, 100),
-      offCurve(300 - 75 * Math.sqrt(3), 25),
-      onCurve(300, 100),
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          onCurve(100, 100),
+          offCurve(100 + 200 / 3, 100),
+          offCurve(300 - 75 * Math.sqrt(3), 25),
+          onCurve(300, 100),
+        ],
+      },
     ]);
   });
 
@@ -171,9 +196,16 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
       editor,
       (e) => e.dragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true }),
       async (e) => {
-        const points = (await e.outline())[0]?.points;
-        expect(points).toHaveLength(4);
-        expect(points?.[2]?.y).toBeCloseTo(50);
+        expect(await e.outline()).toMatchObject([
+          {
+            points: [
+              expect.anything(),
+              expect.anything(),
+              { y: expect.closeTo(50) },
+              expect.anything(),
+            ],
+          },
+        ]);
       },
     );
   });
@@ -182,11 +214,18 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
     await editor.dragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
     await editor.dragFrom({ x: 500, y: 100 }, { x: 580, y: 180 });
 
-    expect((await editor.outline())[0]?.points.slice(2, 6)).toMatchObject([
-      offCurve(300 - 50 * Math.sqrt(3), 50),
-      { ...onCurve(300, 100), smooth: true },
-      offCurve(300 + 50 * Math.sqrt(3), 150),
-      offCurve(420, 20),
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          offCurve(300 - 50 * Math.sqrt(3), 50),
+          { ...onCurve(300, 100), smooth: true },
+          offCurve(300 + 50 * Math.sqrt(3), 150),
+          offCurve(420, 20),
+          expect.anything(),
+        ],
+      },
     ]);
   });
 
@@ -195,7 +234,7 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
     const before = editor.drawnOutline();
 
     editor.holdDragFrom({ x: 500, y: 100 }, { x: 580, y: 160 }, { shiftKey: true });
-    expect(editor.drawnOutline()[0]?.points).toHaveLength(7);
+    expect(editor.drawnOutline()).toMatchObject([{ points: Array(7).fill(expect.anything()) }]);
 
     await editor.pressKey("Escape");
     expect(editor.drawnOutline()).toEqual(before);
@@ -203,10 +242,10 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
 
   it("drops the curve being dragged when another tool is chosen", () => {
     editor.holdDragFrom({ x: 300, y: 100 }, { x: 380, y: 160 }, { shiftKey: true });
-    expect(editor.drawnOutline()[0]?.points).toHaveLength(4);
+    expect(editor.drawnOutline()).toMatchObject([{ points: Array(4).fill(expect.anything()) }]);
 
     editor.selectTool("select");
-    expect(editor.drawnOutline()[0]?.points).toMatchObject([onCurve(100, 100)]);
+    expect(editor.drawnOutline()).toMatchObject([{ points: [onCurve(100, 100)] }]);
 
     editor.selectTool("pen");
     expect(editor.toolState()).toEqual({ id: "pen", state: "ready" });
@@ -217,7 +256,9 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
 
     editor.movePointerTo({ x: 300, y: 100 }, { shiftKey: true });
 
-    expect(editor.drawnOutline()[0]?.points[2]).toMatchObject(offCurve(300, 100));
+    expect(editor.drawnOutline()).toMatchObject([
+      { points: [expect.anything(), expect.anything(), offCurve(300, 100), expect.anything()] },
+    ]);
     await editor.pressKey("Escape");
   });
 
@@ -225,9 +266,13 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
     await editor.clickAt({ x: 300, y: 160 }, { shiftKey: true });
 
     const length = Math.hypot(200, 60);
-    expect((await editor.outline())[0]?.points).toMatchObject([
-      onCurve(100, 100),
-      onCurve(100 + length * Math.cos(Math.PI / 12), 100 + length * Math.sin(Math.PI / 12)),
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          onCurve(100, 100),
+          onCurve(100 + length * Math.cos(Math.PI / 12), 100 + length * Math.sin(Math.PI / 12)),
+        ],
+      },
     ]);
   });
 
@@ -235,8 +280,15 @@ describe("Shift constrains the Pen's handles and points to set directions", () =
     await editor.dragFrom({ x: 300, y: 160 }, { x: 380, y: 240 }, { shiftKey: true });
 
     const length = Math.hypot(200, 60);
-    expect((await editor.outline())[0]?.points[3]).toMatchObject(
-      onCurve(100 + length * Math.cos(Math.PI / 12), 100 + length * Math.sin(Math.PI / 12)),
-    );
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          expect.anything(),
+          onCurve(100 + length * Math.cos(Math.PI / 12), 100 + length * Math.sin(Math.PI / 12)),
+        ],
+      },
+    ]);
   });
 });

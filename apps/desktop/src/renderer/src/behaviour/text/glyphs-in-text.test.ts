@@ -20,16 +20,16 @@ describe("glyphs in the text around the edited glyph", () => {
 
   it("hovers a glyph's item inside its outline, and nothing in its empty space", () => {
     editor.movePointerTo({ x: 700, y: 200 });
-    expect(editor.canvasText()!.hoveredItemId).toBe(editor.canvasText()!.items[1]!.id);
+    expect(editor.canvasText()).toMatchObject({ hoveredItemId: editor.canvasText()!.items[1]!.id });
 
     editor.movePointerTo({ x: 550, y: 200 });
-    expect(editor.canvasText()!.hoveredItemId).toBeNull();
+    expect(editor.canvasText()).toMatchObject({ hoveredItemId: null });
   });
 
   it("never hovers the edited glyph's own item as text", () => {
     editor.movePointerTo({ x: 200, y: 200 });
 
-    expect(editor.canvasText()!.hoveredItemId).toBeNull();
+    expect(editor.canvasText()).toMatchObject({ hoveredItemId: null });
   });
 
   it("moves the selection box with the edited glyph when an advance before it changes", async () => {
@@ -44,7 +44,7 @@ describe("glyphs in the text around the edited glyph", () => {
     editor.setAdvanceWidth(600);
     await editor.settle();
 
-    expect(editor.selectionBox()!.min.x).toBeCloseTo(before + 100);
+    expect(editor.selectionBox()).toMatchObject({ min: { x: expect.closeTo(before + 100) } });
   });
 
   it("selects a glyph's item when it is clicked", async () => {
@@ -72,7 +72,7 @@ describe("glyphs in the text around the edited glyph", () => {
 
     await editor.pressKey("Escape");
     expect(editor.selectionIds()).toEqual([]);
-    expect(editor.canvasText()!.editedItemId).toBe(editor.canvasText()!.items[0]!.id);
+    expect(editor.canvasText()).toMatchObject({ editedItemId: editor.canvasText()!.items[0]!.id });
 
     await editor.pressKey("Escape");
     expect(editor.canvasText()!).toMatchObject({
@@ -85,17 +85,17 @@ describe("glyphs in the text around the edited glyph", () => {
     await editor.pressKey("Escape");
     await editor.undo();
 
-    expect(editor.canvasText()!.editedItemId).toBe(editor.canvasText()!.items[0]!.id);
+    expect(editor.canvasText()).toMatchObject({ editedItemId: editor.canvasText()!.items[0]!.id });
   });
 
   it("hovers the glyph it left as text, and a double-click edits it again", async () => {
     await editor.pressKey("Escape");
 
     editor.movePointerTo({ x: 200, y: 200 });
-    expect(editor.canvasText()!.hoveredItemId).toBe(editor.canvasText()!.items[0]!.id);
+    expect(editor.canvasText()).toMatchObject({ hoveredItemId: editor.canvasText()!.items[0]!.id });
 
     await editor.doubleClickAt({ x: 200, y: 200 });
-    expect(editor.canvasText()!.editedItemId).toBe(editor.canvasText()!.items[0]!.id);
+    expect(editor.canvasText()).toMatchObject({ editedItemId: editor.canvasText()!.items[0]!.id });
   });
 
   it("draws Pen clicks over another glyph into the edited glyph", async () => {
@@ -180,14 +180,16 @@ describe("double-clicking a component", () => {
 
     await editor.doubleClickAt({ x: 200, y: 200 });
 
-    expect(editor.canvasText()!.glyphs.map((glyph) => glyph.name)).toEqual(["A", "B"]);
-    expect(editor.canvasText()!).toMatchObject({
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "A" }, { name: "B" }],
       openItemId: editor.canvasText()!.items[1]!.id,
       editedItemId: editor.canvasText()!.items[1]!.id,
     });
 
     await editor.undo();
-    expect(editor.canvasText()!.items).toHaveLength(1);
-    expect(editor.canvasText()!.openItemId).toBe(editor.canvasText()!.items[0]!.id);
+    expect(editor.canvasText()).toMatchObject({
+      items: [expect.anything()],
+      openItemId: editor.canvasText()!.items[0]!.id,
+    });
   });
 });

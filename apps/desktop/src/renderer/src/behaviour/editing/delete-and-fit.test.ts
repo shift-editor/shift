@@ -133,9 +133,13 @@ describe("deleting a point never raises the degree of the span it joins", () => 
         await e.deleteSelection();
       },
       async (e) => {
-        expect((await e.outline())[0]?.points).toEqual([
-          { id: a, x: 0, y: 0, pointType: "onCurve", smooth: false },
-          { id: c, x: 200, y: 0, pointType: "onCurve", smooth: false },
+        expect(await e.outline()).toEqual([
+          expect.objectContaining({
+            points: [
+              { id: a, x: 0, y: 0, pointType: "onCurve", smooth: false },
+              { id: c, x: 200, y: 0, pointType: "onCurve", smooth: false },
+            ],
+          }),
         ]);
       },
     );
@@ -184,11 +188,15 @@ describe("deleting a point never raises the degree of the span it joins", () => 
 
     await editor.deleteSelection();
 
-    expect((await editor.outline())[0]?.points).toMatchObject([
-      { id: a, pointType: "onCurve" },
-      { pointType: "offCurve" },
-      { pointType: "offCurve" },
-      { id: c, pointType: "onCurve" },
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          { id: a, pointType: "onCurve" },
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          { id: c, pointType: "onCurve" },
+        ],
+      },
     ]);
   });
 

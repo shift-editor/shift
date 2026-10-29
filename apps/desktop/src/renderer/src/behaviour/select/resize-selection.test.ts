@@ -282,7 +282,7 @@ describe("Shift-constrained resizes commit what they show", () => {
   it.each([true, false])("commits the preview with Shift held at release: %s", async (shiftKey) => {
     editor.pressAt({ x: 200, y: 200 }, { shiftKey: true });
     editor.movePointerTo({ x: 250, y: 225 }, { shiftKey: true });
-    expect(editor.toolState()?.state).toBe("resizing");
+    expect(editor.toolState()).toMatchObject({ state: "resizing" });
     expect(editor.drawnPoint(first)).toMatchObject({ x: 100, y: 100 });
     expect(editor.drawnPoint(second)).toMatchObject({ x: 250, y: 250 });
     await editor.releaseAt({ x: 250, y: 225 }, { shiftKey });

@@ -27,16 +27,20 @@ describe("kerning in typed text", () => {
     expect(second!.left).toBe(first!.left + first!.advance - 150);
 
     editor.setLocation({ wdth: 1000, wght: 0 });
-    expect(editor.canvasText()!.glyphs[0]!.kern).toBe(-215);
+    expect(editor.canvasText()).toMatchObject({ glyphs: [{ kern: -215 }, expect.anything()] });
   });
 
   it("blends the masters between them, including on a support layer without kerning", () => {
     editor.setLocation({ wdth: 500, wght: 500 });
-    expect(editor.canvasText()!.glyphs[0]!.kern).toBeCloseTo(-126.25);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ kern: expect.closeTo(-126.25) }, expect.anything()],
+    });
 
     // The crossbar support layer sits at weight 700 and authors no pairs.
     editor.setLocation({ wdth: 0, wght: 700 });
-    expect(editor.canvasText()!.glyphs[0]!.kern).toBeCloseTo(-68);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ kern: expect.closeTo(-68) }, expect.anything()],
+    });
   });
 });
 

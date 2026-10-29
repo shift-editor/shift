@@ -7,8 +7,7 @@ describe("Text mode", () => {
   beforeEach(() => editor.selectTool("text"));
 
   it("puts the caret after the edited glyph and stops editing it", () => {
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 1 });
-    expect(editor.canvasText()!.editedItemId).toBeNull();
+    expect(editor.canvasText()).toMatchObject({ caret: { position: 1 }, editedItemId: null });
     expect(editor.toolState()).toEqual({ id: "text", state: "editing" });
     expect(editor.shownCursor()).toBe("text");
   });
@@ -18,8 +17,7 @@ describe("Text mode", () => {
 
     await editor.pressKey("Escape");
 
-    expect(editor.canvasText()?.caret).toBeNull();
-    expect(editor.canvasText()!.editedItemId).toBe(a!.id);
+    expect(editor.canvasText()).toMatchObject({ caret: null, editedItemId: a!.id });
     expect(editor.toolState()).toEqual({ id: "select", state: "ready" });
   });
 
@@ -31,35 +29,40 @@ describe("Text mode", () => {
     await editor.pressKey("Escape");
     editor.selectTool("text");
 
-    expect(editor.canvasText()?.caret).toEqual(left);
+    expect(editor.canvasText()).toMatchObject({ caret: left });
   });
 
   it("puts the caret after the edited glyph when the old caret's item is gone", async () => {
     editor.typeText("A");
     await editor.pressKey("Escape");
     await editor.undo();
-    expect(editor.canvasText()?.caret, "undo outside Text mode does not show the caret").toBeNull();
+    expect(editor.canvasText(), "undo outside Text mode does not show the caret").toMatchObject({
+      caret: null,
+    });
 
     editor.selectTool("text");
 
-    expect(editor.canvasText()?.caret).toMatchObject({
-      position: 1,
-      selection: { start: 1, end: 1 },
+    expect(editor.canvasText()).toMatchObject({
+      caret: { position: 1, selection: { start: 1, end: 1 } },
     });
   });
 
   it("types text, and undo and redo replay its items and caret", async () => {
     editor.typeText("A");
     const typed = editor.canvasText()!.items[1]!;
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 2 });
+    expect(editor.canvasText()).toMatchObject({ caret: { position: 2 } });
 
     await editor.undo();
-    expect(editor.canvasText()!.items).toHaveLength(1);
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 1 });
+    expect(editor.canvasText()).toMatchObject({
+      items: [expect.anything()],
+      caret: { position: 1 },
+    });
 
     await editor.redo();
-    expect(editor.canvasText()!.items[1]).toEqual(typed);
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 2 });
+    expect(editor.canvasText()).toMatchObject({
+      items: [expect.anything(), typed],
+      caret: { position: 2 },
+    });
   });
 
   it("pushes the edited glyph right when typing before it", () => {
@@ -68,20 +71,20 @@ describe("Text mode", () => {
 
     editor.typeText("A");
 
-    expect(editor.canvasText()!.openItemId).toBe(a!.id);
-    expect(editor.canvasText()!.glyphs[1]).toMatchObject({ itemIds: [a!.id], left: 500 });
+    expect(editor.canvasText()).toMatchObject({
+      openItemId: a!.id,
+      glyphs: [expect.anything(), { itemIds: [a!.id], left: 500 }],
+    });
   });
 
   it("closes the edited glyph when its item is deleted, and undo opens it again", async () => {
     const [a] = editor.canvasText()!.items;
 
     editor.deleteBackward();
-    expect(editor.canvasText()!.items).toEqual([]);
-    expect(editor.canvasText()!.openItemId).toBeNull();
+    expect(editor.canvasText()).toMatchObject({ items: [], openItemId: null });
 
     await editor.undo();
-    expect(editor.canvasText()!.items[0]?.id).toBe(a!.id);
-    expect(editor.canvasText()!.openItemId).toBe(a!.id);
+    expect(editor.canvasText()).toMatchObject({ items: [{ id: a!.id }], openItemId: a!.id });
   });
 
   it("edits no glyph on leaving after the edited glyph was deleted", async () => {
@@ -89,8 +92,7 @@ describe("Text mode", () => {
 
     await editor.pressKey("Escape");
 
-    expect(editor.canvasText()!.editedItemId).toBeNull();
-    expect(editor.canvasText()!.openItemId).toBeNull();
+    expect(editor.canvasText()).toMatchObject({ editedItemId: null, openItemId: null });
   });
 
   it("selects every item, line breaks included, and undo restores the caret", async () => {
@@ -98,27 +100,25 @@ describe("Text mode", () => {
     const before = editor.canvasText()?.caret;
 
     editor.selectAllText();
-    expect(editor.canvasText()?.caret?.selection).toEqual({ start: 0, end: 3 });
+    expect(editor.canvasText()).toMatchObject({ caret: { selection: { start: 0, end: 3 } } });
 
     await editor.undo();
-    expect(editor.canvasText()?.caret).toEqual(before);
+    expect(editor.canvasText()).toMatchObject({ caret: before });
   });
 
   it("moves and deletes across a line break, and undo restores it", async () => {
     editor.typeText("\nA");
     editor.moveCaret(-1);
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 2 });
+    expect(editor.canvasText()).toMatchObject({ caret: { position: 2 } });
 
     editor.deleteBackward();
-    expect(editor.canvasText()?.items).toMatchObject([{ text: "A" }, { text: "A" }]);
+    expect(editor.canvasText()).toMatchObject({ items: [{ text: "A" }, { text: "A" }] });
 
     await editor.undo();
-    expect(editor.canvasText()?.items).toMatchObject([
-      { text: "A" },
-      { text: "\n" },
-      { text: "A" },
-    ]);
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 2 });
+    expect(editor.canvasText()).toMatchObject({
+      items: [{ text: "A" }, { text: "\n" }, { text: "A" }],
+      caret: { position: 2 },
+    });
   });
 
   it("moves a line up by position on the line, and Shift extends the selection", () => {
@@ -126,9 +126,8 @@ describe("Text mode", () => {
 
     editor.moveCaretLine(-1, true);
 
-    expect(editor.canvasText()?.caret).toMatchObject({
-      position: 1,
-      selection: { start: 1, end: 3 },
+    expect(editor.canvasText()).toMatchObject({
+      caret: { position: 1, selection: { start: 1, end: 3 } },
     });
   });
 
@@ -140,7 +139,7 @@ describe("Text mode", () => {
 
     editor.typeText("C");
 
-    expect(editor.canvasText()!.items[2]).toEqual(b);
+    expect(editor.canvasText()).toMatchObject({ items: [{ text: "C" }, { text: "A" }, b] });
   });
 
   it("steps over a base and its combining mark as one character", () => {
@@ -150,19 +149,19 @@ describe("Text mode", () => {
     editor.moveCaret(-1);
     editor.moveCaret(-1);
 
-    expect(editor.canvasText()?.caret?.position).toBe(end - 3);
+    expect(editor.canvasText()).toMatchObject({ caret: { position: end - 3 } });
   });
 
   it("deletes a combining mark alone with Backspace, and a whole cluster with Delete", () => {
     editor.typeText("é");
     editor.deleteBackward();
-    expect(editor.canvasText()?.items).toMatchObject([{ text: "A" }, { text: "e" }]);
+    expect(editor.canvasText()).toMatchObject({ items: [{ text: "A" }, { text: "e" }] });
 
     editor.typeText("́x");
     editor.moveCaret(-1);
     editor.moveCaret(-1);
     editor.deleteForward();
-    expect(editor.canvasText()?.items).toMatchObject([{ text: "A" }, { text: "x" }]);
+    expect(editor.canvasText()).toMatchObject({ items: [{ text: "A" }, { text: "x" }] });
   });
 
   it("moves by word with Option, skipping spaces and punctuation", () => {
@@ -170,11 +169,11 @@ describe("Text mode", () => {
     const end = editor.canvasText()!.caret!.position;
 
     editor.moveCaret(-1, "word");
-    expect(editor.canvasText()?.caret?.position).toBe(end - 5);
+    expect(editor.canvasText()).toMatchObject({ caret: { position: end - 5 } });
     editor.moveCaret(-1, "word");
-    expect(editor.canvasText()?.caret?.position).toBe(end - 12);
+    expect(editor.canvasText()).toMatchObject({ caret: { position: end - 12 } });
     editor.moveCaret(1, "word");
-    expect(editor.canvasText()?.caret?.position).toBe(end - 7);
+    expect(editor.canvasText()).toMatchObject({ caret: { position: end - 7 } });
   });
 });
 
@@ -194,10 +193,10 @@ describe("clicking and dragging in Text mode", () => {
     editor.typeText("A");
 
     await editor.clickAt({ x: 500 * 1.75, y: 0 });
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 2 });
+    expect(editor.canvasText()).toMatchObject({ caret: { position: 2 } });
 
     await editor.clickAt({ x: 500 * 0.25, y: 0 });
-    expect(editor.canvasText()?.caret).toMatchObject({ position: 0 });
+    expect(editor.canvasText()).toMatchObject({ caret: { position: 0 } });
   });
 
   it("extends the selection over the text a drag crosses", async () => {
@@ -205,7 +204,7 @@ describe("clicking and dragging in Text mode", () => {
 
     await editor.dragFrom({ x: 100, y: 0 }, { x: 900, y: 0 });
 
-    expect(editor.canvasText()?.caret?.selection).toEqual({ start: 0, end: 2 });
+    expect(editor.canvasText()).toMatchObject({ caret: { selection: { start: 0, end: 2 } } });
   });
 });
 
@@ -220,8 +219,10 @@ describe("typing a glyph not loaded yet", () => {
       editor.typeText("B");
       await editor.settle();
 
-      expect(editor.canvasText()?.glyphs[1]).toMatchObject({ name: "B", left: 500, advance: 600 });
-      expect(editor.canvasText()?.advance).toBe(1100);
+      expect(editor.canvasText()).toMatchObject({
+        glyphs: [expect.anything(), { name: "B", left: 500, advance: 600 }],
+        advance: 1100,
+      });
     } finally {
       await editor.close();
     }

@@ -3,11 +3,10 @@
  * positions come out of a gesture and so are only close to round numbers.
  *
  * @example
- * expect((await editor.outline())[0]?.points).toMatchObject([
- *   onCurve(100, 100),
- *   offCurve(166.67, 100),
- *   offCurve(220, 20),
- *   onCurve(300, 100),
+ * expect(await editor.outline()).toMatchObject([
+ *   {
+ *     points: [onCurve(100, 100), offCurve(166.67, 100), offCurve(220, 20), onCurve(300, 100)],
+ *   },
  * ]);
  */
 import { expect } from "vitest";

@@ -36,7 +36,17 @@ describe("pulling a handle out of an open end", () => {
     await editor.dragFrom({ x: 300, y: 100 }, { x: 302, y: 100 });
     await editor.dragFrom({ x: 310, y: 100 }, { x: 312, y: 102 });
 
-    expect((await editor.outline())[0]?.points[2]).toMatchObject(offCurve(302, 100));
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          offCurve(302, 100),
+          expect.anything(),
+          expect.anything(),
+        ],
+      },
+    ]);
   });
 
   it("ignores a pull that ends within a few pixels of the end when zoomed out", async () => {
@@ -49,9 +59,17 @@ describe("pulling a handle out of an open end", () => {
     await editor.dragFrom({ x: 500, y: 100 }, { x: 560, y: 160 });
 
     // No pulled handle, so the next curve's first control sits a third of the way along.
-    expect((await editor.outline())[0]?.points[2]).toMatchObject(
-      offCurve(300 + (500 - 300) / 3, 100),
-    );
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          expect.anything(),
+          expect.anything(),
+          offCurve(300 + (500 - 300) / 3, 100),
+          expect.anything(),
+          expect.anything(),
+        ],
+      },
+    ]);
   });
 
   it("keeps a handle pulled with Option on the line's direction, and the end smooth", async () => {
@@ -86,10 +104,8 @@ describe("pulling a handle out of an open end", () => {
 
     await editor.clickAt({ x: 500, y: 100 });
 
-    expect((await editor.outline())[0]?.points).toMatchObject([
-      onCurve(100, 100),
-      onCurve(300, 100),
-      onCurve(500, 100),
+    expect(await editor.outline()).toMatchObject([
+      { points: [onCurve(100, 100), onCurve(300, 100), onCurve(500, 100)] },
     ]);
   });
 
@@ -99,12 +115,16 @@ describe("pulling a handle out of an open end", () => {
 
     await editor.clickAt({ x: 500, y: 100 });
 
-    expect((await editor.outline())[0]?.points).toMatchObject([
-      onCurve(100, 100),
-      { pointType: "offCurve" },
-      { pointType: "offCurve" },
-      onCurve(300, 100),
-      onCurve(500, 100),
+    expect(await editor.outline()).toMatchObject([
+      {
+        points: [
+          onCurve(100, 100),
+          { pointType: "offCurve" },
+          { pointType: "offCurve" },
+          onCurve(300, 100),
+          onCurve(500, 100),
+        ],
+      },
     ]);
   });
 
@@ -115,7 +135,9 @@ describe("pulling a handle out of an open end", () => {
     editor.holdDragFrom({ x: 300, y: 100 }, { x: 360, y: 60 });
     await editor.pressKey("Escape");
 
-    expect((await editor.outline())[0]?.points[2]).toMatchObject(offCurve(220, 20));
+    expect(await editor.outline()).toMatchObject([
+      { points: [expect.anything(), expect.anything(), offCurve(220, 20), expect.anything()] },
+    ]);
   });
 
   it("continues another open contour from the end a handle is pulled out of", async () => {

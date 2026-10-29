@@ -242,7 +242,7 @@ describe("the selection's bounds follow its points", () => {
     expect(editor.selectionLocalRect()).toMatchObject({ x: 130, y: 120, width: 100, height: 100 });
 
     await editor.clickAt({ x: 155, y: 145 }, { metaKey: true });
-    expect((await editor.outline())[0]?.points).toHaveLength(5);
+    expect(await editor.outline()).toMatchObject([{ points: Array(5).fill(expect.anything()) }]);
     expect(editor.selectionIds()).toEqual([first, middle, last]);
     expect(editor.selectionLocalRect()).toMatchObject({ x: 130, y: 120, width: 100, height: 100 });
   });
@@ -254,16 +254,19 @@ describe("dragging while editing several sources", () => {
     await editor.addAxis(WEIGHT);
     await editor.addSource("Bold", { wght: 700 });
     await editor.editSources(["Regular", "Bold"]);
-    const boldBefore = (await editor.layerAt("Bold")).contours[0]!.points[1]!;
+    const bold = { source: { name: "Bold" } };
+    const boldBefore = (await editor.point(middle, bold))!;
     editor.select([middle]);
 
     await expectEdit(editor, (e) => e.dragFrom({ x: 150, y: 150 }, { x: 190, y: 180 }), {
       [middle]: { x: 190, y: 180 },
     });
 
-    const boldAfter = (await editor.layerAt("Bold")).contours[0]!.points[1]!;
-    expect(boldAfter).toMatchObject({ x: boldBefore.x + 40, y: boldBefore.y + 30 });
+    expect(await editor.point(middle, bold)).toMatchObject({
+      x: boldBefore.x + 40,
+      y: boldBefore.y + 30,
+    });
     await editor.undo();
-    expect((await editor.layerAt("Bold")).contours[0]!.points[1]).toEqual(boldBefore);
+    expect(await editor.point(middle, bold)).toEqual(boldBefore);
   });
 });

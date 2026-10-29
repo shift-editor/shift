@@ -92,19 +92,21 @@ describe("kerning edits", () => {
   });
 
   it("makes a side an exception at the edited source only, then returns it to the group", async () => {
-    const before = editor.kerning("T", "A").map(({ amount }) => amount);
+    const before = editor.kerning("T", "A").map(({ amount }) => ({ amount }));
 
     await editor.setKerningException("LightCondensed", "T", "A", "second", true);
-    expect(editor.kerningAt("LightCondensed", "T", "A").rule).toBe("glyph");
-    expect(editor.kerningAt("LightCondensed", "T", "A").amount).toBe(-75);
+    expect(editor.kerningAt("LightCondensed", "T", "A")).toMatchObject({
+      rule: "glyph",
+      amount: -75,
+    });
     expect(editor.kerningAt("BoldWide", "T", "A").rule).toBe("exception");
-    expect(editor.kerning("T", "A").map(({ amount }) => amount)).toEqual(before);
+    expect(editor.kerning("T", "A")).toMatchObject(before);
 
     editor.setKerning("LightCondensed", "T", "A", -40);
     await editor.setKerningException("LightCondensed", "T", "A", "second", false);
 
     expect(editor.kerningAt("LightCondensed", "T", "A").rule).toBe("exception");
-    expect(editor.kerning("T", "A").map(({ amount }) => amount)).toEqual(before);
+    expect(editor.kerning("T", "A")).toMatchObject(before);
   });
 
   it("offers no lock for a glyph without a group on that side", async () => {
@@ -117,10 +119,12 @@ describe("kerning group edits", () => {
   it("creates a group holding a glyph as one undo step", async () => {
     await editor.createKerningGroup("first", "Bars", ["T"]);
 
-    expect(editor.kerningGroupOf("first", "T")?.name).toBe("Bars");
+    expect(editor.kerningGroupOf("first", "T")).toMatchObject({ name: "Bars" });
     await editor.undo();
     expect(editor.kerningGroupOf("first", "T")).toBeNull();
-    expect(editor.kerningGroups("first").map(({ name }) => name)).not.toContain("Bars");
+    expect(editor.kerningGroups("first")).not.toContainEqual(
+      expect.objectContaining({ name: "Bars" }),
+    );
   });
 
   it("takes several glyphs out of their group as one undo step", async () => {
@@ -130,11 +134,12 @@ describe("kerning group edits", () => {
 
     await editor.moveToKerningGroup("second", removed, null);
 
-    expect(editor.kerningGroup("second", group.name)?.members).toEqual(
-      group.members.filter(({ name }) => !removed.includes(name!)),
-    );
+    expect(editor.kerningGroup("second", group.name)).toEqual({
+      ...group,
+      members: group.members.filter(({ name }) => !removed.includes(name!)),
+    });
     await editor.undo();
-    expect(editor.kerningGroup("second", group.name)?.members).toEqual(group.members);
+    expect(editor.kerningGroup("second", group.name)).toEqual(group);
   });
 
   it("renames a group without changing any kern", async () => {
@@ -158,7 +163,7 @@ describe("kerning group edits", () => {
     expect(editor.kerningGroups("second").every(({ position }) => position === "second")).toBe(
       true,
     );
-    expect(editor.kerningGroup("first", "zz-last")?.members.map(({ name }) => name)).toEqual(["T"]);
+    expect(editor.kerningGroup("first", "zz-last")).toMatchObject({ members: [{ name: "T" }] });
     expect(editor.kerningGroup("second", "zz-last")).toBeNull();
   });
 

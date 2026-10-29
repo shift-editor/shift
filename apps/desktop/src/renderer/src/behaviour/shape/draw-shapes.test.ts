@@ -182,8 +182,8 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
     const [committed] = await editor.outline();
     expect(committed).toEqual(grown);
     expect(committed?.id).toBe(draft?.id);
-    expect(editor.drawnHandles().map(({ pointId }) => pointId)).toEqual(
-      committed?.points.map(({ id }) => id),
+    expect(editor.drawnHandles()).toMatchObject(
+      committed!.points.map(({ id }) => ({ pointId: id })),
     );
   });
 
@@ -207,8 +207,8 @@ describe.each(["rectangle", "ellipse"] as const)("drawing a %s", (kind) => {
     editor.selectTool("shape");
     editor.holdDragFrom({ x: 10, y: 10 }, { x: 100, y: 60 });
     expect(editor.drawnOutline()).toHaveLength(2);
-    expect(editor.drawnHandles().map(({ pointId }) => pointId)).toEqual(
-      original?.points.map(({ id }) => id),
+    expect(editor.drawnHandles()).toMatchObject(
+      original!.points.map(({ id }) => ({ pointId: id })),
     );
 
     await editor.pressKey("Escape");

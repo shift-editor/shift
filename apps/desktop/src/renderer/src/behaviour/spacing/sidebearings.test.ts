@@ -79,7 +79,7 @@ describe("setting the glyph's metrics from the sidebar", () => {
     await editor.settle();
 
     expect(await editor.anchorNamed("top")).toMatchObject({ x: 60, y: 500 });
-    expect((await editor.components())[0]?.transformation).toMatchObject({ dx: 20, dy: 0 });
+    expect(await editor.components()).toMatchObject([{ transformation: { dx: 20, dy: 0 } }]);
   });
 });
 

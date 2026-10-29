@@ -36,7 +36,9 @@ describe("components that change scale between masters interpolate like the comp
     // scale 1.25), two thirds of the way: 150 + (362.5 - 150) * 2 / 3.
     editor.setLocation({ wght: 200 });
 
-    expect((await editor.drawnGlyph("ringbig")).bounds?.max).toBeNear({ x: 291.667, y: 241.667 });
+    expect(await editor.drawnGlyph("ringbig")).toMatchObject({
+      bounds: { max: expect.toBeNear({ x: 291.667, y: 241.667 }) },
+    });
   });
 
   it("pairs points as the compiler does when one master mirrors its component", async () => {
@@ -91,7 +93,9 @@ describe("components that change scale between masters interpolate like the comp
     await editor.dragPoint(corner!.id, { x: 100, y: 0 });
 
     editor.setLocation({ wght: 400 });
-    expect((await editor.drawnGlyph("bullet")).bounds?.max).toEqual({ x: 550, y: 450 });
+    expect(await editor.drawnGlyph("bullet")).toMatchObject({
+      bounds: { max: { x: 550, y: 450 } },
+    });
   });
 
   it("keeps the occurrence a component of its base glyph between masters", async () => {

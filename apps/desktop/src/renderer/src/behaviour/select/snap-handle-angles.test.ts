@@ -58,13 +58,13 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       editor.pressAt((await editor.point(id))!);
       editor.movePointerTo(to, { shiftKey: true });
 
-      expect(editor.toolState()?.state).toBe("translating");
+      expect(editor.toolState()).toMatchObject({ state: "translating" });
       expect(editor.drawnPoint(id)).toBeNear(snapped);
       expect(editor.drawnSnapGuides()).toMatchObject([
         { from: pivot, to: expect.toBeNear(snapped) },
       ]);
       await editor.pressKey("Escape");
-      expect(editor.toolState()?.state).toBe("ready");
+      expect(editor.toolState()).toMatchObject({ state: "ready" });
     },
   );
 
@@ -103,7 +103,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
       editor.movePointerTo(to, { shiftKey: true });
       await editor.releaseAt(to, { shiftKey });
 
-      expect(editor.toolState()?.state).toBe("ready");
+      expect(editor.toolState()).toMatchObject({ state: "ready" });
       expect(await editor.point(controlStart)).toBeNear({ x: 100 + 50 * ROOT_3, y: 150 });
     },
   );
@@ -129,7 +129,7 @@ describe("Shift-dragging one handle snaps its angle around its own point", () =>
     editor.selectTool("pen");
     expect(editor.drawnPoint(controlStart)).toMatchObject({ x: 200, y: 100 });
     editor.selectTool("select");
-    expect(editor.toolState()?.state).toBe("ready");
+    expect(editor.toolState()).toMatchObject({ state: "ready" });
 
     await editor.dragFrom({ x: 200, y: 100 }, { x: 180, y: 160 });
 
@@ -194,7 +194,7 @@ describe("Shift-dragging a handle locked to a line does not snap its angle", () 
     editor.pressAt({ x: 500, y: 100 });
     editor.movePointerTo({ x: 560, y: 160 }, { shiftKey: true });
 
-    expect(editor.toolState()?.state).toBe("translating");
+    expect(editor.toolState()).toMatchObject({ state: "translating" });
     expect(editor.drawnSnapGuides()).toEqual([]);
     expect(editor.drawnPoint(handle)).toMatchObject({ y: expect.closeTo(100) });
     await editor.pressKey("Escape");

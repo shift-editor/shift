@@ -20,12 +20,14 @@ describe("the Kerning tool", () => {
   it("shows the kern under the pointer and the pair it comes from", () => {
     editor.movePointerTo(center);
 
-    expect(editor.kerningTool()?.hovered).toMatchObject({
-      amount: -75,
-      pair: {
+    expect(editor.kerningTool()).toMatchObject({
+      hovered: {
         amount: -75,
-        first: { name: "T", group: false, locked: true, toggleable: false },
-        second: { group: true, locked: false, toggleable: true },
+        pair: {
+          amount: -75,
+          first: { name: "T", group: false, locked: true, toggleable: false },
+          second: { group: true, locked: false, toggleable: true },
+        },
       },
     });
   });
@@ -38,55 +40,68 @@ describe("the Kerning tool", () => {
     editor.movePointerTo(center);
 
     // "TATAT": the second T–A uses the same kern; A–T pairs do not.
-    expect(editor.kerningTool()?.sameAsHovered).toHaveLength(1);
-    expect(editor.kerningTool()?.sameAsHovered[0]!.amount).toBe(-75);
+    expect(editor.kerningTool()).toMatchObject({ sameAsHovered: [{ amount: -75 }] });
   });
 
   it("selects a clicked kern, which the sidebar shows", async () => {
-    expect(editor.kerningTool()?.selected).toBeNull();
+    expect(editor.kerningTool()).toMatchObject({ selected: null });
 
     await editor.clickAt({ x: center.x, y: 120 });
 
-    expect(editor.kerningTool()?.selected?.amount).toBe(-75);
+    expect(editor.kerningTool()).toMatchObject({ selected: { amount: -75 } });
   });
 
   it("drops the selected kern when an undo takes one of its glyphs away", async () => {
     await editor.clickAt(center);
-    expect(editor.kerningTool()?.selected).not.toBeNull();
+    expect(editor.kerningTool()).toMatchObject({ selected: expect.anything() });
 
     // Undo past the typing removes the A, so T has no neighbour to kern with.
     await editor.undo();
 
-    expect(editor.canvasText()!.glyphs).toHaveLength(1);
-    expect(editor.kerningTool()?.selected).toBeNull();
+    expect(editor.canvasText()).toMatchObject({ glyphs: [{ name: "T" }] });
+    expect(editor.kerningTool()).toMatchObject({ selected: null });
   });
 
   it("opens the pair up by a drag right, as one undo step", async () => {
     await editor.dragFrom(center, { x: center.x + 20, y: center.y });
 
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-55);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -55 }, { name: "A" }],
+    });
     await editor.undo();
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-75);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -75 }, { name: "A" }],
+    });
   });
 
   it("shows a drag's kern while it drags, and Escape puts it back without saving it", async () => {
     editor.holdDragFrom(center, { x: center.x + 20, y: center.y });
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-55);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -55 }, { name: "A" }],
+    });
     await editor.pressKey("Escape");
 
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-75);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -75 }, { name: "A" }],
+    });
     await editor.settle();
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-75);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -75 }, { name: "A" }],
+    });
   });
 
   it("nudges the selected kern with the arrow keys, by 10 with Shift", async () => {
     await editor.clickAt({ x: center.x, y: 120 });
 
     await editor.pressKey("ArrowLeft");
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-76);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -76 }, { name: "A" }],
+    });
 
     await editor.pressKey("ArrowRight", { shiftKey: true });
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-66);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -66 }, { name: "A" }],
+    });
   });
 
   it("locks a side to its glyph at the active source without moving the kern", async () => {
@@ -95,8 +110,12 @@ describe("the Kerning tool", () => {
     expect(editor.toggleKerningLock("second")).toBe(true);
     await editor.settle();
 
-    expect(editor.kerningTool()?.selected?.pair?.second).toMatchObject({ name: "A", group: false });
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-75);
+    expect(editor.kerningTool()).toMatchObject({
+      selected: { pair: { second: { name: "A", group: false } } },
+    });
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -75 }, { name: "A" }],
+    });
   });
 
   it("opens the value below the baseline for typing, which sets the kern", async () => {
@@ -104,13 +123,15 @@ describe("the Kerning tool", () => {
     const { baseline, bottom } = editor.kerningTool()!.hovered!;
 
     await editor.clickAt({ x: center.x, y: (baseline + bottom) / 2 });
-    expect(editor.kerningTool()?.editing?.amount).toBe(-75);
+    expect(editor.kerningTool()).toMatchObject({ editing: { amount: -75 } });
 
     editor.typeKerning(-100);
     await editor.settle();
 
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-100);
-    expect(editor.kerningTool()?.editing?.amount).toBe(-100);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -100 }, { name: "A" }],
+    });
+    expect(editor.kerningTool()).toMatchObject({ editing: { amount: -100 } });
   });
 });
 
@@ -121,11 +142,13 @@ describe("the Spacing tool in a kerned gap", () => {
     const before = (await editor.drawnGlyph()).sidebearings;
 
     editor.movePointerTo(center);
-    expect(editor.spacingTool()?.hovered).toBeNull();
+    expect(editor.spacingTool()).toMatchObject({ hovered: null });
 
     await editor.dragFrom(center, { x: center.x + 40, y: center.y });
     expect((await editor.drawnGlyph()).sidebearings).toEqual(before);
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-75);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -75 }, { name: "A" }],
+    });
   });
 
   it("measures each glyph's sidebearing to its own advance edge, leaving the kern between", async () => {
@@ -135,10 +158,12 @@ describe("the Spacing tool in a kerned gap", () => {
 
     editor.movePointerTo(inStrip);
 
-    expect(editor.spacingTool()?.hovered).toMatchObject({
-      side: "left",
-      scope: "glyph",
-      gap: { left: { glyph: "T" }, leftBoundary: t!.left + t!.advance, rightBoundary: a!.left },
+    expect(editor.spacingTool()).toMatchObject({
+      hovered: {
+        side: "left",
+        scope: "glyph",
+        gap: { left: { glyph: "T" }, leftBoundary: t!.left + t!.advance, rightBoundary: a!.left },
+      },
     });
   });
 
@@ -150,6 +175,8 @@ describe("the Spacing tool in a kerned gap", () => {
     await editor.dragFrom(inStrip, { x: inStrip.x + 10, y: 300 });
 
     expect((await editor.drawnGlyph()).sidebearings.rsb).toBe(rsb + 10);
-    expect(editor.canvasText()?.glyphs[0]?.kern).toBe(-75);
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [{ name: "T", kern: -75 }, { name: "A" }],
+    });
   });
 });

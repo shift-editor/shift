@@ -29,7 +29,7 @@ describe("sources on a mapped axis", () => {
 
     await editor.editSources([regular]);
     await editor.editSources(["Black"]);
-    expect(editor.location().externalLocation[0]?.value).toBeCloseTo(900);
+    expect(editor.location()).toMatchObject({ externalLocation: [{ value: expect.closeTo(900) }] });
     expect((await editor.drawnGlyph()).advanceWidth).toBe(500);
   });
 });
@@ -48,8 +48,10 @@ describe("mapped weights keep design-space interpolation", () => {
     async (weight, right, advance, ascender) => {
       editor.setLocation({ wght: weight });
 
-      expect((await editor.drawnGlyph()).bounds?.max.x).toBeCloseTo(right);
-      expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(advance);
+      expect(await editor.drawnGlyph()).toMatchObject({
+        bounds: { max: { x: expect.closeTo(right) } },
+        advanceWidth: expect.closeTo(advance),
+      });
       expect(editor.location().metrics.ascender).toBeCloseTo(ascender);
     },
   );
@@ -58,8 +60,10 @@ describe("mapped weights keep design-space interpolation", () => {
     const reopened = await editor.reopen();
     try {
       reopened.setLocation({ wght: 250 });
-      expect((await reopened.drawnGlyph()).advanceWidth).toBeCloseTo(450);
-      expect((await reopened.drawnGlyph()).bounds?.max.x).toBeCloseTo(58);
+      expect(await reopened.drawnGlyph()).toMatchObject({
+        advanceWidth: expect.closeTo(450),
+        bounds: { max: { x: expect.closeTo(58) } },
+      });
       expect(reopened.location().metrics.ascender).toBeCloseTo(750);
     } finally {
       await reopened.close();
@@ -81,8 +85,10 @@ describe("mapped weights keep design-space interpolation", () => {
       [800, 234],
     ]);
 
-    expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(900);
-    expect((await editor.drawnGlyph()).bounds?.max.x).toBeCloseTo(160);
+    expect(await editor.drawnGlyph()).toMatchObject({
+      advanceWidth: expect.closeTo(900),
+      bounds: { max: { x: expect.closeTo(160) } },
+    });
     expect(editor.location().metrics.ascender).toBeCloseTo(900);
 
     await editor.undo();
@@ -141,8 +147,10 @@ describe("editing a variable glyph across sources", () => {
     editor.setLocation({ wght: 550 });
 
     expect(editor.location().sourceId).toBeNull();
-    expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(400);
-    expect((await editor.drawnGlyph()).bounds?.max.x).toBeCloseTo(150);
+    expect(await editor.drawnGlyph()).toMatchObject({
+      advanceWidth: expect.closeTo(400),
+      bounds: { max: { x: expect.closeTo(150) } },
+    });
     expect(editor.location().metrics.ascender).toBeCloseTo(850);
     expect(editor.location().metrics.xHeight).toBeCloseTo(550);
   });

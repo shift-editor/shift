@@ -72,7 +72,7 @@ describe("panning with Space while another tool is active", () => {
 
     expect(editor.canvasOffset()).toEqual({ x: start.x + 120, y: start.y + 80 });
     expect(editor.shownCursor()).toBe(penCursor);
-    expect(editor.toolState()?.id).toBe("pen");
+    expect(editor.toolState()).toMatchObject({ id: "pen" });
 
     await editor.clickAt({ x: 100, y: 100 });
     expect(await editor.outline()).toMatchObject([{ points: [onCurve(100, 100)] }]);
@@ -86,6 +86,6 @@ describe("panning with Space while another tool is active", () => {
 
     expect(editor.shownCursor()).toBe(penCursor);
     expect(editor.shownCursor()).toBe(cursorToCSS({ type: "pen" }));
-    expect(editor.toolState()?.id).toBe("pen");
+    expect(editor.toolState()).toMatchObject({ id: "pen" });
   });
 });

@@ -148,7 +148,7 @@ describe("Shift-dragging an on-curve point snaps its angle", () => {
 
       editor.pressAt(down);
       editor.movePointerTo(to, { shiftKey: true });
-      expect(editor.toolState()?.state).toBe("resizing");
+      expect(editor.toolState()).toMatchObject({ state: "resizing" });
       await editor.releaseAt(to);
 
       expect(await editor.point(first)).toMatchObject(firstAfter);
