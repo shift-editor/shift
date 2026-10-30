@@ -1,31 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { TestEditor } from "@/testing/TestEditor";
+import { describe, expect, it } from "vitest";
+import { cubic } from "@/testing/fixtures";
+import { useTestEditor } from "@/testing/fontFixture";
 
-let editor: TestEditor;
-const layer = () => editor.requireGlyphLayer();
-
-beforeEach(async () => {
-  editor = new TestEditor();
-  await editor.startSession();
-  editor.selectTool("pen");
-  await editor.clickLocal(0, 0);
-  await editor.dragLocal({
-    down: { x: 200, y: 0 },
-    start: { x: 200, y: -40 },
-    end: { x: 200, y: -100 },
-  });
-});
-afterEach(() => editor.destroy());
+const editor = useTestEditor();
 
 describe("GlyphLayer.deletePoints", () => {
   it("publishes the same complete topology locally and after the workspace echo", async () => {
-    const selected = layer().splitSegment(layer().contours[0].segments()[0].id, 0.4)!;
+    await editor.draw({ contours: [cubic([0, 0], [0, 100], [200, 100], [200, 0])] });
+    editor.selectTool("pen");
+    await editor.clickAt({ x: 100, y: 75 });
+    const split = await editor.pointAt({ x: 100, y: 75 });
+    if (!split) throw new Error("Expected the split point");
+    editor.selectTool("select");
+    editor.select([split.id]);
+
+    const deleting = editor.deleteSelection();
+    await expect.poll(() => editor.drawnPoint(split.id)).toBeNull();
+    const local = editor.drawnOutline();
+    expect(editor.editorView().applyStatus).not.toBe("idle");
+    expect(local).toMatchObject([{ points: Array(4).fill({}) }]);
+    expect(editor.drawnPoint(split.id)).toBeNull();
+    await deleting;
     await editor.settle();
-    layer().deletePoints([selected]);
-    const local = layer().state;
-    expect(layer().contours[0].segments()).toHaveLength(1);
-    expect(layer().point(selected)).toBeNull();
-    await editor.settle();
-    expect(layer().state).toEqual(local);
+    expect(await editor.outline()).toEqual(local);
   });
 });

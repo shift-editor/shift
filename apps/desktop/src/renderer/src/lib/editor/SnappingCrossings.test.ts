@@ -1,36 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { Point } from "@shift/glyph-state";
-import { TestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
+
+const editor = useTestEditor();
 
 describe("snapping crosses the corners of every contour's box", () => {
   it("returns each contour's bounds corners and any extra box", async () => {
-    const editor = new TestEditor();
-    await editor.startSession();
-    const layer = editor.requireGlyphLayer();
-    const contourId = layer.addContour();
-    for (const point of [
-      { x: 100, y: 0 },
-      { x: 200, y: 50 },
-      { x: 150, y: 120 },
-    ]) {
-      layer.addPoint(contourId, Point.onCurve(point));
-    }
-    layer.closeContour(contourId);
-    await editor.settle();
+    const { bottom, top } = await editor.draw({
+      contours: [
+        {
+          closed: true,
+          points: [
+            [100, 0],
+            [200, 50],
+            [150, 120],
+          ],
+        },
+        {
+          points: [
+            { x: 300, y: 300, name: "bottom" },
+            { x: 300, y: 340, name: "top" },
+          ],
+        },
+      ],
+    });
+    editor.selectTool("select");
+    editor.select([bottom, top]);
 
-    const crossings = editor.snapping.crossings(layer, [
-      { min: { x: 0, y: 0 }, max: { x: 10, y: 10 } },
-    ]);
+    editor.holdDrag(bottom, { x: -98, y: 0 });
 
-    expect(crossings).toEqual([
+    expect(editor.drawnSnapCrossings()).toEqual([
       { x: 100, y: 0 },
       { x: 200, y: 0 },
       { x: 200, y: 120 },
       { x: 100, y: 120 },
-      { x: 0, y: 0 },
-      { x: 10, y: 0 },
-      { x: 10, y: 10 },
-      { x: 0, y: 10 },
+      { x: 200, y: 300 },
+      { x: 200, y: 300 },
+      { x: 200, y: 340 },
+      { x: 200, y: 340 },
+      { x: 200, y: 300 },
+      { x: 200, y: 300 },
+      { x: 200, y: 340 },
+      { x: 200, y: 340 },
     ]);
   });
 });
