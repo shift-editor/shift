@@ -134,3 +134,6 @@ packages/wasm/src/generated-shaping/
 packages/wasm/src/generated-engine/
 packages/wasm/src/generated-protocol/
 packages/pack/src/.generated-*/
+# Generated before typecheck, tests and builds (generate:bridge-types); not committed.
+crates/shift-bridge/index.d.ts
+packages/types/src/bridge/generated.ts
