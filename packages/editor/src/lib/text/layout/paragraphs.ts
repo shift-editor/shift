@@ -1,4 +1,4 @@
-import type { ShapedRun } from "@shift/types";
+import type { ShapedRun } from "@shift/wasm/protocol";
 import type { Font } from "../../model/Font";
 import {
   glyphIdForItem,

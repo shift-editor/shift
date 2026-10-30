@@ -1,7 +1,7 @@
 //! Numbers from the editor read as the integers they stand for.
 
 /// Returns `value` as a `u32` when it is a whole number in range.
-#[cfg(any(feature = "engine", feature = "shaping"))]
+#[cfg(feature = "engine")]
 pub(crate) fn whole(value: f64) -> Option<u32> {
     let in_range = value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value);
     // In range and whole, so the conversion is exact.

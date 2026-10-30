@@ -5,7 +5,8 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import { EntityMap, type GlyphId, type ReadonlyEntityMap, type ShapedRun } from "@shift/types";
+import { EntityMap, type GlyphId, type ReadonlyEntityMap } from "@shift/types";
+import type { ShapedRun } from "@shift/wasm/protocol";
 import { Caret } from "./Caret";
 import type {
   CaretPosition,

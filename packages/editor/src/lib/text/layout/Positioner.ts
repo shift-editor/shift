@@ -1,5 +1,6 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, GlyphName, ShapedGlyph, Source, Unicode } from "@shift/types";
+import type { GlyphId, GlyphName, Source, Unicode } from "@shift/types";
+import type { ShapedGlyph } from "@shift/wasm/protocol";
 import { track } from "../../signals";
 import { displayAdvance } from "../../utils/displayAdvance";
 import type { PositionedGlyph, PositionedRun, SegmentedRun } from "./types";
