@@ -20,6 +20,32 @@ export class Writer {
     this.#values[this.#length++] = value;
   }
 
+  count(value: number): void {
+    this.number(value);
+  }
+
+  flag(value: boolean): void {
+    this.number(value ? 1 : 0);
+  }
+
+  /** list(number), emitted inline by the "emitted-lists" variant. */
+  numberList(values: readonly number[]): void {
+    this.number(values.length);
+    for (const value of values) this.number(value);
+  }
+
+  /** list(count). */
+  counts(values: readonly number[]): void {
+    this.number(values.length);
+    for (const value of values) this.number(value);
+  }
+
+  /** list(T) with T's emitted writer. */
+  list<T>(values: readonly T[], item: (write: Writer, value: T) => void): void {
+    this.number(values.length);
+    for (const value of values) item(this, value);
+  }
+
   numbers(values: Float64Array): void {
     this.number(values.length);
     if (this.#length + values.length > this.#values.length) this.#grow(this.#length + values.length);
@@ -57,6 +83,34 @@ export class Reader {
     return Math.max(0, this.number());
   }
 
+  flag(): boolean {
+    return this.number() !== 0;
+  }
+
+  /** list(number) as number[], like NumberReader.list(() => read.number()). */
+  numberList(): number[] {
+    const n = this.count();
+    const items: number[] = [];
+    for (let i = 0; i < n; i++) items.push(this.number());
+    return items;
+  }
+
+  /** list(count). */
+  counts(): number[] {
+    const n = this.count();
+    const items: number[] = [];
+    for (let i = 0; i < n; i++) items.push(this.count());
+    return items;
+  }
+
+  /** list(T) with T's emitted reader. */
+  list<T>(item: (read: Reader) => T): T[] {
+    const n = this.count();
+    const items: T[] = [];
+    for (let i = 0; i < n; i++) items.push(item(this));
+    return items;
+  }
+
   /** A view of the next `count` numbers; the reply buffer is the module's fresh copy. */
   numbers(): Float64Array {
     const count = this.count();
@@ -73,10 +127,10 @@ export type Schema =
   | { readonly kind: "bool" }
   | { readonly kind: "string" }
   | { readonly kind: "numbers" }
-  | { readonly kind: "struct"; readonly fields: Readonly<Record<string, Schema>> }
+  | { readonly kind: "struct"; readonly fields: Readonly<Record<string, Schema>>; readonly emitted?: Codec }
   | { readonly kind: "list"; readonly item: Schema }
   | { readonly kind: "option"; readonly inner: Schema }
-  | { readonly kind: "names"; readonly names: readonly string[] }
+  | { readonly kind: "names"; readonly names: readonly string[]; readonly emitted?: Codec }
   | { readonly kind: "variant"; readonly tag: string; readonly cases: Readonly<Record<string, Schema>> };
 
 export const number = { kind: "number" } as const;
@@ -84,17 +138,20 @@ export const count = { kind: "count" } as const;
 export const bool = { kind: "bool" } as const;
 export const string = { kind: "string" } as const;
 export const numbers = { kind: "numbers" } as const;
-export const struct = <F extends Record<string, Schema>>(fields: F) => ({ kind: "struct", fields }) as const;
+/** `emitted`: the generator's read/write for this type, as ordinary source literals (the "emitted" variant). */
+export const struct = <F extends Record<string, Schema>>(fields: F, emitted?: Codec) => ({ kind: "struct", fields, emitted }) as const;
 export const list = <S extends Schema>(item: S) => ({ kind: "list", item }) as const;
 export const option = <S extends Schema>(inner: S) => ({ kind: "option", inner }) as const;
 /** A unit enum, as its variant names (`PointType`). */
 export const names = <N extends string>(...values: N[]) => ({ kind: "names", names: values }) as const;
+/** A unit enum with the generator's read/write emitted as literals. */
+export const namesEmitted = <N extends string>(values: N[], emitted: Codec) => ({ kind: "names", names: values, emitted }) as const;
 /** A data enum: the case index, then that case's struct, read as `{ [tag]: name, ...fields }`. */
 export const variant = <C extends Record<string, Schema>>(tag: string, cases: C) => ({ kind: "variant", tag, cases }) as const;
 
 export interface Codec {
-  read(read: Reader): unknown;
-  write(write: Writer, value: unknown): void;
+  read(read: Reader): any;
+  write(write: Writer, value: any): void;
 }
 
 const codecs = new WeakMap<Schema, Codec>();
@@ -115,6 +172,9 @@ const STRING: Codec = { read: (r) => nameFor(r.count()), write: (w, v) => w.numb
 const NUMBERS: Codec = { read: (r) => r.numbers(), write: (w, v) => w.numbers(v as Float64Array) };
 
 function build(schema: Schema): Codec {
+  // Any schema may carry the generator's emitted codec (emitted variants).
+  const emitted = (schema as { emitted?: Codec }).emitted;
+  if (emitted) return emitted;
   switch (schema.kind) {
     case "number":
       return NUMBER;
@@ -141,6 +201,7 @@ function build(schema: Schema): Codec {
       };
     }
     case "names": {
+      if (schema.emitted) return schema.emitted;
       const all = schema.names;
       return {
         read: (r) => {
@@ -152,6 +213,7 @@ function build(schema: Schema): Codec {
       };
     }
     case "struct":
+      if (schema.emitted) return schema.emitted;
       return structCodec(schema.fields, null, "");
     case "variant": {
       const caseNames = Object.keys(schema.cases);

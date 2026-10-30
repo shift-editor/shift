@@ -6,6 +6,8 @@ import * as layoutsU from "../../packages/editor/src/lib/wasm/generated/layouts"
 import * as engineU from "../../packages/editor/src/lib/wasm/generated/engineLayouts";
 import { NumberReader, NumberWriter } from "../../packages/wasm/src/numbers";
 import * as P from "./schemas";
+import * as E from "./schemasEmitted";
+import * as L from "./schemasEmittedLists";
 import { bindings, realBinding, realPrepareDrag, releaseDrag, useReal, type Binding, type BindingName } from "./shim";
 
 const log = (line: string): void => console.log(line);
@@ -51,6 +53,8 @@ interface Scenario {
   full: boolean;
   unrolled: () => unknown;
   prototype: () => unknown;
+  emitted: () => unknown;
+  emittedLists: () => unknown;
   /** Compare outputs (default deep-equal). */
   same?: (u: unknown, p: unknown) => boolean;
 }
@@ -110,6 +114,8 @@ const scenarios: Scenario[] = [
     full: true,
     unrolled: () => layoutsU.dragMoves(frame()),
     prototype: () => P.dragMoves(frame()),
+    emitted: () => E.dragMoves(frame()),
+    emittedLists: () => L.dragMoves(frame()),
   },
   {
     name: "drag-numbers",
@@ -118,6 +124,8 @@ const scenarios: Scenario[] = [
     full: false,
     unrolled: () => unrolledDragNumbers(frame()),
     prototype: () => P.dragMovesNumbers(frame()),
+    emitted: () => E.dragMovesNumbers(frame()),
+    emittedLists: () => L.dragMovesNumbers(frame()),
     same: (u, p) => deepEqual((u as { moves: number[] }).moves, Array.from((p as { moves: Float64Array }).moves)),
   },
   {
@@ -127,6 +135,8 @@ const scenarios: Scenario[] = [
     full: true,
     unrolled: () => small.map((c) => geometryU.contourGeometry(c)),
     prototype: () => small.map((c) => P.contourGeometry(c)),
+    emitted: () => small.map((c) => E.contourGeometry(c)),
+    emittedLists: () => small.map((c) => L.contourGeometry(c)),
   },
   {
     name: "geometry-big",
@@ -135,6 +145,8 @@ const scenarios: Scenario[] = [
     full: true,
     unrolled: () => big.map((c) => geometryU.contourGeometry(c)),
     prototype: () => big.map((c) => P.contourGeometry(c)),
+    emitted: () => big.map((c) => E.contourGeometry(c)),
+    emittedLists: () => big.map((c) => L.contourGeometry(c)),
   },
   {
     name: "components",
@@ -143,6 +155,8 @@ const scenarios: Scenario[] = [
     full: true,
     unrolled: () => transforms.map((t) => geometryU.decomposeMatrix(geometryU.composeTransform(t))),
     prototype: () => transforms.map((t) => P.decomposeMatrix(P.composeTransform(t))),
+    emitted: () => transforms.map((t) => E.decomposeMatrix(E.composeTransform(t))),
+    emittedLists: () => transforms.map((t) => L.decomposeMatrix(L.composeTransform(t))),
   },
   {
     name: "kerning-run",
@@ -151,6 +165,8 @@ const scenarios: Scenario[] = [
     full: false,
     unrolled: () => engineU.engineKerningRun(kerning),
     prototype: () => P.engineKerningRun(kerning),
+    emitted: () => E.engineKerningRun(kerning),
+    emittedLists: () => L.engineKerningRun(kerning),
   },
 ];
 
@@ -241,17 +257,21 @@ function sameNumbers(a: Float64Array[], b: Float64Array[]): boolean {
   return true;
 }
 
-function checkEqual(s: Scenario, replies: Float64Array[], mode: string): { bytes: boolean; values: boolean; requests: number } {
+type Equality = { bytes: boolean; values: boolean; requests: number };
+function checkEqual(s: Scenario, replies: Float64Array[], mode: string): { prototype: Equality; emitted: Equality; emittedLists: Equality } {
   const inU: Float64Array[] = [];
-  const inP: Float64Array[] = [];
   playReplies(s.bindings, replies, inU);
   const outU = s.unrolled();
-  playReplies(s.bindings, replies, inP);
-  const outP = s.prototype();
-  const bytes = sameNumbers(inU, inP);
-  const values = (s.same ?? deepEqual)(outU, outP);
-  if (!bytes || !values) log(`EQUALITY FAILED ${s.name} ${mode} bytes=${bytes} values=${values}`);
-  return { bytes, values, requests: inU.reduce((n, a) => n + a.length, 0) };
+  const against = (name: string, fn: () => unknown): Equality => {
+    const inX: Float64Array[] = [];
+    playReplies(s.bindings, replies, inX);
+    const outX = fn();
+    const bytes = sameNumbers(inU, inX);
+    const values = (s.same ?? deepEqual)(outU, outX);
+    if (!bytes || !values) log(`EQUALITY FAILED ${s.name} ${name} ${mode} bytes=${bytes} values=${values}`);
+    return { bytes, values, requests: inU.reduce((n, a) => n + a.length, 0) };
+  };
+  return { prototype: against("prototype", s.prototype), emitted: against("emitted", s.emitted), emittedLists: against("emittedLists", s.emittedLists) };
 }
 
 // ---- timing ---------------------------------------------------------------
@@ -292,32 +312,27 @@ const SAMPLES = quick ? 15 : 50;
 const TARGET_MS = (env?.versions?.electron || !env) ? 4 : 1;
 
 function measure(s: Scenario) {
+  const fns = { u: s.unrolled, p: s.prototype, e: s.emitted, l: s.emittedLists } as const;
+  const keys = ["u", "p", "e", "l"] as const;
   const warm = performance.now();
-  while (performance.now() - warm < (quick ? 100 : 600)) {
-    consume(s.unrolled());
-    consume(s.prototype());
-  }
-  const batch = { u: batchOf(s.unrolled, TARGET_MS), p: batchOf(s.prototype, TARGET_MS) };
-  const runs: { u: { med: number; p95: number }; p: { med: number; p95: number }; ratio: number }[] = [];
+  while (performance.now() - warm < (quick ? 100 : 600)) for (const k of keys) consume(fns[k]());
+  const batch = { u: batchOf(fns.u, TARGET_MS), p: batchOf(fns.p, TARGET_MS), e: batchOf(fns.e, TARGET_MS), l: batchOf(fns.l, TARGET_MS) };
+  const runs: Record<"u" | "p" | "e" | "l", { med: number; p95: number }>[] = [];
   for (let r = 0; r < RUNS; r++) {
-    // Alternate which goes first.
-    const order = r % 2 === 0 ? (["u", "p"] as const) : (["p", "u"] as const);
-    const got: Record<string, number[]> = {};
-    for (const which of order) got[which] = samples(which === "u" ? s.unrolled : s.prototype, batch[which], SAMPLES);
-    const u = { med: quantile(got.u!, 0.5), p95: quantile(got.u!, 0.95) };
-    const p = { med: quantile(got.p!, 0.5), p95: quantile(got.p!, 0.95) };
-    runs.push({ u, p, ratio: p.med / u.med });
+    // Rotate which goes first.
+    const order = [0, 1, 2, 3].map((i) => keys[(i + r) % 4]!);
+    const got = {} as Record<"u" | "p" | "e" | "l", number[]>;
+    for (const which of order) got[which] = samples(fns[which], batch[which], SAMPLES);
+    const stat = (xs: number[]) => ({ med: quantile(xs, 0.5), p95: quantile(xs, 0.95) });
+    runs.push({ u: stat(got.u), p: stat(got.p), e: stat(got.e), l: stat(got.l) });
   }
   const med = (xs: number[]) => quantile(xs, 0.5);
-  return {
-    batch,
-    n: { unrolled: RUNS * SAMPLES * batch.u, prototype: RUNS * SAMPLES * batch.p },
-    runs: RUNS,
-    samplesPerRun: SAMPLES,
-    unrolled: { median: med(runs.map((x) => x.u.med)), p95: med(runs.map((x) => x.u.p95)), runMedians: runs.map((x) => x.u.med) },
-    prototype: { median: med(runs.map((x) => x.p.med)), p95: med(runs.map((x) => x.p.p95)), runMedians: runs.map((x) => x.p.med) },
-    ratio: { median: med(runs.map((x) => x.ratio)), min: Math.min(...runs.map((x) => x.ratio)), max: Math.max(...runs.map((x) => x.ratio)) },
+  const variant = (k: "u" | "p" | "e" | "l") => ({ median: med(runs.map((x) => x[k].med)), p95: med(runs.map((x) => x[k].p95)), runMedians: runs.map((x) => x[k].med), n: RUNS * SAMPLES * batch[k] });
+  const ratio = (k: "p" | "e" | "l") => {
+    const rs = runs.map((x) => x[k].med / x.u.med);
+    return { median: med(rs), min: Math.min(...rs), max: Math.max(...rs) };
   };
+  return { batch, runs: RUNS, samplesPerRun: SAMPLES, unrolled: variant("u"), prototype: variant("p"), emitted: variant("e"), emittedLists: variant("l"), ratio: { prototype: ratio("p"), emitted: ratio("e"), emittedLists: ratio("l") } };
 }
 
 // ---- main -----------------------------------------------------------------
@@ -336,15 +351,15 @@ export function main(): void {
     const codecEq = checkEqual(s, replies, "codec");
     playReplies(s.bindings, replies);
     const codec = measure(s);
-    log(`RESULT ${JSON.stringify({ scenario: s.name, mode: "codec-only", describe: s.describe, calls: replies.length, requestNumbers: codecEq.requests, replyNumbers, equal: codecEq, ...codec })}`);
+    log(`RESULT ${JSON.stringify({ scenario: s.name, mode: "codec-only", describe: s.describe, calls: replies.length, requestNumbers: codecEq.prototype.requests, replyNumbers, equal: codecEq, ...codec })}`);
 
     if (s.full) {
       for (const name of s.bindings) useReal(name);
       const outU = s.unrolled();
-      const outP = s.prototype();
-      const fullEq = (s.same ?? deepEqual)(outU, outP);
+      const same = s.same ?? deepEqual;
+      const fullEq = { prototype: same(outU, s.prototype()), emitted: same(outU, s.emitted()), emittedLists: same(outU, s.emittedLists()) };
       const full = measure(s);
-      log(`RESULT ${JSON.stringify({ scenario: s.name, mode: "full-call", describe: s.describe, calls: replies.length, equal: { values: fullEq }, ...full })}`);
+      log(`RESULT ${JSON.stringify({ scenario: s.name, mode: "full-call", describe: s.describe, calls: replies.length, equal: fullEq, ...full })}`);
     }
   }
   releaseDrag(dragHandle);
