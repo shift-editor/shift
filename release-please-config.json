@@ -4,6 +4,7 @@
   "release-type": "node",
   "draft": true,
   "force-tag-creation": true,
+  "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "draft-pull-request": true,
   "include-component-in-tag": false,
