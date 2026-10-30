@@ -4,7 +4,7 @@
  *
  * @remarks
  * Generated code (from `#[derive(Pack)]` and `#[pack::interface]`, see
- * `generate.mjs`) declares each type as a schema with {@link struct},
+ * `generate.ts`) declares each type as a schema with {@link struct},
  * {@link list}, {@link option} and {@link variants}, its type as
  * {@link Infer} of that schema, and its own `read` and `write` functions over
  * {@link Reader} and {@link Writer}. A generated interface class sends each

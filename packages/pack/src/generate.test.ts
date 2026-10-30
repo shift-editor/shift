@@ -1,17 +1,17 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { render } from "./generate.mjs";
+import { render, type Fragment } from "./generate";
 import { Reader, syncTransport, Writer, type Names } from "./index";
 
-const SEGMENT_KIND = {
+const SEGMENT_KIND: Fragment = {
   kind: "enum",
   rust: "SegmentKind",
   name: "SegmentKind",
   doc: null,
   variants: ["line", "quad"],
 };
-const ANCHOR = {
+const ANCHOR: Fragment = {
   kind: "struct",
   rust: "Anchor",
   name: "Anchor",
@@ -26,7 +26,7 @@ const ANCHOR = {
     },
   ],
 };
-const MEASURE = {
+const MEASURE: Fragment = {
   kind: "interface",
   rust: "Measure",
   name: "Measure",
@@ -69,7 +69,7 @@ interface Measure {
 }
 
 /** Renders `fragments` and imports the module, resolving `@shift/pack` to this package's source. */
-async function load(fragments: Record<string, unknown>[]): Promise<Record<string, unknown>> {
+async function load(fragments: Fragment[]): Promise<Record<string, unknown>> {
   const file = join(folder, `module${Math.random().toString(36).slice(2)}.ts`);
   writeFileSync(file, render(fragments).replace('from "@shift/pack"', 'from "../index"'));
   return import(file);
@@ -158,7 +158,7 @@ describe("render", () => {
   });
 
   it("fails when two crates declare different types under one name", () => {
-    const other = { ...SEGMENT_KIND, variants: ["cubic"], crate: "other" };
+    const other: Fragment = { ...SEGMENT_KIND, kind: "enum", variants: ["cubic"], crate: "other" };
 
     expect(() => render([{ ...SEGMENT_KIND, crate: "one" }, other, ANCHOR, MEASURE])).toThrow(
       "two types are named SegmentKind (in one and other)",
