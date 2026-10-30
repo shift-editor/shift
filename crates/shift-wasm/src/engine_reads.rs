@@ -192,60 +192,49 @@ mod exports {
             location: Vec<f64>,
             glyphs: Vec<usize>,
         ) -> Option<Vec<f64>> {
-            kerning_run(self, source, &location, &glyphs)
+            let font = self.session.font();
+            let blend = match source {
+                Some(number) => font
+                    .kerning_blend_at_source(*self.ids.sources.get(number)?)
+                    .ok()?,
+                None => font
+                    .kerning_blend_at(&design_location(font, &location))
+                    .ok()?,
+            };
+            let ids = &self.ids.glyphs;
+            let pairs = glyphs
+                .chunks_exact(2)
+                .map(|pair| match pair {
+                    &[first, second] => ids.get(first).copied().zip(ids.get(second).copied()),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(blend.values(font.kerning(), pairs))
         }
 
         fn kerning_pairs(&self, source: usize, glyphs: Vec<usize>) -> Vec<EditablePair> {
-            editable_pairs(self, source, &glyphs)
+            let kerning = self.session.font().kerning();
+            let ids = &self.ids.glyphs;
+            let source = self.ids.sources.get(source);
+            glyphs
+                .chunks_exact(2)
+                .map(|pair| {
+                    let (&[first, second], Some(source)) = (pair, source) else {
+                        return UNKERNED;
+                    };
+                    match (ids.get(first), ids.get(second)) {
+                        (Some(first), Some(second)) => {
+                            editable_pair(kerning, *source, *first, *second)
+                        }
+                        _ => UNKERNED,
+                    }
+                })
+                .collect()
         }
 
         fn source_metrics_at(&self, location: Vec<f64>) -> Option<InterpolatedMetrics> {
             interpolated_metrics(self.session.font(), &location)
         }
-    }
-
-    fn kerning_run(
-        engine: &Engine,
-        source: Option<usize>,
-        location: &[f64],
-        glyphs: &[usize],
-    ) -> Option<Vec<f64>> {
-        let font = engine.session.font();
-        let blend = match source {
-            Some(number) => font
-                .kerning_blend_at_source(*engine.ids.sources.get(number)?)
-                .ok()?,
-            None => font
-                .kerning_blend_at(&design_location(font, location))
-                .ok()?,
-        };
-        let ids = &engine.ids.glyphs;
-        let pairs = glyphs
-            .chunks_exact(2)
-            .map(|pair| match pair {
-                &[first, second] => ids.get(first).copied().zip(ids.get(second).copied()),
-                _ => None,
-            })
-            .collect::<Option<Vec<_>>>()?;
-        Some(blend.values(font.kerning(), pairs))
-    }
-
-    fn editable_pairs(engine: &Engine, source: usize, glyphs: &[usize]) -> Vec<EditablePair> {
-        let kerning = engine.session.font().kerning();
-        let ids = &engine.ids.glyphs;
-        let source = engine.ids.sources.get(source);
-        glyphs
-            .chunks_exact(2)
-            .map(|pair| {
-                let (&[first, second], Some(source)) = (pair, source) else {
-                    return UNKERNED;
-                };
-                match (ids.get(first), ids.get(second)) {
-                    (Some(first), Some(second)) => editable_pair(kerning, *source, *first, *second),
-                    _ => UNKERNED,
-                }
-            })
-            .collect()
     }
 
     /// The glyphs themselves at zero, for a pair that names nothing known.
