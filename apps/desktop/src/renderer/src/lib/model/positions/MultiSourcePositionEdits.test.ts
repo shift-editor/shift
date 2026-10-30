@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Point } from "@shift/glyph-state";
-import type { AnchorId, AxisId, GlyphName, PointId, SourceId } from "@shift/types";
+import type { AnchorId, AxisId, PointId, SourceId } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { PositionEdits, PositionTargets, type GlyphLayer } from "@shift/editor/model";
 import type { PositionSelection } from "@shift/editor/types";
 import { WEIGHT, useTestEditor } from "@/testing/fontFixture";
 import type { GlyphFixture } from "@/testing/fixtures";
-import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import { drawPoints, startWorkspaceGlyph, type WorkspaceStack } from "@/testing/workspaceStack";
 
 // Position edits over a selection that spans matched layers in two sources, on the real
 // workspace stack: the selection is assembled from the engine's layer match, as the editor's
@@ -22,21 +21,15 @@ describe("multi-source position edits", () => {
   let targetLastId: PointId;
 
   beforeEach(async () => {
-    stack = createWorkspaceStack();
-    await stack.createWorkspace();
-    const record = stack.font.createGlyph("A" as GlyphName);
-    await stack.editCoordinator.settled();
-    const glyph = await stack.font.loadGlyph(record.id);
-    layer = requireLayer(glyph.layerForSource(stack.font.defaultSource.id));
-    const edit = layer.beginEdit();
-    const contourId = edit.addContour(false);
-    const [first, , last] = edit.addPoints(contourId, [
-      Point.onCurve({ x: 100, y: 100 }),
-      Point.onCurve({ x: 150, y: 150 }),
-      Point.onCurve({ x: 200, y: 200 }),
-    ]);
+    const started = await startWorkspaceGlyph();
+    ({ stack, layer } = started);
+    const { record, glyph } = started;
+    const [first, , last] = drawPoints(layer, [
+      { x: 100, y: 100 },
+      { x: 150, y: 150 },
+      { x: 200, y: 200 },
+    ]).pointIds;
     if (!first || !last) throw new Error("Expected drawn points");
-    edit.finish("Draw contour");
     [firstId, lastId] = [first, last];
     anchorId = layer.addAnchor("top", { x: 150, y: 250 });
     await stack.editCoordinator.settled();

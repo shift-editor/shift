@@ -15,7 +15,13 @@ import { Point } from "@shift/glyph-state";
 import { Curve } from "@shift/geo";
 import { effect, signal, track } from "@shift/editor/signals";
 import { emptyExternalAxisLocation } from "@shift/editor/variation";
-import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import {
+  addWorkspaceGlyph,
+  createWorkspaceStack,
+  drawPoints,
+  startWorkspaceGlyph,
+  type WorkspaceStack,
+} from "@/testing/workspaceStack";
 import type { Glyph, GlyphLayer, GlyphRenderModel } from "@shift/editor/model";
 import { RenderGlyph } from "@shift/editor/model";
 
@@ -27,58 +33,16 @@ import { RenderGlyph } from "@shift/editor/model";
  * Not restored yet (blocked on workspace vocabulary):
  * - "Glyph variation interpolation" — needs multi-source/axes vocabulary.
  */
-/** A new workspace font's glyph `A` (U+0041), loaded, as the canvas would show it at the default source. */
-interface WorkspaceGlyph {
-  readonly stack: WorkspaceStack;
-  readonly record: GlyphRecord;
-  readonly glyph: Glyph;
-  readonly layer: GlyphLayer;
-  /** The glyph's render model at the default source, as the canvas draws it. */
-  readonly renderModel: GlyphRenderModel;
-}
-
-/** Creates a workspace font over the real workspace stack and loads its glyph `A`. */
-async function startWorkspaceGlyph(): Promise<WorkspaceGlyph> {
-  const stack = createWorkspaceStack();
-  await stack.createWorkspace();
-  const created = stack.font.createGlyphForUnicode(65 as Unicode);
-  await stack.editCoordinator.settled();
-
-  const sourceId = stack.font.defaultSource.id;
-  const glyph = await stack.font.loadGlyph(created.id);
-  const layer = glyph.layerForSource(sourceId);
-  const record = stack.font.recordForId(created.id);
-  if (!layer || !record) throw new Error("Expected the glyph's default layer and record");
-
-  const renderModel = glyph.renderModelAt(
-    signal(emptyExternalAxisLocation()),
-    signal<SourceId | null>(sourceId),
-  );
-  return { stack, record, glyph, layer, renderModel };
-}
-
 async function addTriangle(stack: WorkspaceStack, layer: GlyphLayer): Promise<readonly Point[]> {
-  const contourId = layer.addContour();
-
-  layer.addPoint(contourId, {
-    x: 0,
-    y: 0,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.addPoint(contourId, {
-    x: 100,
-    y: 0,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.addPoint(contourId, {
-    x: 50,
-    y: 100,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.closeContour(contourId);
+  const { contourId } = drawPoints(
+    layer,
+    [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 50, y: 100 },
+    ],
+    { closed: true },
+  );
   await stack.editCoordinator.settled();
 
   const contour = layer.contour(contourId);
@@ -264,11 +228,7 @@ describe("Glyph", () => {
 
   it("refuses an edit the engine rejects, leaving the layer and the store as they were", async () => {
     const [first] = await addTriangle(stack, layer);
-    const otherRecord = stack.font.createGlyphForUnicode(66 as Unicode);
-    await stack.editCoordinator.settled();
-    const otherGlyph = await stack.font.loadGlyph(otherRecord.id);
-    const otherLayer = otherGlyph.layerForSource(stack.font.defaultSource.id);
-    if (!otherLayer) throw new Error("Expected second glyph layer");
+    const { layer: otherLayer } = await addWorkspaceGlyph(stack, 66 as Unicode);
     const duplicateContourId = otherLayer.addContour();
     await stack.editCoordinator.settled();
     const contours = layer.contours.length;
@@ -757,14 +717,12 @@ describe("GlyphLayer.addComponent with a base not yet loaded this session", () =
 
     const setup = createWorkspaceStack();
     await setup.createWorkspace();
-    setup.font.createGlyph("root" as GlyphName);
-    const baseRecord = setup.font.createGlyph("base" as GlyphName);
-    await setup.editCoordinator.settled();
-    const base = await setup.font.loadGlyph(baseRecord.id);
-    const baseLayer = base.layerForSource(setup.font.defaultSource.id)!;
-    const contourId = baseLayer.addContour();
-    baseLayer.addPoint(contourId, Point.onCurve({ x: 0, y: 0 }));
-    baseLayer.addPoint(contourId, Point.onCurve({ x: 100, y: 100 }));
+    await addWorkspaceGlyph(setup, "root");
+    const { layer: baseLayer } = await addWorkspaceGlyph(setup, "base");
+    drawPoints(baseLayer, [
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+    ]);
     await setup.editCoordinator.save(savePath);
     await setup.closeWorkspace();
     setup.dispose();

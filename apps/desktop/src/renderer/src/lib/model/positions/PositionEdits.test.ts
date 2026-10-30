@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Vec2 } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
-import type { GlyphName, PointId } from "@shift/types";
-import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import type { PointId } from "@shift/types";
+import { drawPoints, startWorkspaceGlyph, type WorkspaceStack } from "@/testing/workspaceStack";
 import {
   AngleSnap,
   DirectionSnap,
@@ -23,19 +23,9 @@ describe("fluent position edits preserve one frozen interaction base", () => {
   let pointId: PointId;
 
   beforeEach(async () => {
-    stack = createWorkspaceStack();
-    await stack.createWorkspace();
-    const record = stack.font.createGlyph("A" as GlyphName);
-    await stack.editCoordinator.settled();
-    const glyph = await stack.font.loadGlyph(record.id);
-    const defaultLayer = glyph.layerForSource(stack.font.defaultSource.id);
-    if (!defaultLayer) throw new Error("Expected the default source layer");
-    layer = defaultLayer;
-    const edit = layer.beginEdit();
-    const contourId = edit.addContour(false);
-    const [added] = edit.addPoints(contourId, [Point.onCurve({ x: 100, y: 100 })]);
+    ({ stack, layer } = await startWorkspaceGlyph());
+    const [added] = drawPoints(layer, [{ x: 100, y: 100 }]).pointIds;
     if (!added) throw new Error("Expected a drawn point");
-    edit.finish("Add point");
     await stack.editCoordinator.settled();
     pointId = added;
   });

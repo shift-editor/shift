@@ -1,26 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
-import type { Unicode } from "@shift/types";
 import type { GlyphLayer } from "@shift/editor/model";
-import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import { drawPoints, startWorkspaceGlyph, type WorkspaceStack } from "@/testing/workspaceStack";
 
 describe("glyph layer edits preserve committed preview bases", () => {
   let stack: WorkspaceStack;
   let layer: GlyphLayer;
 
   beforeEach(async () => {
-    stack = createWorkspaceStack();
-    await stack.createWorkspace();
-    const record = stack.font.createGlyphForUnicode(65 as Unicode);
-    await stack.editCoordinator.settled();
-    const glyph = await stack.font.loadGlyph(record.id);
-    const defaultLayer = glyph.layerForSource(stack.font.defaultSource.id);
-    if (!defaultLayer) throw new Error("Expected the glyph's default layer");
-    layer = defaultLayer;
-    const contourId = layer.addContour();
-    layer.addPoints(contourId, [
-      Point.onCurve({ x: 100, y: 100 }),
-      Point.onCurve({ x: 300, y: 200 }),
+    ({ stack, layer } = await startWorkspaceGlyph());
+    drawPoints(layer, [
+      { x: 100, y: 100 },
+      { x: 300, y: 200 },
     ]);
     await stack.editCoordinator.settled();
   });

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Mat, Rect, Vec2, type Rect2D } from "@shift/geo";
-import { Point } from "@shift/glyph-state";
-import type { ComponentId, GlyphName, Unicode } from "@shift/types";
+import type { ComponentId } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type {
   ComponentTransformSelection,
@@ -11,7 +10,12 @@ import type { GlyphLayer } from "@shift/editor/model";
 import { square } from "@/testing/fixtures";
 import { startEditorWith, WEIGHT } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import {
+  addWorkspaceGlyph,
+  drawPoints,
+  startWorkspaceGlyph,
+  type WorkspaceStack,
+} from "@/testing/workspaceStack";
 
 /** The base glyph's outline: a 100-unit square at the origin, so a component covers it at its offset. */
 const BASE_SIZE = 100;
@@ -24,31 +28,25 @@ describe("multi-source component transform edits", () => {
   let targetComponentId: ComponentId;
 
   beforeEach(async () => {
-    stack = createWorkspaceStack();
-    await stack.createWorkspace();
-    const glyphRecord = stack.font.createGlyphForUnicode(65 as Unicode);
-    const baseRecord = stack.font.createGlyph("component-transform-base" as GlyphName);
-    await stack.editCoordinator.settled();
+    const started = await startWorkspaceGlyph();
+    ({ stack, layer: referenceLayer } = started);
+    const glyphRecord = started.record;
+    const glyph = started.glyph;
+    const { record: baseRecord, layer: baseLayer } = await addWorkspaceGlyph(
+      stack,
+      "component-transform-base",
+    );
+    drawPoints(
+      baseLayer,
+      [
+        { x: 0, y: 0 },
+        { x: BASE_SIZE, y: 0 },
+        { x: BASE_SIZE, y: BASE_SIZE },
+        { x: 0, y: BASE_SIZE },
+      ],
+      { closed: true },
+    );
 
-    const base = await stack.font.loadGlyph(baseRecord.id);
-    const baseLayer = base.layerForSource(stack.font.defaultSource.id);
-    if (!baseLayer) throw new Error("Expected component base layer");
-
-    const contourId = baseLayer.addContour();
-    for (const position of [
-      { x: 0, y: 0 },
-      { x: BASE_SIZE, y: 0 },
-      { x: BASE_SIZE, y: BASE_SIZE },
-      { x: 0, y: BASE_SIZE },
-    ]) {
-      baseLayer.addPoint(contourId, Point.onCurve(position));
-    }
-    baseLayer.closeContour(contourId);
-
-    const glyph = await stack.font.loadGlyph(glyphRecord.id);
-    const reference = glyph.layerForSource(stack.font.defaultSource.id);
-    if (!reference) throw new Error("Expected reference layer");
-    referenceLayer = reference;
     referenceComponentId = referenceLayer.addComponent(baseRecord.id);
     await stack.editCoordinator.settled();
 

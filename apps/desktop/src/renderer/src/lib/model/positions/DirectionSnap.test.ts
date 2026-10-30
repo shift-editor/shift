@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
-import type { ContourId, GlyphName, PointId } from "@shift/types";
-import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+import type { ContourId, PointId } from "@shift/types";
+import {
+  addWorkspaceGlyph,
+  drawPoints,
+  startWorkspaceGlyph,
+  type WorkspaceStack,
+} from "@/testing/workspaceStack";
 import {
   DirectionSnap,
   PositionReference,
@@ -16,29 +21,16 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   let pointId: PointId;
 
   beforeEach(async () => {
-    stack = createWorkspaceStack();
-    await stack.createWorkspace();
-    layer = await addGlyph("A");
-    const edit = layer.beginEdit();
-    contourId = edit.addContour(false);
-    const [added] = edit.addPoints(contourId, [Point.onCurve({ x: 100, y: 100 })]);
+    ({ stack, layer } = await startWorkspaceGlyph());
+    const drawn = drawPoints(layer, [{ x: 100, y: 100 }]);
+    contourId = drawn.contourId;
+    const [added] = drawn.pointIds;
     if (!added) throw new Error("Expected a drawn point");
-    edit.finish("Add point");
     await stack.editCoordinator.settled();
     pointId = added;
   });
 
   afterEach(() => stack.dispose());
-
-  /** Creates the glyph `name` and returns its default source layer, loaded. */
-  async function addGlyph(name: string): Promise<GlyphLayer> {
-    const record = stack.font.createGlyph(name as GlyphName);
-    await stack.editCoordinator.settled();
-    const glyph = await stack.font.loadGlyph(record.id);
-    const defaultLayer = glyph.layerForSource(stack.font.defaultSource.id);
-    if (!defaultLayer) throw new Error(`Expected ${name}'s default source layer`);
-    return defaultLayer;
-  }
 
   it("preserves candidate distance from an explicit pivot and emits a pivot-based guide", () => {
     const edit = layer.positions
@@ -191,7 +183,7 @@ describe("direction snapping distinguishes the moving reference from its fixed p
   });
 
   it("rejects a pivot belonging to a different authored layer", async () => {
-    const other = await addGlyph("B");
+    const { layer: other } = await addWorkspaceGlyph(stack, "B");
     const edit = other.positions.move(PositionTargets.points([]));
 
     expect(() =>
