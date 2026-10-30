@@ -20,9 +20,8 @@ packages/types/src/
   index.ts               -- root barrel: IDs, bridge DTOs, and generated layouts
   ids.ts                 -- branded IDs + cast helpers
   domain.ts              -- derived domain shapes built from bridge DTOs
-  bridge/
+  bridge/                -- also generated.ts, written from shift-bridge/index.d.ts by generate:bridge-types (not committed)
     index.ts             -- stable bridge DTO barrel
-    generated.ts         -- generated from shift-bridge/index.d.ts
   layout/                -- generated from Rust layout constants (pnpm generate:from-rust)
     glyphValues.ts       -- glyph value buffer offsets and strides (shift-font interpolation/values.rs)
     sourceMetrics.ts     -- source metric vector layout (shift-font interpolation/metrics.rs)
