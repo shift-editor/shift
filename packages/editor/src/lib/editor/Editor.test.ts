@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asGlyphId, asPointId, mintNodeId } from "@shift/types";
+import { asGlyphId, asPointId, mintContourId, mintNodeId, mintPointId } from "@shift/types";
 import { startEmptyMemorySession } from "../../testing/emptyMemorySession";
 import type { MemoryFontSession } from "../../types/fontSession";
 import type { GlyphNode, TextRunNode } from "../../types/node";
@@ -149,5 +149,65 @@ describe("Editor scene", () => {
     });
 
     expect(editor.scene.node(right)?.position).toEqual({ x: 730, y: 5 });
+  });
+});
+
+/**
+ * `hideHandles` requests: the Shape tool makes one for the contour it drags
+ * out, and every request is released on its own, however requests overlap.
+ * Visibility is asked with the owning contour, so no geometry is needed.
+ */
+describe("Editor handle visibility requests", () => {
+  let session: MemoryFontSession;
+  let editor: Editor;
+  const contourId = mintContourId();
+  const [first, second, third] = [mintPointId(), mintPointId(), mintPointId()];
+  const visible = (id: typeof first) => editor.handlesVisible(id, contourId);
+
+  beforeEach(() => {
+    session = startEmptyMemorySession();
+    editor = session.editor;
+  });
+  afterEach(() => session.dispose());
+
+  it("hides one Bézier handle without hiding its siblings", () => {
+    const showHandles = editor.hideHandles(second);
+    expect(visible(second)).toBe(false);
+    expect(visible(first)).toBe(true);
+    expect(editor.handlesVisible(contourId)).toBe(true);
+    showHandles();
+    expect(visible(second)).toBe(true);
+  });
+
+  it("keeps overlapping point and contour requests independent and idempotent", () => {
+    const showPoint = editor.hideHandles(second);
+    const showContour = editor.hideHandles(contourId);
+    showPoint();
+    showPoint();
+    expect(visible(second)).toBe(false);
+    expect(visible(third)).toBe(false);
+    showContour();
+    expect(visible(second)).toBe(true);
+    expect(visible(third)).toBe(true);
+  });
+
+  it("retains a point request when a contour request is released first", () => {
+    const showPoint = editor.hideHandles(second);
+    const showContour = editor.hideHandles(contourId);
+    showContour();
+    expect(visible(second)).toBe(false);
+    expect(visible(third)).toBe(true);
+    showPoint();
+    expect(visible(second)).toBe(true);
+  });
+
+  it("does not release another request for the same point", () => {
+    const showFirst = editor.hideHandles(second);
+    const showSecond = editor.hideHandles(second);
+    showFirst();
+    showFirst();
+    expect(visible(second)).toBe(false);
+    showSecond();
+    expect(visible(second)).toBe(true);
   });
 });

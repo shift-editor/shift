@@ -37,41 +37,4 @@ describe("handle visibility is independent of geometry and selection", () => {
     editor.releaseHiddenHandles(hidden);
     expect(drawnHandleIds()).toContain(contour.points[1]!.id);
   });
-
-  it("keeps overlapping point and contour requests independent and idempotent", async () => {
-    const contour = await ellipse();
-    const pointId = contour.points[1]!.id;
-    const pointRequest = editor.requestHiddenHandles(pointId);
-    const contourRequest = editor.requestHiddenHandles(contour.id);
-    editor.releaseHiddenHandles(pointRequest);
-    editor.releaseHiddenHandles(pointRequest);
-    expect(drawnHandleIds()).not.toContain(pointId);
-    expect(drawnHandleIds()).not.toContain(contour.points[2]!.id);
-    editor.releaseHiddenHandles(contourRequest);
-    expect(drawnHandleIds()).toContain(pointId);
-    expect(drawnHandleIds()).toContain(contour.points[2]!.id);
-  });
-
-  it("retains a point request when a contour request is released first", async () => {
-    const contour = await ellipse();
-    const pointId = contour.points[1]!.id;
-    const pointRequest = editor.requestHiddenHandles(pointId);
-    const contourRequest = editor.requestHiddenHandles(contour.id);
-    editor.releaseHiddenHandles(contourRequest);
-    expect(drawnHandleIds()).not.toContain(pointId);
-    expect(drawnHandleIds()).toContain(contour.points[2]!.id);
-    editor.releaseHiddenHandles(pointRequest);
-    expect(drawnHandleIds()).toContain(pointId);
-  });
-
-  it("does not release another request for the same point", async () => {
-    const pointId = (await ellipse()).points[1]!.id;
-    const first = editor.requestHiddenHandles(pointId);
-    const second = editor.requestHiddenHandles(pointId);
-    editor.releaseHiddenHandles(first);
-    editor.releaseHiddenHandles(first);
-    expect(drawnHandleIds()).not.toContain(pointId);
-    editor.releaseHiddenHandles(second);
-    expect(drawnHandleIds()).toContain(pointId);
-  });
 });
