@@ -135,6 +135,7 @@ macro_rules! id_impls {
 macro_rules! typed_id {
     ($name:ident, $prefix:literal) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+        #[cfg_attr(feature = "pack", derive(pack::PackId), pack(brand = "@shift/types"))]
         pub struct $name(std::sync::Arc<str>);
 
         impl $name {
@@ -159,7 +160,10 @@ macro_rules! typed_id {
 /// freed, so ids minted per point or contour stay [`typed_id!`] ids.
 macro_rules! interned_id {
     ($name:ident, $prefix:literal) => {
+        // Crosses into the editor as its text, typed by the brand of the same
+        // name in @shift/types.
         #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[cfg_attr(feature = "pack", derive(pack::PackId), pack(brand = "@shift/types"))]
         pub struct $name(IdText);
 
         impl std::fmt::Debug for $name {

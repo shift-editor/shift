@@ -7,92 +7,132 @@
 //! declared either way, so the editor's side generates without the feature.
 //!
 //! This module is a separate instance from `@shift/wasm`, with its own name
-//! table, so nothing here crosses as an interned name: units, locations, and
-//! tags are numbers.
+//! table: glyph and axis ids, tags and language tags cross as names in it.
 
 use pack::Pack;
+use shift_font::{AxisId, GlyphId};
 
 /// Text shaping with shapers registered with `registerShaper`.
 #[pack::interface]
 pub trait Shaping {
-    /// Sets how a registered shaper's axes normalize and which glyph each
-    /// character maps to; false for an unregistered shaper.
+    /// Sets a registered shaper's glyphs, axes and character mapping; false
+    /// for an unregistered shaper.
     fn set_shaper_glyphs(&self, glyphs: ShaperGlyphs) -> bool;
-    /// Shapes paragraphs with a registered shaper: each paragraph's runs, or
-    /// null for a paragraph that cannot be shaped or an unregistered shaper.
-    fn shape_paragraphs(&self, request: ShapeParagraphs) -> Vec<Option<Vec<ShapedRunOutput>>>;
+    /// Shapes paragraphs with a registered shaper: each paragraph's runs in
+    /// logical order, or null for a paragraph that cannot be shaped; every
+    /// paragraph is null for an unregistered shaper.
+    fn shape_paragraphs(
+        &self,
+        shaper: usize,
+        paragraphs: Vec<ParagraphRequest>,
+    ) -> Vec<Option<Vec<ShapedRun>>>;
 }
 
-/// How one shaper axis's user coordinates normalize, at each mapping point.
+/// One `fvar` axis of a shaper font, and how its user coordinates normalize
+/// at each mapping point, clamped outside them.
 #[derive(Clone, Debug, PartialEq, Pack)]
 pub struct ShaperAxis {
+    pub axis_id: AxisId,
+    /// User coordinate at each mapping point, increasing.
     pub user: Vec<f64>,
+    /// Normalized coordinate at each mapping point.
     pub normalized: Vec<f64>,
 }
 
-/// A registered shaper's axes, in `fvar` order, and character mapping.
+/// A character and the glyph that claims it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct CharacterGlyph {
+    pub codepoint: u32,
+    pub glyph_id: GlyphId,
+}
+
+/// What a registered shaper shapes with: the glyph at each shaper glyph id,
+/// the font's axes in `fvar` order, and which glyph each character maps to.
 #[derive(Clone, Debug, PartialEq, Pack)]
 pub struct ShaperGlyphs {
     pub shaper: usize,
+    /// The Shift glyph at each shaper glyph id; null for a `.notdef` the font
+    /// does not have.
+    pub glyph_ids: Vec<Option<GlyphId>>,
     pub axes: Vec<ShaperAxis>,
-    /// Characters as code points, each mapping to the shaper glyph at the same index of `glyphs`.
-    pub codepoints: Vec<f64>,
-    pub glyphs: Vec<f64>,
+    /// Characters the font's glyphs claim; a character two glyphs claim maps
+    /// to the first in shaper glyph order.
+    pub characters: Vec<CharacterGlyph>,
+}
+
+/// One unit of text to shape.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub enum ShapeUnit {
+    /// A Unicode scalar value.
+    Character { codepoint: u32 },
+    /// A glyph with no character to type, shaped as itself.
+    Glyph { glyph_id: GlyphId },
+}
+
+/// A user-space coordinate on one axis.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct AxisCoordinate {
+    pub axis_id: AxisId,
+    pub value: f64,
 }
 
 /// A feature setting for every run of a paragraph.
 #[derive(Clone, Debug, PartialEq, Pack)]
-pub struct FeatureInput {
-    /// The feature tag's four bytes, big-endian.
-    pub tag: f64,
+pub struct FeatureSetting {
+    /// A feature tag such as `liga`.
+    pub tag: String,
     /// `0` turns the feature off, `1` on; larger values pick an alternate.
-    #[pack(rename = "setting")]
-    pub value: f64,
+    pub value: u32,
 }
 
-/// One paragraph to shape.
+/// A paragraph to shape, split into runs of one script.
 #[derive(Clone, Debug, PartialEq, Pack)]
-pub struct ParagraphInput {
-    /// Each unit: a code point, or `-(glyph + 1)` for a glyph inserted by name as its shaper glyph id.
-    pub units: Vec<f64>,
-    /// The user coordinate on each shaper axis, in order; NaN for the axis default.
-    pub location: Vec<f64>,
-    /// A BCP 47 language tag as UTF-16 code units; empty for the default language system.
-    pub language: Vec<f64>,
-    pub features: Vec<FeatureInput>,
+pub struct ParagraphRequest {
+    pub units: Vec<ShapeUnit>,
+    /// User-space location to shape at; axes left out are at their default.
+    pub location: Vec<AxisCoordinate>,
+    /// BCP 47 language tag; the default language system when null.
+    pub language: Option<String>,
+    /// Settings over the features applied by default.
+    pub features: Vec<FeatureSetting>,
 }
 
-/// Paragraphs to shape with one registered shaper.
-#[derive(Clone, Debug, PartialEq, Pack)]
-pub struct ShapeParagraphs {
-    pub shaper: usize,
-    pub paragraphs: Vec<ParagraphInput>,
+/// The direction a run's glyphs read in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
+pub enum TextDirection {
+    #[default]
+    Ltr,
+    Rtl,
 }
 
-/// One shaped glyph, in font units.
+/// One shaped glyph. Advances and offsets hold only what the font's feature
+/// code positions; glyph advances, kerning, and mark attachment are the
+/// caller's to add.
 #[derive(Clone, Debug, PartialEq, Pack)]
-pub struct ShapedGlyphOutput {
-    /// The shaper glyph; null for `.notdef`.
-    pub glyph: Option<usize>,
-    /// The paragraph unit the glyph's cluster starts at.
-    pub cluster: usize,
-    pub x_advance: f64,
-    pub y_advance: f64,
-    pub x_offset: f64,
-    pub y_offset: f64,
+pub struct ShapedGlyph {
+    /// Null when a character has no glyph.
+    pub glyph_id: Option<GlyphId>,
+    /// Index of the first unit the glyph came from.
+    pub cluster: u32,
+    pub x_advance: i32,
+    pub y_advance: i32,
+    pub x_offset: i32,
+    pub y_offset: i32,
 }
 
-/// One run of a shaped paragraph, in logical order.
+/// One run of a shaped paragraph, in one script and direction.
 #[derive(Clone, Debug, PartialEq, Pack)]
-pub struct ShapedRunOutput {
-    /// The paragraph units the run covers, from `start` up to `end`.
-    pub start: usize,
-    pub end: usize,
-    /// The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script.
-    pub script: f64,
-    pub right_to_left: bool,
-    /// The run's glyphs in visual order.
-    pub glyphs: Vec<ShapedGlyphOutput>,
+pub struct ShapedRun {
+    /// First paragraph unit in the run.
+    pub start: u32,
+    /// One past the last paragraph unit in the run.
+    pub end: u32,
+    /// ISO 15924 script tag such as `Arab`; null when the run holds only
+    /// characters common to all scripts.
+    pub script: Option<String>,
+    pub direction: TextDirection,
+    /// Glyphs in visual order; clusters index the paragraph's units.
+    pub glyphs: Vec<ShapedGlyph>,
 }
 
 #[cfg(feature = "shaping")]
@@ -100,18 +140,17 @@ mod exports {
     use std::cell::RefCell;
     use std::collections::HashMap;
 
+    use shift_font::{AxisId, GlyphId};
     use shift_shape::{
-        AxisNormalization, FeatureSetting, GlyphSource, NOTDEF, ParagraphRequest, ShapeError,
-        Shaper, Tag, TextDirection, Unit, character_glyphs,
+        AxisNormalization, GlyphSource, NOTDEF, ShapeError, Shaper, Tag, Unit, character_glyphs,
     };
     use wasm_bindgen::prelude::*;
 
     use super::{
-        ParagraphInput, ShapeParagraphs, ShapedGlyphOutput, ShapedRunOutput, ShaperGlyphs, Shaping,
+        ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, ShaperGlyphs, Shaping, TextDirection,
         shaping_request,
     };
     use crate::names::with_names;
-    use crate::numbers::whole;
 
     thread_local! {
         static SHAPERS: RefCell<Vec<Option<Registered>>> = const { RefCell::new(Vec::new()) };
@@ -123,24 +162,65 @@ mod exports {
         glyphs: EditorGlyphs,
     }
 
-    /// Glyphs as the editor names them, shaper glyph ids, with characters
-    /// mapped from the live font and zero advances, which the editor
-    /// replaces with live ones.
+    /// Glyphs as the editor names them, by id, with characters mapped from
+    /// the live font and zero advances, which the editor replaces with live
+    /// ones.
     #[derive(Default)]
     struct EditorGlyphs {
+        /// The glyph at each shaper glyph id.
+        glyph_ids: Vec<Option<GlyphId>>,
+        shaper_glyphs: HashMap<GlyphId, u32>,
         characters: HashMap<u32, u32>,
-        axes: Vec<AxisNormalization>,
+        axes: Vec<(AxisId, AxisNormalization)>,
+    }
+
+    impl EditorGlyphs {
+        fn new(glyphs: ShaperGlyphs) -> Self {
+            let shaper_glyphs: HashMap<GlyphId, u32> = glyphs
+                .glyph_ids
+                .iter()
+                .enumerate()
+                .filter_map(|(index, glyph_id)| {
+                    Some((glyph_id.as_ref().copied()?, u32::try_from(index).ok()?))
+                })
+                .collect();
+            let characters = character_glyphs(glyphs.characters.iter().filter_map(|character| {
+                Some((
+                    character.codepoint,
+                    *shaper_glyphs.get(&character.glyph_id)?,
+                ))
+            }));
+            let axes = glyphs
+                .axes
+                .into_iter()
+                .map(|axis| {
+                    let normalization = AxisNormalization::new(
+                        axis.user.into_iter().zip(axis.normalized).collect(),
+                    );
+                    (axis.axis_id, normalization)
+                })
+                .collect();
+            Self {
+                glyph_ids: glyphs.glyph_ids,
+                shaper_glyphs,
+                characters,
+                axes,
+            }
+        }
     }
 
     impl GlyphSource for EditorGlyphs {
-        type Glyph = u32;
+        type Glyph = GlyphId;
 
-        fn shaper_glyph(&self, glyph: &u32) -> Option<u32> {
-            Some(*glyph)
+        fn shaper_glyph(&self, glyph: &GlyphId) -> Option<u32> {
+            self.shaper_glyphs.get(glyph).copied()
         }
 
-        fn host_glyph(&self, shaper_glyph: u32) -> Option<u32> {
-            (shaper_glyph != NOTDEF).then_some(shaper_glyph)
+        fn host_glyph(&self, shaper_glyph: u32) -> Option<GlyphId> {
+            if shaper_glyph == NOTDEF {
+                return None;
+            }
+            *self.glyph_ids.get(usize::try_from(shaper_glyph).ok()?)?
         }
 
         fn character_glyph(&self, codepoint: u32) -> Option<u32> {
@@ -189,36 +269,24 @@ mod exports {
                 let Some(Some(registered)) = shapers.get_mut(glyphs.shaper) else {
                     return false;
                 };
-                registered.glyphs = EditorGlyphs {
-                    characters: character_glyphs(
-                        glyphs.codepoints.iter().zip(&glyphs.glyphs).filter_map(
-                            |(&codepoint, &glyph)| Some((whole(codepoint)?, whole(glyph)?)),
-                        ),
-                    ),
-                    axes: glyphs
-                        .axes
-                        .into_iter()
-                        .map(|axis| {
-                            AxisNormalization::new(
-                                axis.user.into_iter().zip(axis.normalized).collect(),
-                            )
-                        })
-                        .collect(),
-                };
+                registered.glyphs = EditorGlyphs::new(glyphs);
                 true
             })
         }
 
-        fn shape_paragraphs(&self, request: ShapeParagraphs) -> Vec<Option<Vec<ShapedRunOutput>>> {
+        fn shape_paragraphs(
+            &self,
+            shaper: usize,
+            paragraphs: Vec<ParagraphRequest>,
+        ) -> Vec<Option<Vec<ShapedRun>>> {
             SHAPERS.with_borrow(|shapers| {
-                let registered = shapers.get(request.shaper).and_then(Option::as_ref);
-                request
-                    .paragraphs
+                let registered = shapers.get(shaper).and_then(Option::as_ref);
+                paragraphs
                     .iter()
                     .map(|paragraph| {
                         registered.and_then(|registered| shape(registered, paragraph).ok())
                     })
-                    .collect::<Vec<_>>()
+                    .collect()
             })
         }
     }
@@ -232,89 +300,73 @@ mod exports {
 
     fn shape(
         registered: &Registered,
-        paragraph: &ParagraphInput,
-    ) -> Result<Vec<ShapedRunOutput>, ShapeError> {
-        let units: Vec<Unit<u32>> = paragraph
+        paragraph: &ParagraphRequest,
+    ) -> Result<Vec<ShapedRun>, ShapeError> {
+        let units: Vec<Unit<GlyphId>> = paragraph
             .units
             .iter()
-            .filter_map(|&unit| unit_of(unit))
+            .filter_map(|unit| match unit {
+                ShapeUnit::Character { codepoint } => {
+                    char::from_u32(*codepoint).map(Unit::Character)
+                }
+                ShapeUnit::Glyph { glyph_id } => Some(Unit::Glyph(*glyph_id)),
+            })
             .collect();
         let coords: Vec<_> = registered
             .glyphs
             .axes
             .iter()
-            .enumerate()
-            .map(|(index, axis)| axis.normalize(paragraph.location.get(index).copied()))
+            .map(|(axis_id, normalization)| {
+                let user = paragraph
+                    .location
+                    .iter()
+                    .find(|coordinate| coordinate.axis_id == *axis_id)
+                    .map(|coordinate| coordinate.value);
+                normalization.normalize(user)
+            })
             .collect();
-        let language = (!paragraph.language.is_empty()).then(|| {
-            let code_units: Vec<u16> = paragraph
-                .language
-                .iter()
-                .filter_map(|&unit| u16::try_from(whole(unit)?).ok())
-                .collect();
-            String::from_utf16_lossy(&code_units)
-        });
-        let features = paragraph
+        let features: Vec<_> = paragraph
             .features
             .iter()
             .filter_map(|feature| {
-                Some(FeatureSetting {
-                    tag: Tag::new(&whole(feature.tag)?.to_be_bytes()),
-                    value: whole(feature.value)?,
+                Some(shift_shape::FeatureSetting {
+                    tag: Tag::new_checked(feature.tag.as_bytes()).ok()?,
+                    value: feature.value,
                 })
             })
-            .collect::<Vec<_>>();
-
+            .collect();
         let runs = registered.shaper.shape_paragraph(
             &registered.glyphs,
-            &ParagraphRequest {
+            &shift_shape::ParagraphRequest {
                 units: &units,
                 location: coords.as_slice(),
-                language: language.as_deref(),
+                language: paragraph.language.as_deref(),
                 features: &features,
             },
         )?;
         Ok(runs
             .into_iter()
-            .map(|run| ShapedRunOutput {
-                start: index_of(run.units.start),
-                end: index_of(run.units.end),
-                script: run.script.as_deref().map_or(0.0, script_tag),
-                right_to_left: run.direction == TextDirection::RightToLeft,
+            .map(|run| ShapedRun {
+                start: run.units.start,
+                end: run.units.end,
+                script: run.script,
+                direction: match run.direction {
+                    shift_shape::TextDirection::LeftToRight => TextDirection::Ltr,
+                    shift_shape::TextDirection::RightToLeft => TextDirection::Rtl,
+                },
                 glyphs: run
                     .glyphs
                     .into_iter()
-                    .map(|glyph| ShapedGlyphOutput {
-                        glyph: glyph.glyph_id.map(index_of),
-                        cluster: index_of(glyph.cluster),
-                        x_advance: f64::from(glyph.x_advance),
-                        y_advance: f64::from(glyph.y_advance),
-                        x_offset: f64::from(glyph.x_offset),
-                        y_offset: f64::from(glyph.y_offset),
+                    .map(|glyph| ShapedGlyph {
+                        glyph_id: glyph.glyph_id,
+                        cluster: glyph.cluster,
+                        x_advance: glyph.x_advance,
+                        y_advance: glyph.y_advance,
+                        x_offset: glyph.x_offset,
+                        y_offset: glyph.y_offset,
                     })
                     .collect(),
             })
             .collect())
-    }
-
-    /// Reads a unit: a code point, or `-(glyph + 1)` for an inserted glyph.
-    fn unit_of(unit: f64) -> Option<Unit<u32>> {
-        if unit < 0.0 {
-            return whole(-unit - 1.0).map(Unit::Glyph);
-        }
-        char::from_u32(whole(unit)?).map(Unit::Character)
-    }
-
-    fn index_of(value: u32) -> usize {
-        usize::try_from(value).unwrap_or(usize::MAX)
-    }
-
-    /// Returns a script tag such as `Arab` as its four bytes, big-endian.
-    fn script_tag(script: &str) -> f64 {
-        let mut bytes = [b' '; 4];
-        for (byte, source) in bytes.iter_mut().zip(script.bytes()) {
-            *byte = source;
-        }
-        f64::from(u32::from_be_bytes(bytes))
     }
 }

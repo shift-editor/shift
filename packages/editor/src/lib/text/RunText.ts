@@ -1,4 +1,5 @@
-import type { ParagraphRequest, RunId, ShapedRun, ShapeUnit } from "@shift/types";
+import { asAxisId, type AxisId, type RunId } from "@shift/types";
+import type { AxisCoordinate, ParagraphRequest, ShapedRun, ShapeUnit } from "@shift/wasm/protocol";
 import { computed, effect, track } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -68,10 +69,13 @@ export class RunText {
         if (!record || key === null || editor.sessionMode === "preview") return null;
         // A glyph's new Unicode value can change what the text shapes to.
         track(editor.font.glyphEntriesCell);
-        const location = locationFromExternalAxisLocation(editor.externalLocationCell.value);
+        const location = coordinates(
+          locationFromExternalAxisLocation(editor.externalLocationCell.value).values,
+        );
         const paragraphs = splitParagraphs(record.items).map((paragraph) => ({
           units: paragraph.items.map(shapeUnit),
           location,
+          features: [],
         }));
         return paragraphs.length > 0 ? { key, paragraphs } : null;
       },
@@ -148,5 +152,11 @@ function shapingKey(items: readonly TextItem[]): string {
 }
 
 function shapeUnit(item: ParagraphItem): ShapeUnit {
-  return item.kind === "character" ? { codepoint: item.codepoint } : { glyphId: item.glyphId };
+  if (item.kind === "character") return { kind: "character", codepoint: item.codepoint };
+  return { kind: "glyph", glyphId: item.glyphId };
+}
+
+/** A location's coordinates, one per axis it sets. */
+function coordinates(values: Readonly<Record<AxisId, number>>): AxisCoordinate[] {
+  return Object.entries(values).map(([axisId, value]) => ({ axisId: asAxisId(axisId), value }));
 }
