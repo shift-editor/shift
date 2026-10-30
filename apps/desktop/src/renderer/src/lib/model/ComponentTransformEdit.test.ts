@@ -1,70 +1,81 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { Mat, Vec2, type Rect2D } from "@shift/geo";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Mat, Rect, Vec2, type Rect2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
-import type { AxisId, ComponentId, GlyphName, SourceId } from "@shift/types";
+import type { ComponentId, GlyphName, Unicode } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
-import { TestEditor } from "@/testing/TestEditor";
-import type { ComponentTransformSelection } from "@shift/editor/types";
+import type {
+  ComponentTransformSelection,
+  ComponentTransformSelectionLayer,
+} from "@shift/editor/types";
 import type { GlyphLayer } from "@shift/editor/model";
+import { square } from "@/testing/fixtures";
+import { startEditorWith, WEIGHT } from "@/testing/fontFixture";
+import type { EditorTestSurface } from "@/testing/surface";
+import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
+
+/** The base glyph's outline: a 100-unit square at the origin, so a component covers it at its offset. */
+const BASE_SIZE = 100;
 
 describe("multi-source component transform edits", () => {
-  let editor: TestEditor;
-  let axisId: AxisId;
-  let referenceSourceId: SourceId;
-  let targetSourceId: SourceId;
+  let stack: WorkspaceStack;
   let referenceLayer: GlyphLayer;
   let targetLayer: GlyphLayer;
   let referenceComponentId: ComponentId;
   let targetComponentId: ComponentId;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    await editor.addGlyph("component-transform-base", null);
-    const record = editor.font.recordForName("component-transform-base" as GlyphName);
-    if (!record) throw new Error("Expected component base glyph");
+    stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const glyphRecord = stack.font.createGlyphForUnicode(65 as Unicode);
+    const baseRecord = stack.font.createGlyph("component-transform-base" as GlyphName);
+    await stack.editCoordinator.settled();
 
-    const base = await editor.font.loadGlyph(record.id);
-    const baseLayer = base.layerForSource(editor.font.defaultSource.id);
+    const base = await stack.font.loadGlyph(baseRecord.id);
+    const baseLayer = base.layerForSource(stack.font.defaultSource.id);
     if (!baseLayer) throw new Error("Expected component base layer");
 
     const contourId = baseLayer.addContour();
     for (const position of [
       { x: 0, y: 0 },
-      { x: 100, y: 0 },
-      { x: 100, y: 100 },
-      { x: 0, y: 100 },
+      { x: BASE_SIZE, y: 0 },
+      { x: BASE_SIZE, y: BASE_SIZE },
+      { x: 0, y: BASE_SIZE },
     ]) {
       baseLayer.addPoint(contourId, Point.onCurve(position));
     }
     baseLayer.closeContour(contourId);
 
-    referenceLayer = editor.requireGlyphLayer();
-    referenceComponentId = referenceLayer.addComponent(record.id);
-    await editor.settle();
+    const glyph = await stack.font.loadGlyph(glyphRecord.id);
+    const reference = glyph.layerForSource(stack.font.defaultSource.id);
+    if (!reference) throw new Error("Expected reference layer");
+    referenceLayer = reference;
+    referenceComponentId = referenceLayer.addComponent(baseRecord.id);
+    await stack.editCoordinator.settled();
 
-    referenceSourceId = editor.font.defaultSource.id;
-    axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    targetSourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-    await editor.settle();
+    const axisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const targetSourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 700 }),
+    );
+    await stack.editCoordinator.settled();
+    stack.font.createGlyphLayer(glyphRecord.id, targetSourceId);
+    await stack.editCoordinator.settled();
 
-    editor.selectSourceForEditing(referenceSourceId);
-    editor.selectSourceForEditing(targetSourceId, "toggle");
-    await expect.poll(() => editor.editingLayerMatchesCell.peek().size).toBe(1);
-
-    const selection = requireSelection(editor, referenceComponentId);
-    const target = selection.additionalLayers[0];
+    const target = glyph.layerForSource(targetSourceId);
     if (!target) throw new Error("Expected matched component layer");
+    targetLayer = target;
+    targetComponentId = targetLayer.addComponent(baseRecord.id);
+    await stack.editCoordinator.settled();
+  });
 
-    targetLayer = target.layer;
-    const targetId = target.componentIds[0];
-    if (!targetId) throw new Error("Expected matched component");
-    targetComponentId = targetId;
+  afterEach(async () => {
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("moves every matched component and discards every preview", () => {
-    const selection = requireSelection(editor, referenceComponentId);
+    const selection = matchedSelection();
     const edit = selection.layer.beginComponentTransformEdit(selection);
 
     edit.preview(() => Mat.Translate(20, -10));
@@ -90,13 +101,13 @@ describe("multi-source component transform edits", () => {
 
   it("scales around corresponding source pivots and undoes every source atomically", async () => {
     offsetTargetComponent();
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
-    const selection = requireSelection(editor, referenceComponentId);
+    const selection = matchedSelection();
     selection.layer.transformComponents(selection, "Scale components", (layer) =>
       scaleAroundCenter(layer.bounds, 2),
     );
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     const reference = componentTransform(referenceLayer, referenceComponentId);
     const target = componentTransform(targetLayer, targetComponentId);
@@ -107,7 +118,7 @@ describe("multi-source component transform edits", () => {
     expect(target.translateX - reference.translateX).toBeCloseTo(100);
     expect(target.translateY - reference.translateY).toBeCloseTo(50);
 
-    await editor.undo();
+    await stack.editCoordinator.undo();
     expect(componentTransform(referenceLayer, referenceComponentId)).toMatchObject({
       translateX: 0,
       translateY: 0,
@@ -121,16 +132,16 @@ describe("multi-source component transform edits", () => {
       scaleY: 1,
     });
 
-    await editor.redo();
+    await stack.editCoordinator.redo();
     expect(componentTransform(referenceLayer, referenceComponentId).scaleX).toBeCloseTo(2);
     expect(componentTransform(targetLayer, targetComponentId).scaleX).toBeCloseTo(2);
   });
 
   it("rotates every source around its corresponding component center", async () => {
     offsetTargetComponent();
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
-    const selection = requireSelection(editor, referenceComponentId);
+    const selection = matchedSelection();
     const edit = selection.layer.beginComponentTransformEdit(selection);
     edit.preview((layer) => rotateAroundCenter(layer.bounds, Math.PI / 2));
 
@@ -145,7 +156,7 @@ describe("multi-source component transform edits", () => {
   });
 
   it("releases every source edit when a one-shot transform fails", () => {
-    const selection = requireSelection(editor, referenceComponentId);
+    const selection = matchedSelection();
 
     expect(() =>
       selection.layer.transformComponents(selection, "Move components", () => {
@@ -157,22 +168,13 @@ describe("multi-source component transform edits", () => {
     nextEdit.discard();
   });
 
-  it("refuses a transform when any editing source lacks a complete component match", async () => {
-    const record = editor.font.recordForName("component-transform-base" as GlyphName);
-    if (!record) throw new Error("Expected component base glyph");
-
-    targetLayer.addComponent(record.id);
-    await editor.settle();
-    await expect
-      .poll(() => [...editor.editingLayerMatchesCell.peek().values()][0]?.complete)
-      .toBe(false);
-
-    expect(editor.componentTransformSelection([referenceComponentId])).toBeNull();
-    expect(componentTransform(referenceLayer, referenceComponentId)).toMatchObject({
-      translateX: 0,
-      translateY: 0,
-    });
-  });
+  /** The reference component and its counterpart in the Bold layer, as editing both sources selects them. */
+  function matchedSelection(): ComponentTransformSelection {
+    return {
+      ...placedComponent(referenceLayer, referenceComponentId),
+      additionalLayers: [placedComponent(targetLayer, targetComponentId)],
+    };
+  }
 
   function offsetTargetComponent(): void {
     const transform = componentTransform(targetLayer, targetComponentId);
@@ -185,14 +187,42 @@ describe("multi-source component transform edits", () => {
   }
 });
 
-function requireSelection(
-  editor: TestEditor,
-  componentId: ComponentId,
-): ComponentTransformSelection {
-  const selection = editor.componentTransformSelection([componentId]);
-  if (!selection) throw new Error("Expected matched component selection");
+/** One layer's component and the glyph-local bounds it covers: the base square at its offset. */
+describe("component transforms across editing sources", () => {
+  let editor: EditorTestSurface;
+  afterEach(() => editor.close());
 
-  return selection;
+  it("refuses a transform when any editing source lacks a complete component match", async () => {
+    editor = await startEditorWith({
+      glyphs: { base: { outline: { contours: [square(BASE_SIZE)] } }, root: {} },
+      open: "root",
+      axes: [WEIGHT],
+      sources: { Bold: { wght: 700 } },
+    });
+    await editor.editSources(["Regular", "Bold"]);
+    await editor.draw({ components: [{ glyph: "base" }] });
+    await editor.editSources(["Bold"]);
+    await editor.draw({ components: [{ glyph: "base" }] });
+    await editor.editSources(["Regular", "Bold"]);
+    expect((await editor.layerAt("Bold")).components).toHaveLength(2);
+
+    const components = await editor.components();
+    editor.selectObjects(components.map(({ id }) => id));
+    expect(editor.rotateSelection(90)).toBe(false);
+    expect((await editor.layerAt("Regular")).components).toEqual(components);
+  });
+});
+
+function placedComponent(
+  layer: GlyphLayer,
+  componentId: ComponentId,
+): ComponentTransformSelectionLayer {
+  const { translateX, translateY } = componentTransform(layer, componentId);
+  return {
+    layer,
+    componentIds: [componentId],
+    bounds: Rect.fromXYWH(translateX, translateY, BASE_SIZE, BASE_SIZE),
+  };
 }
 
 function componentTransform(layer: GlyphLayer, componentId: ComponentId) {
