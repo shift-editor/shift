@@ -514,6 +514,30 @@ describe("shift/no-editor-internals-in-tests", () => {
     );
   });
 
+  it("checks the Editor a helper takes from asEditor() like the TestEditor it came from", () => {
+    const helpers = [
+      'import type { Editor } from "@shift/editor";',
+      'import { startTestEditor } from "@/testing/TestEditor";',
+      'function captureOf(subject: Editor) { return subject.history.begin("Edit"); }',
+      "function outlineOf(subject: Editor) { return subject.outline(); }",
+      "const editor = await startTestEditor();",
+      "captureOf(editor.asEditor());",
+      "editor.asEditor().toolManager;",
+      'runRendererCommand(editor.asEditor(), "edit.selectAll");',
+      "declare const other: { history: unknown };",
+      "function historyOf(subject: typeof other) { return subject.history; }",
+    ].join("\n");
+
+    assert.deepEqual(
+      reportedLines(
+        "no-editor-internals-in-tests",
+        helpers,
+        "apps/desktop/src/renderer/src/lib/editor/EditorHistory.test.ts",
+      ),
+      [3, 7],
+    );
+  });
+
   it("allows them in the harness, outside the renderer and outside tests", () => {
     for (const fileName of [
       "apps/desktop/src/renderer/src/testing/TestEditor.test.ts",

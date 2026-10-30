@@ -211,8 +211,11 @@ const TEST_EDITOR_FACTORIES = new Set([
   "startEditorWith",
 ]);
 
-/** Type names a test annotates its editor with. */
-const TEST_EDITOR_TYPES = new Set(["TestEditor", "EditorTestSurface"]);
+/**
+ * Type names a test annotates its editor with. `Editor` counts too: a helper taking the
+ * `asEditor()` result reaches the same internals as the `TestEditor` it came from.
+ */
+const TEST_EDITOR_TYPES = new Set(["TestEditor", "EditorTestSurface", "Editor"]);
 
 /** `TestEditor` methods that return the editor itself, so a chain stays on it. */
 const TEST_EDITOR_CHAINS = new Set([
@@ -224,13 +227,14 @@ const TEST_EDITOR_CHAINS = new Set([
   "keyDown",
   "escape",
   "selectTool",
+  "asEditor",
 ]);
 
 /**
  * True when `expression` is provably the editor a test drives: `new TestEditor(…)`, a call to a
- * `TestEditor` factory, a chain of its self-returning methods, a binding annotated `TestEditor`
- * or `EditorTestSurface`, a `const` initialised from one of those, or a same-file function whose
- * return type is one.
+ * `TestEditor` factory, a chain of its self-returning methods or `asEditor()`, a binding
+ * annotated `TestEditor`, `EditorTestSurface` or `Editor`, a `const` initialised from one of
+ * those, or a same-file function whose return type is one.
  */
 function isTestEditor(context, expression, seen = new Set()) {
   let node = expression;
@@ -2103,9 +2107,9 @@ export default {
      *
      * `TestEditor` still extends `Editor`, so a test holding one can read the tool manager, the
      * scene, the edit coordinator, history, layer buffers and signal cells, and breaks when they
-     * move while the behaviour holds (#798). Flags a member read on a provable `TestEditor` (see
-     * `isTestEditor`) whose name `EditorTestSurface` does not declare, and the same names
-     * destructured from one. The allowed names are read from the surface's own declarations
+     * move while the behaviour holds (#798). Flags a member read on a provable `TestEditor`, or on
+     * the `Editor` a helper takes from its `asEditor()` (see `isTestEditor`), whose name
+     * `EditorTestSurface` does not declare, and the same names destructured from one. The allowed names are read from the surface's own declarations
      * (`testSurfaceMembers`), so there is no list of internals to keep in step: a read the
      * surface lacks is added there. `asEditor()` is on the surface; `no-escape-hatch-reads`
      * covers where it may go.

@@ -7,9 +7,13 @@ import { startTestEditor } from "@/testing/TestEditor";
 
 /** Selects `pointId` and creates two glyphs, all captured by one history action. */
 function createGlyphsInOneAction(editor: Editor, pointId: PointId): void {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- EditorHistory is the subject: one capture spanning several workspace edits, which only the desktop workspace replays
   const capture = editor.history.begin("Create glyphs");
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- selection inside the history capture under test
   editor.selection.select([pointId]);
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- a workspace edit inside the history capture under test
   editor.createGlyph("B" as GlyphName);
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- a workspace edit inside the history capture under test
   editor.createGlyph("C" as GlyphName);
   capture.finish();
 }
@@ -19,8 +23,11 @@ function createGlyphsInOneAction(editor: Editor, pointId: PointId): void {
  * action. Returns the edit's outcome.
  */
 function selectAndApplyInOneAction(editor: Editor, pointId: PointId): Promise<unknown> {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- EditorHistory is the subject: a capture whose workspace edit the desktop workspace refuses
   const capture = editor.history.begin("Rejected edit");
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- selection inside the history capture under test
   editor.selection.select([pointId]);
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- the workspace edit the capture under test sends, which failNextWorkspaceApply refuses
   const applying = editor.font.editCoordinator.apply([
     {
       kind: "createGlyph",

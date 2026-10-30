@@ -43,8 +43,10 @@ function createKeyboardEvent(options: KeyboardEventOptions = {}): KeyboardEvent 
 function canvasContext(editor: Editor, canvasActive: boolean): KeyContext {
   return {
     canvasActive,
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests -- KeyboardRouter is the subject; its canvas context takes the active tool, as views/Editor.tsx builds it
     activeTool: editor.tool?.id ?? null,
     editor,
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests -- KeyboardRouter is the subject; its canvas context takes the tool manager, as views/Editor.tsx builds it
     toolManager: editor.toolManager,
   };
 }

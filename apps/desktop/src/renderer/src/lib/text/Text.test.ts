@@ -36,6 +36,7 @@ function canvasText(editor: EditorTestSurface) {
 
 /** The canvas text run node, for the subject calls below. */
 function runNode(editor: Editor): TextRunNode {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- the text run node the TextRunNodeDefinition subject calls take
   const node = editor.scene.nodes().find((candidate) => candidate.kind === "textRun");
   if (!node) throw new Error("Expected a text run");
   return node as TextRunNode;
@@ -47,6 +48,7 @@ function runNode(editor: Editor): TextRunNode {
  * selected at the run level, so this drives the subject directly.
  */
 function scaleRunGlyphsTwice(editor: Editor): void {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- the run's transform target is the subject; no resize handle shows for several run glyphs
   const edit = editor.transformTarget()!.begin("scale");
   edit.preview(({ bounds }) =>
     Mat.Compose(
@@ -59,11 +61,13 @@ function scaleRunGlyphsTwice(editor: Editor): void {
 
 /** The caret the text run node definition maps `point`, in the run's units, to. */
 function caretAt(editor: Editor, point: LocalPoint): number | null {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- TextRunNodeDefinition.caretAt is the subject
   return editor.nodeDefinition("textRun").caretAt(runNode(editor), point);
 }
 
 /** The run-local point a scene point lands on. */
 function runLocal(editor: Editor, x: number): LocalPoint {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- maps a scene point into the run node for the caretAt subject call
   return editor.toLocal(runNode(editor), scenePoint(x, 0));
 }
 
