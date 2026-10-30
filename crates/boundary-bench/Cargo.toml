@@ -1,0 +1,16 @@
+[package]
+name = "boundary-bench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license.workspace = true
+
+# Throwaway benchmarks for the boundary-protocol plan, phase b. Not product code.
+
+[dependencies]
+shift-backends = { workspace = true }
+shift-engine = { workspace = true }
+shift-font = { workspace = true }
+shift-store = { workspace = true }
+shift-workspace = { workspace = true }
+rusqlite = "0.37.0"

@@ -271,6 +271,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "boundary-bench"
+version = "0.0.0"
+dependencies = [
+ "rusqlite",
+ "shift-backends",
+ "shift-engine",
+ "shift-font",
+ "shift-store",
+ "shift-workspace",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

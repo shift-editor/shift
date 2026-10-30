@@ -95,6 +95,12 @@ impl StoreReader {
         self.read(|conn| dependent_glyph_ids_for_layers_from_conn(conn, layer_ids))
     }
 
+    /// Bench-only (branch `bench/boundary-protocol`): the connection, with the merged views.
+    #[doc(hidden)]
+    pub fn connection(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Runs `read` in one read transaction, so every query in it sees the
     /// same committed state even while the writer commits in between.
     fn read<T>(

@@ -120,6 +120,17 @@ function printRendererMemory() {
   console.log(
     `\nRenderer RSS (MB): ${renderers.map((mb) => mb.toFixed(0)).join(", ") || "none found"}`,
   );
+  // bench/boundary-protocol: main and utility (workspace) process RSS too.
+  const rows = execFileSync("ps", ["-A", "-o", "pid=,ppid=,rss=,command="], { encoding: "utf8" })
+    .split("\n")
+    .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/))
+    .filter(Boolean);
+  const main = rows.find((m) => Number(m[1]) === app.pid);
+  const utility = rows
+    .filter((m) => Number(m[2]) === app.pid && m[4].includes("--type=utility"))
+    .map((m) => `${(Number(m[3]) / 1024).toFixed(0)} (${(m[4].match(/--utility-sub-type=(\S+)/) ?? [])[1] ?? "?"})`);
+  console.log(`Main RSS (MB): ${main ? (Number(main[3]) / 1024).toFixed(0) : "?"}`);
+  console.log(`Utility RSS (MB): ${utility.join(", ") || "none found"}`);
 }
 
 async function connect(port) {
