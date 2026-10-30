@@ -113,7 +113,7 @@ test.describe("Performance — 10K-character text run", () => {
     await page.keyboard.insertText(text);
     await expect
       .poll(() => editor.canvasText(), { timeout: 60_000 })
-      .toMatchObject({ glyphs: { length: 1 + [...text].length } });
+      .toMatchObject({ items: { length: 1 + [...text].length } });
 
     await editor.press("Escape");
     await expect.poll(async () => (await editor.editedNodeIds()).length).toBe(1);
