@@ -24,14 +24,7 @@ import { signal } from "@shift/editor/signals";
 import { emptyExternalAxisLocation } from "@shift/editor/variation";
 import type { Point2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
-import type {
-  ContourId,
-  GlyphName,
-  GlyphRecord,
-  PointId,
-  SourceId,
-  Unicode,
-} from "@shift/types";
+import type { ContourId, GlyphName, GlyphRecord, PointId, SourceId, Unicode } from "@shift/types";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
