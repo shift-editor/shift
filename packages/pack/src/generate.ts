@@ -7,7 +7,7 @@
 // them (the phase c bench in the boundary protocol plan). Each interface
 // becomes a class whose methods send their arguments by the method's index
 // through a `SyncTransport`.
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { code, imp, joinCode, literalOf, type Code } from "ts-poet";
 
@@ -72,16 +72,12 @@ const SCALARS = new Set(["number", "count", "flag", "name"]);
 
 /** Reads every crate's fragments under `folder` (`<folder>/<package>/*.json`). */
 export function readFragments(folder: string): Fragment[] {
-  const fragments: Fragment[] = [];
-  for (const crate of readdirSync(folder, { withFileTypes: true })) {
-    if (!crate.isDirectory()) continue;
-    for (const file of readdirSync(join(folder, crate.name)).sort()) {
-      if (!file.endsWith(".json")) continue;
-      const fragment = JSON.parse(readFileSync(join(folder, crate.name, file), "utf8"));
-      fragments.push({ ...fragment, crate: crate.name });
-    }
-  }
-  return fragments;
+  return globSync("*/*.json", { cwd: folder })
+    .sort()
+    .map((file) => ({
+      ...JSON.parse(readFileSync(join(folder, file), "utf8")),
+      crate: dirname(file),
+    }));
 }
 
 /** Writes the module `render` returns for the fragments under `folder` to `output`. */
@@ -239,21 +235,25 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     throw new Error(`unknown type ${type.kind}`);
   };
 
+  const enumSchema = (type: EnumFragment): Code => {
+    const names = type.variants.map((variant) => code`${literalOf(variant)}`);
+    return code`${pack("variants")}(${joinCode(names, { on: ", " })})`;
+  };
+
+  const structSchema = (type: StructFragment): Code => {
+    const fields = type.fields.map(
+      (field) => code`${doc(field.doc)}${field.name}: ${schema(field.type)},`,
+    );
+    return code`${pack("struct")}({ ${joinCode(fields, { on: "\n" })} })`;
+  };
+
+  const schemaOf = (type: Declared): Code => {
+    if (type.kind === "enum") return enumSchema(type);
+    return structSchema(type);
+  };
+
   const declaration = (type: Declared): Code => {
-    const value =
-      type.kind === "enum"
-        ? code`${pack("variants")}(${joinCode(
-            type.variants.map((v) => code`${literalOf(v)}`),
-            { on: ", " },
-          )})`
-        : code`${pack("struct")}({
-            ${joinCode(
-              type.fields.map(
-                (field) => code`${doc(field.doc)}${field.name}: ${schema(field.type)},`,
-              ),
-              { on: "\n" },
-            )}
-          })`;
+    const value = schemaOf(type);
     return code`
       ${doc(type.doc)}export const ${type.name} = ${value};
       export type ${type.name} = ${Infer}<typeof ${type.name}>;
@@ -263,12 +263,11 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   const method = (item: Method, index: number): Code => {
     const params = item.params.map((param) => `${param.name}: ${ts(param.type)}`).join(", ");
     const writes = item.params.map((param) => writeFrom(param.type, param.name));
-    const input = item.params.length > 0 ? "w" : "this.#transport.writer()";
     return code`
       ${doc(item.doc)}${item.name}(${params}): ${ts(item.output)} {
-        ${item.params.length > 0 ? code`const w = this.#transport.writer();` : ""}
+        const w = this.#transport.writer();
         ${joinCode(writes, { on: "\n" })}
-        const r = this.#transport.request(${index}, ${input});
+        const r = this.#transport.request(${index}, w);
         ${readInto(item.output, "result")}
         return result;
       }
@@ -287,53 +286,60 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     }
   `;
 
-  const reader = (type: Declared): Code =>
-    type.kind === "enum"
-      ? code`
-          function read${type.name}(r: ${Reader}): ${type.name} {
-            const value = ${type.name}.names[r.count()];
-            if (value === undefined) throw new Error(${literalOf(`unknown ${type.name}, from a module built with another ${type.name}`)});
-            return value;
-          }
-        `
-      : code`
-          function read${type.name}(r: ${Reader}): ${type.name} {
-            ${joinCode(
-              type.fields.map((field, index) => readInto(field.type, `field${index}`)),
-              { on: "\n" },
-            )}
-            return {
-              ${joinCode(
-                type.fields.map((field, index) => code`${field.name}: field${index},`),
-                { on: "\n" },
-              )}
-            };
-          }
-        `;
+  const readEnum = (type: EnumFragment): Code => {
+    const unknown = `unknown ${type.name}, from a module built with another ${type.name}`;
+    return code`
+      function read${type.name}(r: ${Reader}): ${type.name} {
+        const value = ${type.name}.names[r.count()];
+        if (value === undefined) throw new Error(${literalOf(unknown)});
+        return value;
+      }
+    `;
+  };
 
-  const writer = (type: Declared): Code =>
-    type.kind === "enum"
-      ? code`
-          function write${type.name}(w: ${Writer}, value: ${type.name}): void {
-            w.count(${type.name}.names.indexOf(value));
-          }
-        `
-      : code`
-          function write${type.name}(w: ${Writer}, value: ${type.name}): void {
-            ${joinCode(
-              type.fields.map((field) => writeFrom(field.type, `value.${field.name}`)),
-              { on: "\n" },
-            )}
-          }
-        `;
+  const readStruct = (type: StructFragment): Code => {
+    const reads = type.fields.map((field, index) => readInto(field.type, `field${index}`));
+    const fields = type.fields.map((field, index) => code`${field.name}: field${index},`);
+    return code`
+      function read${type.name}(r: ${Reader}): ${type.name} {
+        ${joinCode(reads, { on: "\n" })}
+        return { ${joinCode(fields, { on: "\n" })} };
+      }
+    `;
+  };
 
-  const codecs = ordered.flatMap((type) => [
-    ...(read.has(type.rust) ? [reader(type)] : []),
-    ...(written.has(type.rust) ? [writer(type)] : []),
-  ]);
-  return joinCode([...ordered.map(declaration), ...interfaces.map(klass), ...codecs], {
-    on: "\n\n",
-  }).toString({ prefix: header });
+  const writeEnum = (type: EnumFragment): Code => code`
+    function write${type.name}(w: ${Writer}, value: ${type.name}): void {
+      w.count(${type.name}.names.indexOf(value));
+    }
+  `;
+
+  const writeStruct = (type: StructFragment): Code => {
+    const writes = type.fields.map((field) => writeFrom(field.type, `value.${field.name}`));
+    return code`
+      function write${type.name}(w: ${Writer}, value: ${type.name}): void {
+        ${joinCode(writes, { on: "\n" })}
+      }
+    `;
+  };
+
+  const reader = (type: Declared): Code => {
+    if (type.kind === "enum") return readEnum(type);
+    return readStruct(type);
+  };
+
+  const writer = (type: Declared): Code => {
+    if (type.kind === "enum") return writeEnum(type);
+    return writeStruct(type);
+  };
+
+  const codecs: Code[] = [];
+  for (const type of ordered) {
+    if (read.has(type.rust)) codecs.push(reader(type));
+    if (written.has(type.rust)) codecs.push(writer(type));
+  }
+  const declarations = [...ordered.map(declaration), ...interfaces.map(klass)];
+  return joinCode([...declarations, ...codecs], { on: "\n\n" }).toString({ prefix: header });
 }
 
 /** Orders items by their TypeScript name. */
