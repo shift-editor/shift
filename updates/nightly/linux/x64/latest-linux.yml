@@ -1,9 +1,9 @@
-version: 0.159.1
+version: 0.160.1
 files:
-  - url: https://releases.shift.graphics/nightly/09656a2c9e2696c3855c50afe6c172d6e7bf77f6/Shift-Nightly-0.159.1-Linux-x64.AppImage
-    sha512: Pt7JlDefpEhdJIxKFeKxv6SFqzthNsBlpIUEy2hWYi7yhxROCGW+AMVeyByoWSH8nyRBT72BRdaf1OIFJ3SMNQ==
-    size: 154646833
-    blockMapSize: 162117
-path: https://releases.shift.graphics/nightly/09656a2c9e2696c3855c50afe6c172d6e7bf77f6/Shift-Nightly-0.159.1-Linux-x64.AppImage
-sha512: Pt7JlDefpEhdJIxKFeKxv6SFqzthNsBlpIUEy2hWYi7yhxROCGW+AMVeyByoWSH8nyRBT72BRdaf1OIFJ3SMNQ==
-releaseDate: '2026-10-29T11:42:05.291Z'
+  - url: https://releases.shift.graphics/nightly/2643f1f52e827b02577d3a24a87059c8e964b3b1/Shift-Nightly-0.160.1-Linux-x64.AppImage
+    sha512: HVxMC+EgvTYkvVXbACyzDff5haHRahW8znnZ4Qu8HFG8l5EWTR3AonxKGjy8T/nQZ/wH1glfoi3GMaLgkgfROw==
+    size: 154655357
+    blockMapSize: 162449
+path: https://releases.shift.graphics/nightly/2643f1f52e827b02577d3a24a87059c8e964b3b1/Shift-Nightly-0.160.1-Linux-x64.AppImage
+sha512: HVxMC+EgvTYkvVXbACyzDff5haHRahW8znnZ4Qu8HFG8l5EWTR3AonxKGjy8T/nQZ/wH1glfoi3GMaLgkgfROw==
+releaseDate: '2026-10-30T11:30:37.186Z'
