@@ -485,10 +485,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   drawnSnapGuides(): readonly PositionGuide[];
   /**
-   * Where the latest frame since {@link recordCanvas} draws a cross on the snap
-   * guides, in glyph units, sorted by x then y: guide ends, snapped positions,
-   * and the box corners a guide passes through. Empty before a frame draws a
-   * guide. Test-only: not agent data.
+   * Returns where the active tool's snap feedback draws a cross for the gesture in flight.
+   *
+   * @remarks
+   * In glyph units: guide ends, snapped positions, and the box corners a guide
+   * passes through, each once: each guide's ends, then the crossings on its line. Empty when
+   * nothing snaps. Test-only: not agent data.
    */
   drawnSnapCrossings(): readonly Point2D[];
   /**

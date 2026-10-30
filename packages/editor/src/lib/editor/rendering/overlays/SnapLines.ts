@@ -39,7 +39,11 @@ export class SnapLines {
 export interface SnapFeedback {
   /** Each distinct guide line once, from its start to its end. */
   readonly lines: readonly (readonly [Point2D, Point2D])[];
-  /** Each position that gets a cross once, in no particular order: guide ends, snapped positions and crossings. */
+  /**
+   * Each position that gets a cross once: guide ends, snapped positions and
+   * crossings, in the order the guides yield them (each guide's ends, then the
+   * crossings on its line), a repeat keeping its first place.
+   */
   readonly markers: readonly Point2D[];
 }
 

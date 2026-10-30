@@ -1,3 +1,4 @@
+import type { Point2D } from "@shift/geo";
 import type { Editor } from "../../editor/Editor";
 import type { ToolEvent } from "./GestureDetector";
 import type { ToolName, ToolState } from "./createContext";
@@ -15,6 +16,7 @@ import type { CursorType } from "../../../types/editor";
 import type { PositionGuide } from "../../../types/positionEdit";
 
 const NO_GUIDES: readonly PositionGuide[] = [];
+const NO_CROSSINGS: readonly Point2D[] = [];
 
 export type { ToolName, ToolState };
 
@@ -95,6 +97,16 @@ export abstract class BaseTool<S extends ToolState, TTool = unknown, Settings = 
    */
   get snapGuides(): readonly PositionGuide[] {
     return NO_GUIDES;
+  }
+
+  /**
+   * The positions, in glyph units, the tool crosses wherever a drawn snap guide
+   * passes through them, such as bounding-box corners; empty when it draws no
+   * guide. With {@link snapGuides} they are the inputs to `snapFeedback`, which
+   * the overlay draws.
+   */
+  get snapCrossings(): readonly Point2D[] {
+    return NO_CROSSINGS;
   }
 
   /** Return a state to short-circuit the behavior loop, or null to continue. */
