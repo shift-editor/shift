@@ -64,6 +64,21 @@ export class Writer {
     this.number(this.#names.id(value));
   }
 
+  /** Writes a count, then the numbers, in one copy. */
+  numbers(values: ArrayLike<number>): void {
+    const end = this.#length + 1 + values.length;
+    if (end > this.#values.length) {
+      let size = this.#values.length * 2;
+      while (size < end) size *= 2;
+      const grown = new Float64Array(size);
+      grown.set(this.#values.subarray(0, this.#length));
+      this.#values = grown;
+    }
+    this.#values[this.#length++] = values.length;
+    this.#values.set(values, this.#length);
+    this.#length = end;
+  }
+
   /** The numbers written, as a view valid until the next request. */
   finish(): Float64Array {
     return this.#values.subarray(0, this.#length);
@@ -103,6 +118,17 @@ export class Reader {
   name(): string {
     return this.#names.name(this.count());
   }
+
+  /**
+   * Reads a count, then that many numbers as a view of the reply, which is
+   * the transport's own copy of the module's output.
+   */
+  numbers(): Float64Array {
+    const count = this.count();
+    const start = this.#at;
+    this.#at = Math.min(start + count, this.#values.length);
+    return this.#values.subarray(start, this.#at);
+  }
 }
 
 /**
@@ -141,6 +167,13 @@ export const count = { kind: "count" } as const;
 export const flag = { kind: "flag" } as const;
 /** A string, crossing as the module's interned id. */
 export const name = { kind: "name" } as const;
+/** A run of numbers, read as one `Float64Array` view. */
+export const numbers = { kind: "numbers" } as const;
+
+/** An id: a string crossing as the module's interned id, typed by its brand. */
+export function id<T extends string>(): { readonly kind: "id"; readonly brand?: T } {
+  return { kind: "id" };
+}
 
 /** A packed value's shape, as generated code declares it. */
 export type Schema =
@@ -148,10 +181,15 @@ export type Schema =
   | typeof count
   | typeof flag
   | typeof name
+  | typeof numbers
+  | { readonly kind: "id"; readonly brand?: string }
   | { readonly kind: "list"; readonly item: Schema }
   | { readonly kind: "option"; readonly inner: Schema }
   | { readonly kind: "variants"; readonly names: readonly string[] }
-  | { readonly kind: "struct"; readonly fields: Readonly<Record<string, Schema>> };
+  | { readonly kind: "struct"; readonly fields: Readonly<Record<string, Schema>> }
+  | { readonly kind: "union"; readonly cases: Readonly<Record<string, StructSchema>> };
+
+type StructSchema = { readonly kind: "struct"; readonly fields: Readonly<Record<string, Schema>> };
 
 /** A count, then that many items. */
 export function list<S extends Schema>(item: S): { readonly kind: "list"; readonly item: S } {
@@ -177,6 +215,16 @@ export function struct<F extends Readonly<Record<string, Schema>>>(
   return { kind: "struct", fields };
 }
 
+/**
+ * An enum whose variants carry fields: the variant's index, then its fields.
+ * Read as a union tagged by `kind`, the variant's name.
+ */
+export function union<C extends Readonly<Record<string, StructSchema>>>(
+  cases: C,
+): { readonly kind: "union"; readonly cases: C } {
+  return { kind: "union", cases };
+}
+
 type OptionalKeys<F> = {
   [K in keyof F]: F[K] extends { readonly kind: "option" } ? K : never;
 }[keyof F];
@@ -188,7 +236,13 @@ type InferFields<F> = {
 };
 
 /** The TypeScript type of the values a schema packs. An optional field may be left out. */
-export type Infer<S> = S extends { readonly kind: "number" | "count" }
+export type Infer<S> = S extends { readonly kind: "id"; readonly brand?: infer T }
+  ? T
+  : S extends { readonly kind: "numbers" }
+    ? Float64Array
+    : InferValue<S>;
+
+type InferValue<S> = S extends { readonly kind: "number" | "count" }
   ? number
   : S extends { readonly kind: "flag" }
     ? boolean
@@ -202,4 +256,12 @@ export type Infer<S> = S extends { readonly kind: "number" | "count" }
             ? N
             : S extends { readonly kind: "struct"; readonly fields: infer F }
               ? InferFields<F>
-              : never;
+              : S extends { readonly kind: "union"; readonly cases: infer C }
+                ? InferCases<C>
+                : never;
+
+type InferCases<C> = {
+  [K in keyof C]: { readonly kind: K } & (C[K] extends { readonly fields: infer F }
+    ? InferFields<F>
+    : never);
+}[keyof C];

@@ -16,11 +16,13 @@ use syn::{
 
 mod fragments;
 
-/// Gives a struct with named fields, or an enum of unit variants, numbers to pack
-/// into.
+/// Gives a struct with named fields, or an enum, numbers to pack into.
 ///
-/// A struct's fields are written in declaration order; an enum is its
-/// variant's index, and an unknown index reads as the first variant.
+/// A struct's fields are written in declaration order. An enum is its
+/// variant's index, followed by the variant's named fields when any variant
+/// has them; an unknown index reads as the first variant. TypeScript reads an
+/// enum of unit variants as a string union and any other as a union tagged by
+/// `kind`.
 /// `#[pack(rename = "…")]` names the type, a field or a variant in
 /// TypeScript; by default a type keeps its name, a field is camel-cased and a
 /// variant is camel-cased with a lowercase first letter.
@@ -63,103 +65,299 @@ fn derive(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             "a packed type cannot be generic",
         ));
     }
-    let name = &input.ident;
-    let ts_name = rename(&input.attrs)?.unwrap_or_else(|| name.to_string());
     match &input.data {
         Data::Struct(data) => {
             let Fields::Named(fields) = &data.fields else {
                 return Err(Error::new_spanned(
-                    name,
+                    &input.ident,
                     "a packed struct needs named fields",
                 ));
             };
-            let mut described = Vec::new();
-            let mut reads = Vec::new();
-            let mut writes = Vec::new();
-            for field in &fields.named {
-                let Some(ident) = &field.ident else { continue };
-                let ty = &field.ty;
-                reads.push(quote! { #ident: <#ty as ::pack::Pack>::read(read) });
-                writes.push(quote! { ::pack::Pack::write(&self.#ident, write); });
-                described.push(json!({
-                    "name": rename(&field.attrs)?.unwrap_or_else(|| camel(&ident.to_string())),
-                    "doc": doc_of(&field.attrs),
-                    "type": type_of(ty)?,
-                }));
-            }
-            fragments::write(
-                &format!("struct-{name}"),
-                &json!({
-                    "kind": "struct",
-                    "rust": name.to_string(),
-                    "name": ts_name,
-                    "doc": doc_of(&input.attrs),
-                    "fields": described,
-                }),
-            );
-            Ok(quote! {
-                impl ::pack::Pack for #name {
-                    fn read(read: &mut ::pack::Reader) -> Self {
-                        // Struct expressions evaluate their fields in source order.
-                        Self { #(#reads,)* }
-                    }
-
-                    fn write(&self, write: &mut ::pack::Writer) {
-                        #(#writes)*
-                    }
-                }
-            })
+            derive_struct(input, fields)
         }
-        Data::Enum(data) => {
-            let mut variants = Vec::new();
-            let mut names = Vec::new();
-            for variant in &data.variants {
-                if !matches!(variant.fields, Fields::Unit) {
-                    return Err(Error::new_spanned(
-                        variant,
-                        "a packed enum's variants carry no data",
-                    ));
-                }
-                let ident = &variant.ident;
-                variants.push(ident);
-                names.push(
-                    rename(&variant.attrs)?.unwrap_or_else(|| lower_first(&ident.to_string())),
-                );
-            }
-            let Some(first) = variants.first() else {
-                return Err(Error::new_spanned(name, "a packed enum needs a variant"));
-            };
-            let indices = 0..variants.len();
-            let read_indices = indices.clone();
-            fragments::write(
-                &format!("enum-{name}"),
-                &json!({
-                    "kind": "enum",
-                    "rust": name.to_string(),
-                    "name": ts_name,
-                    "doc": doc_of(&input.attrs),
-                    "variants": names,
-                }),
-            );
-            Ok(quote! {
-                impl ::pack::Pack for #name {
-                    fn read(read: &mut ::pack::Reader) -> Self {
-                        match read.count() {
-                            #(#read_indices => Self::#variants,)*
-                            _ => Self::#first,
-                        }
-                    }
-
-                    fn write(&self, write: &mut ::pack::Writer) {
-                        write.count(match self {
-                            #(Self::#variants => #indices,)*
-                        });
-                    }
-                }
-            })
+        Data::Enum(data)
+            if data
+                .variants
+                .iter()
+                .all(|v| matches!(v.fields, Fields::Unit)) =>
+        {
+            derive_unit_enum(input, data)
         }
-        Data::Union(_) => Err(Error::new_spanned(name, "a union cannot be packed")),
+        Data::Enum(data) => derive_data_enum(input, data),
+        Data::Union(_) => Err(Error::new_spanned(&input.ident, "a union cannot be packed")),
     }
+}
+
+/// The Rust name and TypeScript name of a derived type.
+fn names(input: &DeriveInput) -> syn::Result<(&syn::Ident, String)> {
+    let name = &input.ident;
+    Ok((
+        name,
+        rename(&input.attrs)?.unwrap_or_else(|| name.to_string()),
+    ))
+}
+
+/// A named field's read and write, and its description for TypeScript.
+struct PackedField {
+    read: proc_macro2::TokenStream,
+    write: proc_macro2::TokenStream,
+    described: Value,
+}
+
+/// Each of `fields`' read, written as `<field>: read`, and write of `<path>.<field>`
+/// (or of the binding `<field>` when `path` is `None`).
+fn packed_fields(
+    fields: &syn::FieldsNamed,
+    path: Option<&proc_macro2::TokenStream>,
+) -> syn::Result<Vec<PackedField>> {
+    let mut packed = Vec::new();
+    for field in &fields.named {
+        let Some(ident) = &field.ident else { continue };
+        let ty = &field.ty;
+        let value = match path {
+            Some(path) => quote! { &#path.#ident },
+            None => quote! { #ident },
+        };
+        packed.push(PackedField {
+            read: quote! { #ident: <#ty as ::pack::Pack>::read(read) },
+            write: quote! { ::pack::Pack::write(#value, write); },
+            described: json!({
+                "name": rename(&field.attrs)?.unwrap_or_else(|| camel(&ident.to_string())),
+                "doc": doc_of(&field.attrs),
+                "type": type_of(ty)?,
+            }),
+        });
+    }
+    Ok(packed)
+}
+
+fn derive_struct(
+    input: &DeriveInput,
+    fields: &syn::FieldsNamed,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let (name, ts_name) = names(input)?;
+    let packed = packed_fields(fields, Some(&quote! { self }))?;
+    let reads = packed.iter().map(|field| &field.read);
+    let writes = packed.iter().map(|field| &field.write);
+    fragments::write(
+        &format!("struct-{name}"),
+        &json!({
+            "kind": "struct",
+            "rust": name.to_string(),
+            "name": ts_name,
+            "doc": doc_of(&input.attrs),
+            "fields": packed.iter().map(|field| &field.described).collect::<Vec<_>>(),
+        }),
+    );
+    Ok(quote! {
+        impl ::pack::Pack for #name {
+            fn read(read: &mut ::pack::Reader) -> Self {
+                // Struct expressions evaluate their fields in source order.
+                Self { #(#reads,)* }
+            }
+
+            fn write(&self, write: &mut ::pack::Writer) {
+                #(#writes)*
+            }
+        }
+    })
+}
+
+/// The TypeScript names of an enum's variants: renamed, or camel-cased with a
+/// lowercase first letter.
+fn variant_names(data: &syn::DataEnum) -> syn::Result<Vec<String>> {
+    data.variants
+        .iter()
+        .map(|variant| {
+            Ok(rename(&variant.attrs)?.unwrap_or_else(|| lower_first(&variant.ident.to_string())))
+        })
+        .collect()
+}
+
+fn derive_unit_enum(
+    input: &DeriveInput,
+    data: &syn::DataEnum,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let (name, ts_name) = names(input)?;
+    let variants: Vec<_> = data.variants.iter().map(|variant| &variant.ident).collect();
+    let Some(first) = variants.first() else {
+        return Err(Error::new_spanned(name, "a packed enum needs a variant"));
+    };
+    let indices = 0..variants.len();
+    let read_indices = indices.clone();
+    fragments::write(
+        &format!("enum-{name}"),
+        &json!({
+            "kind": "enum",
+            "rust": name.to_string(),
+            "name": ts_name,
+            "doc": doc_of(&input.attrs),
+            "variants": variant_names(data)?,
+        }),
+    );
+    Ok(quote! {
+        impl ::pack::Pack for #name {
+            fn read(read: &mut ::pack::Reader) -> Self {
+                match read.count() {
+                    #(#read_indices => Self::#variants,)*
+                    _ => Self::#first,
+                }
+            }
+
+            fn write(&self, write: &mut ::pack::Writer) {
+                write.count(match self {
+                    #(Self::#variants => #indices,)*
+                });
+            }
+        }
+    })
+}
+
+/// An enum whose variants carry named fields (or none): the variant's index,
+/// then its fields in order. TypeScript reads it as a union tagged by `kind`.
+fn derive_data_enum(
+    input: &DeriveInput,
+    data: &syn::DataEnum,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let (name, ts_name) = names(input)?;
+    let mut reads = Vec::new();
+    let mut writes = Vec::new();
+    let mut cases = Vec::new();
+    for ((index, variant), tag) in data.variants.iter().enumerate().zip(variant_names(data)?) {
+        let ident = &variant.ident;
+        let packed = match &variant.fields {
+            Fields::Named(fields) => packed_fields(fields, None)?,
+            Fields::Unit => Vec::new(),
+            Fields::Unnamed(_) => {
+                return Err(Error::new_spanned(
+                    variant,
+                    "a packed enum's variants have named fields or none",
+                ));
+            }
+        };
+        let bindings: Vec<_> = match &variant.fields {
+            Fields::Named(fields) => fields
+                .named
+                .iter()
+                .filter_map(|f| f.ident.as_ref())
+                .collect(),
+            _ => Vec::new(),
+        };
+        let field_reads = packed.iter().map(|field| &field.read);
+        let field_writes = packed.iter().map(|field| &field.write);
+        let construct = if matches!(variant.fields, Fields::Unit) {
+            quote! { Self::#ident }
+        } else {
+            quote! { Self::#ident { #(#field_reads,)* } }
+        };
+        let pattern = if matches!(variant.fields, Fields::Unit) {
+            quote! { Self::#ident }
+        } else {
+            quote! { Self::#ident { #(#bindings,)* } }
+        };
+        reads.push(quote! { #index => #construct, });
+        if index == 0 {
+            reads.push(quote! { _ => #construct, });
+        }
+        writes.push(quote! {
+            #pattern => {
+                write.count(#index);
+                #(#field_writes)*
+            }
+        });
+        cases.push(json!({
+            "name": tag,
+            "doc": doc_of(&variant.attrs),
+            "fields": packed.iter().map(|field| &field.described).collect::<Vec<_>>(),
+        }));
+    }
+    if cases.is_empty() {
+        return Err(Error::new_spanned(name, "a packed enum needs a variant"));
+    }
+    // The first variant also reads an unknown index, so it is listed twice;
+    // move the catch-all last.
+    let catch_all = reads.remove(1);
+    reads.push(catch_all);
+    fragments::write(
+        &format!("union-{name}"),
+        &json!({
+            "kind": "union",
+            "rust": name.to_string(),
+            "name": ts_name,
+            "doc": doc_of(&input.attrs),
+            "cases": cases,
+        }),
+    );
+    Ok(quote! {
+        impl ::pack::Pack for #name {
+            fn read(read: &mut ::pack::Reader) -> Self {
+                match read.count() {
+                    #(#reads)*
+                }
+            }
+
+            fn write(&self, write: &mut ::pack::Writer) {
+                match self {
+                    #(#writes)*
+                }
+            }
+        }
+    })
+}
+
+/// Packs an id type as its text, interned in the module's name table.
+///
+/// The type must have `as_str(&self) -> &str` and `from_raw(impl Display)`.
+/// TypeScript reads it as the brand of the same name imported from the module
+/// given with `#[pack(brand = "…")]`.
+#[proc_macro_derive(PackId, attributes(pack))]
+pub fn derive_pack_id(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    pack_id(&input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+fn pack_id(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let name = &input.ident;
+    let mut brand = None;
+    for attribute in input.attrs.iter().filter(|a| a.path().is_ident("pack")) {
+        attribute.parse_nested_meta(|meta| {
+            if meta.path.is_ident("brand") {
+                brand = Some(meta.value()?.parse::<LitStr>()?.value());
+                Ok(())
+            } else {
+                Err(meta.error("expected `brand = \"…\"`"))
+            }
+        })?;
+    }
+    let Some(brand) = brand else {
+        return Err(Error::new_spanned(
+            name,
+            "an id names the module of its TypeScript brand: #[pack(brand = \"…\")]",
+        ));
+    };
+    fragments::write(
+        &format!("id-{name}"),
+        &json!({
+            "kind": "id",
+            "rust": name.to_string(),
+            "name": name.to_string(),
+            "doc": Value::Null,
+            "module": brand,
+        }),
+    );
+    Ok(quote! {
+        impl ::pack::Pack for #name {
+            fn read(read: &mut ::pack::Reader) -> Self {
+                Self::from_raw(read.name())
+            }
+
+            fn write(&self, write: &mut ::pack::Writer) {
+                write.name(self.as_str());
+            }
+        }
+    })
 }
 
 fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
@@ -288,8 +486,9 @@ fn type_of(ty: &Type) -> syn::Result<Value> {
         }
     };
     Ok(match ident.as_str() {
-        "f64" => json!({ "kind": "number" }),
-        "usize" => json!({ "kind": "count" }),
+        "f64" | "i32" => json!({ "kind": "number" }),
+        "usize" | "u32" => json!({ "kind": "count" }),
+        "Numbers" => json!({ "kind": "numbers" }),
         "bool" => json!({ "kind": "flag" }),
         "String" => json!({ "kind": "name" }),
         "Vec" => json!({ "kind": "list", "item": inner()? }),

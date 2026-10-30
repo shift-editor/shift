@@ -59,6 +59,57 @@ const MEASURE: Fragment = {
   ],
 };
 
+const EDIT: Fragment = {
+  kind: "union",
+  rust: "Edit",
+  name: "Edit",
+  doc: null,
+  cases: [
+    {
+      name: "move",
+      doc: null,
+      fields: [
+        { name: "x", doc: null, type: { kind: "number" } },
+        { name: "y", doc: null, type: { kind: "number" } },
+      ],
+    },
+    {
+      name: "rename",
+      doc: null,
+      fields: [{ name: "glyph", doc: null, type: { kind: "ref", rust: "GlyphId" } }],
+    },
+    { name: "undo", doc: null, fields: [] },
+  ],
+};
+const GLYPH_ID: Fragment = {
+  kind: "id",
+  rust: "GlyphId",
+  name: "GlyphId",
+  doc: null,
+  module: "@shift/types",
+};
+const EDITS: Fragment = {
+  kind: "interface",
+  rust: "Edits",
+  name: "Edits",
+  doc: null,
+  methods: [
+    {
+      name: "apply",
+      doc: null,
+      params: [
+        { name: "edits", type: { kind: "list", item: { kind: "ref", rust: "Edit" } } },
+        { name: "values", type: { kind: "numbers" } },
+      ],
+      output: { kind: "list", item: { kind: "ref", rust: "Edit" } },
+    },
+  ],
+};
+
+interface Edits {
+  apply(edits: unknown[], values: Float64Array): unknown;
+}
+
 const folder = mkdtempSync(join(import.meta.dirname, ".generated-"));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
@@ -147,6 +198,57 @@ describe("a generated interface class", () => {
     const measure = new (generated.Measure as new (t: unknown) => Measure)(transport);
 
     expect(() => measure.scaled({ x: 0, kinds: [] }, 1)).toThrow("unknown SegmentKind");
+  });
+});
+
+describe("a generated union", () => {
+  it("writes each case as its index, then its fields, and ids as interned names", async () => {
+    const generated = await load([EDIT, GLYPH_ID, EDITS]);
+    const { requests, transport } = module((write) => write.count(0));
+    const edits = new (generated.Edits as new (t: unknown) => Edits)(transport);
+
+    edits.apply(
+      [{ kind: "move", x: 1, y: 2 }, { kind: "rename", glyph: "glyph_a" }, { kind: "undo" }],
+      new Float64Array([7, 8]),
+    );
+
+    const glyph = names.id("glyph_a");
+    expect(requests[0]!.input).toEqual([3, 0, 1, 2, 1, glyph, 2, 2, 7, 8]);
+  });
+
+  it("reads each case back tagged by kind", async () => {
+    const generated = await load([EDIT, GLYPH_ID, EDITS]);
+    const glyph = names.id("glyph_b");
+    const { transport } = module((write) => {
+      for (const value of [3, 2, 1, glyph, 0, 5, 6]) write.number(value);
+    });
+    const edits = new (generated.Edits as new (t: unknown) => Edits)(transport);
+
+    expect(edits.apply([], new Float64Array())).toEqual([
+      { kind: "undo" },
+      { kind: "rename", glyph: "glyph_b" },
+      { kind: "move", x: 5, y: 6 },
+    ]);
+  });
+
+  it("throws on a case index the module does not know", async () => {
+    const generated = await load([EDIT, GLYPH_ID, EDITS]);
+    const { transport } = module((write) => {
+      write.count(1);
+      write.count(9);
+    });
+    const edits = new (generated.Edits as new (t: unknown) => Edits)(transport);
+
+    expect(() => edits.apply([], new Float64Array())).toThrow("unknown Edit");
+  });
+});
+
+describe("Reader.numbers", () => {
+  it("reads a count of numbers as one view", () => {
+    const read = new Reader(new Float64Array([2, 1.5, -2, 9]), names);
+
+    expect([...read.numbers()]).toEqual([1.5, -2]);
+    expect(read.number()).toBe(9);
   });
 });
 

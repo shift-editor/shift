@@ -2,9 +2,13 @@
 //!
 //! A value crosses as one flat list of `f64`s, its fields in declaration
 //! order with no names: a number, flag or count is one value; a name is its
-//! interned id ([`Names`]); a list is its length followed by its items; an
-//! optional value is a flag followed by the value when present; a unit enum
-//! is its variant's index.
+//! interned id ([`Names`]), and so is an id ([`derive@PackId`]), which
+//! TypeScript reads as its brand; a list is its length followed by its items,
+//! and [`Numbers`] is the same but read as one `Float64Array`; an optional
+//! value is a flag followed by the value when present; an enum is its
+//! variant's index, followed by the variant's fields when it has any, read
+//! in TypeScript as a string union for unit variants and otherwise as a union
+//! tagged by `kind`.
 //!
 //! [`derive@Pack`] gives a type its [`Pack::read`] and [`Pack::write`].
 //! [`macro@interface`] turns a trait into a request protocol: each method is
@@ -19,7 +23,7 @@
 // The derives name `::pack`, which inside this crate is itself.
 extern crate self as pack;
 
-pub use pack_derive::{Pack, interface};
+pub use pack_derive::{Pack, PackId, interface};
 
 /// Lookups between interned names and their ids, owned by whoever runs the
 /// call, so a name crosses once as text and afterwards as a number.
@@ -146,6 +150,47 @@ impl Pack for usize {
     }
 }
 
+impl Pack for u32 {
+    /// A count past `u32::MAX` saturates.
+    fn read(read: &mut Reader) -> Self {
+        Self::try_from(read.count()).unwrap_or(Self::MAX)
+    }
+
+    fn write(&self, write: &mut Writer) {
+        write.number(f64::from(*self));
+    }
+}
+
+impl Pack for i32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "a number read as f64; out-of-range values saturate"
+    )]
+    fn read(read: &mut Reader) -> Self {
+        read.number() as Self
+    }
+
+    fn write(&self, write: &mut Writer) {
+        write.number(f64::from(*self));
+    }
+}
+
+/// A run of numbers that TypeScript reads as one `Float64Array` view rather
+/// than a `number[]`: the same count and values as a `Vec<f64>`, without a
+/// JavaScript array of boxed numbers on the other side.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Numbers(pub Vec<f64>);
+
+impl Pack for Numbers {
+    fn read(read: &mut Reader) -> Self {
+        Self(Vec::read(read))
+    }
+
+    fn write(&self, write: &mut Writer) {
+        self.0.write(write);
+    }
+}
+
 impl Pack for bool {
     fn read(read: &mut Reader) -> Self {
         read.flag()
@@ -266,6 +311,13 @@ mod tests {
         base_glyph_count: usize,
     }
 
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    enum Edit {
+        Move { x: f64, y: f64 },
+        Rename { name: String },
+        Undo,
+    }
+
     #[interface]
     trait Measure {
         fn width(&self, anchor: Anchor) -> f64;
@@ -377,6 +429,50 @@ mod tests {
         assert_eq!(components.len(), 2);
         assert_eq!(components[0].alignment, Alignment::Anchored);
         assert!(components[1].anchors.is_empty());
+    }
+
+    #[test]
+    fn a_data_enum_is_its_variant_index_then_its_fields() {
+        let mut names = Table::default();
+
+        assert_eq!(
+            encode(&mut names, &Edit::Move { x: 3.0, y: 4.0 }),
+            [0.0, 3.0, 4.0]
+        );
+        assert_eq!(encode(&mut names, &Edit::Undo), [2.0]);
+    }
+
+    #[test]
+    fn a_data_enum_reads_back_what_it_wrote() {
+        let mut names = Table::default();
+        let edits = vec![
+            Edit::Rename { name: "a".into() },
+            Edit::Undo,
+            Edit::Move { x: 1.0, y: 2.0 },
+        ];
+
+        let encoded = encode(&mut names, &edits);
+
+        assert_eq!(decode::<Vec<Edit>>(&names, &encoded), edits);
+    }
+
+    #[test]
+    fn an_unknown_data_enum_index_reads_as_the_first_variant() {
+        assert_eq!(
+            decode::<Edit>(&Table::default(), &[9.0, 5.0, 6.0]),
+            Edit::Move { x: 5.0, y: 6.0 }
+        );
+    }
+
+    #[test]
+    fn numbers_cross_as_a_list_of_numbers() {
+        let mut names = Table::default();
+        let numbers = Numbers(vec![1.5, -2.0]);
+
+        let encoded = encode(&mut names, &numbers);
+
+        assert_eq!(encoded, [2.0, 1.5, -2.0]);
+        assert_eq!(decode::<Numbers>(&names, &encoded), numbers);
     }
 
     #[test]

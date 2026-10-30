@@ -13,7 +13,7 @@ import { code, imp, joinCode, literalOf, type Code } from "ts-poet";
 
 /** A field's, argument's or result's type, as the derive spells it. */
 export type Type =
-  | { readonly kind: "number" | "count" | "flag" | "name" }
+  | { readonly kind: "number" | "count" | "flag" | "name" | "numbers" }
   | { readonly kind: "list"; readonly item: Type }
   | { readonly kind: "option"; readonly inner: Type }
   | { readonly kind: "ref"; readonly rust: string };
@@ -40,6 +40,29 @@ interface EnumFragment {
   readonly variants: readonly string[];
 }
 
+interface IdFragment {
+  readonly kind: "id";
+  readonly rust: string;
+  readonly name: string;
+  readonly doc: string | null;
+  /** The module that declares the id's brand. */
+  readonly module: string;
+}
+
+interface Case {
+  readonly name: string;
+  readonly doc: string | null;
+  readonly fields: readonly Field[];
+}
+
+interface UnionFragment {
+  readonly kind: "union";
+  readonly rust: string;
+  readonly name: string;
+  readonly doc: string | null;
+  readonly cases: readonly Case[];
+}
+
 interface Method {
   readonly name: string;
   readonly doc: string | null;
@@ -56,11 +79,21 @@ interface InterfaceFragment {
 }
 
 /** One item's description, as `#[derive(Pack)]` or `#[pack::interface]` writes it, and the package it came from. */
-export type Fragment = (StructFragment | EnumFragment | InterfaceFragment) & {
+export type Fragment = (
+  | StructFragment
+  | EnumFragment
+  | UnionFragment
+  | IdFragment
+  | InterfaceFragment
+) & {
   readonly crate?: string;
 };
 
-type Declared = (StructFragment | EnumFragment) & { readonly crate?: string };
+type Declared = (StructFragment | EnumFragment | UnionFragment | IdFragment) & {
+  readonly crate?: string;
+};
+/** A type this module declares, with a schema, a reader and a writer; ids are imported instead. */
+type Generated = Exclude<Declared, IdFragment>;
 
 const pack = (name: string) => imp(`${name}@@shift/pack`);
 const packType = (name: string) => imp(`t:${name}@@shift/pack`);
@@ -68,7 +101,7 @@ const Reader = packType("Reader");
 const Writer = packType("Writer");
 const SyncTransport = packType("SyncTransport");
 const Infer = packType("Infer");
-const SCALARS = new Set(["number", "count", "flag", "name"]);
+const SCALARS = new Set(["number", "count", "flag", "name", "numbers"]);
 
 /** Reads every crate's fragments under `folder` (`<folder>/<package>/*.json`). */
 export function readFragments(folder: string): Fragment[] {
@@ -122,7 +155,7 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   // Every type the interfaces use, each after the types it uses, so a schema
   // is declared before another schema names it. Types that cross as
   // arguments get a writer and types that cross as results a reader.
-  const ordered: Declared[] = [];
+  const ordered: Generated[] = [];
   const written = new Set<string>();
   const read = new Set<string>();
   const visit = (type: Type, user: string, direction: Set<string>): void => {
@@ -130,11 +163,9 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     if (type.kind === "option") return visit(type.inner, user, direction);
     if (type.kind !== "ref") return;
     const found = resolve(type, user);
-    if (direction.has(found.rust)) return;
+    if (found.kind === "id" || direction.has(found.rust)) return;
     direction.add(found.rust);
-    if (found.kind === "struct") {
-      for (const field of found.fields) visit(field.type, found.rust, direction);
-    }
+    for (const field of fieldsOf(found)) visit(field.type, found.rust, direction);
     if (!ordered.includes(found)) ordered.push(found);
   };
   for (const item of interfaces) {
@@ -144,24 +175,35 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     }
   }
 
+  /** An id's brand, imported from the module that declares it. */
+  const brand = (type: IdFragment): Code => code`${imp(`t:${type.name}@${type.module}`)}`;
+
   /** The TypeScript type of `type`'s values. */
-  const ts = (type: Type): string => {
+  const ts = (type: Type): Code => {
     switch (type.kind) {
       case "number":
       case "count":
-        return "number";
+        return code`number`;
       case "flag":
-        return "boolean";
+        return code`boolean`;
       case "name":
-        return "string";
+        return code`string`;
+      case "numbers":
+        return code`Float64Array`;
       case "list":
-        return `readonly ${element(ts(type.item))}[]`;
+        return code`readonly ${element(type.item)}[]`;
       case "option":
-        return `${ts(type.inner)} | null`;
-      case "ref":
-        return resolve(type).name;
+        return code`${ts(type.inner)} | null`;
+      case "ref": {
+        const found = resolve(type);
+        return found.kind === "id" ? brand(found) : code`${found.name}`;
+      }
     }
   };
+
+  /** `type` as an array's element type, parenthesised when it is a union or an array. */
+  const element = (type: Type): Code =>
+    type.kind === "option" || type.kind === "list" ? code`(${ts(type)})` : ts(type);
 
   /** `type` as a schema expression. */
   const schema = (type: Type): Code => {
@@ -170,8 +212,10 @@ export function render(fragments: readonly Fragment[], header = ""): string {
         return code`${pack("list")}(${schema(type.item)})`;
       case "option":
         return code`${pack("option")}(${schema(type.inner)})`;
-      case "ref":
-        return code`${resolve(type).name}`;
+      case "ref": {
+        const found = resolve(type);
+        return found.kind === "id" ? code`${pack("id")}<${brand(found)}>()` : code`${found.name}`;
+      }
       default:
         return code`${pack(type.kind)}`;
     }
@@ -181,12 +225,15 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   const readInto = (type: Type, target: string, depth = 0): Code => {
     if (SCALARS.has(type.kind)) return code`const ${target} = r.${type.kind}();`;
     switch (type.kind) {
-      case "ref":
-        return code`const ${target} = read${resolve(type).name}(r);`;
+      case "ref": {
+        const found = resolve(type);
+        if (found.kind === "id") return code`const ${target} = r.name() as ${brand(found)};`;
+        return code`const ${target} = read${found.name}(r);`;
+      }
       case "list": {
         const [item, i, n] = [`item${depth}`, `i${depth}`, `n${depth}`];
         return code`
-          const ${target}: ${element(ts(type.item))}[] = [];
+          const ${target}: ${element(type.item)}[] = [];
           for (let ${i} = 0, ${n} = r.count(); ${i} < ${n}; ${i}++) {
             ${readInto(type.item, item, depth + 1)}
             ${target}.push(${item});
@@ -211,8 +258,11 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   const writeFrom = (type: Type, value: string, depth = 0): Code => {
     if (SCALARS.has(type.kind)) return code`w.${type.kind}(${value});`;
     switch (type.kind) {
-      case "ref":
-        return code`write${resolve(type).name}(w, ${value});`;
+      case "ref": {
+        const found = resolve(type);
+        if (found.kind === "id") return code`w.name(${value});`;
+        return code`write${found.name}(w, ${value});`;
+      }
       case "list": {
         const item = `item${depth}`;
         return code`
@@ -240,19 +290,27 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     return code`${pack("variants")}(${joinCode(names, { on: ", " })})`;
   };
 
-  const structSchema = (type: StructFragment): Code => {
-    const fields = type.fields.map(
+  const fieldsSchema = (fields: readonly Field[]): Code => {
+    const entries = fields.map(
       (field) => code`${doc(field.doc)}${field.name}: ${schema(field.type)},`,
     );
-    return code`${pack("struct")}({ ${joinCode(fields, { on: "\n" })} })`;
+    return code`${pack("struct")}({ ${joinCode(entries, { on: "\n" })} })`;
   };
 
-  const schemaOf = (type: Declared): Code => {
+  const unionSchema = (type: UnionFragment): Code => {
+    const cases = type.cases.map(
+      (item) => code`${doc(item.doc)}${item.name}: ${fieldsSchema(item.fields)},`,
+    );
+    return code`${pack("union")}({ ${joinCode(cases, { on: "\n" })} })`;
+  };
+
+  const schemaOf = (type: Generated): Code => {
     if (type.kind === "enum") return enumSchema(type);
-    return structSchema(type);
+    if (type.kind === "union") return unionSchema(type);
+    return fieldsSchema(type.fields);
   };
 
-  const declaration = (type: Declared): Code => {
+  const declaration = (type: Generated): Code => {
     const value = schemaOf(type);
     return code`
       ${doc(type.doc)}export const ${type.name} = ${value};
@@ -261,7 +319,10 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   };
 
   const method = (item: Method, index: number): Code => {
-    const params = item.params.map((param) => `${param.name}: ${ts(param.type)}`).join(", ");
+    const params = joinCode(
+      item.params.map((param) => code`${param.name}: ${ts(param.type)}`),
+      { on: ", " },
+    );
     const writes = item.params.map((param) => writeFrom(param.type, param.name));
     return code`
       ${doc(item.doc)}${item.name}(${params}): ${ts(item.output)} {
@@ -297,13 +358,38 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     `;
   };
 
-  const readStruct = (type: StructFragment): Code => {
-    const reads = type.fields.map((field, index) => readInto(field.type, `field${index}`));
-    const fields = type.fields.map((field, index) => code`${field.name}: field${index},`);
+  /** Statements reading `fields` in order, then returning them with `head` first. */
+  const readFields = (fields: readonly Field[], head: Code | string = ""): Code => {
+    const reads = fields.map((field, index) => readInto(field.type, `field${index}`));
+    const entries = fields.map((field, index) => code`${field.name}: field${index},`);
+    return code`
+      ${joinCode(reads, { on: "\n" })}
+      return { ${head}${joinCode(entries, { on: "\n" })} };
+    `;
+  };
+
+  const readStruct = (type: StructFragment): Code => code`
+    function read${type.name}(r: ${Reader}): ${type.name} {
+      ${readFields(type.fields)}
+    }
+  `;
+
+  const readUnion = (type: UnionFragment): Code => {
+    const unknown = `unknown ${type.name}, from a module built with another ${type.name}`;
+    const cases = type.cases.map(
+      (item, index) => code`
+        case ${index}: {
+          ${readFields(item.fields, code`kind: ${literalOf(item.name)}, `)}
+        }
+      `,
+    );
     return code`
       function read${type.name}(r: ${Reader}): ${type.name} {
-        ${joinCode(reads, { on: "\n" })}
-        return { ${joinCode(fields, { on: "\n" })} };
+        switch (r.count()) {
+          ${joinCode(cases, { on: "\n" })}
+          default:
+            throw new Error(${literalOf(unknown)});
+        }
       }
     `;
   };
@@ -314,22 +400,46 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     }
   `;
 
-  const writeStruct = (type: StructFragment): Code => {
-    const writes = type.fields.map((field) => writeFrom(field.type, `value.${field.name}`));
+  /** Statements writing `fields` of `value` in order. */
+  const writeFields = (fields: readonly Field[]): Code =>
+    joinCode(
+      fields.map((field) => writeFrom(field.type, `value.${field.name}`)),
+      { on: "\n" },
+    );
+
+  const writeStruct = (type: StructFragment): Code => code`
+    function write${type.name}(w: ${Writer}, value: ${type.name}): void {
+      ${writeFields(type.fields)}
+    }
+  `;
+
+  const writeUnion = (type: UnionFragment): Code => {
+    const cases = type.cases.map(
+      (item, index) => code`
+        case ${literalOf(item.name)}:
+          w.count(${index});
+          ${writeFields(item.fields)}
+          break;
+      `,
+    );
     return code`
       function write${type.name}(w: ${Writer}, value: ${type.name}): void {
-        ${joinCode(writes, { on: "\n" })}
+        switch (value.kind) {
+          ${joinCode(cases, { on: "\n" })}
+        }
       }
     `;
   };
 
-  const reader = (type: Declared): Code => {
+  const reader = (type: Generated): Code => {
     if (type.kind === "enum") return readEnum(type);
+    if (type.kind === "union") return readUnion(type);
     return readStruct(type);
   };
 
-  const writer = (type: Declared): Code => {
+  const writer = (type: Generated): Code => {
     if (type.kind === "enum") return writeEnum(type);
+    if (type.kind === "union") return writeUnion(type);
     return writeStruct(type);
   };
 
@@ -352,9 +462,11 @@ function withoutCrate({ crate: _crate, ...fragment }: Declared): object {
   return fragment;
 }
 
-/** Parenthesises a union or a readonly array so it can take `[]`. */
-function element(type: string): string {
-  return type.includes("|") || type.startsWith("readonly ") ? `(${type})` : type;
+/** The fields a type's values carry: a struct's, or every case's of a union. */
+function fieldsOf(type: Generated): readonly Field[] {
+  if (type.kind === "struct") return type.fields;
+  if (type.kind === "union") return type.cases.flatMap((item) => item.fields);
+  return [];
 }
 
 /** A doc comment for an item, followed by a line break; empty without one. */
