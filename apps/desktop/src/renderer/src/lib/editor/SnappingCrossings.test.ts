@@ -25,22 +25,20 @@ describe("snapping crosses the corners of every contour's box", () => {
     });
     editor.selectTool("select");
     editor.select([bottom, top]);
+    editor.recordCanvas();
 
     editor.holdDrag(bottom, { x: -98, y: 0 });
 
-    expect(editor.drawnSnapCrossings()).toEqual([
-      { x: 100, y: 0 },
-      { x: 200, y: 0 },
-      { x: 200, y: 120 },
-      { x: 100, y: 120 },
-      { x: 200, y: 300 },
-      { x: 200, y: 300 },
-      { x: 200, y: 340 },
-      { x: 200, y: 340 },
-      { x: 200, y: 300 },
-      { x: 200, y: 300 },
-      { x: 200, y: 340 },
-      { x: 200, y: 340 },
-    ]);
+    await expect
+      .poll(() => editor.drawnSnapCrossings())
+      .toEqual([
+        // The guide's end on the triangle's point it aligns to.
+        { x: 200, y: 50 },
+        // The triangle's box corner the guide passes through; no point is there.
+        { x: 200, y: 120 },
+        // The dragged points, snapped onto the guide, with the selection's box corners on them.
+        { x: 200, y: 300 },
+        { x: 200, y: 340 },
+      ]);
   });
 });

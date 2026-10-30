@@ -6,35 +6,38 @@ import { startTestEditor } from "@/testing/TestEditor";
 
 describe("handle visibility is independent of geometry and selection", () => {
   let editor: EditorTestSurface;
+  let first: OutlineContour;
 
   /** The ids of the point handles the canvas draws. */
   const drawnHandleIds = (): readonly PointId[] =>
     editor.drawnHandles().map(({ pointId }) => pointId);
 
-  async function ellipse(): Promise<OutlineContour> {
-    const [contour] = await editor.outline();
-    if (!contour) throw new Error("Expected the ellipse's contour");
-    return contour;
-  }
-
   beforeEach(async () => {
     editor = await startTestEditor();
     editor.chooseToolMenuItem("shape", "ellipse");
     await editor.dragFrom({ x: 0, y: 0 }, { x: 200, y: 100 });
+    const [contour] = await editor.outline();
+    if (!contour) throw new Error("Expected the first ellipse's contour");
+    first = contour;
   });
 
-  it("hides one Bézier handle without hiding its siblings or changing selection bounds", async () => {
-    const contour = await ellipse();
-    const others = contour.points.filter((_, index) => index !== 1).map(({ id }) => id);
-    const bounds = editor.selectionLocalRect();
-    const hidden = editor.requestHiddenHandles(contour.points[1]!.id);
-    expect(drawnHandleIds()).not.toContain(contour.points[1]!.id);
-    expect(drawnHandleIds()).toContain(contour.points[0]!.id);
-    expect(drawnHandleIds()).toEqual(others);
-    expect((await ellipse()).points).toEqual(contour.points);
-    expect(editor.selectionIds()).toEqual([contour.id]);
-    expect(editor.selectionLocalRect()).toEqual(bounds);
-    editor.releaseHiddenHandles(hidden);
-    expect(drawnHandleIds()).toContain(contour.points[1]!.id);
+  it("hides the handles of the shape being dragged out, not its siblings', without changing its geometry or selection bounds", async () => {
+    const firstIds = first.points.map(({ id }) => id);
+
+    editor.chooseToolMenuItem("shape", "ellipse");
+    editor.holdDragFrom({ x: 300, y: 0 }, { x: 500, y: 100 });
+    const dragged = editor.drawnOutline()[1];
+    if (!dragged) throw new Error("Expected the ellipse being dragged out");
+    const draggedIds = dragged.points.map(({ id }) => id);
+
+    expect(drawnHandleIds()).toEqual(firstIds);
+    expect(drawnHandleIds()).not.toContain(draggedIds[1]);
+    expect(dragged.points).toHaveLength(first.points.length);
+    expect(editor.selectionIds()).toEqual([dragged.id]);
+    expect(editor.selectionLocalRect()).toMatchObject({ x: 300, y: 0, width: 200, height: 100 });
+
+    await editor.releaseAt({ x: 500, y: 100 });
+    expect((await editor.outline())[1]?.points.map(({ id }) => id)).toEqual(draggedIds);
+    expect(drawnHandleIds()).toEqual([...firstIds, ...draggedIds]);
   });
 });

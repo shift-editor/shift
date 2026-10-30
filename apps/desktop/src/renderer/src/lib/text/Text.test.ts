@@ -43,6 +43,20 @@ function runNode(editor: Editor): TextRunNode {
 }
 
 /**
+ * The canvas text run's layout as `Text.layout` reads it without subscribing,
+ * and the layout its cell holds now, for the `Text` subject calls.
+ */
+function layoutReads(editor: Editor): { read: unknown; held: unknown } {
+  const { runId } = runNode(editor);
+  return {
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests -- Text.layout, the untracked read, is the subject
+    read: editor.text.layout(runId),
+    // oxlint-disable-next-line shift/no-editor-internals-in-tests -- the layout cell Text.layout must read through
+    held: editor.text.layoutCell(runId).peek(),
+  };
+}
+
+/**
  * Scales each selected run glyph twice over from its own bottom-left, through
  * the run's transform target. No resize handle shows for several run glyphs
  * selected at the run level, so this drives the subject directly.
@@ -113,7 +127,8 @@ describe("Text layout cells", () => {
     editor.selectTool("text");
 
     const before = canvasText(editor);
-    expect(before).toEqual(editor.canvasText());
+    const { read, held } = layoutReads(editor.asEditor());
+    expect(read).toBe(held);
 
     caretToStart(editor);
     editor.typeText("A");

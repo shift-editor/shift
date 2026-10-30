@@ -1,9 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PointId } from "@shift/types";
+import type { Editor } from "@shift/editor";
+import { mintContourId, type ContourId, type PointId } from "@shift/types";
 import { useTestEditor } from "@/testing/fontFixture";
 import type { OutlineContour, OutlinePoint } from "@/testing/reads";
 import type { EditorTestSurface } from "@/testing/surface";
 import { canMakeFirstPoint, runRendererCommand } from "./rendererCommands";
+
+/**
+ * Unions two contours by id, as the sidebar's boolean buttons do once they have
+ * resolved the selected pair. No selection yields ids the layer lacks, so the
+ * guard against them is reached only through `Editor.boolean` itself.
+ */
+function combineContours(editor: Editor, a: ContourId, b: ContourId): Promise<void> {
+  // oxlint-disable-next-line shift/no-editor-internals-in-tests -- Editor.boolean's guard for contour ids its layer lacks is the subject
+  return editor.boolean(a, b, "union");
+}
 
 /** Clicks each glyph-local position in turn with the Pen. */
 async function drawWithPen(
@@ -167,7 +178,7 @@ describe("empty and invalid editor operations", () => {
   });
 
   it("ignores boolean operations with missing contour identities", async () => {
-    expect(await editor.combineSelectedContours("union")).toBe(false);
+    await combineContours(editor.asEditor(), mintContourId(), mintContourId());
     expect(await editor.outline()).toEqual([]);
   });
 

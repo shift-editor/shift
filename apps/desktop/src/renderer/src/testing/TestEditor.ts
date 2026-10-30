@@ -26,6 +26,7 @@ import {
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { effect } from "@shift/editor/signals";
+import { readEditorRenderTheme } from "@shift/editor/rendering";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import {
   kerningValueEdit,
@@ -47,12 +48,14 @@ import {
 import type { EditorCommandId } from "@shared/commands";
 import { Bounds, Rect, type Point2D, type Rect2D } from "@shift/geo";
 import {
+  ascending,
+  comparing,
+  orderBy,
   mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
   type AnchorId,
   type Axis,
-  type ContourId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
@@ -112,7 +115,7 @@ import type {
   ToolShortcut,
 } from "./surface";
 import { drawFixture } from "./drawFixture";
-import { createStubContext } from "./stubCanvas";
+import { createStubContext, recordStrokedLines, type StrokedLine } from "./stubCanvas";
 import { SurfaceActions } from "./SurfaceActions";
 import type {
   AnchorReadOptions,
@@ -226,11 +229,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
   };
   /** The surface's actions, shared with the E2E hook. */
   readonly #actions = new SurfaceActions(this);
-  /** Each held {@link requestHiddenHandles} request's release, by request. */
-  readonly #hiddenHandleRequests = new Map<number, () => void>();
-  #lastHiddenHandleRequest = 0;
   /** The frames {@link recordCanvas} has recorded, each the paths it fills and strokes. */
   readonly #canvasFrames: { fills: Path2D[]; strokes: Path2D[] }[] = [];
+  /** The overlay frames {@link recordCanvas} has recorded, each the lines it strokes. */
+  readonly #overlayFrames: StrokedLine[][] = [];
   /** The ids outlines go by in {@link latestCanvasFrame} and {@link drawnOutlineIds}. */
   readonly #outlineIds = new Map<Path2D, number>();
   /** How many times the canvas text was laid out, once {@link textLayoutCount} first counts. */
@@ -1363,11 +1365,41 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   drawnSnapCrossings(): readonly Point2D[] {
-    if (this.drawnSnapGuides().length === 0) return [];
-    const ids = this.selection.ids;
-    const selection = this.positionSelection(ids);
-    if (!selection) return [];
-    return this.snapping.crossings(selection.layer, [this.selectionBounds(ids)]);
+    const node = this.glyphNode;
+    const lines = this.#overlayFrames.at(-1);
+    if (!node || !lines) return [];
+
+    // SnapLines draws each cross as two screen-space diagonals through its centre.
+    const { color, crossSizePx } = readEditorRenderTheme().snap;
+    const arm = 2 * crossSizePx;
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+    const diagonals = lines.filter(
+      ({ from, to, style }) =>
+        style === color && near(Math.abs(to.x - from.x), arm) && near(Math.abs(to.y - from.y), arm),
+    );
+    const centre = ({ from, to }: StrokedLine) => ({
+      x: (from.x + to.x) / 2,
+      y: (from.y + to.y) / 2,
+      rising: (to.x - from.x) * (to.y - from.y) > 0,
+    });
+    const centres = diagonals.map(centre);
+    const round = (value: number) => Math.round(value * 1e6) / 1e6 + 0;
+    return centres
+      .filter(
+        (cross) =>
+          cross.rising &&
+          centres.some(
+            (other) => !other.rising && near(other.x, cross.x) && near(other.y, cross.y),
+          ),
+      )
+      .map((cross) => this.toLocal(node, this.screenToScene(screenPoint(cross.x, cross.y))))
+      .map((point) => ({ x: round(point.x), y: round(point.y) }))
+      .toSorted(
+        orderBy(
+          comparing((point: Point2D) => point.x, ascending),
+          comparing((point: Point2D) => point.y, ascending),
+        ),
+      );
   }
 
   drawnPoint(id: PointId): AuthoredPoint | null {
@@ -1421,8 +1453,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     scene.ctx.stroke = ((path?: Path2D) => {
       if (path) this.#canvasFrames.at(-1)?.strokes.push(path);
     }) as typeof scene.ctx.stroke;
+    const overlay = recordingSurface();
+    recordStrokedLines(overlay.ctx, this.#overlayFrames);
     const { canvas, rect, dpr, width, height } = recordingSurface();
-    this.attachRenderSurfaces(recordingSurface(), scene, recordingSurface(), {
+    this.attachRenderSurfaces(recordingSurface(), scene, overlay, {
       canvas,
       rect,
       dpr,
@@ -1509,19 +1543,6 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   clipboardText(): string {
     return this.#clipboard.buffer;
-  }
-
-  requestHiddenHandles(target: PointId | ContourId): number {
-    const request = ++this.#lastHiddenHandleRequest;
-    this.#hiddenHandleRequests.set(request, this.hideHandles(target));
-    return request;
-  }
-
-  releaseHiddenHandles(request: number): void {
-    const release = this.#hiddenHandleRequests.get(request);
-    if (!release) return;
-    this.#hiddenHandleRequests.delete(request);
-    release();
   }
 
   toolCursor(): string {

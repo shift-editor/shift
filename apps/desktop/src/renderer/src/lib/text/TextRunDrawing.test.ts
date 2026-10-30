@@ -26,21 +26,36 @@ describe("text run drawing", () => {
   };
 
   it("redraws every composite occurrence when an outline only the run draws changes", async () => {
-    // The dieresis is a component of both composites; the composites are drawn only by the run.
-    editor = await openTestEditor(FONT, "dieresiscomb");
-    await typeAfterEditedGlyph(editor, "ǖlǖü");
+    // The dieresis is a component of both composites; u stays the edited glyph throughout.
+    editor = await openTestEditor(FONT, "u");
+    editor.selectTool("text");
+    editor.typeText("ǖlǖü");
+    // At the start of the text the dieresis has no base, so it is a run glyph of its own.
+    editor.moveCaret(-1, "line");
+    editor.pasteText("/dieresiscomb");
+    await editor.pressKey("Escape");
+    await editor.settle();
     editor.recordCanvas();
     await expect.poll(() => fillsOf("udieresismacron")).toBe(2);
 
-    const drawnBefore = editor.drawnOutlineIds("udieresismacron").closed;
-    // A drag preview commits nothing, so only the run's own subscriptions can redraw the composites.
-    const [contour] = await editor.outline();
+    // The dieresis's first point, in the edited u's units.
+    const text = editor.canvasText();
+    const placed = (name: string) => text?.glyphs.find((glyph) => glyph.name === name);
+    const dieresis = placed("dieresiscomb");
+    const u = placed("u");
+    const [contour] = (await editor.layerOf("dieresiscomb")).contours;
     const point = contour?.points[0];
-    if (!point) throw new Error("Expected a point in the dieresis");
+    if (!dieresis || !u || !point) throw new Error("Expected the dieresis and u in the text");
+    const at = { x: dieresis.origin.x - u.left + point.x, y: dieresis.origin.y + point.y };
     editor.selectTool("select");
-    editor.holdDrag(point.id as PointId, { x: 25, y: 0 });
+    await editor.clickAt(at);
+    const drawnBefore = editor.drawnOutlineIds("udieresismacron").closed;
+    // Dragging the selected run glyph previews a move of its outline and commits nothing, and
+    // the dieresis is not the edited glyph, so only the run's own subscriptions can redraw it.
+    editor.holdDragFrom(at, { x: at.x + 25, y: at.y });
 
     await expect.poll(() => fillsOf("udieresismacron")).toBe(2);
+    expect(editor.canvasText()?.editedItemId).toBe(text?.editedItemId);
     expect(editor.drawnOutlineIds("udieresismacron").closed).not.toBe(drawnBefore);
     expect(editor.latestCanvasFrame().fills).not.toContain(drawnBefore);
     expect(fillsOf("udieresis")).toBe(1);

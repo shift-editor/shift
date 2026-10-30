@@ -27,7 +27,6 @@ import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime"
 import type {
   AnchorId,
   ComponentId,
-  ContourId,
   GlyphName,
   GlyphRecord,
   KerningPosition,
@@ -213,27 +212,6 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   holdDragAnchor(id: AnchorId, by: Point2D, modifiers?: Modifiers): void;
   /** Abandons the gesture in flight, as losing pointer capture does. */
   cancelGesture(): void;
-  /**
-   * Hides the handles of one point, or of every point on a contour, as the
-   * Shape tool does for the contour it is dragging out, until
-   * {@link releaseHiddenHandles} releases the request. Test-only: in the app a
-   * tool's gesture owns the request.
-   *
-   * @remarks
-   * Requests stay independent: handles stay hidden while any request that
-   * covers them, for the point or its contour, is still held.
-   *
-   * @param target - The point, or the contour whose points' handles to hide.
-   * @returns the request, to pass to {@link releaseHiddenHandles}.
-   */
-  requestHiddenHandles(target: PointId | ContourId): number;
-  /**
-   * Releases a request {@link requestHiddenHandles} made; releasing it again
-   * does nothing.
-   *
-   * @param request - What {@link requestHiddenHandles} returned.
-   */
-  releaseHiddenHandles(request: number): void;
   /** Presses a key and waits for the edit it makes. */
   pressKey(key: string, modifiers?: Modifiers): Promise<void>;
   /** Switches to the Hand for as long as Space is held, as the Space key binding does. */
@@ -507,9 +485,10 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   drawnSnapGuides(): readonly PositionGuide[];
   /**
-   * The bounding-box corners Select marks where its snap guides cross them, in
-   * glyph units: each contour's box, then the selection's. Empty while no guide
-   * is drawn. Test-only: not agent data.
+   * Where the latest frame since {@link recordCanvas} draws a cross on the snap
+   * guides, in glyph units, sorted by x then y: guide ends, snapped positions,
+   * and the box corners a guide passes through. Empty before a frame draws a
+   * guide. Test-only: not agent data.
    */
   drawnSnapCrossings(): readonly Point2D[];
   /**
