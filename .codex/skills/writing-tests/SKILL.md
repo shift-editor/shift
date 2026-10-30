@@ -97,28 +97,23 @@ If your target doesn't fit one of these, stop and ask — don't invent a new sha
 ### Tool test
 
 ```ts
-import { describe, it, expect, beforeEach } from "vitest";
-import { TestEditor } from "@/testing/TestEditor";
+import { beforeEach, describe, expect, it } from "vitest";
+import { useTestEditor } from "@/testing/fontFixture";
+
+const editor = useTestEditor();
 
 describe("Hand tool", () => {
-  let editor: TestEditor;
-
   beforeEach(() => {
-    editor = new TestEditor();
-    editor.startSession();
     editor.selectTool("hand");
   });
 
-  it("drag pans the viewport by the screen delta", () => {
-    const startPan = editor.pan;
+  it("drag pans the viewport by the screen delta", async () => {
+    const start = editor.canvasOffset();
 
-    editor.pointerDown(0, 0);
-    editor.pointerMove(50, 30); // crosses drag threshold
-    editor.pointerMove(120, 80);
-    editor.pointerUp(120, 80);
+    // At zoom 1 a font unit is a screen pixel; screen y runs down.
+    await editor.dragFrom({ x: 0, y: 0 }, { x: 120, y: -80 });
 
-    expect(editor.pan.x).toBe(startPan.x + 120);
-    expect(editor.pan.y).toBe(startPan.y + 80);
+    expect(editor.canvasOffset()).toEqual({ x: start.x + 120, y: start.y + 80 });
   });
 });
 ```
@@ -200,15 +195,16 @@ Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, vari
 Before committing a test, run through these. Any miss means the test is wrong.
 
 1. **Mental deletion.** Replace the method body under test with `throw new Error("unimplemented")`. Does your test fail? If it still passes, you wrote a tautology — usually because you asserted on a value you constructed rather than on a consequence.
-2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method. `asEditor()` goes only straight into a call that needs an `Editor`, never read from or kept. Enforced by `shift/no-escape-hatch-reads`.
+2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method. `asEditor()` goes only straight into a call that needs an `Editor`, never read from or kept. Enforced by `shift/no-escape-hatch-reads`. Read and act on a `TestEditor` only through what `EditorTestSurface` declares, never its tool manager, scene, edit coordinator, history, layers or signal cells; add the read or action to the surface when it is missing. Enforced by `shift/no-editor-internals-in-tests`.
 3. **Specific assertions.** `expect(editor.pointCount).toBe(4)` — yes. `expect(result).toBeDefined()` or `expect(spy).toHaveBeenCalled()` — no, those survive any implementation.
 4. **Correct code path.** If the real production path goes through command history + bridge + signals, your test goes through those too. You didn't reach behind the facade.
 5. **Focused body.** Keep unit-test bodies under roughly 15 lines. E2E flows may be longer when the visible workflow requires it, but each test still protects one behavior and repeated plumbing belongs in `EditorDriver` or the owning fixture.
 
 ## Setup discipline
 
-- `beforeEach` is ≤ 5 lines: `new TestEditor()` + `startSession()` + `selectTool()` + optional fixture.
-- No wrapper factories around `TestEditor`. If you need a reusable helper, it belongs as a method on `TestEditor` itself (see `pointerMove`, `click`, `escape`).
+- Get the editor from the harness, typed as `EditorTestSurface`: `const editor = useTestEditor(fixture)` at module or `describe` level (it starts before each test and closes after), or `await startTestEditor()` / `await openTestEditor(file, glyph)` / `await startEditorWith(fixture)` inside a test. Never `new TestEditor()` in a test.
+- `beforeEach` is ≤ 5 lines: `selectTool()` + the drawing or fixture the cases share.
+- No wrapper factories around the editor. If you need a reusable action or read, it belongs on `EditorTestSurface` (declared in `testing/surface.ts`, implemented by `TestEditor`), named for what a user does or sees.
 - If your test needs a pre-drawn shape, draw it with the pen/shape tool in `beforeEach` — don't construct glyph snapshots inline.
 - In E2E specs, prefer the shared `editor` fixture over constructing `EditorDriver` for the primary page. Construct a driver directly only for additional workspace windows.
 - Do not add one-off scene-node, glyph-layer, canvas-offset, or projection helpers when `EditorDriver` can express the same reusable boundary.
