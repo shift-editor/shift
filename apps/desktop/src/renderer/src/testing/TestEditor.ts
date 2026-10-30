@@ -25,6 +25,7 @@ import {
 } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import { effect } from "@shift/editor/signals";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import {
   kerningValueEdit,
@@ -34,6 +35,7 @@ import {
 } from "@shift/editor/model";
 import type { KerningTool, SpacingTool, ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
+import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import {
   alignSelection,
@@ -50,6 +52,7 @@ import {
   mintLayerId,
   type AnchorId,
   type Axis,
+  type ContourId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
@@ -99,12 +102,17 @@ import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
 import type {
   AxisFixture,
   AxisLocation,
+  CanvasFrame,
   DrawnGlyph,
+  DrawnOutlineIds,
   DrawOptions,
   EditorTestSurface,
   Modifiers,
+  ToolbarButton,
+  ToolShortcut,
 } from "./surface";
 import { drawFixture } from "./drawFixture";
+import { createStubContext } from "./stubCanvas";
 import { SurfaceActions } from "./SurfaceActions";
 import type {
   AnchorReadOptions,
@@ -137,6 +145,23 @@ interface DragResult {
  * readable via {@link TestEditor.clipboardBuffer} so tests can assert on
  * what the Editor wrote without needing a round-trip.
  */
+/**
+ * A stand-in canvas the renderer can draw to, 1000 by 800 screen pixels,
+ * whose context records nothing until a caller replaces its methods.
+ */
+function recordingSurface() {
+  const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
+  const canvas = {
+    width: 1000,
+    height: 800,
+    getBoundingClientRect: () => rect,
+    getContext: () => null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as HTMLCanvasElement;
+  return { canvas, rect, dpr: 1, ctx: createStubContext(), width: 1000, height: 800 };
+}
+
 class InMemorySystemClipboard implements SystemClipboard {
   buffer = "";
   async writeText(text: string): Promise<void> {
@@ -168,6 +193,23 @@ export async function openTestEditor(
   return new TestEditor().openSession(sourcePath, glyphName);
 }
 
+/**
+ * The glyph atlas over `editor`'s workspace, wired as the workspace runtime
+ * wires it, for subject tests of desktop parts built with one.
+ *
+ * @throws {Error} when `editor` did not come from {@link startTestEditor} or
+ * {@link openTestEditor}.
+ */
+export function authoredGlyphAtlas(editor: EditorTestSurface): AuthoredGlyphAtlasSource {
+  if (!(editor instanceof TestEditor)) throw new Error("Expected an editor from startTestEditor");
+  const font = editor.font;
+  return new AuthoredGlyphAtlasSource(
+    editor.workspaceEditCoordinator,
+    () => font.getAxes(),
+    () => font.getAxisMappingBases(),
+  );
+}
+
 export class TestEditor extends Editor implements EditorTestSurface {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
@@ -184,6 +226,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
   };
   /** The surface's actions, shared with the E2E hook. */
   readonly #actions = new SurfaceActions(this);
+  /** Each held {@link requestHiddenHandles} request's release, by request. */
+  readonly #hiddenHandleRequests = new Map<number, () => void>();
+  #lastHiddenHandleRequest = 0;
+  /** The frames {@link recordCanvas} has recorded, each the paths it fills and strokes. */
+  readonly #canvasFrames: { fills: Path2D[]; strokes: Path2D[] }[] = [];
+  /** The ids outlines go by in {@link latestCanvasFrame} and {@link drawnOutlineIds}. */
+  readonly #outlineIds = new Map<Path2D, number>();
+  /** How many times the canvas text was laid out, once {@link textLayoutCount} first counts. */
+  #textLayouts: { count: number } | null = null;
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
   #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
@@ -1311,6 +1362,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.editor.drawnSnapGuides();
   }
 
+  drawnSnapCrossings(): readonly Point2D[] {
+    if (this.drawnSnapGuides().length === 0) return [];
+    const ids = this.selection.ids;
+    const selection = this.positionSelection(ids);
+    if (!selection) return [];
+    return this.snapping.crossings(selection.layer, [this.selectionBounds(ids)]);
+  }
+
   drawnPoint(id: PointId): AuthoredPoint | null {
     return this.#pointIn(this.drawnOutline(), id);
   }
@@ -1352,6 +1411,73 @@ export class TestEditor extends Editor implements EditorTestSurface {
     };
   }
 
+  recordCanvas(): void {
+    const scene = recordingSurface();
+    // The renderer clears a layer at the start of each frame it draws.
+    scene.ctx.clearRect = () => this.#canvasFrames.push({ fills: [], strokes: [] });
+    scene.ctx.fill = ((path: Path2D) => {
+      this.#canvasFrames.at(-1)?.fills.push(path);
+    }) as typeof scene.ctx.fill;
+    scene.ctx.stroke = ((path?: Path2D) => {
+      if (path) this.#canvasFrames.at(-1)?.strokes.push(path);
+    }) as typeof scene.ctx.stroke;
+    const { canvas, rect, dpr, width, height } = recordingSurface();
+    this.attachRenderSurfaces(recordingSurface(), scene, recordingSurface(), {
+      canvas,
+      rect,
+      dpr,
+      width,
+      height,
+    });
+  }
+
+  latestCanvasFrame(): CanvasFrame {
+    const frame = this.#canvasFrames.at(-1);
+    return {
+      fills: (frame?.fills ?? []).map((path) => this.#outlineId(path)),
+      strokes: (frame?.strokes ?? []).map((path) => this.#outlineId(path)),
+    };
+  }
+
+  drawnOutlineIds(glyph: string): DrawnOutlineIds {
+    const model = this.glyphForId(this.#glyphNamed(glyph))?.renderModelAt(
+      this.externalLocationCell,
+      this.activeSourceIdCell,
+    );
+    return {
+      closed: model ? this.#outlineId(model.closedContoursPath) : null,
+      open: model ? this.#outlineId(model.openContoursPath) : null,
+    };
+  }
+
+  /** The id {@link drawnOutlineIds} and {@link latestCanvasFrame} give `path`. */
+  #outlineId(path: Path2D): number {
+    let id = this.#outlineIds.get(path);
+    if (id === undefined) {
+      id = this.#outlineIds.size + 1;
+      this.#outlineIds.set(path, id);
+    }
+    return id;
+  }
+
+  glyphLoaded(name: string): boolean {
+    return this.glyphForId(this.#glyphNamed(name)) !== null;
+  }
+
+  textLayoutCount(): number {
+    if (!this.#textLayouts) {
+      const layout = this.text.layoutCell(this.#requireTextRun().runId);
+      const counter = { count: -1 };
+      const watcher = effect(() => {
+        void layout.value;
+        counter.count++;
+      });
+      this.on("destroying", () => watcher.dispose());
+      this.#textLayouts = counter;
+    }
+    return this.#textLayouts.count;
+  }
+
   segmentBetween(start: PointId, end: PointId): string {
     return segmentIdFor(start, end);
   }
@@ -1366,6 +1492,36 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   toolDisabled(name: ToolName): boolean {
     return this.toolRegistry.get(name)?.disabled ?? false;
+  }
+
+  toolbar(): readonly ToolbarButton[] {
+    return [...this.toolRegistry]
+      .filter(([, item]) => !item.hidden)
+      .map(([tool, item]) => ({
+        tool,
+        menu: (item.menuItems ?? []).map((menuItem) => menuItem.toolId ?? tool),
+      }));
+  }
+
+  toolShortcuts(): readonly ToolShortcut[] {
+    return this.getToolShortcuts().map(({ shortcut, toolId }) => ({ key: shortcut, tool: toolId }));
+  }
+
+  clipboardText(): string {
+    return this.#clipboard.buffer;
+  }
+
+  requestHiddenHandles(target: PointId | ContourId): number {
+    const request = ++this.#lastHiddenHandleRequest;
+    this.#hiddenHandleRequests.set(request, this.hideHandles(target));
+    return request;
+  }
+
+  releaseHiddenHandles(request: number): void {
+    const release = this.#hiddenHandleRequests.get(request);
+    if (!release) return;
+    this.#hiddenHandleRequests.delete(request);
+    release();
   }
 
   toolCursor(): string {
