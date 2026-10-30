@@ -130,6 +130,8 @@ impl MetricDefinition {
 /// Both values are expressed in font units. Overshoots are positive above a
 /// metric line and negative below it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[cfg_attr(feature = "pack", pack(rename = "SourceMetricValue"))]
 #[serde(rename_all = "camelCase")]
 pub struct MetricValue {
     pub position: f64,

@@ -1,7 +1,8 @@
 import { Bounds } from "@shift/geo";
 import type { NewPoint } from "./Point";
 import type { ContourGeometry, SegmentPoints } from "./types/contour";
-import { contourGeometry, type SegmentBounds, type SegmentKind } from "./generated/geometryLayouts";
+import { geometry as rules } from "@shift/wasm";
+import type { SegmentBounds, SegmentKind } from "@shift/wasm/protocol";
 
 /** One segment's points, which are the contour's own, and its tight box. */
 export interface ContourSegment<TPoint extends NewPoint> {
@@ -39,7 +40,7 @@ export function segmentContour<TPoint extends NewPoint>(
 
   const coordinates: number[] = [];
   for (const point of points) coordinates.push(point.x, point.y);
-  const geometry = contourGeometry({
+  const geometry = rules.contourGeometry({
     closed,
     pointTypes: points.map((point) => point.pointType),
     coordinates,

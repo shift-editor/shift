@@ -15,7 +15,8 @@
 // `generated-shaping`); `--reference` builds only the test-only reference
 // variant. With `--types`, it writes every variant's declarations
 // (shift_wasm.d.ts and module.d.ts) from a debug build, for typecheck. Release
-// builds write the same declarations, so the two never disagree.
+// builds write the same declarations, so the two never disagree. Every run but
+// `--reference` also writes src/generated-protocol (scripts/protocol.mjs).
 //
 // wasm-opt only shrinks the module, so it runs only with SHIFT_WASM_OPT=1, which
 // the Nightly, release and perf workflows set; everywhere else, including
@@ -25,6 +26,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { writeProtocol } from "./protocol.mjs";
 
 const root = resolve(import.meta.dirname, "../../..");
 const src = resolve(import.meta.dirname, "../src");
@@ -79,6 +81,8 @@ for (const variant of variants) {
   writeDeclarations(staged, out, variant.file);
   if (!typesOnly) finishing.push(finish(staged, out, variant.file));
 }
+// The generated classes over the modules' request exports.
+if (!referenceOnly) writeProtocol();
 await Promise.all(finishing);
 
 /**

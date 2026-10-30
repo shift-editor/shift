@@ -193,6 +193,7 @@ pub struct FollowingComponent<'a, A> {
 
 /// Where a component goes after an edit, and whether it is anchored.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Following {
     pub transform: DecomposedTransform,
     pub alignment: ComponentAlignment,

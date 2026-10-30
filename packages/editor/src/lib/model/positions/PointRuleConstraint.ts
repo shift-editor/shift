@@ -1,7 +1,6 @@
 import { Vec2, type Point2D } from "@shift/geo";
 import type { AnchorId, PointId, PointType } from "@shift/types";
-import { releaseDrag } from "@shift/wasm";
-import { dragMoves, prepareDrag } from "../../wasm/generated/layouts";
+import { drag, releaseDrag } from "@shift/wasm";
 import type { GlyphLayerPositions } from "../Glyph";
 
 /** A layer's contours as a drag's rules read them: each contour's points in order. */
@@ -60,7 +59,7 @@ export class PointRuleConstraint {
       const index = indexOf.get(id);
       return index === undefined ? [] : [index];
     });
-    const { handle } = prepareDrag({ contours, selected });
+    const { handle } = drag.prepareDrag({ contours, selected });
     return new PointRuleConstraint(handle, order);
   }
 
@@ -79,7 +78,7 @@ export class PointRuleConstraint {
     if (this.#disposed) throw new Error("a disposed point rule constraint moves nothing");
 
     const positions: GlyphLayerPositions[number][] = [];
-    for (const move of dragMoves({ handle: this.#handle, dx: delta.x, dy: delta.y })) {
+    for (const move of drag.dragMoves({ handle: this.#handle, dx: delta.x, dy: delta.y })) {
       const id = this.#pointIds[move.point];
       if (id) positions.push({ kind: "point", id, x: move.x, y: move.y });
     }

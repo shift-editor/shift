@@ -1,16 +1,26 @@
 //! Contours from pasted SVG path data, as shift-font parses them. The export
 //! is built into the engine module only: the parser is about 40 KB, too much
-//! for the module every window embeds. The layouts below are declared either
-//! way, so the generated wrapper is the same in every build.
+//! for the module every window embeds. The interface and its types are
+//! declared either way, so the generated class is the same in every build.
 
-use crate::layout::layout;
+use pack::Pack;
 
-layout! {
-    /// SVG path data as UTF-16 code units. A string travels as code units,
-    /// not through the name table, because this module's names are its own.
-    pub struct SvgPathData {
-        pub code_units: Vec<f64>,
-    }
+use crate::geometry::ContourPoints;
+
+/// Contours from SVG path data, as shift-font parses them.
+#[pack::interface]
+pub trait SvgPaths {
+    /// The contours SVG path data draws, one per subpath, as
+    /// `svg_path::contours_from_svg_path` parses them; null when the path
+    /// data is malformed. The editor mints the points' ids.
+    fn svg_path_contours(&self, path: SvgPathData) -> Option<Vec<ContourPoints>>;
+}
+
+/// SVG path data as UTF-16 code units. A string travels as code units,
+/// not through the name table, because this module's names are its own.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct SvgPathData {
+    pub code_units: Vec<f64>,
 }
 
 #[cfg(feature = "engine")]
@@ -19,22 +29,27 @@ mod exports {
     use shift_font::{Contour, Point};
     use wasm_bindgen::prelude::wasm_bindgen;
 
-    use super::SvgPathData;
+    use super::{SvgPathData, SvgPaths, svg_paths_request};
     use crate::geometry::ContourPoints;
-    use crate::layout::{call, whole};
+    use crate::names::with_names;
+    use crate::numbers::whole;
 
-    /// The contours SVG path data draws: `svg_path::contours_from_svg_path`.
-    ///
-    /// Input: [`SvgPathData`]. Output: one [`ContourPoints`] per subpath,
-    /// or none when the path data is malformed. The editor mints the points'
-    /// ids.
-    #[wasm_bindgen(js_name = svgPathContours)]
-    pub fn svg_path_contours(input: &[f64]) -> Vec<f64> {
-        call(input, |path: SvgPathData| {
+    /// The parser [`SvgPaths`] calls.
+    pub struct SvgPathParser;
+
+    impl SvgPaths for SvgPathParser {
+        fn svg_path_contours(&self, path: SvgPathData) -> Option<Vec<ContourPoints>> {
             contours_from_svg_path(&path.text())
                 .ok()
-                .map(|contours| contours.iter().map(ContourPoints::of).collect::<Vec<_>>())
-        })
+                .map(|contours| contours.iter().map(ContourPoints::of).collect())
+        }
+    }
+
+    /// Runs one [`SvgPaths`] method for the editor's generated `SvgPaths`
+    /// class.
+    #[wasm_bindgen(js_name = svgPathsRequest)]
+    pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
+        with_names(|names| svg_paths_request(&SvgPathParser, method, input, names))
     }
 
     impl SvgPathData {
