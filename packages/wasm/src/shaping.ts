@@ -10,15 +10,16 @@
  * that loads when text first needs shaping. Use the typed wrappers in
  * `@shift/editor`; the raw exports are for them.
  */
-import { initSync } from "./generated-shaping/shift_wasm.js";
+import { syncTransport } from "@shift/pack";
+import { initSync, internName, nameOf, shapingRequest } from "./generated-shaping/shift_wasm.js";
 import { moduleBase64 } from "./generated-shaping/module";
 import { embeddedModule } from "./embedded";
+import { Shaping } from "./generated-protocol";
+import { moduleNames } from "./names";
 
 initSync({ module: embeddedModule(moduleBase64) });
 
-export {
-  registerShaper,
-  releaseShaper,
-  setShaperGlyphs,
-  shapeParagraphs,
-} from "./generated-shaping/shift_wasm.js";
+/** Text shaping with the shapers registered with `registerShaper`. */
+export const shaping = new Shaping(syncTransport(shapingRequest, moduleNames(internName, nameOf)));
+
+export { registerShaper, releaseShaper } from "./generated-shaping/shift_wasm.js";

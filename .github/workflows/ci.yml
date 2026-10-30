@@ -65,6 +65,9 @@ jobs:
               # The editor runs these through packages/wasm.
               - 'crates/shift-font/**'
               - 'crates/shift-wasm/**'
+              # They generate @shift/wasm/protocol.
+              - 'crates/pack/**'
+              - 'crates/pack-derive/**'
               - 'Cargo.lock'
               - '.github/actions/wasm-toolchain/**'
               - 'packages/**'

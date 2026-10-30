@@ -76,9 +76,15 @@
         "$TURBO_ROOT$/rust-toolchain.toml",
         "$TURBO_ROOT$/crates/*/Cargo.toml",
         "$TURBO_ROOT$/crates/*/build.rs",
-        "$TURBO_ROOT$/crates/*/src/**"
+        "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-shaping/**", "src/generated-engine/**"],
+      "outputs": [
+        "src/generated/**",
+        "src/generated-shaping/**",
+        "src/generated-engine/**",
+        "src/generated-protocol/**"
+      ],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:debug": {
@@ -90,9 +96,15 @@
         "$TURBO_ROOT$/rust-toolchain.toml",
         "$TURBO_ROOT$/crates/*/Cargo.toml",
         "$TURBO_ROOT$/crates/*/build.rs",
-        "$TURBO_ROOT$/crates/*/src/**"
+        "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-shaping/**", "src/generated-engine/**"],
+      "outputs": [
+        "src/generated/**",
+        "src/generated-shaping/**",
+        "src/generated-engine/**",
+        "src/generated-protocol/**"
+      ],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:e2e": {
@@ -104,9 +116,15 @@
         "$TURBO_ROOT$/rust-toolchain.toml",
         "$TURBO_ROOT$/crates/*/Cargo.toml",
         "$TURBO_ROOT$/crates/*/build.rs",
-        "$TURBO_ROOT$/crates/*/src/**"
+        "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": ["src/generated/**", "src/generated-shaping/**", "src/generated-engine/**"],
+      "outputs": [
+        "src/generated/**",
+        "src/generated-shaping/**",
+        "src/generated-engine/**",
+        "src/generated-protocol/**"
+      ],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:reference": {
@@ -132,9 +150,14 @@
         "$TURBO_ROOT$/rust-toolchain.toml",
         "$TURBO_ROOT$/crates/*/Cargo.toml",
         "$TURBO_ROOT$/crates/*/build.rs",
-        "$TURBO_ROOT$/crates/*/src/**"
+        "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": ["src/generated*/shift_wasm.d.ts", "src/generated*/module.d.ts"]
+      "outputs": [
+        "src/generated*/shift_wasm.d.ts",
+        "src/generated*/module.d.ts",
+        "src/generated-protocol/**"
+      ]
     },
     "generate:bridge-types": {
       "dependsOn": ["shift-bridge#types"],

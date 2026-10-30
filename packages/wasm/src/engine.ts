@@ -11,7 +11,16 @@
  * a chunk that loads when a font opens for editing. Use the typed wrapper in
  * `@shift/editor`; the raw exports are for it.
  */
-import { initSync } from "./generated-engine/shift_wasm.js";
+import { syncTransport } from "@shift/pack";
+import {
+  engineReadsRequest,
+  initSync,
+  internName,
+  nameOf,
+  svgPathsRequest,
+} from "./generated-engine/shift_wasm.js";
+import { EngineReads, SvgPaths } from "./generated-protocol";
+import { moduleNames } from "./names";
 
 /** The parts of Node's `process` this module reads, where it runs under Node. */
 interface NodeProcess {
@@ -36,6 +45,18 @@ async function engineModule(): Promise<WebAssembly.Module> {
 
 initSync({ module: await engineModule() });
 
+const names = moduleNames(internName, nameOf);
+
+/** Contours from SVG path data, as shift-font parses them. */
+export const svgPaths = new SvgPaths(syncTransport(svgPathsRequest, names));
+
+/** What the editor reads from the engine session `handle`'s font. */
+export function engineReads(handle: number): EngineReads {
+  return new EngineReads(
+    syncTransport((method, input) => engineReadsRequest(handle, method, input), names),
+  );
+}
+
 export {
   engineApply,
   engineBeginEdit,
@@ -43,9 +64,7 @@ export {
   engineDiscardRedo,
   engineEndEdit,
   engineGlyphNumbers,
-  engineKerningPairs,
   engineKerningPairsNaming,
-  engineKerningRun,
   engineMarkSaved,
   engineMissingKerningOrigin,
   engineNewAnchorName,
@@ -56,11 +75,9 @@ export {
   engineRedo,
   engineRelease,
   engineRewindEdit,
-  engineSourceMetricsAt,
   engineSourceNumbers,
   engineStage,
   engineUndo,
-  svgPathContours,
   type EngineEdit,
   type EngineKerningPair,
   type EngineLayer,

@@ -1,9 +1,11 @@
 //! Anchor rules: kinds, propagation into composites, and anchored placement.
 //!
-//! Propagation and placement take and return numbers in the layouts declared
-//! here ([`crate::layout`]); anchor names are interned ids ([`crate::names`]).
+//! Propagation and placement are the [`Anchors`] interface, whose values
+//! cross packed into numbers ([`pack`]); anchor names are interned ids
+//! ([`crate::names`]).
 
 use fontir::ir::AnchorKind as IrAnchorKind;
+use pack::Pack;
 use serde::Serialize;
 use shift_font::anchor_attachment::{self, AnchorLike, Following, follow_anchors};
 use shift_font::anchor_propagation::{
@@ -13,7 +15,7 @@ use shift_font::{ComponentAlignment, DecomposedTransform, Transform};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
-use crate::layout::{call, enum_layout, foreign_layout, layout};
+use crate::names::with_names;
 
 /// An anchor's role in mark positioning, as export reads its name.
 #[derive(Serialize, Tsify)]
@@ -77,12 +79,21 @@ pub fn anchor_kind(name: &str) -> Result<Ts<AnchorKind>, JsError> {
     Ok(kind.into_ts()?)
 }
 
-/// Propagates one glyph's anchors at one location, as export compiles them.
-///
-/// Input: a [`PropagationGlyph`]. Output: [`PropagatedAnchors`].
-#[wasm_bindgen(js_name = propagateAnchors)]
-pub fn propagate_anchors(input: &[f64]) -> Vec<f64> {
-    call(input, |glyph: PropagationGlyph| {
+/// Anchor propagation and placement, as export and the workspace run them.
+#[pack::interface]
+pub trait Anchors {
+    /// Propagates one glyph's anchors at one location, as export compiles them.
+    fn propagate_anchors(&self, glyph: PropagationGlyph) -> PropagatedAnchors;
+    /// Places a composite's components after an edit, anchored ones on their
+    /// anchors; one placement per component.
+    fn follow_anchors(&self, components: Vec<FollowingComponent>) -> Vec<Following>;
+}
+
+/// The anchor rules [`Anchors`] calls.
+pub struct AnchorRules;
+
+impl Anchors for AnchorRules {
+    fn propagate_anchors(&self, glyph: PropagationGlyph) -> PropagatedAnchors {
         let components = glyph
             .components
             .iter()
@@ -98,16 +109,9 @@ pub fn propagate_anchors(input: &[f64]) -> Vec<f64> {
             is_mark: glyph.is_mark,
             is_ligature: glyph.is_ligature,
         })
-    })
-}
+    }
 
-/// Places a composite's components after an edit, anchored ones on their anchors.
-///
-/// Input: a list of [`FollowingComponent`]. Output: a list of [`Following`],
-/// one per component.
-#[wasm_bindgen(js_name = followAnchors)]
-pub fn follow_anchors_in(input: &[f64]) -> Vec<f64> {
-    call(input, |components: Vec<FollowingComponent>| {
+    fn follow_anchors(&self, components: Vec<FollowingComponent>) -> Vec<Following> {
         let components = components
             .iter()
             .map(|component| anchor_attachment::FollowingComponent {
@@ -119,117 +123,58 @@ pub fn follow_anchors_in(input: &[f64]) -> Vec<f64> {
             })
             .collect::<Vec<_>>();
         follow_anchors(&components)
-    })
-}
-
-foreign_layout! {
-    /// A named anchor position in a glyph's own coordinates.
-    PropagationAnchor => PropagationAnchor {
-        name: String,
-        x: f64,
-        y: f64,
     }
 }
 
-foreign_layout! {
-    /// A glyph's anchors with its components' anchors copied in.
-    PropagatedAnchors => PropagatedAnchors {
-        anchors: Vec<PropagationAnchor>,
-        /// How many base glyphs this glyph counts, for composites built on it.
-        base_glyph_count: usize,
-    }
+/// Runs one [`Anchors`] method for the editor's generated `Anchors` class.
+#[wasm_bindgen(js_name = anchorsRequest)]
+pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
+    with_names(|names| anchors_request(&AnchorRules, method, input, names))
 }
 
-foreign_layout! {
-    /// An affine matrix: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
-    Transform => Matrix {
-        xx: f64 => a,
-        xy: f64 => b,
-        yx: f64 => c,
-        yy: f64 => d,
-        dx: f64 => e,
-        dy: f64 => f,
-    }
+/// One component of a composite, as propagation reads it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct PropagationComponent {
+    /// The component glyph's anchors after its own propagation; null when the glyph is missing.
+    pub anchors: Option<Vec<PropagationAnchor>>,
+    /// How many base glyphs the component glyph counts, for numbering ligature anchors.
+    pub base_glyph_count: usize,
+    /// Where the component sits in the composite.
+    #[pack(rename = "matrix")]
+    pub transform: Transform,
 }
 
-foreign_layout! {
-    /// A transform as its parts, in interpolation order.
-    DecomposedTransform => DecomposedTransform {
-        translate_x: f64,
-        translate_y: f64,
-        rotation: f64,
-        scale_x: f64,
-        scale_y: f64,
-        skew_x: f64,
-        skew_y: f64,
-        t_center_x: f64,
-        t_center_y: f64,
-    }
+/// A glyph's own anchors and components, and the category facts propagation reads.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct PropagationGlyph {
+    pub anchors: Vec<PropagationAnchor>,
+    pub components: Vec<PropagationComponent>,
+    /// A mark that has anchors keeps exactly its own.
+    pub is_mark: bool,
+    /// A ligature numbers its components' anchors: `top` becomes `top_1`, `top_2`.
+    pub is_ligature: bool,
 }
 
-enum_layout! {
-    /// How a component was placed: by its anchors, by hand, or not recorded.
-    ComponentAlignment {
-        Unset => "unset",
-        Anchored => "anchored",
-        Free => "free",
-    }
+/// An anchor as alignment reads it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct AlignmentAnchor {
+    pub name: Option<String>,
+    pub x: f64,
+    pub y: f64,
 }
 
-foreign_layout! {
-    /// Where a component goes after an edit, and whether it is anchored.
-    Following => Following {
-        transform: DecomposedTransform,
-        alignment: ComponentAlignment,
-    }
-}
-
-layout! {
-    /// One component of a composite, as propagation reads it.
-    pub struct PropagationComponent {
-        /// The component glyph's anchors after its own propagation; null when the glyph is missing.
-        pub anchors: Option<Vec<PropagationAnchor>>,
-        /// How many base glyphs the component glyph counts, for numbering ligature anchors.
-        pub base_glyph_count: usize,
-        /// Where the component sits in the composite.
-        pub transform: Transform => matrix,
-    }
-}
-
-layout! {
-    /// A glyph's own anchors and components, and the category facts propagation reads.
-    pub struct PropagationGlyph {
-        pub anchors: Vec<PropagationAnchor>,
-        pub components: Vec<PropagationComponent>,
-        /// A mark that has anchors keeps exactly its own.
-        pub is_mark: bool,
-        /// A ligature numbers its components' anchors: `top` becomes `top_1`, `top_2`.
-        pub is_ligature: bool,
-    }
-}
-
-layout! {
-    /// An anchor as alignment reads it.
-    pub struct AlignmentAnchor {
-        pub name: Option<String>,
-        pub x: f64,
-        pub y: f64,
-    }
-}
-
-layout! {
-    /// One component of a composite, as it is now and as the workspace last accepted it.
-    pub struct FollowingComponent {
-        /// As the workspace last accepted it.
-        pub alignment: ComponentAlignment,
-        pub transform: DecomposedTransform,
-        /// Null for a component the edit added.
-        pub accepted_transform: Option<DecomposedTransform>,
-        /// The component glyph's own anchors now.
-        pub anchors: Vec<AlignmentAnchor>,
-        /// The component glyph's own anchors as last accepted.
-        pub accepted_anchors: Vec<AlignmentAnchor>,
-    }
+/// One component of a composite, as it is now and as the workspace last accepted it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct FollowingComponent {
+    /// As the workspace last accepted it.
+    pub alignment: ComponentAlignment,
+    pub transform: DecomposedTransform,
+    /// Null for a component the edit added.
+    pub accepted_transform: Option<DecomposedTransform>,
+    /// The component glyph's own anchors now.
+    pub anchors: Vec<AlignmentAnchor>,
+    /// The component glyph's own anchors as last accepted.
+    pub accepted_anchors: Vec<AlignmentAnchor>,
 }
 
 impl AnchorLike for AlignmentAnchor {

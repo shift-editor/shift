@@ -1,51 +1,49 @@
 //! A contour's segments and bounds, and a component's placement as a
 //! matrix, as shift-font computes them.
 
+use pack::Pack;
 use shift_font::{DecomposedTransform, PointType, SegmentIndexIter, SegmentIndices, Transform};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::layout::{call, enum_layout, layout};
+use crate::names::with_names;
 
-/// Segments one contour and bounds each segment and the whole contour.
-///
-/// Input: [`ContourPoints`]. Output: [`ContourGeometry`].
-#[wasm_bindgen(js_name = contourGeometry)]
-pub fn contour_geometry(input: &[f64]) -> Vec<f64> {
-    call(input, |contour: ContourPoints| contour.geometry())
+/// A contour's segments and bounds, and a component's placement, as
+/// shift-font computes them.
+#[pack::interface]
+pub trait Geometry {
+    /// Segments one contour and bounds each segment and the whole contour.
+    fn contour_geometry(&self, contour: ContourPoints) -> ContourGeometry;
+    /// A component placement's matrix: `DecomposedTransform::to_matrix`.
+    fn compose_transform(&self, transform: DecomposedTransform) -> Transform;
+    /// The placement a matrix makes: `DecomposedTransform::from_matrix`.
+    fn decompose_matrix(&self, matrix: Transform) -> DecomposedTransform;
 }
 
-/// A component placement's matrix: `DecomposedTransform::to_matrix`.
-///
-/// Input: [`DecomposedTransform`]. Output: [`Transform`], as the editor's
-/// `MatModel` names it.
-#[wasm_bindgen(js_name = composeTransform)]
-pub fn compose_transform(input: &[f64]) -> Vec<f64> {
-    call(input, |transform: DecomposedTransform| {
+/// The geometry rules [`Geometry`] calls.
+pub struct GeometryRules;
+
+impl Geometry for GeometryRules {
+    fn contour_geometry(&self, contour: ContourPoints) -> ContourGeometry {
+        contour.geometry()
+    }
+
+    fn compose_transform(&self, transform: DecomposedTransform) -> Transform {
         transform.to_matrix()
-    })
-}
+    }
 
-/// The placement a matrix makes: `DecomposedTransform::from_matrix`.
-///
-/// Input: [`Transform`]. Output: [`DecomposedTransform`].
-#[wasm_bindgen(js_name = decomposeMatrix)]
-pub fn decompose_matrix(input: &[f64]) -> Vec<f64> {
-    call(input, |matrix: Transform| {
+    fn decompose_matrix(&self, matrix: Transform) -> DecomposedTransform {
         DecomposedTransform::from_matrix(&matrix)
-    })
-}
-
-enum_layout! {
-    /// A point's type, as the editor spells it.
-    PointType {
-        OnCurve => "onCurve",
-        OffCurve => "offCurve",
-        QCurve => "qCurve",
     }
 }
 
+/// Runs one [`Geometry`] method for the editor's generated `Geometry` class.
+#[wasm_bindgen(js_name = geometryRequest)]
+pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
+    with_names(|names| geometry_request(&GeometryRules, method, input, names))
+}
+
 /// The kind of curve a segment draws.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
 pub enum SegmentKind {
     #[default]
     Line,
@@ -53,51 +51,39 @@ pub enum SegmentKind {
     Cubic,
 }
 
-enum_layout! {
-    /// The kind of curve a segment draws.
-    SegmentKind {
-        Line => "line",
-        Quad => "quad",
-        Cubic => "cubic",
-    }
+/// One contour's points: their types, and their coordinates as `x, y`
+/// pairs in the same order.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ContourPoints {
+    pub closed: bool,
+    pub point_types: Vec<PointType>,
+    pub coordinates: Vec<f64>,
 }
 
-layout! {
-    /// One contour's points: their types, and their coordinates as `x, y`
-    /// pairs in the same order.
-    pub struct ContourPoints {
-        pub closed: bool,
-        pub point_types: Vec<PointType>,
-        pub coordinates: Vec<f64>,
-    }
+/// A tight axis-aligned box.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct SegmentBounds {
+    pub min_x: f64,
+    pub min_y: f64,
+    pub max_x: f64,
+    pub max_y: f64,
 }
 
-layout! {
-    /// A tight axis-aligned box.
-    pub struct SegmentBounds {
-        pub min_x: f64,
-        pub min_y: f64,
-        pub max_x: f64,
-        pub max_y: f64,
-    }
-}
-
-layout! {
-    /// A contour's segments in order, as parallel lists so reading them
-    /// allocates per list, not per segment, and the box around all of them,
-    /// which is absent when the contour has no segment.
-    ///
-    /// A segment's points are consecutive in the contour, two for a line,
-    /// three for a quad and four for a cubic, from its first index, wrapping
-    /// to the start of a closed contour.
-    pub struct ContourGeometry {
-        pub kinds: Vec<SegmentKind>,
-        /// Each segment's first point index.
-        pub firsts: Vec<usize>,
-        /// Each segment's tight box as `min_x, min_y, max_x, max_y`.
-        pub segment_bounds: Vec<f64>,
-        pub bounds: Option<SegmentBounds>,
-    }
+/// A contour's segments in order, as parallel lists so reading them
+/// allocates per list, not per segment, and the box around all of them,
+/// which is absent when the contour has no segment.
+///
+/// A segment's points are consecutive in the contour, two for a line,
+/// three for a quad and four for a cubic, from its first index, wrapping
+/// to the start of a closed contour.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ContourGeometry {
+    pub kinds: Vec<SegmentKind>,
+    /// Each segment's first point index.
+    pub firsts: Vec<usize>,
+    /// Each segment's tight box as `min_x, min_y, max_x, max_y`.
+    pub segment_bounds: Vec<f64>,
+    pub bounds: Option<SegmentBounds>,
 }
 
 impl ContourPoints {

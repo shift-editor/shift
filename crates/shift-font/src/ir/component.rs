@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// Whether a component is placed by its anchors or by hand.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub enum ComponentAlignment {
     /// Not recorded, as in sources and documents from before alignment was:
@@ -45,18 +46,27 @@ impl Identified for Component {
 /// | 0   0   1  | (implicit)
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[cfg_attr(feature = "pack", pack(rename = "Matrix"))]
 pub struct Transform {
+    #[cfg_attr(feature = "pack", pack(rename = "a"))]
     pub xx: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "b"))]
     pub xy: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "c"))]
     pub yx: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "d"))]
     pub yy: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "e"))]
     pub dx: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "f"))]
     pub dy: f64,
 }
 
 /// Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
 /// Composition order: translate to center → rotate → scale → skew → translate back
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct DecomposedTransform {
     pub translate_x: f64,

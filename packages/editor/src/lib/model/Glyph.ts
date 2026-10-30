@@ -43,11 +43,8 @@ import type {
   GlyphOptions,
 } from "../../types/glyph";
 import { followingPlacements } from "../wasm/anchors";
-import {
-  propagateAnchors,
-  type PropagatedAnchors,
-  type PropagationAnchor,
-} from "../wasm/generated/layouts";
+import { anchors as anchorRules } from "@shift/wasm";
+import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
@@ -1784,7 +1781,7 @@ export class GlyphRenderModel {
       const category = this.#anchorCategory(glyphId);
       // Export classes a glyph by its authored anchors, named or not.
       const attaching = geometry.anchors.some((anchor) => !anchor.name?.startsWith("_"));
-      const propagated = propagateAnchors({
+      const propagated = anchorRules.propagateAnchors({
         anchors,
         components,
         isMark: category.mark,

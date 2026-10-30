@@ -1,20 +1,28 @@
 //! Component outlines between masters of a glyph compilers decompose.
 
+use pack::Pack;
 use shift_font::Transform;
 use shift_font::placed_blend::{self, BlendedPoint, ContourShape, blend_decomposed_glyph};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::layout::{call, foreign_layout, layout};
+use crate::names::with_names;
 
-/// Blends every component occurrence of a decomposed glyph as each master
-/// places it, as compilers interpolate the glyph.
-///
-/// Input: [`DecomposedGlyph`]. Output: each occurrence's blended points in
-/// placed order, contour after contour, or null when any occurrence's masters
-/// don't line up point for point.
-#[wasm_bindgen(js_name = blendDecomposedGlyph)]
-pub fn blend_decomposed_glyph_in(input: &[f64]) -> Vec<f64> {
-    call(input, |glyph: DecomposedGlyph| {
+/// Component outlines between masters, as compilers interpolate a glyph
+/// they decompose.
+#[pack::interface]
+pub trait Decomposition {
+    /// Blends every component occurrence of a decomposed glyph as each master
+    /// places it: each occurrence's blended points in placed order, contour
+    /// after contour, or null when any occurrence's masters don't line up
+    /// point for point.
+    fn blend_decomposed_glyph(&self, glyph: DecomposedGlyph) -> Option<Vec<Vec<BlendedPoint>>>;
+}
+
+/// The blending rule [`Decomposition`] calls.
+pub struct DecompositionRules;
+
+impl Decomposition for DecompositionRules {
+    fn blend_decomposed_glyph(&self, glyph: DecomposedGlyph) -> Option<Vec<Vec<BlendedPoint>>> {
         let occurrences = glyph
             .occurrences
             .iter()
@@ -31,7 +39,14 @@ pub fn blend_decomposed_glyph_in(input: &[f64]) -> Vec<f64> {
             .map(|masters| masters.iter().map(Flattened::master).collect::<Vec<_>>())
             .collect::<Vec<_>>();
         blend_decomposed_glyph(&masters, &glyph.weights)
-    })
+    }
+}
+
+/// Runs one [`Decomposition`] method for the editor's generated
+/// `Decomposition` class.
+#[wasm_bindgen(js_name = decompositionRequest)]
+pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
+    with_names(|names| decomposition_request(&DecompositionRules, method, input, names))
 }
 
 /// One master's contours as the shared rule reads them: shapes, then
@@ -72,53 +87,39 @@ impl Flattened {
     }
 }
 
-layout! {
-    /// A point's position.
-    pub struct Coordinate {
-        pub x: f64,
-        pub y: f64,
-    }
+/// A point's position.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct Coordinate {
+    pub x: f64,
+    pub y: f64,
 }
 
-layout! {
-    /// One contour of a component glyph at one master, before placement.
-    pub struct SourceContour {
-        pub closed: bool,
-        pub points: Vec<Coordinate>,
-    }
+/// One contour of a component glyph at one master, before placement.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct SourceContour {
+    pub closed: bool,
+    pub points: Vec<Coordinate>,
 }
 
-layout! {
-    /// One master's outline of a component occurrence and where that master places it.
-    pub struct PlacedMaster {
-        /// The occurrence's placement in the root glyph at this master.
-        pub transform: Transform => matrix,
-        pub contours: Vec<SourceContour>,
-    }
+/// One master's outline of a component occurrence and where that master places it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct PlacedMaster {
+    /// The occurrence's placement in the root glyph at this master.
+    #[pack(rename = "matrix")]
+    pub transform: Transform,
+    pub contours: Vec<SourceContour>,
 }
 
-layout! {
-    /// One component occurrence of a decomposed glyph, at each of the glyph's masters.
-    pub struct PlacedOccurrence {
-        pub masters: Vec<PlacedMaster>,
-    }
+/// One component occurrence of a decomposed glyph, at each of the glyph's masters.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct PlacedOccurrence {
+    pub masters: Vec<PlacedMaster>,
 }
 
-layout! {
-    /// Every component occurrence of a decomposed glyph, and its masters' weights.
-    pub struct DecomposedGlyph {
-        pub occurrences: Vec<PlacedOccurrence>,
-        /// One source weight per master, in order.
-        pub weights: Vec<f64>,
-    }
-}
-
-foreign_layout! {
-    /// One point of a blended occurrence.
-    BlendedPoint => BlendedPoint {
-        /// The point's index in the first master's contour, which gives it identity and type.
-        source_index: usize,
-        x: f64,
-        y: f64,
-    }
+/// Every component occurrence of a decomposed glyph, and its masters' weights.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct DecomposedGlyph {
+    pub occurrences: Vec<PlacedOccurrence>,
+    /// One source weight per master, in order.
+    pub weights: Vec<f64>,
 }
