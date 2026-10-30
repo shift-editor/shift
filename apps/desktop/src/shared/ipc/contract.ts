@@ -3,7 +3,7 @@ import type {
   FontSessionMode,
   WorkspaceDocumentState,
   WorkspaceExportResult,
-} from "../workspace/protocol";
+} from "../workspace/lanes";
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";

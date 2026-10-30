@@ -9,7 +9,7 @@
  * has type imports only and uses neither `import.meta.url` nor `__dirname`.
  */
 import type { PointId } from "@shift/types";
-import type { FontSessionMode } from "@shared/workspace/protocol";
+import type { FontSessionMode } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { GlyphListing, Read } from "./reads";
 

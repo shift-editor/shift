@@ -22,7 +22,7 @@ import type {
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
-} from "@shared/workspace/protocol";
+} from "@shared/workspace/lanes";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineEdit, EngineLayer, FontStore } from "@shift/editor/model";
 import type {

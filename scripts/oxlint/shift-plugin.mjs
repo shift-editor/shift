@@ -42,7 +42,6 @@ const GLYPH_SNAPSHOT_ALLOWED = [
   "bridge/",
   "shared/bridge/",
   "shared/workspace/lanes.ts",
-  "shared/workspace/protocol.ts",
   "utility/workspace/WorkspaceHost.ts",
   "renderer/src/types/glyph.ts",
   "renderer/src/lib/model/",

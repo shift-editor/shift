@@ -1,7 +1,7 @@
 import type { CommandId, RendererCommandId } from "../commands";
 import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
-import type { FontSessionMode, FontStoreLocation } from "../workspace/protocol";
+import type { FontSessionMode, FontStoreLocation } from "../workspace/lanes";
 import type { RecentDocument } from "../recents";
 import type { AgentConnection } from "../agent/protocol";
 import type { AgentConnectionsState } from "../agent/connections";

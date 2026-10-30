@@ -2,7 +2,7 @@ import { EntityMap } from "@shift/types";
 import type {
   WorkspaceDocumentState,
   WorkspaceDocumentIdentity,
-} from "../../shared/workspace/protocol";
+} from "../../shared/workspace/lanes";
 import type { WorkspaceProcess } from "./WorkspaceProcess";
 import type { FontSessionId } from "./FontSessionHost";
 

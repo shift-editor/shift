@@ -39,7 +39,7 @@ import type {
   Unicode,
 } from "@shift/types";
 import type { EditorCommandId } from "@shared/commands";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { AxisFixture, AxisLocation, FontBuilder } from "./fonts";
 import type {
