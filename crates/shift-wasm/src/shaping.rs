@@ -150,7 +150,6 @@ mod exports {
         ParagraphRequest, ShapeUnit, ShapedGlyph, ShapedRun, ShaperGlyphs, Shaping, TextDirection,
         shaping_request,
     };
-    use crate::names::with_names;
 
     thread_local! {
         static SHAPERS: RefCell<Vec<Option<Registered>>> = const { RefCell::new(Vec::new()) };
@@ -294,8 +293,16 @@ mod exports {
     /// Runs one [`Shaping`] method for the editor's generated `Shaping`
     /// class.
     #[wasm_bindgen(js_name = shapingRequest)]
-    pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
-        with_names(|names| shaping_request(&Shapers, method, input, names))
+    pub fn request(
+        method: u32,
+        input: &[f64],
+        #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+            js_sys::Array,
+        >,
+    ) -> Vec<f64> {
+        crate::blobs::answer(blobs, |blobs, names| {
+            shaping_request(&Shapers, method, input, blobs, names)
+        })
     }
 
     fn shape(

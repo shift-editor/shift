@@ -37,11 +37,19 @@ pub fn derive_pack(input: TokenStream) -> TokenStream {
 /// Turns a trait into a request protocol.
 ///
 /// Every method takes `&self` and arguments and a result that pack into
-/// numbers. Next to the trait it writes `<trait>_request(target, method,
-/// input, names)`, which calls the method at index `method` (in declaration
-/// order) on `target` with the arguments decoded from `input`, and returns
-/// the encoded result; an unknown index returns nothing. Its fragment gives
-/// TypeScript one class per trait with a method per trait method.
+/// numbers. Next to the trait it writes:
+///
+/// - `<trait>_request(target, method, input, blobs, names)`, which calls the
+///   method at index `method` (in declaration order) on `target` with the
+///   arguments decoded from `input` and `blobs`, and returns the encoded
+///   result as a `pack::Packed`; an unknown index returns nothing.
+/// - `<Trait>Client<T>`, which sends each method through a
+///   `pack::Transport` `T` and returns its result, or the transport's error:
+///   the asking side, for a caller in Rust.
+///
+/// Its fragment gives TypeScript one class per trait with a method per trait
+/// method. A method that returns `Result<T, E>` returns `T` in TypeScript and
+/// throws a `PackError` carrying `E`.
 #[proc_macro_attribute]
 pub fn interface(attribute: TokenStream, item: TokenStream) -> TokenStream {
     if !attribute.is_empty() {
@@ -364,8 +372,10 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let name = &item.ident;
     let visibility = &item.vis;
     let request = format_ident!("{}_request", snake(&name.to_string()));
+    let client = format_ident!("{name}Client");
     let mut methods = Vec::new();
     let mut arms = Vec::new();
+    let mut client_methods = Vec::new();
     for (index, trait_item) in item.items.iter().enumerate() {
         let TraitItem::Fn(method) = trait_item else {
             return Err(Error::new_spanned(
@@ -389,6 +399,8 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
         let mut params = Vec::new();
         let mut reads = Vec::new();
         let mut arguments = Vec::new();
+        let mut client_params = Vec::new();
+        let mut client_writes = Vec::new();
         for (position, input) in inputs.enumerate() {
             let FnArg::Typed(typed) = input else {
                 continue;
@@ -402,6 +414,9 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
             let ty = &typed.ty;
             let argument = format_ident!("argument{position}");
             reads.push(quote! { let #argument = <#ty as ::pack::Pack>::read(&mut read); });
+            let parameter = &pattern.ident;
+            client_params.push(quote! { #parameter: #ty });
+            client_writes.push(quote! { ::pack::Pack::write(&#parameter, write); });
             arguments.push(argument);
             params.push(json!({
                 "name": camel(&pattern.ident.to_string()),
@@ -418,12 +433,28 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
             .map_err(|_| Error::new_spanned(signature, "an interface has too many methods"))?;
         arms.push(quote! {
             #index => {
-                let mut read = ::pack::Reader::new(input, &*names);
+                let mut read = ::pack::Reader::new(input, &mut blobs, &*names);
                 #(#reads)*
                 let result = target.#ident(#(#arguments),*);
                 let mut write = ::pack::Writer::new(names);
                 ::pack::Pack::write(&result, &mut write);
                 write.finish()
+            }
+        });
+        let method_docs = &method
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("doc"))
+            .collect::<Vec<_>>();
+        client_methods.push(quote! {
+            #(#method_docs)*
+            ///
+            /// The outer `Result` is the transport's: its error when the
+            /// request gets no reply.
+            pub fn #ident(&self, #(#client_params),*) -> ::std::result::Result<#output, T::Error> {
+                self.0.call(#index, |write| {
+                    #(#client_writes)*
+                })
             }
         });
         methods.push(json!({
@@ -445,8 +476,12 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     );
     let docs = format!(
         "Calls the [`{name}`] method at index `method` on `target` with the \
-         arguments in `input`, and returns its encoded result; nothing for an \
-         unknown index."
+         arguments in `input` and `blobs`, and returns its encoded result; \
+         nothing for an unknown index."
+    );
+    let client_docs = format!(
+        "Asks for [`{name}`]'s methods through a [`pack::Transport`]: each \
+         method sends its arguments by the method's index and reads the reply."
     );
     Ok(quote! {
         #item
@@ -457,12 +492,22 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
             target: &T,
             method: u32,
             input: &[f64],
+            mut blobs: ::std::vec::Vec<::std::vec::Vec<u8>>,
             names: &mut dyn ::pack::Names,
-        ) -> ::std::vec::Vec<f64> {
+        ) -> ::pack::Packed {
             match method {
                 #(#arms)*
-                _ => ::std::vec::Vec::new(),
+                _ => ::pack::Packed::default(),
             }
+        }
+
+        #[doc = #client_docs]
+        #[allow(dead_code)]
+        #visibility struct #client<T>(pub T);
+
+        #[allow(dead_code, clippy::needless_pass_by_value, clippy::missing_errors_doc)]
+        impl<T: ::pack::Transport> #client<T> {
+            #(#client_methods)*
         }
     })
 }
@@ -493,6 +538,24 @@ fn type_of(ty: &Type) -> syn::Result<Value> {
         "String" => json!({ "kind": "name" }),
         "Vec" => json!({ "kind": "list", "item": inner()? }),
         "Option" => json!({ "kind": "option", "inner": inner()? }),
+        "Bytes" => json!({ "kind": "bytes" }),
+        "Result" => {
+            let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+                return Err(Error::new_spanned(ty, "expected two type arguments"));
+            };
+            let types: Vec<_> = arguments
+                .args
+                .iter()
+                .filter_map(|argument| match argument {
+                    GenericArgument::Type(inner) => Some(inner),
+                    _ => None,
+                })
+                .collect();
+            let [ok, err] = types.as_slice() else {
+                return Err(Error::new_spanned(ty, "expected two type arguments"));
+            };
+            json!({ "kind": "result", "ok": type_of(ok)?, "err": type_of(err)? })
+        }
         _ => json!({ "kind": "ref", "rust": ident }),
     })
 }

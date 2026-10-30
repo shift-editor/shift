@@ -23,6 +23,7 @@
 )]
 
 pub mod anchors;
+pub mod blobs;
 pub mod decomposition;
 pub mod drag;
 #[cfg(feature = "engine")]

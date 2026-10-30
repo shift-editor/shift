@@ -8,8 +8,19 @@
  * {@link list}, {@link option} and {@link variants}, its type as
  * {@link Infer} of that schema, and its own `read` and `write` functions over
  * {@link Reader} and {@link Writer}. A generated interface class sends each
- * method through a {@link SyncTransport}, by the method's index.
+ * method through a {@link SyncTransport}, by the method's index. A method
+ * whose Rust result is `Result<T, E>` returns `T`, and throws a
+ * {@link PackError} carrying `E`.
+ *
+ * `Bytes` do not go into the numbers: each crosses whole as a `Uint8Array`
+ * in the message's blob list, and the numbers hold its index there.
  */
+
+/** A message's blobs, in the order its `Bytes` values were written. */
+export type Blobs = readonly Uint8Array[];
+
+/** The blob list of a message without bytes, shared so such a message allocates none. */
+const NO_BLOBS: Blobs = Object.freeze([]);
 
 /** Lookups between interned names and their ids, as the module answering a request keeps them. */
 export interface Names {
@@ -31,6 +42,8 @@ export class Writer {
   readonly #names: Names;
   #values = new Float64Array(256);
   #length = 0;
+  /** Null until the request writes bytes, so a request without them allocates no list. */
+  #blobs: Uint8Array[] | null = null;
 
   constructor(names: Names) {
     this.#names = names;
@@ -39,6 +52,7 @@ export class Writer {
   /** Empties the writer for the next request, and returns it. */
   reset(): this {
     this.#length = 0;
+    this.#blobs = null;
     return this;
   }
 
@@ -79,9 +93,21 @@ export class Writer {
     this.#length = end;
   }
 
+  /** Appends `value` to the request's blob list, without copying it, and writes its index there. */
+  bytes(value: Uint8Array): void {
+    this.#blobs ??= [];
+    this.number(this.#blobs.length);
+    this.#blobs.push(value);
+  }
+
   /** The numbers written, as a view valid until the next request. */
   finish(): Float64Array {
     return this.#values.subarray(0, this.#length);
+  }
+
+  /** The blobs written, in order; one shared empty list when there are none. */
+  blobs(): Blobs {
+    return this.#blobs ?? NO_BLOBS;
   }
 }
 
@@ -94,11 +120,18 @@ export class Writer {
 export class Reader {
   readonly #values: Float64Array;
   readonly #names: Names;
+  /** The reply's blobs once taken, until then the function that takes them. */
+  #blobs: Blobs | (() => Blobs);
   #at = 0;
 
-  constructor(values: Float64Array, names: Names) {
+  /**
+   * @param takeBlobs - Returns the reply's blobs. Called once, at the first
+   * {@link Reader.bytes}, so a reply without bytes never asks for them.
+   */
+  constructor(values: Float64Array, names: Names, takeBlobs: () => Blobs = noBlobs) {
     this.#values = values;
     this.#names = names;
+    this.#blobs = takeBlobs;
   }
 
   number(): number {
@@ -129,6 +162,44 @@ export class Reader {
     this.#at = Math.min(start + count, this.#values.length);
     return this.#values.subarray(start, this.#at);
   }
+
+  /** Reads a blob index and returns that blob; empty for an index past the blob list. */
+  bytes(): Uint8Array {
+    const index = this.count();
+    if (typeof this.#blobs === "function") this.#blobs = this.#blobs();
+    return this.#blobs[index] ?? new Uint8Array(0);
+  }
+}
+
+function noBlobs(): Blobs {
+  return NO_BLOBS;
+}
+
+/**
+ * What a method whose Rust result is `Result<T, E>` throws for an `Err`: the
+ * error, as the generated type of `E`.
+ *
+ * @remarks
+ * Narrow it by the Rust enum's TypeScript name, then by `kind`:
+ * `if (error instanceof PackError && error.type === "StoreReadError")`.
+ */
+export class PackError<E = unknown> extends Error {
+  /** The error enum's TypeScript name, such as `StoreReadError`. */
+  readonly type: string;
+  /** The error's variant: the value itself for a unit-only enum, else its `kind`. */
+  readonly kind: string;
+  /** The error, as its generated type. */
+  readonly error: E;
+
+  constructor(type: string, error: E) {
+    const kind =
+      typeof error === "string" ? error : String((error as { readonly kind?: unknown }).kind);
+    super(`${type}.${kind}`);
+    this.name = "PackError";
+    this.type = type;
+    this.kind = kind;
+    this.error = error;
+  }
 }
 
 /**
@@ -146,16 +217,126 @@ export interface SyncTransport {
  * A transport over a synchronous request function, such as a WebAssembly
  * module's `<trait>Request` export bound to its session.
  *
+ * @param request - Sends the method's index, the request's numbers and its
+ * blobs, `undefined` for a request without bytes so a module need not read an
+ * empty list, and returns the reply's numbers.
  * @param names - The module's name table, so names cross as its ids.
+ * @param takeBlobs - Returns the latest reply's blobs, as a WebAssembly
+ * module's `takeReplyBlobs`; asked only when a reply reads bytes.
  */
 export function syncTransport(
-  request: (method: number, input: Float64Array) => Float64Array,
+  request: (method: number, numbers: Float64Array, blobs: Blobs | undefined) => Float64Array,
   names: Names,
+  takeBlobs: () => Blobs = noBlobs,
 ): SyncTransport {
   const writer = new Writer(names);
   return {
     writer: () => writer.reset(),
-    request: (method, input) => new Reader(request(method, input.finish()), names),
+    request: (method, input) => {
+      const blobs = input.blobs();
+      const numbers = request(method, input.finish(), blobs.length > 0 ? blobs : undefined);
+      return new Reader(numbers, names, takeBlobs);
+    },
+  };
+}
+
+/** A reply that carries its blobs with its numbers, as a native module returns one. */
+export interface Reply {
+  readonly numbers: Float64Array;
+  readonly blobs: Blobs;
+}
+
+/**
+ * Names for one message to or from a module this side shares no name table
+ * with: what the message writes is interned in a table of its own, sent as its
+ * last blob, and what the reply reads resolves in the table it carries. The
+ * TypeScript side of Rust's `pack::CarriedNames`, with the same blob layout:
+ * each name's UTF-8 length as a little-endian u32, then its text, in id order.
+ */
+class CarriedNames implements Names {
+  // non-reactive: one message's names, cleared before the next
+  readonly #sent = new Map<string, number>();
+  #received: readonly string[] = [];
+
+  /** Starts the next request's table, and returns this. */
+  reset(): this {
+    this.#sent.clear();
+    return this;
+  }
+
+  id(name: string): number {
+    let id = this.#sent.get(name);
+    if (id === undefined) {
+      id = this.#sent.size;
+      this.#sent.set(name, id);
+    }
+    return id;
+  }
+
+  name(id: number): string {
+    return this.#received[id] ?? "";
+  }
+
+  /** The names this request wrote, as a blob. */
+  sentBlob(): Uint8Array {
+    const encoder = new TextEncoder();
+    const texts = this.#sent
+      .keys()
+      .map((name) => encoder.encode(name))
+      .toArray();
+    const blob = new Uint8Array(texts.reduce((total, text) => total + 4 + text.length, 0));
+    const view = new DataView(blob.buffer);
+    let at = 0;
+    for (const text of texts) {
+      view.setUint32(at, text.length, true);
+      blob.set(text, at + 4);
+      at += 4 + text.length;
+    }
+    return blob;
+  }
+
+  /** Resolves the reply's names in `blob`; a malformed table keeps the names before it breaks. */
+  receive(blob: Uint8Array | undefined): void {
+    const received: string[] = [];
+    if (blob) {
+      const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+      const decoder = new TextDecoder();
+      for (let at = 0; at + 4 <= blob.length; ) {
+        const end = at + 4 + view.getUint32(at, true);
+        if (end > blob.length) break;
+        received.push(decoder.decode(blob.subarray(at + 4, end)));
+        at = end;
+      }
+    }
+    this.#received = received;
+  }
+}
+
+/**
+ * A transport to a Rust module this side shares no name table with, such as
+ * the native store reader that answers shift-engine's `StoreReader`: the names
+ * each message uses travel as its last blob, as Rust's `pack::CarryingNames`
+ * sends them and `pack::Packed::answer_carrying_names` answers.
+ *
+ * @param request - Sends the method's index, the request's numbers and its
+ * blobs, and returns the reply.
+ */
+export function carryingNames(
+  request: (method: number, numbers: Float64Array, blobs: Blobs) => Reply,
+): SyncTransport {
+  const names = new CarriedNames();
+  const writer = new Writer(names);
+  return {
+    writer: () => {
+      names.reset();
+      return writer.reset();
+    },
+    request: (method, input) => {
+      const reply = request(method, input.finish(), [...input.blobs(), names.sentBlob()]);
+      const blobs = reply.blobs.slice(0, -1);
+      names.receive(reply.blobs.at(-1));
+      return new Reader(reply.numbers, names, () => blobs);
+    },
   };
 }
 
@@ -169,6 +350,8 @@ export const flag = { kind: "flag" } as const;
 export const name = { kind: "name" } as const;
 /** A run of numbers, read as one `Float64Array` view. */
 export const numbers = { kind: "numbers" } as const;
+/** A buffer, crossing whole in the message's blob list. */
+export const bytes = { kind: "bytes" } as const;
 
 /** An id: a string crossing as the module's interned id, typed by its brand. */
 export function id<T extends string>(): { readonly kind: "id"; readonly brand?: T } {
@@ -182,6 +365,7 @@ export type Schema =
   | typeof flag
   | typeof name
   | typeof numbers
+  | typeof bytes
   | { readonly kind: "id"; readonly brand?: string }
   | { readonly kind: "list"; readonly item: Schema }
   | { readonly kind: "option"; readonly inner: Schema }
@@ -240,7 +424,9 @@ export type Infer<S> = S extends { readonly kind: "id"; readonly brand?: infer T
   ? T
   : S extends { readonly kind: "numbers" }
     ? Float64Array
-    : InferValue<S>;
+    : S extends { readonly kind: "bytes" }
+      ? Uint8Array
+      : InferValue<S>;
 
 type InferValue<S> = S extends { readonly kind: "number" | "count" }
   ? number

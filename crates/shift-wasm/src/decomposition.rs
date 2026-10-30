@@ -5,8 +5,6 @@ use shift_font::Transform;
 use shift_font::placed_blend::{self, BlendedPoint, ContourShape, blend_decomposed_glyph};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::names::with_names;
-
 /// Component outlines between masters, as compilers interpolate a glyph
 /// they decompose.
 #[pack::interface]
@@ -45,8 +43,16 @@ impl Decomposition for DecompositionRules {
 /// Runs one [`Decomposition`] method for the editor's generated
 /// `Decomposition` class.
 #[wasm_bindgen(js_name = decompositionRequest)]
-pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
-    with_names(|names| decomposition_request(&DecompositionRules, method, input, names))
+pub fn request(
+    method: u32,
+    input: &[f64],
+    #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+        js_sys::Array,
+    >,
+) -> Vec<f64> {
+    crate::blobs::answer(blobs, |blobs, names| {
+        decomposition_request(&DecompositionRules, method, input, blobs, names)
+    })
 }
 
 /// One master's contours as the shared rule reads them: shapes, then

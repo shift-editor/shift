@@ -6,15 +6,18 @@
 // a loop of its own: shared helpers cost up to 1.6x in V8 once many types use
 // them (the phase c bench in the boundary protocol plan). Each interface
 // becomes a class whose methods send their arguments by the method's index
-// through a `SyncTransport`.
+// through a `SyncTransport`; a method whose Rust result is `Result<T, E>`
+// returns `T` and throws a `PackError` carrying `E`.
 import { globSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { code, imp, joinCode, literalOf, type Code } from "ts-poet";
 
 /** A field's, argument's or result's type, as the derive spells it. */
 export type Type =
-  | { readonly kind: "number" | "count" | "flag" | "name" | "numbers" }
+  | { readonly kind: "number" | "count" | "flag" | "name" | "numbers" | "bytes" }
   | { readonly kind: "list"; readonly item: Type }
+  /** Only as a method's result. */
+  | { readonly kind: "result"; readonly ok: Type; readonly err: Type }
   | { readonly kind: "option"; readonly inner: Type }
   | { readonly kind: "ref"; readonly rust: string };
 
@@ -101,7 +104,13 @@ const Reader = packType("Reader");
 const Writer = packType("Writer");
 const SyncTransport = packType("SyncTransport");
 const Infer = packType("Infer");
-const SCALARS = new Set(["number", "count", "flag", "name", "numbers"]);
+const PackError = pack("PackError");
+const SCALARS = new Set(["number", "count", "flag", "name", "numbers", "bytes"]);
+
+/** Thrown for a `Result` anywhere but as a method's result, which TypeScript has no shape for. */
+function nestedResult(): never {
+  throw new Error("a Result crosses only as an interface method's result");
+}
 
 /** Reads every crate's fragments under `folder` (`<folder>/<package>/*.json`). */
 export function readFragments(folder: string): Fragment[] {
@@ -161,16 +170,26 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   const visit = (type: Type, user: string, direction: Set<string>): void => {
     if (type.kind === "list") return visit(type.item, user, direction);
     if (type.kind === "option") return visit(type.inner, user, direction);
+    if (type.kind === "result") {
+      visit(type.ok, user, direction);
+      return visit(type.err, user, direction);
+    }
     if (type.kind !== "ref") return;
     const found = resolve(type, user);
     if (found.kind === "id" || direction.has(found.rust)) return;
     direction.add(found.rust);
-    for (const field of fieldsOf(found)) visit(field.type, found.rust, direction);
+    for (const field of fieldsOf(found)) {
+      if (field.type.kind === "result") nestedResult();
+      visit(field.type, found.rust, direction);
+    }
     if (!ordered.includes(found)) ordered.push(found);
   };
   for (const item of interfaces) {
     for (const method of item.methods) {
-      for (const param of method.params) visit(param.type, item.name, written);
+      for (const param of method.params) {
+        if (param.type.kind === "result") nestedResult();
+        visit(param.type, item.name, written);
+      }
       visit(method.output, item.name, read);
     }
   }
@@ -190,6 +209,8 @@ export function render(fragments: readonly Fragment[], header = ""): string {
         return code`string`;
       case "numbers":
         return code`Float64Array`;
+      case "bytes":
+        return code`Uint8Array`;
       case "list":
         return code`readonly ${element(type.item)}[]`;
       case "option":
@@ -198,6 +219,8 @@ export function render(fragments: readonly Fragment[], header = ""): string {
         const found = resolve(type);
         return found.kind === "id" ? brand(found) : code`${found.name}`;
       }
+      case "result":
+        return nestedResult();
     }
   };
 
@@ -216,6 +239,8 @@ export function render(fragments: readonly Fragment[], header = ""): string {
         const found = resolve(type);
         return found.kind === "id" ? code`${pack("id")}<${brand(found)}>()` : code`${found.name}`;
       }
+      case "result":
+        return nestedResult();
       default:
         return code`${pack(type.kind)}`;
     }
@@ -324,16 +349,36 @@ export function render(fragments: readonly Fragment[], header = ""): string {
       { on: ", " },
     );
     const writes = item.params.map((param) => writeFrom(param.type, param.name));
+    const output = item.output;
+    if (output.kind === "result") {
+      const thrown = `@throws {@link PackError} carrying a ${errorName(output.err)} when Rust returns an error.`;
+      return code`
+        ${doc([withoutErrors(item.doc), thrown].filter(Boolean).join("\n\n"))}${item.name}(${params}): ${ts(output.ok)} {
+          const w = this.#transport.writer();
+          ${joinCode(writes, { on: "\n" })}
+          const r = this.#transport.request(${index}, w);
+          if (!r.flag()) {
+            ${readInto(output.err, "error")}
+            throw new ${PackError}<${ts(output.err)}>(${literalOf(errorName(output.err))}, error);
+          }
+          ${readInto(output.ok, "result")}
+          return result;
+        }
+      `;
+    }
     return code`
-      ${doc(item.doc)}${item.name}(${params}): ${ts(item.output)} {
+      ${doc(item.doc)}${item.name}(${params}): ${ts(output)} {
         const w = this.#transport.writer();
         ${joinCode(writes, { on: "\n" })}
         const r = this.#transport.request(${index}, w);
-        ${readInto(item.output, "result")}
+        ${readInto(output, "result")}
         return result;
       }
     `;
   };
+
+  /** The TypeScript name of an error type, as a thrown `PackError`'s `type`. */
+  const errorName = (type: Type): string => (type.kind === "ref" ? resolve(type).name : type.kind);
 
   const klass = (item: InterfaceFragment): Code => code`
     ${doc(item.doc)}export class ${item.name} {
@@ -467,6 +512,11 @@ function fieldsOf(type: Generated): readonly Field[] {
   if (type.kind === "struct") return type.fields;
   if (type.kind === "union") return type.cases.flatMap((item) => item.fields);
   return [];
+}
+
+/** Rust doc text without its `# Errors` section, which a `@throws` tag replaces. */
+function withoutErrors(text: string | null): string | null {
+  return text?.split(/^# Errors$/m)[0]!.trimEnd() || null;
 }
 
 /** A doc comment for an item, followed by a line break; empty without one. */

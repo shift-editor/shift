@@ -1,14 +1,20 @@
-//! Values packed into flat numbers to cross into TypeScript.
+//! Values packed into flat numbers to cross into TypeScript or another
+//! process.
 //!
 //! A value crosses as one flat list of `f64`s, its fields in declaration
 //! order with no names: a number, flag or count is one value; a name is its
 //! interned id ([`Names`]), and so is an id ([`derive@PackId`]), which
 //! TypeScript reads as its brand; a list is its length followed by its items,
 //! and [`Numbers`] is the same but read as one `Float64Array`; an optional
-//! value is a flag followed by the value when present; an enum is its
-//! variant's index, followed by the variant's fields when it has any, read
-//! in TypeScript as a string union for unit variants and otherwise as a union
+//! value is a flag followed by the value when present; a [`Result`] is a flag,
+//! set for `Ok`, followed by the value or the error; an enum is its variant's
+//! index, followed by the variant's fields when it has any, read in
+//! TypeScript as a string union for unit variants and otherwise as a union
 //! tagged by `kind`.
+//!
+//! [`Bytes`] do not go into the numbers: each crosses as one blob beside
+//! them, and the numbers hold its index in the message's blob list
+//! ([`Packed::blobs`]), so a buffer crosses whole, without a number per byte.
 //!
 //! [`derive@Pack`] gives a type its [`Pack::read`] and [`Pack::write`].
 //! [`macro@interface`] turns a trait into a request protocol: each method is
@@ -17,11 +23,17 @@
 //! they expand, they write a JSON fragment per item there, which
 //! `@shift/pack`'s generator turns into the TypeScript side. Both sides
 //! come from the same build, so they cannot disagree about field order.
+//!
+//! Between two Rust modules that share no name table, such as the editor's
+//! engine in WebAssembly and the store reader in a native addon, the names a
+//! message uses travel with it: see [`CarriedNames`].
 
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
 // The derives name `::pack`, which inside this crate is itself.
 extern crate self as pack;
+
+use std::collections::HashMap;
 
 pub use pack_derive::{Pack, PackId, interface};
 
@@ -34,6 +46,15 @@ pub trait Names {
     fn id(&mut self, name: &str) -> u32;
 }
 
+/// One message of a call: its numbers, and the blobs its [`Bytes`] values
+/// name by index.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Packed {
+    pub numbers: Vec<f64>,
+    /// Each [`Bytes`] value the message holds, in the order it was written.
+    pub blobs: Vec<Vec<u8>>,
+}
+
 /// Reads numbers in order from a call's input.
 ///
 /// Reading past the end yields zeros, so a short input decodes to empty and
@@ -41,14 +62,18 @@ pub trait Names {
 pub struct Reader<'a> {
     values: &'a [f64],
     at: usize,
+    blobs: &'a mut [Vec<u8>],
     names: &'a dyn Names,
 }
 
 impl<'a> Reader<'a> {
-    pub fn new(values: &'a [f64], names: &'a dyn Names) -> Self {
+    /// Reads `values`, taking each [`Bytes`] value from `blobs` by the index
+    /// the values hold; pass an empty slice for a message without bytes.
+    pub fn new(values: &'a [f64], blobs: &'a mut [Vec<u8>], names: &'a dyn Names) -> Self {
         Self {
             values,
             at: 0,
+            blobs,
             names,
         }
     }
@@ -82,6 +107,16 @@ impl<'a> Reader<'a> {
             .to_string()
     }
 
+    /// Reads a blob index and takes that blob, without copying it; empty for
+    /// an index past the blob list or a blob already taken.
+    pub fn bytes(&mut self) -> Vec<u8> {
+        let index = self.count();
+        self.blobs
+            .get_mut(index)
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
     /// How many numbers are left; bounds what a count may reserve.
     pub fn remaining(&self) -> usize {
         self.values.len().saturating_sub(self.at)
@@ -91,6 +126,7 @@ impl<'a> Reader<'a> {
 /// Appends numbers to a call's output.
 pub struct Writer<'a> {
     values: Vec<f64>,
+    blobs: Vec<Vec<u8>>,
     names: &'a mut dyn Names,
 }
 
@@ -98,6 +134,7 @@ impl<'a> Writer<'a> {
     pub fn new(names: &'a mut dyn Names) -> Self {
         Self {
             values: Vec::new(),
+            blobs: Vec::new(),
             names,
         }
     }
@@ -119,8 +156,19 @@ impl<'a> Writer<'a> {
         self.values.push(f64::from(id));
     }
 
-    pub fn finish(self) -> Vec<f64> {
-        self.values
+    /// Appends `bytes` to the message's blob list, copying them once, and
+    /// writes their index there.
+    pub fn bytes(&mut self, bytes: &[u8]) {
+        self.count(self.blobs.len());
+        self.blobs.push(bytes.to_vec());
+    }
+
+    /// The numbers and blobs written.
+    pub fn finish(self) -> Packed {
+        Packed {
+            numbers: self.values,
+            blobs: self.blobs,
+        }
     }
 }
 
@@ -191,6 +239,25 @@ impl Pack for Numbers {
     }
 }
 
+/// A buffer that crosses whole as one blob beside the numbers, which hold
+/// its index in the message's blob list; TypeScript reads it as a
+/// `Uint8Array`.
+///
+/// Writing copies the buffer into the message once; reading takes it from
+/// the message without a copy.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Bytes(pub Vec<u8>);
+
+impl Pack for Bytes {
+    fn read(read: &mut Reader) -> Self {
+        Self(read.bytes())
+    }
+
+    fn write(&self, write: &mut Writer) {
+        write.bytes(&self.0);
+    }
+}
+
 impl Pack for bool {
     fn read(read: &mut Reader) -> Self {
         read.flag()
@@ -244,6 +311,30 @@ impl<T: Pack> Pack for Option<T> {
     }
 }
 
+/// A flag, set for `Ok`, then the value or the error. A short input reads as
+/// `Err`, so an empty reply, as for an unknown method, is a failure rather
+/// than a zero value.
+///
+/// TypeScript reads a method's `Result` as its value, and throws a
+/// `PackError` carrying the error.
+impl<T: Pack, E: Pack> Pack for Result<T, E> {
+    fn read(read: &mut Reader) -> Self {
+        if read.flag() {
+            Ok(T::read(read))
+        } else {
+            Err(E::read(read))
+        }
+    }
+
+    fn write(&self, write: &mut Writer) {
+        write.flag(self.is_ok());
+        match self {
+            Ok(value) => value.write(write),
+            Err(error) => error.write(write),
+        }
+    }
+}
+
 /// Decodes `input` as `I`, applies `method`, and encodes its result: one
 /// method of a request protocol, as [`macro@interface`]'s dispatch calls it.
 ///
@@ -251,14 +342,149 @@ impl<T: Pack> Pack for Option<T> {
 /// and names in `O` are interned while encoding.
 pub fn call<I: Pack, O: Pack>(
     input: &[f64],
+    blobs: &mut [Vec<u8>],
     names: &mut dyn Names,
     method: impl FnOnce(I) -> O,
-) -> Vec<f64> {
-    let value = I::read(&mut Reader::new(input, &*names));
+) -> Packed {
+    let value = I::read(&mut Reader::new(input, blobs, &*names));
     let result = method(value);
     let mut write = Writer::new(names);
     result.write(&mut write);
     write.finish()
+}
+
+/// Carries a request to whatever answers an interface, and reads its reply:
+/// what a [`macro@interface`]'s generated `<Trait>Client` calls through.
+pub trait Transport {
+    /// Why a request did not get a reply, as when the other side threw.
+    type Error;
+
+    /// Sends method `method` with the arguments `write` writes, and reads
+    /// the reply as `O`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the transport's error when the request gets no reply.
+    fn call<O: Pack>(&self, method: u32, write: impl FnOnce(&mut Writer))
+    -> Result<O, Self::Error>;
+}
+
+/// The names one message uses, for a call between two Rust modules that
+/// share no name table: what the message writes is interned in a table of
+/// its own, which travels as the message's last blob, and what it reads
+/// resolves in the table the other side sent.
+///
+/// [`CarryingNames`] does this for the side that asks, and
+/// [`Packed::answer_carrying_names`] for the side that answers. A call between
+/// TypeScript and a module with a table of its own does not need it: its
+/// names cross once each, by the module's ids.
+#[derive(Debug, Default)]
+pub struct CarriedNames {
+    received: Vec<String>,
+    sent: Vec<String>,
+    ids: HashMap<String, u32>,
+}
+
+impl CarriedNames {
+    /// Names that resolve in the table `blob` holds, as [`Self::into_blob`]
+    /// wrote it. A malformed table resolves the names it holds up to where it
+    /// breaks.
+    pub fn received(blob: &[u8]) -> Self {
+        let mut received = Vec::new();
+        let mut rest = blob;
+        while let Some((length, tail)) = rest.split_first_chunk::<4>() {
+            let Some((name, tail)) = usize::try_from(u32::from_le_bytes(*length))
+                .ok()
+                .and_then(|length| tail.split_at_checked(length))
+            else {
+                break;
+            };
+            received.push(String::from_utf8_lossy(name).into_owned());
+            rest = tail;
+        }
+        Self {
+            received,
+            ..Self::default()
+        }
+    }
+
+    /// The names written, as a blob: each one's UTF-8 length as a
+    /// little-endian `u32`, then its text, in id order.
+    pub fn into_blob(self) -> Vec<u8> {
+        let mut blob = Vec::new();
+        for name in &self.sent {
+            // A name past 4 GiB cannot be written; it reads as empty.
+            let length = u32::try_from(name.len()).unwrap_or(0);
+            blob.extend_from_slice(&length.to_le_bytes());
+            if length > 0 {
+                blob.extend_from_slice(name.as_bytes());
+            }
+        }
+        blob
+    }
+}
+
+impl Names for CarriedNames {
+    fn name(&self, id: u32) -> Option<&str> {
+        self.received
+            .get(usize::try_from(id).ok()?)
+            .map(String::as_str)
+    }
+
+    fn id(&mut self, name: &str) -> u32 {
+        if let Some(&id) = self.ids.get(name) {
+            return id;
+        }
+        // More than u32::MAX names in one message cannot be told apart.
+        let id = u32::try_from(self.sent.len()).unwrap_or(u32::MAX);
+        self.sent.push(name.to_string());
+        self.ids.insert(name.to_string(), id);
+        id
+    }
+}
+
+/// A [`Transport`] over a function that sends a request to another Rust
+/// module and returns its reply, with the names each message uses carried
+/// as its last blob ([`CarriedNames`]). The other side answers with
+/// [`Packed::answer_carrying_names`].
+pub struct CarryingNames<F>(pub F);
+
+impl<F, E> Transport for CarryingNames<F>
+where
+    F: Fn(u32, Packed) -> Result<Packed, E>,
+{
+    type Error = E;
+
+    fn call<O: Pack>(&self, method: u32, write: impl FnOnce(&mut Writer)) -> Result<O, E> {
+        let mut names = CarriedNames::default();
+        let mut writer = Writer::new(&mut names);
+        write(&mut writer);
+        let mut request = writer.finish();
+        request.blobs.push(names.into_blob());
+        let mut reply = (self.0)(method, request)?;
+        let names = CarriedNames::received(&reply.blobs.pop().unwrap_or_default());
+        Ok(O::read(&mut Reader::new(
+            &reply.numbers,
+            &mut reply.blobs,
+            &names,
+        )))
+    }
+}
+
+impl Packed {
+    /// Answers this request, which a [`CarryingNames`] transport sent: takes
+    /// the names table off the end of its blobs, runs `dispatch` (an
+    /// interface's `<trait>_request`) with names resolving in it, and returns
+    /// the reply with the names it wrote as its last blob.
+    pub fn answer_carrying_names(
+        mut self,
+        dispatch: impl FnOnce(&[f64], Vec<Vec<u8>>, &mut dyn Names) -> Self,
+    ) -> Self {
+        let mut names = CarriedNames::received(&self.blobs.pop().unwrap_or_default());
+        let mut reply = dispatch(&self.numbers, self.blobs, &mut names);
+        reply.blobs.push(names.into_blob());
+        reply
+    }
 }
 
 #[cfg(test)]
@@ -348,11 +574,11 @@ mod tests {
     fn encode<T: Pack>(names: &mut Table, value: &T) -> Vec<f64> {
         let mut write = Writer::new(names);
         value.write(&mut write);
-        write.finish()
+        write.finish().numbers
     }
 
     fn decode<T: Pack>(names: &Table, values: &[f64]) -> T {
-        T::read(&mut Reader::new(values, names))
+        T::read(&mut Reader::new(values, &mut [], names))
     }
 
     fn component() -> Component {
@@ -486,10 +712,10 @@ mod tests {
         let mut input = encode(&mut names, &anchor);
         input.push(2.0);
 
-        let reply = measure_request(&Ruler, 1, &input, &mut names);
+        let reply = measure_request(&Ruler, 1, &input, Vec::new(), &mut names);
 
         assert_eq!(
-            decode::<Anchor>(&names, &reply),
+            decode::<Anchor>(&names, &reply.numbers),
             Anchor {
                 name: None,
                 x: 6.0,
@@ -502,13 +728,168 @@ mod tests {
     fn a_method_without_arguments_reads_nothing() {
         let mut names = Table::default();
 
-        assert_eq!(measure_request(&Ruler, 2, &[], &mut names), [3.0]);
+        assert_eq!(
+            measure_request(&Ruler, 2, &[], Vec::new(), &mut names).numbers,
+            [3.0]
+        );
     }
 
     #[test]
     fn an_unknown_method_replies_with_nothing() {
         let mut names = Table::default();
 
-        assert!(measure_request(&Ruler, 9, &[], &mut names).is_empty());
+        assert_eq!(
+            measure_request(&Ruler, 9, &[], Vec::new(), &mut names),
+            Packed::default()
+        );
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    struct Payload {
+        before: f64,
+        first: Bytes,
+        second: Bytes,
+        after: f64,
+    }
+
+    #[test]
+    fn bytes_cross_as_an_index_into_the_blob_list() {
+        let mut names = Table::default();
+        let payload = Payload {
+            before: 1.0,
+            first: Bytes(vec![1, 2, 3]),
+            second: Bytes(vec![]),
+            after: 2.0,
+        };
+        let mut write = Writer::new(&mut names);
+        payload.write(&mut write);
+        let mut packed = write.finish();
+
+        assert_eq!(packed.numbers, [1.0, 0.0, 1.0, 2.0]);
+        assert_eq!(packed.blobs, [vec![1, 2, 3], vec![]]);
+        assert_eq!(
+            Payload::read(&mut Reader::new(&packed.numbers, &mut packed.blobs, &names)),
+            payload
+        );
+    }
+
+    #[test]
+    fn bytes_past_the_blob_list_read_as_empty() {
+        assert_eq!(
+            Bytes::read(&mut Reader::new(&[4.0], &mut [], &Table::default())),
+            Bytes::default()
+        );
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    enum ReadError {
+        Closed,
+        Missing { name: String },
+    }
+
+    #[test]
+    fn a_result_is_a_flag_set_for_ok_then_the_value_or_the_error() {
+        let mut names = Table::default();
+        let ok: Result<f64, ReadError> = Ok(5.0);
+        let err: Result<f64, ReadError> = Err(ReadError::Missing { name: "a".into() });
+
+        assert_eq!(encode(&mut names, &ok), [1.0, 5.0]);
+        let encoded = encode(&mut names, &err);
+        assert_eq!(encoded, [0.0, 1.0, 0.0]);
+        assert_eq!(decode::<Result<f64, ReadError>>(&names, &encoded), err);
+    }
+
+    #[test]
+    fn an_empty_reply_reads_as_an_error() {
+        assert_eq!(
+            decode::<Result<f64, ReadError>>(&Table::default(), &[]),
+            Err(ReadError::Closed)
+        );
+    }
+
+    #[interface]
+    trait Store {
+        fn layers(&self, names: Vec<String>) -> Result<Bytes, ReadError>;
+        fn echo(&self, name: String) -> String;
+    }
+
+    struct Shelf;
+
+    impl Store for Shelf {
+        fn layers(&self, names: Vec<String>) -> Result<Bytes, ReadError> {
+            match names.as_slice() {
+                [] => Err(ReadError::Closed),
+                [first, ..] if first == "missing" => Err(ReadError::Missing {
+                    name: first.clone(),
+                }),
+                _ => Ok(Bytes(names.join(",").into_bytes())),
+            }
+        }
+
+        fn echo(&self, name: String) -> String {
+            name
+        }
+    }
+
+    /// A client and a server with no name table in common, as the engine in
+    /// WebAssembly and the store reader in the native addon are.
+    fn client() -> StoreClient<CarryingNames<impl Fn(u32, Packed) -> Result<Packed, ()>>> {
+        StoreClient(CarryingNames(|method, request: Packed| {
+            Ok(request.answer_carrying_names(|input, blobs, names| {
+                store_request(&Shelf, method, input, blobs, names)
+            }))
+        }))
+    }
+
+    #[test]
+    fn a_client_calls_through_a_transport_carrying_its_names() {
+        let client = client();
+
+        assert_eq!(
+            client.layers(vec!["a".into(), "b".into()]),
+            Ok(Ok(Bytes(b"a,b".to_vec())))
+        );
+        assert_eq!(client.echo("caf\u{e9}".into()), Ok("caf\u{e9}".to_string()));
+    }
+
+    #[test]
+    fn a_client_reads_the_error_a_method_returned() {
+        let client = client();
+
+        assert_eq!(client.layers(vec![]), Ok(Err(ReadError::Closed)));
+        assert_eq!(
+            client.layers(vec!["missing".into()]),
+            Ok(Err(ReadError::Missing {
+                name: "missing".into()
+            }))
+        );
+    }
+
+    #[test]
+    fn carried_names_read_back_in_id_order() {
+        let mut names = CarriedNames::default();
+        assert_eq!(names.id("b"), 0);
+        assert_eq!(names.id("a"), 1);
+        assert_eq!(names.id("b"), 0);
+
+        let received = CarriedNames::received(&names.into_blob());
+
+        assert_eq!(received.name(0), Some("b"));
+        assert_eq!(received.name(1), Some("a"));
+        assert_eq!(received.name(2), None);
+    }
+
+    #[test]
+    fn a_truncated_names_table_keeps_the_names_before_the_break() {
+        let mut names = CarriedNames::default();
+        names.id("whole");
+        names.id("cut");
+        let mut blob = names.into_blob();
+        blob.truncate(blob.len() - 1);
+
+        let received = CarriedNames::received(&blob);
+
+        assert_eq!(received.name(0), Some("whole"));
+        assert_eq!(received.name(1), None);
     }
 }

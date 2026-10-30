@@ -2,7 +2,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { render, type Fragment } from "./generate";
-import { Reader, syncTransport, Writer, type Names } from "./index";
+import {
+  carryingNames,
+  PackError,
+  Reader,
+  syncTransport,
+  Writer,
+  type Blobs,
+  type Names,
+} from "./index";
 
 const SEGMENT_KIND: Fragment = {
   kind: "enum",
@@ -139,16 +147,98 @@ const names: Names = {
   },
 } as Names;
 
-/** A module that records each request and answers with `reply`'s numbers. */
+/** A module that records each request and answers with what `reply` writes, its blobs taken on demand. */
 function module(reply: (write: Writer) => void) {
-  const requests: { method: number; input: number[] }[] = [];
-  const transport = syncTransport((method, input) => {
-    requests.push({ method, input: [...input] });
-    const write = new Writer(names);
-    reply(write);
-    return write.finish().slice();
-  }, names);
-  return { requests, transport };
+  const requests: { method: number; input: number[]; blobs: Blobs | undefined }[] = [];
+  let replyBlobs: Blobs = [];
+  let blobsTaken = 0;
+  const transport = syncTransport(
+    (method, input, blobs) => {
+      requests.push({ method, input: [...input], blobs });
+      const write = new Writer(names);
+      reply(write);
+      replyBlobs = [...write.blobs()];
+      return write.finish().slice();
+    },
+    names,
+    () => {
+      blobsTaken++;
+      return replyBlobs;
+    },
+  );
+  return { requests, transport, blobsTaken: () => blobsTaken };
+}
+
+const READ_ERROR: Fragment = {
+  kind: "union",
+  rust: "ReadError",
+  name: "ReadError",
+  doc: null,
+  cases: [
+    { name: "closed", doc: null, fields: [] },
+    {
+      name: "missing",
+      doc: null,
+      fields: [{ name: "glyph", doc: null, type: { kind: "ref", rust: "GlyphId" } }],
+    },
+  ],
+};
+const STORE: Fragment = {
+  kind: "interface",
+  rust: "Store",
+  name: "Store",
+  doc: "A store.",
+  methods: [
+    {
+      name: "layers",
+      doc: "Layers, as bytes.",
+      params: [{ name: "glyphs", type: { kind: "list", item: { kind: "ref", rust: "GlyphId" } } }],
+      output: {
+        kind: "result",
+        ok: { kind: "bytes" },
+        err: { kind: "ref", rust: "ReadError" },
+      },
+    },
+    {
+      name: "save",
+      doc: null,
+      params: [
+        { name: "first", type: { kind: "bytes" } },
+        { name: "second", type: { kind: "bytes" } },
+      ],
+      output: { kind: "count" },
+    },
+    {
+      name: "basesOf",
+      doc: null,
+      params: [{ name: "glyphs", type: { kind: "list", item: { kind: "ref", rust: "GlyphId" } } }],
+      output: {
+        kind: "result",
+        ok: { kind: "list", item: { kind: "ref", rust: "GlyphId" } },
+        err: { kind: "ref", rust: "ReadError" },
+      },
+    },
+  ],
+};
+
+interface Store {
+  layers(glyphs: string[]): Uint8Array;
+  save(first: Uint8Array, second: Uint8Array): number;
+  basesOf(glyphs: string[]): string[];
+}
+
+/** A names table as Rust's `pack::CarriedNames` writes it. */
+function namesBlob(names: readonly string[]): Uint8Array {
+  const texts = names.map((name) => new TextEncoder().encode(name));
+  const blob = new Uint8Array(texts.reduce((total, text) => total + 4 + text.length, 0));
+  const view = new DataView(blob.buffer);
+  let at = 0;
+  for (const text of texts) {
+    view.setUint32(at, text.length, true);
+    blob.set(text, at + 4);
+    at += 4 + text.length;
+  }
+  return blob;
 }
 
 describe("a generated interface class", () => {
@@ -160,7 +250,7 @@ describe("a generated interface class", () => {
     const width = measure.width({ name: null, x: 3, kinds: ["quad", "line"] });
 
     expect(width).toBe(7);
-    expect(requests).toEqual([{ method: 0, input: [0, 3, 2, 1, 0] }]);
+    expect(requests).toEqual([{ method: 0, input: [0, 3, 2, 1, 0], blobs: undefined }]);
   });
 
   it("reads a struct result with its names, options and enums", async () => {
@@ -177,7 +267,7 @@ describe("a generated interface class", () => {
     const scaled = measure.scaled({ x: 3, kinds: [] }, 2);
 
     expect(scaled).toEqual({ name: "top", x: 6, kinds: ["quad"] });
-    expect(requests[0]).toEqual({ method: 1, input: [0, 3, 0, 2] });
+    expect(requests[0]).toEqual({ method: 1, input: [0, 3, 0, 2], blobs: undefined });
   });
 
   it("reads nested lists inside an option", async () => {
@@ -240,6 +330,135 @@ describe("a generated union", () => {
     const edits = new (generated.Edits as new (t: unknown) => Edits)(transport);
 
     expect(() => edits.apply([], new Float64Array())).toThrow("unknown Edit");
+  });
+});
+
+describe("bytes", () => {
+  it("cross as an index into the request's blob list, without a copy", async () => {
+    const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
+    const { requests, transport } = module((write) => write.count(2));
+    const store = new (generated.Store as new (t: unknown) => Store)(transport);
+    const first = new Uint8Array([1, 2]);
+    const second = new Uint8Array([3]);
+
+    expect(store.save(first, second)).toBe(2);
+
+    expect(requests[0]!.input).toEqual([0, 1]);
+    expect(requests[0]!.blobs?.[0]).toBe(first);
+    expect(requests[0]!.blobs?.[1]).toBe(second);
+  });
+
+  it("read back as the reply blob their index names", async () => {
+    const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
+    const layers = new Uint8Array([9, 8, 7]);
+    const { transport } = module((write) => {
+      write.flag(true);
+      write.bytes(layers);
+    });
+    const store = new (generated.Store as new (t: unknown) => Store)(transport);
+
+    expect(store.layers(["glyph_a"])).toBe(layers);
+  });
+
+  it("are left out of a request without them and never taken for a reply without them", async () => {
+    const generated = await load([SEGMENT_KIND, ANCHOR, MEASURE]);
+    const { requests, transport, blobsTaken } = module((write) => write.number(1));
+    const measure = new (generated.Measure as new (t: unknown) => Measure)(transport);
+
+    measure.width({ name: null, x: 0, kinds: [] });
+    measure.width({ name: null, x: 0, kinds: [] });
+
+    expect(requests.map((request) => request.blobs)).toEqual([undefined, undefined]);
+    expect(blobsTaken()).toBe(0);
+  });
+});
+
+describe("a method returning a Result", () => {
+  it("throws a PackError carrying the error and its kind", async () => {
+    const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
+    const glyph = names.id("glyph_missing");
+    const { transport } = module((write) => {
+      write.flag(false);
+      write.count(1);
+      write.number(glyph);
+    });
+    const store = new (generated.Store as new (t: unknown) => Store)(transport);
+
+    let thrown: unknown;
+    try {
+      store.layers(["glyph_missing"]);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(PackError);
+    const error = thrown as PackError;
+    expect(error.type).toBe("ReadError");
+    expect(error.kind).toBe("missing");
+    expect(error.error).toEqual({ kind: "missing", glyph: "glyph_missing" });
+  });
+
+  it("throws for an empty reply, as Rust reads one", async () => {
+    const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
+    const { transport } = module(() => {});
+    const store = new (generated.Store as new (t: unknown) => Store)(transport);
+
+    expect(() => store.layers([])).toThrow("ReadError.closed");
+  });
+
+  it("is refused anywhere but as a method's result", () => {
+    const nested: Fragment = {
+      ...ANCHOR,
+      fields: [
+        {
+          name: "outcome",
+          doc: null,
+          type: { kind: "result", ok: { kind: "number" }, err: { kind: "number" } },
+        },
+      ],
+    };
+
+    expect(() => render([nested, MEASURE])).toThrow("a Result crosses only as");
+  });
+});
+
+describe("carryingNames", () => {
+  it("sends the request's names as its last blob and reads the reply's from its own", async () => {
+    const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
+    const requests: { numbers: number[]; blobs: Blobs }[] = [];
+    const transport = carryingNames((_method, numbers, blobs) => {
+      requests.push({ numbers: [...numbers], blobs });
+      return {
+        numbers: new Float64Array([1, 2, 1, 0]),
+        blobs: [namesBlob(["glyph_base", "glyph_mark"])],
+      };
+    });
+    const store = new (generated.Store as new (t: unknown) => Store)(transport);
+
+    expect(store.basesOf(["glyph_a", "glyph_b", "glyph_a"])).toEqual(["glyph_mark", "glyph_base"]);
+    expect(requests[0]!.numbers).toEqual([3, 0, 1, 0]);
+    expect(requests[0]!.blobs).toEqual([namesBlob(["glyph_a", "glyph_b"])]);
+  });
+
+  it("starts each request's names afresh and keeps its bytes before the names", async () => {
+    const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
+    const requests: Blobs[] = [];
+    const layers = new Uint8Array([4, 5]);
+    const transport = carryingNames((_method, _numbers, blobs) => {
+      requests.push(blobs);
+      return { numbers: new Float64Array([1, 0]), blobs: [layers, namesBlob([])] };
+    });
+    const store = new (generated.Store as new (t: unknown) => Store)(transport);
+
+    store.layers(["glyph_a"]);
+    expect(store.layers(["glyph_b"])).toBe(layers);
+    expect(requests[1]).toEqual([namesBlob(["glyph_b"])]);
+  });
+});
+
+describe("PackError", () => {
+  it("takes a unit-only error's value as its kind", () => {
+    expect(new PackError("Closed", "closed").kind).toBe("closed");
   });
 });
 
