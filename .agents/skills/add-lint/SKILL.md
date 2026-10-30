@@ -1,6 +1,6 @@
 ---
 name: add-lint
-description: Turn a code pattern the user doesn't want into a check that finds it without them — an oxlint rule in `scripts/oxlint/shift-plugin.mjs`, a workspace clippy lint, or a report in `shift-scan` (Rust) or `scan-ts` (TypeScript) — and clean up what it finds. Use when the user says "I don't like X", "we keep doing X", "add a lint/rule/check for X", "make this a rule", "scan for X", "can we catch this automatically", or when the same review comment comes up a second time. Also use to run the scanners on a branch before review.
+description: Turn a code pattern the user doesn't want into a check that finds it without them — an oxlint rule in `scripts/oxlint/shift-plugin.mjs`, a workspace clippy lint, or a report in `shift-scan` (Rust) or `scan-ts` (TypeScript) — and clean up what it finds. Use when the user says "I don't like X", "we keep doing X", "add a lint/rule/check for X", "make this a rule", "scan for X", "can we catch this automatically", or when the same review comment comes up a second time. Also use to run the scanners on a branch before review or before opening a pull request, and to count where a code pattern occurs across the tree (how many tests reach an internal, how many files do X) instead of grepping: extend a scanner kind or rule and report its hits.
 ---
 
 # /add-lint — Catch a pattern once, not in every review

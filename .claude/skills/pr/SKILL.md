@@ -124,7 +124,7 @@ Review a change once, as it will stay. When work toward one goal takes several s
 4. For substantial untracked work, invoke `/issue` before opening the pull request.
 5. Use `/commit` to create any required logical commits.
 6. Rebase or merge the current `main` only when needed. Do not rewrite a published branch without explicit approval.
-7. Run focused validation and the repository checks required by the affected subsystem.
+7. Run focused validation and the repository checks required by the affected subsystem, and the scanners over the branch (`pnpm scan:ts --since origin/main`, `pnpm scan:rust --since origin/main`; see `/add-lint`'s "Running the scanners on a branch"). Fix each finding the branch introduced or say in the body why it stays.
 8. Re-read the final diff and summarize observable behavior, not implementation trivia.
 9. Choose a Conventional Commit title that matches the dominant change.
 10. Push the named branch without force unless explicitly approved.
