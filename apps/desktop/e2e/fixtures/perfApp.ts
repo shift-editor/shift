@@ -16,9 +16,15 @@ import os from "node:os";
 import * as path from "path";
 import { once } from "events";
 import type { ContourContent } from "@shift/editor/clipboard";
+import type { PointId } from "@shift/types";
+import type { ContourFixture, PointFixture } from "@/testing/fixtures";
 import { EditorDriver } from "./EditorDriver";
+import { clearSelection } from "./editorInteractions";
 import { copyImportedSource, createAuthoredDocument } from "./fontSource";
 import type { RecordedDialog } from "./types";
+import { registerApp } from "./appHooks";
+import { buildFontFixture } from "./buildFontFixture";
+import type { FontFixture } from "@/testing/fonts";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -49,6 +55,8 @@ export type PerfFixtures = {
   page: Page;
   editor: EditorDriver;
   sourcePath: string;
+  /** What to build into the opened font before the test starts; nothing when unset. */
+  font: FontFixture | undefined;
 };
 
 /**
@@ -56,6 +64,8 @@ export type PerfFixtures = {
  */
 function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDocument) {
   return base.extend<PerfFixtures>({
+    font: [undefined, { option: true }],
+
     electronApp: async ({}, use) => {
       const testRoot = fs.mkdtempSync(path.join(os.tmpdir(), "shift-e2e-"));
       const userDataDir = path.join(testRoot, "user-data");
@@ -74,7 +84,9 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
           },
         });
 
+        registerApp(app);
         const page = await app.firstWindow();
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
           electronApp.getPath("userData"),
         );
@@ -89,16 +101,19 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
           win.setContentSize(width, height);
           win.center();
         }, contentSize);
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         await page.waitForFunction(
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
           contentSize,
         );
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         await page.waitForFunction(() => document.visibilityState === "visible");
         await browserWindow.evaluate((win, { width, height }) => {
           win.setContentSize(width, height);
           win.center();
         }, contentSize);
         await browserWindow.dispose();
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
         await page.waitForFunction(
           ({ width, height }) => window.innerWidth === width && window.innerHeight === height,
           contentSize,
@@ -122,16 +137,18 @@ function createAppTest(fontPath: string, prepareSource: typeof createAuthoredDoc
     },
 
     sourcePath: async ({ electronApp }, use) => {
+      // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main and sizes the window, not app state
       const sourcePath = await electronApp.evaluate(() => process.env.SHIFT_E2E_FONT_PATH ?? null);
       if (!sourcePath) throw new Error("E2E font source path is unavailable");
 
       await use(sourcePath);
     },
 
-    page: async ({ electronApp }, use) => {
+    page: async ({ electronApp, font }, use) => {
       const page = await electronApp.firstWindow();
       await page.waitForLoadState("domcontentloaded");
       await page.waitForURL(/#\/home/, { timeout: 20_000 });
+      if (font) await buildFontFixture(page, electronApp, font);
 
       const dialogs: RecordedDialog[] = [];
       page.on("dialog", async (dialog) => {
@@ -242,6 +259,32 @@ export function generateContourData(targetPoints: number) {
   }
 
   return contours;
+}
+
+/** {@link generateContourData}'s contours as glyph fixtures, for {@link EditorDriver.draw}. */
+export function benchmarkContours(targetPoints: number): ContourFixture[] {
+  return generateContourData(targetPoints).map((contour) => ({
+    closed: contour.closed,
+    points: contour.points.map((point): PointFixture => {
+      // oxlint-disable-next-line shift/no-raw-point-type-check -- generated benchmark data in the test process, where @shift/glyph-state does not load
+      if (point.pointType === "offCurve") return { x: point.x, y: point.y, off: true };
+      return point.smooth ? { x: point.x, y: point.y, smooth: true } : [point.x, point.y];
+    }),
+  }));
+}
+
+/**
+ * Draws {@link benchmarkContours} into the open glyph and returns its point ids in drawing
+ * order, leaving nothing selected, as pasting them would.
+ */
+export async function drawBenchmarkGlyph(
+  editor: EditorDriver,
+  targetPoints: number,
+): Promise<PointId[]> {
+  await editor.draw({ contours: benchmarkContours(targetPoints) }, { select: true });
+  const ids = [...(await editor.selectionIds())] as PointId[];
+  await clearSelection(editor.page);
+  return ids;
 }
 
 export interface PerfResult {

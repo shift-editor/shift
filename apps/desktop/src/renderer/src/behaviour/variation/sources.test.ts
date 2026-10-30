@@ -27,7 +27,7 @@ describe("adding a source", () => {
     const [original] = await editor.outline();
 
     await editor.addSource("Bold", { wght: 700 });
-    const bold = editor.source("Bold")!.id;
+    const bold = editor.source({ name: "Bold" })!.id;
 
     expect(editor.editorView()).toMatchObject({
       activeSourceId: bold,
@@ -43,7 +43,7 @@ describe("adding a source", () => {
 describe("choosing sources", () => {
   it("keeps the shown source and the axis location in step", async () => {
     await editor.addSource("Bold", { wght: 700 });
-    const bold = editor.source("Bold")!.id;
+    const bold = editor.source({ name: "Bold" })!.id;
 
     editor.clickSource("Regular");
     expect(editor.editorView().externalLocation).toEqual([{ axisId: weight, value: 400 }]);
@@ -62,9 +62,9 @@ describe("choosing sources", () => {
 
   it("edits a range or a hand-picked set of sources around the shown one", async () => {
     await editor.addSource("Thin", { wght: 100 });
-    const thin = editor.source("Thin")!.id;
+    const thin = editor.source({ name: "Thin" })!.id;
     await editor.addSource("Bold", { wght: 700 });
-    const bold = editor.source("Bold")!.id;
+    const bold = editor.source({ name: "Bold" })!.id;
     await editor.addSource("Black", { wght: 900 });
     const everySource = editor.fontOverview().sources.map(({ id }) => id);
 

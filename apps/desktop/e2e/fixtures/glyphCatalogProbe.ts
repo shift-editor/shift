@@ -1,17 +1,20 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import type { AxisId } from "@shift/types";
-import { setLocation } from "./fontSetup";
+import type { AxisId, GlyphId } from "@shift/types";
+import type { EditorDriver } from "./EditorDriver";
+import { hooksOf } from "./appHooks";
 
 // Instrumentation of the Home glyph catalog's resident GPU Grid: paint waits, published Grid
 // state, and DOM observers that record transitions between two reads.
 
 /** Whether the page has WebGPU. */
 export async function gpuAvailable(page: Page): Promise<boolean> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   return page.evaluate(() => Boolean(navigator.gpu));
 }
 
 /** Waits for two animation frames, so the next read sees a painted frame. */
 export async function afterNextPaint(page: Page): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
@@ -22,6 +25,7 @@ export async function afterNextPaint(page: Page): Promise<void> {
 
 /** Waits for the page's web fonts to load. */
 export async function fontsReady(page: Page): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
@@ -29,14 +33,13 @@ export async function fontsReady(page: Page): Promise<void> {
 
 /** The page's viewport height in CSS pixels. */
 export async function viewportHeight(page: Page): Promise<number> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   return page.evaluate(() => window.innerHeight);
 }
 
 /** Waits until the Grid has rendered its current target location with complete residency. */
 export async function waitForSettledGrid(page: Page, glyphCanvas: Locator): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.settled();
-  });
+  await hooksOf(page).session.settle();
   await afterNextPaint(page);
   await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
@@ -75,6 +78,7 @@ export async function paintsGlyphs(surface: Locator, glyphCanvas: Locator): Prom
  * {@link paintsGlyphs} makes; read the count with {@link hiddenGlyphCanvasCount}.
  */
 export async function countGlyphCanvasHides(page: Page): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
       '[data-testid="glyph-catalog-canvas"]',
@@ -100,11 +104,13 @@ export async function countGlyphCanvasHides(page: Page): Promise<void> {
 
 /** How often the Grid hid its glyph canvas since {@link countGlyphCanvasHides}. */
 export async function hiddenGlyphCanvasCount(page: Page): Promise<number> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   return page.evaluate(() => Number(document.documentElement.dataset.slugHiddenTransitions));
 }
 
 /** Starts recording the Grid's readiness changes and canvas hides; read them with {@link observedGridState}. */
 export async function trackGridTransitions(page: Page): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
       '[data-testid="glyph-catalog-canvas"]',
@@ -140,6 +146,7 @@ export async function observedGridState(page: Page): Promise<{
   readiness: string[];
   hiddenTransitions: number;
 }> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
   return page.evaluate(() => ({
     readiness: JSON.parse(
       document.documentElement.dataset.gridReadinessTransitions ?? "[]",
@@ -155,16 +162,18 @@ export async function observedGridState(page: Page): Promise<{
  * @throws {Error} when the Grid does not render a value within 600 frames.
  */
 export async function scrubGridGeometry(
-  page: Page,
+  editor: EditorDriver,
   glyphCanvas: Locator,
-  axisId: AxisId,
+  axisTag: string,
   values: readonly number[],
 ): Promise<{ previewHeight: number; scrollHeight: number }[]> {
+  const page = editor.page;
   const samples: { previewHeight: number; scrollHeight: number }[] = [];
   for (const value of values) {
     const previousLocation = await glyphCanvas.getAttribute("data-active-location");
-    await setLocation(page, { [axisId]: value });
+    await editor.setLocation({ [axisTag]: value });
     // Sample only once the Grid has rendered this location, never a stale frame.
+    // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- measures the page (paint, viewport, DOM observers), not app state
     const rendered = await page.evaluate(async (previous) => {
       const canvas = document.querySelector<HTMLCanvasElement>(
         '[data-testid="glyph-catalog-canvas"]',
@@ -201,47 +210,15 @@ export async function scrubGridGeometry(
  */
 export async function observeRenameTransition(
   page: Page,
-  glyphId: string,
+  glyphId: GlyphId,
   nextName: string,
 ): Promise<boolean> {
-  return page.evaluate(
-    ({ glyphId, nextName }) =>
-      new Promise<boolean>((resolve) => {
-        function sample(): void {
-          const currentName = window.shift?.font
-            .glyphRecords()
-            .find(({ id }) => id === glyphId)?.name;
-          const input = document.querySelector<HTMLInputElement>('[aria-label="Glyph name"]');
-          const renderer = [
-            ...document.querySelectorAll<HTMLElement>("[data-glyph-catalog-renderer]"),
-          ].find((element) => getComputedStyle(element).visibility === "visible");
-          if (input) {
-            requestAnimationFrame(sample);
-            return;
-          }
-
-          const visibleName = renderer?.dataset.firstGlyphName;
-          if (currentName === nextName) {
-            resolve(visibleName === nextName);
-            return;
-          }
-          if (visibleName !== nextName) {
-            resolve(false);
-            return;
-          }
-
-          requestAnimationFrame(sample);
-        }
-
-        requestAnimationFrame(sample);
-      }),
-    { glyphId, nextName },
-  );
+  return hooksOf(page).catalog.observeRenameTransition(glyphId, nextName);
 }
 
 /** The location the catalog previews glyphs at, one coordinate per axis in font axis order. */
 export async function catalogLocation(page: Page): Promise<readonly number[] | undefined> {
-  return page.evaluate(() => window.shiftSession?.catalog.locationCell.peek());
+  return hooksOf(page).catalog.location();
 }
 
 /**
@@ -252,11 +229,22 @@ export async function catalogLocationOn(
   page: Page,
   axisId: AxisId,
 ): Promise<{ location: number | undefined; sourceId: string | null | undefined }> {
-  return page.evaluate((id) => {
-    const axisIndex = window.shift?.font.getAxes().findIndex((axis) => axis.id === id) ?? -1;
-    return {
-      location: window.shiftSession?.catalog.locationCell.peek()[axisIndex],
-      sourceId: window.shiftSession?.catalog.sourceIdCell.peek(),
-    };
-  }, axisId);
+  return hooksOf(page).catalog.locationOn(axisId);
+}
+
+/**
+ * Waits until the Grid reports itself complete and fully resident, then checks that it holds
+ * every glyph it targets, and at least one.
+ */
+export async function expectCompleteResidency(glyphCanvas: Locator): Promise<void> {
+  await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
+    timeout: 30_000,
+  });
+  await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
+  const residency = await glyphCanvas.evaluate((canvas: HTMLCanvasElement) => ({
+    resident: Number(canvas.dataset.residentGlyphCount),
+    target: Number(canvas.dataset.targetGlyphCount),
+  }));
+  expect(residency.target).toBeGreaterThan(0);
+  expect(residency.resident).toBe(residency.target);
 }

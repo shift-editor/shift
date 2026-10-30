@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { colorThemes } from "../src/renderer/src/lib/themes";
+import { themeById } from "../src/renderer/src/lib/themes";
 import type { Page } from "@playwright/test";
 import type { ThemeId } from "../src/renderer/src/lib/themes";
 import { workspaceTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
@@ -28,8 +28,7 @@ async function writeThemeFile(
   id: string,
   { name = "Rice", appearance = "dark", changes = {}, colors = {} }: ThemeFileOptions = {},
 ): Promise<void> {
-  const nord = colorThemes.find((theme) => theme.id === "nord");
-  if (!nord) throw new Error("Expected the Nord theme");
+  const nord = themeById("nord");
   const palette = Object.entries({ ...nord.palette, ...changes }).map(
     ([key, color]) => `${key} = "${color}"`,
   );
@@ -118,8 +117,7 @@ test.describe("Theme", () => {
     await openAppearance(page);
     await chooseTheme(page, "Dark", "Nord");
 
-    const nord = colorThemes.find(({ id }) => id === "nord");
-    if (!nord) throw new Error("Expected the Nord theme");
+    const nord = themeById("nord");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
     await expect.poll(() => cssVariable(page, "--color-background")).toBe(nord.palette.base00);
@@ -196,7 +194,7 @@ test.describe("Theme", () => {
     await setTheme(page, "rice");
 
     await expect.poll(() => cssVariable(page, "--color-accent")).toBe("#ff9e64");
-    const nord = colorThemes.find(({ id }) => id === "nord")!;
+    const nord = themeById("nord");
     expect(await cssVariable(page, "--editor-handle-primary-stroke")).toBe(nord.palette.base0D);
   });
 

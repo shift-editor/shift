@@ -1,5 +1,6 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
+import { hooksOf, readsOf } from "./appHooks";
 
 const FIRST_GLYPH_PREVIEW_POINT = { x: 50, y: 50 };
 const FIRST_GLYPH_NAME_POINT = { x: 50, y: 117 };
@@ -50,6 +51,20 @@ export function variationControls(page: Page) {
   return editorSidebar(page).getByRole("tabpanel", { name: "Variations" });
 }
 
+/** The Variations panel's row for the source named `name`, as a screen reader finds it. */
+export function sourceRow(controls: Locator, name: string): Locator {
+  return controls
+    .getByRole("group", { name: "Sources" })
+    .getByRole("button", { name, exact: true });
+}
+
+/** The Variations panel's row for the named instance `name`, as a screen reader finds it. */
+export function instanceRow(controls: Locator, name: string): Locator {
+  return controls
+    .getByRole("group", { name: "Instances" })
+    .getByRole("button", { name, exact: true });
+}
+
 export async function openVariationControls(page: Page) {
   const sidebar = editorSidebar(page);
   await sidebar.getByRole("tab", { name: "Variations", exact: true }).click();
@@ -65,7 +80,7 @@ export function settingsDetails(page: Page) {
 }
 
 export async function firstAxisSlider(page: Page) {
-  const axisName = await page.evaluate(() => window.shiftSession?.catalog.axesCell.peek()[0]?.name);
+  const axisName = await hooksOf(page).session.firstCatalogAxisName();
   if (!axisName) throw new Error("Expected a variable axis");
 
   return page.getByRole("slider", { name: axisName, exact: true });
@@ -110,14 +125,8 @@ export async function waitForEditorReady(page: Page, glyphId: string): Promise<v
   await page.waitForURL(new RegExp(`#/editor/${encodeURIComponent(glyphId)}$`));
   await expect(editorShell(page)).toBeVisible();
   await expect
-    .poll(() =>
-      page.evaluate(
-        (expectedGlyphId) =>
-          window.shiftSession?.editor.scene.first("glyph")?.glyphId === expectedGlyphId,
-        glyphId,
-      ),
-    )
-    .toBe(true);
+    .poll(async () => (await readsOf(page).editor.inspect("")).glyph?.glyphId)
+    .toBe(glyphId);
 }
 
 /**
@@ -133,7 +142,7 @@ export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
     page,
     decodeURIComponent(new URL(page.url()).hash.slice("#/editor/".length)),
   );
-  return page.evaluate(() => window.shiftSession!.editor.scene.first("glyph")!.glyphId);
+  return (await readsOf(page).editor.inspect("")).glyph!.glyphId;
 }
 
 /**
@@ -144,13 +153,7 @@ export async function openFirstCatalogGlyph(page: Page): Promise<GlyphId> {
  * @throws {Error} when the workspace is unavailable or glyph acquisition fails.
  */
 export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void> {
-  await page.evaluate(async (id) => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected font workspace");
-
-    await font.loadGlyph(id);
-    window.location.hash = `#/editor/${encodeURIComponent(id)}`;
-  }, glyphId);
+  await hooksOf(page).session.openGlyph(glyphId);
   await waitForEditorReady(page, glyphId);
 }
 
@@ -162,16 +165,7 @@ export async function openGlyphRoute(page: Page, glyphId: GlyphId): Promise<void
  * @throws {Error} when the session has no glyph named `name`.
  */
 export async function openSessionGlyphNamed(page: Page, name: string): Promise<GlyphId> {
-  const glyphId = await page.evaluate(async (glyphName) => {
-    const session = window.shiftSession;
-    if (!session) throw new Error("Expected a font session");
-
-    const entry = session.font.entryForName(glyphName);
-    if (!entry) throw new Error(`Expected a glyph named ${glyphName}`);
-    await session.font.loadGlyph(entry.id);
-    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
-    return entry.id;
-  }, name);
+  const glyphId = await hooksOf(page).session.openGlyphNamed(name);
   await waitForEditorReady(page, glyphId);
   return glyphId;
 }
@@ -191,4 +185,9 @@ export async function openCatalogGlyph(
   });
   await clickFirstCatalogGlyph(page);
   await waitForEditorReady(page, glyphId);
+}
+
+/** The width `element` takes on the page now, in CSS pixels; 0 while it is not rendered. */
+export async function elementWidth(element: Locator): Promise<number> {
+  return (await element.boundingBox())?.width ?? 0;
 }

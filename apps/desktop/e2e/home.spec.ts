@@ -4,6 +4,7 @@ import {
   clickFirstCatalogGlyph,
   clickFirstCatalogGlyphName,
   editorToolbar,
+  elementWidth,
   fontNavigation,
   glyphCatalogRenderer,
   glyphCatalogSurface,
@@ -11,7 +12,6 @@ import {
   openFirstCatalogGlyph,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { deleteAxis } from "./fixtures/fontSetup";
 import { afterNextPaint, observeRenameTransition } from "./fixtures/glyphCatalogProbe";
 import { expectPageSnapshot, expectPanelSnapshot } from "./fixtures/snapshots";
 import type { GlyphListing } from "@/testing/reads";
@@ -248,7 +248,7 @@ test.describe("Home view", () => {
   });
 
   test("keeps unavailable source creation discoverable without axes", async ({ editor, page }) => {
-    for (const axis of (await editor.fontOverview()).axes) await deleteAxis(page, axis.id);
+    for (const axis of (await editor.fontOverview()).axes) await editor.deleteAxis(axis.tag);
 
     const createSource = page.getByRole("button", { name: "Create source", exact: true });
     const tooltip = page.getByRole("tooltip");
@@ -320,10 +320,6 @@ test.describe("Home view", () => {
       .toEqual(initialSize);
   });
 });
-
-async function elementWidth(element: Locator): Promise<number> {
-  return (await element.boundingBox())?.width ?? 0;
-}
 
 /** Creates a glyph with the catalog's Create glyph button and returns it once the font has it. */
 async function createQuickGlyph(page: Page, editor: EditorDriver): Promise<GlyphListing> {

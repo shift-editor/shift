@@ -148,6 +148,9 @@ export class Designspace {
     });
     // (undocumented)
     get axes(): readonly Axis[];
+    // (undocumented)
+    axis(axisId: AxisId): Axis | null;
+    axisTagged(tag: string): Axis | null;
     coordinates(location: ExternalAxisLocation | DesignAxisLocation): {
         axisId: AxisId;
         value: number;
@@ -470,7 +473,9 @@ export class Font {
     constructor(input: FontOptions);
     assignKerningGroup(position: KerningPairPosition, glyphIds: readonly GlyphId[], groupId: KerningGroupId | null): Promise<void>;
     get axesCell(): Signal<Axis[]>;
+    axis(axisId: AxisId): Axis | null;
     get axisMappingsCell(): Signal<AxisMapping[]>;
+    axisTagged(tag: string): Axis | null;
     beginKerningEdit(): KerningEdit;
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
     get committedRevisionCell(): Signal<number>;
@@ -557,6 +562,8 @@ export class Font {
     metricsForLayerSource(sourceId: SourceId): SourceMetrics;
     metricsForSource(sourceId: SourceId): SourceMetrics;
     missingPairOrigin(sourceId: SourceId): MissingKerningOrigin;
+    namedInstance(instanceId: NamedInstanceId): NamedInstance | null;
+    namedInstanceNamed(name: string): NamedInstance | null;
     get namedInstances(): NamedInstance[];
     get namedInstancesCell(): Signal<NamedInstance[]>;
     nameForUnicode(unicode: Unicode): GlyphName;
@@ -1237,6 +1244,10 @@ export interface ShiftCapabilities {
         resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
     };
     // (undocumented)
+    instances: {
+        get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
+    };
+    // (undocumented)
     kerning: {
         groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
         pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
@@ -1256,6 +1267,10 @@ export interface ShiftCapabilities {
     // (undocumented)
     sessions: {
         list(): Promise<ShiftSession[]>;
+    };
+    // (undocumented)
+    sources: {
+        get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
     };
 }
 
@@ -1316,6 +1331,10 @@ export interface ShiftRead {
         resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
     };
     // (undocumented)
+    instances: {
+        get(input: ShiftReadInput<InstanceGetInput>): Promise<NamedInstance>;
+    };
+    // (undocumented)
     kerning: {
         groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
         pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
@@ -1331,6 +1350,10 @@ export interface ShiftRead {
     // (undocumented)
     locations: {
         resolve(input: ShiftReadInput<LocationResolveInput>): Promise<ResolvedLocation>;
+    };
+    // (undocumented)
+    sources: {
+        get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
     };
     // (undocumented)
     readonly state: ShiftReadState;

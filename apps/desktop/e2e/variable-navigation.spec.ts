@@ -1,11 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { AxisId, GlyphId, GlyphName, NamedInstanceId, SourceId } from "@shift/types";
-import {
-  DESIGNSPACE_FONT_PATH,
-  expect,
-  waitForWorkspaceReady,
-  workspaceTest,
-} from "./fixtures/electronApp";
+import { FONTS, expect, waitForWorkspaceReady, workspaceTest } from "./fixtures/electronApp";
 import {
   editorShell,
   fontNavigation,
@@ -14,7 +9,6 @@ import {
   openCatalogGlyph,
   openVariationControls,
 } from "./fixtures/appLocators";
-import type { EditorDriver } from "./fixtures/EditorDriver";
 import { catalogLocationOn } from "./fixtures/glyphCatalogProbe";
 import type { ExternalAxisLocation } from "@shift/editor/types";
 
@@ -95,10 +89,7 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
       name: "Navigation Preview",
       location: {
         values: Object.fromEntries(
-          font
-            .getAxes()
-            .filter((axis) => axis.role === "external")
-            .map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
+          font.getAxes().map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
         ),
       },
     });
@@ -149,23 +140,9 @@ async function expectPreview(
 /** The name of the fixture's bold source. */
 const BOLD = "Navigation Bold";
 
-async function activeSourceId(editor: EditorDriver): Promise<SourceId | null> {
-  return (await editor.editorView()).activeSourceId;
-}
-
-/** Whether the glyph named `glyph` has its own layer at the source `sourceId`. */
-async function hasLayerAt(
-  editor: EditorDriver,
-  glyph: string,
-  sourceId: SourceId,
-): Promise<boolean> {
-  const listing = await editor.glyphNamed(glyph);
-  return listing?.layers.some((layer) => layer.sourceId === sourceId) ?? false;
-}
-
 // Navigation coherence is renderer-independent, so this runs on the software-rendered
 // visual project with the authored MutatorSans designspace.
-const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
+const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
 
 test("keeps variable preview and exact-source editability coherent across Grid navigation", async ({
   page,
@@ -207,7 +184,9 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   });
 
   await page.getByTestId(`source-${fixture.boldSourceId}`).click();
-  await expect.poll(() => activeSourceId(editor)).toBe(fixture.boldSourceId);
+  await expect
+    .poll(() => editor.editorView())
+    .toMatchObject({ activeSourceId: fixture.boldSourceId });
   const advanceInput = glyphProperties(page).getByLabel("Advance width", { exact: true });
   await expect(advanceInput).toBeEnabled();
   await advanceInput.click();
@@ -236,11 +215,15 @@ test("keeps variable preview and exact-source editability coherent across Grid n
 
   await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId);
   await openVariationControls(page);
-  await expect.poll(() => hasLayerAt(editor, "navigationSparse", fixture.boldSourceId)).toBe(false);
+  await expect
+    .poll(async () => (await editor.glyphNamed("navigationSparse"))?.layers)
+    .not.toContainEqual(expect.objectContaining({ sourceId: fixture.boldSourceId }));
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeDisabled();
 
   await page.getByTestId(`source-${fixture.boldSourceId}`).click();
-  await expect.poll(() => hasLayerAt(editor, "navigationSparse", fixture.boldSourceId)).toBe(true);
+  await expect
+    .poll(async () => (await editor.glyphNamed("navigationSparse"))?.layers)
+    .toContainEqual(expect.objectContaining({ sourceId: fixture.boldSourceId }));
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeEnabled();
 
   const editorAxisInput = variationControls.getByLabel("Navigation Weight value", {
@@ -249,7 +232,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   await editorAxisInput.click();
   await editorAxisInput.fill("650");
   await editorAxisInput.press("Enter");
-  await expect.poll(() => activeSourceId(editor)).toBeNull();
+  await expect.poll(() => editor.editorView()).toMatchObject({ activeSourceId: null });
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeDisabled();
 
   await editorShell(page).getByLabel("Font overview").click();

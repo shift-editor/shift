@@ -1,16 +1,7 @@
-import type { Page } from "@playwright/test";
-import type { Axis, AxisId, NamedInstance, NamedInstanceId, Source, SourceId } from "@shift/types";
+import type { Axis, NamedInstance, Source, SourceId } from "@shift/types";
 import { expect, recoveryTest as test, type RecoveryApp } from "./fixtures/electronApp";
 import { runWindowCommand } from "./fixtures/documentLifecycle";
-import { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  createAxis,
-  createNamedInstance,
-  createSource,
-  deleteAxis,
-  deleteSource,
-  editSource,
-} from "./fixtures/fontSetup";
+import { WEIGHT } from "@/testing/fonts";
 
 interface ObservedVariableFont {
   axes: Axis[];
@@ -20,219 +11,153 @@ interface ObservedVariableFont {
   dirty: boolean;
 }
 
-interface SourceFixture {
-  axisId: AxisId;
-  defaultSourceId: SourceId;
-  mediumSourceId: SourceId;
-  boldSourceId: SourceId;
-  instanceId: NamedInstanceId;
-}
-
-interface AxisFixture {
-  weightAxisId: AxisId;
-  widthAxisId: AxisId;
-  slantAxisId: AxisId;
-  defaultSourceId: SourceId;
-  boldSourceId: SourceId;
-  instanceId: NamedInstanceId;
-}
-
 // Deletion cascades and undo are unit-tested in Font.test.ts; these tests prove that a
 // topology edit survives forced termination, recovery, explicit Save, and reopening.
 test.setTimeout(90_000);
 
-test("persists source topology", async ({ recoveryApp }) => {
-  const fixture = await authorSourceTopology(recoveryApp);
-  await save(recoveryApp, recoveryApp.page);
-  const baseline = await observeVariableFont(recoveryApp, recoveryApp.page);
-  expect(baseline.sources.map(({ id }) => id)).toEqual([
-    fixture.defaultSourceId,
-    fixture.mediumSourceId,
-    fixture.boldSourceId,
-  ]);
-  expectCanonicalFont(recoveryApp, baseline);
-
-  await deleteSource(recoveryApp.page, fixture.mediumSourceId);
-  const deleted = await observeVariableFont(recoveryApp, recoveryApp.page);
-  expect(deleted).toMatchObject({
-    defaultSourceId: fixture.defaultSourceId,
-    dirty: true,
+test.describe("source topology", () => {
+  test.use({
+    font: {
+      axes: [{ ...WEIGHT, name: "Weight" }],
+      sources: { "Medium Master": { wght: 600 }, Bold: { wght: 900 } },
+      // MutatorSans's Ascender is 1000; Medium Master's sits 17 units higher.
+      metrics: { "Medium Master": { Ascender: 1017 } },
+      instances: { Display: { wght: 800 } },
+      location: { wght: WEIGHT.default },
+    },
   });
-  expect(deleted.sources.map(({ id }) => id)).toEqual([
-    fixture.defaultSourceId,
-    fixture.boldSourceId,
-  ]);
-  expectCanonicalFont(recoveryApp, baseline);
 
-  const recovered = await recoveryApp.crashAndRecover();
-  await expectVariableFont(recoveryApp, recovered, deleted);
-  expectCanonicalFont(recoveryApp, baseline);
+  test("persists source topology", async ({ recoveryApp }) => {
+    const editor = recoveryApp.editor;
+    // Source edits Settings › Sources makes that the font fixture does not declare.
+    await editor.setSourceItalicAngle("Medium Master", -2);
+    await editor.setSourceLineGap("Medium Master", 37);
+    // Recovery must keep each record's identity, so follow each by id from here on.
+    const [defaultSource, medium, bold] = await Promise.all([
+      editor.source("default"),
+      editor.source({ name: "Medium Master" }),
+      editor.source({ name: "Bold" }),
+    ]);
+    const fixture = {
+      defaultSourceId: defaultSource!.id,
+      mediumSourceId: medium!.id,
+      boldSourceId: bold!.id,
+    };
+    await save(recoveryApp);
+    const baseline = await observeVariableFont(recoveryApp);
+    expect(baseline.sources.map(({ id }) => id)).toEqual([
+      fixture.defaultSourceId,
+      fixture.mediumSourceId,
+      fixture.boldSourceId,
+    ]);
+    expectCanonicalFont(recoveryApp, baseline);
 
-  await save(recoveryApp, recovered);
-  const saved = { ...deleted, dirty: false };
-  await expectVariableFont(recoveryApp, recovered, saved);
-  expectCanonicalFont(recoveryApp, saved);
+    await editor.deleteSource("Medium Master");
+    const deleted = await observeVariableFont(recoveryApp);
+    expect(deleted).toMatchObject({
+      defaultSourceId: fixture.defaultSourceId,
+      dirty: true,
+    });
+    expect(deleted.sources.map(({ id }) => id)).toEqual([
+      fixture.defaultSourceId,
+      fixture.boldSourceId,
+    ]);
+    expectCanonicalFont(recoveryApp, baseline);
 
-  const reopened = await recoveryApp.crashAndReopenDocument();
-  await expectVariableFont(recoveryApp, reopened, saved);
+    await recoveryApp.crashAndRecover();
+    await expectVariableFont(recoveryApp, deleted);
+    expectCanonicalFont(recoveryApp, baseline);
+
+    await save(recoveryApp);
+    const saved = { ...deleted, dirty: false };
+    await expectVariableFont(recoveryApp, saved);
+    expectCanonicalFont(recoveryApp, saved);
+
+    await recoveryApp.crashAndReopenDocument();
+    await expectVariableFont(recoveryApp, saved);
+  });
 });
 
-test("persists axis topology", async ({ recoveryApp }) => {
-  const fixture = await authorAxisTopology(recoveryApp);
-  await save(recoveryApp, recoveryApp.page);
-  const baseline = await observeVariableFont(recoveryApp, recoveryApp.page);
-  expect(baseline.axes.map(({ id }) => id)).toEqual([
-    fixture.weightAxisId,
-    fixture.widthAxisId,
-    fixture.slantAxisId,
-  ]);
-  expectCanonicalFont(recoveryApp, baseline);
+test.describe("axis topology", () => {
+  test.use({
+    font: {
+      axes: [
+        { ...WEIGHT, name: "Weight" },
+        { tag: "wdth", name: "Width", minimum: 50, default: 100, maximum: 200 },
+        { tag: "slnt", name: "Slant", minimum: -10, default: 0, maximum: 10 },
+      ],
+      sources: { "Bold Slanted": { wght: 900, wdth: 150, slnt: -8 } },
+      instances: { Display: { wght: 700, wdth: 120, slnt: -4 } },
+      location: { wght: WEIGHT.default, wdth: 100, slnt: 0 },
+    },
+  });
 
-  await deleteAxis(recoveryApp.page, fixture.widthAxisId);
-  const deleted = await observeVariableFont(recoveryApp, recoveryApp.page);
-  expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
-  expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
-  expect(deleted.dirty).toBe(true);
-  expectCanonicalFont(recoveryApp, baseline);
+  test("persists axis topology", async ({ recoveryApp }) => {
+    const editor = recoveryApp.editor;
+    // Recovery must keep each record's identity, so follow each by id from here on.
+    const [weight, width, slant, defaultSource] = await Promise.all([
+      editor.axis({ tag: "wght" }),
+      editor.axis({ tag: "wdth" }),
+      editor.axis({ tag: "slnt" }),
+      editor.source("default"),
+    ]);
+    const fixture = {
+      weightAxisId: weight!.id,
+      widthAxisId: width!.id,
+      slantAxisId: slant!.id,
+      defaultSourceId: defaultSource!.id,
+    };
+    await save(recoveryApp);
+    const baseline = await observeVariableFont(recoveryApp);
+    expect(baseline.axes.map(({ id }) => id)).toEqual([
+      fixture.weightAxisId,
+      fixture.widthAxisId,
+      fixture.slantAxisId,
+    ]);
+    expectCanonicalFont(recoveryApp, baseline);
 
-  const recovered = await recoveryApp.crashAndRecover();
-  await expectVariableFont(recoveryApp, recovered, deleted);
-  expectCanonicalFont(recoveryApp, baseline);
+    await editor.deleteAxis("wdth");
+    const deleted = await observeVariableFont(recoveryApp);
+    expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
+    expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
+    expect(deleted.dirty).toBe(true);
+    expectCanonicalFont(recoveryApp, baseline);
 
-  await save(recoveryApp, recovered);
-  const saved = { ...deleted, dirty: false };
-  await expectVariableFont(recoveryApp, recovered, saved);
-  expectCanonicalFont(recoveryApp, saved);
+    await recoveryApp.crashAndRecover();
+    await expectVariableFont(recoveryApp, deleted);
+    expectCanonicalFont(recoveryApp, baseline);
 
-  const reopened = await recoveryApp.crashAndReopenDocument();
-  await expectVariableFont(recoveryApp, reopened, saved);
+    await save(recoveryApp);
+    const saved = { ...deleted, dirty: false };
+    await expectVariableFont(recoveryApp, saved);
+    expectCanonicalFont(recoveryApp, saved);
+
+    await recoveryApp.crashAndReopenDocument();
+    await expectVariableFont(recoveryApp, saved);
+  });
 });
 
-/** A driver for `page` in the app the recovery fixture is running now. */
-function driverFor(recoveryApp: RecoveryApp, page: Page): EditorDriver {
-  return new EditorDriver(page, recoveryApp.app);
-}
-
-/** The font's default source: the source a glyph's layer read without one is at. */
-async function defaultSourceId(editor: EditorDriver): Promise<SourceId> {
-  return (await editor.layerOf("A")).sourceId;
-}
-
-async function authorSourceTopology(recoveryApp: RecoveryApp): Promise<SourceFixture> {
-  const page = recoveryApp.page;
-  const defaultSource = await defaultSourceId(driverFor(recoveryApp, page));
-  const axisId = await createAxis(page, {
-    tag: "wght",
-    name: "Weight",
-    role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-    labels: [],
-    hidden: false,
-  });
-  const mediumSourceId = await createSource(page, "Medium", { [axisId]: 600 });
-  const boldSourceId = await createSource(page, "Bold", { [axisId]: 900 });
-  const instanceId = await createNamedInstance(page, {
-    name: "Display",
-    postscriptName: "MutatorSans-Display",
-    location: { [axisId]: 800 },
-  });
-  await editSource(page, mediumSourceId, {
-    name: "Medium Master",
-    italicAngle: -2,
-    lineGap: 37,
-    metricOffsets: { ascender: 17 },
-  });
-
-  return { axisId, defaultSourceId: defaultSource, mediumSourceId, boldSourceId, instanceId };
-}
-
-async function authorAxisTopology(recoveryApp: RecoveryApp): Promise<AxisFixture> {
-  const page = recoveryApp.page;
-  const defaultSource = await defaultSourceId(driverFor(recoveryApp, page));
-  const weightAxisId = await createAxis(page, {
-    tag: "wght",
-    name: "Weight",
-    role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-    labels: [],
-    hidden: false,
-  });
-  const widthAxisId = await createAxis(page, {
-    tag: "wdth",
-    name: "Width",
-    role: "external",
-    axisType: "continuous",
-    minimum: 50,
-    default: 100,
-    maximum: 200,
-    labels: [],
-    hidden: true,
-  });
-  const slantAxisId = await createAxis(page, {
-    tag: "slnt",
-    name: "Slant",
-    role: "external",
-    axisType: "continuous",
-    minimum: -10,
-    default: 0,
-    maximum: 10,
-    labels: [],
-    hidden: false,
-  });
-  const boldSourceId = await createSource(page, "Bold Slanted", {
-    [weightAxisId]: 900,
-    [widthAxisId]: 150,
-    [slantAxisId]: -8,
-  });
-  const instanceId = await createNamedInstance(page, {
-    name: "Display",
-    postscriptName: "MutatorSans-Display",
-    location: { [weightAxisId]: 700, [widthAxisId]: 120, [slantAxisId]: -4 },
-  });
-
-  return {
-    weightAxisId,
-    widthAxisId,
-    slantAxisId,
-    defaultSourceId: defaultSource,
-    boldSourceId,
-    instanceId,
-  };
-}
-
-async function observeVariableFont(
-  recoveryApp: RecoveryApp,
-  page: Page,
-): Promise<ObservedVariableFont> {
-  const editor = driverFor(recoveryApp, page);
+async function observeVariableFont(recoveryApp: RecoveryApp): Promise<ObservedVariableFont> {
+  const editor = recoveryApp.editor;
   const [{ axes, sources, instances }, defaultSource, document] = await Promise.all([
     editor.fontOverview(),
-    defaultSourceId(editor),
+    editor.source("default"),
     editor.documentState(),
   ]);
   return {
     axes,
     sources,
     namedInstances: instances,
-    defaultSourceId: defaultSource,
+    defaultSourceId: defaultSource!.id,
     dirty: document?.dirty ?? false,
   };
 }
 
 async function expectVariableFont(
   recoveryApp: RecoveryApp,
-  page: Page,
   expected: ObservedVariableFont,
 ): Promise<void> {
-  await expect
-    .poll(() => observeVariableFont(recoveryApp, page), { timeout: 20_000 })
-    .toEqual(expected);
+  await expect.poll(() => observeVariableFont(recoveryApp), { timeout: 20_000 }).toEqual(expected);
 }
 
 function expectCanonicalFont(recoveryApp: RecoveryApp, expected: ObservedVariableFont): void {
@@ -244,9 +169,9 @@ function expectCanonicalFont(recoveryApp: RecoveryApp, expected: ObservedVariabl
 }
 
 /** Saves through File › Save, as its menu item does, and waits until the document is clean. */
-async function save(recoveryApp: RecoveryApp, page: Page): Promise<void> {
-  await runWindowCommand(page, "file.save");
-  const editor = driverFor(recoveryApp, page);
+async function save(recoveryApp: RecoveryApp): Promise<void> {
+  const editor = recoveryApp.editor;
+  await runWindowCommand(editor.page, "file.save");
   await expect
     .poll(() => editor.documentState(), { timeout: 20_000 })
     .toMatchObject({ dirty: false });

@@ -1,11 +1,10 @@
 import fs from "node:fs";
-import type { ElectronApplication, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import {
   documentTest as launcherTest,
   documentWorkspaceTest as authoredTest,
   expect,
-  FONT_PATH,
-  UFO_FONT_PATH,
+  FONTS,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
 import {
@@ -13,6 +12,7 @@ import {
   applicationMenuSummary,
   clickApplicationMenuItem,
   clipboardText,
+  openFontFromLauncher,
   sessionMode,
   writeClipboardText,
 } from "./fixtures/documentLifecycle";
@@ -21,21 +21,11 @@ import { selectedComponentHitPoint } from "./fixtures/editorInteractions";
 import { openCubicPointTypes, openScratchGlyph, WAVE_CONTOUR } from "./fixtures/scratchGlyph";
 
 const binaryPreviewTest = launcherTest.extend({
-  openFontPath: FONT_PATH,
+  openFontPath: FONTS.mutatorSansTtf,
 });
 const convertiblePreviewTest = launcherTest.extend({
-  openFontPath: UFO_FONT_PATH,
+  openFontPath: FONTS.mutatorSansLightCondensed,
 });
-
-async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
-
-  const workspacePage = await workspaceWindow;
-  await workspacePage.waitForURL(/#\/home$/);
-  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-  return workspacePage;
-}
 
 async function expectCloseOnlyWindowControls(page: Page): Promise<void> {
   const windowControls = page.getByRole("toolbar", { name: "Window controls" });
@@ -193,13 +183,13 @@ authoredTest(
     await expect
       .poll(async () => (await editor.components()).length)
       .toBe(candidate.initialCount + 1);
-    await expect
-      .poll(async () => {
-        const [selectedId] = await editor.selectionIds();
-        const components = await editor.components();
-        return components.find((component) => component.id === selectedId) ?? null;
-      })
-      .toMatchObject({ baseGlyphName: candidate.name });
+    // The new component is selected, and it is the candidate glyph.
+    await expect(async () => {
+      const [selectedId] = await editor.selectionIds();
+      expect(await editor.components()).toContainEqual(
+        expect.objectContaining({ id: selectedId, baseGlyphName: candidate.name }),
+      );
+    }).toPass();
 
     const [componentId] = await editor.selectionIds();
     const contextTarget = { componentId, ...(await selectedComponentHitPoint(page)) };
@@ -283,15 +273,11 @@ authoredTest(
     await expect(confirmation).toBeVisible();
     await confirmation.getByRole("button", { name: "Create", exact: true }).click();
 
-    await expect
-      .poll(async () => {
-        const components = await editor.components();
-        return {
-          count: components.length,
-          added: components.some(({ baseGlyphName }) => baseGlyphName === candidate.name),
-        };
-      })
-      .toEqual({ count: candidate.initialCount + 1, added: true });
+    await expect(async () => {
+      const components = await editor.components();
+      expect(components).toHaveLength(candidate.initialCount + 1);
+      expect(components).toContainEqual(expect.objectContaining({ baseGlyphName: candidate.name }));
+    }).toPass();
 
     await clickApplicationMenuItem(page, electronApp, "edit.undo");
     await expect
@@ -453,7 +439,7 @@ authoredTest(
 convertiblePreviewTest(
   "View menu distinguishes canvas zoom from interface size",
   async ({ electronApp, page }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+    const workspacePage = await openFontFromLauncher(page, electronApp);
     await clickApplicationMenuItem(workspacePage, electronApp, "file.save");
     await waitForWorkspaceReady(workspacePage);
 
@@ -527,7 +513,7 @@ launcherTest(
 binaryPreviewTest(
   "application menu keeps binary previews read-only",
   async ({ electronApp, page }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+    const workspacePage = await openFontFromLauncher(page, electronApp);
 
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "app.showSettings"))
@@ -550,7 +536,7 @@ binaryPreviewTest(
 convertiblePreviewTest(
   "application menu converts a preview and refreshes authored capabilities",
   async ({ electronApp, page, saveShiftPath }) => {
-    const workspacePage = await openSelectedPreview(page, electronApp);
+    const workspacePage = await openFontFromLauncher(page, electronApp);
 
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.save"))
@@ -632,13 +618,11 @@ authoredTest(
 authoredTest(
   "native Delete uses fitted deletion rather than raw point removal",
   async ({ page, editor, electronApp }) => {
-    await openScratchGlyph(page, editor, "deletionWave", [WAVE_CONTOUR]);
+    const { middle } = await openScratchGlyph(editor, "deletionWave", [WAVE_CONTOUR]);
     await expect
       .poll(() => editor.outline())
       .toMatchObject([{ points: openCubicPointTypes(4).map((pointType) => ({ pointType })) }]);
-    const before = await editor.outline();
-    const selected = before[0].points.filter((point) => point.pointType === "onCurve")[2]!;
-    await editor.clickPoint(selected.id);
+    await editor.clickPoint(middle);
 
     await clickApplicationMenuItem(page, electronApp, "edit.deleteSelection");
 
@@ -646,7 +630,7 @@ authoredTest(
       .poll(() => editor.outline())
       .toMatchObject([{ points: openCubicPointTypes(3).map((pointType) => ({ pointType })) }]);
     expect(await editor.outline()).toMatchObject([
-      { points: expect.not.arrayContaining([expect.objectContaining({ id: selected.id })]) },
+      { points: expect.not.arrayContaining([expect.objectContaining({ id: middle })]) },
     ]);
   },
 );

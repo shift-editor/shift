@@ -1317,6 +1317,38 @@ export class Font {
     return this.#peekDesignspace((designspace) => designspace.source(sourceId));
   }
 
+  /** The axis with id `axisId`, or null when the font has none. */
+  axis(axisId: AxisId): Axis | null {
+    return this.#peekDesignspace((designspace) => designspace.axis(axisId));
+  }
+
+  /** The axis tagged `tag`, or null when the font has none. */
+  axisTagged(tag: string): Axis | null {
+    return this.#peekDesignspace((designspace) => designspace.axisTagged(tag));
+  }
+
+  /** The named instance with id `instanceId`, or null when the font has none. */
+  namedInstance(instanceId: NamedInstanceId): NamedInstance | null {
+    return this.namedInstances.find((instance) => instance.id === instanceId) ?? null;
+  }
+
+  /**
+   * The named instance called exactly `name`.
+   *
+   * @remarks
+   * Instance names are not unique, as source names are not (see {@link Designspace.sourceNamed}).
+   *
+   * @returns null when no instance has the name.
+   * @throws {Error} when more than one instance has it.
+   */
+  namedInstanceNamed(name: string): NamedInstance | null {
+    const named = this.namedInstances.filter((instance) => instance.name === name);
+    if (named.length > 1) {
+      throw new Error(`Instance name ${name} is ambiguous: ${named.length} instances have it`);
+    }
+    return named[0] ?? null;
+  }
+
   /**
    * Find a source by its exact name; see {@link Designspace.sourceNamed}.
    *

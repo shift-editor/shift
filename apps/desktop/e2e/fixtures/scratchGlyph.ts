@@ -1,74 +1,95 @@
-import type { Page } from "@playwright/test";
-import type { GlyphName, PointType } from "@shift/types";
+import type { PointId, PointType } from "@shift/types";
+import type { ContourFixture, GlyphFixture, PointNames } from "@/testing/fixtures";
 import type { EditorDriver } from "./EditorDriver";
-import type { ScratchContour } from "./types";
 
 /**
- * Creates an empty glyph, opens it, and optionally inserts contours framed in the viewport.
+ * Creates an empty glyph, opens it, and optionally draws `fixture` into it framed in the viewport.
  *
  * @remarks
- * Setup for gesture tests whose subject is not drawing. Returns after the inserted
- * geometry is persisted, the selection is empty, and the fitted camera has rendered.
+ * Setup for gesture tests whose subject is not drawing. Returns after the drawing is
+ * persisted, the selection is empty, and the fitted camera has rendered.
  *
  * @param page - authored workspace window.
  * @param editor - driver for the same window.
  * @param name - unique glyph name for the test.
- * @param contours - geometry to insert; omit for an empty glyph at the default camera.
+ * @param fixture - what to draw, or just its contours; omit for an empty glyph at the default
+ * camera.
+ * @returns the drawn point ids, keyed by each point's `name`.
  */
-export async function openScratchGlyph(
-  page: Page,
+export async function openScratchGlyph<const C extends readonly ContourFixture[]>(
   editor: EditorDriver,
   name: string,
-  contours: readonly ScratchContour[] = [],
-): Promise<void> {
-  const glyphId = await page.evaluate(async (glyphName) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected authored workspace");
+  contours: C,
+): Promise<Record<PointNames<{ contours: C }>, PointId>>;
+export async function openScratchGlyph<const F extends GlyphFixture>(
+  editor: EditorDriver,
+  name: string,
+  fixture?: F,
+): Promise<Record<PointNames<F>, PointId>>;
+export async function openScratchGlyph(
+  editor: EditorDriver,
+  name: string,
+  fixture?: GlyphFixture | readonly ContourFixture[],
+): Promise<Record<string, PointId>> {
+  await editor.addGlyph(name, null);
+  await editor.openGlyphByName(name);
 
-    const record = workspace.editor.createGlyph(glyphName as GlyphName);
-    await workspace.font.editCoordinator.settled();
-    return record.id;
-  }, name);
-  await editor.openGlyph(glyphId);
-
-  if (contours.length > 0) {
-    await page.evaluate(async (content) => {
-      const workspace = window.shift;
-      if (!workspace) throw new Error("Expected authored workspace");
-
-      const inserted = workspace.editor.insertContent({
-        contours: content.map((contour) => ({ ...contour, points: [...contour.points] })),
-      });
-      if (!inserted) throw new Error("Expected inserted scratch contours");
-
-      await workspace.font.editCoordinator.settled();
-      workspace.editor.selection.clear();
-      workspace.editor.zoomToFit();
-    }, contours);
-  }
+  const glyph: GlyphFixture = isContourList(fixture) ? { contours: fixture } : (fixture ?? {});
+  const draws =
+    glyph.advance !== undefined ||
+    (glyph.contours ?? []).length > 0 ||
+    (glyph.anchors ?? []).length > 0 ||
+    (glyph.components ?? []).length > 0;
+  const names: Record<string, PointId> = draws ? await editor.draw(glyph) : {};
+  if ((glyph.contours ?? []).length > 0) await editor.zoomToFit();
 
   await editor.waitForCanvasRender();
+  return names;
 }
 
-/** An open four-segment cubic wave, wide enough to delete a middle point by fitting. */
-export const WAVE_CONTOUR: ScratchContour = {
-  closed: false,
+function isContourList(
+  fixture: GlyphFixture | readonly ContourFixture[] | undefined,
+): fixture is readonly ContourFixture[] {
+  return Array.isArray(fixture);
+}
+
+/**
+ * An open four-segment cubic wave, wide enough to delete a middle point by fitting. Its third
+ * on-curve point, at (550, 100), is named `middle`.
+ */
+export const WAVE_CONTOUR = {
   points: [
-    { x: 100, y: 300, pointType: "onCurve", smooth: false },
-    { x: 150, y: 200, pointType: "offCurve", smooth: false },
-    { x: 200, y: 150, pointType: "offCurve", smooth: false },
-    { x: 300, y: 150, pointType: "onCurve", smooth: true },
-    { x: 400, y: 150, pointType: "offCurve", smooth: false },
-    { x: 450, y: 100, pointType: "offCurve", smooth: false },
-    { x: 550, y: 100, pointType: "onCurve", smooth: true },
-    { x: 650, y: 100, pointType: "offCurve", smooth: false },
-    { x: 700, y: 150, pointType: "offCurve", smooth: false },
-    { x: 800, y: 150, pointType: "onCurve", smooth: true },
-    { x: 900, y: 150, pointType: "offCurve", smooth: false },
-    { x: 950, y: 200, pointType: "offCurve", smooth: false },
-    { x: 1000, y: 300, pointType: "onCurve", smooth: false },
+    [100, 300],
+    { x: 150, y: 200, off: true },
+    { x: 200, y: 150, off: true },
+    { x: 300, y: 150, smooth: true },
+    { x: 400, y: 150, off: true },
+    { x: 450, y: 100, off: true },
+    { x: 550, y: 100, smooth: true, name: "middle" },
+    { x: 650, y: 100, off: true },
+    { x: 700, y: 150, off: true },
+    { x: 800, y: 150, smooth: true },
+    { x: 900, y: 150, off: true },
+    { x: 950, y: 200, off: true },
+    [1000, 300],
   ],
-};
+} as const satisfies ContourFixture;
+
+/**
+ * Two open cubics along y = 100 joined at a smooth point, `join`, at (400, 100): the first
+ * cubic's last handle, `incoming`, is at 300 and the second's first, `outgoing`, at 500.
+ */
+export const SMOOTH_JOIN_CONTOUR = {
+  points: [
+    [100, 100],
+    { x: 200, y: 100, off: true },
+    { x: 300, y: 100, off: true, name: "incoming" },
+    { x: 400, y: 100, smooth: true, name: "join" },
+    { x: 500, y: 100, off: true, name: "outgoing" },
+    { x: 600, y: 100, off: true },
+    [700, 100],
+  ],
+} as const satisfies ContourFixture;
 
 /**
  * The point types of an open contour made of `segments` cubic segments, as

@@ -12,7 +12,7 @@ import type {
   ResolvedKerningPairs,
   SourceSelector,
 } from "@shift/runtime";
-import type { GlyphId, KerningPosition, SourceId } from "@shift/types";
+import type { GlyphId, KerningGroup, KerningPosition, SourceId } from "@shift/types";
 import {
   isGroupSide,
   kerningRule,
@@ -46,14 +46,25 @@ export class ShiftKerningReader {
     const groups = this.#font.kerning.groups;
     const positions: KerningPosition[] = position ? [position] : ["first", "second"];
 
-    return positions.flatMap((at) =>
-      groups.atPosition(at).map((group) => ({
-        groupId: group.id,
-        name: group.name,
-        position: group.position,
-        members: group.glyphIds.map((glyphId) => this.#glyph(glyphId)),
-      })),
-    );
+    return positions.flatMap((at) => groups.atPosition(at).map((group) => this.#group(group)));
+  }
+
+  /** The kerning group named `name` at a position, or null when the font has none. */
+  group(position: KerningPosition, name: string): KerningGroupSummary | null {
+    const group = this.#font.kerning.groups.named(position, name);
+    return group ? this.#group(group) : null;
+  }
+
+  /**
+   * The kerning group `glyph` belongs to at a position, or null when it kerns alone there.
+   *
+   * @throws {Error} when the font has no such glyph.
+   */
+  groupOf(position: KerningPosition, glyph: GlyphSelector): KerningGroupSummary | null {
+    const groups = this.#font.kerning.groups;
+    const groupId = groups.groupOf(position, this.#select.glyphId(glyph));
+    const group = groupId ? groups.group(groupId) : null;
+    return group ? this.#group(group) : null;
   }
 
   /**
@@ -175,6 +186,15 @@ export class ShiftKerningReader {
       origin: font.missingPairOrigin(sourceId),
       rule: "none",
       pair: null,
+    };
+  }
+
+  #group(group: KerningGroup): KerningGroupSummary {
+    return {
+      groupId: group.id,
+      name: group.name,
+      position: group.position,
+      members: group.glyphIds.map((glyphId) => this.#glyph(glyphId)),
     };
   }
 

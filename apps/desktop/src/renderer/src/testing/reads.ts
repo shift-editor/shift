@@ -4,7 +4,7 @@
  *
  * @remarks
  * Every read is the agent read API (`@shift/runtime`): vitest calls the
- * window's agent readers in-process, and Playwright calls the same readers,
+ * window's app readers in-process, and Playwright calls the same readers,
  * with the same methods and selectors, through the app's E2E read hook.
  * Both drivers implement this interface,
  * so a read cannot exist in one without the other. A read returns either a
@@ -30,8 +30,17 @@ import type {
   SpacingToolView,
   TextRunView,
 } from "@shift/runtime";
-import type { KerningPosition, PointId } from "@shift/types";
-import type { GlyphOutlineTarget } from "@shift/editor/types";
+import type {
+  Axis,
+  AxisId,
+  KerningPosition,
+  NamedInstance,
+  NamedInstanceId,
+  PointId,
+  Source,
+  SourceId,
+} from "@shift/types";
+import type { GlyphOutlineTarget, SourceSelectionMode } from "@shift/editor/types";
 import type { DrawnHandle } from "@/agent/ShiftEditorReader";
 
 /**
@@ -60,6 +69,13 @@ export type SourceKerning = KerningMasterValue;
 export type KerningGroup = KerningGroupSummary;
 /** One glyph's authored layer at one source, as agents read it with `layers.get`. */
 export type SourceLayer = AuthoredLayer;
+/** A source by its exact name or stable id, the font's default source, or the editor's active one. */
+export type SourceSelection = { name: string } | { id: SourceId } | "default" | "active";
+/** A named instance by its exact name or stable id. */
+export type InstanceSelection = { name: string } | { id: NamedInstanceId };
+/** An axis by its tag or stable id. */
+export type AxisSelection = { tag: string } | { id: AxisId };
+
 /** A glyph's identity and the layer each source holds. */
 export type GlyphListing = GlyphSummary;
 /** The font's info, metrics, axes, sources and instances. */
@@ -80,6 +96,12 @@ export type CanvasHandle = DrawnHandle;
 export type OutlineTarget = GlyphOutlineTarget;
 
 /** Where a point read looks for the point. */
+/** Where {@link EditorTestSurface.anchorNamed} reads. */
+export interface AnchorReadOptions {
+  /** The source, by name, whose layer of the open glyph to read; the shown one when omitted. */
+  readonly source?: string;
+}
+
 export interface PointReadOptions {
   /**
    * Read the counterpart of the shown source's point `id` in this source's
@@ -124,6 +146,15 @@ export interface EditorReads {
   glyphNamed(name: string): Read<GlyphListing | null>;
   /** The authored layer of the glyph named `glyph` at the source named `source`, the default source when omitted. */
   layerOf(glyph: string, source?: string): Promise<SourceLayer>;
+  /**
+   * The source `selector` names: by name or id, the font's default source (`"default"`), or the
+   * one the editor shows and edits (`"active"`, null between sources); null when it has none.
+   */
+  source(selector: SourceSelection): Read<Source | null>;
+  /** The font's named instance by name or id, or null when it has none. */
+  instance(selector: InstanceSelection): Read<NamedInstance | null>;
+  /** The font's axis by tag or id, or null when it has none. */
+  axis(selector: AxisSelection): Read<Axis | null>;
   /** The font's info, metrics, axes, sources and instances, and the session's mode, as agents read them. */
   fontOverview(): Read<FontSummary>;
   /** The shown glyph, source, location, editing sources, selection and tool, as agents read them. */
@@ -140,4 +171,13 @@ export interface EditorReads {
   drawnHandles(): Read<readonly CanvasHandle[]>;
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
   drawnOutlineTargets(): Read<readonly OutlineTarget[]>;
+}
+
+/** What both drivers do the way a user does it, under the same names. */
+export interface EditorActions {
+  /**
+   * Shows and edits the source named `name`, as clicking its row in the Sources panel does;
+   * `toggle` adds it to (or removes it from) the sources being edited, as Cmd-clicking does.
+   */
+  clickSource(name: string, mode?: SourceSelectionMode): Read<void>;
 }

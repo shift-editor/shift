@@ -1,11 +1,11 @@
-import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
+import { documentTest, expect, FONTS } from "./fixtures/electronApp";
 import { glyphCatalogRenderer } from "./fixtures/appLocators";
 import { sessionMode } from "./fixtures/documentLifecycle";
 import { expectPanelSnapshot } from "./fixtures/snapshots";
 import { prepareWindow } from "./fixtures/window";
 
 const test = documentTest.extend({
-  openFontPath: FONT_PATH,
+  openFontPath: FONTS.mutatorSansTtf,
 });
 
 test(

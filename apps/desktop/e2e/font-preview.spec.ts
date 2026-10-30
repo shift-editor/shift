@@ -12,7 +12,12 @@ import {
   settingsDetails,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { afterNextPaint, gpuAvailable, paintsGlyphs } from "./fixtures/glyphCatalogProbe";
+import {
+  afterNextPaint,
+  expectCompleteResidency,
+  gpuAvailable,
+  paintsGlyphs,
+} from "./fixtures/glyphCatalogProbe";
 import { previewGlyphState, previewLoadState } from "./fixtures/previewSession";
 
 test.describe("retained font source Grid preview", () => {
@@ -132,16 +137,7 @@ async function expectResidentPreviewGrid(editor: EditorDriver): Promise<Locator>
   await expect.poll(async () => (await editor.fontOverview()).mode).toBe("preview");
 
   const glyphCanvas: Locator = glyphCatalogCanvas(page);
-  await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
-    timeout: 30_000,
-  });
-  await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
-  const residency = await glyphCanvas.evaluate((canvas) => ({
-    resident: Number(canvas.dataset.residentGlyphCount),
-    target: Number(canvas.dataset.targetGlyphCount),
-  }));
-  expect(residency.resident).toBeGreaterThan(0);
-  expect(residency.resident).toBe(residency.target);
+  await expectCompleteResidency(glyphCanvas);
   return glyphCanvas;
 }
 

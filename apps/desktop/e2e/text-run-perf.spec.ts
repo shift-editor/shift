@@ -23,12 +23,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Page } from "@playwright/test";
-import type { LocalPoint, ScenePoint } from "@shift/editor/spaces";
 import type { Point2D } from "@shift/geo";
-import type { GlyphName, TextItemId } from "@shift/types";
+import type { TextItemId } from "@shift/types";
 import { proofText } from "../src/renderer/src/testing/proofText";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { installFrameProbe, measureMove } from "./fixtures/frameProbe";
+import { liveUTopAnchor, textRunHoverTargets } from "./fixtures/editorInteractions";
+import { installFrameProbe, measureMove } from "./fixtures/perfProbe";
 import {
   anchorDragTest as test,
   computeStats,
@@ -50,47 +50,13 @@ const CEILINGS: Record<string, number> = {
   "text run drag u.top frame (10K chars)": 250,
 };
 
-/** Live position of the `u` glyph's `top` anchor in its default-source layer. */
-async function uTop(page: Page): Promise<Point2D> {
-  return page.evaluate(() => {
-    const editor = window.shift!.editor;
-    const record = editor.font.recordForName("u" as GlyphName);
-    const layer = record
-      ? editor.glyphForId(record.id)?.layerForSource(editor.font.defaultSource.id)
-      : null;
-    const anchor = layer?.anchors.find((candidate) => candidate.name === "top");
-    if (!anchor) throw new Error("Expected u's top anchor");
-
-    return { x: anchor.x, y: anchor.y };
-  });
-}
-
 /** Page positions over run glyphs on the canvas, other than the edited one, with their items. */
 async function hoverTargets(
   page: Page,
   editor: EditorDriver,
 ): Promise<{ itemId: TextItemId; position: Point2D }[]> {
   const bounds = await editor.canvasBounds();
-  const targets = await page.evaluate((size) => {
-    const editor = window.shift!.editor;
-    const run = editor.scene.first("textRun");
-    const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
-    if (!run || !layout) throw new Error("Expected the canvas run");
-
-    const found: { itemId: TextItemId; position: Point2D }[] = [];
-    for (const placed of layout.placedGlyphs.slice(1, 40)) {
-      // Between the bowl's outer and inner rings, inside every letter's fill.
-      const local = { x: placed.left + placed.glyph.xAdvance / 2, y: 35 } as LocalPoint;
-      const scene = editor.toScene(run, local);
-      const target = editor.getPointerTarget(scene as ScenePoint);
-      const screen = editor.sceneToScreen(scene);
-      const onCanvas =
-        screen.x > 0 && screen.y > 0 && screen.x < size.width && screen.y < size.height;
-      if (target.kind === "text" && onCanvas)
-        found.push({ itemId: target.itemId, position: screen });
-    }
-    return found;
-  }, bounds);
+  const targets = await textRunHoverTargets(page, bounds);
 
   return targets.map(({ itemId, position }) => ({
     itemId,
@@ -146,27 +112,12 @@ test.describe("Performance — 10K-character text run", () => {
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.insertText(text);
     await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const editor = window.shift!.editor;
-            const run = editor.scene.first("textRun");
-            const items = run ? editor.text.run(run.runId)?.items : null;
-            const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
-            const loaded = layout?.placedGlyphs.every(
-              (placed) => placed.glyph.glyphId && editor.glyphForId(placed.glyph.glyphId),
-            );
-            return items && loaded ? items.length : null;
-          }),
-        { timeout: 60_000 },
-      )
-      .toBe(1 + [...text].length);
+      .poll(() => editor.canvasText(), { timeout: 60_000 })
+      .toMatchObject({ items: { length: 1 + [...text].length } });
 
     await editor.press("Escape");
-    await expect
-      .poll(() => page.evaluate(() => window.shift!.editor.editing.nodeIds.length))
-      .toBe(1);
-    await page.evaluate(() => window.shift!.editor.setZoom(window.shift!.editor.zoom * 0.5));
+    await expect.poll(async () => (await editor.editedNodeIds()).length).toBe(1);
+    await editor.setZoom((await editor.zoomLevel()) * 0.5);
     await editor.waitForCanvasRender();
 
     // Hover: each move lands on another run glyph, so each frame redraws its outline.
@@ -184,7 +135,7 @@ test.describe("Performance — 10K-character text run", () => {
     }
 
     // Drag: press on the anchor, start the drag, then time each move.
-    const before = await uTop(page);
+    const before = await liveUTopAnchor(page);
     const from = await editor.projectGlyphToPage(before);
     await editor.pointerDown(from);
     await editor.pointerMove({ x: from.x + 6, y: from.y - 3 });
@@ -200,13 +151,13 @@ test.describe("Performance — 10K-character text run", () => {
       dragWork.push(sample.work);
       dragFrame.push(sample.frame);
     }
-    const dragged = await uTop(page);
+    const dragged = await liveUTopAnchor(page);
     expect(dragged.x).toBeGreaterThan(before.x);
 
     await editor.pointerUp();
-    expect(await uTop(page)).toEqual(dragged);
+    expect(await liveUTopAnchor(page)).toEqual(dragged);
     await editor.undo();
-    expect(await uTop(page)).toEqual(before);
+    expect(await liveUTopAnchor(page)).toEqual(before);
 
     record("text run hover work (10K chars)", hoverWork);
     record("text run hover frame (10K chars)", hoverFrame);

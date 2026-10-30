@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { activeRightSidebearing, spacingHalfCanvasPoint } from "./fixtures/editorInteractions";
+import { spacingHalfCanvasPoint } from "./fixtures/editorInteractions";
 
 type Half = "left" | "right";
 
@@ -28,14 +28,11 @@ async function halfPagePoint(
   return { x: bounds.x + canvas.x, y: bounds.y + canvas.y };
 }
 
-/** The selected half as `side:itemIndex`, or null. */
-async function selectedHalf(editor: EditorDriver): Promise<string | null> {
+/** The half arrow keys nudge: its side and the text item whose sidebearing it is; null for none. */
+async function selectedHalf(editor: EditorDriver): Promise<{ side: Half; itemId: string } | null> {
   const selected = (await editor.spacingTool())?.selected;
   const half = selected?.gap[selected.side];
-  if (!selected || !half) return null;
-  const text = await editor.canvasText();
-  if (!text) throw new Error("Expected the canvas text run");
-  return `${selected.side}:${text.items.findIndex((item) => item.id === half.itemId)}`;
+  return selected && half ? { side: selected.side, itemId: half.itemId } : null;
 }
 
 /** A short description of the element that has keyboard focus. */
@@ -75,12 +72,13 @@ test.describe("Spacing tool", () => {
     const point = await halfPagePoint(page, editor, BETWEEN, "left", 0.2);
     await hover(editor, point);
     await page.mouse.click(point.x, point.y);
-    await expect.poll(() => selectedHalf(editor)).toBe("left:0");
+    const [first, second] = (await editor.canvasText())!.items;
+    await expect.poll(() => selectedHalf(editor)).toEqual({ side: "left", itemId: first!.id });
     const focusedBefore = await focusedElement(page);
 
     await page.keyboard.press("Tab");
 
-    await expect.poll(() => selectedHalf(editor)).toBe("right:1");
+    await expect.poll(() => selectedHalf(editor)).toEqual({ side: "right", itemId: second!.id });
     expect(await focusedElement(page)).toBe(focusedBefore);
   });
 
@@ -88,7 +86,7 @@ test.describe("Spacing tool", () => {
     page,
     editor,
   }) => {
-    const before = await activeRightSidebearing(page);
+    const before = await rightSidebearing(editor);
     if (before === null) throw new Error("Expected the edited glyph's right sidebearing");
     const pill = await halfPagePoint(page, editor, BETWEEN, "left");
     await hover(editor, pill);
@@ -99,7 +97,7 @@ test.describe("Spacing tool", () => {
     await field.fill(String(before + 37));
     await editor.press("Enter");
 
-    await expect.poll(() => activeRightSidebearing(page)).toBe(before + 37);
+    await expect.poll(() => rightSidebearing(editor)).toBe(before + 37);
     await expect(field).toBeHidden();
   });
 
@@ -107,7 +105,7 @@ test.describe("Spacing tool", () => {
     page,
     editor,
   }) => {
-    const before = await activeRightSidebearing(page);
+    const before = await rightSidebearing(editor);
     const pill = await halfPagePoint(page, editor, BETWEEN, "left");
     await hover(editor, pill);
     await page.mouse.click(pill.x, pill.y);
@@ -118,6 +116,16 @@ test.describe("Spacing tool", () => {
     await editor.press("Escape");
 
     await expect(field).toBeHidden();
-    expect(await activeRightSidebearing(page)).toBe(before);
+    expect(await rightSidebearing(editor)).toBe(before);
   });
 });
+
+/** The open glyph's right sidebearing at the active source, in whole units; the field edits it. */
+async function rightSidebearing(editor: EditorDriver): Promise<number | null> {
+  const { glyph, activeSourceId } = await editor.editorView();
+  const source = activeSourceId ? await editor.source({ id: activeSourceId }) : null;
+  if (!glyph || !source) return null;
+
+  const { advanceWidth, bounds } = await editor.layerOf(glyph.name, source.name);
+  return bounds ? Math.round(advanceWidth - bounds.max.x) : null;
+}

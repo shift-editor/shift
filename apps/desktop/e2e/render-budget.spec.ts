@@ -8,7 +8,7 @@
  * the message lists which components started the renders and what changed;
  * `pnpm profile:desktop` reproduces the same report on a packaged build.
  */
-import { DESIGNSPACE_FONT_PATH, expect, workspaceTest } from "./fixtures/electronApp";
+import { FONTS, expect, workspaceTest } from "./fixtures/electronApp";
 import { editorShell, openVariationControls } from "./fixtures/appLocators";
 import {
   installRenderCounter,
@@ -17,7 +17,7 @@ import {
   type RenderCount,
 } from "./fixtures/renderCounter.mjs";
 
-const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
+const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
 
 /** Pointer moves per interaction; enough commits for a stable mean. */
 const MOVES = 60;

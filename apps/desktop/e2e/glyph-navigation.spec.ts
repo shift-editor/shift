@@ -2,17 +2,25 @@ import type { Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { openCatalogGlyph } from "./fixtures/appLocators";
-import { addSquare } from "./fixtures/editorInteractions";
-import { createGlyphs } from "./fixtures/fontSetup";
+import { square } from "@/testing/fixtures";
+import type { EditorDriver } from "./fixtures/EditorDriver";
 
 interface NavigationGlyphs {
   firstId: GlyphId;
   secondId: GlyphId;
 }
 
-async function createNavigationGlyphs(page: Page): Promise<NavigationGlyphs> {
-  const [first, second] = await createGlyphs(page, ["navigationA", "navigationB"]);
-  return { firstId: first!.id, secondId: second!.id };
+// Two empty glyphs, added before each test by the `font` fixture.
+test.use({ font: { glyphs: { navigationA: {}, navigationB: {} } } });
+
+/** The two navigation glyphs' ids. */
+async function navigationGlyphs(editor: EditorDriver): Promise<NavigationGlyphs> {
+  const [first, second] = await Promise.all([
+    editor.glyphNamed("navigationA"),
+    editor.glyphNamed("navigationB"),
+  ]);
+  if (!first || !second) throw new Error("Expected the navigation glyphs");
+  return { firstId: first.id, secondId: second.id };
 }
 
 async function returnHome(page: Page): Promise<void> {
@@ -24,11 +32,11 @@ test("preserves confirmed edits and document history across glyph navigation", a
   page,
   editor,
 }) => {
-  const glyphs = await createNavigationGlyphs(page);
+  const glyphs = await navigationGlyphs(editor);
   await editor.openGlyph(glyphs.firstId);
 
-  const authored = await addSquare(page);
-  expect(authored).toBe(4);
+  await editor.draw({ contours: [square(100)] });
+  expect(await editor.pointCount()).toBe(4);
   await expect
     .poll(() => editor.activeGlyph())
     .toMatchObject({
@@ -58,7 +66,7 @@ test("preserves confirmed edits and document history across glyph navigation", a
 });
 
 test("starts a fresh Pen context after navigating to another glyph", async ({ page, editor }) => {
-  const glyphs = await createNavigationGlyphs(page);
+  const glyphs = await navigationGlyphs(editor);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);
   await expect.poll(() => editor.activeGlyph()).toMatchObject({ glyphId: glyphs.firstId });
   await page.getByRole("button", { name: "Pen Tool (P)" }).click();
@@ -85,9 +93,9 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
 });
 
 test("clears transient editor state when navigating between glyphs", async ({ page, editor }) => {
-  const glyphs = await createNavigationGlyphs(page);
+  const glyphs = await navigationGlyphs(editor);
   await openCatalogGlyph(page, "navigationA", glyphs.firstId);
-  await addSquare(page);
+  await editor.draw({ contours: [square(100)] });
   await editor.selectVisiblePoint();
   await editor.hoverVisibleUnselectedPoint();
 

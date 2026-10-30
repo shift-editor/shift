@@ -1,11 +1,14 @@
-import type { Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 import { waitForPageClock, wheelZoomThenPan } from "./fixtures/editorInteractions";
-import { createGlyphWithOutline } from "./fixtures/fontSetup";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import { rect } from "@/testing/fixtures";
+import { screenPoint } from "@shift/editor/spaces";
 
 /** Four glyphs: one empty, and three with a box as wide as their advance (narrow, wide, extreme). */
-async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; name: string }[]> {
+async function createViewGlyphs(
+  editor: EditorDriver,
+): Promise<readonly { id: GlyphId; name: string }[]> {
   const definitions = [
     { name: "viewEmpty", width: null },
     { name: "viewNarrow", width: 20 },
@@ -14,30 +17,20 @@ async function createViewGlyphs(page: Page): Promise<readonly { id: GlyphId; nam
   ];
   const glyphs: { id: GlyphId; name: string }[] = [];
   for (const { name, width } of definitions) {
-    const box =
-      width === null
-        ? []
-        : [
-            {
-              closed: true,
-              points: [
-                { x: 0, y: -100 },
-                { x: width, y: -100 },
-                { x: width, y: 900 },
-                { x: 0, y: 900 },
-              ].map((point) => ({ ...point, pointType: "onCurve" as const, smooth: false })),
-            },
-          ];
-    glyphs.push({ id: await createGlyphWithOutline(page, name, width ?? 500, box), name });
+    const box = width === null ? [] : [rect(0, -100, width, 1000)];
+    await editor.addGlyph(name, null);
+    await editor.openGlyphByName(name);
+    const { id } = (await editor.glyphNamed(name))!;
+    await editor.draw({ advance: width ?? 500, contours: box });
+    glyphs.push({ id, name });
   }
   return glyphs;
 }
 
 test("keeps the reported wheel position anchored across the full zoom range", async ({
-  page,
   editor,
 }) => {
-  const glyphs = await createViewGlyphs(page);
+  const glyphs = await createViewGlyphs(editor);
   const glyph = glyphs[2];
   if (!glyph) throw new Error("Expected a glyph with handles");
 
@@ -48,10 +41,10 @@ test("keeps the reported wheel position anchored across the full zoom range", as
   if (!point) throw new Error("Expected glyph point");
   const target = (await editor.pointTargets([point.id]))[0];
   if (!target) throw new Error("Expected glyph point target");
-  const screen = {
-    x: Math.round(target.canvasPosition.x),
-    y: Math.round(target.canvasPosition.y),
-  };
+  const screen = screenPoint(
+    Math.round(target.canvasPosition.x),
+    Math.round(target.canvasPosition.y),
+  );
   const scene = await editor.projectCanvasToScene(screen);
   const anchor = {
     screen,
@@ -78,7 +71,7 @@ test("keeps the reported wheel position anchored across the full zoom range", as
 });
 
 test("does not turn released-modifier zoom momentum into pan", async ({ page, editor }) => {
-  const glyphs = await createViewGlyphs(page);
+  const glyphs = await createViewGlyphs(editor);
   const glyph = glyphs[2];
   if (!glyph) throw new Error("Expected a glyph with handles");
 

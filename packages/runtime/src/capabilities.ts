@@ -16,6 +16,7 @@ import type {
   LayerId,
   MetricDefinition,
   NamedInstance,
+  NamedInstanceId,
   NodeId,
   PointId,
   PointType,
@@ -168,6 +169,14 @@ export type GlyphSelector =
 export type SourceSelector =
   | { sourceId: SourceId; name?: never }
   | { name: string; sourceId?: never };
+
+/** Select one named instance by stable ID or exact name, never by both. */
+export type InstanceSelector =
+  | { instanceId: NamedInstanceId; name?: never }
+  | { name: string; instanceId?: never };
+
+/** Select one axis by stable ID or tag, never by both. */
+export type AxisSelector = { axisId: AxisId; tag?: never } | { tag: string; axisId?: never };
 
 /**
  * Select one authored layer by stable ID, or as a glyph's layer at a source,
@@ -340,6 +349,12 @@ export interface GlyphListInput extends ShiftTarget {
 
 export type GlyphGetInput = ShiftTarget & GlyphSelector;
 
+/** One source by stable id or exact name, never by both. */
+export type SourceGetInput = ShiftTarget & SourceSelector;
+
+/** One named instance by stable id or exact name, never by both. */
+export type InstanceGetInput = ShiftTarget & InstanceSelector;
+
 export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
@@ -487,6 +502,12 @@ export interface ShiftCapabilities {
     get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
     resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
   };
+  sources: {
+    get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
+  };
+  instances: {
+    get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
+  };
   layers: {
     get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
     resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
@@ -531,6 +552,12 @@ export interface ShiftRead {
     list(input?: ShiftReadInput<GlyphListInput>): Promise<GlyphPage>;
     get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
     resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
+  };
+  sources: {
+    get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
+  };
+  instances: {
+    get(input: ShiftReadInput<InstanceGetInput>): Promise<NamedInstance>;
   };
   layers: {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;

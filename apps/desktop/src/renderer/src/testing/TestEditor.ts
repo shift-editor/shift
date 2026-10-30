@@ -14,14 +14,20 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { localPoint, scenePoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
+import {
+  localPoint,
+  scenePoint,
+  screenPoint,
+  screenVector,
+  type LocalPoint,
+  type ScreenPoint,
+  type ScreenVector,
+} from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import {
   kerningValueEdit,
-  sourceMetricValue,
-  withSourceMetricValue,
   type Glyph,
   type GlyphRenderModel,
   type GlyphLayer,
@@ -37,23 +43,21 @@ import {
   rotateSelection,
 } from "@/lib/editor/sidebarActions";
 import type { EditorCommandId } from "@shared/commands";
-import { Bounds, Mat, Rect, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Rect, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
   type AnchorId,
   type Axis,
-  type AxisId,
-  type ComponentId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
   type KerningGroupId,
   type KerningPosition,
-  type MetricId,
   type PointId,
   type SelectableId,
+  type NamedInstance,
   type Source,
   type SourceId,
   type SourceMetrics,
@@ -70,13 +74,7 @@ import type {
   TextRunNode,
 } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
-import {
-  contourContent,
-  pointNames,
-  type ComponentFixture,
-  type GlyphFixture,
-  type PointNames,
-} from "./fixtures";
+import type { GlyphFixture, PointNames } from "./fixtures";
 import type {
   AuthoredAnchor,
   AuthoredComponent,
@@ -106,7 +104,17 @@ import type {
   EditorTestSurface,
   Modifiers,
 } from "./surface";
-import type { DocumentSaveState, Outline, PointReadOptions } from "./reads";
+import { drawFixture } from "./drawFixture";
+import { SurfaceActions } from "./SurfaceActions";
+import type {
+  AnchorReadOptions,
+  AxisSelection,
+  DocumentSaveState,
+  InstanceSelection,
+  Outline,
+  PointReadOptions,
+  SourceSelection,
+} from "./reads";
 
 const DEFAULT_MODIFIERS = { shiftKey: false, altKey: false, metaKey: false };
 
@@ -166,7 +174,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   /** Temporary directories this editor's document was saved into, removed on {@link close}. */
   readonly #temporaryDirectories: string[] = [];
   /**
-   * The agent readers MCP serves, over this editor: every surface read goes
+   * the app readers (the read layer MCP serves too), over this editor: every surface read goes
    * through them, so a test sees what an agent sees.
    */
   readonly #reads: {
@@ -174,6 +182,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     readonly kerning: ShiftKerningReader;
     readonly editor: ShiftEditorReader;
   };
+  /** The surface's actions, shared with the E2E hook. */
+  readonly #actions = new SurfaceActions(this);
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
   #kerningPreview: ReturnType<Editor["font"]["beginKerningEdit"]> | null = null;
 
@@ -595,54 +605,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this;
   }
 
-  async draw<const F extends GlyphFixture>(
+  draw<const F extends GlyphFixture>(
     fixture: F,
     options: DrawOptions = {},
   ): Promise<Record<PointNames<F>, PointId>> {
-    const names = {} as Record<PointNames<F>, PointId>;
-    if (fixture.advance !== undefined) this.setXAdvance(fixture.advance);
-
-    const contours = fixture.contours ?? [];
-    let drawn: readonly SelectableId[] = [];
-    if (contours.length > 0) {
-      const ids = this.insertContent(contourContent(contours));
-      if (!ids) throw new Error("draw needs one open glyph to draw into");
-      drawn = ids;
-      pointNames(contours).forEach((name, index) => {
-        if (name !== null) (names as Record<string, PointId>)[name] = ids[index] as PointId;
-      });
-    }
-
-    for (const anchor of fixture.anchors ?? []) {
-      if (!this.addAnchorAt({ x: anchor.x, y: anchor.y })) {
-        throw new Error(`draw could not add anchor ${anchor.name}`);
-      }
-      const [anchorId] = this.selection.ids;
-      if (anchorId) this.renameAnchor(anchorId as AnchorId, anchor.name);
-    }
-
-    for (const component of fixture.components ?? []) await this.#drawComponent(component);
-
-    if (options.select) this.selection.select(drawn);
-    else this.selection.clear();
-    await this.settle();
-    return names;
-  }
-
-  /** Adds a component and moves it as the sidebar's position fields do. */
-  async #drawComponent(component: ComponentFixture): Promise<void> {
-    const base = this.font.recordForName(component.glyph as GlyphName);
-    if (!base) throw new Error(`draw needs a glyph named ${component.glyph}`);
-
-    const id: ComponentId | null = await this.addComponent(base.id);
-    if (!id) throw new Error(`draw could not add component ${component.glyph}`);
-
-    const { x = 0, y = 0 } = component;
-    if (x === 0 && y === 0) return;
-    await this.settle();
-    const selection = this.componentTransformSelection([id]);
-    if (!selection) throw new Error(`draw could not move component ${component.glyph}`);
-    selection.layer.transformComponents(selection, "Move components", () => Mat.Translate(x, y));
+    return drawFixture(this, fixture, options);
   }
 
   select(ids: readonly PointId[]): void {
@@ -1007,17 +974,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async addAxis(axis: AxisFixture): Promise<void> {
-    this.font.createAxis({
-      tag: axis.tag,
-      name: axis.name ?? axis.tag,
-      role: axis.role ?? "external",
-      axisType: "continuous",
-      minimum: axis.minimum,
-      default: axis.default,
-      maximum: axis.maximum,
-      labels: [],
-      hidden: false,
-    });
+    this.#actions.addAxis(axis);
     await this.settle();
   }
 
@@ -1041,38 +998,51 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async addSource(name: string, location: AxisLocation): Promise<void> {
-    this.createSource(name, externalAxisLocationFromRecord(this.#axisValueRecord(location)));
+    this.#actions.addSource(name, location);
     await this.settle();
   }
 
   async deleteSource(name: string): Promise<void> {
-    this.font.deleteSource(this.#sourceNamed(name));
+    this.#actions.deleteSource(name);
+    await this.settle();
+  }
+
+  async deleteAxis(tag: string): Promise<void> {
+    this.#actions.deleteAxis(tag);
+    await this.settle();
+  }
+
+  async renameSource(source: string, name: string): Promise<void> {
+    await this.#actions.renameSource(source, name);
+    await this.settle();
+  }
+
+  async setSourceItalicAngle(source: string, italicAngle: number): Promise<void> {
+    await this.#actions.setSourceItalicAngle(source, italicAngle);
+    await this.settle();
+  }
+
+  async setSourceLineGap(source: string, lineGap: number): Promise<void> {
+    await this.#actions.setSourceLineGap(source, lineGap);
     await this.settle();
   }
 
   async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
-    const current = this.font.source(this.#sourceNamed(source));
-    if (!current) throw new Error(`The font has no source named ${source}`);
-    const value = sourceMetricValue(current, this.#metricNamed(metric));
-    await this.font.updateSource(withSourceMetricValue(current, { ...value, position }));
+    await this.#actions.setSourceMetric(source, metric, position);
+    await this.settle();
   }
 
   addInstance(name: string, location: AxisLocation): void {
-    this.font.createNamedInstance({ name, location: { values: this.#axisValueRecord(location) } });
+    this.#actions.addInstance(name, location);
   }
 
   clickSource(name: string, mode?: SourceSelectionMode): void {
-    this.selectSourceForEditing(this.#sourceNamed(name), mode);
+    this.#actions.clickSource(name, mode);
   }
 
   async editSources(names: readonly string[]): Promise<void> {
-    const [first, ...rest] = names.map((name) => this.#sourceNamed(name));
-    if (!first) throw new Error("editSources needs at least one source");
-
-    this.selectSourceForEditing(first);
-    for (const sourceId of rest) this.selectSourceForEditing(sourceId, "toggle");
+    await this.#actions.editSources(names);
     await this.settle();
-    await this.editingLayersMatched();
   }
 
   toggleSourceOutline(name: string): void {
@@ -1083,7 +1053,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   setLocation(location: AxisLocation): void {
-    this.setExternalLocation(externalAxisLocationFromRecord(this.#axisValueRecord(location)));
+    this.#actions.setLocation(location);
   }
 
   kerning(first: string, second: string): readonly KerningMasterValue[] {
@@ -1100,15 +1070,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   kerningGroup(position: KerningPosition, name: string): KerningGroupSummary | null {
-    return this.kerningGroups(position).find((group) => group.name === name) ?? null;
+    return this.#reads.kerning.group(position, name);
   }
 
   kerningGroupOf(position: KerningPosition, glyph: string): KerningGroupSummary | null {
-    return (
-      this.kerningGroups(position).find((group) =>
-        group.members.some((member) => member.name === glyph),
-      ) ?? null
-    );
+    return this.#reads.kerning.groupOf(position, { name: glyph as GlyphName });
   }
 
   kerningGroups(position: KerningPosition): readonly KerningGroupSummary[] {
@@ -1131,23 +1097,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return axis;
   }
 
-  #axisValueRecord(location: AxisLocation): Record<AxisId, number> {
-    return Object.fromEntries(
-      Object.entries(location).map(([tag, value]) => [this.#axisTagged(tag).id, value]),
-    ) as Record<AxisId, number>;
-  }
-
   #axisCoordinates(location: AxisLocation): AxisCoordinate[] {
     return Object.entries(location).map(([tag, value]) => ({
       axisId: this.#axisTagged(tag).id,
       value,
     }));
-  }
-
-  #metricNamed(name: string): MetricId {
-    const definition = this.font.metricDefinitions.find((candidate) => candidate.name === name);
-    if (!definition) throw new Error(`The font has no metric named ${name}`);
-    return definition.id;
   }
 
   #kerningGroupNamed(position: KerningPosition, name: string): KerningGroupId {
@@ -1222,8 +1176,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
     );
   }
 
-  async anchorNamed(name: string): Promise<AuthoredAnchor | null> {
-    return (await this.anchors()).find((anchor) => anchor.name === name) ?? null;
+  async anchorNamed(
+    name: string,
+    { source }: AnchorReadOptions = {},
+  ): Promise<AuthoredAnchor | null> {
+    const anchors =
+      source === undefined ? await this.anchors() : (await this.layerAt(source)).anchors;
+    return anchors.find((anchor) => anchor.name === name) ?? null;
   }
 
   async outlineBounds(): Promise<Bounds | null> {
@@ -1258,8 +1217,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   glyphNamed(name: string): GlyphSummary | null {
-    if (!this.font.recordForName(name as GlyphName)) return null;
-    return this.#reads.font.getGlyph({ name: name as GlyphName });
+    return this.#reads.font.glyphNamed(name as GlyphName);
   }
 
   async glyphNames(): Promise<readonly string[]> {
@@ -1277,8 +1235,28 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.font.getFont();
   }
 
-  source(name: string): Source | null {
-    return this.font.sourceNamed(name);
+  source(selector: SourceSelection): Source | null {
+    switch (selector) {
+      case "default":
+        return this.#reads.font.defaultSource();
+      case "active":
+        return this.#reads.editor.activeSource();
+    }
+    return "id" in selector
+      ? this.#reads.font.source({ sourceId: selector.id })
+      : this.#reads.font.source({ name: selector.name });
+  }
+
+  instance(selector: InstanceSelection): NamedInstance | null {
+    return "id" in selector
+      ? this.#reads.font.instance({ instanceId: selector.id })
+      : this.#reads.font.instance({ name: selector.name });
+  }
+
+  axis(selector: AxisSelection): Axis | null {
+    return "id" in selector
+      ? this.#reads.font.axis({ axisId: selector.id })
+      : this.#reads.font.axis({ tag: selector.tag });
   }
 
   languages(): readonly string[] | null {
@@ -1337,16 +1315,16 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#pointIn(this.drawnOutline(), id);
   }
 
-  editGhost(ids: readonly PointId[]): Record<PointId, Point2D> | null {
+  editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null {
     const ghost = this.requireGlyphLayer().editBaseGeometryCell.peek();
     if (!ghost) return null;
     return Object.fromEntries(
       ids.map((id) => {
         const point = ghost.point(id);
         if (!point) throw new Error(`The edit ghost shows no point ${id}`);
-        return [id, { x: point.x, y: point.y }];
+        return [id, localPoint(point.x, point.y)];
       }),
-    ) as Record<PointId, Point2D>;
+    ) as Record<PointId, LocalPoint>;
   }
 
   async drawnGlyph(glyph?: string): Promise<DrawnGlyph> {
@@ -1416,18 +1394,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.zoom;
   }
 
-  canvasOffset(): Point2D {
-    return this.pan;
+  canvasOffset(): ScreenVector {
+    return screenVector(this.pan.x, this.pan.y);
   }
 
-  screenPosition(position: Point2D): Point2D {
+  screenPosition(position: Point2D): ScreenPoint {
     const { x, y } = this.localToScreen(position);
-    return { x, y };
+    return screenPoint(x, y);
   }
 
-  viewportCentre(): Point2D {
+  viewportCentre(): ScreenPoint {
     const { x, y } = this.camera.centre;
-    return { x, y };
+    return screenPoint(x, y);
   }
 
   async reopen(): Promise<EditorTestSurface> {

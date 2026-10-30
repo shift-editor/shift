@@ -28,7 +28,10 @@ import type {
   ShiftObservation,
   ShiftSession,
   ShiftTarget,
+  SourceGetInput,
+  InstanceGetInput,
 } from "@shift/runtime";
+import type { NamedInstance, Source } from "@shift/types";
 
 export type SandboxCallMap = {
   "sandbox.execute": {
@@ -69,6 +72,14 @@ export type SandboxHostCallMap = {
   "shift.glyphs.get": {
     request: GlyphGetInput;
     response: ShiftObservation<GlyphSummary>;
+  };
+  "shift.instances.get": {
+    request: InstanceGetInput;
+    response: ShiftObservation<NamedInstance>;
+  };
+  "shift.sources.get": {
+    request: SourceGetInput;
+    response: ShiftObservation<Source>;
   };
   "shift.glyphs.resolve": {
     request: GlyphResolveInput;

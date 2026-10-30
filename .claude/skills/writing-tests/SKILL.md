@@ -191,7 +191,7 @@ test("moves a point and supports undo", async ({ editor }) => {
 
 Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `point()` must not be preceded by direct `editCoordinator.settled()` calls.
 
-Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. After setup changes geometry or camera state, call `waitForCanvasRender()` before projections or pointer input; authored-layer readiness does not guarantee current canvas transforms or hit regions. Use `livePointPosition()` and `selectionBounds()` for gesture previews; keep `point()` for confirmed geometry.
+Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. After setup changes geometry or camera state, call `waitForCanvasRender()` before projections or pointer input; authored-layer readiness does not guarantee current canvas transforms or hit regions. Use `drawnPoint()`, `drawnOutline()` and `selectionBounds()` for gesture previews; keep `point()` for confirmed geometry. Projection helpers take and return `LocalPoint` (the glyph's units), `ScenePoint` or `ScreenPoint` (canvas pixels); build them with `localPoint(x, y)` and friends, never a cast.
 
 Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, variable-font construction, GPU residency, performance loops, and screenshot assertions remain at their owning fixture or spec boundary.
 
@@ -234,6 +234,10 @@ These hold for behaviour tests (`apps/desktop/src/renderer/src/behaviour/`) and 
    `expect(editor.spacingTool()?.hovered?.side).toBe("left")` → `expect(editor.spacingTool()).toMatchObject({ hovered: { side: "left" } })`
 8. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
    `splitCubic(…)` lives in `testing/fixtures.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
+9. **Refer to things by name; use an id only where identity is the point.** Setup and locators name sources, axes, instances and glyphs the way the fixture and the UI do (`sourceRow(controls, "Bold")`, not ``getByTestId(`source-${id}`)``). Read an id through a selector only to follow a record across a change (a rename, a recovery), and never build, encode, sort or search for one.
+   `const { id: opsz } = (await editor.axis({ tag: "opsz" }))!; … expect(await editor.axis({ id: opsz })).toMatchObject({ name: "Optical Scale" })`
+10. **Never look a record up over a read; use the selector read.** `source({ name } | { id } | "default" | "active")`, `axis({ tag } | { id })`, `instance({ name } | { id })`, `anchorNamed(name, { source })`; add one to the surface when a test needs another. `shift/no-lookup-in-tests` flags `.find`/`.filter`/`.some` whose callback compares a member or destructured key with `===`/`!==`; a genuine case (a protocol response, picking points by position for a golden) takes a reasoned disable.
+    `sources.find(({ name }) => name === "Bold")` → `editor.source({ name: "Bold" })`
 
 Positions in test code use the editor's coordinate spaces from `@shift/editor/spaces` (`LocalPoint`, `ScenePoint`, `ScreenPoint`) where a read or driver input already has one.
 

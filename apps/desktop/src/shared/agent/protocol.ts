@@ -23,8 +23,9 @@ import type {
   ShiftObservation,
   ShiftReadInput,
   SourceSelector,
+  InstanceSelector,
 } from "@shift/runtime";
-import type { GlyphId, KerningPosition } from "@shift/types";
+import type { GlyphId, KerningPosition, NamedInstance, Source } from "@shift/types";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -63,6 +64,14 @@ export type AgentCallMap = {
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<GlyphPage>;
+  };
+  "instances.get": {
+    request: { selector: InstanceSelector; ifFontRevision?: FontRevision };
+    response: ShiftObservation<NamedInstance>;
+  };
+  "sources.get": {
+    request: { selector: SourceSelector; ifFontRevision?: FontRevision };
+    response: ShiftObservation<Source>;
   };
   "glyphs.get": {
     request: { selector: GlyphSelector; ifFontRevision?: FontRevision };
@@ -129,5 +138,27 @@ export type AgentCallMap = {
     response: unknown;
   };
 };
+
+/**
+ * Test actions the renderer serves on the agent lane only when main enables
+ * them on connect, for E2E launches (`NODE_ENV=test`). Only the E2E actions
+ * hook sends them; agents and MCP never can.
+ */
+export type AgentE2ECallMap = {
+  /**
+   * Calls `method` of the renderer's E2E hook named `hook` (`testing/e2e/hooks.ts`:
+   * setup actions, which settle, and probes) with `args`, returning its plain result.
+   */
+  "e2e.call": {
+    request: { hook: string; method: string; args: unknown[] };
+    response: unknown;
+  };
+};
+
+/** What main tells a renderer when it connects the agent lane. */
+export interface AgentConnection {
+  /** Whether this is an E2E launch, so the renderer serves {@link AgentE2ECallMap}. */
+  readonly e2eActions: boolean;
+}
 
 export type AgentEventMap = Record<string, never>;

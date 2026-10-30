@@ -39,15 +39,18 @@ export async function installRenderCounter(
 ): Promise<void> {
   await page.context().addInitScript({ content: renderCounterInitScript() });
   await page.reload();
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- counts React renders in the page, not app state
   await page.waitForFunction(() => window.__shiftRenders !== undefined);
   await waitForReady();
 }
 
 export async function startRenderCount(page: Page): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- counts React renders in the page, not app state
   await page.evaluate(() => window.__shiftRenders?.start());
 }
 
 export async function stopRenderCount(page: Page): Promise<RenderCount> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- counts React renders in the page, not app state
   return page.evaluate(() => {
     if (!window.__shiftRenders) throw new Error("the render counter is not installed");
     return window.__shiftRenders.stop();

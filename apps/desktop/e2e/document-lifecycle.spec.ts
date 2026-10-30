@@ -2,15 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page } from "@playwright/test";
 import {
-  DESIGNSPACE_FONT_PATH,
+  FONTS,
   documentTest as test,
   documentWorkspaceTest as workspaceTest,
   expect,
-  FONT_PATH,
-  GLYPHS_FONT_PATH,
-  GLYPHSPACKAGE_FONT_PATH,
-  OTF_FONT_PATH,
-  UFO_FONT_PATH,
   waitForWorkspaceReady,
 } from "./fixtures/electronApp";
 import {
@@ -18,6 +13,7 @@ import {
   createNewFont,
   dirtyDocumentDecisions,
   launchSecondInstance,
+  openFontFromLauncher,
   quitApp,
   requestAppQuit,
   runCommand,
@@ -87,7 +83,7 @@ const failedExportTest = workspaceTest.extend({
   },
 });
 const convertiblePreviewTest = test.extend({
-  openFontPath: UFO_FONT_PATH,
+  openFontPath: FONTS.mutatorSansLightCondensed,
 });
 const cancelPreviewSaveTest = convertiblePreviewTest.extend({
   saveShiftPath: async ({}, use) => {
@@ -102,13 +98,9 @@ const failedPreviewSaveTest = convertiblePreviewTest.extend({
   },
 });
 
+/** Opens the scripted font from the launcher as a preview and returns its window. */
 async function openSelectedPreview(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
-
-  const workspacePage = await workspaceWindow;
-  await workspacePage.waitForURL(/#\/home$/);
-  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
+  const workspacePage = await openFontFromLauncher(page, electronApp);
   await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("preview");
   return workspacePage;
 }
@@ -151,7 +143,7 @@ workspaceTest(
 // Every supported extension shares one activation path in App; a binary file and a
 // directory package cover the file-system shapes. Per-format opening is covered by the
 // preview Save and Save As conversion tests below.
-for (const sourcePath of [FONT_PATH, GLYPHSPACKAGE_FONT_PATH]) {
+for (const sourcePath of [FONTS.mutatorSansTtf, FONTS.packageFont]) {
   test.describe(`external ${path.extname(sourcePath)} activation`, () => {
     test.describe("cold launch", () => {
       test.use({ electronArgs: [sourcePath] });
@@ -189,7 +181,7 @@ workspaceTest(
   "source activation preserves an existing document",
   async ({ electronApp, page, testRoot }) => {
     const workspaceWindow = electronApp.waitForEvent("window");
-    await launchSecondInstance(electronApp, testRoot, FONT_PATH);
+    await launchSecondInstance(electronApp, testRoot, FONTS.mutatorSansTtf);
     const workspacePage = await workspaceWindow;
 
     await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
@@ -203,7 +195,7 @@ test.describe("case-insensitive source activation", () => {
   test.use({
     electronArgs: async ({ testRoot }, use) => {
       const sourcePath = path.join(testRoot, "Font With Spaces.TTF");
-      fs.copyFileSync(FONT_PATH, sourcePath);
+      fs.copyFileSync(FONTS.mutatorSansTtf, sourcePath);
       await use([sourcePath]);
     },
   });
@@ -219,7 +211,7 @@ test.describe("case-insensitive source activation", () => {
 });
 
 test.describe("unsupported file activation", () => {
-  test.use({ electronArgs: [path.join(path.dirname(FONT_PATH), "ignored.txt")] });
+  test.use({ electronArgs: [path.join(path.dirname(FONTS.mutatorSansTtf), "ignored.txt")] });
 
   test("keeps the launcher for unsupported extensions", async ({ electronApp, page }) => {
     await expect(page.getByRole("button", { name: "Open Font…", exact: true })).toBeVisible();
@@ -229,7 +221,10 @@ test.describe("unsupported file activation", () => {
 });
 
 function createSecondDocument(testRoot: string): string {
-  const generatedPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "second-workspace"));
+  const generatedPath = createAuthoredDocument(
+    FONTS.mutatorSansTtf,
+    path.join(testRoot, "second-workspace"),
+  );
   const secondPath = path.join(testRoot, "second.shift");
   fs.renameSync(generatedPath, secondPath);
   return secondPath;
@@ -246,7 +241,7 @@ async function hasWindowTitle(
 }
 
 test.describe("opening a font through the application shell", () => {
-  test.use({ openFontPath: FONT_PATH });
+  test.use({ openFontPath: FONTS.mutatorSansTtf });
 
   test("opens a selected font with disabled authoring controls", async ({ electronApp, page }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
@@ -332,8 +327,8 @@ failedOpenTest("failed Open keeps the launcher available", async ({ electronApp,
 });
 
 for (const { format, fontPath } of [
-  { format: "TTF", fontPath: FONT_PATH },
-  { format: "OTF", fontPath: OTF_FONT_PATH },
+  { format: "TTF", fontPath: FONTS.mutatorSansTtf },
+  { format: "OTF", fontPath: FONTS.mutatorSansOtf },
 ]) {
   const binaryPreviewTest = test.extend({
     openFontPath: fontPath,
@@ -366,7 +361,7 @@ convertiblePreviewTest(
 convertiblePreviewTest(
   "Save converts a preview to an editable Shift document that reopens",
   async ({ relaunch, electronApp, page, saveShiftPath, testRoot }) => {
-    const sourceBefore = sourceTreeSnapshot(UFO_FONT_PATH);
+    const sourceBefore = sourceTreeSnapshot(FONTS.mutatorSansLightCondensed);
     const workspacePage = await openSelectedPreview(page, electronApp);
 
     await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
@@ -377,11 +372,11 @@ convertiblePreviewTest(
     await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("workspace");
 
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("A");
-    expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
+    expect(sourceTreeSnapshot(FONTS.mutatorSansLightCondensed)).toEqual(sourceBefore);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
     await runCommand(workspacePage, electronApp, "file.save");
-    expect(sourceTreeSnapshot(UFO_FONT_PATH)).toEqual(sourceBefore);
+    expect(sourceTreeSnapshot(FONTS.mutatorSansLightCondensed)).toEqual(sourceBefore);
 
     await quitApp(electronApp);
     const relaunchedApp = await relaunch();
@@ -399,14 +394,14 @@ convertiblePreviewTest(
 for (const { format, sourcePath, sourceRoot } of [
   {
     format: "Designspace",
-    sourcePath: DESIGNSPACE_FONT_PATH,
-    sourceRoot: path.dirname(DESIGNSPACE_FONT_PATH),
+    sourcePath: FONTS.mutatorSans,
+    sourceRoot: path.dirname(FONTS.mutatorSans),
   },
-  { format: "Glyphs", sourcePath: GLYPHS_FONT_PATH, sourceRoot: GLYPHS_FONT_PATH },
+  { format: "Glyphs", sourcePath: FONTS.mutatorSansGlyphs, sourceRoot: FONTS.mutatorSansGlyphs },
   {
     format: "Glyphspackage",
-    sourcePath: GLYPHSPACKAGE_FONT_PATH,
-    sourceRoot: GLYPHSPACKAGE_FONT_PATH,
+    sourcePath: FONTS.packageFont,
+    sourceRoot: FONTS.packageFont,
   },
 ]) {
   const formatConversionTest = test.extend({

@@ -58,6 +58,8 @@ export class SandboxRuntimeProcess {
       "shift.glyphs.list": (input) => this.#capabilities.glyphs.list(input),
       "shift.glyphs.get": (input) => this.#capabilities.glyphs.get(input),
       "shift.glyphs.resolve": (input) => this.#capabilities.glyphs.resolve(input),
+      "shift.sources.get": (input) => this.#capabilities.sources.get(input),
+      "shift.instances.get": (input) => this.#capabilities.instances.get(input),
       "shift.kerning.groups": (input) => this.#capabilities.kerning.groups(input),
       "shift.kerning.pairs": (input) => this.#capabilities.kerning.pairs(input),
       "shift.kerning.resolve": (input) => this.#capabilities.kerning.resolve(input),

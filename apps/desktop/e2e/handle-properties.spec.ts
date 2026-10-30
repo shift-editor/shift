@@ -1,28 +1,18 @@
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { glyphProperties } from "./fixtures/appLocators";
-import { openScratchGlyph } from "./fixtures/scratchGlyph";
+import { openScratchGlyph, SMOOTH_JOIN_CONTOUR } from "./fixtures/scratchGlyph";
 
 test("edits a selected cubic handle by angle and length", async ({ page, editor }) => {
-  await openScratchGlyph(page, editor, "handleProperties", [
-    {
-      closed: false,
-      points: [
-        { x: 100, y: 100, pointType: "onCurve", smooth: false },
-        { x: 200, y: 100, pointType: "offCurve", smooth: false },
-        { x: 300, y: 100, pointType: "offCurve", smooth: false },
-        { x: 400, y: 100, pointType: "onCurve", smooth: true },
-        { x: 500, y: 100, pointType: "offCurve", smooth: false },
-        { x: 600, y: 100, pointType: "offCurve", smooth: false },
-        { x: 700, y: 100, pointType: "onCurve", smooth: false },
-      ],
-    },
+  const { incoming, join, outgoing } = await openScratchGlyph(editor, "handleProperties", [
+    SMOOTH_JOIN_CONTOUR,
   ]);
 
   const properties = glyphProperties(page);
-  // The smooth on-curve point at 400 joins two cubics: its outgoing handle is the one edited,
-  // and the incoming cubic's last handle is the opposite one.
-  const [contour] = await editor.outline();
-  const [, , incomingHandle, smoothPoint, outgoingHandle] = contour?.points ?? [];
+  // The smooth on-curve point joins two cubics: its outgoing handle is the one edited, and the
+  // incoming cubic's last handle is the opposite one.
+  const [incomingHandle, smoothPoint, outgoingHandle] = await Promise.all(
+    [incoming, join, outgoing].map((id) => editor.point(id)),
+  );
   if (!incomingHandle || !smoothPoint?.smooth || !outgoingHandle) {
     throw new Error("Expected a smooth cubic handle");
   }

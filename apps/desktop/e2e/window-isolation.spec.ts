@@ -2,7 +2,7 @@ import { documentTest as test, expect } from "./fixtures/electronApp";
 import { openGlyphRoute } from "./fixtures/appLocators";
 import { createAnotherDirtyFont, dirtyNewFont, glyphIdForName } from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
-import { addSquare } from "./fixtures/editorInteractions";
+import { square } from "@/testing/fixtures";
 
 test("keeps authored document state isolated between windows", async ({ electronApp, page }) => {
   const firstPage = await dirtyNewFont(page, electronApp);
@@ -15,7 +15,7 @@ test("keeps authored document state isolated between windows", async ({ electron
   await expect.poll(async () => (await secondEditor.editorView()).applyStatus).toBe("idle");
 
   await openGlyphRoute(firstPage, firstGlyphId);
-  await addSquare(firstPage);
+  await firstEditor.draw({ contours: [square(100)] });
   await firstEditor.waitForCanvasRender();
   await firstEditor.selectVisiblePoint();
   await openGlyphRoute(secondPage, secondGlyphId);

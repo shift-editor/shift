@@ -13,11 +13,7 @@
 import type { Point2D } from "@shift/geo";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import {
-  insertEdgeOverlappingContour,
-  selectedObjectKind,
-  setCanvasOffset,
-} from "./fixtures/editorInteractions";
+import { insertEdgeOverlappingContour, setCanvasOffset } from "./fixtures/editorInteractions";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
 // MutatorSans glyph codepoints (hex).
@@ -107,11 +103,10 @@ test.describe("Glyph rendering — zoom", () => {
     { tag: "@golden" },
     async ({ page, editor }) => {
       await editor.openGlyphByUnicode(GLYPH_S);
-      const offCurve = (await editor.outline())[0]?.points.find(
-        (point) => point.pointType === "offCurve",
-      );
-      if (!offCurve) throw new Error("Expected an off-curve point on S");
-      const [target] = await editor.pointTargets([offCurve.id]);
+      // S's first contour starts on-curve, so its second point is the first handle.
+      const [, offCurve] = (await editor.outline())[0]!.points;
+      expect(offCurve).toMatchObject({ pointType: "offCurve" });
+      const [target] = await editor.pointTargets([offCurve!.id]);
       if (!target) throw new Error("Expected off-curve point target");
 
       // Wheel steps are clamped to ×1.1, so a fixed step count from the fit zoom is
@@ -263,7 +258,7 @@ test.describe("Segment selection rendering", () => {
       const middle = { x: 0.675, y: 0.625 };
       const middlePage = await editor.canvasPagePoint(middle);
       await page.mouse.click(middlePage.x, middlePage.y);
-      await expect.poll(() => selectedObjectKind(page)).toBe("segment");
+      await expect.poll(async () => (await editor.selectedObjects())[0]?.kind).toBe("segment");
       await expectCanvasSnapshot(editor, "segment-selected.png");
 
       await editor.pointerDown(middlePage);

@@ -1,4 +1,4 @@
-import { asAxisId, asGlyphId, asLayerId, asSourceId } from "@shift/types";
+import { asAxisId, asGlyphId, asLayerId, asNamedInstanceId, asSourceId } from "@shift/types";
 import * as z from "zod/v4";
 
 const windowId = z.number().int().positive();
@@ -6,6 +6,7 @@ const fontRevision = z.string().min(1).max(256);
 const ifFontRevision = fontRevision.optional();
 const glyphId = z.string().min(1).transform(asGlyphId);
 const sourceId = z.string().min(1).transform(asSourceId);
+const instanceId = z.string().min(1).transform(asNamedInstanceId);
 const layerId = z.string().min(1).transform(asLayerId);
 const axisId = z.string().min(1).transform(asAxisId);
 const axisCoordinate = z.strictObject({ axisId, value: z.number() });
@@ -65,6 +66,14 @@ export const shiftInputSchemas = {
   "glyphs.get": z.union([
     z.strictObject({ windowId, ifFontRevision, glyphId }),
     z.strictObject({ windowId, ifFontRevision, name: z.string().min(1) }),
+  ]),
+  "sources.get": z.union([
+    z.strictObject({ windowId, ifFontRevision, sourceId }),
+    z.strictObject({ windowId, ifFontRevision, name }),
+  ]),
+  "instances.get": z.union([
+    z.strictObject({ windowId, ifFontRevision, instanceId }),
+    z.strictObject({ windowId, ifFontRevision, name }),
   ]),
   "glyphs.resolve": z.strictObject({
     windowId,

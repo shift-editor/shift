@@ -53,7 +53,11 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
   };
 
   return (
-    <div className="flex justify-start items-start flex-col gap-1">
+    <div
+      role="group"
+      aria-label="Sources"
+      className="flex justify-start items-start flex-col gap-1"
+    >
       {sources.map((source, index) => {
         const target = { kind: "source", sourceId: source.id } as const;
         const visible = outlineControls?.targets.hasSource(source.id) ?? false;

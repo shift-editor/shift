@@ -99,8 +99,8 @@ describe("adding, renaming, and deleting anchors", () => {
   it("moves several anchors to one coordinate, keeping other sources relative", async () => {
     await editor.editSources(["Light", "Bold"]);
     const lightTop = await editor.anchorNamed("top");
-    const boldTop = (await editor.layerAt("Bold")).anchors.filter(({ name }) => name === "top");
-    expect(boldTop).toHaveLength(1);
+    const boldTop = await editor.anchorNamed("top", { source: "Bold" });
+    expect(boldTop).not.toBeNull();
 
     const ogonek = await editor.anchorNamed("ogonek");
     expect(editor.setAnchorAxis([lightTop!.id, ogonek!.id], "x", 300)).toBe(true);
@@ -109,7 +109,7 @@ describe("adding, renaming, and deleting anchors", () => {
     expect(await editor.anchorNamed("top")).toMatchObject({ x: 300 });
     expect(await editor.anchorNamed("ogonek")).toMatchObject({ x: 300 });
     expect((await editor.layerAt("Bold")).anchors).toContainEqual(
-      expect.objectContaining({ name: "top", x: boldTop[0]!.x + (300 - lightTop!.x) }),
+      expect.objectContaining({ name: "top", x: boldTop!.x + (300 - lightTop!.x) }),
     );
   });
 

@@ -7,6 +7,7 @@ import type {
 import type { UpdateProgress } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
+import type { AgentConnection } from "../agent/protocol";
 import type { AppConfigState, ThemeSetting } from "../config/config";
 import type { DebugOverlays } from "../debug";
 import type { MenuBar, TitleBarColors, WindowButtonLayout } from "../menu/types";
@@ -45,7 +46,7 @@ export type RendererErrorReport = {
  * channels here only when preload needs a new main-process capability.
  */
 export type RendererToMain = {
-  "agent.connect": () => void;
+  "agent.connect": () => AgentConnection;
   "agentConnections.state": () => AgentConnectionsState;
   /** Persists whether local agents may connect and starts or stops the MCP server. */
   "agentConnections.setAllowed": (allowed: boolean) => AgentConnectionsState;
