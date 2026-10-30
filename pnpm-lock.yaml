@@ -563,6 +563,9 @@ importers:
 
   packages/wasm:
     dependencies:
+      '@shift/pack':
+        specifier: workspace:*
+        version: link:../pack
       '@shift/types':
         specifier: workspace:*
         version: link:../types

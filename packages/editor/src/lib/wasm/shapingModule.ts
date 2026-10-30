@@ -7,13 +7,8 @@ import type {
   ShaperFont,
   ShapeUnit,
 } from "@shift/types";
-import { registerShaper, releaseShaper } from "@shift/wasm/shaping";
-import {
-  setShaperGlyphs,
-  shapeParagraphs,
-  type ParagraphInput,
-  type ShapedRunOutput,
-} from "./generated/shapingLayouts";
+import type { ParagraphInput, ShapedRunOutput } from "@shift/wasm/protocol";
+import { registerShaper, releaseShaper, shaping } from "@shift/wasm/shaping";
 
 const released = new FinalizationRegistry<number>(releaseShaper);
 
@@ -59,7 +54,7 @@ export class RegisteredShaper {
         shaperGlyphs.push(shaperGlyph);
       }
     }
-    setShaperGlyphs({
+    shaping.setShaperGlyphs({
       shaper: this.#handle,
       axes: font.axes,
       codepoints,
@@ -74,7 +69,7 @@ export class RegisteredShaper {
    * for a paragraph that cannot be shaped.
    */
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): (ShapedRun[] | null)[] {
-    const shaped = shapeParagraphs({
+    const shaped = shaping.shapeParagraphs({
       shaper: this.#handle,
       paragraphs: paragraphs.map((paragraph) => this.#input(paragraph)),
     });

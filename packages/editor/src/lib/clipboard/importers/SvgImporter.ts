@@ -39,11 +39,11 @@ export class SvgImporter implements ClipboardImporter {
     const pathData = this.#extractPathData(trimmed);
     if (!pathData) return null;
 
-    const { svgPathContours } = await loadEngine();
+    const { svgPaths } = await loadEngine();
     const codeUnits = Array.from({ length: pathData.length }, (_, index) =>
       pathData.charCodeAt(index),
     );
-    const parsed = svgPathContours({ codeUnits });
+    const parsed = svgPaths.svgPathContours({ codeUnits });
     if (!parsed || parsed.length === 0) return null;
 
     return { contours: parsed.map(contourContent) };

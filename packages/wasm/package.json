@@ -24,9 +24,9 @@
       "types": "./src/engine.ts",
       "import": "./src/engine.ts"
     },
-    "./numbers": {
-      "types": "./src/numbers.ts",
-      "import": "./src/numbers.ts"
+    "./protocol": {
+      "types": "./src/generated-protocol/index.ts",
+      "import": "./src/generated-protocol/index.ts"
     }
   },
   "scripts": {
@@ -39,6 +39,7 @@
     "lint:check": "oxlint --deny-warnings src/"
   },
   "dependencies": {
+    "@shift/pack": "workspace:*",
     "@shift/types": "workspace:*"
   },
   "devDependencies": {

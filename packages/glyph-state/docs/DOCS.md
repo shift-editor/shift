@@ -26,7 +26,6 @@ packages/glyph-state/src/
   valueLayout.ts        -- value-buffer cursor helpers built on the generated layout constants
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
   segmentContour.ts     -- segments and bounds from shift-font (`contourGeometry`), retaining supplied points
-  generated/geometryLayouts.ts -- generated call into `@shift/wasm` (do not edit)
   filledContoursContain.ts -- non-zero fill hit testing over segmented contours
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list

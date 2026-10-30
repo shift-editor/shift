@@ -2531,6 +2531,7 @@ dependencies = [
  "kurbo",
  "libm",
  "linesweeper",
+ "pack",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2616,6 +2617,7 @@ version = "0.0.0"
 dependencies = [
  "fontir",
  "js-sys",
+ "pack",
  "rmp-serde",
  "serde",
  "serde-wasm-bindgen",

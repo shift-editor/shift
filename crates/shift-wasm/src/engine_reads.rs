@@ -1,9 +1,10 @@
 //! What the editor reads from the editing engine's font: kerning and source
 //! metrics, answered by the same shift-font code the workspace and export run.
 //!
-//! The exports exist only with the `engine` feature, beside the session they
-//! read ([`crate::engine`]). The layouts below are declared either way, so the
-//! editor's side generates without the feature.
+//! The [`EngineReads`] interface is answered only with the `engine` feature,
+//! beside the session it reads ([`crate::engine`]). The interface and its
+//! types are declared either way, so the editor's side generates without the
+//! feature.
 //!
 //! The engine is a separate instance from `@shift/wasm`, with no name table of
 //! its own, so ids cross as numbers the session interns: the editor interns a
@@ -11,77 +12,58 @@
 //! and passes its number from then on. A location crosses as numbers in the
 //! font's axis order, NaN for an axis at its default.
 
-use crate::layout::{foreign_layout, layout};
+use pack::Pack;
 use shift_font::MetricValue;
 
-layout! {
-    /// Glyph pairs whose kerning one call reads, and where it is read.
-    pub struct KerningRun {
-        /// The engine session's handle.
-        pub engine: usize,
-        /// The source being edited, by number; null reads at `location`.
-        pub source: Option<usize>,
-        /// The design location in the font's axis order, NaN for an axis default; read only without `source`.
-        pub location: Vec<f64>,
-        /// Glyphs by number, each pair's first glyph then its second.
-        pub glyphs: Vec<usize>,
-    }
+/// What the editor reads from one engine session's font. Glyphs and sources
+/// are named by the numbers the session interned for them; `glyphs` lists
+/// pairs, each pair's first glyph then its second.
+#[pack::interface]
+pub trait EngineReads {
+    /// The kerning between glyph pairs in font units, as
+    /// `Font::kerning_blend_at_source` or `Font::kerning_blend_at` weighs the
+    /// sources: at `source` when given, else at `location`, in the font's axis
+    /// order with NaN for an axis default. Null for a source or glyph number
+    /// the session never interned, or a location the font's basis cannot
+    /// evaluate. A glyph the font lacks kerns nothing.
+    fn kerning_run(
+        &self,
+        source: Option<usize>,
+        location: Vec<f64>,
+        glyphs: Vec<usize>,
+    ) -> Option<Vec<f64>>;
+    /// For each pair, the authored pair an edit to it at `source` changes, as
+    /// `Kerning::resolve` and `Kerning::editable_pair` find it.
+    fn kerning_pairs(&self, source: usize, glyphs: Vec<usize>) -> Vec<EditablePair>;
+    /// The masters' metrics interpolated at `location`, in the font's axis
+    /// order with NaN for an axis default, by
+    /// `SourceMetricInterpolation::resolve`; null for a static font or one
+    /// whose masters cannot be interpolated.
+    fn source_metrics_at(&self, location: Vec<f64>) -> Option<InterpolatedMetrics>;
 }
 
-layout! {
-    /// Glyph pairs whose authored kerning at one source one call reads.
-    pub struct SourcePairs {
-        /// The engine session's handle.
-        pub engine: usize,
-        /// The source, by number.
-        pub source: usize,
-        /// Glyphs by number, each pair's first glyph then its second.
-        pub glyphs: Vec<usize>,
-    }
+/// The authored pair an edit to the kerning between two glyphs at a source changes.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct EditablePair {
+    /// Whether the pair is authored there, so it is the kerning that applies; false for the most general pair the glyphs' groups allow.
+    pub authored: bool,
+    /// Whether the pair's first side is the first glyph's group rather than the glyph.
+    pub first_group: bool,
+    /// Whether the pair's second side is the second glyph's group rather than the glyph.
+    pub second_group: bool,
+    /// The pair's value there in font units; zero when it is not authored.
+    pub amount: f64,
 }
 
-layout! {
-    /// The authored pair an edit to the kerning between two glyphs at a source changes.
-    pub struct EditablePair {
-        /// Whether the pair is authored there, so it is the kerning that applies; false for the most general pair the glyphs' groups allow.
-        pub authored: bool,
-        /// Whether the pair's first side is the first glyph's group rather than the glyph.
-        pub first_group: bool,
-        /// Whether the pair's second side is the second glyph's group rather than the glyph.
-        pub second_group: bool,
-        /// The pair's value there in font units; zero when it is not authored.
-        pub amount: f64,
-    }
-}
-
-layout! {
-    /// A design location at which to read source metrics.
-    pub struct SourceMetricsAt {
-        /// The engine session's handle.
-        pub engine: usize,
-        /// The design location in the font's axis order, NaN for an axis default.
-        pub location: Vec<f64>,
-    }
-}
-
-foreign_layout! {
-    /// One metric's position and overshoot, in font units.
-    MetricValue => SourceMetricValue {
-        position: f64,
-        overshoot: f64,
-    }
-}
-
-layout! {
-    /// Source metrics between the masters, as export interpolates them; a technical field is present only when every master sets it.
-    pub struct InterpolatedMetrics {
-        /// Each metric definition's value, in the font's definition order.
-        pub metrics: Vec<MetricValue>,
-        pub italic_angle: Option<f64>,
-        pub line_gap: Option<f64>,
-        pub underline_position: Option<f64>,
-        pub underline_thickness: Option<f64>,
-    }
+/// Source metrics between the masters, as export interpolates them; a technical field is present only when every master sets it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct InterpolatedMetrics {
+    /// Each metric definition's value, in the font's definition order.
+    pub metrics: Vec<MetricValue>,
+    pub italic_angle: Option<f64>,
+    pub line_gap: Option<f64>,
+    pub underline_position: Option<f64>,
+    pub underline_thickness: Option<f64>,
 }
 
 #[cfg(feature = "engine")]
@@ -101,9 +83,9 @@ mod exports {
     use tsify::{Ts, Tsify};
     use wasm_bindgen::prelude::*;
 
-    use super::{EditablePair, InterpolatedMetrics, KerningRun, SourceMetricsAt, SourcePairs};
+    use super::{EditablePair, EngineReads, InterpolatedMetrics, engine_reads_request};
     use crate::engine::{Engine, with_engine};
-    use crate::layout::call;
+    use crate::names::with_names;
     use crate::variation::to_location;
 
     /// The ids a session's reads name by number, each interned once.
@@ -191,68 +173,74 @@ mod exports {
         with_engine(handle, |engine| engine.ids.sources.intern(&source_ids))
     }
 
-    /// Input: `KerningRun`. Output: the kerning between each pair, in font
-    /// units, as `Font::kerning_blend_at_source` or `Font::kerning_blend_at`
-    /// weighs the sources; null for an unknown engine, or a source or glyph
-    /// number the session never interned, or a location the font's basis
-    /// cannot evaluate. A glyph the font lacks kerns nothing.
-    #[wasm_bindgen(js_name = engineKerningRun)]
-    pub fn engine_kerning_run(input: &[f64]) -> Vec<f64> {
-        call(input, |run: KerningRun| {
-            let handle = u32::try_from(run.engine).ok()?;
-            with_engine(handle, |engine| Ok(kerning_run(engine, &run)))
-                .ok()
-                .flatten()
+    /// Runs one [`EngineReads`] method on the session `handle`. An unknown
+    /// handle replies with nothing, which the editor reads as null or empty.
+    #[wasm_bindgen(js_name = engineReadsRequest)]
+    pub fn request(handle: u32, method: u32, input: &[f64]) -> Vec<f64> {
+        with_engine(handle, |engine| {
+            Ok(with_names(|names| {
+                engine_reads_request(&*engine, method, input, names)
+            }))
         })
+        .unwrap_or_default()
     }
 
-    fn kerning_run(engine: &Engine, run: &KerningRun) -> Option<Vec<f64>> {
+    impl EngineReads for Engine {
+        fn kerning_run(
+            &self,
+            source: Option<usize>,
+            location: Vec<f64>,
+            glyphs: Vec<usize>,
+        ) -> Option<Vec<f64>> {
+            kerning_run(self, source, &location, &glyphs)
+        }
+
+        fn kerning_pairs(&self, source: usize, glyphs: Vec<usize>) -> Vec<EditablePair> {
+            editable_pairs(self, source, &glyphs)
+        }
+
+        fn source_metrics_at(&self, location: Vec<f64>) -> Option<InterpolatedMetrics> {
+            interpolated_metrics(self.session.font(), &location)
+        }
+    }
+
+    fn kerning_run(
+        engine: &Engine,
+        source: Option<usize>,
+        location: &[f64],
+        glyphs: &[usize],
+    ) -> Option<Vec<f64>> {
         let font = engine.session.font();
-        let blend = match run.source {
+        let blend = match source {
             Some(number) => font
                 .kerning_blend_at_source(*engine.ids.sources.get(number)?)
                 .ok()?,
             None => font
-                .kerning_blend_at(&design_location(font, &run.location))
+                .kerning_blend_at(&design_location(font, location))
                 .ok()?,
         };
-        let glyphs = &engine.ids.glyphs;
-        let pairs = run
-            .glyphs
+        let ids = &engine.ids.glyphs;
+        let pairs = glyphs
             .chunks_exact(2)
             .map(|pair| match pair {
-                &[first, second] => glyphs.get(first).copied().zip(glyphs.get(second).copied()),
+                &[first, second] => ids.get(first).copied().zip(ids.get(second).copied()),
                 _ => None,
             })
             .collect::<Option<Vec<_>>>()?;
         Some(blend.values(font.kerning(), pairs))
     }
 
-    /// Input: `SourcePairs`. Output: for each pair, the authored pair an edit
-    /// to it at the source changes, as `Kerning::resolve` and
-    /// `Kerning::editable_pair` find it; empty for an unknown engine.
-    #[wasm_bindgen(js_name = engineKerningPairs)]
-    pub fn engine_kerning_pairs(input: &[f64]) -> Vec<f64> {
-        call(input, |request: SourcePairs| {
-            let Ok(handle) = u32::try_from(request.engine) else {
-                return Vec::new();
-            };
-            with_engine(handle, |engine| Ok(editable_pairs(engine, &request))).unwrap_or_default()
-        })
-    }
-
-    fn editable_pairs(engine: &Engine, request: &SourcePairs) -> Vec<EditablePair> {
+    fn editable_pairs(engine: &Engine, source: usize, glyphs: &[usize]) -> Vec<EditablePair> {
         let kerning = engine.session.font().kerning();
-        let glyphs = &engine.ids.glyphs;
-        let source = engine.ids.sources.get(request.source);
-        request
-            .glyphs
+        let ids = &engine.ids.glyphs;
+        let source = engine.ids.sources.get(source);
+        glyphs
             .chunks_exact(2)
             .map(|pair| {
                 let (&[first, second], Some(source)) = (pair, source) else {
                     return UNKERNED;
                 };
-                match (glyphs.get(first), glyphs.get(second)) {
+                match (ids.get(first), ids.get(second)) {
                     (Some(first), Some(second)) => editable_pair(kerning, *source, *first, *second),
                     _ => UNKERNED,
                 }
@@ -383,24 +371,6 @@ mod exports {
             ))
         })?;
         Ok(origin.into_ts()?)
-    }
-
-    /// Input: `SourceMetricsAt`. Output: the masters' metrics interpolated at
-    /// the location by `SourceMetricInterpolation::resolve`; null for a static
-    /// font, one whose masters cannot be interpolated, or an unknown engine.
-    #[wasm_bindgen(js_name = engineSourceMetricsAt)]
-    pub fn engine_source_metrics_at(input: &[f64]) -> Vec<f64> {
-        call(input, |request: SourceMetricsAt| {
-            let handle = u32::try_from(request.engine).ok()?;
-            with_engine(handle, |engine| {
-                Ok(interpolated_metrics(
-                    engine.session.font(),
-                    &request.location,
-                ))
-            })
-            .ok()
-            .flatten()
-        })
     }
 
     fn interpolated_metrics(font: &Font, location: &[f64]) -> Option<InterpolatedMetrics> {

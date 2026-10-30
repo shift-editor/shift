@@ -3,91 +3,96 @@
 //!
 //! The exports exist only with the `shaping` feature, which builds them into
 //! `@shift/wasm/shaping`, a module of its own that the editor loads when
-//! text first needs shaping. The layouts below are declared either way, so
-//! the editor's side generates without the feature.
+//! text first needs shaping. The [`Shaping`] interface and its types are
+//! declared either way, so the editor's side generates without the feature.
 //!
 //! This module is a separate instance from `@shift/wasm`, with its own name
 //! table, so nothing here crosses as an interned name: units, locations, and
 //! tags are numbers.
 
-use crate::layout::layout;
+use pack::Pack;
 
-layout! {
-    /// How one shaper axis's user coordinates normalize, at each mapping point.
-    pub struct ShaperAxis {
-        pub user: Vec<f64>,
-        pub normalized: Vec<f64>,
-    }
+/// Text shaping with shapers registered with `registerShaper`.
+#[pack::interface]
+pub trait Shaping {
+    /// Sets how a registered shaper's axes normalize and which glyph each
+    /// character maps to; false for an unregistered shaper.
+    fn set_shaper_glyphs(&self, glyphs: ShaperGlyphs) -> bool;
+    /// Shapes paragraphs with a registered shaper: each paragraph's runs, or
+    /// null for a paragraph that cannot be shaped or an unregistered shaper.
+    fn shape_paragraphs(&self, request: ShapeParagraphs) -> Vec<Option<Vec<ShapedRunOutput>>>;
 }
 
-layout! {
-    /// A registered shaper's axes, in `fvar` order, and character mapping.
-    pub struct ShaperGlyphs {
-        pub shaper: usize,
-        pub axes: Vec<ShaperAxis>,
-        /// Characters as code points, each mapping to the shaper glyph at the same index of `glyphs`.
-        pub codepoints: Vec<f64>,
-        pub glyphs: Vec<f64>,
-    }
+/// How one shaper axis's user coordinates normalize, at each mapping point.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ShaperAxis {
+    pub user: Vec<f64>,
+    pub normalized: Vec<f64>,
 }
 
-layout! {
-    /// A feature setting for every run of a paragraph.
-    pub struct FeatureInput {
-        /// The feature tag's four bytes, big-endian.
-        pub tag: f64,
-        /// `0` turns the feature off, `1` on; larger values pick an alternate.
-        pub value: f64 => setting,
-    }
+/// A registered shaper's axes, in `fvar` order, and character mapping.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ShaperGlyphs {
+    pub shaper: usize,
+    pub axes: Vec<ShaperAxis>,
+    /// Characters as code points, each mapping to the shaper glyph at the same index of `glyphs`.
+    pub codepoints: Vec<f64>,
+    pub glyphs: Vec<f64>,
 }
 
-layout! {
-    /// One paragraph to shape.
-    pub struct ParagraphInput {
-        /// Each unit: a code point, or `-(glyph + 1)` for a glyph inserted by name as its shaper glyph id.
-        pub units: Vec<f64>,
-        /// The user coordinate on each shaper axis, in order; NaN for the axis default.
-        pub location: Vec<f64>,
-        /// A BCP 47 language tag as UTF-16 code units; empty for the default language system.
-        pub language: Vec<f64>,
-        pub features: Vec<FeatureInput>,
-    }
+/// A feature setting for every run of a paragraph.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct FeatureInput {
+    /// The feature tag's four bytes, big-endian.
+    pub tag: f64,
+    /// `0` turns the feature off, `1` on; larger values pick an alternate.
+    #[pack(rename = "setting")]
+    pub value: f64,
 }
 
-layout! {
-    /// Paragraphs to shape with one registered shaper.
-    pub struct ShapeParagraphs {
-        pub shaper: usize,
-        pub paragraphs: Vec<ParagraphInput>,
-    }
+/// One paragraph to shape.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ParagraphInput {
+    /// Each unit: a code point, or `-(glyph + 1)` for a glyph inserted by name as its shaper glyph id.
+    pub units: Vec<f64>,
+    /// The user coordinate on each shaper axis, in order; NaN for the axis default.
+    pub location: Vec<f64>,
+    /// A BCP 47 language tag as UTF-16 code units; empty for the default language system.
+    pub language: Vec<f64>,
+    pub features: Vec<FeatureInput>,
 }
 
-layout! {
-    /// One shaped glyph, in font units.
-    pub struct ShapedGlyphOutput {
-        /// The shaper glyph; null for `.notdef`.
-        pub glyph: Option<usize>,
-        /// The paragraph unit the glyph's cluster starts at.
-        pub cluster: usize,
-        pub x_advance: f64,
-        pub y_advance: f64,
-        pub x_offset: f64,
-        pub y_offset: f64,
-    }
+/// Paragraphs to shape with one registered shaper.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ShapeParagraphs {
+    pub shaper: usize,
+    pub paragraphs: Vec<ParagraphInput>,
 }
 
-layout! {
-    /// One run of a shaped paragraph, in logical order.
-    pub struct ShapedRunOutput {
-        /// The paragraph units the run covers, from `start` up to `end`.
-        pub start: usize,
-        pub end: usize,
-        /// The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script.
-        pub script: f64,
-        pub right_to_left: bool,
-        /// The run's glyphs in visual order.
-        pub glyphs: Vec<ShapedGlyphOutput>,
-    }
+/// One shaped glyph, in font units.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ShapedGlyphOutput {
+    /// The shaper glyph; null for `.notdef`.
+    pub glyph: Option<usize>,
+    /// The paragraph unit the glyph's cluster starts at.
+    pub cluster: usize,
+    pub x_advance: f64,
+    pub y_advance: f64,
+    pub x_offset: f64,
+    pub y_offset: f64,
+}
+
+/// One run of a shaped paragraph, in logical order.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct ShapedRunOutput {
+    /// The paragraph units the run covers, from `start` up to `end`.
+    pub start: usize,
+    pub end: usize,
+    /// The run's ISO 15924 script tag's four bytes, big-endian; 0 when the run has no specific script.
+    pub script: f64,
+    pub right_to_left: bool,
+    /// The run's glyphs in visual order.
+    pub glyphs: Vec<ShapedGlyphOutput>,
 }
 
 #[cfg(feature = "shaping")]
@@ -101,12 +106,12 @@ mod exports {
     };
     use wasm_bindgen::prelude::*;
 
-    use crate::layout::whole;
-
     use super::{
-        ParagraphInput, ShapeParagraphs, ShapedGlyphOutput, ShapedRunOutput, ShaperGlyphs,
+        ParagraphInput, ShapeParagraphs, ShapedGlyphOutput, ShapedRunOutput, ShaperGlyphs, Shaping,
+        shaping_request,
     };
-    use crate::layout::call;
+    use crate::names::with_names;
+    use crate::numbers::whole;
 
     thread_local! {
         static SHAPERS: RefCell<Vec<Option<Registered>>> = const { RefCell::new(Vec::new()) };
@@ -175,10 +180,11 @@ mod exports {
         });
     }
 
-    /// Input: `ShaperGlyphs`. Output: whether the shaper is registered.
-    #[wasm_bindgen(js_name = setShaperGlyphs)]
-    pub fn set_shaper_glyphs(input: &[f64]) -> Vec<f64> {
-        call(input, |glyphs: ShaperGlyphs| {
+    /// The registered shapers [`Shaping`] calls.
+    pub struct Shapers;
+
+    impl Shaping for Shapers {
+        fn set_shaper_glyphs(&self, glyphs: ShaperGlyphs) -> bool {
             SHAPERS.with_borrow_mut(|shapers| {
                 let Some(Some(registered)) = shapers.get_mut(glyphs.shaper) else {
                     return false;
@@ -201,14 +207,9 @@ mod exports {
                 };
                 true
             })
-        })
-    }
+        }
 
-    /// Input: `ShapeParagraphs`. Output: each paragraph's runs, or null for
-    /// a paragraph that cannot be shaped or an unregistered shaper.
-    #[wasm_bindgen(js_name = shapeParagraphs)]
-    pub fn shape_paragraphs(input: &[f64]) -> Vec<f64> {
-        call(input, |request: ShapeParagraphs| {
+        fn shape_paragraphs(&self, request: ShapeParagraphs) -> Vec<Option<Vec<ShapedRunOutput>>> {
             SHAPERS.with_borrow(|shapers| {
                 let registered = shapers.get(request.shaper).and_then(Option::as_ref);
                 request
@@ -219,7 +220,14 @@ mod exports {
                     })
                     .collect::<Vec<_>>()
             })
-        })
+        }
+    }
+
+    /// Runs one [`Shaping`] method for the editor's generated `Shaping`
+    /// class.
+    #[wasm_bindgen(js_name = shapingRequest)]
+    pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
+        with_names(|names| shaping_request(&Shapers, method, input, names))
     }
 
     fn shape(

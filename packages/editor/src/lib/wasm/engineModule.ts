@@ -16,6 +16,7 @@ import {
   enginePreview,
   engineRedo,
   engineRelease,
+  engineReads,
   engineRewindEdit,
   engineSourceNumbers,
   engineStage,
@@ -27,15 +28,10 @@ import {
   type EngineStage,
   type MissingKerningOrigin,
 } from "@shift/wasm/engine";
-import {
-  engineKerningPairs,
-  engineKerningRun,
-  engineSourceMetricsAt,
-  type EditablePair,
-  type InterpolatedMetrics,
-} from "./generated/engineLayouts";
+import type { EditablePair, EngineReads, InterpolatedMetrics } from "@shift/wasm/protocol";
 
-export { svgPathContours, type ContourPoints } from "./generated/engineLayouts";
+export { svgPaths } from "@shift/wasm/engine";
+export type { ContourPoints } from "@shift/wasm/protocol";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 
@@ -53,6 +49,7 @@ const released = new FinalizationRegistry<number>(engineRelease);
  */
 export class EngineSession {
   readonly #handle: number;
+  readonly #reads: EngineReads;
   // non-reactive: numbers the session interned for each id; an id's number never changes
   readonly #glyphNumbers = new Map<GlyphId, number>();
   // non-reactive: as #glyphNumbers, for sources
@@ -60,6 +57,7 @@ export class EngineSession {
 
   private constructor(handle: number) {
     this.#handle = handle;
+    this.#reads = engineReads(handle);
     released.register(this, handle, this);
   }
 
@@ -147,7 +145,7 @@ export class EngineSession {
         ? this.#numbers([place.sourceId], this.#sourceNumbers, engineSourceNumbers)[0]
         : null;
     const location = place.kind === "location" ? place.location : [];
-    const values = engineKerningRun({ engine: this.#handle, source, location, glyphs });
+    const values = this.#reads.kerningRun(source ?? null, location, glyphs);
     return values ?? unkerned(pairs);
   }
 
@@ -160,7 +158,7 @@ export class EngineSession {
   kerningPairs(sourceId: SourceId, pairs: readonly GlyphId[]): readonly EditablePair[] {
     const [source] = this.#numbers([sourceId], this.#sourceNumbers, engineSourceNumbers);
     const glyphs = this.#numbers(pairs, this.#glyphNumbers, engineGlyphNumbers);
-    return engineKerningPairs({ engine: this.#handle, source: source ?? 0, glyphs });
+    return this.#reads.kerningPairs(source ?? 0, glyphs);
   }
 
   /**
@@ -186,7 +184,7 @@ export class EngineSession {
    * @returns null when the font's masters do not interpolate, as for a static font.
    */
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
-    return engineSourceMetricsAt({ engine: this.#handle, location });
+    return this.#reads.sourceMetricsAt(location);
   }
 
   /**
