@@ -1,6 +1,6 @@
 #[cfg(test)]
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::Connection;
 use shift_font as font;
@@ -157,38 +157,34 @@ pub(crate) fn referenced_glyph_ids_for_glyphs_from_conn(
     conn: &Connection,
     glyph_ids: &[font::GlyphId],
 ) -> Result<Vec<font::GlyphId>, StoreError> {
-    let mut result = HashSet::new();
+    // The id list is one JSON parameter, not a placeholder per id, so the
+    // statement text is the same for every batch and stays prepared. Through
+    // the recovery views, preparing it costs far more than running it.
+    //
+    // Keys go through IN subqueries, not joins: a recovered document reads
+    // through merged UNION ALL views, and SQLite pushes WHERE terms into
+    // them but not join terms, so a join scans every component row.
+    let mut stmt = conn.prepare_cached(
+        "SELECT DISTINCT c.base_glyph_id
+         FROM glyph_components AS c
+         WHERE c.layer_id IN (
+             SELECT l.id FROM glyph_layers AS l
+             WHERE l.glyph_id IN (SELECT value FROM json_each(?1))
+         )",
+    )?;
+    let mut result = BTreeSet::new();
     for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
         #[cfg(test)]
         COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(count.get() + 1));
 
-        let placeholders = (0..count_batch.len())
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
-        // Keys go through IN subqueries, not joins: a recovered document reads
-        // through merged UNION ALL views, and SQLite pushes WHERE terms into
-        // them but not join terms, so a join scans every component row.
-        let sql = format!(
-            "SELECT DISTINCT c.base_glyph_id
-             FROM glyph_components AS c
-             WHERE c.layer_id IN (
-                 SELECT l.id FROM glyph_layers AS l WHERE l.glyph_id IN ({placeholders})
-             )"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-            |row| row.get::<_, font::GlyphId>(0),
-        )?;
+        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+            row.get::<_, font::GlyphId>(0)
+        })?;
         for row in rows {
             result.insert(row?);
         }
     }
-
-    let mut result = result.into_iter().collect::<Vec<_>>();
-    result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-    Ok(result)
+    Ok(result.into_iter().collect())
 }
 
 pub(crate) fn referenced_glyph_closure_from_conn(
@@ -220,35 +216,30 @@ pub(crate) fn dependent_glyph_ids_for_layers_from_conn(
     if layer_ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut result = HashSet::new();
+    // One JSON parameter and IN subqueries, as in
+    // `referenced_glyph_ids_for_glyphs_from_conn`. `users` is materialised:
+    // otherwise SQLite pushes `IN users` into both arms of the merged
+    // `glyph_layers` view and finds the component rows once per arm.
+    let mut stmt = conn.prepare_cached(
+        "WITH users AS MATERIALIZED (
+             SELECT c.layer_id FROM glyph_components AS c
+             WHERE c.base_glyph_id IN (
+                 SELECT target.glyph_id FROM glyph_layers AS target
+                 WHERE target.id IN (SELECT value FROM json_each(?1))
+             )
+         )
+         SELECT DISTINCT owner.glyph_id
+         FROM glyph_layers AS owner
+         WHERE owner.id IN users",
+    )?;
+    let mut result = BTreeSet::new();
     for count_batch in layer_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-        let placeholders = (0..count_batch.len())
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
-        // IN subqueries rather than joins, for the merged views; see
-        // `referenced_glyph_ids_for_glyphs`.
-        let sql = format!(
-            "SELECT DISTINCT owner.glyph_id
-             FROM glyph_layers AS owner
-             WHERE owner.id IN (
-                 SELECT c.layer_id FROM glyph_components AS c
-                 WHERE c.base_glyph_id IN (
-                     SELECT target.glyph_id FROM glyph_layers AS target
-                     WHERE target.id IN ({placeholders})
-                 )
-             )"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-            |row| row.get::<_, font::GlyphId>(0),
-        )?;
+        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+            row.get::<_, font::GlyphId>(0)
+        })?;
         for row in rows {
             result.insert(row?);
         }
     }
-    let mut result: Vec<_> = result.into_iter().collect();
-    result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-    Ok(result)
+    Ok(result.into_iter().collect())
 }

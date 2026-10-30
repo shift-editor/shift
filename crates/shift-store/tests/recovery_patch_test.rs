@@ -2,7 +2,7 @@ use shift_font::{CreateKerningGroup, RenameKerningGroup, SetKerningGroupMember, 
 use std::sync::Arc;
 
 use shift_font::test_support::sample_font;
-use shift_store::{SaveState, ShiftStore};
+use shift_store::{SaveState, ShiftStore, StoreReader};
 
 fn source_collection(font: &shift_font::Font) -> shift_font::SourceCollection {
     shift_font::SourceCollection {
@@ -691,4 +691,113 @@ fn kerning_group_edits_persist_in_a_working_store_and_a_recovery_overlay() {
             .unwrap(),
         font
     );
+}
+
+/// A document of the sample font, where `A` draws `acute` twice, opened with
+/// a recovery overlay and a reader beside it.
+fn component_document(temp: &tempfile::TempDir) -> (ShiftStore, StoreReader) {
+    let document_path = temp.path().join("Components.shift");
+    let recovery_path = temp.path().join("recovery.sqlite");
+    drop(ShiftStore::create_document(&document_path, &sample_font()).expect("create document"));
+    let document = ShiftStore::open_document_with_recovery(&document_path, &recovery_path)
+        .expect("open with recovery");
+    let reader = StoreReader::open_document(&document_path, &recovery_path).expect("open reader");
+    (document, reader)
+}
+
+/// The glyphs drawing the glyph that owns `layer`, as the writer and the
+/// reader both answer.
+fn dependents(
+    document: &ShiftStore,
+    reader: &StoreReader,
+    layer: &str,
+) -> Vec<shift_font::GlyphId> {
+    let layer_ids = [shift_font::LayerId::from_raw(layer)];
+    let dependents = document.dependent_glyph_ids_for_layers(&layer_ids).unwrap();
+    assert_eq!(
+        reader.dependent_glyph_ids_for_layers(&layer_ids).unwrap(),
+        dependents
+    );
+    dependents
+}
+
+/// The component closure of `root`, as the writer and the reader both answer.
+fn closure(document: &ShiftStore, reader: &StoreReader, root: &str) -> Vec<shift_font::GlyphId> {
+    let roots = [shift_font::GlyphId::from_raw(root)];
+    let closure = document.referenced_glyph_closure(roots).unwrap();
+    assert_eq!(reader.referenced_glyph_closure(roots).unwrap(), closure);
+    closure
+}
+
+fn glyph_ids(ids: &[&str]) -> Vec<shift_font::GlyphId> {
+    ids.iter()
+        .copied()
+        .map(shift_font::GlyphId::from_raw)
+        .collect()
+}
+
+#[test]
+fn component_queries_see_composites_added_and_changed_in_the_overlay() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let (mut document, reader) = component_document(&temp);
+    assert_eq!(
+        dependents(&document, &reader, "acute_regular"),
+        glyph_ids(&["A"])
+    );
+    assert_eq!(closure(&document, &reader, "A"), glyph_ids(&["A", "acute"]));
+
+    let mut added = shift_font::Glyph::with_id(shift_font::GlyphId::from_raw("Aring"), "Aring");
+    let mut added_layer = shift_font::GlyphLayer::with_width(
+        shift_font::LayerId::from_raw("Aring_regular"),
+        shift_font::SourceId::from_raw("regular"),
+        600.0,
+    );
+    added_layer.add_component(shift_font::Component::new(
+        shift_font::GlyphId::from_raw("A"),
+        "A",
+    ));
+    added.set_layer(added_layer);
+    let mut post = sample_font();
+    post.insert_glyph(added.clone()).expect("insert glyph");
+    document
+        .apply_change_set_with_font(&glyph_created(&added).into(), &post, SaveState::Unsaved)
+        .unwrap();
+
+    assert_eq!(
+        dependents(&document, &reader, "A_regular"),
+        glyph_ids(&["Aring"])
+    );
+    assert_eq!(
+        closure(&document, &reader, "Aring"),
+        glyph_ids(&["Aring", "A", "acute"])
+    );
+
+    let mut changed = document
+        .load_glyph_layer(shift_font::LayerId::from_raw("A_regular"))
+        .unwrap()
+        .unwrap();
+    changed.clear_components();
+    document.replace_glyph_layer(&changed).unwrap();
+
+    assert!(dependents(&document, &reader, "acute_regular").is_empty());
+    assert_eq!(
+        closure(&document, &reader, "Aring"),
+        glyph_ids(&["Aring", "A"])
+    );
+}
+
+#[test]
+fn component_queries_hide_a_composite_deleted_in_the_overlay() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let (mut document, reader) = component_document(&temp);
+    let mut post = sample_font();
+    let composite_id = shift_font::GlyphId::from_raw("A");
+    let composite = post.glyph(composite_id).unwrap().clone();
+    post.pop_glyph(composite_id).expect("pop tail glyph");
+    document
+        .apply_change_set_with_font(&glyph_deleted(&composite).into(), &post, SaveState::Unsaved)
+        .unwrap();
+
+    assert!(dependents(&document, &reader, "acute_regular").is_empty());
+    assert_eq!(closure(&document, &reader, "A"), glyph_ids(&["A"]));
 }
