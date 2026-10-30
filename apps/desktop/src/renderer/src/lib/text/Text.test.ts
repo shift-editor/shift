@@ -1,15 +1,71 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Mat } from "@shift/geo";
-import { Point } from "@shift/glyph-state";
-import { localPoint, scenePoint } from "@shift/editor/spaces";
-import { effect } from "@shift/editor/signals";
-import { characterTextItem, glyphTextItem } from "@shift/editor/text";
+import type { Editor } from "@shift/editor";
+import { localPoint, scenePoint, type LocalPoint } from "@shift/editor/spaces";
+import { effect, untracked } from "@shift/editor/signals";
 import { trackRunLayouts } from "@shift/editor/tools";
-import type { GlyphName } from "@shift/types";
-import { TestEditor } from "@/testing/TestEditor";
+import type { TextRunNode } from "@shift/editor/types";
+import { rect } from "@/testing/fixtures";
+import { startEditorWith } from "@/testing/fontFixture";
+import type { EditorTestSurface } from "@/testing/surface";
+import { openTestEditor, startTestEditor } from "@/testing/TestEditor";
 
 const FONTS = resolve(process.cwd(), "../../fixtures/fonts");
+
+/** Pastes `text` after the edited glyph in Text mode, then goes back to editing it. */
+async function pasteAfterEditedGlyph(editor: EditorTestSurface, text: string): Promise<void> {
+  editor.selectTool("text");
+  editor.pasteText(text);
+  await editor.pressKey("Escape");
+  await editor.settle();
+}
+
+/** Puts the Text mode caret before the first item, as Command-Left does. */
+function caretToStart(editor: EditorTestSurface): void {
+  editor.selectTool("text");
+  editor.moveCaret(-1, "line");
+}
+
+/** The canvas text, which a test expects to be there. */
+function canvasText(editor: EditorTestSurface) {
+  const text = editor.canvasText();
+  if (!text) throw new Error("Expected canvas text");
+  return text;
+}
+
+/** The canvas text run node, for the subject calls below. */
+function runNode(editor: Editor): TextRunNode {
+  const node = editor.scene.nodes().find((candidate) => candidate.kind === "textRun");
+  if (!node) throw new Error("Expected a text run");
+  return node as TextRunNode;
+}
+
+/**
+ * Scales each selected run glyph twice over from its own bottom-left, through
+ * the run's transform target. No resize handle shows for several run glyphs
+ * selected at the run level, so this drives the subject directly.
+ */
+function scaleRunGlyphsTwice(editor: Editor): void {
+  const edit = editor.transformTarget()!.begin("scale");
+  edit.preview(({ bounds }) =>
+    Mat.Compose(
+      Mat.Translate(bounds.left, bounds.bottom),
+      Mat.Compose(Mat.Scale(2, 2), Mat.Translate(-bounds.left, -bounds.bottom)),
+    ),
+  );
+  edit.commit();
+}
+
+/** The caret the text run node definition maps `point`, in the run's units, to. */
+function caretAt(editor: Editor, point: LocalPoint): number | null {
+  return editor.nodeDefinition("textRun").caretAt(runNode(editor), point);
+}
+
+/** The run-local point a scene point lands on. */
+function runLocal(editor: Editor, x: number): LocalPoint {
+  return editor.toLocal(runNode(editor), scenePoint(x, 0));
+}
 
 /**
  * Subject tests of `Text`'s layout cells and the text run node: when a layout
@@ -18,77 +74,62 @@ const FONTS = resolve(process.cwd(), "../../fixtures/fonts");
  */
 describe("Text layout cells", () => {
   it("keep a run's layout while a point moves, since only anchors place marks", async () => {
-    const editor = await new TestEditor().openSession(
-      resolve(FONTS, "AnchorPropagation.glyphs"),
-      "a",
-    );
-    for (const record of editor.font.glyphRecords()) await editor.font.loadGlyph(record.id);
-    const id = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
-    const layer = editor.requireGlyphLayer();
-    const contourId = layer.addContour();
-    const pointId = layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
-    await editor.settle();
-    const run = editor.text.createRun([glyphTextItem(id("a")), glyphTextItem(id("acutecomb"))]);
-    const layout = editor.text.layoutCell(run.id);
-    // Subscribed the way the canvas holds a run's layout.
-    const subscription = effect(() => void layout.value);
-    await editor.text.settled();
-    const before = layout.peek();
+    const editor = await openTestEditor(resolve(FONTS, "AnchorPropagation.glyphs"), "a");
+    const { point } = await editor.draw({
+      contours: [{ points: [{ x: 0, y: 0, name: "point" }] }],
+    });
+    await pasteAfterEditedGlyph(editor, "/acutecomb");
+    // Counting holds the layout the way the canvas holds a run's layout.
+    const before = editor.textLayoutCount();
 
-    layer.previewPositionPatch([{ kind: "point", id: pointId, x: 40, y: 0 }]);
-    subscription.dispose();
+    editor.selectTool("select");
+    editor.holdDrag(point, { x: 40, y: 0 });
 
-    expect(layout.peek()).toBe(before);
+    expect(editor.textLayoutCount()).toBe(before);
     await editor.close();
   });
 
   it("keep a run's layout while the caret moves, and rebuild it when items change", async () => {
-    const editor = await new TestEditor().startSession();
+    const editor = await startTestEditor();
     editor.selectTool("text");
-    const layoutCell = editor.text.layoutCell(editor.textRun!.runId);
-    const initial = layoutCell.peek();
+    const initial = editor.textLayoutCount();
 
-    editor.textEditing.placeAtCluster(0);
-    expect(layoutCell.peek()).toBe(initial);
-    editor.textEditing.insert([characterTextItem(65)]);
-    const populated = layoutCell.peek();
+    caretToStart(editor);
+    expect(editor.textLayoutCount()).toBe(initial);
+    editor.typeText("A");
+    const populated = editor.textLayoutCount();
     expect(populated).not.toBe(initial);
-    editor.textEditing.move(-1, "character");
-    expect(layoutCell.peek()).toBe(populated);
+    editor.moveCaret(-1, "character");
+    expect(editor.textLayoutCount()).toBe(populated);
     await editor.close();
   });
 
   it("read a run's current layout without subscribing", async () => {
-    const editor = await new TestEditor().startSession();
+    const editor = await startTestEditor();
     editor.selectTool("text");
-    const runId = editor.textRun!.runId;
 
-    const before = editor.text.layout(runId)!;
-    expect(before).toBe(editor.text.layoutCell(runId).peek());
+    const before = canvasText(editor);
+    expect(before).toEqual(editor.canvasText());
 
-    editor.textEditing.placeAtCluster(0);
-    editor.textEditing.insert([characterTextItem(65)]);
-    expect(editor.text.layout(runId)!.placedGlyphs).toHaveLength(before.placedGlyphs.length + 1);
+    caretToStart(editor);
+    editor.typeText("A");
+    expect(canvasText(editor).glyphs).toHaveLength(before.glyphs.length + 1);
     await editor.close();
   });
 
   it("redraw an overlay tracking every run's layout when the active source changes", async () => {
-    const editor = await new TestEditor().openSession(
+    const editor = await openTestEditor(
       resolve(FONTS, "mutatorsans-variable/MutatorSans.designspace"),
       "T",
     );
-    editor.selectTool("text");
-    editor.textEditing.insert([characterTextItem(65)]);
-    editor.escape();
-    await editor.settle();
-    const placed = () => editor.text.layout(editor.textRun!.runId)!.placedGlyphs;
+    await pasteAfterEditedGlyph(editor, "A");
     const drawn: number[] = [];
     const overlay = effect(() => {
-      trackRunLayouts(editor);
-      drawn.push(placed()[1]!.left);
+      trackRunLayouts(editor.asEditor());
+      drawn.push(untracked(() => canvasText(editor).glyphs[1]!.left));
     });
 
-    editor.selectSource(editor.font.sourceNamed("BoldWide")!.id);
+    editor.clickSource("BoldWide");
     overlay.dispose();
 
     expect(drawn).toHaveLength(2);
@@ -98,101 +139,78 @@ describe("Text layout cells", () => {
 });
 
 describe("TextRunNodeDefinition", () => {
-  // No resize handle shows for several run glyphs selected at the run level, so
-  // this drives the run's transform target directly.
   it("scales each glyph from its own edge, and a component follows its scaled base once", async () => {
-    const editor = await new TestEditor().startSession();
-    await editor.addGlyph("B", 66);
-    const bRecord = editor.font.recordForName("B" as GlyphName)!;
-    const bLayer = (await editor.font.loadGlyph(bRecord.id)).layerForSource(
-      editor.font.defaultSource.id,
-    )!;
-    const contourId = bLayer.addContour();
-    for (const [x, y] of [
-      [100, 100],
-      [300, 100],
-      [300, 300],
-      [100, 300],
-    ] as const) {
-      bLayer.addPoint(contourId, Point.onCurve({ x, y }));
-    }
-    bLayer.closeContour(contourId);
-    bLayer.setXAdvance(500);
-    const aLayer = editor.requireGlyphLayer();
-    aLayer.addComponent(bRecord.id);
-    editor.selectTool("text");
-    editor.textEditing.insertText("B");
-    editor.escape();
-    editor.selection.clear();
-    editor.escape();
+    const editor = await startEditorWith({
+      glyphs: {
+        B: { unicode: 66, outline: { advance: 500, contours: [rect(100, 100, 200, 200)] } },
+        A: { outline: { components: [{ glyph: "B" }] } },
+      },
+    });
+    await pasteAfterEditedGlyph(editor, "B");
+    editor.select([]);
+    await editor.pressKey("Escape");
     await editor.settle();
 
     editor.selectAll();
-    const edit = editor.transformTarget()!.begin("scale");
-    edit.preview(({ bounds }) =>
-      Mat.Compose(
-        Mat.Translate(bounds.left, bounds.bottom),
-        Mat.Compose(Mat.Scale(2, 2), Mat.Translate(-bounds.left, -bounds.bottom)),
-      ),
-    );
-    edit.commit();
+    scaleRunGlyphsTwice(editor.asEditor());
     await editor.settle();
 
-    expect(bLayer.sidebearings).toEqual({ lsb: 100, rsb: 200 });
-    expect(bLayer.xAdvance).toBe(700);
-    expect(aLayer.components[0]?.matrix).toMatchObject({ a: 1, d: 1, e: 0, f: 0 });
+    const b = await editor.drawnGlyph("B");
+    expect(b.sidebearings).toEqual({ lsb: 100, rsb: 200 });
+    expect(b.advanceWidth).toBe(700);
+    const [component] = (await editor.layerOf("A")).components;
+    expect(component?.transformation).toMatchObject({ xx: 1, yy: 1, dx: 0, dy: 0 });
     await editor.close();
   });
 
   it("deletes the edited child when any writer removes its item, in the same undo step", async () => {
-    const editor = await new TestEditor().startSession();
-    const run = editor.textRun!;
-    const child = editor.runGlyph!;
+    const editor = await startTestEditor();
+    const childItemId = canvasText(editor).editedItemId;
+    if (!childItemId) throw new Error("Expected the edited glyph's item");
 
-    editor.history.capture("Clear run", () => editor.text.setItems(run.runId, []));
-    expect(editor.scene.node(child.id)).toBeNull();
+    editor.selectTool("text");
+    editor.selectAllText();
+    editor.deleteBackward();
+    // In Text mode the open glyph is the edited child; none is open once its item is gone.
+    expect(canvasText(editor)).toMatchObject({ items: [], openItemId: null });
 
     await editor.undo();
-    expect(editor.text.run(run.runId)!.items[0]?.id).toBe(child.itemId);
-    expect(editor.scene.node(child.id)).not.toBeNull();
+    expect(canvasText(editor).items[0]?.id).toBe(childItemId);
+    expect(canvasText(editor)).toMatchObject({ openItemId: childItemId });
     await editor.close();
   });
 
   it("maps a point in a scaled run to its caret position", async () => {
-    const editor = await new TestEditor().startSession();
-    const run = editor.textRun!;
-    editor.selectTool("text");
-    editor.textEditing.insert([characterTextItem(65)]);
-    editor.scene.updateNode({ id: run.id, size: editor.font.metricsCell.peek().unitsPerEm * 2 });
-    const node = editor.scene.nodeOfKind(run.id, "textRun")!;
-    const advance = editor.text.layout(node.runId)!.totalAdvance / 2;
-    const definition = editor.nodeDefinition("textRun");
+    const editor = await startTestEditor();
+    caretToStart(editor);
+    editor.typeText("A");
+    editor.setTextSize(editor.metrics().unitsPerEm * 2);
+    const advance = canvasText(editor).advance / 2;
 
-    expect(definition.caretAt(node, localPoint(advance * 1.75, 0))).toBe(2);
-    expect(definition.caretAt(node, editor.toLocal(node, scenePoint(advance * 3.5, 0)))).toBe(2);
-    expect(definition.caretAt(node, localPoint(advance * 10, 0))).toBeNull();
+    expect(caretAt(editor.asEditor(), localPoint(advance * 1.75, 0))).toBe(2);
+    expect(caretAt(editor.asEditor(), runLocal(editor.asEditor(), advance * 3.5))).toBe(2);
+    expect(caretAt(editor.asEditor(), localPoint(advance * 10, 0))).toBeNull();
     await editor.close();
   });
 });
 
 describe("TextEditing", () => {
   it("shows the caret, its selection and where it draws only in the edited node", async () => {
-    const editor = await new TestEditor().startSession();
-    editor.selectTool("text");
-    const node = editor.textRun!;
-    editor.textEditing.placeAtCluster(0);
-    editor.textEditing.insert([characterTextItem(65), characterTextItem(66)]);
-    editor.textEditing.move(-1, "character", true);
-    const layout = editor.text.layout(node.runId)!;
+    const editor = await startTestEditor();
+    caretToStart(editor);
+    editor.typeText("AB");
+    editor.moveCaret(-1, "character", true);
+    const glyph = canvasText(editor).glyphs[1]!;
 
-    expect(editor.textEditing.caretIn(node.id)).toEqual({
-      cluster: 1,
+    expect(canvasText(editor).caret).toEqual({
+      position: 1,
       selection: { start: 1, end: 2 },
-      position: layout.caretAt(1).position(),
+      x: glyph.left,
+      y: glyph.baseline,
     });
 
-    editor.escape();
-    expect(editor.textEditing.caretIn(node.id)).toBeNull();
+    await editor.pressKey("Escape");
+    expect(canvasText(editor).caret).toBeNull();
     await editor.close();
   });
 });
