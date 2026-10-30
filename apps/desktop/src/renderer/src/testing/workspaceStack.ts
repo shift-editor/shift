@@ -11,7 +11,9 @@ import {
   type TransportMessage,
 } from "@shared/workspace/channel";
 import { toTransportError } from "@shared/errors";
-import type { ShellCallMap, ShellEventMap, SyncCallMap } from "@shared/workspace/protocol";
+import type { WorkspaceShell, WorkspaceSync } from "@shared/workspace/lanes";
+import type { ShellEventMap, ShellPortCallMap } from "@shared/workspace/protocol";
+import { client as laneClient } from "@shared/workspace/remote";
 import { WorkspaceHost } from "../../../utility/workspace/WorkspaceHost";
 import { Font, FontStore } from "@shift/editor/model";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
@@ -53,13 +55,16 @@ export function createWorkspaceStack(): WorkspaceStack {
     shell: nodePortTransport(shellLane.port2),
     portTransport: (port) => nodePortTransport(port as NodeMessagePort),
   }).start();
-  const shell = new Channel<ShellCallMap, ShellEventMap>(nodePortTransport(shellLane.port1));
+  const shellChannel = new Channel<ShellPortCallMap, ShellEventMap>(
+    nodePortTransport(shellLane.port1),
+  );
+  const shell = laneClient<WorkspaceShell, ShellPortCallMap, ShellEventMap>(shellChannel);
 
   const refusals = { pending: 0 };
   const client = new FontSessionClient(null, {
     transport: async () => {
       const lane = new MessageChannel();
-      await shell.call("workspace.connect", undefined, [lane.port1]);
+      await shellChannel.call("connect", undefined, [lane.port1]);
       return refusingPersists(nodePortTransport(lane.port2), refusals);
     },
   });
@@ -75,7 +80,7 @@ export function createWorkspaceStack(): WorkspaceStack {
     editCoordinator,
     font,
     async createWorkspace(): Promise<void> {
-      await shell.call("workspace.create", undefined);
+      await shell.create();
       await client.connect();
 
       const snapshot = client.workspaceCell.peek();
@@ -87,7 +92,7 @@ export function createWorkspaceStack(): WorkspaceStack {
       await editCoordinator.reopenEngine();
     },
     async openWorkspace(sourcePath: string): Promise<void> {
-      await shell.call("workspace.open", { path: sourcePath });
+      await shell.open(sourcePath);
       await client.connect();
 
       const snapshot = client.workspaceCell.peek();
@@ -99,7 +104,7 @@ export function createWorkspaceStack(): WorkspaceStack {
       await editCoordinator.reopenEngine();
     },
     async closeWorkspace(discard = false): Promise<void> {
-      await shell.call("workspace.close", { discard });
+      await shell.close(discard);
     },
     failNextPersist(): void {
       refusals.pending += 1;
@@ -107,20 +112,20 @@ export function createWorkspaceStack(): WorkspaceStack {
     dispose(): void {
       engine.dispose();
       client.dispose();
-      shell.dispose();
+      shellChannel.dispose();
       rmSync(documentsRoot, { recursive: true, force: true });
     },
   };
 }
 
 /**
- * `transport`, answering `refusals.pending` coming `workspace.persist`
+ * `transport`, answering `refusals.pending` coming `persist`
  * requests with an error instead of sending them: a workspace failing an edit
  * for a reason the window's engine cannot see, such as a refused write.
  */
 function refusingPersists(transport: Transport, refusals: { pending: number }): Transport {
   const listeners: ((message: TransportMessage) => void)[] = [];
-  const persist: keyof SyncCallMap = "workspace.persist";
+  const persist: keyof WorkspaceSync = "persist";
   return {
     ...transport,
     onMessage(listener) {
