@@ -1,0 +1,34 @@
+{
+  "name": "@shift/pack",
+  "version": "0.0.1",
+  "license": "MIT OR Apache-2.0",
+  "private": true,
+  "description": "The TypeScript side of crates/pack: reading and writing packed values, and generating each interface's class from the derive's fragments",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./generate": {
+      "types": "./src/generate.d.mts",
+      "import": "./src/generate.mjs",
+      "default": "./src/generate.mjs"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "oxlint --fix src/",
+    "lint:check": "oxlint --deny-warnings src/"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.10"
+  }
+}
