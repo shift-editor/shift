@@ -1,9 +1,6 @@
 import type {
-  AppliedChange,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  FontSnapshot,
-  SaveState,
   GlyphId,
   GlyphLayerSnapshot,
   GlyphPreview,
@@ -13,76 +10,47 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
+  SaveState,
   ShaperFont,
   SlugAtlas,
   Specimen,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
 } from "@shift/types";
+import type {
+  FontSourceAtlasPageRequest,
+  FontSourceSession,
+  FontSourceSnapshot,
+  FontStoreLocation,
+  PersistedChange,
+  SlugAtlasOrigin,
+  WorkspaceDocumentIdentity,
+  WorkspaceExportResult,
+  WorkspaceGlyphSnapshotRequest,
+  WorkspaceRecovery,
+  WorkspaceSlugAtlas,
+  WorkspaceSlugAtlasPageRequest,
+} from "./lanes";
 
 export type {
   FontSessionMode,
+  FontSourceAtlasPageRequest,
+  FontSourceSession,
+  FontSourceSnapshot,
+  SlugAtlasOrigin,
   Specimen,
+  WorkspaceDocumentIdentity,
   WorkspaceDocumentSourceKind,
   WorkspaceDocumentState,
+  WorkspaceExportResult,
   WorkspaceGlyphLayerSnapshot,
+  WorkspaceGlyphSnapshotRequest,
+  WorkspaceRecovery,
+  WorkspaceSlugAtlas,
+  WorkspaceSlugAtlasPageRequest,
   WorkspaceSnapshot,
-} from "@shift/types";
-
-export type WorkspaceGlyphSnapshotRequest = {
-  glyphId: GlyphId;
-};
-
-/** Process-local origin required to stream or discard one prepared atlas page. */
-export type SlugAtlasOrigin = "native" | "cached";
-
-/** Prepared page descriptor paired with its utility-owned byte origin. */
-export type WorkspaceSlugAtlas = SlugAtlas & {
-  origin: SlugAtlasOrigin;
-};
-
-/** One deterministic fixed-page request within the current authored revision. */
-export type WorkspaceSlugAtlasPageRequest = {
-  glyphIds: GlyphId[];
-  alignment: number;
-  pageIndex: number;
-  pageCount: number;
-  replacementPageIndices: number[];
-};
-
-/** Recoverable authored workspace discovered under the app-owned documents root. */
-export type WorkspaceRecovery =
-  | {
-      kind: "saved";
-      state: "recoverable";
-      workspaceId: string;
-      documentId: string;
-      canonicalPath: string;
-    }
-  | {
-      kind: "unsaved";
-      state: "recoverable";
-      workspaceId: string;
-    };
-
-/** Main-visible identity for one retained, read-only foreign source session. */
-export type FontSourceSession = {
-  sessionId: string;
-  canonicalPath: string;
-};
-
-/** Renderer catch-up state for the retained backend of the shared catalog. */
-export type FontSourceSnapshot = FontSourceSession & {
-  font: FontSnapshot;
-};
-
-/** One deterministic page request expressed in source-local glyph indexes. */
-export type FontSourceAtlasPageRequest = {
-  pageIndex: number;
-  glyphIds: GlyphId[];
-  coordinates: number[];
-  alignment: number;
-};
+} from "./lanes";
+export { FontStoreLocation } from "./lanes";
 
 /** Bounded byte delivery over a dedicated transferred port. */
 export type ByteStreamMessage =
@@ -106,16 +74,54 @@ export interface ByteReadableStreamReader<T> {
   releaseLock(): void;
 }
 
-/** Identifies one concrete canonical `.shift` document path. */
-export type WorkspaceDocumentIdentity = {
-  documentId: string;
-  canonicalPath: string;
+/**
+ * Shell-lane calls that carry a transferred port, served beside
+ * `WorkspaceShell`.
+ *
+ * @remarks
+ * The port arrives in the handler's context, not in the payload.
+ */
+export type ShellPortCallMap = {
+  /** Hands the window's sync-lane port to the workspace; replaces the previous sync lane. */
+  connect: { request: void; response: void };
 };
 
-/** Identifies the compiled font written by a workspace export. */
-export type WorkspaceExportResult = {
-  path: string;
-  format: "ttf";
+/** One-way shell-lane events from the workspace to main. */
+export type ShellEventMap = {
+  ready: void;
+  "document.changed": WorkspaceDocumentState | null;
+};
+
+/**
+ * Sync-lane calls that stream bytes over a transferred response port, served
+ * beside `WorkspaceSync`.
+ *
+ * @remarks
+ * Each resolves once the stream completes; the bytes travel on the port as
+ * {@link ByteStreamMessage}s. Their prepare and discard calls are interface
+ * methods.
+ */
+export type SyncStreamCallMap = {
+  /** Streams one prepared preview page (from `prepareSourceAtlasPage`). */
+  streamSourceAtlasPage: {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  /** Streams one prepared atlas generation (from `prepareSlugAtlas`). */
+  streamSlugAtlas: {
+    request: { generation: number; maximumLength: number };
+    response: null;
+  };
+  /** Streams one prepared page (from `prepareSlugAtlasPage`). */
+  streamSlugAtlasPage: {
+    request: { generation: number; origin: SlugAtlasOrigin; maximumLength: number };
+    response: null;
+  };
+};
+
+/** One-way sync-lane events from the workspace to the window. */
+export type SyncEventMap = {
+  "document.changed": WorkspaceDocumentState | null;
 };
 
 /**
@@ -168,45 +174,6 @@ export type ShellCallMap = {
   "workspace.specimen": { request: { path: string }; response: Specimen | null };
 };
 
-export type ShellEventMap = {
-  ready: void;
-  "document.changed": WorkspaceDocumentState | null;
-};
-
-/**
- * Sync lane: renderer ↔ utility.
- *
- * @remarks
- * Convention: **every sync-lane response is the renderer's next state** —
- * states, not acks. Create/open are main-owned shell-lane operations; the
- * renderer catches up by reading `workspace.snapshot`.
- */
-/**
- * Where an open workspace's font store lives, so another process can read
- * it read-only (its directory and layers): a document with its recovery
- * overlay, or the working store behind an untitled or imported workspace.
- */
-export type FontStoreLocation =
-  | { kind: "document"; documentPath: string; recoveryPath: string }
-  | { kind: "working"; storePath: string };
-
-export const FontStoreLocation = {
-  /** Whether `a` and `b` name the same store files. */
-  equals(a: FontStoreLocation, b: FontStoreLocation | null): boolean {
-    if (!b) return false;
-    switch (a.kind) {
-      case "document":
-        return (
-          b.kind === "document" &&
-          a.documentPath === b.documentPath &&
-          a.recoveryPath === b.recoveryPath
-        );
-      case "working":
-        return b.kind === "working" && a.storePath === b.storePath;
-    }
-  },
-};
-
 export type SyncCallMap = {
   "workspace.snapshot": { request: void; response: WorkspaceSnapshot | null };
   /** The open workspace's store, for the window's read-only layer reader; `null` for a preview. */
@@ -251,7 +218,7 @@ export type SyncCallMap = {
      * edits.
      */
     request: { changeSet: Uint8Array; saveState: SaveState };
-    response: { applied: AppliedChange; documentState: WorkspaceDocumentState };
+    response: PersistedChange;
   };
   /**
    * Saves to the current canonical document, or rejects when the workspace still
@@ -341,8 +308,4 @@ export type SyncCallMap = {
     request: { knownRevision: number | null };
     response: ShaperFont | null;
   };
-};
-
-export type SyncEventMap = {
-  "document.changed": WorkspaceDocumentState | null;
 };

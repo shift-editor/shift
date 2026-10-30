@@ -1,25 +1,51 @@
 import { createBridge, type ShiftBridge, type Specimen } from "@shift/bridge";
-import type { GlyphSnapshot } from "@shift/types";
+import type {
+  CatalogAtlasPage,
+  CatalogAtlasWeights,
+  GlyphId,
+  GlyphLayerSnapshot,
+  GlyphPreview,
+  GlyphProjection,
+  GlyphSnapshot,
+  LayerId,
+  LayerMatch,
+  LayerRead,
+  Location,
+  SaveState,
+  ShaperFont,
+  SlugAtlas,
+} from "@shift/types";
 import fs from "node:fs";
 import path from "node:path";
-import { serveChannel, type ChannelServer, type Transport } from "../../shared/workspace/channel";
+import { type ChannelServer, type Transport } from "../../shared/workspace/channel";
+import {
+  workspaceShellMethods,
+  workspaceSyncMethods,
+  type FontSourceAtlasPageRequest,
+  type FontSourceSession,
+  type FontSourceSnapshot,
+  type FontStoreLocation,
+  type PersistedChange,
+  type SlugAtlasOrigin,
+  type WorkspaceDocumentIdentity,
+  type WorkspaceDocumentSourceKind,
+  type WorkspaceDocumentState,
+  type WorkspaceExportResult,
+  type WorkspaceGlyphSnapshotRequest,
+  type WorkspaceRecovery,
+  type WorkspaceShell,
+  type WorkspaceSlugAtlas,
+  type WorkspaceSlugAtlasPageRequest,
+  type WorkspaceSnapshot,
+  type WorkspaceSync,
+} from "../../shared/workspace/lanes";
 import type {
-  FontSourceAtlasPageRequest,
-  FontSourceSession,
-  FontStoreLocation,
-  ShellCallMap,
   ShellEventMap,
-  SlugAtlasOrigin,
-  SyncCallMap,
+  ShellPortCallMap,
   SyncEventMap,
-  WorkspaceDocumentIdentity,
-  WorkspaceDocumentSourceKind,
-  WorkspaceDocumentState,
-  WorkspaceExportResult,
-  WorkspaceSlugAtlas,
-  WorkspaceSlugAtlasPageRequest,
-  WorkspaceSnapshot,
+  SyncStreamCallMap,
 } from "../../shared/workspace/protocol";
+import { serve } from "../../shared/workspace/remote";
 import { PortByteStream } from "../../shared/workspace/PortByteStream";
 import {
   closeCachedAtlas,
@@ -66,11 +92,12 @@ export type WorkspaceHostOptions = {
  * document storage.
  *
  * @remarks
- * Serves the shell lane (main ↔ utility plumbing) and one sync lane
- * (renderer ↔ utility workspace operations) at a time; a new
- * `workspace.connect` replaces the previous sync lane.
+ * Implements both lane interfaces: serves {@link WorkspaceShell} to main and
+ * {@link WorkspaceSync} to one window at a time; a new `connect` replaces the
+ * previous sync lane. Every call that touches the workspace runs behind one
+ * queue, so lanes cannot reorder each other's work.
  */
-export class WorkspaceHost {
+export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   readonly #bridge: ShiftBridge;
   readonly #documents: DocumentStorage;
   readonly #documentOpener: DocumentOpener;
@@ -108,112 +135,207 @@ export class WorkspaceHost {
 
   /** Serves the shell lane and announces readiness. Drafts are retained. */
   start(): void {
-    this.#shell = serveChannel<ShellCallMap, ShellEventMap>(this.#shellTransport, {
-      "workspace.create": () => this.#serialize(() => this.#create()),
-      "workspace.createFromSource": ({ sourcePath, documentPath }) =>
-        this.#serialize(() => this.#createFromSource(sourcePath, documentPath)),
-      "workspace.inspectDocument": ({ path }) => this.#serialize(() => this.#inspectDocument(path)),
-      "workspace.open": ({ path }) => this.#serialize(() => this.#open(path)),
-      "workspace.listRecoveries": () =>
-        this.#serialize(() => {
-          this.#documents.pruneOrphanedStorage();
-          return this.#documents.listRecoveries();
-        }),
-      "workspace.resume": ({ workspaceId }) => this.#serialize(() => this.#resume(workspaceId)),
-      "workspace.close": ({ discard }) => this.#serialize(() => this.#close(discard)),
-      "source.open": ({ path }) => this.#serialize(() => this.#openFontSource(path)),
-      "source.close": () => this.#serialize(() => this.#closeFontSource()),
-      "workspace.connect": (_payload, context) => {
-        this.#connectSyncLane(context.ports);
-      },
-      "document.state": () => this.#serialize(() => this.#documentState()),
-      "workspace.specimen": ({ path }) => this.#specimen(path),
-    });
+    this.#shell = serve<WorkspaceShell, ShellEventMap, ShellPortCallMap>(
+      this.#shellTransport,
+      this,
+      workspaceShellMethods,
+      { connect: (_payload, context) => this.#connectSyncLane(context.ports) },
+    );
 
     this.#shell.emit("ready", undefined);
+  }
+
+  // Shell lane.
+
+  create(): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => this.#create());
+  }
+
+  createFromSource(sourcePath: string, documentPath: string): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => this.#createFromSource(sourcePath, documentPath));
+  }
+
+  inspectDocument(path: string): Promise<WorkspaceDocumentIdentity> {
+    return this.#serialize(() => this.#inspectDocument(path));
+  }
+
+  open(path: string): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => this.#open(path));
+  }
+
+  listRecoveries(): Promise<WorkspaceRecovery[]> {
+    return this.#serialize(() => {
+      this.#documents.pruneOrphanedStorage();
+      return this.#documents.listRecoveries();
+    });
+  }
+
+  resume(workspaceId: string): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => this.#resume(workspaceId));
+  }
+
+  close(discard: boolean): Promise<null> {
+    return this.#serialize(() => this.#close(discard));
+  }
+
+  openSource(path: string): Promise<FontSourceSession> {
+    return this.#serialize(() => this.#openFontSource(path));
+  }
+
+  closeSource(): Promise<null> {
+    return this.#serialize(() => this.#closeFontSource());
+  }
+
+  specimen(path: string): Promise<Specimen | null> {
+    return this.#specimen(path);
+  }
+
+  // Both lanes.
+
+  documentState(): Promise<WorkspaceDocumentState | null> {
+    return this.#serialize(() => this.#documentState());
+  }
+
+  // Sync lane.
+
+  snapshot(): Promise<WorkspaceSnapshot | null> {
+    return this.#serialize(() =>
+      this.#state.kind === "document" ? this.#snapshot(this.#state.allocation.workspaceId) : null,
+    );
+  }
+
+  storeLocation(): Promise<FontStoreLocation | null> {
+    return this.#serialize(() => this.#storeLocation());
+  }
+
+  directory(): Promise<Uint8Array | null> {
+    return this.#serialize(() =>
+      this.#state.kind === "document" ? this.#bridge.encodedDirectory() : null,
+    );
+  }
+
+  sourceSnapshot(): Promise<FontSourceSnapshot | null> {
+    return this.#serialize(() => (this.#state.kind === "preview" ? this.#state.preview : null));
+  }
+
+  sourceGlyph(glyphId: GlyphId): Promise<GlyphSnapshot[]> {
+    return this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphId));
+  }
+
+  prepareSourceAtlasPage(request: FontSourceAtlasPageRequest): Promise<CatalogAtlasPage> {
+    return this.#serialize(() => this.#prepareSourceAtlasPage(request));
+  }
+
+  discardSourceAtlasPage(pageIndex: number, generation: number): Promise<null> {
+    return this.#serialize(() => this.#discardSourceAtlasPage(pageIndex, generation));
+  }
+
+  sourceAtlasWeights(coordinates: number[]): Promise<CatalogAtlasWeights[]> {
+    return this.#serialize(() => this.#bridge.sourceAtlasWeights(coordinates));
+  }
+
+  persist(changeSet: Uint8Array, saveState: SaveState): Promise<PersistedChange> {
+    return this.#serialize(() => {
+      const applied = this.#bridge.persist(changeSet, saveState);
+      this.#atlasCacheRevision = null;
+      return { applied, documentState: this.#emitDocumentChanged() };
+    });
+  }
+
+  // Save rides the edit lane: the same #serialize queue orders it behind
+  // every persisted edit, so it never writes stale state.
+  save(): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => this.#save());
+  }
+
+  saveAs(path: string): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => this.#saveAs(path));
+  }
+
+  releaseRetiredStores(): Promise<null> {
+    return this.#serialize(() => this.#releaseRetiredStores());
+  }
+
+  export(path: string): Promise<WorkspaceExportResult> {
+    return this.#export(path);
+  }
+
+  glyphSnapshots(requests: WorkspaceGlyphSnapshotRequest[]): Promise<GlyphSnapshot[]> {
+    return this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]);
+  }
+
+  readLayers(layerIds: LayerId[]): Promise<GlyphLayerSnapshot[]> {
+    return this.#serialize(() => this.#bridge.readLayers(layerIds));
+  }
+
+  resolveLayers(layerIds: LayerId[]): Promise<LayerRead[]> {
+    return this.#serialize(() => this.#bridge.resolveLayers(layerIds));
+  }
+
+  layerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
+    return this.#serialize(() => this.#bridge.getLayerMatch(referenceLayerId, targetLayerId));
+  }
+
+  glyphProjections(glyphIds: GlyphId[]): Promise<GlyphProjection[]> {
+    return this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds));
+  }
+
+  glyphPreviews(glyphIds: GlyphId[], location: Location): Promise<GlyphPreview[]> {
+    return this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location));
+  }
+
+  prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
+    return this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment));
+  }
+
+  prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
+    return this.#serialize(() => this.#prepareSlugAtlasPage(request));
+  }
+
+  discardSlugAtlas(generation: number): Promise<null> {
+    return this.#serialize(() => {
+      this.#bridge.discardSlugAtlas(generation);
+      return null;
+    });
+  }
+
+  discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<null> {
+    return this.#serialize(() => this.#discardSlugAtlasPage(generation, origin));
+  }
+
+  mapLocation(location: Location): Promise<Location> {
+    return this.#serialize(() => this.#bridge.mapLocation(location));
+  }
+
+  // Not serialized: a synchronous bridge read, so it never waits behind a save or import.
+  async shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
+    return this.#bridge.shaperFont(knownRevision ?? undefined) ?? null;
   }
 
   #connectSyncLane(ports: readonly unknown[]): void {
     const port = ports.at(0);
     if (!port) {
-      throw new Error("workspace.connect requires a transferred sync-lane port");
+      throw new Error("connect requires a transferred sync-lane port");
     }
 
     this.#sync?.dispose();
-    this.#sync = serveChannel<SyncCallMap, SyncEventMap>(this.#portTransport(port), {
-      "workspace.snapshot": () =>
-        this.#serialize(() =>
-          this.#state.kind === "document"
-            ? this.#snapshot(this.#state.allocation.workspaceId)
-            : null,
-        ),
-      "workspace.storeLocation": () => this.#serialize(() => this.#storeLocation()),
-      "workspace.directory": () =>
-        this.#serialize(() =>
-          this.#state.kind === "document" ? this.#bridge.encodedDirectory() : null,
-        ),
-      "source.snapshot": () =>
-        this.#serialize(() => (this.#state.kind === "preview" ? this.#state.preview : null)),
-      "source.glyph": ({ glyphId }) =>
-        this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphId)),
-      "source.atlasPagePrepare": (request) =>
-        this.#serialize(() => this.#prepareSourceAtlasPage(request)),
-      "source.atlasPageStream": ({ generation, maximumLength }, context) =>
-        this.#serialize(() =>
-          this.#streamSourceAtlasPage(generation, maximumLength, context.ports),
-        ),
-      "source.atlasPageDiscard": ({ pageIndex, generation }) =>
-        this.#serialize(() => this.#discardSourceAtlasPage(pageIndex, generation)),
-      "source.atlasWeights": ({ coordinates }) =>
-        this.#serialize(() => this.#bridge.sourceAtlasWeights(coordinates)),
-      "document.state": () => this.#serialize(() => this.#documentState()),
-      "workspace.persist": ({ changeSet, saveState }) =>
-        this.#serialize(() => {
-          const applied = this.#bridge.persist(changeSet, saveState);
-          this.#atlasCacheRevision = null;
-          return { applied, documentState: this.#emitDocumentChanged() };
-        }),
-      // Save rides the edit lane: the same #serialize queue orders it behind
-      // every persisted edit, so it never writes stale state.
-      "workspace.save": () => this.#serialize(() => this.#save()),
-      "workspace.saveAs": ({ path }) => this.#serialize(() => this.#saveAs(path)),
-      "workspace.releaseRetiredStores": () => this.#serialize(() => this.#releaseRetiredStores()),
-      "workspace.export": ({ path }) => this.#export(path),
-      "workspace.glyphSnapshots": ({ requests }) =>
-        this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]),
-      "workspace.layers.read": ({ layerIds }) =>
-        this.#serialize(() => this.#bridge.readLayers(layerIds)),
-      "workspace.layers.resolve": ({ layerIds }) =>
-        this.#serialize(() => this.#bridge.resolveLayers(layerIds)),
-      "workspace.layerMatch": ({ referenceLayerId, targetLayerId }) =>
-        this.#serialize(() => this.#bridge.getLayerMatch(referenceLayerId, targetLayerId)),
-      "workspace.glyphProjections": ({ glyphIds }) =>
-        this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds)),
-      "workspace.glyphPreviews": ({ glyphIds, location }) =>
-        this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location)),
-      "workspace.slugAtlasPrepare": ({ alignment }) =>
-        this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment)),
-      "workspace.slugAtlasPagePrepare": (request) =>
-        this.#serialize(() => this.#prepareSlugAtlasPage(request)),
-      "workspace.slugAtlasStream": ({ generation, maximumLength }, context) =>
-        this.#serialize(() => this.#streamSlugAtlas(generation, maximumLength, context.ports)),
-      "workspace.slugAtlasPageStream": ({ generation, origin, maximumLength }, context) =>
-        this.#serialize(() =>
-          this.#streamSlugAtlasPage(generation, origin, maximumLength, context.ports),
-        ),
-      "workspace.slugAtlasDiscard": ({ generation }) =>
-        this.#serialize(() => {
-          this.#bridge.discardSlugAtlas(generation);
-          return null;
-        }),
-      "workspace.slugAtlasPageDiscard": ({ generation, origin }) =>
-        this.#serialize(() => this.#discardSlugAtlasPage(generation, origin)),
-      "workspace.mapLocation": (location) =>
-        this.#serialize(() => this.#bridge.mapLocation(location)),
-      // Not serialized: a synchronous bridge read, so it never waits behind a save or import.
-      "workspace.shaperFont": ({ knownRevision }) =>
-        this.#bridge.shaperFont(knownRevision ?? undefined) ?? null,
-    });
+    this.#sync = serve<WorkspaceSync, SyncEventMap, SyncStreamCallMap>(
+      this.#portTransport(port),
+      this,
+      workspaceSyncMethods,
+      {
+        streamSourceAtlasPage: ({ generation, maximumLength }, context) =>
+          this.#serialize(() =>
+            this.#streamSourceAtlasPage(generation, maximumLength, context.ports),
+          ),
+        streamSlugAtlas: ({ generation, maximumLength }, context) =>
+          this.#serialize(() => this.#streamSlugAtlas(generation, maximumLength, context.ports)),
+        streamSlugAtlasPage: ({ generation, origin, maximumLength }, context) =>
+          this.#serialize(() =>
+            this.#streamSlugAtlasPage(generation, origin, maximumLength, context.ports),
+          ),
+      },
+    );
   }
 
   async #prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
@@ -308,7 +430,7 @@ export class WorkspaceHost {
     ports: readonly unknown[],
   ): Promise<null> {
     const port = ports.at(0);
-    if (!port) throw new Error("workspace.slugAtlasStream requires a transferred response port");
+    if (!port) throw new Error("streamSlugAtlas requires a transferred response port");
 
     const stream = new PortByteStream(this.#portTransport(port));
     try {
@@ -330,8 +452,7 @@ export class WorkspaceHost {
     ports: readonly unknown[],
   ): Promise<null> {
     const port = ports.at(0);
-    if (!port)
-      throw new Error("workspace.slugAtlasPageStream requires a transferred response port");
+    if (!port) throw new Error("streamSlugAtlasPage requires a transferred response port");
 
     const stream = new PortByteStream(this.#portTransport(port));
     if (origin === "cached") {
@@ -453,7 +574,7 @@ export class WorkspaceHost {
     ports: readonly unknown[],
   ): Promise<null> {
     const port = ports.at(0);
-    if (!port) throw new Error("source.atlasPageStream requires a transferred response port");
+    if (!port) throw new Error("streamSourceAtlasPage requires a transferred response port");
     if (!this.#preparedSourcePages.has(generation)) {
       throw new Error(`unknown source atlas generation ${generation}`);
     }
