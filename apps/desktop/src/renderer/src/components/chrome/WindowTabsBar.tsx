@@ -16,7 +16,12 @@ import GridIcon from "@/assets/toolbar/grid.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { useShownPageId } from "@/hooks/usePages";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
-import { windowLocation, type MovableTab, type WindowTab } from "@/lib/tabs/WindowTabs";
+import {
+  isMovableTab,
+  windowLocation,
+  type MovableTab,
+  type WindowTab,
+} from "@/lib/tabs/WindowTabs";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 /**
@@ -33,10 +38,7 @@ export const WindowTabsBar = () => {
   const active = tabs.activeTab(location);
 
   const overview = openTabs[0];
-  const rest = useMemo(
-    () => openTabs.filter((tab): tab is MovableTab => tab.kind !== "glyphs"),
-    [openTabs],
-  );
+  const rest = useMemo(() => openTabs.filter(isMovableTab), [openTabs]);
   const restIds = useMemo(() => rest.map((tab) => tab.id), [rest]);
   const label = (tab: WindowTab): string => {
     switch (tab.kind) {

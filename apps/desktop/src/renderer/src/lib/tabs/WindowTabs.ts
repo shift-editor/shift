@@ -334,7 +334,7 @@ export class WindowTabs {
 
   /** The page and glyph tabs, as {@link tabsCell} resolves them now. */
   #movable(): readonly MovableTab[] {
-    return this.#tabsCell.peek().filter((tab): tab is MovableTab => tab.kind !== "glyphs");
+    return this.#tabsCell.peek().filter(isMovableTab);
   }
 
   #selectionPage(): PageNode {
@@ -379,6 +379,11 @@ function resolveTabs(
     }
   }
   return tabs;
+}
+
+/** Whether a tab is a page or glyph tab, which can move and close, rather than the pinned overview. */
+export function isMovableTab(tab: WindowTab): tab is MovableTab {
+  return tab.kind !== "glyphs";
 }
 
 function hasPageTab(tabs: readonly MovableTab[], pageId: NodeId): boolean {

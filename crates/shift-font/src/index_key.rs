@@ -96,7 +96,10 @@ fn between_keys(a: &str, b: &str) -> Result<String, IndexKeyError> {
     let integer_b = integer_part(b)?;
     let fraction_b = &b[integer_b.len()..];
     if integer_a == integer_b {
-        return Ok(format!("{integer_a}{}", midpoint(fraction_a, Some(fraction_b))?));
+        return Ok(format!(
+            "{integer_a}{}",
+            midpoint(fraction_a, Some(fraction_b))?
+        ));
     }
 
     let next = increment(integer_a)?.ok_or_else(|| IndexKeyError::Exhausted(a.to_owned()))?;
@@ -108,7 +111,7 @@ fn between_keys(a: &str, b: &str) -> Result<String, IndexKeyError> {
 
 /// A fraction between `a` and `b` (or after `a` when `b` is `None`), `a < b`.
 fn midpoint(a: &str, b: Option<&str>) -> Result<String, IndexKeyError> {
-    let invalid = |key: &str| IndexKeyError::Invalid(key.to_owned());
+    let invalid = |key: &str| invalid(key);
     if a.ends_with('0') {
         return Err(invalid(a));
     }
@@ -124,13 +127,23 @@ fn midpoint(a: &str, b: Option<&str>) -> Result<String, IndexKeyError> {
             .count();
         if common > 0 {
             let rest_a = a.get(common..).unwrap_or("");
-            return Ok(format!("{}{}", &b[..common], midpoint(rest_a, Some(&b[common..]))?));
+            return Ok(format!(
+                "{}{}",
+                &b[..common],
+                midpoint(rest_a, Some(&b[common..]))?
+            ));
         }
     }
 
-    let digit_a = a.bytes().next().map_or(Ok(0), |digit| digit_index(digit, a))?;
+    let digit_a = a
+        .bytes()
+        .next()
+        .map_or(Ok(0), |digit| digit_index(digit, a))?;
     let digit_b = match b {
-        Some(b) => b.bytes().next().map_or(Ok(DIGITS.len()), |digit| digit_index(digit, b))?,
+        Some(b) => b
+            .bytes()
+            .next()
+            .map_or(Ok(DIGITS.len()), |digit| digit_index(digit, b))?,
         None => DIGITS.len(),
     };
     if digit_b - digit_a > 1 {
@@ -140,38 +153,53 @@ fn midpoint(a: &str, b: Option<&str>) -> Result<String, IndexKeyError> {
         return Ok(b[..1].to_owned());
     }
 
-    Ok(format!("{}{}", char::from(DIGITS[digit_a]), midpoint(a.get(1..).unwrap_or(""), None)?))
+    Ok(format!(
+        "{}{}",
+        char::from(DIGITS[digit_a]),
+        midpoint(a.get(1..).unwrap_or(""), None)?
+    ))
+}
+
+/// The error for a key that is not a fractional index.
+fn invalid(key: &str) -> IndexKeyError {
+    IndexKeyError::Invalid(key.to_owned())
 }
 
 fn validate(key: &str) -> Result<(), IndexKeyError> {
     if key == SMALLEST_INTEGER {
-        return Err(IndexKeyError::Invalid(key.to_owned()));
+        return Err(invalid(key));
     }
     let integer = integer_part(key)?;
     if key.len() > integer.len() && key.ends_with('0') {
-        return Err(IndexKeyError::Invalid(key.to_owned()));
+        return Err(invalid(key));
     }
     Ok(())
 }
 
 fn integer_part(key: &str) -> Result<&str, IndexKeyError> {
-    let head = key.bytes().next().ok_or_else(|| IndexKeyError::Invalid(key.to_owned()))?;
-    let length = integer_length(head).ok_or_else(|| IndexKeyError::Invalid(key.to_owned()))?;
-    key.get(..length).ok_or_else(|| IndexKeyError::Invalid(key.to_owned()))
+    let head = key.bytes().next().ok_or_else(|| invalid(key))?;
+    let length = integer_length(head).ok_or_else(|| invalid(key))?;
+    key.get(..length).ok_or_else(|| invalid(key))
 }
 
 /// The length of an integer part with head `head`: 2 for `a` and `Z`, one more per letter outward.
 fn integer_length(head: u8) -> Option<usize> {
     let half = INTEGER_HEADS.len() / 2;
-    let at = INTEGER_HEADS.iter().position(|&candidate| candidate == head)?;
-    Some(if at < half { half - at + 1 } else { at - half + 2 })
+    let at = INTEGER_HEADS
+        .iter()
+        .position(|&candidate| candidate == head)?;
+    Some(if at < half {
+        half - at + 1
+    } else {
+        at - half + 2
+    })
 }
 
 fn digit_index(digit: u8, key: &str) -> Result<usize, IndexKeyError> {
     DIGITS
         .iter()
         .position(|&candidate| candidate == digit)
-        .ok_or_else(|| IndexKeyError::Invalid(key.to_owned()))
+        .ok_or_else(|| invalid(key))
 }
 
 /// The next integer part, or `None` after the largest.
@@ -192,7 +220,7 @@ enum Step {
 
 fn step(integer: &str, direction: Step) -> Result<Option<String>, IndexKeyError> {
     let bytes = integer.as_bytes();
-    let (&head, digits) = bytes.split_first().ok_or_else(|| IndexKeyError::Invalid(integer.to_owned()))?;
+    let (&head, digits) = bytes.split_first().ok_or_else(|| invalid(integer))?;
     let (wrap_from, wrap_to) = match direction {
         Step::Up => (DIGITS[DIGITS.len() - 1], DIGITS[0]),
         Step::Down => (DIGITS[0], DIGITS[DIGITS.len() - 1]),
@@ -217,15 +245,16 @@ fn step(integer: &str, direction: Step) -> Result<Option<String>, IndexKeyError>
     let head_at = INTEGER_HEADS
         .iter()
         .position(|&candidate| candidate == head)
-        .ok_or_else(|| IndexKeyError::Invalid(integer.to_owned()))?;
+        .ok_or_else(|| invalid(integer))?;
     let next_at = match direction {
         Step::Up if head_at + 1 < INTEGER_HEADS.len() => head_at + 1,
         Step::Down if head_at > 0 => head_at - 1,
         _ => return Ok(None),
     };
     let next_head = INTEGER_HEADS[next_at];
-    let (Some(length), Some(next_length)) = (integer_length(head), integer_length(next_head)) else {
-        return Err(IndexKeyError::Invalid(integer.to_owned()));
+    let (Some(length), Some(next_length)) = (integer_length(head), integer_length(next_head))
+    else {
+        return Err(invalid(integer));
     };
     match next_length.cmp(&length) {
         Ordering::Greater => stepped.push(wrap_to),
@@ -315,18 +344,35 @@ mod tests {
 
     #[test]
     fn refuses_malformed_and_equal_keys() {
-        assert!(matches!(between(Some("a10"), None), Err(IndexKeyError::Invalid(_))));
-        assert!(matches!(between(Some(""), None), Err(IndexKeyError::Invalid(_))));
-        assert!(matches!(between(Some("!0"), None), Err(IndexKeyError::Invalid(_))));
-        assert!(matches!(between(Some(SMALLEST_INTEGER), None), Err(IndexKeyError::Invalid(_))));
-        assert_eq!(between(Some("a1"), Some("a1")), Err(IndexKeyError::Equal("a1".to_owned())));
+        assert!(matches!(
+            between(Some("a10"), None),
+            Err(IndexKeyError::Invalid(_))
+        ));
+        assert!(matches!(
+            between(Some(""), None),
+            Err(IndexKeyError::Invalid(_))
+        ));
+        assert!(matches!(
+            between(Some("!0"), None),
+            Err(IndexKeyError::Invalid(_))
+        ));
+        assert!(matches!(
+            between(Some(SMALLEST_INTEGER), None),
+            Err(IndexKeyError::Invalid(_))
+        ));
+        assert_eq!(
+            between(Some("a1"), Some("a1")),
+            Err(IndexKeyError::Equal("a1".to_owned()))
+        );
     }
 
     #[test]
     fn orders_the_keys_scenes_wrote_before_as_strings() {
         let mut existing: Vec<String> = (0..12).map(|count| format!("a{count}")).collect();
         existing.sort_by(|a, b| compare(a, b));
-        let as_strings = ["a0", "a1", "a10", "a11", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"];
+        let as_strings = [
+            "a0", "a1", "a10", "a11", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9",
+        ];
         assert_eq!(existing, as_strings);
     }
 }

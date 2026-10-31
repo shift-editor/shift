@@ -138,8 +138,10 @@ export function useSortableItem(id: string, disabled = false): SortableItemHandl
   };
 }
 
-export interface SortableItemProps
-  extends Omit<React.ComponentProps<"div">, "children" | "ref" | "style"> {
+export interface SortableItemProps extends Omit<
+  React.ComponentProps<"div">,
+  "children" | "ref" | "style"
+> {
   id: string;
   disabled?: boolean;
   /** Renders the item; spread `activator` on the control that drags it. */

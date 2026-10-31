@@ -9,6 +9,11 @@ use wasm_bindgen::prelude::wasm_bindgen;
 #[pack::interface]
 pub trait IndexKeys {
     /// A key after `before` and before `after`; `None` for the start or end of the list.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IndexKeyFailure`] when a key is malformed, the two are equal,
+    /// or they reach the end of the key space.
     fn between(
         &self,
         before: Option<String>,
@@ -84,7 +89,9 @@ mod tests {
     fn makes_and_orders_keys_as_shift_font_does() {
         let rules = IndexKeyRules;
         let first = rules.between(None, None).expect("a first key");
-        let next = rules.between(Some(first.clone()), None).expect("a next key");
+        let next = rules
+            .between(Some(first.clone()), None)
+            .expect("a next key");
 
         assert_eq!((first.as_str(), next.as_str()), ("a0", "a1"));
         assert_eq!(rules.compare(first.clone(), next.clone()), -1);
