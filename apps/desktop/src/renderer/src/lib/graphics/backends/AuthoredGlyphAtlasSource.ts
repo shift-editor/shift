@@ -51,6 +51,7 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
       weightSets: descriptor.weightSets,
       weightAxes: [...this.#axes()],
       weightMappingBases: [...this.#mappingBases()],
+      weightEngine: this.#edits.engine,
       resolvedWeights: null,
     };
   }

@@ -1,4 +1,4 @@
-import type { AxisId, NamedInstanceId, SourceId } from "@shift/types";
+import type { AxisId, InterpolationBasis, NamedInstanceId, SourceId } from "@shift/types";
 
 declare const axisLocationSpace: unique symbol;
 
@@ -11,6 +11,44 @@ export type ExternalAxisLocation = AxisLocation<"external">;
 
 /** Internal coordinates used by authored sources, interpolation, and exact-source matching. */
 export type DesignAxisLocation = AxisLocation<"design">;
+
+/**
+ * Evaluates a font's variation: its axis mappings, and the weights of the
+ * source sets its glyphs interpolate over, at a location.
+ *
+ * @remarks
+ * A `Font` chooses its reader once, as a computed: the window's editing
+ * engine while it is open, which builds the mappings and each source set's
+ * basis from its own font, or stateless `@shift/wasm` calls that carry the
+ * font's axes and bases otherwise. Both run shift-font's evaluators. Readers
+ * do not subscribe: {@link Designspace} subscribes for them.
+ */
+export interface VariationReader {
+  /** Maps an external location once, through the font's axis mappings, into design space. */
+  toDesign(location: ExternalAxisLocation): DesignAxisLocation;
+
+  /** The external location a design location's mapping came from, on the external axes. */
+  toExternal(location: DesignAxisLocation): ExternalAxisLocation;
+
+  /**
+   * The number this reader knows `basis`'s source set by, for
+   * {@link interpolationWeights}; it stays the set's for the reader's life.
+   */
+  sourceSet(basis: InterpolationBasis): number;
+
+  /**
+   * One weight per source of the source set numbered `set`, in its order, at
+   * a design location: shift-font's `InterpolationBasis::weights_at` for the
+   * basis the font gives that set.
+   *
+   * @remarks
+   * The result is shared between callers at the same location: read it, don't change it.
+   *
+   * @returns null when the font's sources give the set no model.
+   * @throws When `set` is not a number this reader gave.
+   */
+  interpolationWeights(set: number, location: DesignAxisLocation): Float64Array | null;
+}
 
 /** Identifies the source-creation constraint and control associated with a validation failure. */
 export type SourceCreationIssue =

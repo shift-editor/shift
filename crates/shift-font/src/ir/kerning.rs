@@ -82,6 +82,7 @@ impl KerningPair {
 
 /// The kerning that applies between two glyphs at one source.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ResolvedKerning {
     /// The authored pair that supplied the value.
     pub pair: KerningPair,

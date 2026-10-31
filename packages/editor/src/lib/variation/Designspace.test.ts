@@ -11,6 +11,18 @@ import {
 import { computed, signal } from "../signals";
 import { Designspace } from "./Designspace";
 import { axisValue, externalAxisLocationFromRecord } from "./location";
+import type {
+  CoordinateSpacesRemainDistinct,
+  MappingAcceptsExternalLocation,
+  MappingReturnsDesignLocation,
+} from "./location.test-d";
+
+const coordinateSpaceContract: readonly [
+  MappingAcceptsExternalLocation,
+  MappingReturnsDesignLocation,
+  CoordinateSpacesRemainDistinct,
+] = [true, true, true];
+void coordinateSpaceContract;
 
 function weightAxis(): Axis {
   return {

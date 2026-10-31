@@ -7,6 +7,7 @@ import type {
   SlugPreviewExtents,
   SlugWeightSet,
 } from "@shift/types";
+import type { FontEngine } from "@shift/editor/types";
 
 export interface GlyphAtlasGlyph {
   readonly glyphId: GlyphId;
@@ -26,6 +27,11 @@ export interface GlyphAtlasPage {
   readonly weightSets: readonly SlugWeightSet[];
   readonly weightAxes: readonly Axis[];
   readonly weightMappingBases: readonly AxisMappingBasis[];
+  /**
+   * The open document's engine, which evaluates the weight sets from its own
+   * font; null evaluates them statelessly from the bases above.
+   */
+  readonly weightEngine: FontEngine | null;
   readonly resolvedWeights: readonly number[] | null;
 }
 

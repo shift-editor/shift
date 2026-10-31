@@ -9,8 +9,6 @@ use shift_font::drag_rules::{DragContour, DragPoint, PointRef, PreparedDrag};
 use shift_font::kurbo::{Point, Vec2};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::variation::Registry;
-
 thread_local! {
     static DRAGS: RefCell<Registry<Prepared>> = const { RefCell::new(Registry::new()) };
 }
@@ -178,6 +176,47 @@ impl DragPointInput {
             position: Point::new(self.x, self.y),
             point_type: self.point_type,
             smooth: self.smooth,
+        }
+    }
+}
+
+/// Prepared drags by handle; a released handle is reused.
+struct Registry<T> {
+    entries: Vec<Option<T>>,
+    free: Vec<u32>,
+}
+
+impl<T> Registry<T> {
+    const fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+            free: Vec::new(),
+        }
+    }
+
+    fn insert(&mut self, value: T) -> u32 {
+        if let Some(handle) = self.free.pop() {
+            self.entries[handle as usize] = Some(value);
+            return handle;
+        }
+        self.entries.push(Some(value));
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "usize is 32 bits on wasm32, the only target that hands out handles"
+        )]
+        let handle = (self.entries.len() - 1) as u32;
+        handle
+    }
+
+    fn get(&self, handle: u32) -> Option<&T> {
+        self.entries.get(handle as usize)?.as_ref()
+    }
+
+    fn remove(&mut self, handle: u32) {
+        if let Some(entry) = self.entries.get_mut(handle as usize)
+            && entry.take().is_some()
+        {
+            self.free.push(handle);
         }
     }
 }

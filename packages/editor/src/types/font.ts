@@ -19,6 +19,7 @@ import type {
   GlyphName,
   Unicode,
   ReadonlyEntityMap,
+  SlugWeightSet,
   SourceId,
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
@@ -29,6 +30,7 @@ import type {
   EngineKerningPair,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  SourceSetWeights,
 } from "../lib/wasm/engine";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
@@ -143,6 +145,29 @@ export interface FontEngine {
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null;
 
   /**
+   * The open session's variation reads, a new value for each session it
+   * opens; null while the engine is not open.
+   */
+  readonly variationCell: Signal<EngineVariation | null>;
+
+  /**
+   * A Slug atlas's weights at an external location, from the bases the
+   * engine's font gives its weight sets: weight 0 is 1, and each set's
+   * weights sit at its `sourceWeightIndices`. Pass the atlas's same `sets`
+   * array every frame: the engine interns it once.
+   *
+   * @param external - External coordinates in the font's axis order, NaN for an axis default.
+   * @returns null while the engine is not open, when a set's sources are
+   * missing from the font or form no model, or a set names an index past
+   * `weightCount`.
+   */
+  atlasWeights(
+    sets: readonly SlugWeightSet[],
+    weightCount: number,
+    external: readonly number[],
+  ): readonly number[] | null;
+
+  /**
    * The name a new glyph asked to be called `name` takes: `name` trimmed, or
    * `newGlyph` when blank, numbered `.1`, `.2`, … past any glyph called that.
    *
@@ -157,6 +182,29 @@ export interface FontEngine {
    * @throws When the engine is not open.
    */
   newAnchorName(layerIds: readonly LayerId[]): string;
+}
+
+/**
+ * One engine session's variation reads, from the session's font as it
+ * stands, unsaved edits included: axis mapping, and the weights of the source
+ * sets it interned.
+ *
+ * @remarks
+ * Locations cross as numbers in the font's axis order, NaN for an axis the
+ * location omits. Reads on a released session answer empty.
+ */
+export interface EngineVariation {
+  /**
+   * The number the session interned the ordered source set `sourceIds` as,
+   * interning it when new; a set's number stays its own for the session's life.
+   */
+  sourceSetNumber(sourceIds: readonly SourceId[]): number;
+  /** Every interned source set's weights at a design location, in one read. */
+  sourceSetWeights(location: readonly number[]): SourceSetWeights;
+  /** An external location's design location, through the font's axis mappings, once. */
+  designLocation(external: readonly number[]): readonly number[];
+  /** The external location a design location's mapping came from; NaN on internal axes. */
+  externalLocation(design: readonly number[]): readonly number[];
 }
 
 /**

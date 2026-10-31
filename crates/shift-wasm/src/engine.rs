@@ -9,6 +9,7 @@
 //! layer comes back in the same shape as the workspace's echo.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
@@ -24,7 +25,7 @@ use shift_wire::replacement::FontReplacement;
 use shift_wire::{AnchorData, ComponentData, ContourData, values};
 use wasm_bindgen::prelude::*;
 
-use crate::engine_reads::InternedIds;
+use crate::engine_reads::{FontVariation, InternedIds};
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
@@ -223,6 +224,11 @@ pub(crate) struct Engine {
     /// The font-level records the latest apply, undo or redo changed, until
     /// `EngineEdits::replacement` takes them.
     pub(crate) replaced: Option<FontReplacement>,
+    /// The variation the reads evaluate, derived from the session's font on
+    /// first read and again once the font's axes, mappings or source
+    /// locations differ from the ones it was derived from; read it through
+    /// [`Engine::variation`].
+    variation: RefCell<Option<Rc<FontVariation>>>,
 }
 
 impl Engine {
@@ -234,12 +240,17 @@ impl Engine {
         let layers = engine_layers(before, &applied.layers)?;
         let edit = Object::new();
         set(&edit, "layers", &layers)?;
-        let impact = applied
-            .changes
-            .impact()
-            .difference(FontChangeImpact::GLYPHS);
-        self.replaced = FontReplacement::changed_by(self.session.font(), impact)?;
+        let impact = applied.changes.impact();
+        self.replaced = FontReplacement::changed_by(
+            self.session.font(),
+            impact.difference(FontChangeImpact::GLYPHS),
+        )?;
         Ok(edit)
+    }
+
+    /// The variation the reads evaluate for the session's font as it stands.
+    pub(crate) fn variation(&self) -> Rc<FontVariation> {
+        FontVariation::of(&self.variation, self.session.font())
     }
 
     /// The intents held for this apply, stage or preview, as one set.
@@ -255,7 +266,7 @@ impl Engine {
     pub(crate) fn load_layers(&mut self, layer_ids: Vec<LayerId>) -> Result<(), JsError> {
         self.session
             .load_layers(&mut HostLayers(&self.source), layer_ids)
-            .map_err(|error| JsError::new(&error.to_string()))
+            .map_err(js_error)
     }
 }
 
@@ -302,6 +313,7 @@ pub fn engine_open(
             ids: InternedIds::default(),
             held: Vec::new(),
             replaced: None,
+            variation: RefCell::default(),
         }));
         Ok(handle)
     })
@@ -551,10 +563,15 @@ pub fn engine_preview(handle: u32) -> Result<Array, JsError> {
     })
 }
 
+/// A Rust error as the `Error` an engine call throws, carrying its message.
+fn js_error(error: impl std::fmt::Display) -> JsError {
+    JsError::new(&error.to_string())
+}
+
 fn apply_error(error: ApplyError<HostError>) -> JsError {
     match error {
-        ApplyError::Load(error) => JsError::new(&error.to_string()),
-        ApplyError::Engine(error) => JsError::new(&error.to_string()),
+        ApplyError::Load(error) => js_error(error),
+        ApplyError::Engine(error) => js_error(error),
     }
 }
 
@@ -571,7 +588,7 @@ pub fn engine_preload(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError
         engine
             .session
             .load_glyph_closure(&mut HostLayers(&engine.source), glyph_ids)
-            .map_err(|error| JsError::new(&error.to_string()))
+            .map_err(js_error)
     })
 }
 

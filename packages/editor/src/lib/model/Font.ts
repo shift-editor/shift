@@ -58,6 +58,7 @@ import {
   type Signal,
 } from "../signals/signal";
 import type {
+  EngineVariation,
   FontEngine,
   FontOptions,
   FontRecordIndex,
@@ -65,7 +66,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import { locationValues } from "../wasm/variation";
+import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
@@ -84,7 +85,11 @@ import {
 } from "../variation/location";
 import { Designspace } from "../variation/Designspace";
 import { withIndependentMapping } from "../variation/independentMapping";
-import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
+import type {
+  DesignAxisLocation,
+  ExternalAxisLocation,
+  VariationReader,
+} from "../../types/variation";
 import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
@@ -316,11 +321,26 @@ export class Font {
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
     this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
-    this.#designspace = new Designspace({
-      axesCell: computed(() => fontCell.value?.axes ?? NO_AXES),
+    const axisRecordsCell = computed(() => fontCell.value?.axes ?? NO_AXES);
+    const variationCells = {
+      axesCell: axisRecordsCell,
       mappingBasesCell: this.#axisMappingBasesCell,
       sourcesCell: this.#sourcesCell,
-    });
+    };
+    const stateless = new StatelessVariationReader(axisRecordsCell, this.#axisMappingBasesCell);
+    const engineVariationCell = store.engine?.variationCell ?? NO_ENGINE_VARIATION;
+    // The engine's reader while a session is open, one per session: a set's
+    // number is the session's own.
+    const variationCell = computed<VariationReader>(
+      () => {
+        const engineVariation = engineVariationCell.value;
+        return engineVariation
+          ? new EngineVariationReader(engineVariation, variationCells)
+          : stateless;
+      },
+      { name: "font.variation" },
+    );
+    this.#designspace = new Designspace({ ...variationCells, variationCell });
     this.#axesCell = this.#designspace.axesCell;
     this.#externalAxesCell = computed(() =>
       this.#axesCell.value.filter((axis) => axis.role === "external"),
@@ -1755,9 +1775,7 @@ export class Font {
     });
     if (exactSource) return this.#metricsForSource(exactSource);
 
-    const interpolated = this.#store.engine?.sourceMetricsAt(
-      Array.from(locationValues(axes, designLocation)),
-    );
+    const interpolated = this.#store.engine?.sourceMetricsAt(locationValues(axes, designLocation));
     return (interpolated && this.#interpolatedMetrics(interpolated)) ?? this.defaultSourceMetrics;
   }
 
@@ -1806,7 +1824,7 @@ export class Font {
       if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
       return {
         kind: "location",
-        location: Array.from(locationValues(designspace.axes, designspace.toDesign(location))),
+        location: locationValues(designspace.axes, designspace.toDesign(location)),
       };
     });
     return this.#kerningCell.peek().between(pairs, place);
@@ -2014,6 +2032,7 @@ export class Font {
 
 /** Never changes: the revision of reads a font without an engine answers. */
 const NO_REVISIONS: Signal<number> = computed(() => 0);
+const NO_ENGINE_VARIATION: Signal<EngineVariation | null> = computed(() => null);
 const NO_AXES: readonly AxisRecord[] = [];
 
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */

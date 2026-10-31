@@ -6,18 +6,15 @@
 
 use fontir::ir::AnchorKind as IrAnchorKind;
 use pack::Pack;
-use serde::Serialize;
 use shift_font::anchor_attachment::{self, AnchorLike, Following, follow_anchors};
 use shift_font::anchor_propagation::{
     self, PropagatedAnchors, PropagationAnchor, compiled_anchors,
 };
 use shift_font::{ComponentAlignment, DecomposedTransform, Transform};
-use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
 /// An anchor's role in mark positioning, as export reads its name.
-#[derive(Serialize, Tsify)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq, Pack)]
 pub enum AnchorKind {
     /// `top`: marks attach here.
     Base { group: String },
@@ -39,44 +36,6 @@ pub enum AnchorKind {
     Invalid,
 }
 
-/// Returns the kind fontc reads from an anchor name.
-///
-/// # Errors
-///
-/// Returns a [`JsError`] when the kind cannot be converted to a JavaScript value.
-#[wasm_bindgen(js_name = anchorKind)]
-pub fn anchor_kind(name: &str) -> Result<Ts<AnchorKind>, JsError> {
-    let index = |index: usize| u32::try_from(index).unwrap_or(u32::MAX);
-    let kind = match IrAnchorKind::new(name) {
-        Ok(IrAnchorKind::Base(group)) => AnchorKind::Base {
-            group: group.to_string(),
-        },
-        Ok(IrAnchorKind::Mark(group)) => AnchorKind::Mark {
-            group: group.to_string(),
-        },
-        Ok(IrAnchorKind::Ligature {
-            group_name,
-            index: number,
-        }) => AnchorKind::Ligature {
-            group: group_name.to_string(),
-            index: index(number),
-        },
-        Ok(IrAnchorKind::ComponentMarker(number)) => AnchorKind::ComponentMarker {
-            index: index(number),
-        },
-        Ok(IrAnchorKind::Caret(number)) => AnchorKind::Caret {
-            index: index(number),
-        },
-        Ok(IrAnchorKind::VCaret(number)) => AnchorKind::Vcaret {
-            index: index(number),
-        },
-        Ok(IrAnchorKind::CursiveEntry) => AnchorKind::Entry,
-        Ok(IrAnchorKind::CursiveExit) => AnchorKind::Exit,
-        Err(_) => AnchorKind::Invalid,
-    };
-    Ok(kind.into_ts()?)
-}
-
 /// Anchor propagation and placement, as export and the workspace run them.
 #[pack::interface]
 pub trait Anchors {
@@ -85,6 +44,8 @@ pub trait Anchors {
     /// Places a composite's components after an edit, anchored ones on their
     /// anchors; one placement per component.
     fn follow_anchors(&self, components: Vec<FollowingComponent>) -> Vec<Following>;
+    /// The kind fontc reads from an anchor name.
+    fn anchor_kind(&self, name: String) -> AnchorKind;
 }
 
 /// The anchor rules [`Anchors`] calls.
@@ -121,6 +82,44 @@ impl Anchors for AnchorRules {
             })
             .collect::<Vec<_>>();
         follow_anchors(&components)
+    }
+
+    fn anchor_kind(&self, name: String) -> AnchorKind {
+        AnchorKind::of(&name)
+    }
+}
+
+impl AnchorKind {
+    /// The kind fontc reads from `name`.
+    fn of(name: &str) -> Self {
+        let index = |index: usize| u32::try_from(index).unwrap_or(u32::MAX);
+        match IrAnchorKind::new(name) {
+            Ok(IrAnchorKind::Base(group)) => Self::Base {
+                group: group.to_string(),
+            },
+            Ok(IrAnchorKind::Mark(group)) => Self::Mark {
+                group: group.to_string(),
+            },
+            Ok(IrAnchorKind::Ligature {
+                group_name,
+                index: number,
+            }) => Self::Ligature {
+                group: group_name.to_string(),
+                index: index(number),
+            },
+            Ok(IrAnchorKind::ComponentMarker(number)) => Self::ComponentMarker {
+                index: index(number),
+            },
+            Ok(IrAnchorKind::Caret(number)) => Self::Caret {
+                index: index(number),
+            },
+            Ok(IrAnchorKind::VCaret(number)) => Self::Vcaret {
+                index: index(number),
+            },
+            Ok(IrAnchorKind::CursiveEntry) => Self::Entry,
+            Ok(IrAnchorKind::CursiveExit) => Self::Exit,
+            Err(_) => Self::Invalid,
+        }
     }
 }
 

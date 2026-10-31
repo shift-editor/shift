@@ -126,6 +126,7 @@ impl Font {
 /// Where the value of a pair comes from at a source that authors no pair for
 /// it; see [`Font::missing_kerning_origin`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum MissingKerningOrigin {
     /// The source kerns on its own, so the missing pair kerns zero.
     Unkerned,

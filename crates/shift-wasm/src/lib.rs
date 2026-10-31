@@ -4,11 +4,12 @@
 //! native bridge, which is asynchronous, cannot. Each module calls the same
 //! code the workspace and export use, so there is one implementation.
 //!
-//! Cold values that cross the boundary are typed with `tsify`, which
-//! generates their TypeScript types. Hot calls are [`pack::interface`]
-//! traits, one request export each, whose values cross packed into flat
-//! number arrays; the editor's side is generated from them, and strings cross
-//! once each, as interned ids ([`names`]).
+//! Calls are [`pack::interface`] traits, one request export each, whose
+//! values cross packed into flat number arrays; the editor's side, and every
+//! type the calls carry, is generated from them, and strings cross once each,
+//! as interned ids ([`names`]). Only calls that pass typed arrays or
+//! JavaScript functions as they are (`blendSourceValues`, the engine's edit
+//! calls) are plain `wasm_bindgen` exports.
 
 // Library code returns errors instead of panicking: a panic kills the
 // WebAssembly engine. Tests may unwrap (clippy.toml).
@@ -36,8 +37,6 @@ pub mod engine_reads;
 pub mod geometry;
 pub mod names;
 mod numbers;
-#[cfg(feature = "reference")]
-pub mod reference;
 pub mod shaping;
 pub mod svg;
 pub mod variation;

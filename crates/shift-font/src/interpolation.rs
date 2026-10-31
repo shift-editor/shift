@@ -443,6 +443,36 @@ pub fn blend_values(weights: &[f64], sources: &[&[f64]]) -> Option<Vec<f64>> {
 }
 
 impl Font {
+    /// The interpolation basis over `source_ids`, in that order, at the
+    /// sources' current locations: the basis a glyph projection carries for
+    /// a glyph whose compatible sources are these, built from this font.
+    /// `None` when the sources cannot form a model, as when two share a
+    /// location.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CoreError::SourceNotFound`] for a source the font
+    /// lacks, or the font's error when its axis mappings cannot be compiled.
+    pub fn interpolation_basis_for(
+        &self,
+        source_ids: &[SourceId],
+    ) -> CoreResult<Option<InterpolationBasis>> {
+        let locations = source_ids
+            .iter()
+            .map(|source_id| {
+                Ok((
+                    *source_id,
+                    self.require_source(*source_id)?.location().clone(),
+                ))
+            })
+            .collect::<CoreResult<Vec<_>>>()?;
+        Ok(InterpolationBasis::from_source_locations(
+            &locations,
+            self.axes(),
+            self.design_normalization()?,
+        ))
+    }
+
     /// Builds interpolation for one glyph from compatible authored sources.
     ///
     /// The font default source defines topology when that glyph has a layer
@@ -776,6 +806,20 @@ mod tests {
                 assert!((weight - expected).abs() < 1e-9);
             }
         }
+    }
+
+    #[test]
+    fn a_source_sets_basis_is_the_one_its_glyphs_interpolate_with() {
+        let font = sample_variable_font();
+        let glyph = font.glyph_by_name("A").unwrap();
+        let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
+
+        let basis = font
+            .interpolation_basis_for(interpolation.basis().source_ids())
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(&basis, interpolation.basis());
     }
 
     #[test]
