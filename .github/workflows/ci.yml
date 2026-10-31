@@ -82,6 +82,8 @@ jobs:
               - '.oxlintrc.json'
               - 'tsconfig*.json'
               - 'turbo.json'
+              # A change to this workflow runs the jobs it may have changed.
+              - '.github/workflows/ci.yml'
             release:
               - '.github/workflows/**'
               - '.release-please-manifest.json'
