@@ -1,6 +1,6 @@
 # shift-engine
 
-<!-- reviewed: 2026-10-24 review-every: 90d -->
+<!-- reviewed: 2026-10-31 review-every: 90d -->
 
 The editing session over a partly loaded font. The native workspace runs it against its SQLite store; the renderer will run the same code through WebAssembly against a native reader in its preload. It depends only on `shift-font` and `pack`.
 
@@ -21,6 +21,7 @@ crates/shift-engine/src/
   session.rs    -- `EngineSession`: load, stage, commit, preview, evict
   residency.rs  -- `LayerResidency`: which directory layers are placeholders
   source.rs     -- `LayerSource`: where unloaded layers are read from
+  records.rs    -- `RecordSource`, `RecordCache`; glyph records and the shaper font's source, from loaded layers and the store
   store_reader.rs -- `StoreReader`: the `LayerSource` questions as a request protocol, and `StoreReadError`
 crates/shift-engine/tests/
   session_test.rs -- property test: a partly loaded session edits exactly as a fully loaded font
@@ -31,6 +32,8 @@ crates/shift-engine/tests/
 - `EngineSession` -- the font directory, its loaded layers, and which layers are still placeholders. Loads, stages, commits, and evicts.
 - `StagedEdit` -- an applied edit on a copy of the font that is not part of the session yet: its font and its `FontChangeSet`.
 - `LayerSource` -- a synchronous reader of persisted state: layer content, the glyphs given glyphs' components use (`bases_of`, transitively, without the glyphs themselves), and the glyphs built directly from given glyphs (`composites_of`).
+- `RecordSource` -- what glyph records and the shaper font's source read from the store for layers the session has not loaded: persisted component bases, the layers that carry an anchor marks attach to (`attaching_anchor_layers`), and glyph data's categories. `EngineSession::glyph_records` and `EngineSession::shaper_font_source` answer from loaded layers first, so unsaved edits count, and load nothing.
+- `RecordCache` -- the store's answers a session keeps: glyph data's category by name and codepoints (a pure function of both), and whether each layer the session has not loaded carries an attaching anchor (the store's copy cannot change until an edit loads it). `reading(source)` answers from it and asks `source` only for the rest. **WHY:** asking glyph data for all 10,000 glyphs took about 5 ms and the attaching-anchor read about 13 ms on every shaper source build; a session that evicts layers calls `forget_layers`
 - `StoreReader`, `StoreReaderClient`, `StoreReadError` -- the same questions across a process or module boundary: layers cross as one MessagePack blob (`pack::Bytes`), ids by the names each message carries.
 - `LayerResidency` -- which directory layers are placeholders.
 - `EngineError`, `LoadError`, `ApplyError` -- a failed stage (the session is unchanged), a failed load (layers loaded before the failure stay loaded), and either from `apply`.

@@ -18,7 +18,9 @@ pub use format::GLYPH_LAYER_FORMAT;
 pub use load::{MAX_LAYER_READ_BATCH_COUNT, MAX_LAYER_READ_BATCH_DECODED_BYTES};
 
 pub(crate) use format::encode_layer;
-pub(crate) use load::load_glyph_layers_from_conn;
+pub(crate) use load::{
+    layer_payload_digests_from_conn, load_glyph_layers_from_conn, present_layer_ids_from_conn,
+};
 pub(crate) use payload::StoredLayerPayload;
 pub(crate) use references::{
     bases_of_from_conn, component_bases_from_conn, composites_of_from_conn,

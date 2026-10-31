@@ -9,7 +9,8 @@ use napi::Env;
 use napi::bindgen_prelude::{Float64ArraySlice, Uint8ArraySlice};
 use napi_derive::napi;
 use pack::Bytes;
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
+use std::collections::{HashMap, HashSet};
 
 use shift_backends::GlyphCategories;
 use shift_engine::{StoreReadError, StoreReader, store_reader_request};
@@ -26,6 +27,17 @@ pub struct LayerReader {
   reader: Option<StoreFiles>,
   /// Glyphs' glyph data, parsed on the first category read.
   glyph_data: OnceCell<GlyphCategories>,
+  /// Whether each layer read so far carries an anchor marks attach to, with
+  /// the digest of the payload that answered, so a layer is decoded again
+  /// only once its payload changes. Anchors live inside the payload.
+  attaching_anchors: RefCell<HashMap<LayerId, AttachingAnchor>>,
+}
+
+/// What a layer's payload, by its digest, says about attaching anchors.
+#[derive(Clone, Copy)]
+struct AttachingAnchor {
+  digest: [u8; 32],
+  attaching: bool,
 }
 
 #[napi]
@@ -40,10 +52,7 @@ impl LayerReader {
   pub fn open_document(document_path: String, recovery_path: String) -> napi::Result<Self> {
     let reader =
       StoreFiles::open_document(document_path, recovery_path).map_err(BridgeError::from)?;
-    Ok(Self {
-      reader: Some(reader),
-      glyph_data: OnceCell::new(),
-    })
+    Ok(Self::new(reader))
   }
 
   /// Reads the working store behind an untitled or imported workspace.
@@ -54,10 +63,7 @@ impl LayerReader {
   #[napi(factory)]
   pub fn open_working_store(store_path: String) -> napi::Result<Self> {
     let reader = StoreFiles::open_working_store(store_path).map_err(BridgeError::from)?;
-    Ok(Self {
-      reader: Some(reader),
-      glyph_data: OnceCell::new(),
-    })
+    Ok(Self::new(reader))
   }
 
   /// Answers one [`StoreReader`] request, as the engine's `StoreReaderClient`
@@ -116,6 +122,40 @@ impl StoreReader for LayerReader {
       .get_or_init(GlyphCategories::new)
       .lookup_all(&glyphs)
   }
+
+  fn attaching_anchor_layers(
+    &self,
+    layer_ids: Vec<LayerId>,
+  ) -> Result<Vec<LayerId>, StoreReadError> {
+    let store = self.open()?;
+    let digests = store
+      .layer_payload_digests(&layer_ids)
+      .map_err(unreadable)?;
+    let mut known = self.attaching_anchors.borrow_mut();
+    let stale: Vec<LayerId> = digests
+      .iter()
+      .filter(|(layer_id, digest)| known.get(*layer_id).map(|known| &known.digest) != Some(*digest))
+      .map(|(layer_id, _)| *layer_id)
+      .collect();
+    let attaching: HashSet<LayerId> = store
+      .attaching_anchor_layers(&stale)
+      .map_err(unreadable)?
+      .into_iter()
+      .collect();
+    for layer_id in stale {
+      let digest = digests[&layer_id];
+      let attaching = attaching.contains(&layer_id);
+      known.insert(layer_id, AttachingAnchor { digest, attaching });
+    }
+    // Digests are in id order, so the answer is too.
+    Ok(
+      digests
+        .keys()
+        .copied()
+        .filter(|layer_id| known.get(layer_id).is_some_and(|known| known.attaching))
+        .collect(),
+    )
+  }
 }
 
 /// A store failure as the error that crosses to the engine, as its text.
@@ -126,6 +166,14 @@ fn unreadable(error: impl std::fmt::Display) -> StoreReadError {
 }
 
 impl LayerReader {
+  fn new(reader: StoreFiles) -> Self {
+    Self {
+      reader: Some(reader),
+      glyph_data: OnceCell::new(),
+      attaching_anchors: RefCell::new(HashMap::new()),
+    }
+  }
+
   /// The store, for a [`StoreReader`] method.
   fn open(&self) -> Result<&StoreFiles, StoreReadError> {
     self.reader.as_ref().ok_or(StoreReadError::Closed)
