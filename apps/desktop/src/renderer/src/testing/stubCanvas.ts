@@ -17,6 +17,7 @@ export function createStubContext(): CanvasRenderingContext2D {
     moveTo: noop,
     lineTo: noop,
     arc: noop,
+    rect: noop,
     stroke: noop,
     fill: noop,
     fillRect: noop,

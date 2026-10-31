@@ -58,7 +58,8 @@
     "shift/no-conditional-spread": "error",
     "shift/no-inline-comparator": "error",
     "shift/no-page-evaluate-in-specs": "error",
-    "shift/no-agent-types-in-behaviour-tests": "error"
+    "shift/no-agent-types-in-behaviour-tests": "error",
+    "shift/no-editor-internals-in-tests": "error"
   },
   "overrides": [
     {

@@ -16,7 +16,10 @@ import {
   SegmentDoubleClick,
   NodeDoubleClick,
 } from "./behaviors";
+import type { Point2D } from "@shift/geo";
+import type { SelectableId } from "@shift/types";
 import type { CursorType } from "../../../types/editor";
+import type { GlyphLayer } from "../../model/Glyph";
 import type { PositionGuide } from "../../../types/positionEdit";
 import { objectIsKindOf, type ShiftObject } from "../../../types/object";
 import type { Canvas } from "../../editor/rendering/Canvas";
@@ -63,6 +66,21 @@ export class Select extends BaseTool<SelectState, Select> {
   override get snapGuides(): readonly PositionGuide[] {
     const state = this.getState();
     return state.type === "translating" ? state.translate.guides : [];
+  }
+
+  /**
+   * The bounding-box corners of each contour of the edited layer, then of the
+   * selection, that the translation's guides may cross; empty while nothing snaps.
+   */
+  override get snapCrossings(): readonly Point2D[] {
+    if (this.snapGuides.length === 0) return [];
+    const ids = this.editor.selection.ids;
+    const selection = this.editor.positionSelection(ids);
+    return selection ? this.#crossings(ids, selection.layer) : [];
+  }
+
+  #crossings(ids: readonly SelectableId[], layer: GlyphLayer): Point2D[] {
+    return this.editor.snapping.crossings(layer, [this.editor.selectionBounds(ids)]);
   }
 
   override getCursor(state: SelectState): CursorType {
@@ -212,9 +230,7 @@ export class Select extends BaseTool<SelectState, Select> {
     const node = this.editor.selectionNode(ids);
     if (!selection || !node) return;
 
-    const crossings = this.editor.snapping.crossings(selection.layer, [
-      this.editor.selectionBounds(ids),
-    ]);
+    const crossings = this.#crossings(ids, selection.layer);
     canvas.withTransform(this.editor.sceneTransform(node), () => {
       this.#snapLines.draw(canvas, guides, crossings);
     });
