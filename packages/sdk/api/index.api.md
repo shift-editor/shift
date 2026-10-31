@@ -142,9 +142,9 @@ export type DesignAxisLocation = AxisLocation<"design">;
 // @public
 export class Designspace {
     constructor(cells: {
-        axesCell: Signal<Axis[]>;
-        mappingBasesCell: Signal<AxisMappingBasis[]>;
-        sourcesCell: Signal<Source[]>;
+        axesCell: Signal<readonly Axis[]>;
+        mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
+        sourcesCell: Signal<readonly Source[]>;
     });
     // (undocumented)
     get axes(): readonly Axis[];
@@ -472,9 +472,9 @@ export function externalAxisLocationFromRecord(values: Readonly<Record<string, n
 export class Font {
     constructor(input: FontOptions);
     assignKerningGroup(position: KerningPairPosition, glyphIds: readonly GlyphId[], groupId: KerningGroupId | null): Promise<void>;
-    get axesCell(): Signal<Axis[]>;
+    get axesCell(): Signal<readonly Axis[]>;
     axis(axisId: AxisId): Axis | null;
-    get axisMappingsCell(): Signal<AxisMapping[]>;
+    get axisMappingsCell(): Signal<readonly AxisMapping[]>;
     axisTagged(tag: string): Axis | null;
     beginKerningEdit(): KerningEdit;
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
@@ -511,9 +511,9 @@ export class Font {
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     get externalAxesCell(): Signal<readonly Axis[]>;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
-    getAxes(): Axis[];
-    getAxisMappingBases(): AxisMappingBasis[];
-    getAxisMappings(): AxisMapping[];
+    getAxes(): readonly Axis[];
+    getAxisMappingBases(): readonly AxisMappingBasis[];
+    getAxisMappings(): readonly AxisMapping[];
     get glyphCount(): number;
     glyphEntries(): readonly GlyphEntry[];
     get glyphEntriesCell(): Signal<readonly GlyphEntry[]>;
@@ -553,8 +553,8 @@ export class Font {
     // (undocumented)
     get metadata(): FontMetadata;
     get metadataCell(): Signal<FontMetadata>;
-    get metricDefinitions(): MetricDefinition[];
-    get metricDefinitionsCell(): Signal<MetricDefinition[]>;
+    get metricDefinitions(): readonly MetricDefinition[];
+    get metricDefinitionsCell(): Signal<readonly MetricDefinition[]>;
     // (undocumented)
     get metrics(): FontMetrics;
     metricsAtLocation(location: ExternalAxisLocation): SourceMetrics;
@@ -564,8 +564,8 @@ export class Font {
     missingPairOrigin(sourceId: SourceId): MissingKerningOrigin;
     namedInstance(instanceId: NamedInstanceId): NamedInstance | null;
     namedInstanceNamed(name: string): NamedInstance | null;
-    get namedInstances(): NamedInstance[];
-    get namedInstancesCell(): Signal<NamedInstance[]>;
+    get namedInstances(): readonly NamedInstance[];
+    get namedInstancesCell(): Signal<readonly NamedInstance[]>;
     nameForUnicode(unicode: Unicode): GlyphName;
     // (undocumented)
     nearestSource(location: ExternalAxisLocation): Source | null;
@@ -593,8 +593,8 @@ export class Font {
     sourceAtOrDefault(location: ExternalAxisLocation): Source;
     get sourceMetricsRevisionCell(): Signal<number>;
     sourceNamed(name: string): Source | null;
-    get sources(): Source[];
-    get sourcesCell(): Signal<Source[]>;
+    get sources(): readonly Source[];
+    get sourcesCell(): Signal<readonly Source[]>;
     // (undocumented)
     get unicodes(): readonly Unicode[];
     get unicodesCell(): Signal<Unicode[]>;
@@ -629,31 +629,31 @@ export interface FontOverview {
 // @public
 export type FontRevision = string;
 
-// @public (undocumented)
+// @public
 export interface FontSnapshot {
     // (undocumented)
-    axes: Array<Axis>;
+    readonly axes: readonly Axis[];
     // (undocumented)
-    axisMappingBases: Array<AxisMappingBasis>;
+    readonly axisMappingBases: readonly AxisMappingBasis[];
     // (undocumented)
-    axisMappings: Array<AxisMapping>;
+    readonly axisMappings: readonly AxisMapping[];
     // (undocumented)
-    glyphs: Array<GlyphEntry>;
+    readonly glyphs: readonly GlyphEntry[];
     // (undocumented)
-    kerning: KerningSnapshot;
-    languageIds?: Array<string>;
+    readonly kerning: KerningSnapshot;
+    readonly languageIds?: readonly string[] | null;
     // (undocumented)
-    metadata: FontMetadata;
+    readonly metadata: FontMetadata;
     // (undocumented)
-    metricDefinitions: Array<MetricDefinition>;
+    readonly metricDefinitions: readonly MetricDefinition[];
     // (undocumented)
-    metrics: FontMetrics;
+    readonly metrics: FontMetrics;
     // (undocumented)
-    namedInstances: Array<NamedInstance>;
+    readonly namedInstances: readonly NamedInstance[];
     // (undocumented)
-    sourceMetricsInterpolation?: SourceMetricsInterpolationSnapshot;
+    readonly sourceMetricsInterpolation?: SourceMetricsInterpolationSnapshot | null;
     // (undocumented)
-    sources: Array<Source>;
+    readonly sources: readonly Source[];
 }
 
 // @beta
@@ -737,11 +737,11 @@ export interface GlyphLayerReference {
 // @public (undocumented)
 export interface GlyphLayerSnapshot {
     // (undocumented)
-    glyphId: GlyphId;
+    readonly glyphId: GlyphId;
     // (undocumented)
-    sourceId: SourceId;
+    readonly sourceId: SourceId;
     // (undocumented)
-    state: GlyphState;
+    readonly state: GlyphState;
 }
 
 // @public (undocumented)
@@ -782,18 +782,18 @@ export interface GlyphReader {
 // @public (undocumented)
 export interface GlyphRecord {
     // (undocumented)
-    componentBaseGlyphIds: Array<GlyphId>;
+    readonly componentBaseGlyphIds: readonly GlyphId[];
     // (undocumented)
-    id: GlyphId;
+    readonly id: GlyphId;
     // (undocumented)
-    layers: Array<GlyphLayerRecord>;
-    ligature?: "explicit" | "subcategory";
-    mark?: boolean;
+    readonly layers: readonly GlyphLayerRecord[];
+    readonly ligature?: Ligature | null;
+    readonly mark: boolean;
     // (undocumented)
-    name: GlyphName;
-    nonspacingMark?: boolean;
+    readonly name: GlyphName;
+    readonly nonspacingMark: boolean;
     // (undocumented)
-    unicodes: Array<Unicode>;
+    readonly unicodes: readonly number[];
 }
 
 // @public (undocumented)
@@ -816,11 +816,11 @@ export type GlyphSelector = {
 // @public (undocumented)
 export interface GlyphSnapshot {
     // (undocumented)
-    glyphId: GlyphId;
+    readonly glyphId: GlyphId;
     // (undocumented)
-    layers: Array<GlyphLayerSnapshot>;
+    readonly layers: readonly GlyphLayerSnapshot[];
     // (undocumented)
-    projection?: GlyphProjection;
+    readonly projection?: GlyphProjection | null;
 }
 
 // @public
@@ -1012,7 +1012,7 @@ export interface LayerOverlays {
 // @public
 export interface LayerRead {
     // (undocumented)
-    authored: GlyphLayerSnapshot;
+    authored: GlyphLayerSnapshot$1;
     // (undocumented)
     resolved: ResolvedLayerGeometry;
 }
