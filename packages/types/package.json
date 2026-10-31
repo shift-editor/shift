@@ -14,7 +14,8 @@
     },
     "./native-protocol": {
       "types": "./src/bridge/protocol.ts",
-      "import": "./src/bridge/protocol.ts"
+      "import": "./src/bridge/protocol.ts",
+      "default": "./src/bridge/protocol.ts"
     }
   },
   "scripts": {
