@@ -1,18 +1,9 @@
-import { Mat, Polygon, type Bounds } from "@shift/geo";
+import { Polygon } from "@shift/geo";
 import type { Contour, GlyphGeometry, Point } from "@shift/glyph-state";
-import { ContourPath } from "@shift/editor/rendering";
 import { Validate } from "@shift/validation";
 import type { ContourId } from "@shift/types";
-import type {
-  ContourDirection,
-  GlyphIconFrame,
-  ObjectTree,
-  ObjectTreeItem,
-  PlacedContour,
-} from "@/types/objectTree";
-
-const CONTOUR_ICON_SIZE = 14;
-const CONTOUR_ICON_PADDING = 1;
+import type { ContourDirection, ObjectTree, ObjectTreeItem } from "@/types/objectTree";
+import { CONTOUR_ICON } from "./IconBox";
 
 /**
  * Builds the Objects panel tree for a glyph's geometry.
@@ -131,7 +122,7 @@ function contourItem(contour: Contour, contourIndex: number): ObjectTreeItem {
     id: contour.id,
     kind: "contour",
     icon: "contour",
-    iconPath: createContourIconPath(contour),
+    iconPath: CONTOUR_ICON.contourPath(contour),
     direction: contourDirection(contour),
     label: `Contour ${contourIndex + 1}`,
     children: contour.points.map((point, pointIndex) => {
@@ -151,64 +142,6 @@ function contourItem(contour: Contour, contourIndex: number): ObjectTreeItem {
       };
     }),
   };
-}
-
-export function createContourIconPath(contour: Contour): string | undefined {
-  const transform = iconTransform(contour.bounds);
-  return transform ? ContourPath.fromContour(contour, transform).svgPath : undefined;
-}
-
-/** Side of the square a glyph preview is drawn in, in pixels. */
-export const GLYPH_ICON_SIZE = 16;
-
-/**
- * Returns a filled SVG path previewing a whole glyph, components included.
- *
- * @remarks
- * Every glyph is drawn at the same scale, the font's height from descender
- * to ascender fitting the box, and centred on its advance, so a dot stays
- * small and a wide form stays wide, as in the glyph grid.
- */
-export function createGlyphIconPath(
-  contours: readonly PlacedContour[],
-  frame: GlyphIconFrame,
-): string | undefined {
-  const height = frame.ascender - frame.descender;
-  if (contours.length === 0 || height <= 0) return undefined;
-
-  const scale = (GLYPH_ICON_SIZE - CONTOUR_ICON_PADDING * 2) / height;
-  const fit = new Mat(
-    scale,
-    0,
-    0,
-    -scale,
-    (GLYPH_ICON_SIZE - frame.advance * scale) / 2,
-    CONTOUR_ICON_PADDING + frame.ascender * scale,
-  );
-  return contours
-    .map(
-      ({ contour, transform }) =>
-        ContourPath.fromContour(contour, Mat.Compose(fit, transform)).svgPath,
-    )
-    .join(" ");
-}
-
-/** Fits bounds, y-up, into the icon box, y-down, centred with padding. */
-function iconTransform(bounds: Bounds | null): Mat | null {
-  if (!bounds) return null;
-
-  const width = bounds.max.x - bounds.min.x;
-  const height = bounds.max.y - bounds.min.y;
-  const longestSide = Math.max(width, height);
-  if (longestSide === 0) return null;
-
-  const contentSize = CONTOUR_ICON_SIZE - CONTOUR_ICON_PADDING * 2;
-  const scale = contentSize / longestSide;
-  const scaledWidth = width * scale;
-  const scaledHeight = height * scale;
-  const translateX = CONTOUR_ICON_PADDING + (contentSize - scaledWidth) / 2 - bounds.min.x * scale;
-  const translateY = CONTOUR_ICON_PADDING + (contentSize - scaledHeight) / 2 + bounds.max.y * scale;
-  return new Mat(scale, 0, 0, -scale, translateX, translateY);
 }
 
 function contourDirection(contour: Contour): ContourDirection | undefined {

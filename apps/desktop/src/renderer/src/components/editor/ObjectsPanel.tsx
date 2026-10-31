@@ -6,11 +6,8 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { useNavigate } from "react-router";
 import type { ObjectTree, ObjectTreeSectionId } from "@/types/objectTree";
 import { useListSelection } from "@/hooks/useListSelection";
-import {
-  createGlyphIconPath,
-  createObjectTree,
-  ObjectTreeCache,
-} from "./object-tree/createObjectTree";
+import { createObjectTree, ObjectTreeCache } from "./object-tree/createObjectTree";
+import { GLYPH_ICON } from "./object-tree/IconBox";
 import { GlyphObjectRow } from "./object-tree/GlyphObjectRow";
 import { flattenVisibleObjectRows } from "./object-tree/flattenVisibleObjectRows";
 import { OBJECT_ROW_STEP, VirtualObjectRows } from "./object-tree/VirtualObjectRows";
@@ -20,8 +17,6 @@ import { useMemberSet } from "@/hooks/useMemberSet";
 /** The edited glyph's heading and its object tree, with empty sections left out. */
 interface GlyphObjects {
   readonly name: string;
-  /** A filled SVG path previewing the glyph in a 16 × 16 box. */
-  readonly iconPath: string | undefined;
   readonly tree: ObjectTree;
 }
 
@@ -58,25 +53,37 @@ export const ObjectsPanel = () => {
         : glyph.layerAt(externalLocation);
       if (layer) track(layer.geometryCell);
 
-      // The preview draws the glyph as shown, components included, so it tracks their shapes too.
-      const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
-      const placed = view.contoursCell.value;
-      for (const contour of placed) contour.trackShape();
-      const metrics = editor.font.defaultSourceMetricsCell.value;
       const tree = createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation), cache);
 
       return {
         name: glyph.name,
-        iconPath: createGlyphIconPath(placed, {
-          ascender: metrics.ascender,
-          descender: metrics.descender,
-          advance: view.xAdvanceCell.value,
-        }),
         tree: tree.filter((section) => section.items.length > 0),
       };
     });
   }, [editor]);
+  // The preview draws the glyph as shown, components included, so it tracks every placed
+  // contour's shape and the advance; a cell of its own, so a drag frame redraws only the icon.
+  const glyphIconCell = useMemo(
+    () =>
+      computed((): string | undefined => {
+        const node = editor.scene.onlyCell("glyph").value;
+        const glyph = node ? editor.glyphForId(node.glyphId) : null;
+        if (!glyph) return undefined;
+
+        const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+        const placed = view.contoursCell.value;
+        for (const contour of placed) contour.trackShape();
+        const metrics = editor.font.defaultSourceMetricsCell.value;
+        return GLYPH_ICON.glyphPath(placed, {
+          ascender: metrics.ascender,
+          descender: metrics.descender,
+          advance: view.xAdvanceCell.value,
+        });
+      }),
+    [editor],
+  );
   const glyphObjects = useSignalState(glyphObjectsCell, { schedule: "frame" });
+  const glyphIconPath = useSignalState(glyphIconCell, { schedule: "frame" });
   const objectTree = glyphObjects?.tree ?? EMPTY_TREE;
   const [glyphsOpen, setGlyphsOpen] = useState(true);
   const [glyphOpen, setGlyphOpen] = useState(true);
@@ -213,7 +220,7 @@ export const ObjectsPanel = () => {
           <ObjectSectionRow title="Glyphs" open={glyphsOpen} onOpenChange={setGlyphsOpen}>
             <GlyphObjectRow
               name={glyphObjects.name}
-              iconPath={glyphObjects.iconPath}
+              iconPath={glyphIconPath}
               open={glyphOpen}
               onOpenChange={setGlyphOpen}
               onSelect={() => editor.selectAll()}

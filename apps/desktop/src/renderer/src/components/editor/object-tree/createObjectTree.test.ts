@@ -2,12 +2,8 @@ import { describe, expect, it } from "vitest";
 import { GlyphGeometry } from "@shift/glyph-state";
 import { asContourId, asPointId } from "@shift/types";
 import { Mat } from "@shift/geo";
-import {
-  createContourIconPath,
-  createGlyphIconPath,
-  createObjectTree,
-  ObjectTreeCache,
-} from "./createObjectTree";
+import { createObjectTree, ObjectTreeCache } from "./createObjectTree";
+import { CONTOUR_ICON, GLYPH_ICON } from "./IconBox";
 
 const geometry = new GlyphGeometry(
   {
@@ -96,7 +92,7 @@ describe("object tree contour descriptions", () => {
     const contour = geometry.contours[0];
     if (!contour) throw new Error("Expected contour fixture");
 
-    const iconPath = createContourIconPath(contour);
+    const iconPath = CONTOUR_ICON.contourPath(contour);
 
     expect(iconPath).toBe("M 1 8 L 5 8 L 9 8 Q 11 4 13 8");
   });
@@ -176,7 +172,7 @@ describe("glyph previews", () => {
   const frame = { ascender: 800, descender: -200, advance: 500 };
   const square = (coordinates: readonly number[]) => squareGeometry(true, coordinates).contours[0]!;
   const preview = (coordinates: readonly number[], transform = Mat.Identity()) =>
-    createGlyphIconPath([{ contour: square(coordinates), transform }], frame);
+    GLYPH_ICON.glyphPath([{ contour: square(coordinates), transform }], frame);
   const xs = (path: string | undefined) =>
     [...(path ?? "").matchAll(/[ML] (-?[\d.]+)/g)].map((match) => Number(match[1]));
 
