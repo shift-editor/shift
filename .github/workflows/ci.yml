@@ -733,9 +733,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          # The fixtures open documents through @shift/bridge, whose generated
+          # clients are not committed.
           path: |
             apps/desktop/.vite/
             crates/shift-bridge/*.node
+            packages/types/src/bridge/protocol.ts
           include-hidden-files: true
           retention-days: 1
 
@@ -744,9 +747,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          # The fixtures open documents through @shift/bridge, whose generated
+          # clients are not committed.
           path: |
             apps/desktop/.vite/
             crates/shift-bridge/*.node
+            packages/types/src/bridge/protocol.ts
           include-hidden-files: true
           retention-days: 1
           overwrite: true
