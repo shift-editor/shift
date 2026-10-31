@@ -30,7 +30,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ShaperFont,
   PointId,
   SegmentId,
   NamedInstance,
@@ -66,6 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
+import type { ParagraphRequest, ShapedRun } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1447,12 +1447,22 @@ export class Font {
   }
 
   /**
-   * Returns the shaper font compiled from the font's feature code, after
-   * pending edits settle, or null while `knownRevision` is still current.
-   * The editor shapes with it itself, in `@shift/wasm/shaping`.
+   * Shapes paragraphs with the font's feature code, as the window's engine
+   * holds the font: unsaved edits included. Tracks the engine's shaping
+   * revision, so a computed that shapes reshapes after any edit that may
+   * change the result.
+   *
+   * @returns Each paragraph's runs in logical order, null for a paragraph
+   * that cannot be shaped; null without an open engine, or when the font
+   * cannot make a shaper font.
    */
-  shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
-    return this.editCoordinator.shaperFont(knownRevision);
+  shapeParagraphs(
+    paragraphs: readonly ParagraphRequest[],
+  ): readonly (readonly ShapedRun[] | null)[] | null {
+    const engine = this.#store.engine;
+    if (!engine) return null;
+    track(engine.shapingRevisionCell);
+    return engine.shapeParagraphs(paragraphs);
   }
 
   /** @knipclassignore — used by VariationPanel component */

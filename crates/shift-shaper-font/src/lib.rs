@@ -23,6 +23,7 @@
 
 mod axes;
 mod diagnostics;
+mod references;
 mod shape;
 mod state;
 mod tables;
@@ -55,6 +56,7 @@ pub use shape::{
 pub use state::ShaperFontState;
 
 use diagnostics::feature_diagnostics;
+use references::FeatureReferences;
 
 /// Path fea-rs reports for the authored feature source.
 const FEATURE_SOURCE_PATH: &str = "features.fea";
@@ -218,14 +220,25 @@ impl ShaperFont {
 
         let (tree, parse_diagnostics) = parse_feature_source(&request.feature_source, &glyph_map)?;
         if parse_diagnostics.has_errors() {
-            return Ok(ShaperFontCompilation::failed(&parse_diagnostics, &tree));
+            // What a source that does not parse names is unknown, so any
+            // glyph change may let it compile.
+            return Ok(ShaperFontCompilation::failed(
+                &parse_diagnostics,
+                &tree,
+                FeatureReferences::every_glyph(),
+            ));
         }
+        let references = FeatureReferences::of(&tree);
 
         let static_metadata = request.variation_metadata()?;
         let variation_info = static_metadata.as_ref().map(FeaVariationInfo::new);
         let validation = compile::validate(&tree, &glyph_map, variation_info.as_ref());
         if validation.has_errors() {
-            return Ok(ShaperFontCompilation::failed(&validation, &tree));
+            return Ok(ShaperFontCompilation::failed(
+                &validation,
+                &tree,
+                references,
+            ));
         }
 
         let compiled = compile::compile(
@@ -237,7 +250,9 @@ impl ShaperFont {
         );
         let (mut compilation, warnings) = match compiled {
             Ok(compiled) => compiled,
-            Err(errors) => return Ok(ShaperFontCompilation::failed(&errors, &tree)),
+            Err(errors) => {
+                return Ok(ShaperFontCompilation::failed(&errors, &tree, references));
+            }
         };
 
         tables::add_glyph_classes(&mut compilation, &glyph_map, &request.gdef_classes);
@@ -265,6 +280,7 @@ impl ShaperFont {
                 insert_markers: tables::insert_markers(&compilation, &tree),
             }),
             diagnostics: feature_diagnostics(&warnings, &tree),
+            references,
         })
     }
 
@@ -329,13 +345,21 @@ pub struct InsertMarker {
 pub struct ShaperFontCompilation {
     pub font: Option<ShaperFont>,
     pub diagnostics: Vec<FeatureDiagnostic>,
+    /// The glyphs the feature source names, which decide whether a later
+    /// glyph change needs a recompile.
+    references: FeatureReferences,
 }
 
 impl ShaperFontCompilation {
-    fn failed(diagnostics: &DiagnosticSet, tree: &ParseTree) -> Self {
+    fn failed(
+        diagnostics: &DiagnosticSet,
+        tree: &ParseTree,
+        references: FeatureReferences,
+    ) -> Self {
         Self {
             font: None,
             diagnostics: feature_diagnostics(diagnostics, tree),
+            references,
         }
     }
 }

@@ -25,11 +25,10 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_font::{
-    Axis, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, ShaperFontSource,
-    Source,
-};
+use shift_font::{Axis, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source};
 use shift_wire::KerningSnapshot;
+
+use crate::shaping::{ParagraphRequest, ShapedRun, ShapingFailure};
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -79,16 +78,26 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
-    /// What the font's shaper font compiles from: units per em, glyph order
-    /// with each glyph's GDEF class, feature source, and axes with their
-    /// mappings. A class reads anchors from the layers the session loaded and
-    /// asks the store's reader about the rest, and glyph data's categories
-    /// from it too; nothing is loaded to answer.
+    /// Shapes paragraphs with the font's feature code, through a shaper font
+    /// the session compiles from its own font: each paragraph's runs in
+    /// logical order, or null for a paragraph that cannot be shaped.
+    ///
+    /// The session compiles when text is first shaped, and again before the
+    /// next shape after an edit that may change the glyph directory or the
+    /// axes and their mappings; a source equal
+    /// to the last is not compiled again, and feature code with errors keeps
+    /// the last font. What the compile reads of layers the session has not
+    /// loaded (whether they carry an anchor marks attach to) and glyph data's
+    /// categories come from the store's reader; nothing is loaded to answer.
     ///
     /// # Errors
     ///
-    /// Returns [`StoreReadError`] when the store's reader cannot answer.
-    fn shaper_font_source(&self) -> Result<ShaperFontSource, StoreReadError>;
+    /// Returns [`ShapingFailure`] when no shaper font has been made and the
+    /// font cannot make one now, or the store's reader cannot answer for it.
+    fn shape_paragraphs(
+        &self,
+        paragraphs: Vec<ParagraphRequest>,
+    ) -> Result<Vec<Option<Vec<ShapedRun>>>, ShapingFailure>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -168,8 +177,8 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, ShaperFontSource,
-        Source, SourceSetWeights, engine_reads_request,
+        Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, ParagraphRequest,
+        ShapedRun, ShapingFailure, Source, SourceSetWeights, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::variation::{design_values, external_values, to_location, weights_at};
@@ -500,8 +509,15 @@ mod exports {
             Self::glyph_records(self)
         }
 
-        fn shaper_font_source(&self) -> Result<ShaperFontSource, StoreReadError> {
-            Self::shaper_font_source(self)
+        fn shape_paragraphs(
+            &self,
+            paragraphs: Vec<ParagraphRequest>,
+        ) -> Result<Vec<Option<Vec<ShapedRun>>>, ShapingFailure> {
+            self.shaping.shape_paragraphs(
+                self.session.font(),
+                || self.shaper_font_source(),
+                &paragraphs,
+            )
         }
 
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {

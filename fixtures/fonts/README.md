@@ -82,6 +82,13 @@ attachment, and noon, which `ccmp` decomposes into a dotless body and a dot
 mark. Written for Shift's tests and released under the same terms as
 the repository.
 
+## UndrawnLigature
+
+`UndrawnLigature.ufo` holds only `f` and `i`, with feature code that
+substitutes `f i` by an `f_i` the font does not have yet, so its features
+compile only once that glyph is added. Written for Shift's tests and
+released under the same terms as the repository.
+
 ## LightDefault.glyphs
 
 Hand-written. The default master is the lightest, its design values (stem

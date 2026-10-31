@@ -32,6 +32,7 @@ import type {
   MissingKerningOrigin,
   SourceSetWeights,
 } from "../lib/wasm/engine";
+import type { ParagraphRequest, ShapedRun } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -101,6 +102,8 @@ export interface FontEngine {
   readonly kerningRevisionCell: Signal<number>;
   /** Changes whenever {@link sourceMetricsAt} may answer differently. */
   readonly sourceMetricsRevisionCell: Signal<number>;
+  /** Changes whenever {@link shapeParagraphs} may answer differently. */
+  readonly shapingRevisionCell: Signal<number>;
 
   /**
    * Reads the kerning between glyph pairs at one place, in one call.
@@ -182,6 +185,19 @@ export interface FontEngine {
    * @throws When the engine is not open.
    */
   newAnchorName(layerIds: readonly LayerId[]): string;
+
+  /**
+   * Shapes paragraphs with the font's feature code, through a shaper font
+   * the engine compiles from its own font: the glyph order with each glyph's
+   * GDEF class, feature code, units per em and axes, unsaved edits included.
+   *
+   * @returns Each paragraph's runs in logical order, in request order, null
+   * for a paragraph that cannot be shaped; null while the engine is not open
+   * or when the font cannot make a shaper font, so text lays out literally.
+   */
+  shapeParagraphs(
+    paragraphs: readonly ParagraphRequest[],
+  ): readonly (readonly ShapedRun[] | null)[] | null;
 }
 
 /**

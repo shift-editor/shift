@@ -15,7 +15,6 @@ import {
   type TextLayout,
 } from "./layout";
 import { RunText, type ShapedText } from "./RunText";
-import { TextShaper } from "./TextShaper";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** Owns proof text records and one reactive layout per run identity. */
@@ -23,8 +22,6 @@ export class Text {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #editor: Editor;
   readonly #glyphsLoadedCell = signal(0);
-  /** Made with the first run's layout, so shaping loads only once text exists. */
-  #shaper: TextShaper | null = null;
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
@@ -47,7 +44,6 @@ export class Text {
           new RunText(this.#editor, runIdCell, {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
-            shaperCell: this.#textShaper().shaperCell,
             onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
           }),
       ),
@@ -197,8 +193,7 @@ export class Text {
   }
 
   /**
-   * Resolves once the shaper reflects the latest glyph directory and every
-   * glyph text needs has loaded.
+   * Resolves once every glyph text needs has loaded.
    *
    * @remarks
    * Loading a glyph can reshape text and ask for more glyphs, so this waits
@@ -206,7 +201,6 @@ export class Text {
    */
   async settled(): Promise<void> {
     for (;;) {
-      await this.#shaper?.settled();
       const loads = this.#loading.values().toArray();
       if (loads.length === 0) return;
       await Promise.all(loads);
@@ -215,7 +209,6 @@ export class Text {
 
   dispose(): void {
     this.#unsubscribeStore();
-    this.#shaper?.dispose();
     this.#runsByItem.dispose();
     this.#runs.clear();
   }
@@ -229,11 +222,6 @@ export class Text {
   }
 
   /** Loads glyphs the shaper substituted in, which no item names directly. */
-  #textShaper(): TextShaper {
-    this.#shaper ??= new TextShaper(this.#editor);
-    return this.#shaper;
-  }
-
   #acquireShapedGlyphs(shaped: ShapedText): void {
     for (const runs of shaped.paragraphs) {
       for (const run of runs ?? []) {

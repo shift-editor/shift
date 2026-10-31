@@ -21,6 +21,7 @@ import {
   type MissingKerningOrigin,
   unkerned,
 } from "@shift/editor/model";
+import type { ParagraphRequest, ShapedRun } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
 import { engineStoreRequest } from "./engineStoreRequest";
@@ -29,9 +30,10 @@ import { engineStoreRequest } from "./engineStoreRequest";
 interface ChangedReads {
   readonly kerning: boolean;
   readonly sourceMetrics: boolean;
+  readonly shaping: boolean;
 }
 
-const UNCHANGED: ChangedReads = { kerning: false, sourceMetrics: false };
+const UNCHANGED: ChangedReads = { kerning: false, sourceMetrics: false, shaping: false };
 
 /**
  * The open session and the reader it loads layers through, which moves with
@@ -76,6 +78,9 @@ export class WindowEngine implements FontEngine {
   readonly #sourceMetricsRevision: WritableSignal<number> = signal(0, {
     name: "windowEngine.sourceMetricsRevision",
   });
+  readonly #shapingRevision: WritableSignal<number> = signal(0, {
+    name: "windowEngine.shapingRevision",
+  });
   #opened: Opened | null = null;
   readonly #variation: WritableSignal<EngineVariation | null> = signal<EngineVariation | null>(
     null,
@@ -99,6 +104,10 @@ export class WindowEngine implements FontEngine {
 
   get variationCell(): Signal<EngineVariation | null> {
     return this.#variation;
+  }
+
+  get shapingRevisionCell(): Signal<number> {
+    return this.#shapingRevision;
   }
 
   get isOpen(): boolean {
@@ -131,7 +140,7 @@ export class WindowEngine implements FontEngine {
         this.#close();
         this.#opened = { session, reader, location };
         this.#variation.set(session);
-        this.#changed({ kerning: true, sourceMetrics: true });
+        this.#changed({ kerning: true, sourceMetrics: true, shaping: true });
       });
     } catch (error) {
       this.#layers.close(reader);
@@ -314,6 +323,20 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
+  shapeParagraphs(
+    paragraphs: readonly ParagraphRequest[],
+  ): readonly (readonly ShapedRun[] | null)[] | null {
+    const session = this.#opened?.session;
+    if (!session) return null;
+    try {
+      return session.shapeParagraphs(paragraphs);
+    } catch (error) {
+      // The engine says so once, then shapes nothing until an edit may let it.
+      console.error("failed to prepare shaping", error);
+      return null;
+    }
+  }
+
   newAnchorName(layerIds: readonly LayerId[]): string {
     return this.#require().newAnchorName(layerIds);
   }
@@ -359,6 +382,7 @@ export class WindowEngine implements FontEngine {
     this.#record({
       kerning: edit.next?.kerning != null,
       sourceMetrics: edit.next?.sourceMetricsInterpolation != null,
+      shaping: edit.shaping,
     });
     return edit;
   }
@@ -375,6 +399,7 @@ export class WindowEngine implements FontEngine {
     this.#inEdit = {
       kerning: this.#inEdit.kerning || changed.kerning,
       sourceMetrics: this.#inEdit.sourceMetrics || changed.sourceMetrics,
+      shaping: this.#inEdit.shaping || changed.shaping,
     };
     this.#changed(changed);
   }
@@ -384,6 +409,7 @@ export class WindowEngine implements FontEngine {
     batch(() => {
       if (changed.kerning) this.#kerningRevision.update((revision) => revision + 1);
       if (changed.sourceMetrics) this.#sourceMetricsRevision.update((revision) => revision + 1);
+      if (changed.shaping) this.#shapingRevision.update((revision) => revision + 1);
     });
   }
 
