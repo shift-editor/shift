@@ -35,6 +35,10 @@ const typesOnly = process.argv.includes("--types");
 const referenceOnly = process.argv.includes("--reference");
 const optimise = process.env.SHIFT_WASM_OPT === "1";
 const profile = typesOnly ? "debug" : "release";
+// Declarations build each variant at once in its own target directory, except
+// on CI, where nothing is cached between runs and four directories would each
+// compile every dependency.
+const parallel = typesOnly && !process.env.CI;
 const run = (command, args, env = process.env) =>
   new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, { cwd: root, stdio: "inherit", env });
@@ -71,24 +75,43 @@ const variants = typesOnly
   ? allVariants
   : allVariants.filter((variant) => variant.testOnly === referenceOnly);
 
-// Compiles run in turn: they share one target directory, so later variants
-// reuse the crates the first one compiled. Each variant's optimisation then
-// runs while the next one compiles. The build reads the module and staging
-// folders it wrote under target/, which other checkouts sharing target/ write
-// too, so it holds a lock from the first compile to the last install.
-await withLock(join(root, "target"), `wasm-${profile}`, async () => {
-  const finishing = [];
-  for (const variant of variants) {
-    const staged = await compile(variant.folder, variant.features);
-    const out = join(src, variant.folder);
-    mkdirSync(out, { recursive: true });
-    writeDeclarations(staged, out, variant.file);
-    if (!typesOnly) finishing.push(finish(staged, out, variant.file));
-  }
-  // The generated classes over the modules' request exports.
-  if (!referenceOnly) await writeProtocol();
-  await Promise.all(finishing);
-});
+// Each build reads the module and staging folder it wrote under target/,
+// which other checkouts sharing target/ write too, so it holds a lock from
+// compile to install.
+const targetRoot = join(root, "target");
+if (parallel) {
+  // Variants with different features in one directory replace each other's
+  // shift-wasm build, so every run rebuilt all of them. The protocol check has
+  // its own target directory too, so it runs alongside.
+  await Promise.all([
+    ...variants.map((variant) =>
+      withLock(targetRoot, `wasm-types-${variant.folder}`, async () => {
+        const staged = await compile(variant.folder, variant.features);
+        const out = join(src, variant.folder);
+        mkdirSync(out, { recursive: true });
+        writeDeclarations(staged, out, variant.file);
+      }),
+    ),
+    run(process.execPath, [join(import.meta.dirname, "protocol.mjs")]),
+  ]);
+} else {
+  // Compiles run in turn: they share one target directory, so later variants
+  // reuse the crates the first one compiled. Each variant's optimisation then
+  // runs while the next one compiles.
+  await withLock(targetRoot, `wasm-${profile}`, async () => {
+    const finishing = [];
+    for (const variant of variants) {
+      const staged = await compile(variant.folder, variant.features);
+      const out = join(src, variant.folder);
+      mkdirSync(out, { recursive: true });
+      writeDeclarations(staged, out, variant.file);
+      if (!typesOnly) finishing.push(finish(staged, out, variant.file));
+    }
+    // The generated classes over the modules' request exports.
+    if (!referenceOnly) await writeProtocol();
+    await Promise.all(finishing);
+  });
+}
 
 /**
  * Compiles shift-wasm with `features` and writes the wasm-bindgen output to a
@@ -105,6 +128,7 @@ async function compile(folder, features) {
   // RUSTFLAGS replaces the target flags in .cargo/config.toml, so they are
   // repeated here.
   const cargoHome = process.env.CARGO_HOME ?? join(homedir(), ".cargo");
+  const targetDir = parallel ? join(root, "target", "wasm-types", folder) : "target";
   await run(
     "cargo",
     [
@@ -113,11 +137,14 @@ async function compile(folder, features) {
       "shift-wasm",
       "--target",
       "wasm32-unknown-unknown",
+      ...(parallel ? ["--target-dir", targetDir] : []),
       ...(typesOnly ? [] : ["--release"]),
       ...features.flatMap((feature) => ["--features", feature]),
     ],
     {
       ...process.env,
+      // Declarations need no debug info, which makes the module 8x larger.
+      CARGO_PROFILE_DEV_DEBUG: typesOnly ? "0" : process.env.CARGO_PROFILE_DEV_DEBUG,
       RUSTFLAGS: [
         `--remap-path-prefix=${cargoHome}=/cargo`,
         "--cfg",
@@ -132,7 +159,7 @@ async function compile(folder, features) {
     "shift_wasm",
     "--out-dir",
     staged,
-    `target/wasm32-unknown-unknown/${profile}/shift_wasm.wasm`,
+    join(targetDir, "wasm32-unknown-unknown", profile, "shift_wasm.wasm"),
   ]);
   return staged;
 }
