@@ -73,6 +73,7 @@ launcherTest(
 
     expect(menu.settingsInstalled).toBe(true);
     expect(menu.fileIds).not.toContain("app.showSettings");
+    expect(menu.fileIds).toEqual(expect.arrayContaining(["tab.close", "window.close"]));
     expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
     expect(menu.glyphIds).toContain("glyph.addComponent");
     expect(menu.addComponentAccelerator).toBe("CmdOrCtrl+Shift+C");
