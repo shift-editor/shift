@@ -85,3 +85,10 @@ shift-workspace = { path = "crates/shift-workspace" }
 inherits = "release"
 opt-level = 1
 codegen-units = 256
+
+# HarfRust with a shape hook told about each layout table and lookup, so the
+# editor positions generated features (kern, mark, mkmk, curs) at their
+# `# Automatic Code` markers among the font's own lookups. Drop once HarfRust
+# releases an equivalent.
+[patch.crates-io]
+harfrust = { git = "https://github.com/shift-editor/harfrust", rev = "b90075ae7ad1903405852216ddd3a64123ba1673" }
