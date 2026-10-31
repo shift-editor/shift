@@ -51,6 +51,7 @@ pub mod layer_edit;
 pub mod naming;
 pub mod placed_blend;
 pub mod point_arrange;
+pub mod positioning;
 pub mod projection;
 pub mod shaper_font_source;
 mod string_enum;
