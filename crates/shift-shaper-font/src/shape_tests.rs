@@ -3,6 +3,7 @@ use std::sync::Arc;
 use shift_font::test_support::sample_variable_font;
 use shift_font::{ExternalLocation, Font, Glyph};
 
+use super::test_fonts::request_for;
 use super::*;
 
 const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
@@ -30,13 +31,13 @@ fn ligature_font() -> Font {
 }
 
 fn shaper(font: &Font) -> LiveShaper {
-    let compilation = ShaperFont::compile(&ShaperFontRequest::from_font(font).unwrap()).unwrap();
+    let compilation = ShaperFont::compile(&request_for(font).unwrap()).unwrap();
     assert!(
         compilation.diagnostics.is_empty(),
         "{:?}",
         compilation.diagnostics
     );
-    LiveShaper::new(Arc::new(compilation.font.unwrap()), font).unwrap()
+    LiveShaper::new(Arc::new(compilation.font.unwrap()), font.character_map()).unwrap()
 }
 
 fn characters(text: &str) -> Vec<ShapeUnit> {
@@ -251,14 +252,10 @@ fn state_shapes_without_features_until_the_source_first_compiles() {
     );
     let mut state = ShaperFontState::default();
 
-    assert!(
-        state
-            .update(ShaperFontRequest::from_font(&font).unwrap())
-            .unwrap()
-    );
+    assert!(state.update(request_for(&font).unwrap()).unwrap());
     assert!(!state.diagnostics().is_empty());
 
-    let shaper = LiveShaper::new(state.font().cloned().unwrap(), &font).unwrap();
+    let shaper = LiveShaper::new(state.font().cloned().unwrap(), font.character_map()).unwrap();
     let location = ExternalLocation::new();
     let units = characters("fi");
     let shaped = shaper.shape(&request(&units, &location)).unwrap();
@@ -344,4 +341,132 @@ fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
         names_and_clusters(&font, &runs[1].glyphs),
         vec![named("beh-ar.fina", 3), named("beh-ar.init", 2)]
     );
+}
+
+/// A state over `font`, compiled once, and a shaper over its font.
+fn compiled_state(font: &Font) -> ShaperFontState {
+    let mut state = ShaperFontState::default();
+    assert!(state.update(request_for(font).unwrap()).unwrap());
+    assert_eq!(state.compiles(), 1);
+    state
+}
+
+/// Brings `state` up to `font` and returns a shaper over its glyph order.
+fn updated_shaper(state: &mut ShaperFontState, font: &Font) -> LiveShaper {
+    state.update(request_for(font).unwrap()).unwrap();
+    let mut shaper = LiveShaper::new(state.font().cloned().unwrap(), font.character_map()).unwrap();
+    shaper.set_glyphs(state.glyph_order(), font.character_map());
+    shaper
+}
+
+fn shaped_names(font: &Font, shaper: &LiveShaper, text: &str) -> Vec<(Option<String>, u32)> {
+    let location = ExternalLocation::new();
+    let units = characters(text);
+    names_and_clusters(font, &shaper.shape(&request(&units, &location)).unwrap())
+}
+
+#[test]
+fn adding_a_glyph_the_features_do_not_name_does_not_recompile() {
+    let mut font = ligature_font();
+    let mut state = compiled_state(&font);
+    let mut added = Glyph::new("x");
+    added.add_unicode(u32::from('x'));
+    font.insert_glyph(added).unwrap();
+
+    let shaper = updated_shaper(&mut state, &font);
+
+    assert_eq!(state.compiles(), 1);
+    // The added glyph lies past the compiled font's glyph count and shapes as
+    // itself, beside a ligature the compiled lookups still form.
+    assert_eq!(
+        shaped_names(&font, &shaper, "fix"),
+        vec![named("f_i", 0), named("x", 2)]
+    );
+}
+
+#[test]
+fn adding_the_glyph_the_features_name_recompiles() {
+    let mut font = font_with(&[("f", Some('f')), ("i", Some('i'))], LIGATURE);
+    let mut state = ShaperFontState::default();
+    state.update(request_for(&font).unwrap()).unwrap();
+    let before = state.compiles();
+    font.insert_glyph(Glyph::new("f_i")).unwrap();
+
+    let shaper = updated_shaper(&mut state, &font);
+
+    assert_eq!(state.compiles(), before + 1);
+    assert_eq!(shaped_names(&font, &shaper, "fi"), vec![named("f_i", 0)]);
+}
+
+#[test]
+fn renaming_a_glyph_recompiles_only_when_the_features_name_it() {
+    let mut font = font_with(
+        &[
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+            ("x", Some('x')),
+        ],
+        LIGATURE,
+    );
+    let mut state = compiled_state(&font);
+
+    let x = font.glyph_by_name("x").unwrap().id();
+    font.rename_glyph(x, "ex".into()).unwrap();
+    let shaper = updated_shaper(&mut state, &font);
+    assert_eq!(state.compiles(), 1);
+    assert_eq!(shaped_names(&font, &shaper, "x"), vec![named("ex", 0)]);
+
+    // The feature code then names a glyph the font lacks: the compile fails
+    // and the last font stays, shaping the renamed ligature.
+    let ligature = font.glyph_by_name("f_i").unwrap().id();
+    font.rename_glyph(ligature, "f_i.liga".into()).unwrap();
+    let shaper = updated_shaper(&mut state, &font);
+    assert!(!state.diagnostics().is_empty());
+    assert_eq!(
+        shaped_names(&font, &shaper, "fi"),
+        vec![named("f_i.liga", 0)]
+    );
+
+    font.rename_glyph(ligature, "f_i".into()).unwrap();
+    let shaper = updated_shaper(&mut state, &font);
+    assert!(state.diagnostics().is_empty());
+    assert_eq!(state.compiles(), 3);
+    assert_eq!(shaped_names(&font, &shaper, "fi"), vec![named("f_i", 0)]);
+}
+
+#[test]
+fn adding_a_mark_recompiles_for_its_class() {
+    let mut font = ligature_font();
+    let mut state = compiled_state(&font);
+    let mut mark = Glyph::new("acutecomb");
+    mark.add_unicode(0x0301);
+    mark.set_category(Some(shift_font::GlyphCategory::Mark));
+    mark.set_sub_category(Some(shift_font::GlyphSubcategory::Nonspacing));
+    font.insert_glyph(mark).unwrap();
+
+    updated_shaper(&mut state, &font);
+
+    assert_eq!(state.compiles(), 2);
+}
+
+#[test]
+fn a_removed_glyph_no_longer_shapes() {
+    let mut font = font_with(
+        &[
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+            ("x", Some('x')),
+        ],
+        LIGATURE,
+    );
+    let mut state = compiled_state(&font);
+    let x = font.glyph_by_name("x").unwrap().id();
+    font.pop_glyph(x).unwrap();
+
+    let shaper = updated_shaper(&mut state, &font);
+
+    assert_eq!(state.compiles(), 1);
+    assert_eq!(shaped_names(&font, &shaper, "x"), vec![(None, 0)]);
 }

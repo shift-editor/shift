@@ -119,7 +119,6 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-            packages/wasm/src/generated-shaping
             packages/wasm/src/generated-engine
           key: native-module-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
@@ -207,7 +206,6 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-            packages/wasm/src/generated-shaping
             packages/wasm/src/generated-engine
           key: native-module-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
@@ -222,7 +220,6 @@ jobs:
           path: |
             crates/shift-bridge/*.node
             packages/wasm/src/generated
-            packages/wasm/src/generated-shaping
             packages/wasm/src/generated-engine
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 

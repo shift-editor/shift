@@ -40,10 +40,7 @@ impl LayerReader {
   pub fn open_document(document_path: String, recovery_path: String) -> napi::Result<Self> {
     let reader =
       StoreFiles::open_document(document_path, recovery_path).map_err(BridgeError::from)?;
-    Ok(Self {
-      reader: Some(reader),
-      glyph_data: OnceCell::new(),
-    })
+    Ok(Self::new(reader))
   }
 
   /// Reads the working store behind an untitled or imported workspace.
@@ -54,10 +51,7 @@ impl LayerReader {
   #[napi(factory)]
   pub fn open_working_store(store_path: String) -> napi::Result<Self> {
     let reader = StoreFiles::open_working_store(store_path).map_err(BridgeError::from)?;
-    Ok(Self {
-      reader: Some(reader),
-      glyph_data: OnceCell::new(),
-    })
+    Ok(Self::new(reader))
   }
 
   /// Answers one [`StoreReader`] request, as the engine's `StoreReaderClient`
@@ -116,6 +110,16 @@ impl StoreReader for LayerReader {
       .get_or_init(GlyphCategories::new)
       .lookup_all(&glyphs)
   }
+
+  fn attaching_anchor_layers(
+    &self,
+    layer_ids: Vec<LayerId>,
+  ) -> Result<Vec<LayerId>, StoreReadError> {
+    self
+      .open()?
+      .attaching_anchor_layers(&layer_ids)
+      .map_err(unreadable)
+  }
 }
 
 /// A store failure as the error that crosses to the engine, as its text.
@@ -126,6 +130,13 @@ fn unreadable(error: impl std::fmt::Display) -> StoreReadError {
 }
 
 impl LayerReader {
+  fn new(reader: StoreFiles) -> Self {
+    Self {
+      reader: Some(reader),
+      glyph_data: OnceCell::new(),
+    }
+  }
+
   /// The store, for a [`StoreReader`] method.
   fn open(&self) -> Result<&StoreFiles, StoreReadError> {
     self.reader.as_ref().ok_or(StoreReadError::Closed)

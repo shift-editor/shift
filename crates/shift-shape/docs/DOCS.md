@@ -6,10 +6,10 @@ Shapes text with compiled OpenType features — script itemization, HarfRust sha
 
 ## Architecture Invariants
 
-- **One shaping implementation.** Command-line rendering and the editor, through WebAssembly, shape with this crate, as does `shift-backends`' `LiveShaper`. Itemization, inserted-glyph stand-ins, and break opportunities are rules: a second copy in another crate or in TypeScript would let a proof and the editor's preview set the same text differently.
-- **Hosts differ only by `GlyphSource`.** It owns every translation between the host and the shaper: the host's glyph identity (`type Glyph`) to and from shaper glyph ids, where a character maps, and a glyph's own advance (`None` defers to the shaping font's `cmap` and `hmtx`). Requests and results are generic over that glyph type, so no host redefines or copies them: `shift-backends` names them as aliases (`ShapedRun = shift_shape::ShapedRun<GlyphId>`). The editor maps characters through the live font and returns zero advances, so results hold only what the feature source contributes and live advances, kerning, and mark attachment are added by the caller; a compiled font uses `FontGlyphs`, its own tables and glyph ids.
+- **One shaping implementation.** Command-line rendering and the editor, through WebAssembly, shape with this crate, as does `shift-shaper-font`'s `LiveShaper`. Itemization, inserted-glyph stand-ins, and break opportunities are rules: a second copy in another crate or in TypeScript would let a proof and the editor's preview set the same text differently.
+- **Hosts differ only by `GlyphSource`.** It owns every translation between the host and the shaper: the host's glyph identity (`type Glyph`) to and from shaper glyph ids, where a character maps, and a glyph's own advance (`None` defers to the shaping font's `cmap` and `hmtx`). Requests and results are generic over that glyph type, so no host redefines or copies them: `shift-shaper-font` names them as aliases (`ShapedRun = shift_shape::ShapedRun<GlyphId>`). The editor maps characters through the live font and returns zero advances, so results hold only what the feature source contributes and live advances, kerning, and mark attachment are added by the caller; a compiled font uses `FontGlyphs`, its own tables and glyph ids.
 - **No Shift types.** The shaper works in shaper glyph ids and normalized coordinates in `fvar` order. A host holding another kind of location converts it and re-targets its request with `ParagraphRequest::at`, so the crate depends on nothing in the workspace and builds for `wasm32`.
-- **Same coordinates, same mapping.** `AxisNormalization` (user to normalized, linear between the shaper font's mapping points) and `character_glyphs` (a character two glyphs claim maps to the first in glyph order) are used by `shift-backends`' `LiveShaper` and the editor's WebAssembly shaper alike, so both shape the same text at the same location to the same glyphs.
+- **Same coordinates, same mapping.** `AxisNormalization` (user to normalized, linear between the shaper font's mapping points) and `character_glyphs` (a character two glyphs claim maps to the first in glyph order) are used by `shift-shaper-font`'s `LiveShaper`, which the editor's WebAssembly shaper runs, and by command-line shaping alike, so both shape the same text at the same location to the same glyphs.
 - **Parse once.** A `Shaper` parses the font's layout tables (`ShaperData`) when made. Keep one per font bytes; making one per call reparses `GSUB`/`GPOS` every time.
 
 ## Codemap
@@ -51,16 +51,17 @@ crates/shift-shape/src/
 
 - **Thai, Lao, Khmer, and Burmese break only at spaces.** UAX #14 needs a dictionary to find their word boundaries; `unicode-linebreak` has none.
 - **Clusters index units, not bytes or UTF-16 code units.** One `Unit` is one character or one inserted glyph.
+- **`.notdef` is two things.** HarfRust gives glyph id 0 both for a character with no glyph and for a `.notdef` inserted by name; only the second comes back as a host glyph, told apart by the unit at its cluster.
 
 ## Verification
 
 ```bash
 nix develop --command cargo test -p shift-shape
-nix develop --command cargo test -p shift-backends --lib shaper_font
+nix develop --command cargo test -p shift-shaper-font
 nix develop --command cargo clippy -p shift-shape --all-targets -- -D warnings
 ```
 
 ## Related
 
-- [`crates/shift-backends/docs/DOCS.md`](../../shift-backends/docs/DOCS.md) — compiles the shaper font from authored features and wraps this crate as `LiveShaper`.
+- [`crates/shift-shaper-font/docs/DOCS.md`](../../shift-shaper-font/docs/DOCS.md) — compiles the shaper font from authored features and wraps this crate as `LiveShaper`.
 - [`crates/shift-wasm/docs/DOCS.md`](../../shift-wasm/docs/DOCS.md) — how rules reach the editor through WebAssembly.

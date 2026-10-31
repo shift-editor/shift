@@ -30,7 +30,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ShaperFont,
   PointId,
   SegmentId,
   NamedInstance,
@@ -66,6 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
+import type { ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -314,7 +314,7 @@ export class Font {
     this.#metricsCell = computed(() => fontCell.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#metricDefinitionsCell = computed(() => fontCell.value?.metricDefinitions ?? []);
 
-    this.#sourceMetricsRevisionCell = store.engine?.sourceMetricsRevisionCell ?? NO_REVISIONS;
+    this.#sourceMetricsRevisionCell = store.engine?.revision("sourceMetrics") ?? NO_REVISIONS;
     this.#kerningCell = store.kerningCell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
@@ -1447,12 +1447,19 @@ export class Font {
   }
 
   /**
-   * Returns the shaper font compiled from the font's feature code, after
-   * pending edits settle, or null while `knownRevision` is still current.
-   * The editor shapes with it itself, in `@shift/wasm/shaping`.
+   * Shapes paragraphs with the font's feature code, as the window's engine
+   * holds the font: unsaved edits included. Tracks the revision of each
+   * change flag shaping reads, so a computed that shapes reshapes after any
+   * edit that may change the result.
+   *
+   * @returns Each paragraph's runs in logical order, or why it could not be
+   * shaped; null without an open engine.
    */
-  shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
-    return this.editCoordinator.shaperFont(knownRevision);
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null {
+    const engine = this.#store.engine;
+    if (!engine) return null;
+    for (const flag of engine.shapingInputs()) track(engine.revision(flag));
+    return engine.shapeParagraphs(paragraphs);
   }
 
   /** @knipclassignore — used by VariationPanel component */

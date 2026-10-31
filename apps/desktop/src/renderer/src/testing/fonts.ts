@@ -27,6 +27,8 @@ export const FONT_FILES = {
   scaledComponent: "ScaledComponent.glyphs",
   /** Features that substitute and position glyphs, for shaping. */
   shapingTest: "ShapingTest.ufo",
+  /** Feature code that substitutes `f i` by an `f_i` the font does not have yet. */
+  undrawnLigature: "UndrawnLigature.ufo",
   /** MutatorSans compiled to one static TrueType font, opened as a preview or imported. */
   mutatorSansTtf: "mutatorsans/MutatorSans.ttf",
   /** MutatorSans compiled to one static CFF OpenType font. */

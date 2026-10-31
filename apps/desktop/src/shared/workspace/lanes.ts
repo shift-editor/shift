@@ -13,7 +13,6 @@ import type {
   LayerRead,
   Location,
   SaveState,
-  ShaperFont,
   SlugAtlas,
   Specimen,
   WorkspaceDocumentState,
@@ -507,17 +506,6 @@ export interface WorkspaceSync {
    * @returns The mapped location, with omitted axes filled from their defaults.
    */
   mapLocation(location: Location): Promise<Location>;
-
-  /**
-   * Compiles the font's feature code into a shaper font for the window to shape with.
-   *
-   * @remarks
-   * Not queued: a synchronous read, so it never waits behind a save or import.
-   *
-   * @param knownRevision - The revision the window already has, or `null`.
-   * @returns `null` while `knownRevision` is still current.
-   */
-  shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
 }
 
 /** The methods the sync lane serves. */
@@ -547,5 +535,4 @@ export const workspaceSyncMethods: LaneMethods<WorkspaceSync> = {
   discardSlugAtlas: true,
   discardSlugAtlasPage: true,
   mapLocation: true,
-  shaperFont: true,
 };

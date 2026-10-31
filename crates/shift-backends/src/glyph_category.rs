@@ -8,14 +8,12 @@
 //! shift-font's ([`RecordCategory::of`]); this module looks glyph data up
 //! and builds GDEF classes.
 
-use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use glyphs_reader::glyphdata::GlyphData;
-use shift_font::{
-    Glyph, GlyphCategory, GlyphDataCategory, GlyphSubcategory, LibData, NamedGlyph,
-    OpenTypeCategories, OpenTypeCategory,
-};
-use write_fonts::tables::gdef::GlyphClassDef;
+use shift_font::{Glyph, GlyphClasses, GlyphDataCategory, LibData, NamedGlyph};
 
 /// Looks glyphs up in Glyphs' bundled glyph data.
 #[derive(Default)]
@@ -45,6 +43,19 @@ impl GlyphCategories {
     /// The glyph's own category and subcategory, each falling back to glyph data.
     pub fn resolve(&self, glyph: &Glyph) -> GlyphDataCategory {
         self.lookup(glyph.name(), glyph.unicodes()).resolve(glyph)
+    }
+
+    /// The GDEF classes of `glyphs`, with glyph data's categories and the
+    /// classes `lib` gives by name. Every layer must be loaded, because a
+    /// class depends on the glyph's anchors.
+    pub fn classes<'a, 'g>(
+        &self,
+        glyphs: impl IntoIterator<Item = &'g Glyph>,
+        lib: &'a LibData,
+    ) -> GlyphClasses<'a> {
+        GlyphClasses::of_loaded(glyphs, lib, |glyph| {
+            self.lookup(glyph.name(), glyph.unicodes())
+        })
     }
 
     /// Glyph data's category for each of `glyphs`, in order.
@@ -82,7 +93,7 @@ pub(crate) fn record_categories<'a>(
     font_lib: &LibData,
 ) -> BTreeMap<shift_font::GlyphId, shift_font::RecordCategory> {
     let categories = GlyphCategories::new();
-    let explicit = OpenTypeCategories::of(font_lib);
+    let explicit = shift_font::OpenTypeCategories::of(font_lib);
     glyphs
         .into_iter()
         .map(|glyph| {
@@ -94,53 +105,24 @@ pub(crate) fn record_categories<'a>(
         .collect()
 }
 
-/// GDEF classes for every glyph that has one, by glyph name.
-pub(crate) fn gdef_classes<'a>(
-    glyphs: impl IntoIterator<Item = &'a Glyph>,
-    font_lib: &LibData,
-) -> BTreeMap<String, GlyphClassDef> {
-    let categories = GlyphCategories::new();
-    let explicit = OpenTypeCategories::of(font_lib);
-    glyphs
-        .into_iter()
-        .filter_map(|glyph| {
-            let class = match explicit.class(glyph.name()) {
-                Some(class) => gdef_class(class),
-                None => class_for(categories.resolve(glyph), glyph.has_attaching_anchor())?,
-            };
-            Some((glyph.name().to_string(), class))
-        })
-        .collect()
-}
-
-/// fontc's Glyphs rule: marks by category, and bases and ligatures only when
-/// they carry an anchor something can attach to.
-fn class_for(resolved: GlyphDataCategory, attaching_anchor: bool) -> Option<GlyphClassDef> {
-    match (resolved.category, resolved.sub_category) {
-        (_, Some(GlyphSubcategory::Ligature)) if attaching_anchor => Some(GlyphClassDef::Ligature),
-        (
-            Some(GlyphCategory::Mark),
-            Some(GlyphSubcategory::Nonspacing | GlyphSubcategory::SpacingCombining),
-        ) => Some(GlyphClassDef::Mark),
-        _ if attaching_anchor => Some(GlyphClassDef::Base),
-        _ => None,
-    }
-}
-
-fn gdef_class(category: OpenTypeCategory) -> GlyphClassDef {
-    match category {
-        OpenTypeCategory::Base => GlyphClassDef::Base,
-        OpenTypeCategory::Ligature => GlyphClassDef::Ligature,
-        OpenTypeCategory::Mark => GlyphClassDef::Mark,
-        OpenTypeCategory::Component => GlyphClassDef::Component,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shift_font::OpenTypeCategory;
+
+    /// The GDEF classes of `glyphs`, with glyph data's categories.
+    fn gdef_classes<const N: usize>(
+        glyphs: [&Glyph; N],
+        lib: &LibData,
+    ) -> BTreeMap<String, OpenTypeCategory> {
+        GlyphCategories::new()
+            .classes(glyphs, lib)
+            .gdef_classes(glyphs)
+    }
     use shift_font::ir::glyph_category::OPENTYPE_CATEGORIES_KEY;
-    use shift_font::{Anchor, GlyphLayer, LayerId, LibValue, SourceId};
+    use shift_font::{
+        Anchor, GlyphCategory, GlyphLayer, GlyphSubcategory, LayerId, LibValue, SourceId,
+    };
 
     fn glyph_with_anchor(name: &str, unicodes: &[u32], anchor: &str) -> Glyph {
         let mut glyph = Glyph::new(name);
@@ -175,8 +157,8 @@ mod tests {
         let classes = gdef_classes([&jdotless, &acute, &a], &LibData::new());
 
         assert_eq!(classes.get("jdotless"), None);
-        assert_eq!(classes.get("acutecomb"), Some(&GlyphClassDef::Mark));
-        assert_eq!(classes.get("a"), Some(&GlyphClassDef::Base));
+        assert_eq!(classes.get("acutecomb"), Some(&OpenTypeCategory::Mark));
+        assert_eq!(classes.get("a"), Some(&OpenTypeCategory::Base));
     }
 
     #[test]
@@ -187,7 +169,7 @@ mod tests {
 
         let classes = gdef_classes([&glyph], &LibData::new());
 
-        assert_eq!(classes.get("a"), Some(&GlyphClassDef::Mark));
+        assert_eq!(classes.get("a"), Some(&OpenTypeCategory::Mark));
     }
 
     #[test]
@@ -203,7 +185,7 @@ mod tests {
 
         let classes = gdef_classes([&acute], &lib);
 
-        assert_eq!(classes.get("acutecomb"), Some(&GlyphClassDef::Base));
+        assert_eq!(classes.get("acutecomb"), Some(&OpenTypeCategory::Base));
     }
 
     #[test]

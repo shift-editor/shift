@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { expectEdit } from "@/testing/expectEdit";
 import { rect } from "@/testing/fixtures";
-import { useTestEditor } from "@/testing/fontFixture";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
 
@@ -191,5 +191,15 @@ describe("double-clicking a component", () => {
       items: [expect.anything()],
       openItemId: editor.canvasText()!.items[0]!.id,
     });
+  });
+});
+
+describe(".notdef", () => {
+  const notdef = useTestEditor({ file: FONTS.mutatorSans, glyph: ".notdef" });
+
+  it("stays in the text once it is shaped", async () => {
+    await notdef.settle();
+
+    expect(notdef.canvasText()).toMatchObject({ glyphs: [{ name: ".notdef" }] });
   });
 });

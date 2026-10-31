@@ -2,7 +2,7 @@
 
 <!-- reviewed: 2026-10-31 review-every: 90d -->
 
-The native addon the utility process calls: four `#[pack::interface]` traits on one `Bridge` (`NativeWorkspace`, `NativeAtlas`, `NativeSource`, `NativeShaping`), each answered by one napi request export, plus the napi methods the traits do not carry yet.
+The native addon the utility process calls: three `#[pack::interface]` traits on one `Bridge` (`NativeWorkspace`, `NativeAtlas`, `NativeSource`), each answered by one napi request export, plus the napi methods the traits do not carry yet.
 
 ## Architecture Invariants
 
@@ -12,7 +12,7 @@ The native addon the utility process calls: four `#[pack::interface]` traits on 
 
 **Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 
-**Architecture Invariant:** The utility process calls the addon through four traits split by area, each a `#[pack::interface]` in `src/bridge/`: `NativeWorkspace` (open, save, close, persist, the font's records other than its axes, sources and kerning, which the window reads from its engine, and `apply`, which writes a store from intents directly for tests and tools that seed one; the editor edits in its window's engine and persists the change set), `NativeAtlas` (Slug atlas generations and source catalog pages), `NativeSource` (a font file opened for browsing; its snapshot carries shift-font's own `Axis`, `Source` and `KerningSide`, the types the engine reads and the intents take) and `NativeShaping` (the shaping tables). Each has one napi export, `<area>_request(method, numbers, blobs)`, which `reply::answer` decodes with the trait's `<trait>_request` and encodes the result of; names travel with each message (`pack::CarriedNames`). napi is the transport only: the generated `@shift/types/native-protocol` classes, built by `@shift/bridge`'s `createBridge`, are the API. **WHY:** One declaration per call, both sides generated, instead of a napi signature, a `shift-wire` twin and a scraped declaration per method.
+**Architecture Invariant:** The utility process calls the addon through three traits split by area, each a `#[pack::interface]` in `src/bridge/`: `NativeWorkspace` (open, save, close, persist, the font's records other than its axes, sources and kerning, which the window reads from its engine, and `apply`, which writes a store from intents directly for tests and tools that seed one; the editor edits in its window's engine and persists the change set), `NativeAtlas` (Slug atlas generations and source catalog pages), `NativeSource` (a font file opened for browsing; its snapshot carries shift-font's own `Axis`, `Source` and `KerningSide`, the types the engine reads and the intents take); the window compiles its own shaper font, in its engine module. Each has one napi export, `<area>_request(method, numbers, blobs)`, which `reply::answer` decodes with the trait's `<trait>_request` and encodes the result of; names travel with each message (`pack::CarriedNames`). napi is the transport only: the generated `@shift/types/native-protocol` classes, built by `@shift/bridge`'s `createBridge`, are the API. **WHY:** One declaration per call, both sides generated, instead of a napi signature, a `shift-wire` twin and a scraped declaration per method.
 
 **Architecture Invariant:** A trait method returns `Result<T, Native<Area>Error>`. Each variant carries the Rust error's text as `detail`, so the generated TypeScript throws a `PackError` whose `kind` names the failure (`noWorkspace`, `needsSaveAs`, `invalidInput`, `failed`, …) and whose message ends with the text callers saw before. Internally failures stay `BridgeError`; `through_bridge_error!` lets a trait method use `?` on anything `BridgeError` wraps.
 
@@ -41,7 +41,6 @@ crates/shift-bridge/
       workspace.rs -- `NativeWorkspace`: lifecycle, storage, persist, font records
       atlas.rs     -- `NativeAtlas`: Slug atlas generations and source catalog pages
       source.rs    -- `NativeSource`: a font file opened for browsing
-      shaping.rs   -- `NativeShaping`: the compiled shaping tables
     reply.rs     -- one packed request over napi: read in place, reply blobs copied once
     config.rs    -- stateless config.toml and theme-file functions over shift-config, used by desktop main
     errors.rs    -- bridge error type and NAPI mapping

@@ -307,7 +307,7 @@ impl Shaper {
             .iter()
             .zip(shaped.glyph_positions())
             .map(|(info, position)| ShapedGlyph {
-                glyph_id: source.host_glyph(info.glyph_id),
+                glyph_id: host_glyph(source, request.units, info.glyph_id, info.cluster),
                 cluster: info.cluster,
                 x_advance: position.x_advance,
                 y_advance: position.y_advance,
@@ -320,6 +320,29 @@ impl Shaper {
 
     fn font(&self) -> Result<FontRef<'_>, ShapeError> {
         FontRef::new(&self.bytes).map_err(|_| ShapeError::InvalidFont)
+    }
+}
+
+/// The host glyph shaper glyph `shaper_glyph` at unit `cluster` is.
+///
+/// `.notdef` is both a character with no glyph and, when the font has one,
+/// a glyph of its own: a `.notdef` inserted by name at `cluster` comes back
+/// as itself; any other `.notdef` as no glyph.
+fn host_glyph<S: GlyphSource>(
+    source: &S,
+    units: &[Unit<S::Glyph>],
+    shaper_glyph: u32,
+    cluster: u32,
+) -> Option<S::Glyph> {
+    if shaper_glyph != NOTDEF {
+        return source.host_glyph(shaper_glyph);
+    }
+    let unit = usize::try_from(cluster)
+        .ok()
+        .and_then(|index| units.get(index))?;
+    match unit {
+        Unit::Glyph(glyph) if source.shaper_glyph(glyph) == Some(NOTDEF) => Some(glyph.clone()),
+        _ => None,
     }
 }
 
