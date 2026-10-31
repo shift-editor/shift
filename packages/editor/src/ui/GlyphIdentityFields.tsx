@@ -1,10 +1,10 @@
 import { Input } from "@shift/ui";
-import type { GlyphName } from "@shift/types";
 import { useEffect, useRef, useState } from "react";
 import type { Font } from "../lib/model/Font";
 import type { Glyph } from "../lib/model/Glyph";
 import { useSignalState } from "../lib/signals";
-import { codepointToHex, parseCodepoint } from "../lib/utils/unicode";
+import { codepointToHex, formatCodepointAsUPlus } from "../lib/utils/unicode";
+import type { GlyphIdentityChange, GlyphIdentityConflict } from "../types/glyph";
 
 export interface GlyphIdentityFieldsProps {
   font: Font;
@@ -18,9 +18,10 @@ export interface GlyphIdentityFieldsProps {
  * The glyph's name and primary codepoint, side by side, each edited in place.
  *
  * @remarks
- * Changes go through {@link Font.updateGlyphIdentity}, so they are undoable.
- * A name or codepoint another glyph already uses is refused and the field
- * reverts; clearing the codepoint removes it.
+ * Changes go through {@link Font.renameGlyph} and
+ * {@link Font.setPrimaryCodepoint}, which own the rules and are undoable. A
+ * refused change reverts the field and says why below it; clearing the
+ * codepoint removes it.
  */
 export function GlyphIdentityFields({ font, glyph, editable }: GlyphIdentityFieldsProps) {
   if (!glyph) {
@@ -44,49 +45,51 @@ function GlyphIdentityFieldsFor({
 }: GlyphIdentityFieldsProps & { glyph: Glyph }) {
   const entry = useSignalState(glyph.entryCell);
   const unicode = entry.unicodes[0] ?? null;
-  const otherUnicodes = entry.unicodes.slice(1);
-
-  const rename = (text: string) => {
-    const name = text.trim() as GlyphName;
-    if (!name || name === entry.name || font.recordForName(name)) return;
-    font.updateGlyphIdentity(entry.id, name, [...entry.unicodes]);
-  };
-
-  const assignUnicode = (text: string) => {
-    if (text.trim() === "") {
-      if (unicode !== null) font.updateGlyphIdentity(entry.id, entry.name, otherUnicodes);
-      return;
-    }
-
-    const codepoint = parseCodepoint(text);
-    if (codepoint === null || codepoint === unicode) return;
-    const owner = font.entryForUnicode(codepoint);
-    if (owner && owner.id !== entry.id) return;
-
-    const rest = otherUnicodes.filter((value) => value !== codepoint);
-    font.updateGlyphIdentity(entry.id, entry.name, [codepoint, ...rest]);
-  };
+  const [conflict, setConflict] = useState<GlyphIdentityConflict | null>(null);
+  const report = (change: GlyphIdentityChange) =>
+    setConflict(change.kind === "refused" ? change.conflict : null);
 
   return (
-    <div className="flex gap-1.5">
-      <TextField
-        ariaLabel="Glyph name"
-        value={entry.name}
-        disabled={!editable}
-        className="text-center"
-        onCommit={rename}
-      />
-      <div className="w-18 shrink-0">
+    <div className="flex flex-col gap-1">
+      <div className="flex gap-1.5">
         <TextField
-          ariaLabel="Unicode"
-          label="U+"
-          value={unicode === null ? "" : codepointToHex(unicode)}
+          ariaLabel="Glyph name"
+          value={entry.name}
           disabled={!editable}
-          onCommit={assignUnicode}
+          className="text-center"
+          onCommit={(text) => report(font.renameGlyph(entry.id, text))}
         />
+        <div className="w-18 shrink-0">
+          <TextField
+            ariaLabel="Unicode"
+            label="U+"
+            value={unicode === null ? "" : codepointToHex(unicode)}
+            disabled={!editable}
+            onCommit={(text) => report(font.setPrimaryCodepoint(entry.id, text))}
+          />
+        </div>
       </div>
+      {conflict ? (
+        <p role="alert" className="text-xs text-muted">
+          {conflictMessage(conflict)}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/** Says why a name or codepoint was not changed. */
+function conflictMessage(conflict: GlyphIdentityConflict): string {
+  switch (conflict.kind) {
+    case "blankName":
+      return "A glyph needs a name.";
+    case "nameTaken":
+      return `Another glyph is named ${conflict.name}.`;
+    case "invalidCodepoint":
+      return `${conflict.text.trim()} is not a Unicode codepoint.`;
+    case "codepointTaken":
+      return `${formatCodepointAsUPlus(conflict.codepoint)} belongs to ${conflict.owner}.`;
+  }
 }
 
 interface TextFieldProps {

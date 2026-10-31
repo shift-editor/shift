@@ -4,6 +4,7 @@ import type {
   ContourId,
   GlyphEntry,
   GlyphId,
+  GlyphName,
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
@@ -12,6 +13,7 @@ import type {
   SegmentId,
   SourceId,
   ReadonlyEntityMap,
+  Unicode,
 } from "@shift/types";
 import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
@@ -75,3 +77,16 @@ export interface GlyphOptions {
   /** Reads a glyph's propagation category; reactive callers re-run when it changes. */
   readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
 }
+
+/** Why a glyph's name or codepoint was not changed, so the field can say. */
+export type GlyphIdentityConflict =
+  | { readonly kind: "blankName" }
+  | { readonly kind: "nameTaken"; readonly name: GlyphName }
+  | { readonly kind: "invalidCodepoint"; readonly text: string }
+  | { readonly kind: "codepointTaken"; readonly codepoint: Unicode; readonly owner: GlyphName };
+
+/** What a glyph identity change did: changed it, left it as it was, or refused it. */
+export type GlyphIdentityChange =
+  | { readonly kind: "changed" }
+  | { readonly kind: "unchanged" }
+  | { readonly kind: "refused"; readonly conflict: GlyphIdentityConflict };

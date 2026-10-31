@@ -67,7 +67,7 @@ import type {
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
-import type { GlyphReader } from "../../types/glyph";
+import type { GlyphIdentityChange, GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -91,7 +91,7 @@ import type {
   VariationReader,
 } from "../../types/variation";
 import { uniqueInOrder } from "../utils/utils";
-import { fallbackGlyphNameForUnicode } from "../utils/unicode";
+import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 
 /**
@@ -774,6 +774,66 @@ export class Font {
    */
   glyphHandleForName(name: GlyphName): GlyphHandle {
     return this.#directoryCell.peek().glyphHandleForName(name);
+  }
+
+  /**
+   * Renames a glyph, refusing a blank name or one another glyph has.
+   *
+   * @remarks
+   * Surrounding whitespace is dropped. The rename is undoable; an unchanged
+   * name changes nothing.
+   */
+  renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityChange {
+    const entry = this.entryForId(glyphId);
+    const trimmed = name.trim();
+    if (!entry || trimmed === entry.name) return { kind: "unchanged" };
+    if (trimmed === "") return { kind: "refused", conflict: { kind: "blankName" } };
+    if (this.recordForName(trimmed)) {
+      return { kind: "refused", conflict: { kind: "nameTaken", name: trimmed } };
+    }
+
+    this.updateGlyphIdentity(glyphId, trimmed, [...entry.unicodes]);
+    return { kind: "changed" };
+  }
+
+  /**
+   * Sets a glyph's primary codepoint, the one it is listed and typed by.
+   *
+   * @remarks
+   * The codepoint replaces the primary one and the glyph keeps its others; a
+   * blank `text` removes the primary one. A codepoint another glyph has is refused, since one
+   * codepoint maps to one glyph. Undoable.
+   *
+   * @param text - the codepoint as hex, `U+` optional; blank removes it.
+   */
+  setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityChange {
+    const entry = this.entryForId(glyphId);
+    if (!entry) return { kind: "unchanged" };
+
+    const [primary = null, ...others] = entry.unicodes;
+    if (text.trim() === "") {
+      if (primary === null) return { kind: "unchanged" };
+      this.updateGlyphIdentity(glyphId, entry.name, others);
+      return { kind: "changed" };
+    }
+
+    const codepoint = parseCodepoint(text);
+    if (codepoint === null) {
+      return { kind: "refused", conflict: { kind: "invalidCodepoint", text } };
+    }
+    if (codepoint === primary) return { kind: "unchanged" };
+
+    const owner = this.entryForUnicode(codepoint);
+    if (owner && owner.id !== glyphId) {
+      return {
+        kind: "refused",
+        conflict: { kind: "codepointTaken", codepoint, owner: owner.name },
+      };
+    }
+
+    const rest = others.filter((value) => value !== codepoint);
+    this.updateGlyphIdentity(glyphId, entry.name, [codepoint, ...rest]);
+    return { kind: "changed" };
   }
 
   /**
