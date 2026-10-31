@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 import type { IpcRendererEvent } from "electron";
 import type { ShiftHost } from "../shared/host/ShiftHost";
 import { invoke, listen } from "../shared/ipc/renderer";
+import { layerReaderHost } from "./layerReaders";
 
 const shiftHost: ShiftHost = {
   platform: process.platform,
@@ -57,6 +58,10 @@ const shiftHost: ShiftHost = {
     onAvailable: listen(ipcRenderer, "update.available"),
     onReady: listen(ipcRenderer, "update.ready"),
   },
+  debug: {
+    overlays: invoke(ipcRenderer, "debug.overlays"),
+    onOverlaysChanged: listen(ipcRenderer, "debug.overlaysChanged"),
+  },
   ui: {
     onZoomChanged: listen(ipcRenderer, "ui.zoomChanged"),
   },
@@ -73,6 +78,7 @@ const shiftHost: ShiftHost = {
     writeText: invoke(ipcRenderer, "clipboard.writeText"),
     readText: invoke(ipcRenderer, "clipboard.readText"),
   },
+  layers: layerReaderHost(),
 };
 
 contextBridge.exposeInMainWorld("shiftHost", shiftHost);

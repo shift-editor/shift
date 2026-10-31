@@ -13,12 +13,12 @@ fn resident_two_source_model_matches_shift_projection_at_midpoint() {
     let font = sample_variable_font();
     let glyph_id = font.glyphs().next().expect("fixture has a glyph").id();
     let axis_id = font.axes()[0].id();
-    let base = location(&axis_id, 400.0);
-    let midpoint = location(&axis_id, 600.0);
-    let source = location(&axis_id, 800.0);
-    let base_commands = commands_at(&font, &glyph_id, &base);
-    let source_commands = commands_at(&font, &glyph_id, &source);
-    let midpoint_commands = commands_at(&font, &glyph_id, &midpoint);
+    let base = location(axis_id, 400.0);
+    let midpoint = location(axis_id, 600.0);
+    let source = location(axis_id, 800.0);
+    let base_commands = commands_at(&font, glyph_id, &base);
+    let source_commands = commands_at(&font, glyph_id, &source);
+    let midpoint_commands = commands_at(&font, glyph_id, &midpoint);
 
     let mut variable_builder = VariableAtlasBuilder::default();
     variable_builder
@@ -54,7 +54,7 @@ fn resident_two_source_model_matches_shift_projection_at_midpoint() {
 
 fn commands_at(
     font: &shift_font::Font,
-    glyph_id: &GlyphId,
+    glyph_id: GlyphId,
     location: &DesignLocation,
 ) -> Vec<OutlineCommand<f32>> {
     let glyph = font
@@ -102,6 +102,6 @@ fn commands_at(
     commands
 }
 
-fn location(axis_id: &shift_font::AxisId, value: f64) -> DesignLocation {
-    DesignLocation::from([(axis_id.clone(), value)])
+fn location(axis_id: shift_font::AxisId, value: f64) -> DesignLocation {
+    DesignLocation::from([(axis_id, value)])
 }

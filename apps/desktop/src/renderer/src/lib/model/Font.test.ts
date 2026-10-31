@@ -1,21 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "node:path";
 import {
-  mintAxisId,
   mintAxisLabelId,
   mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
-  mintSourceId,
-  type Axis,
   type AxisDefinition,
   type AxisId,
   type GlyphId,
   type GlyphName,
+  type Source,
   type SourceId,
   type Unicode,
 } from "@shift/types";
-import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
+import type { WorkspaceSnapshot } from "@shared/workspace/lanes";
 import { Font, FontStore } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 import { signal } from "@shift/editor/signals";
@@ -35,6 +33,8 @@ const SNAPSHOT: WorkspaceSnapshot = {
       unicodes: [65 as Unicode],
       componentBaseGlyphIds: [],
       layers: [],
+      mark: false,
+      nonspacingMark: false,
     },
   ],
   sources: [
@@ -42,7 +42,8 @@ const SNAPSHOT: WorkspaceSnapshot = {
       id: "source-1" as SourceId,
       name: "Regular",
       location: { values: {} },
-      metricValues: [],
+      metricValues: {},
+      role: "master",
     },
   ],
   axes: [],
@@ -139,6 +140,65 @@ describe("Font projects the workspace snapshot", () => {
   });
 });
 
+describe("Font answers directory and source queries", () => {
+  const glyph = (id: string, name: string) => ({
+    id: id as GlyphId,
+    name: name as GlyphName,
+    unicodes: [],
+    componentBaseGlyphIds: [],
+    layers: [],
+    mark: false,
+    nonspacingMark: false,
+  });
+  const source = (id: string, name: string): Source => ({
+    id: id as SourceId,
+    name,
+    location: { values: {} },
+    metricValues: {},
+    role: "master",
+  });
+  const font = (snapshot: Partial<WorkspaceSnapshot>) =>
+    new Font({ store: new FontStore({ workspace: { ...SNAPSHOT, ...snapshot } }) });
+
+  it("pages the directory after a glyph, in font order", () => {
+    const abc = font({ glyphs: [glyph("g_A", "A"), glyph("g_B", "B"), glyph("g_C", "C")] });
+    const names = (page: ReturnType<Font["glyphsAfter"]>) =>
+      page?.entries.map((entry) => entry.name);
+
+    expect(abc.glyphCount).toBe(3);
+    expect(names(abc.glyphsAfter(null, 2))).toEqual(["A", "B"]);
+    expect(abc.glyphsAfter(null, 2)?.hasMore).toBe(true);
+    expect(names(abc.glyphsAfter("g_B" as GlyphId, 2))).toEqual(["C"]);
+    expect(abc.glyphsAfter("g_B" as GlyphId, 2)?.hasMore).toBe(false);
+    expect(abc.glyphsAfter("g_gone" as GlyphId, 2)).toBeNull();
+  });
+
+  it("names a glyph by id, and nothing for an unknown id", () => {
+    const a = font({ glyphs: [glyph("g_A", "A")] });
+
+    expect(a.glyphName("g_A" as GlyphId)).toBe("A");
+    expect(a.glyphName("g_gone" as GlyphId)).toBeNull();
+  });
+
+  it("finds a source by exact name", () => {
+    const sources = font({ sources: [source("s_1", "Regular"), source("s_2", "Bold")] });
+
+    expect(sources.sourceNamed("Bold")?.id).toBe("s_2");
+    expect(sources.sourceNamed("Black")).toBeNull();
+  });
+
+  it("reads a gone source's layer against the default source's metrics", () => {
+    const regular = font({});
+
+    expect(regular.metricsForLayerSource("source-1" as SourceId)).toEqual(
+      regular.metricsForSource("source-1" as SourceId),
+    );
+    expect(regular.metricsForLayerSource("s_gone" as SourceId)).toEqual(
+      regular.defaultSourceMetrics,
+    );
+  });
+});
+
 describe("font-level intents make the font variable", () => {
   it("persists metadata replacement through the reactive font and undo ledger", async () => {
     const stack = createWorkspaceStack();
@@ -173,48 +233,22 @@ describe("font-level intents make the font variable", () => {
   it("createAxis and createSource project axes and sources without creating glyph layers", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
-    const glyphId = mintGlyphId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createGlyph",
-        createGlyph: {
-          glyphId,
-          name: "A" as GlyphName,
-          unicodes: [65 as Unicode],
-        },
-      },
-    ]);
+    const glyphId = stack.font.createGlyph("A" as GlyphName).id;
+    await stack.editCoordinator.settled();
     expect(stack.font.isVariable()).toBe(false);
 
-    const weightAxisId = mintAxisId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createAxis",
-        createAxis: {
-          axis: continuousAxis(weightAxisId),
-        },
-      },
-    ]);
+    const weightAxisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
     expect(stack.font.getAxes().map((axis) => axis.tag)).toEqual(["wght"]);
     expect(stack.font.isVariable()).toBe(true);
 
-    const boldSourceId = mintSourceId();
-    const applied = await stack.editCoordinator.apply([
-      {
-        kind: "createSource",
-        createSource: {
-          sourceId: boldSourceId,
-          name: "Bold",
-          location: {
-            values: { [weightAxisId]: 700 } as Record<AxisId, number>,
-          },
-        },
-      },
-    ]);
-    const bold = stack.font.sources.find((source) => source.name === "Bold");
+    const boldSourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [weightAxisId]: 700 }),
+    );
+    await stack.editCoordinator.settled();
+    const bold = stack.font.sourceNamed("Bold");
     expect(bold?.id).toBe(boldSourceId);
-    expect(applied.next?.sources?.find((source) => source.name === "Bold")?.id).toBe(boldSourceId);
-    expect(applied.layers).toEqual([]);
     expect(
       stack.font.recordForId(glyphId)?.layers.some((layer) => layer.sourceId === boldSourceId),
     ).toBe(false);
@@ -229,10 +263,7 @@ describe("font-level intents make the font variable", () => {
       tag: "opsz",
       name: "Optical Size",
       role: "external",
-      axisType: "continuous",
-      minimum: 8,
-      default: 14,
-      maximum: 72,
+      kind: { kind: "continuous", minimum: 8, default: 14, maximum: 72 },
       labels: [],
       hidden: false,
     });
@@ -245,7 +276,9 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.settled();
 
     const source = stack.font.sources.find((candidate) => candidate.id === sourceId);
-    expect(source?.metricValues).toHaveLength(stack.font.metricDefinitions.length);
+    expect(Object.keys(source?.metricValues ?? {})).toHaveLength(
+      stack.font.metricDefinitions.length,
+    );
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -272,7 +305,7 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    expect(applied.next?.glyphs?.[0]?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
     expect(stack.font.recordForId(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
   });
 
@@ -283,10 +316,7 @@ describe("font-level intents make the font variable", () => {
       tag: "wght",
       name: "Weight",
       role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
+      kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
       labels: [],
       hidden: false,
     });
@@ -308,7 +338,7 @@ describe("font-level intents make the font variable", () => {
     ]);
     expect(stack.font.getAxisMappings().map((mapping) => mapping.id)).toEqual([mappingId]);
     expect(
-      stack.client.workspaceCell.peek()?.axisMappingBases.map((basis) => basis.mappingId),
+      stack.store.workspaceCell.peek()?.axisMappingBases.map((basis) => basis.mappingId),
     ).toEqual([mappingId]);
     const mapped = await stack.font.mapLocation({
       values: { [axisId]: 900 } as Record<AxisId, number>,
@@ -375,9 +405,7 @@ describe("font-level intents make the font variable", () => {
       ...weightAxis(),
       tag: "wdth",
       name: "Width",
-      minimum: 50,
-      default: 100,
-      maximum: 200,
+      kind: { kind: "continuous", minimum: 50, default: 100, maximum: 200 },
     });
     await stack.editCoordinator.settled();
     const boldSourceId = stack.font.createSource(
@@ -429,10 +457,7 @@ describe("font-level intents make the font variable", () => {
       tag: "wght",
       name: "Weight",
       role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
+      kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
       labels: [
         {
           id: labelId,
@@ -526,16 +551,8 @@ describe("font-level intents make the font variable", () => {
     const glyph = await stack.font.loadGlyph(record.id);
     const layers = glyph.layers;
 
-    await stack.editCoordinator.apply([
-      {
-        kind: "updateGlyph",
-        updateGlyph: {
-          glyphId: record.id,
-          newName: "A.alt" as GlyphName,
-          newUnicodes: [0xe001 as Unicode],
-        },
-      },
-    ]);
+    stack.font.updateGlyphIdentity(record.id, "A.alt" as GlyphName, [0xe001 as Unicode]);
+    await stack.editCoordinator.settled();
 
     expect(await stack.font.loadGlyph(record.id)).toBe(glyph);
     expect(glyph.entry.name).toBe("A.alt");
@@ -548,51 +565,19 @@ describe("font-level intents make the font variable", () => {
   it("exact sources without glyph layers have no live layer and use projected fallback geometry", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
-    const glyphId = mintGlyphId();
-    const defaultLayerId = mintLayerId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createGlyph",
-        createGlyph: {
-          glyphId,
-          name: "A" as GlyphName,
-          unicodes: [65 as Unicode],
-        },
-      },
-      {
-        kind: "createGlyphLayer",
-        createGlyphLayer: {
-          layerId: defaultLayerId,
-          glyphId,
-          sourceId: stack.font.defaultSource.id,
-        },
-      },
-      {
-        kind: "setXAdvance",
-        setXAdvance: { layerId: defaultLayerId, width: 640 },
-      },
-    ]);
+    const glyphId = stack.font.createGlyph("A" as GlyphName).id;
+    await stack.editCoordinator.settled();
+    (await stack.font.loadGlyph(glyphId))
+      .layerForSource(stack.font.defaultSource.id)!
+      .setXAdvance(640);
 
-    const axisId = mintAxisId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createAxis",
-        createAxis: {
-          axis: continuousAxis(axisId),
-        },
-      },
-    ]);
-    const sourceId = mintSourceId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createSource",
-        createSource: {
-          sourceId,
-          name: "Bold",
-          location: { values: { [axisId]: 700 } as Record<AxisId, number> },
-        },
-      },
-    ]);
+    const axisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const sourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 700 }),
+    );
+    await stack.editCoordinator.settled();
 
     const glyph = await stack.font.loadGlyph(glyphId);
     expect(glyph.xAdvance).toBe(640);
@@ -611,57 +596,19 @@ describe("font-level intents make the font variable", () => {
   it("loads every authored layer in one glyph snapshot", async () => {
     const stack = createWorkspaceStack();
     await stack.createWorkspace();
-    const glyphId = mintGlyphId();
+    const record = stack.font.createGlyph("A" as GlyphName);
+    const glyphId = record.id;
     const defaultSourceId = stack.font.defaultSource.id;
-    const defaultLayerId = mintLayerId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createGlyph",
-        createGlyph: {
-          glyphId,
-          name: "A" as GlyphName,
-          unicodes: [65 as Unicode],
-        },
-      },
-      {
-        kind: "createGlyphLayer",
-        createGlyphLayer: {
-          layerId: defaultLayerId,
-          glyphId,
-          sourceId: defaultSourceId,
-        },
-      },
-    ]);
+    const defaultLayerId = record.layers[0]!.id;
 
-    const axisId = mintAxisId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createAxis",
-        createAxis: {
-          axis: continuousAxis(axisId),
-        },
-      },
-    ]);
-    const boldSourceId = mintSourceId();
-    const boldLayerId = mintLayerId();
-    await stack.editCoordinator.apply([
-      {
-        kind: "createSource",
-        createSource: {
-          sourceId: boldSourceId,
-          name: "Bold",
-          location: { values: { [axisId]: 700 } as Record<AxisId, number> },
-        },
-      },
-      {
-        kind: "createGlyphLayer",
-        createGlyphLayer: {
-          layerId: boldLayerId,
-          glyphId,
-          sourceId: boldSourceId,
-        },
-      },
-    ]);
+    const axisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const boldSourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 700 }),
+    );
+    const boldLayerId = stack.font.createGlyphLayer(glyphId, boldSourceId);
+    await stack.editCoordinator.settled();
 
     const boldSource = stack.font.source(boldSourceId);
     if (!boldSource) throw new Error("Expected bold source");
@@ -716,25 +663,14 @@ describe("font-level intents make the font variable", () => {
     const record = stack.font.createGlyph("A" as GlyphName);
     await stack.editCoordinator.settled();
     const glyph = await stack.font.loadGlyph(record.id);
-    const axisId = mintAxisId();
-    const sourceId = mintSourceId();
-    const layerId = mintLayerId();
-
-    await stack.editCoordinator.apply([
-      { kind: "createAxis", createAxis: { axis: continuousAxis(axisId) } },
-      {
-        kind: "createSource",
-        createSource: {
-          sourceId,
-          name: "Bold",
-          location: { values: { [axisId]: 700 } as Record<AxisId, number> },
-        },
-      },
-      {
-        kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId: glyph.id, sourceId },
-      },
-    ]);
+    const axisId = stack.font.createAxis(weightAxis());
+    await stack.editCoordinator.settled();
+    const sourceId = stack.font.createSource(
+      "Bold",
+      externalAxisLocationFromRecord({ [axisId]: 700 }),
+    );
+    const layerId = stack.font.createGlyphLayer(glyph.id, sourceId);
+    await stack.editCoordinator.settled();
 
     expect(await stack.font.loadGlyph(glyph.id)).toBe(glyph);
     expect(glyph.layerForSource(sourceId)?.id).toBe(layerId);
@@ -772,7 +708,7 @@ describe("font-level intents make the font variable", () => {
     );
     const record = stack.font.recordForName("Aacute" as GlyphName);
     if (!record) throw new Error("Expected Aacute fixture glyph");
-    const source = stack.font.sources.find((candidate) => candidate.name === "BoldWide");
+    const source = stack.font.sourceNamed("BoldWide");
     if (!source) throw new Error("Expected BoldWide fixture source");
     const glyph = await stack.font.loadGlyph(record.id);
     const locationCell = signal(stack.font.defaultLocation());
@@ -834,21 +770,6 @@ describe("font-level intents make the font variable", () => {
   });
 });
 
-function continuousAxis(axisId: AxisId): Axis {
-  return {
-    id: axisId,
-    tag: "wght",
-    name: "Weight",
-    role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-    labels: [],
-    hidden: false,
-  };
-}
-
 function mappingPoint(axisId: AxisId, input: number, output: number) {
   return {
     input: { values: { [axisId]: input } as Record<AxisId, number> },
@@ -861,10 +782,7 @@ function weightAxis(): AxisDefinition {
     tag: "wght",
     name: "Weight",
     role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
+    kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
     labels: [],
     hidden: false,
   };

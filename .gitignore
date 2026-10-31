@@ -108,6 +108,7 @@ npm/
 **/settings.local.json
 
 .turbo
+vitest-report.json
 *.settings.local.json*
 
 .plans/
@@ -129,5 +130,12 @@ packages/sdk/THIRD_PARTY_LICENSES.txt
 
 # Built from crates/shift-wasm by packages/wasm/scripts/build.mjs
 packages/wasm/src/generated/
-packages/wasm/src/generated-reference/
 packages/wasm/src/generated-shaping/
+packages/wasm/src/generated-engine/
+packages/wasm/src/generated-protocol/
+packages/pack/src/.generated-*/
+# Generated before typecheck, tests and builds (generate:bridge-types); not committed.
+crates/shift-bridge/index.d.ts
+crates/shift-bridge/protocol.ts
+packages/types/src/bridge/generated.ts
+packages/types/src/bridge/protocol.ts

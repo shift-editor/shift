@@ -47,21 +47,22 @@ try {
   });
   execFileSync("git", ["-C", checkout, "checkout", INTER_COMMIT], { stdio: "inherit" });
 
-  const bridgeModule = await import(
-    pathToFileURL(resolve(repositoryRoot, "crates/shift-bridge/index.js")).href
+  // The native workspace through its generated clients, as the utility process calls it.
+  const { createBridge } = await import(
+    pathToFileURL(resolve(repositoryRoot, "packages/bridge/src/index.ts")).href
   );
-  const bridge = new bridgeModule.Bridge();
+  const bridge = createBridge();
 
   try {
-    bridge.openWorkspace(join(checkout, SOURCE_PATH), workspace);
-    const record = bridge.getGlyphs().find((candidate) => candidate.name === "a");
+    bridge.workspace.openWorkspace(join(checkout, SOURCE_PATH), workspace);
+    const record = bridge.workspace.getGlyphs().find((candidate) => candidate.name === "a");
     if (!record || !record.unicodes.includes(0x61)) throw new Error("Inter lowercase a not found");
 
-    const glyphs = bridge.getGlyphSnapshots([{ glyphId: record.id }]);
+    const glyphs = bridge.napi.getGlyphSnapshots([{ glyphId: record.id }]);
     const glyph = glyphs[0];
     if (!glyph) throw new Error("Inter lowercase a snapshot is missing");
 
-    const axes = bridge.getAxes();
+    const axes = bridge.workspace.getAxes();
     const opticalSizeAxis = axes.find((axis) => axis.tag === "opsz");
     const namedInstances = bridge
       .getNamedInstances()
@@ -71,15 +72,15 @@ try {
           instance.location.values[opticalSizeAxis.id] === opticalSizeAxis.default,
       );
     const font = {
-      metadata: bridge.getMetadata(),
-      metrics: bridge.getMetrics(),
-      metricDefinitions: bridge.getMetricDefinitions(),
-      sourceMetricsInterpolation: bridge.getSourceMetricsInterpolation(),
+      metadata: bridge.workspace.getMetadata(),
+      metrics: bridge.workspace.getMetrics(),
+      metricDefinitions: bridge.workspace.getMetricDefinitions(),
+      sourceMetricsInterpolation: bridge.workspace.getSourceMetricsInterpolation(),
       glyphs: [record],
-      sources: bridge.getSources(),
+      sources: bridge.workspace.getSources(),
       axes,
-      axisMappings: bridge.getAxisMappings(),
-      axisMappingBases: bridge.getAxisMappingBases(),
+      axisMappings: bridge.workspace.getAxisMappings(),
+      axisMappingBases: bridge.workspace.getAxisMappingBases(),
       namedInstances,
     };
 
@@ -115,7 +116,7 @@ try {
       `Generated Inter a fixture with ${record.layers.length} masters and ${namedInstances.length} instances at ${target}`,
     );
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
   }
 } finally {
   await rm(root, { recursive: true, force: true });

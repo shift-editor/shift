@@ -20,20 +20,36 @@ export interface WorkspaceSnapshot {
   workspaceId: string;
   metadata: FontMetadata;
   metrics: FontMetrics;
-  metricDefinitions: MetricDefinition[];
+  metricDefinitions: readonly MetricDefinition[];
   sourceMetricsInterpolation: SourceMetricsInterpolationSnapshot | null;
-  glyphs: GlyphRecord[];
-  sources: Source[];
-  axes: Axis[];
-  axisMappings: AxisMapping[];
-  axisMappingBases: AxisMappingBasis[];
-  namedInstances: NamedInstance[];
+  glyphs: readonly GlyphRecord[];
+  sources: readonly Source[];
+  axes: readonly Axis[];
+  axisMappings: readonly AxisMapping[];
+  axisMappingBases: readonly AxisMappingBasis[];
+  namedInstances: readonly NamedInstance[];
   /** Tracked Hyperglot language ids; `null` when the font stores no list. */
-  languageIds: string[] | null;
+  languageIds: readonly string[] | null;
   kerning: KerningSnapshot;
   /** The editor's canvas stored with the document; `null` when none was ever written. */
   sceneState: SceneState | null;
 }
+
+/**
+ * What the workspace's store answers at open: a {@link WorkspaceSnapshot}
+ * without the axes, sources, kerning and glyph records, which the window
+ * reads from its engine.
+ */
+export type StoredWorkspaceSnapshot = Omit<WorkspaceSnapshot, keyof EngineFontRecords>;
+
+/**
+ * The axes, sources and kerning of an open font, as the window's engine
+ * reads them from its own font without asking its store.
+ */
+export type EngineStorelessRecords = Pick<WorkspaceSnapshot, "axes" | "sources" | "kerning">;
+
+/** The axes, sources, kerning and glyph records of an open font, as the window's engine reads them. */
+export type EngineFontRecords = EngineStorelessRecords & Pick<WorkspaceSnapshot, "glyphs">;
 
 export interface WorkspaceGlyphLayerSnapshot {
   glyphId: GlyphId;

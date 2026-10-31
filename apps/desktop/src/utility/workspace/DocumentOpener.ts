@@ -1,6 +1,6 @@
 import type { ShiftBridge } from "@shift/bridge";
 import fs from "node:fs";
-import type { WorkspaceDocumentIdentity } from "../../shared/workspace/protocol";
+import type { WorkspaceDocumentIdentity } from "../../shared/workspace/lanes";
 import type { DocumentStorage } from "./DocumentStorage";
 import {
   DocumentAddress,
@@ -68,7 +68,7 @@ export class DocumentOpener {
       this.#removeOtherBindings(opened.address, binding.workspaceId);
       return opened;
     } catch (error) {
-      this.#bridge.closeWorkspace();
+      this.#bridge.workspace.closeWorkspace();
       throw error;
     }
   }
@@ -91,20 +91,20 @@ export class DocumentOpener {
     let opened = false;
 
     try {
-      this.#bridge.openDocument(identity.canonicalPath, workspace.recoveryPath);
+      this.#bridge.workspace.openDocument(identity.canonicalPath, workspace.recoveryPath);
       opened = true;
-      const openedState = this.#bridge.documentState();
+      const openedState = this.#bridge.workspace.documentState();
       if (openedState.documentId !== identity.documentId) {
         throw new Error(
           `document changed during open: expected ${identity.documentId}, found ${openedState.documentId}`,
         );
       }
 
-      this.#bridge.setWorkspaceId(workspace.workspaceId);
+      this.#bridge.workspace.setWorkspaceId(workspace.workspaceId);
       this.#documents.writeDocumentBinding(address, workspace);
       return { workspace, address };
     } catch (error) {
-      if (opened) this.#bridge.closeWorkspace();
+      if (opened) this.#bridge.workspace.closeWorkspace();
       throw error;
     }
   }

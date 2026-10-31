@@ -19,6 +19,8 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
 import { ScriptIcon } from "./ScriptIcon";
+import { NameQuery } from "@/lib/utils/NameQuery";
+import { useMemberSet } from "@/hooks/useMemberSet";
 
 export interface LanguagePickerProps {
   scripts: readonly LanguageScript[];
@@ -40,14 +42,13 @@ export const LanguagePicker = ({
 }: LanguagePickerProps) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const checked = useMemberSet<string>();
+  const checkedIds = checked.values;
   const searchRef = useRef<HTMLInputElement>(null);
 
   const visibleScripts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return normalizedQuery === ""
-      ? scripts
-      : scripts.filter(({ script }) => script.toLowerCase().includes(normalizedQuery));
+    const search = NameQuery.from(query);
+    return search.isEmpty ? scripts : search.filterBy(scripts, ({ script }) => [script]);
   }, [query, scripts]);
 
   const { onMouseDown, itemsToChange, resetRange } = useCheckboxRange(visibleScripts);
@@ -55,24 +56,18 @@ export const LanguagePicker = ({
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       setQuery("");
-      setCheckedIds(new Set(trackedLanguageIds));
+      checked.clear();
+      checked.setMany(trackedLanguageIds, true);
       resetRange();
     }
     setOpen(nextOpen);
   };
 
-  const setScriptChecked = (target: LanguageScript, checked: boolean) => {
-    const affected = itemsToChange(target);
-    setCheckedIds((previous) => {
-      const next = new Set(previous);
-      for (const script of affected) {
-        for (const { language } of script.languages) {
-          if (checked) next.add(language.id);
-          else next.delete(language.id);
-        }
-      }
-      return next;
-    });
+  const setScriptChecked = (target: LanguageScript, isChecked: boolean) => {
+    const languageIds = itemsToChange(target).flatMap((script) =>
+      script.languages.map(({ language }) => language.id),
+    );
+    checked.setMany(languageIds, isChecked);
   };
 
   const apply = () => {

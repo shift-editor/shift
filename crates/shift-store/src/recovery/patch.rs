@@ -61,7 +61,7 @@ impl RecoveryOverlay {
                     source_ids.extend(value.after.sources.iter().map(font::Source::id));
                 }
                 font::FontChange::KerningValue { source_id, .. } => {
-                    kerning_source_ids.insert(source_id.clone());
+                    kerning_source_ids.insert(*source_id);
                 }
                 font::FontChange::KerningGroup { .. } => kerning_groups_changed = true,
                 _ => {}
@@ -145,7 +145,7 @@ impl RecoveryOverlay {
                 clear_tombstone(&tx, AXES, axis_id.as_str())?;
                 writer.upsert_axis_with_order(axis, sql_int(order_index))?;
             } else {
-                delete_axis_override(&tx, &axis_id)?;
+                delete_axis_override(&tx, axis_id)?;
                 mark_tombstone(&tx, AXES, axis_id.as_str())?;
             }
         }
@@ -163,33 +163,37 @@ impl RecoveryOverlay {
                 mark_replaced(&tx, SOURCE_METRIC_VALUES, source_id.as_str())?;
                 mark_replaced(&tx, SOURCE_LIB, source_id.as_str())?;
             } else {
-                delete_source_override(&tx, &source_id)?;
+                delete_source_override(&tx, source_id)?;
                 mark_tombstone(&tx, SOURCES, source_id.as_str())?;
             }
         }
 
         for glyph_id in glyph_ids {
-            if let Some(glyph) = post_font.glyph(&glyph_id) {
+            if let Some(glyph) = post_font.glyph(glyph_id) {
                 let order_index = post_font
-                    .glyph_order(&glyph_id)
+                    .glyph_order(glyph_id)
                     .or_missing(StoreEntity::GlyphOrder, &glyph_id)?;
                 clear_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
                 writer.write_glyph_directory(glyph, sql_int(order_index), WriteMode::Upsert)?;
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LIB, glyph_id.as_str())?;
             } else {
-                delete_glyph_override(&tx, &glyph_id)?;
+                delete_glyph_override(&tx, glyph_id)?;
                 mark_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
             }
         }
 
         for layer_id in layer_ids {
-            if let Some((glyph_id, layer)) = find_layer(post_font, &layer_id) {
+            // The font's layer index finds the owner without scanning every glyph.
+            let owned = post_font
+                .glyph_id_by_layer(layer_id)
+                .zip(post_font.layer(layer_id));
+            if let Some((glyph_id, layer)) = owned {
                 clear_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
-                write_layer_in_tx(&tx, &glyph_id, layer)?;
+                write_layer_in_tx(&tx, glyph_id, layer)?;
                 mark_replaced(&tx, GLYPH_COMPONENTS, layer_id.as_str())?;
             } else {
-                delete_layer_override(&tx, &layer_id)?;
+                delete_layer_override(&tx, layer_id)?;
                 mark_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
             }
         }
@@ -200,7 +204,7 @@ impl RecoveryOverlay {
             mark_replaced(&tx, KERNING_GROUP_MEMBERS, GLOBAL_OWNER)?;
         }
         for source_id in kerning_source_ids {
-            writer.replace_source_kerning(post_font.kerning(), &source_id)?;
+            writer.replace_source_kerning(post_font.kerning(), source_id)?;
             mark_replaced(&tx, KERNING_PAIRS, source_id.as_str())?;
         }
 
@@ -211,7 +215,7 @@ impl RecoveryOverlay {
 
     pub(crate) fn replace_layer(
         &mut self,
-        glyph_id: &font::GlyphId,
+        glyph_id: font::GlyphId,
         layer: &font::GlyphLayer,
     ) -> Result<(), StoreError> {
         self.require_editable()?;
@@ -310,14 +314,14 @@ fn clear_tombstone(
     Ok(())
 }
 
-fn delete_axis_override(tx: &Transaction<'_>, axis_id: &font::AxisId) -> Result<(), StoreError> {
+fn delete_axis_override(tx: &Transaction<'_>, axis_id: font::AxisId) -> Result<(), StoreError> {
     tx.execute("DELETE FROM axes WHERE id = ?1", [&axis_id])?;
     Ok(())
 }
 
 fn delete_source_override(
     tx: &Transaction<'_>,
-    source_id: &font::SourceId,
+    source_id: font::SourceId,
 ) -> Result<(), StoreError> {
     tx.execute(
         "DELETE FROM source_locations WHERE source_id = ?1",
@@ -332,14 +336,14 @@ fn delete_source_override(
     Ok(())
 }
 
-fn delete_glyph_override(tx: &Transaction<'_>, glyph_id: &font::GlyphId) -> Result<(), StoreError> {
+fn delete_glyph_override(tx: &Transaction<'_>, glyph_id: font::GlyphId) -> Result<(), StoreError> {
     tx.execute("DELETE FROM glyph_unicodes WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute("DELETE FROM glyph_lib WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute("DELETE FROM glyphs WHERE id = ?1", [glyph_id])?;
     Ok(())
 }
 
-fn delete_layer_override(tx: &Transaction<'_>, layer_id: &font::LayerId) -> Result<(), StoreError> {
+fn delete_layer_override(tx: &Transaction<'_>, layer_id: font::LayerId) -> Result<(), StoreError> {
     tx.execute(
         "DELETE FROM glyph_components WHERE layer_id = ?1",
         [layer_id],
@@ -350,16 +354,4 @@ fn delete_layer_override(tx: &Transaction<'_>, layer_id: &font::LayerId) -> Resu
     )?;
     tx.execute("DELETE FROM glyph_layers WHERE id = ?1", [layer_id])?;
     Ok(())
-}
-
-fn find_layer<'a>(
-    font: &'a font::Font,
-    layer_id: &font::LayerId,
-) -> Option<(font::GlyphId, &'a font::GlyphLayer)> {
-    font.glyphs().find_map(|glyph| {
-        glyph
-            .layers()
-            .get(layer_id)
-            .map(|layer| (glyph.id(), layer.as_ref()))
-    })
 }

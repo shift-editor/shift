@@ -42,7 +42,7 @@ impl UfoKerning {
     }
 
     /// Adds this UFO's pairs to `import` as the values of `source_id`.
-    pub(crate) fn add_pairs(&self, import: &mut KerningImport<'_>, source_id: &SourceId) {
+    pub(crate) fn add_pairs(&self, import: &mut KerningImport<'_>, source_id: SourceId) {
         for (first, seconds) in &self.pairs {
             for (second, value) in seconds {
                 import.add_pair(
@@ -105,7 +105,7 @@ pub(crate) fn ufo_kerning(
     }
 
     let mut pairs = norad::Kerning::new();
-    let Some(source) = source_id.and_then(|source_id| kerning.source(source_id)) else {
+    let Some(source) = source_id.and_then(|source_id| kerning.source(*source_id)) else {
         return Ok((groups, pairs));
     };
     for (pair, value) in source.pairs() {
@@ -134,7 +134,7 @@ fn ufo_side(
     match side {
         KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).map(ToString::to_string),
         KerningSide::Group(group_id) => kerning
-            .group(group_id)
+            .group(*group_id)
             .map(|group| format!("{group_prefix}{}", group.name)),
     }
 }

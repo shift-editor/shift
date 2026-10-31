@@ -153,9 +153,10 @@ impl ShiftStore {
 pub enum SaveState {
     /// The document now differs from what is saved; recovery keeps the change.
     Unsaved,
-    /// The change returns the document to exactly its saved state, so the
-    /// recovery overlay is discarded. Pass this only when the font equals the
-    /// saved document, as an undo or redo onto the saved position does.
+    /// The change returns the document to exactly its saved state, as an
+    /// undo or redo onto the saved position does. A document checks the claim
+    /// against its saved rows and discards the recovery overlay only when it
+    /// holds.
     MatchesSaved,
 }
 

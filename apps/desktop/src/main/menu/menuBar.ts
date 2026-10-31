@@ -29,7 +29,7 @@ export function withMenuItemIds(
   return template.map((item, index) => {
     const id = item.id ?? `${parentId}.${index}`;
     const submenu = Array.isArray(item.submenu) ? withMenuItemIds(item.submenu, id) : item.submenu;
-    return { ...item, id, ...(submenu === undefined ? {} : { submenu }) };
+    return { ...item, id, submenu };
   });
 }
 

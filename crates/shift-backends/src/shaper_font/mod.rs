@@ -231,7 +231,7 @@ impl ShaperFont {
                     .iter()
                     .map(|(user, _, normalized)| (user.to_f64(), normalized.to_f64()))
                     .collect();
-                (axis_id.clone(), AxisNormalization::new(points))
+                (*axis_id, AxisNormalization::new(points))
             })
             .collect()
     }

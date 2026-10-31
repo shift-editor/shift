@@ -1,4 +1,3 @@
-import type { Page } from "@playwright/test";
 import { expect, navigateToEditor, workspaceTest as test } from "./fixtures/electronApp";
 import {
   editorShell,
@@ -11,36 +10,19 @@ import {
   openVariationControls,
   settingsDetails,
 } from "./fixtures/appLocators";
+import { WEIGHT } from "@/testing/fonts";
 
-async function createWeightAxis(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const font = window.shift?.font;
-    if (!font) throw new Error("Expected authored font");
-
-    font.createAxis({
-      tag: "wght",
-      name: "Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await font.editCoordinator.settled();
-  });
-}
-
-test("exposes stable semantic selectors for major application surfaces", async ({ page }) => {
+test("exposes stable semantic selectors for major application surfaces", async ({
+  page,
+  editor,
+}) => {
   const navigation = fontNavigation(page);
   await expect(navigation).toBeVisible();
   await expect(glyphProperties(page)).toBeVisible();
   await expect(glyphCatalogSurface(page)).toBeVisible();
   await expect(glyphCatalogCanvas(page)).toBeAttached();
 
-  const defaultSourceId = await page.evaluate(() => window.shift?.font.defaultSource.id);
-  if (!defaultSourceId) throw new Error("Expected default source");
+  const defaultSourceId = (await editor.source("default"))!.id;
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 
@@ -53,7 +35,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await settings.getByLabel("Close settings").click();
   await expect(settings).toBeHidden();
 
-  await createWeightAxis(page);
+  await editor.addAxis({ ...WEIGHT, name: "Weight" });
   await navigation.getByRole("button", { name: "Axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
   await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();
@@ -70,23 +52,26 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeVisible();
 });
 
-test("positions an initially hidden variation slider at its current value", async ({ page }) => {
-  await createWeightAxis(page);
-  await navigateToEditor(page, "41");
+test.describe("with a weight axis", () => {
+  test.use({ font: { axes: [{ ...WEIGHT, name: "Weight" }] } });
 
-  const controls = await openVariationControls(page);
-  const slider = controls.getByRole("slider", { name: "Weight", exact: true });
-  await expect(slider).toHaveValue("400");
+  test("positions an initially hidden variation slider at its current value", async ({ page }) => {
+    await navigateToEditor(page, "41");
 
-  const normalizedPosition = await slider.evaluate((input) => {
-    const thumb = input.parentElement;
-    const track = thumb?.parentElement;
-    if (!thumb || !track) throw new Error("Expected slider thumb and track");
+    const controls = await openVariationControls(page);
+    const slider = controls.getByRole("slider", { name: "Weight", exact: true });
+    await expect(slider).toHaveValue("400");
 
-    const thumbBounds = thumb.getBoundingClientRect();
-    const trackBounds = track.getBoundingClientRect();
-    return (thumbBounds.left + thumbBounds.width / 2 - trackBounds.left) / trackBounds.width;
+    const normalizedPosition = await slider.evaluate((input) => {
+      const thumb = input.parentElement;
+      const track = thumb?.parentElement;
+      if (!thumb || !track) throw new Error("Expected slider thumb and track");
+
+      const thumbBounds = thumb.getBoundingClientRect();
+      const trackBounds = track.getBoundingClientRect();
+      return (thumbBounds.left + thumbBounds.width / 2 - trackBounds.left) / trackBounds.width;
+    });
+
+    expect(normalizedPosition).toBeCloseTo(0.375, 2);
   });
-
-  expect(normalizedPosition).toBeCloseTo(0.375, 2);
 });

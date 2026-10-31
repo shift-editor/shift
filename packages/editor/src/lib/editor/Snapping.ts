@@ -11,7 +11,9 @@ import type { PositionCondition } from "../../types/positionEdit";
 /** Editor state snapping reads when it builds a snap set. */
 export interface SnappingContext {
   readonly font: Pick<Font, "metricsForSource">;
-  /** Snap distance in scene units at the current zoom. */
+  /** Snap distance at the current zoom in the units of `node`. */
+  hitRadiusIn(node: ShiftNode): number;
+  /** Snap distance in scene units at the current zoom, for a layer placed in no node. */
   readonly hitRadius: number;
   visibleLocalBounds(node: ShiftNode): LocalBounds | null;
 }
@@ -19,8 +21,10 @@ export interface SnappingContext {
 /** Options for one layer's snap set. */
 export interface LayerSnapOptions {
   /** Points that must not be alignment targets, such as the ones being moved. */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent excludes nothing
   readonly excluding?: ReadonlySet<PointId>;
   /** Excluded points still guided when they sit exactly on a line another target snapped to. */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent marks nothing
   readonly marking?: ReadonlySet<PointId>;
   /** Per-frame switch for every snap in the set, such as a held modifier suspending it. */
   readonly condition?: PositionCondition;
@@ -50,7 +54,8 @@ export class Snapping {
    * @param node - Node the layer is placed in; its visible area limits alignment targets.
    */
   forLayer(layer: GlyphLayer, node: ShiftNode | null, options: LayerSnapOptions = {}): SnapSet {
-    const { font, hitRadius } = this.#context;
+    const { font } = this.#context;
+    const hitRadius = node ? this.#context.hitRadiusIn(node) : this.#context.hitRadius;
     const { excluding, marking } = options;
     const visible = node ? this.#context.visibleLocalBounds(node) : null;
     const onScreenOnCurve = layer.allPoints.filter(

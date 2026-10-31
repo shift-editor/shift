@@ -14,6 +14,7 @@ capHeight = 700;
 descender = -200;
 id = master-light;
 customName = Light;
+name = Light;
 weightValue = 100;
 xHeight = 500;
 },
@@ -23,6 +24,7 @@ capHeight = 700;
 descender = -200;
 id = master-bold;
 customName = Bold;
+name = Bold;
 weightValue = 900;
 xHeight = 500;
 }

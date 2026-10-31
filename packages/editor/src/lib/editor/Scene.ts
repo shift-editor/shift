@@ -1,4 +1,4 @@
-import { mintNodeId, type NodeId } from "@shift/types";
+import { EntityMap, mintNodeId, type NodeId, type ReadonlyEntityMap } from "@shift/types";
 import { Tree } from "../utils/Tree";
 import { computed, type Signal } from "../signals/index";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -21,8 +21,9 @@ export interface SceneValue {
 export class Scene {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #cell: Signal<SceneValue>;
-  readonly #nodesById: Signal<ReadonlyMap<NodeId, ShiftNode>>;
+  readonly #nodesById: Signal<ReadonlyEntityMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
+  readonly #onlyCellsByKind = new Map<NodeKind, Signal<ShiftNode | null>>();
   readonly #byReference: StoreIndex<NodeReference, ShiftNodeRecord>;
 
   /**
@@ -51,11 +52,10 @@ export class Scene {
     );
     this.#nodesById = computed(
       () => {
-        const nodes = new Map<NodeId, ShiftNode>();
-        for (const node of this.#cell.value.nodes) {
-          nodes.set(node.id, node);
-        }
-        return nodes;
+        return new EntityMap(
+          "node",
+          this.#cell.value.nodes.map((node) => [node.id, node] as const),
+        );
       },
       { name: "editor.scene.nodesById" },
     );
@@ -99,7 +99,7 @@ export class Scene {
   node(nodeId: NodeId | null): ShiftNode | null {
     if (!nodeId) return null;
 
-    return this.#nodesById.peek().get(nodeId) ?? null;
+    return this.#nodesById.peek().get(nodeId);
   }
 
   /**
@@ -153,6 +153,30 @@ export class Scene {
   only<K extends NodeKind>(kind: K): NodeOfKind<K> | null {
     const nodes = this.nodesOfKind(kind);
     return nodes.length === 1 ? (nodes[0] ?? null) : null;
+  }
+
+  /**
+   * Reactive {@link only}: the scene's one node of `kind`, or null with none or
+   * several.
+   *
+   * @remarks
+   * Readers rerun when the nodes of `kind` change, not on every scene change.
+   * One cell per kind, created on first use.
+   */
+  onlyCell<K extends NodeKind>(kind: K): Signal<NodeOfKind<K> | null> {
+    let cell = this.#onlyCellsByKind.get(kind);
+    if (!cell) {
+      cell = computed(
+        () => {
+          const nodes = this.#nodesByKind.value.get(kind) ?? [];
+          return nodes.length === 1 ? (nodes[0] ?? null) : null;
+        },
+        { name: `editor.scene.only.${kind}` },
+      );
+      this.#onlyCellsByKind.set(kind, cell);
+    }
+
+    return cell as Signal<NodeOfKind<K> | null>;
   }
 
   /** Returns the first node of `kind` in scene order, or null when there is none. */

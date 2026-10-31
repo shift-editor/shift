@@ -3,6 +3,7 @@
 use super::*;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddPoints {
     pub layer_id: LayerId,
     /// Target contour; when `None`, derived from `before` (Rust owns
@@ -26,6 +27,10 @@ impl LayerIntent for AddPoints {
             before,
             points,
         } = self;
+        points
+            .iter()
+            .flat_map(PointSeed::coordinates)
+            .require_finite(Coordinates::NewPoints)?;
         let mut point_ids = HashSet::new();
         for seed in points {
             if font.has_point_id(&seed.id) || !point_ids.insert(seed.id.clone()) {
@@ -34,10 +39,10 @@ impl LayerIntent for AddPoints {
         }
 
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             let contour_id = match (contour_id, before) {
                 (Some(contour_id), _) => contour_id.clone(),
-                (None, Some(before_id)) => layer.contour_of_point(before_id.clone())?,
+                (None, Some(before_id)) => layer.contour_of_point(before_id)?,
                 (None, None) => {
                     return Err(CoreError::InvalidContourId(
                         "addPoints requires a contour or a before anchor".to_string(),
@@ -80,6 +85,7 @@ impl LayerIntent for AddPoints {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddContour {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -102,7 +108,7 @@ impl LayerIntent for AddContour {
         }
 
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             let mut contour = Contour::with_id(contour_id.clone());
             if *closed {
                 contour.close();
@@ -117,6 +123,7 @@ impl LayerIntent for AddContour {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetContourClosed {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -134,7 +141,7 @@ impl LayerIntent for SetContourClosed {
             contour_id,
             closed,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         if *closed {
             layer.close_contour(contour_id)?;
         } else {
@@ -146,6 +153,7 @@ impl LayerIntent for SetContourClosed {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MovePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -168,6 +176,10 @@ impl LayerIntent for MovePoints {
             point_ids,
             coords,
         } = self;
+        coords
+            .iter()
+            .copied()
+            .require_finite(Coordinates::PointPositions)?;
         if coords.len() != point_ids.len() * 2 {
             return Err(CoreError::InvalidPointId(format!(
                 "movePoints expects {} coords for {} points, got {}",
@@ -177,7 +189,7 @@ impl LayerIntent for MovePoints {
             )));
         }
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.apply_bulk_node_positions(BulkNodePositionUpdates {
             point_ids: Some(point_ids),
             point_coords: Some(coords),
@@ -190,6 +202,7 @@ impl LayerIntent for MovePoints {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetPointSmooth {
     pub layer_id: LayerId,
     pub point_id: PointId,
@@ -207,7 +220,7 @@ impl LayerIntent for SetPointSmooth {
             point_id,
             smooth,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.set_point_smooth(point_id, *smooth)?;
 
         Ok(())
@@ -215,6 +228,7 @@ impl LayerIntent for SetPointSmooth {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemovePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -230,15 +244,16 @@ impl LayerIntent for RemovePoints {
             layer_id,
             point_ids,
         } = self;
+        let before = font.layer_snapshot(*layer_id)?;
         let empty_contours = {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             layer.remove_points(point_ids)?
         };
 
         if empty_contours.is_empty() {
             font.forget_point_ids(point_ids);
         } else {
-            font.rebuild_structure_index()?;
+            font.reindex_layer(*layer_id, &before)?;
         }
 
         Ok(())
@@ -246,6 +261,7 @@ impl LayerIntent for RemovePoints {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddAnchors {
     pub layer_id: LayerId,
     pub anchors: Vec<AnchorSeed>,
@@ -262,6 +278,10 @@ impl LayerIntent for AddAnchors {
 
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, anchors } = self;
+        anchors
+            .iter()
+            .flat_map(AnchorSeed::coordinates)
+            .require_finite(Coordinates::NewAnchors)?;
         let mut anchor_ids = HashSet::new();
         for seed in anchors {
             if font.has_anchor_id(&seed.id) || !anchor_ids.insert(seed.id.clone()) {
@@ -270,7 +290,7 @@ impl LayerIntent for AddAnchors {
         }
 
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             for seed in anchors {
                 layer.add_anchor(Anchor::with_id(
                     seed.id.clone(),
@@ -287,6 +307,7 @@ impl LayerIntent for AddAnchors {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MoveAnchors {
     pub layer_id: LayerId,
     pub anchor_ids: Vec<AnchorId>,
@@ -313,6 +334,10 @@ impl LayerIntent for MoveAnchors {
             anchor_ids,
             coords,
         } = self;
+        coords
+            .iter()
+            .copied()
+            .require_finite(Coordinates::AnchorPositions)?;
         if coords.len() != anchor_ids.len() * 2 {
             return Err(CoreError::InvalidAnchorId(format!(
                 "moveAnchors expects {} coords for {} anchors, got {}",
@@ -322,7 +347,7 @@ impl LayerIntent for MoveAnchors {
             )));
         }
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.apply_bulk_node_positions(BulkNodePositionUpdates {
             point_ids: None,
             point_coords: None,
@@ -334,7 +359,46 @@ impl LayerIntent for MoveAnchors {
     }
 }
 
+/// Sets every point and anchor position of a layer at once: a move of many
+/// points that names none of them, so it costs numbers, not ids.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetPositions {
+    pub layer_id: LayerId,
+    /// Every contour point, contour after contour, then every anchor, each as
+    /// `x, y`.
+    #[cfg_attr(feature = "pack", pack(numbers))]
+    pub positions: Vec<f64>,
+}
+
+impl LayerIntent for SetPositions {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn may_move_anchors(&self) -> bool {
+        true
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            positions,
+        } = self;
+        positions
+            .iter()
+            .copied()
+            .require_finite(Coordinates::PointPositions)?;
+        font.require_layer_mut(*layer_id)?.set_positions(positions)
+    }
+}
+
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemoveAnchors {
     pub layer_id: LayerId,
     pub anchor_ids: Vec<AnchorId>,
@@ -355,7 +419,7 @@ impl LayerIntent for RemoveAnchors {
             anchor_ids,
         } = self;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             layer.remove_anchors(anchor_ids)?;
         }
 
@@ -366,6 +430,7 @@ impl LayerIntent for RemoveAnchors {
 
 /// Renames anchors in one layer; `names[i]` is the new name of `anchor_ids[i]`.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RenameAnchors {
     pub layer_id: LayerId,
     pub anchor_ids: Vec<AnchorId>,
@@ -396,7 +461,7 @@ impl LayerIntent for RenameAnchors {
             )));
         }
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         for anchor_id in anchor_ids {
             if layer.anchor(anchor_id).is_none() {
                 return Err(CoreError::AnchorNotFound(anchor_id.clone()));
@@ -414,6 +479,7 @@ impl LayerIntent for RenameAnchors {
 
 /// Adds one direct reference after rejecting direct or transitive component cycles.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddComponent {
     pub layer_id: LayerId,
     pub component_id: ComponentId,
@@ -434,21 +500,22 @@ impl LayerIntent for AddComponent {
         if font.has_component_id(component_id) {
             return Err(CoreError::DuplicateComponentId(component_id.clone()));
         }
-        let glyph_id = font.require_layer_owner(layer_id)?;
-        let base_glyph_name = font.require_glyph(base_glyph_id)?.glyph_name().clone();
-        if font.component_reference_would_cycle(&glyph_id, base_glyph_id) {
+        let glyph_id = font.require_layer_owner(*layer_id)?;
+        let base_glyph_name = font.require_glyph(*base_glyph_id)?.glyph_name().clone();
+        if font.component_reference_would_cycle(glyph_id, *base_glyph_id) {
             return Err(CoreError::CyclicComponentReference {
                 glyph_id,
-                base_glyph_id: base_glyph_id.clone(),
+                base_glyph_id: *base_glyph_id,
             });
         }
 
-        let aligned = font.anchor_aligned_component_transform(layer_id, base_glyph_id)?;
+        let aligned = font.anchor_aligned_component_transform(*layer_id, *base_glyph_id)?;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             let mut component = Component::with_id(
                 component_id.clone(),
-                base_glyph_id.clone(),
+                *base_glyph_id,
                 base_glyph_name,
                 aligned.unwrap_or_default(),
             );
@@ -460,13 +527,14 @@ impl LayerIntent for AddComponent {
             layer.add_component(component);
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
 
 /// Replaces direct component transforms without changing component identity or order.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetComponentTransforms {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -501,14 +569,12 @@ impl LayerIntent for SetComponentTransforms {
                 ),
             });
         }
-        if transforms.iter().any(|value| !value.is_finite()) {
-            return Err(CoreError::InvalidPositionUpdateInput {
-                kind: "component transforms",
-                message: "values must be finite".to_string(),
-            });
-        }
+        transforms
+            .iter()
+            .copied()
+            .require_finite(Coordinates::ComponentTransforms)?;
 
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
             if layer.component(component_id).is_none() {
                 return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -527,6 +593,7 @@ impl LayerIntent for SetComponentTransforms {
 /// Records whether components are placed by their anchors; anchoring one
 /// also places it on its anchors now.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetComponentAlignment {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -544,7 +611,7 @@ impl LayerIntent for SetComponentAlignment {
             component_ids,
             alignment,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
             if layer.component(component_id).is_none() {
                 return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -560,6 +627,7 @@ impl LayerIntent for SetComponentAlignment {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemoveComponents {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -575,8 +643,9 @@ impl LayerIntent for RemoveComponents {
             layer_id,
             component_ids,
         } = self;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             for component_id in component_ids {
                 if layer.component(component_id).is_none() {
                     return Err(CoreError::InvalidComponentId(component_id.to_string()));
@@ -587,12 +656,13 @@ impl LayerIntent for RemoveComponents {
             }
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DecomposeComponents {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -608,26 +678,20 @@ impl LayerIntent for DecomposeComponents {
             layer_id,
             component_ids,
         } = self;
-        let (glyph_id, location) = {
-            let glyph_id = font.require_layer_owner(layer_id)?;
-            let layer = font.require_layer_mut(layer_id)?;
-            for component_id in component_ids {
-                if layer.component(component_id).is_none() {
-                    return Err(CoreError::InvalidComponentId(component_id.to_string()));
-                }
+        let layer = font.require_layer(*layer_id)?;
+        for component_id in component_ids {
+            if layer.component(component_id).is_none() {
+                return Err(CoreError::InvalidComponentId(component_id.to_string()));
             }
-            let source_id = layer.source_id();
-            let location = font.require_source(&source_id)?.location().clone();
-            (glyph_id, location)
-        };
-        let resolved_contours = {
-            let mut projection = font.projection(&location);
-            let component_ids = component_ids.iter().cloned().collect::<HashSet<_>>();
-            projection.component_contours(&glyph_id, &component_ids)?
-        };
+        }
+        let resolved_contours = font.layer_component_contours(
+            *layer_id,
+            &component_ids.iter().cloned().collect::<HashSet<_>>(),
+        )?;
 
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             for component_id in component_ids {
                 layer.remove_component(component_id);
             }
@@ -643,12 +707,13 @@ impl LayerIntent for DecomposeComponents {
             }
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ReverseContour {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -664,7 +729,7 @@ impl LayerIntent for ReverseContour {
             layer_id,
             contour_id,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.reverse_contour(contour_id)?;
 
         Ok(())
@@ -673,6 +738,7 @@ impl LayerIntent for ReverseContour {
 
 /// Rotates a closed contour to an existing on-curve point without changing its geometry.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetContourStart {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -690,7 +756,7 @@ impl LayerIntent for SetContourStart {
             contour_id,
             point_id,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.set_contour_start(contour_id, point_id)?;
 
         Ok(())
@@ -699,6 +765,7 @@ impl LayerIntent for SetContourStart {
 
 /// Affine move: O(selection-ids) wire instead of O(N) coords.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct TranslatePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -722,7 +789,8 @@ impl LayerIntent for TranslatePoints {
             dx,
             dy,
         } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        [*dx, *dy].require_finite(Coordinates::PointTranslation)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.move_points(point_ids, *dx, *dy)?;
 
         Ok(())
@@ -732,6 +800,7 @@ impl LayerIntent for TranslatePoints {
 /// Affine transform of the whole layer: every contour point, anchor, and
 /// component placement. The advance width is unchanged.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct TransformLayer {
     pub layer_id: LayerId,
     pub transform: Transform,
@@ -755,27 +824,18 @@ impl LayerIntent for TransformLayer {
             layer_id,
             transform,
         } = self;
-        let values = [
-            transform.xx,
-            transform.xy,
-            transform.yx,
-            transform.yy,
-            transform.dx,
-            transform.dy,
-        ];
-        if values.iter().any(|value| !value.is_finite()) {
-            return Err(CoreError::InvalidPositionUpdateInput {
-                kind: "layer transform",
-                message: "values must be finite".to_string(),
-            });
-        }
+        transform
+            .to_values()
+            .require_finite(Coordinates::LayerTransform)?;
 
-        font.require_layer_mut(layer_id)?.transform_layer(transform);
+        font.require_layer_mut(*layer_id)?
+            .transform_layer(transform);
         Ok(())
     }
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetXAdvance {
     pub layer_id: LayerId,
     pub width: f64,
@@ -792,7 +852,8 @@ impl LayerIntent for SetXAdvance {
 
     fn apply(&self, font: &mut Font) -> CoreResult<()> {
         let Self { layer_id, width } = self;
-        let layer = font.require_layer_mut(layer_id)?;
+        [*width].require_finite(Coordinates::AdvanceWidth)?;
+        let layer = font.require_layer_mut(*layer_id)?;
         layer.set_x_advance(*width);
 
         Ok(())
@@ -802,6 +863,7 @@ impl LayerIntent for SetXAdvance {
 /// Rust-only computation: the echo is the same replace-grade shape as
 /// every other intent — remote changes are not a special case.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ApplyBooleanOp {
     pub layer_id: LayerId,
     pub contour_id_a: ContourId,
@@ -821,13 +883,259 @@ impl LayerIntent for ApplyBooleanOp {
             contour_id_b,
             operation,
         } = self;
+        let before = font.layer_snapshot(*layer_id)?;
         {
-            let layer = font.require_layer_mut(layer_id)?;
+            let layer = font.require_layer_mut(*layer_id)?;
             layer.apply_boolean_op(contour_id_a, contour_id_b, *operation)?;
         }
 
-        font.rebuild_structure_index()?;
+        font.reindex_layer(*layer_id, &before)?;
         Ok(())
+    }
+}
+
+/// Deletes points and reconnects what survives: see [`GlyphLayer::delete_points`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct DeletePoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub mode: DeleteMode,
+}
+
+impl LayerIntent for DeletePoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            mode,
+        } = self;
+        font.edit_layer(*layer_id, |layer| layer.delete_points(point_ids, *mode))
+    }
+}
+
+/// Splits a segment at `t`, keeping its shape: see [`GlyphLayer::split_segment`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SplitSegment {
+    pub layer_id: LayerId,
+    pub start_id: PointId,
+    pub end_id: PointId,
+    pub t: f64,
+    /// The new on-curve point, minted by the caller so it can keep drawing from it.
+    pub point_id: PointId,
+}
+
+impl LayerIntent for SplitSegment {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            start_id,
+            end_id,
+            t,
+            point_id,
+        } = self;
+        font.edit_layer(*layer_id, |layer| {
+            layer.split_segment(start_id, end_id, *t, point_id.clone())
+        })
+    }
+}
+
+/// Raises a line to a cubic of the same shape: see [`GlyphLayer::upgrade_line_to_cubic`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct UpgradeLineToCubic {
+    pub layer_id: LayerId,
+    pub start_id: PointId,
+    pub end_id: PointId,
+}
+
+impl LayerIntent for UpgradeLineToCubic {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            start_id,
+            end_id,
+        } = self;
+        font.edit_layer(*layer_id, |layer| {
+            layer.upgrade_line_to_cubic(start_id, end_id)
+        })
+    }
+}
+
+/// Closes a contour or joins two by their ends: see [`GlyphLayer::join_contours`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct JoinContours {
+    pub layer_id: LayerId,
+    pub from: ContourEnd,
+    pub to: ContourEnd,
+    pub mode: JoinMode,
+}
+
+impl LayerIntent for JoinContours {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            from,
+            to,
+            mode,
+        } = self;
+        font.edit_layer(*layer_id, |layer| layer.join_contours(from, to, *mode))
+    }
+}
+
+/// Moves points by one affine transform.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct TransformPoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub transform: Transform,
+}
+
+impl LayerIntent for TransformPoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            transform,
+        } = self;
+        transform
+            .to_values()
+            .require_finite(Coordinates::PointTransform)?;
+        font.require_layer_mut(*layer_id)?
+            .transform_points(point_ids, transform)
+    }
+}
+
+/// Lines points up on an edge or centre of their box: see [`GlyphLayer::align_points`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct AlignPoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub alignment: PointAlignment,
+}
+
+impl LayerIntent for AlignPoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            alignment,
+        } = self;
+        font.require_layer_mut(*layer_id)?
+            .align_points(point_ids, *alignment)
+    }
+}
+
+/// Spaces points evenly along an axis: see [`GlyphLayer::distribute_points`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct DistributePoints {
+    pub layer_id: LayerId,
+    pub point_ids: Vec<PointId>,
+    pub axis: DistributeAxis,
+}
+
+impl LayerIntent for DistributePoints {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            point_ids,
+            axis,
+        } = self;
+        font.require_layer_mut(*layer_id)?
+            .distribute_points(point_ids, *axis)
+    }
+}
+
+/// Adds to one sidebearing: see [`GlyphLayer::shift_sidebearing`].
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct ShiftSidebearing {
+    pub layer_id: LayerId,
+    pub sidebearing: Sidebearing,
+    pub delta: f64,
+}
+
+impl LayerIntent for ShiftSidebearing {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn may_move_anchors(&self) -> bool {
+        self.sidebearing == Sidebearing::Left
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            sidebearing,
+            delta,
+        } = self;
+        [*delta].require_finite(Coordinates::SidebearingDelta)?;
+        font.require_layer_mut(*layer_id)?
+            .shift_sidebearing(*sidebearing, *delta);
+        Ok(())
+    }
+}
+
+impl Font {
+    /// Runs `edit` on a layer and reindexes it against the layer as it was.
+    fn edit_layer(
+        &mut self,
+        layer_id: LayerId,
+        edit: impl FnOnce(&mut GlyphLayer) -> CoreResult<()>,
+    ) -> CoreResult<()> {
+        let before = self.layer_snapshot(layer_id)?;
+        edit(self.require_layer_mut(layer_id)?)?;
+        self.reindex_layer(layer_id, &before)
     }
 }
 
@@ -836,6 +1144,7 @@ impl LayerIntent for ApplyBooleanOp {
 /// Values use font units and supplied entity identities. The complete replacement
 /// is validated before installation and refreshes component dependencies.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ReplaceGlyphLayerContent {
     pub layer_id: LayerId,
     pub width: f64,
@@ -862,14 +1171,14 @@ impl LayerIntent for ReplaceGlyphLayerContent {
             components,
         } = self;
         let glyph_id = font
-            .glyph_id_by_layer(layer_id)
-            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?;
+            .glyph_id_by_layer(*layer_id)
+            .ok_or(CoreError::LayerNotFound(*layer_id))?;
         for component in components {
             let base_glyph_id = component.base_glyph_id();
-            if font.glyph(&base_glyph_id).is_none() {
+            if font.glyph(base_glyph_id).is_none() {
                 return Err(CoreError::GlyphNotFound(base_glyph_id));
             }
-            if font.component_reference_would_cycle(&glyph_id, &base_glyph_id) {
+            if font.component_reference_would_cycle(glyph_id, base_glyph_id) {
                 return Err(CoreError::CyclicComponentReference {
                     glyph_id,
                     base_glyph_id,
@@ -877,8 +1186,8 @@ impl LayerIntent for ReplaceGlyphLayerContent {
             }
         }
         let mut layer = font
-            .layer(layer_id)
-            .ok_or_else(|| CoreError::LayerNotFound(layer_id.clone()))?
+            .layer(*layer_id)
+            .ok_or(CoreError::LayerNotFound(*layer_id))?
             .clone();
         layer.replace_content(
             *width,

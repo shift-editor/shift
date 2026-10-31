@@ -25,29 +25,27 @@ export class AnchorEdits {
   }
 
   /**
-   * Adds an anchor at the same position to each layer.
-   *
-   * @remarks
-   * Named `new`, or `new.1`, `new.2`, … when taken in any layer, as Glyphs names it.
+   * Adds an anchor named `name` at the same position to each layer.
    *
    * @returns The new anchor's id in each layer's source.
    */
-  static add(layers: readonly GlyphLayer[], position: Point2D): ReadonlyMap<SourceId, AnchorId> {
-    const taken = new Set(layers.flatMap((layer) => layer.anchors.map((anchor) => anchor.name)));
-    let name = "new";
-    for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
+  static add(
+    layers: readonly GlyphLayer[],
+    name: string,
+    position: Point2D,
+  ): ReadonlyMap<SourceId, AnchorId> {
     const at = { x: Math.round(position.x), y: Math.round(position.y) };
     return new Map(layers.map((layer) => [layer.sourceId, layer.addAnchor(name, at)] as const));
   }
 
   rename(name: string): void {
     for (const { layer, targets } of this.#layers) {
-      layer.renameAnchors(new Map((targets.anchors ?? []).map((id) => [id, name] as const)));
+      layer.renameAnchors(new Map(targets.anchors.map((id) => [id, name] as const)));
     }
   }
 
   remove(): void {
-    for (const { layer, targets } of this.#layers) layer.removeAnchors(targets.anchors ?? []);
+    for (const { layer, targets } of this.#layers) layer.removeAnchors(targets.anchors);
   }
 
   /**
@@ -60,13 +58,13 @@ export class AnchorEdits {
   setAxis(axis: "x" | "y", value: number): void {
     const [reference] = this.#layers;
     if (!reference) return;
-    const deltas = (reference.targets.anchors ?? []).map((id) => {
+    const deltas = reference.targets.anchors.map((id) => {
       const anchor = reference.layer.anchor(id);
       return anchor ? value - anchor[axis] : 0;
     });
     for (const { layer, targets } of this.#layers) {
       layer.applyPositionPatch(
-        (targets.anchors ?? []).flatMap((id, index) => {
+        targets.anchors.flatMap((id, index) => {
           const anchor = layer.anchor(id);
           const delta = deltas[index] ?? 0;
           if (!anchor || delta === 0) return [];

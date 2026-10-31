@@ -1,4 +1,4 @@
-import { isPointId, type PointId, type SelectableId } from "@shift/types";
+import { ascending, isPointId, type PointId, type SelectableId } from "@shift/types";
 import { Validate } from "@shift/validation";
 import type { Contour, Point } from "@shift/glyph-state";
 import type { ContourContent, PointContent, ShiftContent } from "./types";
@@ -114,7 +114,7 @@ function expandPartialSelection(contour: Contour, selectedIndices: Set<number>):
   }
 
   return [...expanded]
-    .sort((a, b) => a - b)
+    .sort(ascending)
     .map((idx) => contour.pointAt(idx, false))
     .filter((p): p is Point => p !== null);
 }

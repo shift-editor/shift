@@ -24,7 +24,7 @@ export class PullHandleBehavior implements PenBehavior {
     const nodePoint = ctx.editor.toLocal(stroke.node, event.coords.scene);
     const target = PenTargets.forGeometry(stroke.layer.geometry).at(
       nodePoint,
-      ctx.editor.hitRadius,
+      ctx.editor.hitRadiusIn(stroke.node),
     );
     if (!pullsFromTarget(stroke, target)) return false;
 

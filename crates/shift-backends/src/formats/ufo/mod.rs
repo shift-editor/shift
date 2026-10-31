@@ -97,10 +97,10 @@ mod tests {
         );
 
         let original_layer = original_glyph
-            .layer_for_source(&original.default_source_id().unwrap())
+            .layer_for_source(original.default_source_id().unwrap())
             .unwrap();
         let loaded_layer = loaded_glyph
-            .layer_for_source(&loaded.default_source_id().unwrap())
+            .layer_for_source(loaded.default_source_id().unwrap())
             .unwrap();
 
         assert_eq!(original_layer.width(), loaded_layer.width());
@@ -239,12 +239,12 @@ mod tests {
             let mut glyph = Glyph::with_unicode(name.to_string(), unicode);
             glyph.set_layer(GlyphLayer::with_width(
                 LayerId::new(),
-                default_source_id.clone(),
+                default_source_id,
                 500.0,
             ));
             glyph.set_layer(GlyphLayer::with_width(
                 LayerId::new(),
-                bold_source_id.clone(),
+                bold_source_id,
                 550.0,
             ));
             font.insert_glyph(glyph).unwrap();
@@ -388,7 +388,7 @@ mod tests {
 
         let loaded_glyph = loaded.glyph_by_name("A").unwrap();
         let loaded_layer = loaded_glyph
-            .layer_for_source(&loaded.default_source_id().unwrap())
+            .layer_for_source(loaded.default_source_id().unwrap())
             .unwrap();
 
         assert_eq!(loaded_layer.width(), 512.5);

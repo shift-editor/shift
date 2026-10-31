@@ -13,11 +13,7 @@ import {
   type SlugSection,
   type SourceId,
 } from "@shift/types";
-import {
-  interpolationWeights,
-  externalAxisLocationFromRecord,
-  mapAxisLocation,
-} from "@shift/editor/variation";
+import { atlasWeights, externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { CatalogLocation } from "@/types/glyphCatalog";
 import type { GlyphPreviewInstance, PackedGlyphPreviewFrame } from "@/types/glyphPreview";
 import type { GlyphAtlasGlyph, GlyphAtlasPage } from "@/types/glyphAtlas";
@@ -167,26 +163,20 @@ export class SlugAtlas {
       );
     }
     const externalLocation = externalAxisLocationFromRecord(
-      Object.fromEntries(axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.default])),
+      Object.fromEntries(
+        axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.kind.default]),
+      ),
     );
-    const designLocation = mapAxisLocation(
-      externalLocation,
-      axes,
-      this.#descriptor.weightMappingBases,
+    return new Float32Array(
+      atlasWeights(
+        axes,
+        this.#descriptor.weightMappingBases,
+        this.#descriptor.weightSets,
+        this.#descriptor.weightCount,
+        externalLocation,
+        this.#descriptor.weightEngine,
+      ),
     );
-    const weights = new Float32Array(this.#descriptor.weightCount);
-    weights[0] = 1;
-    for (const set of this.#descriptor.weightSets) {
-      const basisWeights = interpolationWeights(set.basis, designLocation, axes);
-      for (let sourceIndex = 0; sourceIndex < set.sourceWeightIndices.length; sourceIndex += 1) {
-        const weightIndex = set.sourceWeightIndices[sourceIndex];
-        if (weightIndex === undefined || weightIndex >= weights.length) {
-          throw new Error("resident Slug weight index is out of range");
-        }
-        weights[weightIndex] = basisWeights[sourceIndex] ?? 0;
-      }
-    }
-    return weights;
   }
 
   setResolvedWeights(weights: readonly number[]): void {

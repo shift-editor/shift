@@ -1,4 +1,5 @@
 import type { GlyphEntry, GlyphId, KerningGroupId } from "@shift/types";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 /** How many glyphs a search or suggestion lists; large fonts have tens of thousands. */
 const ADD_MEMBER_LIMIT = 50;
@@ -18,12 +19,12 @@ export function memberCandidates(
 ): GlyphEntry[] {
   const inGroup = new Set(members);
   const outside = entries.filter((entry) => !inGroup.has(entry.id));
-  const typed = query.trim();
-  if (!typed) return suggestedMembers(outside, memberStem(memberNames), groupOf);
+  const search = NameQuery.from(query);
+  if (search.isEmpty) return suggestedMembers(outside, memberStem(memberNames), groupOf);
 
-  const lower = typed.toLowerCase();
+  // A glyph's character matches exactly and case-sensitively, so "a" does not find "A".
   return outside
-    .filter((entry) => entry.name.toLowerCase().includes(lower) || glyphCharacter(entry) === typed)
+    .filter((entry) => search.matches(entry) || glyphCharacter(entry) === search.text)
     .slice(0, ADD_MEMBER_LIMIT);
 }
 

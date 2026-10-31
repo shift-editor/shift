@@ -51,6 +51,7 @@ function residentFixture(): {
     weightSets: [],
     weightAxes: [],
     weightMappingBases: [],
+    weightEngine: null,
     resolvedWeights: null,
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);
@@ -85,10 +86,7 @@ function mappedWeightFixture(): GlyphAtlasPage {
         tag: "wght",
         name: "Weight",
         role: "external",
-        axisType: "continuous",
-        minimum: 100,
-        default: 400,
-        maximum: 900,
+        kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
         labels: [],
         hidden: false,
       },

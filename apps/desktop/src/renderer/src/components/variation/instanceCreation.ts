@@ -1,40 +1,30 @@
-import type { Axis, Location, NamedInstance } from "@shift/types";
+import type { Axis } from "@shift/editor/model";
+import type { Axis as AxisRecord, Location, NamedInstance } from "@shift/types";
 import type { InstanceCreationIssue } from "@shift/editor/types";
+import { LocationDraft, type LocationDraftValues } from "./locationDraft";
 
 /** Parses editable external-axis fields into a complete named-instance location. */
 export function instanceLocation(
-  axes: readonly Axis[],
-  values: Readonly<Record<string, string>>,
+  axes: readonly AxisRecord[],
+  values: LocationDraftValues["location"],
 ): Location | null {
-  const entries = axes.map((axis) => {
-    const input = values[axis.id];
-    const value = input?.trim() ? Number(input) : Number.NaN;
-    return [axis.id, value] as const;
-  });
-  if (entries.some(([, value]) => !Number.isFinite(value))) return null;
-
-  return { values: Object.fromEntries(entries) } as Location;
+  const coordinates = new LocationDraft({ name: "", location: values }).coordinates(axes);
+  return coordinates ? { values: coordinates } : null;
 }
 
 /** Returns the first authoring constraint that prevents named-instance creation. */
 export function instanceCreationIssue(
   name: string,
-  values: Readonly<Record<string, string>>,
+  values: LocationDraftValues["location"],
   axes: readonly Axis[],
   instances: readonly NamedInstance[],
 ): InstanceCreationIssue | null {
-  const trimmedName = name.trim();
-  if (!trimmedName) return { kind: "name", message: "Enter an instance name" };
-  if (instances.some((instance) => instance.name === trimmedName)) {
-    return {
-      kind: "name",
-      message: `An instance named “${trimmedName}” already exists`,
-    };
-  }
+  const draft = new LocationDraft({ name, location: values });
+  const nameIssue = draft.nameIssue("an instance", instances);
+  if (nameIssue) return nameIssue;
 
   for (const axis of axes) {
-    const input = values[axis.id];
-    const value = input?.trim() ? Number(input) : Number.NaN;
+    const value = draft.coordinate(axis);
     if (!Number.isFinite(value)) {
       return {
         kind: "axis",
@@ -43,21 +33,21 @@ export function instanceCreationIssue(
       };
     }
 
-    if (axis.axisType === "discrete" && !axis.values?.includes(value)) {
+    if (axis.isDiscrete && !axis.accepts(value)) {
       return {
         kind: "axis",
         axisId: axis.id,
         message: `Choose a defined value for ${axis.name}`,
       };
     }
-    if (axis.minimum !== undefined && value < axis.minimum) {
+    if (!axis.isDiscrete && value < axis.minimum) {
       return {
         kind: "axis",
         axisId: axis.id,
         message: `${axis.name} must be at least ${axis.minimum}`,
       };
     }
-    if (axis.maximum !== undefined && value > axis.maximum) {
+    if (!axis.isDiscrete && value > axis.maximum) {
       return {
         kind: "axis",
         axisId: axis.id,
@@ -66,9 +56,10 @@ export function instanceCreationIssue(
     }
   }
 
-  const location = instanceLocation(axes, values);
-  if (!location) return null;
+  const coordinates = draft.coordinates(axes);
+  if (!coordinates) return null;
 
+  const location: Location = { values: coordinates };
   const existing = instances.find((instance) => sameLocation(instance.location, location, axes));
   return existing
     ? {

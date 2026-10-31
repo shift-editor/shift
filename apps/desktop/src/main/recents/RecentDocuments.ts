@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { RecentDocument, RecentDocumentVisit } from "../../shared/recents";
-import type { Specimen } from "../../shared/workspace/protocol";
+import type { Specimen } from "../../shared/workspace/lanes";
+import { RecentList, type RecentListRules } from "@shift/types";
+import { z } from "zod";
+import { parseEach } from "../../shared/parseEach";
 
 /** Most files kept in recents; older opens fall off the end. */
 export const RECENT_DOCUMENTS_LIMIT = 20;
@@ -13,20 +16,42 @@ export const RECENT_DOCUMENTS_LIMIT = 20;
  */
 const SPECIMEN_REVISION = 1;
 
-/** A built specimen and the file modification time it was built from. */
-type Thumbnail = {
-  specimen: Specimen | null;
-  modifiedAt: number;
-  revision?: number;
-};
+/**
+ * A built specimen and the file modification time it was built from. The
+ * specimen and revision are not checked beyond being present as stored, and
+ * unknown fields are kept, so a list written by another version reads back as
+ * it was.
+ */
+const thumbnailSchema = z.looseObject({
+  specimen: z.custom<Specimen | null>((value) => typeof value === "object"),
+  modifiedAt: z.number(),
+  revision: z.custom<number | undefined>(() => true).optional(),
+});
 
-type RecentEntry = {
-  path: string;
-  documentId: string | null;
-  openedAt: number;
-  thumbnail?: Thumbnail;
+type Thumbnail = z.output<typeof thumbnailSchema>;
+
+const recentEntrySchema = z.looseObject({
+  path: z.string(),
+  documentId: z.string().nullable(),
+  openedAt: z.number(),
+  thumbnail: thumbnailSchema.optional(),
   /** Set while the document is open; still set at launch only if Shift did not quit normally. */
-  open?: true;
+  open: z.literal(true).optional(),
+});
+
+type RecentEntry = z.output<typeof recentEntrySchema>;
+
+/**
+ * One entry per document, newest first, at most {@link RECENT_DOCUMENTS_LIMIT}.
+ * An entry is the same document as a visit by path, or by `DocumentId` when the
+ * visit has one, so a moved `.shift` document replaces its old entry.
+ */
+const RECENT_RULES: RecentListRules<RecentEntry, RecentDocumentVisit> = {
+  matches: (entry, visit) =>
+    entry.path === visit.path ||
+    (visit.documentId !== null && entry.documentId === visit.documentId),
+  usedAt: (entry) => entry.openedAt,
+  limit: RECENT_DOCUMENTS_LIMIT,
 };
 
 /**
@@ -46,7 +71,7 @@ export class RecentDocuments {
   readonly #filePath: string;
   readonly #homeDirectory: string;
   readonly #listeners = new Set<() => void>();
-  #entries: RecentEntry[];
+  #entries: RecentList<RecentEntry, RecentDocumentVisit>;
 
   /**
    * Loads recents persisted at `filePath`.
@@ -65,7 +90,7 @@ export class RecentDocuments {
    * @returns a new array; mutating it does not change the store.
    */
   list(): RecentDocument[] {
-    return this.#entries.map((entry) => {
+    return this.#entries.items.map((entry) => {
       const modifiedAt = modificationTime(entry.path);
       return {
         path: entry.path,
@@ -84,7 +109,7 @@ export class RecentDocuments {
    * @param visit - File to check; it need not be in recents.
    */
   needsSpecimen(visit: RecentDocumentVisit): boolean {
-    const entry = this.#entries.find((candidate) => sameDocument(candidate, visit));
+    const entry = this.#entries.find(visit);
     if (!entry) return false;
 
     return currentThumbnail(entry, modificationTime(entry.path)) === null;
@@ -97,15 +122,14 @@ export class RecentDocuments {
    * @param specimen - Built specimen, or null when the font draws nothing usable.
    */
   setSpecimen(visit: RecentDocumentVisit, specimen: Specimen | null): void {
-    const entry = this.#entries.find((candidate) => sameDocument(candidate, visit));
+    const entry = this.#entries.find(visit);
     const modifiedAt = modificationTime(visit.path);
     if (!entry || modifiedAt === null) return;
 
-    this.#entries = this.#entries.map((candidate) =>
-      candidate === entry
-        ? { ...candidate, thumbnail: { specimen, modifiedAt, revision: SPECIMEN_REVISION } }
-        : candidate,
-    );
+    this.#entries = this.#entries.update(visit, (candidate) => ({
+      ...candidate,
+      thumbnail: { specimen, modifiedAt, revision: SPECIMEN_REVISION },
+    }));
     this.#changed();
   }
 
@@ -116,16 +140,12 @@ export class RecentDocuments {
    * @param openedAt - Epoch milliseconds of the open.
    */
   record(visit: RecentDocumentVisit, openedAt: number = Date.now()): void {
-    const previous = this.#entries.find((entry) => sameDocument(entry, visit));
-    const remaining = this.#entries.filter((entry) => !sameDocument(entry, visit));
-    const recorded: RecentEntry = {
+    this.#entries = this.#entries.touch(visit, (previous) => ({
       ...previous,
       path: visit.path,
       documentId: visit.documentId,
       openedAt,
-    };
-
-    this.#entries = [recorded, ...remaining].slice(0, RECENT_DOCUMENTS_LIMIT);
+    }));
     this.#changed();
   }
 
@@ -139,7 +159,8 @@ export class RecentDocuments {
     const removed = this.list().find((entry) => entry.path === filePath) ?? null;
     if (!removed) return null;
 
-    this.#entries = this.#entries.filter((entry) => entry.path !== filePath);
+    // By path alone: a query without a DocumentId matches no entry by id.
+    this.#entries = this.#entries.remove({ path: filePath, documentId: null });
     this.#changed();
     return removed;
   }
@@ -150,7 +171,6 @@ export class RecentDocuments {
    * @param document - Entry previously returned by {@link remove}.
    */
   restore(document: RecentDocument): void {
-    const remaining = this.#entries.filter((entry) => !sameDocument(entry, document));
     const restored: RecentEntry = {
       path: document.path,
       documentId: document.documentId,
@@ -164,9 +184,8 @@ export class RecentDocuments {
         revision: SPECIMEN_REVISION,
       };
     }
-    this.#entries = [...remaining, restored]
-      .sort((a, b) => b.openedAt - a.openedAt)
-      .slice(0, RECENT_DOCUMENTS_LIMIT);
+    // Placing by openedAt puts it back in its original time order.
+    this.#entries = this.#entries.touch(document, () => restored);
     this.#changed();
   }
 
@@ -178,21 +197,22 @@ export class RecentDocuments {
    * @param open - Whether the file is now open.
    */
   setOpen(visit: RecentDocumentVisit, open: boolean): void {
-    const entry = this.#entries.find((candidate) => sameDocument(candidate, visit));
+    const entry = this.#entries.find(visit);
     if (!entry || (entry.open === true) === open) return;
 
-    const { open: _open, ...closed } = entry;
-    const updated: RecentEntry = open ? { ...closed, open: true } : closed;
-    this.#entries = this.#entries.map((candidate) => (candidate === entry ? updated : candidate));
-    writeEntries(this.#filePath, this.#entries);
+    this.#entries = this.#entries.update(visit, (candidate) => {
+      const { open: _open, ...closed } = candidate;
+      return open ? { ...closed, open: true } : closed;
+    });
+    writeEntries(this.#filePath, this.#entries.items);
   }
 
   /** Records that no file is open, as after a normal quit. */
   clearOpen(): void {
-    if (!this.#entries.some((entry) => entry.open)) return;
+    if (this.#entries.where((entry) => entry.open === true).length === 0) return;
 
     this.#entries = this.#entries.map(({ open: _open, ...entry }) => entry);
-    writeEntries(this.#filePath, this.#entries);
+    writeEntries(this.#filePath, this.#entries.items);
   }
 
   /**
@@ -201,16 +221,16 @@ export class RecentDocuments {
    * @returns open files, newest first; empty after a normal quit.
    */
   takeOpen(): RecentDocumentVisit[] {
-    const open = this.#entries.filter((entry) => entry.open);
+    const open = this.#entries.where((entry) => entry.open === true);
     this.clearOpen();
     return open.map((entry) => ({ path: entry.path, documentId: entry.documentId }));
   }
 
   /** Removes every entry. */
   clear(): void {
-    if (this.#entries.length === 0) return;
+    if (this.#entries.isEmpty) return;
 
-    this.#entries = [];
+    this.#entries = RecentList.of([], RECENT_RULES);
     this.#changed();
   }
 
@@ -228,14 +248,9 @@ export class RecentDocuments {
   }
 
   #changed(): void {
-    writeEntries(this.#filePath, this.#entries);
+    writeEntries(this.#filePath, this.#entries.items);
     for (const listener of this.#listeners) listener();
   }
-}
-
-function sameDocument(entry: RecentEntry, visit: RecentDocumentVisit): boolean {
-  if (entry.path === visit.path) return true;
-  return visit.documentId !== null && entry.documentId === visit.documentId;
 }
 
 /** Returns the file's folder with a leading home directory shortened to `~`. */
@@ -265,16 +280,15 @@ function currentThumbnail(entry: RecentEntry, modifiedAt: number | null): Thumbn
   return thumbnail.modifiedAt === modifiedAt ? thumbnail : null;
 }
 
-function readEntries(filePath: string): RecentEntry[] {
-  let parsed: unknown;
+function readEntries(filePath: string): RecentList<RecentEntry, RecentDocumentVisit> {
+  let text: string;
   try {
-    parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    text = fs.readFileSync(filePath, "utf8");
   } catch {
-    return [];
+    return RecentList.of([], RECENT_RULES);
   }
 
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter(isRecentEntry).slice(0, RECENT_DOCUMENTS_LIMIT);
+  return RecentList.of(parseEach(recentEntrySchema, text), RECENT_RULES);
 }
 
 function writeEntries(filePath: string, entries: readonly RecentEntry[]): void {
@@ -286,27 +300,4 @@ function writeEntries(filePath: string, entries: readonly RecentEntry[]): void {
   } catch (error) {
     console.warn("failed to persist recent documents", error);
   }
-}
-
-function isRecentEntry(value: unknown): value is RecentEntry {
-  if (typeof value !== "object" || value === null) return false;
-
-  const entry = value as Record<string, unknown>;
-  const documentIdValid = entry.documentId === null || typeof entry.documentId === "string";
-  const thumbnailValid = entry.thumbnail === undefined || isThumbnail(entry.thumbnail);
-  const openValid = entry.open === undefined || entry.open === true;
-  return (
-    typeof entry.path === "string" &&
-    typeof entry.openedAt === "number" &&
-    documentIdValid &&
-    thumbnailValid &&
-    openValid
-  );
-}
-
-function isThumbnail(value: unknown): value is Thumbnail {
-  if (typeof value !== "object" || value === null) return false;
-
-  const thumbnail = value as Record<string, unknown>;
-  return typeof thumbnail.modifiedAt === "number" && typeof thumbnail.specimen === "object";
 }

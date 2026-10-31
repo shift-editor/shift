@@ -179,14 +179,14 @@ fn build(cases: &[AxisCase]) -> Option<Built> {
         .map(|(case, id)| {
             AxisMapping::new(
                 format!("{} mapping", case.tag),
-                vec![id.clone()],
-                vec![id.clone()],
+                vec![*id],
+                vec![*id],
                 case.map
                     .iter()
                     .map(|(user, design)| AxisMappingPoint {
                         description: None,
-                        input: Location::from([(id.clone(), *user)]),
-                        output: Location::from([(id.clone(), *design)]),
+                        input: Location::from([(*id, *user)]),
+                        output: Location::from([(*id, *design)]),
                     })
                     .collect(),
             )
@@ -213,16 +213,16 @@ fn build(cases: &[AxisCase]) -> Option<Built> {
             .iter()
             .zip(&ids)
             .zip(user)
-            .map(|((case, id), value)| (id.clone(), case.to_design(*value)))
+            .map(|((case, id), value)| (*id, case.to_design(*value)))
             .collect();
         let source_id = if index == 0 {
-            font.source_mut(&default_id).unwrap().set_location(location);
-            default_id.clone()
+            font.source_mut(default_id).unwrap().set_location(location);
+            default_id
         } else {
             font.add_source(Source::new(format!("Master {index}"), location))
         };
         let width = 100.0 + 50.0 * index as f64;
-        glyph.set_layer(square(source_id.clone(), width));
+        glyph.set_layer(square(source_id, width));
         masters.push((source_id, width + 100.0));
     }
     font.insert_glyph(glyph).ok()?;
@@ -248,7 +248,7 @@ fn failures(cases: &[AxisCase]) -> Vec<String> {
     for (index, case) in cases.iter().enumerate() {
         for step in 0..=8 {
             let user = case.min + (case.max - case.min) * step as f64 / 8.0;
-            let external = ExternalLocation::from([(ids[index].clone(), user)]);
+            let external = ExternalLocation::from([(ids[index], user)]);
             let ours = font
                 .mapped_location(&external)
                 .unwrap()
@@ -275,12 +275,12 @@ fn failures(cases: &[AxisCase]) -> Vec<String> {
     }
 
     let glyph = font.glyph_by_name("square").unwrap();
-    let Some(interpolation) = font.glyph_interpolation(&glyph.id()).unwrap() else {
+    let Some(interpolation) = font.glyph_interpolation(glyph.id()).unwrap() else {
         failures.push("the glyph can't be interpolated".into());
         return failures;
     };
     for (source_id, width) in masters {
-        let source = font.source(&source_id).unwrap();
+        let source = font.source(source_id).unwrap();
         let layer = interpolation
             .resolve(source.location(), font.axes())
             .unwrap();

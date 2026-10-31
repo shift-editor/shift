@@ -82,6 +82,12 @@ export class KerningTool extends BaseTool<KerningState, KerningTool> {
     }
   }
 
+  /** The pair under the pointer while hovering, as last hit, or null. */
+  get hovered(): KerningPair | null {
+    const state = this.getState();
+    return state.type === "ready" ? state.hit : null;
+  }
+
   /** The pair whose value is open for typing, or null. */
   get editing(): KerningPair | null {
     const state = this.getState();

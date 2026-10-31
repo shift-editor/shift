@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /** Files where raw .pointType checks are expected (validation implementation). */
-const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/", "packages/rules/"];
+const POINT_TYPE_ALLOWED = ["packages/validation/", "packages/glyph-state/"];
 
 function checkParam(context, node) {
   // Handle destructured or rest patterns — only check simple identifiers
@@ -41,7 +41,7 @@ function checkParam(context, node) {
 const GLYPH_SNAPSHOT_ALLOWED = [
   "bridge/",
   "shared/bridge/",
-  "shared/workspace/protocol.ts",
+  "shared/workspace/lanes.ts",
   "utility/workspace/WorkspaceHost.ts",
   "renderer/src/types/glyph.ts",
   "renderer/src/lib/model/",
@@ -65,6 +65,218 @@ function brandsWithHelpers() {
     Array.from(source.matchAll(/export function as([A-Z]\w*Id)\b/g), (match) => match[1]),
   );
   return brandHelperNames;
+}
+
+/** Playwright calls that run a function inside the page or the main process. */
+const EVALUATE_METHODS = new Set(["evaluate", "evaluateHandle", "waitForFunction"]);
+
+/** Playwright calls that return a `Locator` or `ElementHandle`. */
+const ELEMENT_METHODS = new Set([
+  "$",
+  "and",
+  "filter",
+  "first",
+  "getByAltText",
+  "getByLabel",
+  "getByPlaceholder",
+  "getByRole",
+  "getByTestId",
+  "getByText",
+  "getByTitle",
+  "last",
+  "locator",
+  "nth",
+  "or",
+  "waitForSelector",
+]);
+
+/** Types whose `evaluate` runs on one DOM element or one native window, not on the app. */
+const ELEMENT_TYPES = new Set(["ElementHandle", "Locator"]);
+
+/** The name a type annotation refers to, looking through `Promise<T>`. */
+function annotatedTypeName(annotation) {
+  const type = annotation?.typeAnnotation;
+  if (type?.type !== "TSTypeReference") return undefined;
+  const name = type.typeName?.name;
+  if (name !== "Promise") return name;
+  const inner = (type.typeArguments ?? type.typeParameters)?.params?.[0];
+  return annotatedTypeName({ typeAnnotation: inner });
+}
+
+/** The first definition of `identifier` in scope, or `undefined` for a global. */
+function definitionOf(context, identifier) {
+  for (let scope = context.sourceCode.getScope(identifier); scope; scope = scope.upper) {
+    const variable = scope.set.get(identifier.name);
+    if (variable) return variable.defs[0];
+  }
+  return undefined;
+}
+
+/**
+ * True when `expression` is provably a locator, an element handle or an Electron
+ * `BrowserWindow` handle, whose `evaluate` reads one element or window rather than the app.
+ *
+ * Proof is syntactic: a locator call (`page.getByRole(…)`), `electronApp.browserWindow(…)`, a
+ * binding annotated `Locator` or `ElementHandle`, a `const` initialised from one of those, or a
+ * same-file function whose return type is one. A locator returned by an imported helper cannot be
+ * seen, so a spec annotates the binding (`const grid: Locator = glyphCatalogCanvas(page)`).
+ */
+function isElementSide(context, expression, seen = new Set()) {
+  let node = expression;
+  while (
+    node?.type === "AwaitExpression" ||
+    node?.type === "ChainExpression" ||
+    node?.type === "TSNonNullExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    node = node.type === "AwaitExpression" ? node.argument : node.expression;
+  }
+
+  if (node?.type === "CallExpression") {
+    const callee = node.callee;
+    if (callee.type === "MemberExpression" && !callee.computed) {
+      return ELEMENT_METHODS.has(callee.property.name) || callee.property.name === "browserWindow";
+    }
+    if (callee.type !== "Identifier") return false;
+    const definition = definitionOf(context, callee);
+    return (
+      definition?.type === "FunctionName" &&
+      ELEMENT_TYPES.has(annotatedTypeName(definition.node.returnType))
+    );
+  }
+
+  if (node?.type !== "Identifier" || seen.has(node.name)) return false;
+  seen.add(node.name);
+  const definition = definitionOf(context, node);
+  if (!definition) return false;
+  if (ELEMENT_TYPES.has(annotatedTypeName(definition.name.typeAnnotation))) return true;
+  return (
+    definition.type === "Variable" &&
+    definition.node.init != null &&
+    isElementSide(context, definition.node.init, seen)
+  );
+}
+
+/** The harness files that declare `EditorTestSurface` and the interfaces it extends. */
+const TEST_SURFACE_FILES = ["surface.ts", "reads.ts", "fonts.ts"];
+
+let testSurfaceMemberNames = null;
+
+/**
+ * The member names `EditorTestSurface` declares, with those of the interfaces it extends.
+ *
+ * Read from the harness sources the way `brandsWithHelpers` reads `ids.ts`: an interface's own
+ * members are its lines at two-space indentation, which the formatter keeps fixed.
+ */
+function testSurfaceMembers() {
+  if (testSurfaceMemberNames) return testSurfaceMemberNames;
+
+  const interfaces = new Map();
+  for (const file of TEST_SURFACE_FILES) {
+    const filePath = fileURLToPath(
+      new URL(`../../apps/desktop/src/renderer/src/testing/${file}`, import.meta.url),
+    );
+    const source = readFileSync(filePath, "utf8");
+    const declaration = /^export interface (\w+)(?:<[^>]*>)?(?: extends ([^{]+))? \{$/gm;
+    for (const match of source.matchAll(declaration)) {
+      const bodyStart = match.index + match[0].length;
+      const bodyEnd = source.indexOf("\n}", bodyStart);
+      const body = source.slice(bodyStart, bodyEnd);
+      const members = Array.from(
+        body.matchAll(/^ {2}(?:readonly )?([A-Za-z_$][\w$]*)\??\s*[(<:]/gm),
+        (member) => member[1],
+      );
+      const parents = (match[2] ?? "").split(",").map((name) => name.trim().replace(/<.*$/, ""));
+      interfaces.set(match[1], { members, parents: parents.filter(Boolean) });
+    }
+  }
+
+  const names = new Set();
+  const visit = (name) => {
+    const entry = interfaces.get(name);
+    if (!entry) return;
+    for (const member of entry.members) names.add(member);
+    for (const parent of entry.parents) visit(parent);
+  };
+  visit("EditorTestSurface");
+  testSurfaceMemberNames = names;
+  return names;
+}
+
+/** Calls that return the editor a test drives: `TestEditor`'s factories in `@/testing`. */
+const TEST_EDITOR_FACTORIES = new Set([
+  "useTestEditor",
+  "startTestEditor",
+  "openTestEditor",
+  "startEditorWith",
+]);
+
+/**
+ * Type names a test annotates its editor with. `Editor` counts too: a helper taking the
+ * `asEditor()` result reaches the same internals as the `TestEditor` it came from.
+ */
+const TEST_EDITOR_TYPES = new Set(["TestEditor", "EditorTestSurface", "Editor"]);
+
+/** `TestEditor` methods that return the editor itself, so a chain stays on it. */
+const TEST_EDITOR_CHAINS = new Set([
+  "startSession",
+  "openSession",
+  "pointerDown",
+  "pointerMove",
+  "pointerUp",
+  "keyDown",
+  "escape",
+  "selectTool",
+  "asEditor",
+]);
+
+/**
+ * True when `expression` is provably the editor a test drives: `new TestEditor(…)`, a call to a
+ * `TestEditor` factory, a chain of its self-returning methods or `asEditor()`, a binding
+ * annotated `TestEditor`, `EditorTestSurface` or `Editor`, a `const` initialised from one of
+ * those, or a same-file function whose return type is one.
+ */
+function isTestEditor(context, expression, seen = new Set()) {
+  let node = expression;
+  while (
+    node?.type === "AwaitExpression" ||
+    node?.type === "ChainExpression" ||
+    node?.type === "TSNonNullExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    node = node.type === "AwaitExpression" ? node.argument : node.expression;
+  }
+
+  if (node?.type === "NewExpression") {
+    return node.callee.type === "Identifier" && node.callee.name === "TestEditor";
+  }
+
+  if (node?.type === "CallExpression") {
+    const callee = node.callee;
+    if (callee.type === "MemberExpression" && !callee.computed) {
+      return (
+        TEST_EDITOR_CHAINS.has(callee.property.name) && isTestEditor(context, callee.object, seen)
+      );
+    }
+    if (callee.type !== "Identifier") return false;
+    if (TEST_EDITOR_FACTORIES.has(callee.name)) return true;
+    const definition = definitionOf(context, callee);
+    return (
+      definition?.type === "FunctionName" &&
+      TEST_EDITOR_TYPES.has(annotatedTypeName(definition.node.returnType))
+    );
+  }
+
+  if (node?.type !== "Identifier" || seen.has(node.name)) return false;
+  seen.add(node.name);
+  const definition = definitionOf(context, node);
+  if (!definition) return false;
+  if (TEST_EDITOR_TYPES.has(annotatedTypeName(definition.name.typeAnnotation))) return true;
+  return (
+    definition.type === "Variable" &&
+    definition.node.init != null &&
+    isTestEditor(context, definition.node.init, seen)
+  );
 }
 
 function isAllowedFile(filename, allowList) {
@@ -184,7 +396,7 @@ function isIteratorValueRead(node) {
 }
 
 const SIGNAL_PRIMITIVES = new Set(["signal", "computed", "effect", "track"]);
-const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet"]);
+const MUTABLE_COLLECTIONS = new Set(["Map", "Set", "WeakMap", "WeakSet", "EntityMap"]);
 const COLLECTION_MUTATORS = new Set(["set", "delete", "clear", "add"]);
 const SIGNAL_TYPES = new Set(["Signal", "WritableSignal", "ComputedSignal", "ReadonlySignal"]);
 const NON_REACTIVE_ANNOTATION = /^\s*non-reactive:\s*\S/;
@@ -228,7 +440,7 @@ function typeArgumentsOf(node) {
 function collectionShape(kind, typeArgs) {
   if (!MUTABLE_COLLECTIONS.has(kind)) return null;
 
-  const valueIndex = kind === "Map" || kind === "WeakMap" ? 1 : 0;
+  const valueIndex = kind === "Map" || kind === "WeakMap" || kind === "EntityMap" ? 1 : 0;
   const valueType = typeArgs[valueIndex];
   const holdsSignals = SIGNAL_TYPES.has(typeReferenceName(valueType));
   return { kind, holdsSignals };
@@ -313,6 +525,44 @@ function enclosingClassBody(node) {
     current = current.parent;
   }
 
+  return null;
+}
+
+/** The generated bridge types module, by any relative path or package specifier. */
+const GENERATED_BRIDGE_MODULE = /(^|\/)bridge\/generated(\.[cm]?[jt]s)?$/;
+
+/** True when `node` is one of the arguments (not the callee) of a call or `new`. */
+function isCallArgument(node) {
+  const parent = node.parent;
+  if (!parent) return false;
+  if (parent.type !== "CallExpression" && parent.type !== "NewExpression") return false;
+  return parent.arguments.includes(node);
+}
+
+/** A property's key when it is written literally (`a`, `"a"`); null for computed keys and spreads. */
+function staticKey(property) {
+  if (property.type !== "Property" || property.computed) return null;
+  if (property.key.type === "Identifier") return property.key.name;
+  if (property.key.type === "Literal" && typeof property.key.value === "string") {
+    return property.key.value;
+  }
+  return null;
+}
+
+/**
+ * The name a member read reaches when it is private by convention: `obj._x`, `obj["_x"]` or
+ * `obj["#x"]`. Names starting `__` are runtime hooks, not private members, and return null.
+ */
+function privateMemberName(node) {
+  const property = node.property;
+  let name = null;
+  if (!node.computed && property.type === "Identifier") name = property.name;
+  if (node.computed && property.type === "Literal" && typeof property.value === "string") {
+    name = property.value;
+  }
+  if (name === null || name.startsWith("__")) return null;
+  if (/^_[A-Za-z]/.test(name)) return name;
+  if (node.computed && /^#[A-Za-z]/.test(name)) return name;
   return null;
 }
 
@@ -701,7 +951,14 @@ export default {
         const filename = context.getFilename();
 
         if (isAllowedFile(filename, POINT_TYPE_ALLOWED)) return {};
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
+        // E2E specs run as CommonJS in Playwright and cannot load @shift/glyph-state.
+        if (
+          filename.includes(".test.") ||
+          filename.includes(".spec.") ||
+          filename.includes("testing/")
+        ) {
+          return {};
+        }
 
         return {
           /**
@@ -1131,42 +1388,6 @@ export default {
     },
 
     /**
-     * Ban `@shift/wasm/reference` outside tests.
-     *
-     * The reference module is a second WebAssembly build holding shift-font's
-     * answers for rules the editor keeps in TypeScript, so tests can compare
-     * the two. It is test-only and must never reach the app or the SDK.
-     */
-    "no-reference-module-outside-tests": {
-      meta: {
-        type: "problem",
-        messages: {
-          testOnly:
-            "@shift/wasm/reference is a test-only build. Import it only from .test.ts files or testing/ helpers.",
-        },
-        schema: [],
-      },
-      create(context) {
-        const filename = context.getFilename();
-
-        if (filename.includes(".test.") || filename.includes("testing/")) return {};
-
-        const report = (node) => {
-          const source = node.source && node.source.value;
-          if (typeof source === "string" && source.startsWith("@shift/wasm/reference")) {
-            context.report({ node, messageId: "testOnly" });
-          }
-        };
-        return {
-          ImportDeclaration: report,
-          ExportNamedDeclaration: report,
-          ExportAllDeclaration: report,
-          ImportExpression: report,
-        };
-      },
-    },
-
-    /**
      * Ban vitest mock primitives in test files.
      *
      * `vi.fn`, `vi.spyOn`, `toHaveBeenCalled*`, and `.mock.calls` lead to
@@ -1480,6 +1701,691 @@ export default {
             if (node.right.type !== "Literal" || node.right.value !== 1) return;
 
             context.report({ node, messageId: "useOnly" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban optional collection fields.
+     *
+     * `readonly points?: readonly PointId[]` makes every reader write
+     * `points ?? []`. Make the field required and let an empty collection mean
+     * "none". When absence really differs from empty (an option that falls back
+     * to a default, a wire format), keep it and say why in a disable comment.
+     */
+    "no-optional-collection-field": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          requiredCollection:
+            "`{{name}}` is an optional collection, so readers must write `?? []`. Make it required and use an empty collection for none, or justify the absence in a disable comment.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (filename.includes(".test.") || filename.includes("/testing/")) return {};
+        // Generated bindings mirror Rust's Option<Vec<_>> wire fields.
+        if (filename.includes("/generated")) return {};
+
+        const isCollection = (type) => {
+          if (!type) return false;
+          if (type.type === "TSArrayType") return true;
+          if (type.type === "TSTypeOperator" && type.operator === "readonly") {
+            return isCollection(type.typeAnnotation);
+          }
+          return (
+            type.type === "TSTypeReference" &&
+            type.typeName?.type === "Identifier" &&
+            ["Array", "ReadonlyArray", "Set", "ReadonlySet", "Map", "ReadonlyMap"].includes(
+              type.typeName.name,
+            )
+          );
+        };
+
+        return {
+          TSPropertySignature(node) {
+            if (!node.optional || !isCollection(node.typeAnnotation?.typeAnnotation)) return;
+
+            const name = node.key?.name ?? source(node.key);
+            context.report({ node, messageId: "requiredCollection", data: { name } });
+          },
+        };
+
+        function source(key) {
+          return (context.sourceCode ?? context.getSourceCode()).getText(key);
+        }
+      },
+    },
+
+    /**
+     * Ban comparators written inline in `sort` and `toSorted`.
+     *
+     * `(a, b) => a - b` says how to order but not what the order is, and the
+     * same comparator gets written again at the next call site. Pass a named
+     * order instead: `ascending`, `byName`, `comparing(key, order)` and
+     * `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a
+     * comparator named next to the type it orders. When the order is part of
+     * the domain, let the owning collection keep it so callers do not sort.
+     */
+    "no-inline-comparator": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          nameComparator:
+            "Name this order instead of writing the comparator inline: pass `ascending`, `byName`, `comparing(key, order)` or `orderBy(...)` from @shift/types, `byAxis` from @shift/geo, or a comparator named next to the type it orders.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const SORTS = new Set(["sort", "toSorted"]);
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (!callee || callee.type !== "MemberExpression" || callee.computed) return;
+            if (!SORTS.has(callee.property?.name)) return;
+
+            const comparator = node.arguments[0];
+            if (!comparator) return;
+            if (
+              comparator.type !== "ArrowFunctionExpression" &&
+              comparator.type !== "FunctionExpression"
+            ) {
+              return;
+            }
+
+            context.report({ node: comparator, messageId: "nameComparator" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban `this.#map.get(key) ?? null` on a class's own collections.
+     *
+     * Shift's lookups return `null` for a missing entity, while `Map.get`
+     * returns `undefined`, so each lookup method converted by hand. Hold the
+     * collection in an `EntityMap` from `@shift/types`: its `get` returns
+     * `null`, and its `require` throws a named not-found error.
+     */
+    "no-map-get-to-null": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useEntityMap:
+            "Hold `{{field}}` in an EntityMap from @shift/types, whose get returns null, instead of converting Map.get with `?? null`.",
+        },
+        schema: [],
+      },
+      create(context) {
+        if (context.getFilename().replace(/\\/g, "/").endsWith("packages/types/src/EntityMap.ts")) {
+          return {};
+        }
+
+        return {
+          LogicalExpression(node) {
+            if (node.operator !== "??") return;
+            if (node.right.type !== "Literal" || node.right.value !== null) return;
+
+            const call = node.left;
+            if (call.type !== "CallExpression" || call.callee.type !== "MemberExpression") return;
+            if (call.callee.property?.name !== "get") return;
+
+            const field = call.callee.object;
+            if (field.type !== "MemberExpression" || field.object.type !== "ThisExpression") return;
+            if (field.property.type !== "PrivateIdentifier") return;
+
+            context.report({
+              node,
+              messageId: "useEntityMap",
+              data: { field: `#${field.property.name}` },
+            });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban spreading a conditional object to leave a key out:
+     * `{ ...(v === undefined ? {} : { x: v }) }` or `{ ...(cond && { x }) }`.
+     *
+     * The spread exists only because an optional field won't take `undefined`.
+     * Declare an input or options field `x?: T | undefined` and pass the value
+     * through (`x: v === undefined ? undefined : f(v)`). A stored shape where an
+     * absent key differs from `undefined` keeps the spread with a disable comment
+     * saying why.
+     */
+    "no-conditional-spread": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          passThrough:
+            "Do not spread a conditional object to omit a key. Declare the field `?: T | undefined` and pass the value through (`x: v === undefined ? undefined : f(v)`); a stored shape that must omit the key says why in a disable comment.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const unwrap = (node) =>
+          node.type === "ParenthesizedExpression" ? unwrap(node.expression) : node;
+        const isEmptyObject = (node) => {
+          const inner = unwrap(node);
+          return inner.type === "ObjectExpression" && inner.properties.length === 0;
+        };
+        const isObject = (node) => unwrap(node).type === "ObjectExpression";
+
+        const omitsKey = (argument) => {
+          const inner = unwrap(argument);
+          if (inner.type === "ConditionalExpression") {
+            return isEmptyObject(inner.consequent) || isEmptyObject(inner.alternate);
+          }
+          return (
+            inner.type === "LogicalExpression" && inner.operator === "&&" && isObject(inner.right)
+          );
+        };
+
+        return {
+          ObjectExpression(node) {
+            for (const property of node.properties) {
+              if (property.type !== "SpreadElement" || !omitsKey(property.argument)) continue;
+              context.report({ node: property, messageId: "passThrough" });
+            }
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban looking an object up by key over a read in behaviour tests and E2E specs.
+     *
+     * `(await editor.fontOverview()).sources.find((source) => source.name === "Bold")`
+     * and its kin wrapped in little helpers (`axisWithId`, `nameOfDefaultSource`)
+     * re-implement a selector in every test. The test surface has selector reads
+     * for these (`source({ name })`, `axis({ tag })`, `instance({ id })`, …); add
+     * one there when a test needs another. Shape-based: flags `.find`, `.filter`
+     * and `.some` whose callback compares a member, or a destructured parameter,
+     * with `===` or `!==`. Genuine cases take a reasoned disable.
+     */
+    "no-lookup-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useSelector:
+            "Do not look an object up by key over a read in a test. Use the test surface's selector reads (source({ name }), axis({ tag }), instance({ id }), …) and add one there if it is missing.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        const behaviourTest =
+          filename.includes("/apps/desktop/src/renderer/src/behaviour/") &&
+          filename.endsWith(".test.ts");
+        const e2eSpec = filename.includes("/apps/desktop/e2e/") && filename.endsWith(".spec.ts");
+        if (!behaviourTest && !e2eSpec) return {};
+
+        const lookups = new Set(["find", "filter", "some"]);
+        const isFunction = (node) =>
+          node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression";
+        // Names a callback's object pattern binds, as in `({ name }) => name === "Bold"`.
+        const destructured = (params) =>
+          new Set(
+            params.flatMap((param) =>
+              param.type === "ObjectPattern"
+                ? param.properties.flatMap((property) =>
+                    property.type === "Property" && property.value.type === "Identifier"
+                      ? [property.value.name]
+                      : [],
+                  )
+                : [],
+            ),
+          );
+        const isKey = (node, keys) =>
+          node.type === "MemberExpression" || (node.type === "Identifier" && keys.has(node.name));
+        const comparesKey = (node, keys) => {
+          if (!node || typeof node !== "object") return false;
+          if (Array.isArray(node)) return node.some((child) => comparesKey(child, keys));
+          if (
+            node.type === "BinaryExpression" &&
+            (node.operator === "===" || node.operator === "!==") &&
+            (isKey(node.left, keys) || isKey(node.right, keys))
+          ) {
+            return true;
+          }
+          return Object.entries(node).some(
+            ([key, child]) =>
+              key !== "parent" && child && typeof child === "object" && comparesKey(child, keys),
+          );
+        };
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (callee.type !== "MemberExpression" || callee.computed) return;
+            if (callee.property.type !== "Identifier" || !lookups.has(callee.property.name)) return;
+            const [callback] = node.arguments;
+            if (!callback || !isFunction(callback)) return;
+            if (comparesKey(callback.body, destructured(callback.params))) {
+              context.report({ node, messageId: "useSelector" });
+            }
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban `@shift/runtime` and agent-reader imports in behaviour tests and E2E specs.
+     *
+     * Those tests read through the test surface, which owns its read types
+     * (`testing/surface.ts`, `testing/reads.ts`) as aliases of the runtime's.
+     * Importing the runtime or `agent/` directly ties a test to the agent API's
+     * shape and module layout, which may change while the behaviour holds.
+     */
+    "no-agent-types-in-behaviour-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useSurfaceTypes:
+            "Do not import {{source}} in a behaviour test or E2E spec. Import the read types the test surface declares (@/testing/surface, @/testing/reads); add an alias there if one is missing.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        const behaviourTest = filename.includes("/apps/desktop/src/renderer/src/behaviour/");
+        const e2eSpec =
+          filename.includes("/apps/desktop/e2e/") &&
+          filename.endsWith(".spec.ts") &&
+          !filename.includes("/e2e/fixtures/");
+        if (!behaviourTest && !e2eSpec) return {};
+
+        const report = (node) => {
+          const source = node.source && node.source.value;
+          if (typeof source !== "string") return;
+          const runtime = source === "@shift/runtime" || source.startsWith("@shift/runtime/");
+          const agent = /(^|\/)agent(\/|$)/.test(source);
+          if (runtime || agent)
+            context.report({ node, messageId: "useSurfaceTypes", data: { source } });
+        };
+        return {
+          ImportDeclaration: report,
+          ExportNamedDeclaration: report,
+          ExportAllDeclaration: report,
+          ImportExpression: report,
+        };
+      },
+    },
+
+    /**
+     * Ban running code inside the app from a desktop E2E spec.
+     *
+     * A spec reads the app through `EditorDriver` (whose reads are the agent
+     * read API, the same as the vitest test surface) and acts through the
+     * user surface. `page.evaluate`, `page.evaluateHandle`,
+     * `page.waitForFunction` and `electronApp.evaluate` reach into renderer or
+     * main internals instead, so a refactor breaks the spec while the
+     * behaviour holds. The rule covers specs and fixtures alike: the one
+     * exempt file is `e2e/fixtures/appHooks.ts`, the typed bridge to the
+     * app's E2E hooks (agent reads, setup actions and test probes), so code
+     * that needs app state calls a hook rather than evaluating in the page.
+     * Fixtures that only measure the page or drive Electron main mark each
+     * evaluation with a reasoned disable.
+     *
+     * Evaluating on a locator, an element handle or a `BrowserWindow` handle
+     * reads DOM or window state (`scrollTop`, focus, bounds) and is allowed,
+     * as is `evaluateAll`. Without type information the rule flags any
+     * receiver it cannot prove is one of those (see `isElementSide`).
+     */
+    "no-page-evaluate-in-specs": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          useDriver:
+            "Do not call .{{method}}() in an E2E spec or fixture. Read through EditorDriver (the agent read API), act through the UI, or call an E2E hook through fixtures/appHooks.ts. See /writing-e2e-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (!filename.includes("/apps/desktop/e2e/")) return {};
+        if (!/\.m?ts$/.test(filename)) return {};
+        if (filename.endsWith("/e2e/fixtures/appHooks.ts")) return {};
+
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (callee.type !== "MemberExpression" || callee.computed) return;
+
+            const method = callee.property?.name;
+            if (!EVALUATE_METHODS.has(method)) return;
+            if (method !== "waitForFunction" && isElementSide(context, callee.object)) return;
+
+            context.report({ node, messageId: "useDriver", data: { method } });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban reaching past `EditorTestSurface` into the editor a desktop test drives.
+     *
+     * `TestEditor` still extends `Editor`, so a test holding one can read the tool manager, the
+     * scene, the edit coordinator, history, layer buffers and signal cells, and breaks when they
+     * move while the behaviour holds (#798). Flags a member read on a provable `TestEditor`, or on
+     * the `Editor` a helper takes from its `asEditor()` (see `isTestEditor`), whose name
+     * `EditorTestSurface` does not declare, and the same names destructured from one. The allowed names are read from the surface's own declarations
+     * (`testSurfaceMembers`), so there is no list of internals to keep in step: a read the
+     * surface lacks is added there. `asEditor()` is on the surface; `no-escape-hatch-reads`
+     * covers where it may go.
+     *
+     * Applies to tests under the renderer outside the harness's own `testing/` directory.
+     * Without type information an editor passed through an unannotated binding is not seen.
+     */
+    "no-editor-internals-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          internal:
+            "`{{name}}` is an editor internal, not on EditorTestSurface. Act and read through the surface; add the action or read there if it is missing. See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (!filename.includes("/apps/desktop/src/renderer/")) return {};
+        if (!/\.test\.tsx?$/.test(filename)) return {};
+        if (filename.includes("/testing/")) return {};
+
+        const surface = testSurfaceMembers();
+        const report = (node, name) => {
+          if (surface.has(name)) return;
+          context.report({ node, messageId: "internal", data: { name } });
+        };
+
+        return {
+          MemberExpression(node) {
+            if (node.computed || node.property.type !== "Identifier") return;
+            if (!isTestEditor(context, node.object)) return;
+            report(node.property, node.property.name);
+          },
+          VariableDeclarator(node) {
+            if (node.id.type !== "ObjectPattern" || node.init == null) return;
+            if (!isTestEditor(context, node.init)) return;
+            for (const property of node.id.properties) {
+              const key = staticKey(property);
+              if (key !== null) report(property.key, key);
+            }
+          },
+        };
+      },
+    },
+
+    /**
+     * Allow `x.asEditor()` only as an argument to a call.
+     *
+     * Tests are typed against `EditorTestSurface`; `asEditor()` hands the full `Editor` to an API
+     * that needs one (`foo(editor.asEditor())`). Reading from its result
+     * (`editor.asEditor().font`) or keeping it (`const e = editor.asEditor()`) puts the test back
+     * on editor internals the surface exists to hide. Matches the call's position only, never a
+     * list of editor member names.
+     */
+    "no-escape-hatch-reads": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          argumentOnly:
+            "Pass `asEditor()` straight into the call that needs an Editor. Read state through EditorTestSurface instead of the Editor it returns. See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        return {
+          CallExpression(node) {
+            const callee = node.callee;
+            if (callee.type !== "MemberExpression" || callee.computed) return;
+            if (callee.property.type !== "Identifier" || callee.property.name !== "asEditor")
+              return;
+            if (isCallArgument(node)) return;
+            context.report({ node, messageId: "argumentOnly" });
+          },
+        };
+      },
+    },
+
+    /**
+     * Assert a read whole instead of drilling into it inside `expect(…)`.
+     *
+     * `expect(editor.spacingTool()?.hovered?.side).toBe("left")` passes vacuously when the read is
+     * null and the expected value is too, and `read()[0]!.x` or `read().map(pick)` assert a
+     * projection the reader has to rebuild. `expect(editor.spacingTool()).toMatchObject({ hovered:
+     * { side: "left" } })` asserts the read itself. Flags, inside the first argument of `expect`,
+     * `expect.soft` or `expect.poll(() => …)` only: a `?.` member, a `[n]!` index, a `read()!.x`
+     * member or a `.map(…)` whose chain starts at a call. Picks made to act on a read (outside `expect`) are not flagged.
+     */
+    "no-drill-into-reads": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          drill:
+            "Do not drill into a read inside expect(…). Assert the read whole with toMatchObject({ …only the fields this test is about }). See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const startsAtCall = (node) => {
+          let current = node;
+          while (current) {
+            switch (current.type) {
+              case "CallExpression":
+                return true;
+              case "MemberExpression":
+                current = current.object;
+                break;
+              case "AwaitExpression":
+                current = current.argument;
+                break;
+              case "TSNonNullExpression":
+              case "ChainExpression":
+              case "ParenthesizedExpression":
+              case "TSAsExpression":
+                current = current.expression;
+                break;
+              default:
+                return false;
+            }
+          }
+          return false;
+        };
+
+        const drillsIntoRead = (node) => {
+          if (node.type === "MemberExpression" && node.optional) return startsAtCall(node.object);
+          if (node.type === "TSNonNullExpression") {
+            const inner = node.expression;
+            if (inner.type === "MemberExpression" && inner.computed)
+              return startsAtCall(inner.object);
+            return node.parent.type === "MemberExpression" && startsAtCall(inner);
+          }
+          if (node.type !== "CallExpression") return false;
+          const callee = node.callee;
+          return (
+            callee.type === "MemberExpression" &&
+            !callee.computed &&
+            callee.property.type === "Identifier" &&
+            callee.property.name === "map" &&
+            startsAtCall(callee.object)
+          );
+        };
+
+        const isFunction = (node) =>
+          node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression";
+
+        const visit = (node) => {
+          if (drillsIntoRead(node)) {
+            context.report({ node, messageId: "drill" });
+            return;
+          }
+          if (isFunction(node)) return;
+          for (const key of Object.keys(node)) {
+            if (key === "parent") continue;
+            const value = node[key];
+            const children = Array.isArray(value) ? value : [value];
+            for (const child of children) {
+              if (child && typeof child.type === "string") visit(child);
+            }
+          }
+        };
+
+        const subjectOf = (node) => {
+          const callee = node.callee;
+          if (callee.type === "Identifier" && callee.name === "expect") return node.arguments[0];
+          if (
+            callee.type !== "MemberExpression" ||
+            callee.computed ||
+            callee.object.type !== "Identifier" ||
+            callee.object.name !== "expect" ||
+            callee.property.type !== "Identifier"
+          ) {
+            return undefined;
+          }
+          const subject = node.arguments[0];
+          if (callee.property.name === "soft") return subject;
+          if (callee.property.name !== "poll" || subject === undefined) return undefined;
+          return isFunction(subject) ? subject.body : subject;
+        };
+
+        const visitSubject = (subject) => {
+          if (subject.type !== "BlockStatement") {
+            visit(subject);
+            return;
+          }
+          for (const statement of subject.body) {
+            if (statement.type === "ReturnStatement" && statement.argument) {
+              visit(statement.argument);
+            }
+          }
+        };
+
+        return {
+          CallExpression(node) {
+            const subject = subjectOf(node);
+            if (subject === undefined || subject === null) return;
+            visitSubject(subject);
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban the casts and comments that let a test reach past the types it is given.
+     *
+     * `as any`, `as unknown as T`, `@ts-ignore` and an unexplained `@ts-expect-error` switch the
+     * type checker off at the point where it would say the test is using something it should not.
+     * Bracket reads of `"#x"` / `"_x"` names and `obj._x` reads reach members marked private by
+     * convention. `this._x` and `__x` names (`__proto__`, `__dirname`-style globals) are not
+     * flagged.
+     */
+    "no-test-type-escapes": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          asAny: "Do not cast to `any` in tests. Use the typed surface that owns the value.",
+          doubleCast:
+            "`as unknown as T` hides a type mismatch. Build a real value with a builder, or use the typed surface that owns it.",
+          tsIgnore:
+            "Do not use @ts-ignore in tests. Fix the type, or use @ts-expect-error with a reason when the error is the point of the test.",
+          expectErrorReason: "Say why the error is expected: `// @ts-expect-error <reason>`.",
+          privateRead:
+            "`{{name}}` is private by convention. Assert through the public surface instead of reading internals.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const sourceCode = context.sourceCode ?? context.getSourceCode();
+        return {
+          Program() {
+            const comments = sourceCode.getAllComments ? sourceCode.getAllComments() : [];
+            for (const comment of comments) {
+              const directive = /^[\s/*]*@ts-(ignore|expect-error)\b(.*)$/s.exec(comment.value);
+              if (!directive) continue;
+              if (directive[1] === "ignore") {
+                context.report({ node: comment, messageId: "tsIgnore" });
+                continue;
+              }
+              const reason = directive[2].replace(/^[\s:\-–—]*/, "").trim();
+              if (reason.length === 0)
+                context.report({ node: comment, messageId: "expectErrorReason" });
+            }
+          },
+          TSAsExpression(node) {
+            const target = node.typeAnnotation.type;
+            if (target === "TSAnyKeyword") {
+              context.report({ node, messageId: "asAny" });
+              return;
+            }
+            const inner = node.expression;
+            if (
+              inner.type === "TSAsExpression" &&
+              inner.typeAnnotation.type === "TSUnknownKeyword"
+            ) {
+              context.report({ node, messageId: "doubleCast" });
+            }
+          },
+          MemberExpression(node) {
+            const name = privateMemberName(node);
+            if (name === null) return;
+            if (node.object.type === "ThisExpression") return;
+            context.report({ node, messageId: "privateRead", data: { name } });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban the engine's wire format in tests.
+     *
+     * An intent written as `{ kind: "createGlyph", createGlyph: { … } }` and the generated
+     * bridge types are the wire between editor and engine; tests built on them break whenever
+     * the wire changes, with no change in behaviour. The literal is matched by shape (its `kind`
+     * names another of its keys, holding an object literal), never by a list of intent names, so
+     * a domain union such as `{ kind: "metric", metric: "xHeight" }` passes.
+     */
+    "no-wire-shapes-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          taggedPayload:
+            '`{ kind: "{{kind}}", {{kind}}: … }` is the engine\'s wire format. Drive the edit through TestEditor and assert on the result.',
+          generatedImport:
+            "Tests do not import the generated bridge types. Use the domain types and builders in @/testing.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const checkImport = (node) => {
+          const source = node.source && node.source.value;
+          if (typeof source === "string" && GENERATED_BRIDGE_MODULE.test(source)) {
+            context.report({ node, messageId: "generatedImport" });
+          }
+        };
+        return {
+          ImportDeclaration: checkImport,
+          ExportNamedDeclaration: checkImport,
+          ExportAllDeclaration: checkImport,
+          ImportExpression: checkImport,
+          ObjectExpression(node) {
+            const payloadKeys = new Set();
+            let kind = null;
+            for (const property of node.properties) {
+              const key = staticKey(property);
+              if (key === null) continue;
+              const value = property.value;
+              if (key === "kind" && value.type === "Literal" && typeof value.value === "string") {
+                kind = value.value;
+              }
+              if (value.type === "ObjectExpression") payloadKeys.add(key);
+            }
+            if (kind === null || !payloadKeys.has(kind)) return;
+            context.report({ node, messageId: "taggedPayload", data: { kind } });
           },
         };
       },

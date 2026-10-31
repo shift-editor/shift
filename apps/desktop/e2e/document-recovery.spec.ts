@@ -1,7 +1,7 @@
-import type { Page } from "@playwright/test";
-import type { GlyphName } from "@shift/types";
+import type { ElectronApplication, Page } from "@playwright/test";
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { waitForEditorReady } from "./fixtures/appLocators";
+import { createGlyphNamed, runWindowCommand } from "./fixtures/documentLifecycle";
 import { expect, recoveryTest as test } from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
@@ -10,21 +10,17 @@ test(
   "recovers completed edits after forced termination and saves explicitly",
   { tag: "@os" },
   async ({ recoveryApp }) => {
-    const glyphName = "recoveredE2E" as GlyphName;
-    await recoveryApp.page.evaluate((name) => {
-      window.shift?.editor.createGlyph(name);
-    }, glyphName);
-    await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, true);
+    const glyphName = "recoveredE2E";
+    await createGlyphNamed(recoveryApp.page, glyphName);
+    await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], true, true);
     expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
 
     const restarted = await recoveryApp.crashAndRecover();
 
-    await waitForGlyphsAndState(restarted, [glyphName], true, true);
+    await expectGlyphsAndState(restarted, recoveryApp.app, [glyphName], true, true);
     expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
-    await restarted.evaluate(async () => {
-      await window.shiftHost?.commands.run("file.save");
-    });
-    await waitForGlyphsAndState(restarted, [glyphName], true, false);
+    await runWindowCommand(restarted, "file.save");
+    await expectGlyphsAndState(restarted, recoveryApp.app, [glyphName], true, false);
     expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
   },
 );
@@ -32,40 +28,44 @@ test(
 test("recovers undo past the last save as a dirty document that saves explicitly", async ({
   recoveryApp,
 }) => {
-  const glyphName = "recoveryUndone" as GlyphName;
-  await createGlyph(recoveryApp.page, glyphName);
-  await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, true);
-  await save(recoveryApp.page);
-  await waitForGlyphsAndState(recoveryApp.page, [glyphName], true, false);
+  const glyphName = "recoveryUndone";
+  await createGlyphNamed(recoveryApp.page, glyphName);
+  await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], true, true);
+  await runWindowCommand(recoveryApp.page, "file.save");
+  await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], true, false);
   expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
 
-  await recoveryApp.page.evaluate(async () => {
-    await window.shift?.font.editCoordinator.undo();
-  });
-  await waitForGlyphsAndState(recoveryApp.page, [glyphName], false, true);
+  await runWindowCommand(recoveryApp.page, "edit.undo");
+  await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], false, true);
 
   const recovered = await recoveryApp.crashAndRecover();
-  await waitForGlyphsAndState(recovered, [glyphName], false, true);
+  await expectGlyphsAndState(recovered, recoveryApp.app, [glyphName], false, true);
   expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
 
-  await save(recovered);
-  await waitForGlyphsAndState(recovered, [glyphName], false, false);
+  await runWindowCommand(recovered, "file.save");
+  await expectGlyphsAndState(recovered, recoveryApp.app, [glyphName], false, false);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
 });
 
 test("recovers edits made after a previous recovery", async ({ recoveryApp }) => {
-  const firstGlyph = "recoveredFirst" as GlyphName;
-  const secondGlyph = "recoveredSecond" as GlyphName;
-  await createGlyph(recoveryApp.page, firstGlyph);
-  await waitForGlyphsAndState(recoveryApp.page, [firstGlyph], true, true);
+  const firstGlyph = "recoveredFirst";
+  const secondGlyph = "recoveredSecond";
+  await createGlyphNamed(recoveryApp.page, firstGlyph);
+  await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [firstGlyph], true, true);
 
   const recovered = await recoveryApp.crashAndRecover();
-  await waitForGlyphsAndState(recovered, [firstGlyph], true, true);
-  await createGlyph(recovered, secondGlyph);
-  await waitForGlyphsAndState(recovered, [firstGlyph, secondGlyph], true, true);
+  await expectGlyphsAndState(recovered, recoveryApp.app, [firstGlyph], true, true);
+  await createGlyphNamed(recovered, secondGlyph);
+  await expectGlyphsAndState(recovered, recoveryApp.app, [firstGlyph, secondGlyph], true, true);
 
   const recoveredAgain = await recoveryApp.crashAndRecover();
-  await waitForGlyphsAndState(recoveredAgain, [firstGlyph, secondGlyph], true, true);
+  await expectGlyphsAndState(
+    recoveredAgain,
+    recoveryApp.app,
+    [firstGlyph, secondGlyph],
+    true,
+    true,
+  );
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(firstGlyph);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(secondGlyph);
 });
@@ -73,81 +73,45 @@ test("recovers edits made after a previous recovery", async ({ recoveryApp }) =>
 test("reopens a saved document on the glyph and canvas it was editing after forced termination", async ({
   recoveryApp,
 }) => {
-  const editor = new EditorDriver(recoveryApp.page);
+  const editor = new EditorDriver(recoveryApp.page, recoveryApp.app);
   await editor.openGlyphByUnicode("41");
   const glyph = await editor.activeGlyph();
   if (!glyph) throw new Error("Expected glyph A to be open before the crash");
   // Placing the glyph on the canvas is document content: wait until it is recovered.
-  await waitForDirty(recoveryApp.page, true);
-  const before = await canvasRun(recoveryApp.page);
+  await expect
+    .poll(() => editor.documentState(), { timeout: 20_000 })
+    .toMatchObject({
+      dirty: true,
+    });
+  const before = await editor.canvasText();
 
   const reopened = await recoveryApp.crashAndRecoverWindow(glyph.glyphId);
 
   await waitForEditorReady(reopened, glyph.glyphId);
-  expect(await canvasRun(reopened)).toEqual(before);
-  expect(before.childGlyphId).toBe(glyph.glyphId);
-  expect(await reopened.evaluate(() => window.shift?.documentStateCell.peek()?.dirty)).toBe(true);
+  const after = new EditorDriver(reopened, recoveryApp.app);
+  expect(await after.canvasText()).toMatchObject({ items: before?.items });
+  expect(await after.documentState()).toMatchObject({ dirty: true });
 });
 
-/** Identifies the canvas run node and the glyph its child edits. */
-async function canvasRun(
+/** Waits until each of `glyphNames` is in the font, or none is, and the document is dirty or not. */
+async function expectGlyphsAndState(
   page: Page,
-): Promise<{ runNodeId: string | null; childGlyphId: string | null }> {
-  return page.evaluate(() => {
-    const editor = window.shift?.editor;
-    const run = editor?.scene.first("textRun") ?? null;
-    const child = run ? (editor?.nodeDefinition("textRun").childGlyph(run) ?? null) : null;
-    return { runNodeId: run?.id ?? null, childGlyphId: child?.glyphId ?? null };
-  });
-}
-
-async function waitForDirty(page: Page, dirty: boolean): Promise<void> {
-  await page.waitForFunction(
-    (expected) => window.shift?.documentStateCell.peek()?.dirty === expected,
-    dirty,
-    { timeout: 20_000 },
-  );
-}
-
-/** Creates a glyph in one transaction so a single undo removes it. */
-async function createGlyph(page: Page, name: GlyphName): Promise<void> {
-  await page.evaluate((glyphName) => {
-    const workspace = window.shift;
-    if (!workspace) throw new Error("Expected authored workspace");
-
-    workspace.font.editCoordinator.transaction(`Create ${glyphName}`, () => {
-      workspace.editor.createGlyph(glyphName);
-    });
-  }, name);
-}
-
-async function save(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await window.shiftHost?.commands.run("file.save");
-  });
-}
-
-async function waitForGlyphsAndState(
-  page: Page,
-  glyphNames: GlyphName[],
+  app: ElectronApplication,
+  glyphNames: string[],
   present: boolean,
   dirty: boolean,
 ): Promise<void> {
-  await page.waitForFunction(
-    ({ names, expectedPresent, expectedDirty }) => {
-      const workspace = window.shift;
-      if (
-        workspace?.applyStatusCell.peek() !== "idle" ||
-        workspace.documentStateCell.peek()?.dirty !== expectedDirty
-      ) {
-        return false;
-      }
-
-      return names.every(
-        (name) => (workspace.font.recordForName(name) !== null) === expectedPresent,
-      );
-    },
-    { names: glyphNames, expectedPresent: present, expectedDirty: dirty },
-    { timeout: 20_000 },
-  );
+  const editor = new EditorDriver(page, app);
+  await expect
+    .poll(
+      async () => {
+        const glyphs = await editor.glyphNames();
+        return {
+          present: glyphNames.map((name) => glyphs.includes(name)),
+          document: await editor.documentState(),
+        };
+      },
+      { timeout: 20_000 },
+    )
+    .toMatchObject({ present: glyphNames.map(() => present), document: { dirty } });
 }

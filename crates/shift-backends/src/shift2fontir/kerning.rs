@@ -128,7 +128,7 @@ fn master_kerning<'a>(
         .iter()
         .filter(|source| source.is_master())
         .filter_map(|source| {
-            let pairs = snapshot.kerning.source(&source.id())?;
+            let pairs = snapshot.kerning.source(source.id())?;
             Some(
                 normalized_source_location(source, &snapshot.axes, axes)
                     .map(|location| (location, pairs)),
@@ -199,7 +199,7 @@ fn resolve_side(
         KerningSide::Glyph(glyph_id) => glyph_names.get(glyph_id).cloned().map(KernSide::Glyph),
         KerningSide::Group(group_id) => {
             let group = kerning
-                .group(group_id)
+                .group(*group_id)
                 .filter(|group| group.position == position)?;
             let group = kern_group(position, &group.name);
             groups

@@ -44,6 +44,8 @@ Before deleting a test or materially reducing a test file, create a test migrati
 
 Move replacement tests to the new behavioral owner before deleting the old file. Similar-looking coverage is not enough: verify that it exercises the same boundary, failure mode, and state transition. Report removed and replacement test counts in the handoff.
 
+`pnpm scan:ts --since origin/main --kind test-ledger` lists the cases a branch removed and added, cases making fewer `expect` calls, and exact matchers it weakened (`toBe(4)` to `toBeGreaterThan(0)`); start the ledger from it. `--kind refactor-churn` lists the behaviour tests the branch touched: a refactor should touch none.
+
 Example:
 
 | Removed test                               | Protected invariant                                                                             | Replacement                                               |
@@ -72,13 +74,13 @@ If you catch yourself doing any of the following, stop. You're about to write a 
 
 ## Test categories
 
-| Category             | Use when                                                                   | Template in repo                                                                            |
-| -------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Tool test**        | User-triggerable behavior of a tool (pointer, keyboard, selection, cursor) | `lib/tools/pen/Pen.test.ts`, `lib/tools/hand/Hand.test.ts`, `lib/tools/shape/Shape.test.ts` |
-| **Command test**     | A `Command`'s execute/undo/redo round-trip                                 | `lib/commands/primitives/PointCommands.test.ts`                                             |
-| **Pure module test** | Stateless class or function with no `Editor` dependency                    | `lib/tools/text/TextRunController.test.ts`, `lib/editor/hit/boundingBox.test.ts`            |
-| **Bridge test**      | `NativeBridge` against the real Rust engine                                | `bridge/NativeBridge.test.ts`                                                               |
-| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output      | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                   |
+| Category             | Use when                                                                   | Template in repo                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Tool test**        | User-triggerable behavior of a tool (pointer, keyboard, selection, cursor) | `behaviour/pen/draw-with-pen.test.ts`, `behaviour/canvas/pan-with-hand.test.ts`, `behaviour/shape/draw-shapes.test.ts` |
+| **Command test**     | A `Command`'s execute/undo/redo round-trip                                 | `lib/commands/primitives/PointCommands.test.ts`                                                                        |
+| **Pure module test** | Stateless class or function with no `Editor` dependency                    | `lib/tools/text/TextRunController.test.ts`, `lib/editor/hit/boundingBox.test.ts`                                       |
+| **Bridge test**      | `NativeBridge` against the real Rust engine                                | `bridge/NativeBridge.test.ts`                                                                                          |
+| **Desktop E2E test** | Behavior requiring the real renderer, DOM, Electron, or visual output      | `e2e/editor.spec.ts`, `e2e/tools.spec.ts`, `e2e/application-menu.spec.ts`                                              |
 
 If your target doesn't fit one of these, stop and ask — don't invent a new shape.
 
@@ -95,28 +97,23 @@ If your target doesn't fit one of these, stop and ask — don't invent a new sha
 ### Tool test
 
 ```ts
-import { describe, it, expect, beforeEach } from "vitest";
-import { TestEditor } from "@/testing/TestEditor";
+import { beforeEach, describe, expect, it } from "vitest";
+import { useTestEditor } from "@/testing/fontFixture";
+
+const editor = useTestEditor();
 
 describe("Hand tool", () => {
-  let editor: TestEditor;
-
   beforeEach(() => {
-    editor = new TestEditor();
-    editor.startSession();
     editor.selectTool("hand");
   });
 
-  it("drag pans the viewport by the screen delta", () => {
-    const startPan = editor.pan;
+  it("drag pans the viewport by the screen delta", async () => {
+    const start = editor.canvasOffset();
 
-    editor.pointerDown(0, 0);
-    editor.pointerMove(50, 30); // crosses drag threshold
-    editor.pointerMove(120, 80);
-    editor.pointerUp(120, 80);
+    // At zoom 1 a font unit is a screen pixel; screen y runs down.
+    await editor.dragFrom({ x: 0, y: 0 }, { x: 120, y: -80 });
 
-    expect(editor.pan.x).toBe(startPan.x + 120);
-    expect(editor.pan.y).toBe(startPan.y + 80);
+    expect(editor.canvasOffset()).toEqual({ x: start.x + 120, y: start.y + 80 });
   });
 });
 ```
@@ -177,19 +174,19 @@ import { workspaceTest as test, expect } from "./fixtures/electronApp";
 test("moves a point and supports undo", async ({ editor }) => {
   await editor.openGlyphByName("A");
   const point = await editor.selectVisiblePoint();
-  const before = await editor.pointPosition(point.id);
+  const before = await editor.point(point.id);
 
   await editor.dragPoint(point);
-  expect(await editor.pointPosition(point.id)).toEqual(point.expectedGlyphPosition);
+  expect(await editor.point(point.id)).toMatchObject(point.expectedGlyphPosition);
 
   await editor.undo();
-  expect(await editor.pointPosition(point.id)).toEqual(before);
+  expect(await editor.point(point.id)).toEqual(before);
 });
 ```
 
-Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `pointPosition()` must not be preceded by direct `editCoordinator.settled()` calls.
+Use `EditorDriver` for semantic editor actions and domain observations. Keep assertions in the spec, and use Playwright's `page` only for visible UI, browser, or Electron behavior. Driver actions that can persist geometry own edit settling; confirmed reads such as `outline()` and `point()` must not be preceded by direct `editCoordinator.settled()` calls.
 
-Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. After setup changes geometry or camera state, call `waitForCanvasRender()` before projections or pointer input; authored-layer readiness does not guarantee current canvas transforms or hit regions. Use `livePointPosition()` and `selectionBounds()` for gesture previews; keep `pointPosition()` for confirmed geometry.
+Coordinate spaces are explicit: pointer methods take page positions, `dragCanvas()` takes canvas-local positions, and projection helpers convert between scene, canvas, and page coordinates. `activeGlyph()` returns `null` until the scene node and authored layer are both published. After setup changes geometry or camera state, call `waitForCanvasRender()` before projections or pointer input; authored-layer readiness does not guarantee current canvas transforms or hit regions. Use `drawnPoint()`, `drawnOutline()` and `selectionBounds()` for gesture previews; keep `point()` for confirmed geometry. Projection helpers take and return `LocalPoint` (the glyph's units), `ScenePoint` or `ScreenPoint` (canvas pixels); build them with `localPoint(x, y)` and friends, never a cast.
 
 Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, variable-font construction, GPU residency, performance loops, and screenshot assertions remain at their owning fixture or spec boundary.
 
@@ -198,19 +195,47 @@ Do not turn `EditorDriver` into a dumping ground. Native window/menu focus, vari
 Before committing a test, run through these. Any miss means the test is wrong.
 
 1. **Mental deletion.** Replace the method body under test with `throw new Error("unimplemented")`. Does your test fail? If it still passes, you wrote a tautology — usually because you asserted on a value you constructed rather than on a consequence.
-2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method.
+2. **User-facing surface.** You drove through a method a real user can trigger (pointer, keyboard, command, menu action), not a `#private` field or a tool-internal method. `asEditor()` goes only straight into a call that needs an `Editor`, never read from or kept. Enforced by `shift/no-escape-hatch-reads`. Read and act on a `TestEditor` only through what `EditorTestSurface` declares, never its tool manager, scene, edit coordinator, history, layers or signal cells; add the read or action to the surface when it is missing. Enforced by `shift/no-editor-internals-in-tests`.
 3. **Specific assertions.** `expect(editor.pointCount).toBe(4)` — yes. `expect(result).toBeDefined()` or `expect(spy).toHaveBeenCalled()` — no, those survive any implementation.
 4. **Correct code path.** If the real production path goes through command history + bridge + signals, your test goes through those too. You didn't reach behind the facade.
 5. **Focused body.** Keep unit-test bodies under roughly 15 lines. E2E flows may be longer when the visible workflow requires it, but each test still protects one behavior and repeated plumbing belongs in `EditorDriver` or the owning fixture.
 
 ## Setup discipline
 
-- `beforeEach` is ≤ 5 lines: `new TestEditor()` + `startSession()` + `selectTool()` + optional fixture.
-- No wrapper factories around `TestEditor`. If you need a reusable helper, it belongs as a method on `TestEditor` itself (see `pointerMove`, `click`, `escape`).
+- Get the editor from the harness, typed as `EditorTestSurface`: `const editor = useTestEditor(fixture)` at module or `describe` level (it starts before each test and closes after), or `await startTestEditor()` / `await openTestEditor(file, glyph)` / `await startEditorWith(fixture)` inside a test. Never `new TestEditor()` in a test.
+- `beforeEach` is ≤ 5 lines: `selectTool()` + the drawing or fixture the cases share.
+- No wrapper factories around the editor. If you need a reusable action or read, it belongs on `EditorTestSurface` (declared in `testing/surface.ts`, implemented by `TestEditor`), named for what a user does or sees.
 - If your test needs a pre-drawn shape, draw it with the pen/shape tool in `beforeEach` — don't construct glyph snapshots inline.
 - In E2E specs, prefer the shared `editor` fixture over constructing `EditorDriver` for the primary page. Construct a driver directly only for additional workspace windows.
 - Do not add one-off scene-node, glyph-layer, canvas-offset, or projection helpers when `EditorDriver` can express the same reusable boundary.
 - Use raw Playwright gestures only when the low-level browser lifecycle is itself under test; otherwise use `pointerDown()`, `pointerMove()`, `pointerUp()`, `dragCanvas()`, or `cancelGesture()`.
+
+## Test helpers
+
+These hold for behaviour tests (`apps/desktop/src/renderer/src/behaviour/`) and E2E specs alike.
+
+1. **Setup returns the ids the test needs, by the fixture's own names.** Never search the outline afterwards for a point you drew.
+   `const { first, middle, last } = await editor.draw({ contours: [CORNER] });`
+2. **A question about a read's result is a shared pure function or matcher in `testing/`**, not a method on the read (reads are plain data; in E2E they arrive as JSON) and not a per-file helper.
+   `expect(await editor.outline()).toDrawLike(fitted);`
+3. **Builders return plain data; domain math stays on the domain type** (`Curve`, `Vec2`). A builder only names the result, and takes the points a test writes, not a `@shift/geo` value.
+   `splitCubic([0, 0], [50, 100], [200, 100], [200, 0], 0.4)`
+4. **A read every driver needs goes on the shared surface**, `EditorReads`, implemented by `TestEditor` and `EditorDriver` alike — not a per-file `position(id)`. One stored point is `point(id)`; mid-gesture, `drawnPoint(id)` reads it as the canvas draws it now; `point(id, { source: { name: "Bold" } })` reads its counterpart in another source's layer, as the engine matches the layers.
+   `expect(await editor.point(corner)).toMatchObject({ x: 100, y: 0 });`
+5. **Shared assertions are matchers**, one implementation in `testing/` registered with vitest's and Playwright's `expect` — not a per-file `expectNear`.
+   `expect(await editor.point(corner)).toBeNear({ x: 186.6, y: 150 });`
+6. **A file's own scenario helpers stay local.** `drawStroke()` names the stroke `close-and-join.test.ts` closes, so it lives there.
+   `async function drawStroke(): Promise<void> { … }`
+7. **Assert the read whole; pick from it only to act on it.** Inside `expect(…)`, give the read itself and match only the fields the test is about; merge checks of the same read in the same state into one shape. Arrays inside `toMatchObject` match exact length (`expect.arrayContaining` for membership), and `?.` behind `toBeNull()` passes vacuously when the read itself is null. `shift/no-drill-into-reads` flags `?.`, `[n]!`, `read()!.x` and `.map(…)` on a read inside `expect`.
+   `expect(editor.spacingTool()?.hovered?.side).toBe("left")` → `expect(editor.spacingTool()).toMatchObject({ hovered: { side: "left" } })`
+8. **Domain vocabulary is central from the start; scenario helpers stay local even when repeated.** A helper naming positions, shapes or nearness goes in `testing/` the first time it is written; one naming a file's scenario stays in that file.
+   `splitCubic(…)` lives in `testing/fixtures.ts`; `clickHalf()` stays in `spacing-tool.test.ts`.
+9. **Refer to things by name; use an id only where identity is the point.** Setup and locators name sources, axes, instances and glyphs the way the fixture and the UI do (`sourceRow(controls, "Bold")`, not ``getByTestId(`source-${id}`)``). Read an id through a selector only to follow a record across a change (a rename, a recovery), and never build, encode, sort or search for one.
+   `const { id: opsz } = (await editor.axis({ tag: "opsz" }))!; … expect(await editor.axis({ id: opsz })).toMatchObject({ name: "Optical Scale" })`
+10. **Never look a record up over a read; use the selector read.** `source({ name } | { id } | "default" | "active")`, `axis({ tag } | { id })`, `instance({ name } | { id })`, `anchorNamed(name, { source })`; add one to the surface when a test needs another. `shift/no-lookup-in-tests` flags `.find`/`.filter`/`.some` whose callback compares a member or destructured key with `===`/`!==`; a genuine case (a protocol response, picking points by position for a golden) takes a reasoned disable.
+    `sources.find(({ name }) => name === "Bold")` → `editor.source({ name: "Bold" })`
+
+Positions in test code use the editor's coordinate spaces from `@shift/editor/spaces` (`LocalPoint`, `ScenePoint`, `ScreenPoint`) where a read or driver input already has one.
 
 ## Naming
 

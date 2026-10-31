@@ -5,7 +5,7 @@
 //! is in-memory: history survives a renderer reload while the workspace process
 //! remains alive, but not a utility crash.
 
-use shift_font::{EntityChange, FontChangeSet, FontEntityChange, LayerId};
+use shift_font::FontChangeSet;
 use shift_store::SaveState;
 
 /// Maximum entries retained independently by each stack. The oldest entry on
@@ -20,23 +20,6 @@ pub struct LedgerEntry {
     position: HistoryPosition,
     pub label: Option<String>,
     pub change_set: FontChangeSet,
-}
-
-impl LedgerEntry {
-    /// Layers whose current payloads must be resident before replay.
-    pub(crate) fn layer_ids(&self) -> Vec<LayerId> {
-        self.change_set
-            .entity_changes()
-            .into_iter()
-            .filter_map(|entity| match entity {
-                FontEntityChange::Layer { change, .. } => Some(match change {
-                    EntityChange::Created(layer) | EntityChange::Deleted(layer) => layer.id(),
-                    EntityChange::Updated { after, .. } => after.id(),
-                }),
-                _ => None,
-            })
-            .collect()
-    }
 }
 
 pub struct Ledger {

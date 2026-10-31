@@ -3,6 +3,7 @@ import type {
   AnchorId,
   Axis,
   AxisId,
+  AxisMapping,
   ComponentId,
   ContourId,
   FontMetadata,
@@ -15,6 +16,7 @@ import type {
   LayerId,
   MetricDefinition,
   NamedInstance,
+  NamedInstanceId,
   NodeId,
   PointId,
   PointType,
@@ -104,6 +106,22 @@ export interface EditorView {
   applyStatus: "idle" | "queued" | "applying" | null;
 }
 
+/** Where an open document came from: a `.shift` package, a font file opened for editing, or a new font. */
+export type DocumentSourceKind = "document" | "imported" | "untitled";
+
+/** One window's document and whether it has edits Save has not written. */
+export interface DocumentState {
+  sourceKind: DocumentSourceKind;
+  /** The file Save writes; null until the document has one. */
+  saveTarget: string | null;
+  /** The file the document was opened from or last saved to; null for a new font. */
+  path: string | null;
+  /** Whether the document has edits Save has not written. */
+  dirty: boolean;
+  /** Whether Save must first ask where to write, as for a new or imported font. */
+  needsSaveAs: boolean;
+}
+
 /** Editor facts paired with the explicit window and font-session target. */
 export interface EditorInspection extends EditorView {
   windowId: number;
@@ -119,6 +137,8 @@ export interface FontOverview {
   metricDefinitions: MetricDefinition[];
   glyphCount: number;
   axes: Axis[];
+  /** How user coordinates on the axes map to source coordinates (`avar`), in font order. */
+  axisMappings: AxisMapping[];
   /** Global designspace sources; glyph-specific layers are advertised on glyphs. */
   sources: Source[];
   instances: NamedInstance[];
@@ -144,6 +164,27 @@ export interface GlyphSummary {
 export type GlyphSelector =
   | { glyphId: GlyphId; name?: never }
   | { name: GlyphName; glyphId?: never };
+
+/** Select one source by stable ID or exact name, never by both. */
+export type SourceSelector =
+  | { sourceId: SourceId; name?: never }
+  | { name: string; sourceId?: never };
+
+/** Select one named instance by stable ID or exact name, never by both. */
+export type InstanceSelector =
+  | { instanceId: NamedInstanceId; name?: never }
+  | { name: string; instanceId?: never };
+
+/** Select one axis by stable ID or tag, never by both. */
+export type AxisSelector = { axisId: AxisId; tag?: never } | { tag: string; axisId?: never };
+
+/**
+ * Select one authored layer by stable ID, or as a glyph's layer at a source,
+ * never both. Without `source`, the glyph's layer at the default source.
+ */
+export type LayerSelector =
+  | { layerId: LayerId; glyph?: never; source?: never }
+  | { glyph: GlyphSelector; source?: SourceSelector; layerId?: never };
 
 /** One bounded page of glyphs in font directory order. */
 export interface GlyphPage {
@@ -302,27 +343,32 @@ export interface ResolvedGlyphs {
 export interface GlyphListInput extends ShiftTarget {
   limit?: number;
   cursor?: string;
-  sourceId?: SourceId;
+  /** Nests each glyph's authored layer at this source. */
+  source?: SourceSelector;
 }
 
 export type GlyphGetInput = ShiftTarget & GlyphSelector;
+
+/** One source by stable id or exact name, never by both. */
+export type SourceGetInput = ShiftTarget & SourceSelector;
+
+/** One named instance by stable id or exact name, never by both. */
+export type InstanceGetInput = ShiftTarget & InstanceSelector;
 
 export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
 }
 
-/** Addresses one authored layer by its stable identity. */
-export interface LayerGetInput extends ShiftTarget {
-  layerId: LayerId;
-}
+/** Addresses one authored layer by its stable identity, or by glyph and source. */
+export type LayerGetInput = ShiftTarget & LayerSelector;
 
 export type LayerResolveInput = LayerGetInput;
 
-export interface LayerRenderInput extends LayerGetInput {
+export type LayerRenderInput = LayerGetInput & {
   overlays?: LayerOverlays;
   appearance?: LayerAppearance;
-}
+};
 
 export interface LocationResolveInput extends ShiftTarget {
   location: AxisCoordinate[];
@@ -407,24 +453,33 @@ export interface KerningGroupsInput extends ShiftTarget {
 }
 
 export interface KerningPairsInput extends ShiftTarget {
-  sourceId: SourceId;
-  /** Only pairs that apply to this glyph (exact name or id), directly or through its groups. */
-  glyph?: string;
+  /** The master whose pairs to list; the default source when omitted. */
+  source?: SourceSelector;
+  /** Only pairs that apply to this glyph, directly or through its groups. */
+  glyph?: GlyphSelector;
   limit?: number;
   cursor?: string;
 }
 
-/** Two glyphs, first then second, each by exact name or stable glyph id. */
+/** Two glyphs, first then second, each selected by exact name or stable glyph id. */
 export interface KerningPairQuery {
-  first: string;
-  second: string;
+  first: GlyphSelector;
+  second: GlyphSelector;
 }
 
-/** Resolves at one master (`sourceId`), an external `location`, or else the default location. */
+/** Resolves at one master (`source`), an external `location`, or else the default location. */
 export interface KerningResolveInput extends ShiftTarget {
   pairs: KerningPairQuery[];
-  sourceId?: SourceId;
+  source?: SourceSelector;
+  // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use source or the default location", not an empty location
   location?: AxisCoordinate[];
+}
+
+/** One pair, first glyph then second, at one master; the default source when `source` is omitted. */
+export interface KerningAtInput extends ShiftTarget {
+  first: GlyphSelector;
+  second: GlyphSelector;
+  source?: SourceSelector;
 }
 
 /** Live application capabilities shared by protocol and plugin hosts. */
@@ -447,6 +502,12 @@ export interface ShiftCapabilities {
     get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
     resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
   };
+  sources: {
+    get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
+  };
+  instances: {
+    get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
+  };
   layers: {
     get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
     resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
@@ -456,6 +517,7 @@ export interface ShiftCapabilities {
     groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
     pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
     resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
+    at(input: KerningAtInput): Promise<ShiftObservation<KerningMasterValue>>;
   };
 }
 
@@ -491,6 +553,12 @@ export interface ShiftRead {
     get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
     resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
   };
+  sources: {
+    get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
+  };
+  instances: {
+    get(input: ShiftReadInput<InstanceGetInput>): Promise<NamedInstance>;
+  };
   layers: {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
     resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
@@ -500,6 +568,7 @@ export interface ShiftRead {
     groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
     pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+    at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
 }
 
@@ -514,4 +583,142 @@ export interface ShiftScript extends ShiftCapabilities {
     target: { windowId: number },
     callback: (read: ShiftRead) => Result | Promise<Result>,
   ): Promise<Result>;
+}
+
+/** One item of a canvas text run: a typed character, a glyph picked by name, or a line break. */
+export interface TextRunItem {
+  id: string;
+  /** The character, `"\n"` for a line break, or `/name` for a glyph picked by name. */
+  text: string;
+}
+
+/** One glyph a canvas text run shows, in the order its line shows them. */
+export interface TextRunGlyph {
+  /** The glyph shown; null for a character the font has no glyph for. */
+  glyphId: GlyphId | null;
+  name: string;
+  /** The items it shows: one for most glyphs, several for a ligature. */
+  itemIds: string[];
+  line: number;
+  /** Left edge of its advance box, in the run's units. */
+  left: number;
+  baseline: number;
+  /** Where its outline is drawn: `left` and `baseline` plus a mark's attachment offset. */
+  origin: { x: number; y: number };
+  advance: number;
+  /** Kerning with the next glyph, added after `advance`. */
+  kern: number;
+}
+
+/** The Text mode caret, as positions between items: 0 is before the first item. */
+export interface TextRunCaret {
+  position: number;
+  /** The selected positions, `start` to `end`; equal when nothing is selected. */
+  selection: { start: number; end: number };
+  /** Where the caret is drawn, in the run's units. */
+  x: number;
+  y: number;
+}
+
+/** The canvas text run as it shows now. */
+export interface TextRunView {
+  items: TextRunItem[];
+  glyphs: TextRunGlyph[];
+  /** The run's total advance, in its units. */
+  advance: number;
+  /** Each line's baseline, top line first. */
+  baselines: number[];
+  /** The item whose glyph is open on the canvas, showing its outline; null when none is. */
+  openItemId: string | null;
+  /**
+   * The name of the glyph open on the canvas: the item's glyph, or one part
+   * of it, such as a dot, when the font draws the item with several.
+   */
+  openGlyph: string | null;
+  /** The item whose glyph is being edited in place, its points editable; null when none is. */
+  editedItemId: string | null;
+  /** The item under the pointer, highlighted as text; null when none is. */
+  hoveredItemId: string | null;
+  /** The caret while Text mode shows one; null otherwise. */
+  caret: TextRunCaret | null;
+}
+
+/** One glyph's side of a spacing gap. */
+export interface SpacingGapSide {
+  itemId: string;
+  glyph: string;
+  sidebearing: number;
+  /** X of its outline's edge facing the gap. */
+  edge: number;
+}
+
+/** The space between two neighbouring glyphs, or before or after a line. */
+export interface SpacingGapView {
+  left: SpacingGapSide | null;
+  right: SpacingGapSide | null;
+  /** End of the left glyph's advance box. */
+  leftBoundary: number;
+  /** Start of the right glyph's advance box; differs from `leftBoundary` by the kern. */
+  rightBoundary: number;
+  baseline: number;
+  top: number;
+  bottom: number;
+}
+
+/** One sidebearing the Spacing tool shows: a gap's left or right half. */
+export interface SpacingHalfView {
+  side: "left" | "right";
+  /** `gap` when reached through its gap; `glyph` when drawn alone beside its glyph. */
+  scope: "gap" | "glyph";
+  gap: SpacingGapView;
+}
+
+/** What the Spacing tool shows. */
+export interface SpacingToolView {
+  hovered: SpacingHalfView | null;
+  /** The half arrow keys nudge. */
+  selected: SpacingHalfView | null;
+  /** The half whose value field is open. */
+  editing: SpacingHalfView | null;
+  /** Every other place the hovered half's glyph shows the same sidebearing. */
+  sameAsHovered: SpacingHalfView[];
+  /** Whether the pointer is on the hovered half's value. */
+  overValue: boolean;
+  /** Whether a nudge hid the overlay until the pointer moves. */
+  quiet: boolean;
+}
+
+/** One side of the kerning pair that applies between two glyphs. */
+export interface KerningPairSideView {
+  /** The glyph's name, or the group's name when the pair kerns a group. */
+  name: string;
+  group: boolean;
+  /** Whether this side is locked to its glyph, an exception to its group. */
+  locked: boolean;
+  /** Whether the lock can be toggled: false for a glyph with no group on that side. */
+  toggleable: boolean;
+}
+
+/** One kern the Kerning tool shows between two neighbouring glyphs. */
+export interface KerningGapView {
+  firstItemId: string;
+  secondItemId: string;
+  amount: number;
+  /** X of the middle of the kern, in the run's units. */
+  center: number;
+  baseline: number;
+  bottom: number;
+  /** The pair an edit here changes; null where the location is interpolated. */
+  pair: { first: KerningPairSideView; second: KerningPairSideView; amount: number } | null;
+}
+
+/** What the Kerning tool shows. */
+export interface KerningToolView {
+  hovered: KerningGapView | null;
+  /** The kern arrow keys nudge, which the sidebar shows. */
+  selected: KerningGapView | null;
+  /** The kern whose value field is open. */
+  editing: KerningGapView | null;
+  /** Every other place in the text the hovered kern applies to. */
+  sameAsHovered: KerningGapView[];
 }

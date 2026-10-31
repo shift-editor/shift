@@ -13,6 +13,7 @@ use crate::ir::Transform;
 
 /// A named anchor position in a glyph's own coordinates.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct PropagationAnchor {
     pub name: String,
     pub x: f64,
@@ -43,6 +44,7 @@ pub struct PropagationGlyph<'a> {
 
 /// A glyph's anchors with its components' anchors copied in.
 #[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct PropagatedAnchors {
     pub anchors: Vec<PropagationAnchor>,
     /// How many base glyphs this glyph counts, for composites built on it.

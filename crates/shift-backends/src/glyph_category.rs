@@ -4,36 +4,18 @@
 //! name and codepoint, so `jdotless` is a letter and `dotaccentcomb` a
 //! nonspacing mark even though neither says so. The GDEF rules follow fontc's
 //! Glyphs reader (after glyphsLib), and a UFO's `public.openTypeCategories`
-//! overrides them glyph by glyph, as ufo2ft does.
+//! overrides them glyph by glyph, as ufo2ft does. The record rule itself is
+//! shift-font's ([`RecordCategory::of`]); this module looks glyph data up
+//! and builds GDEF classes.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use glyphs_reader::glyphdata::GlyphData;
-use shift_font::{Glyph, GlyphCategory, GlyphId, GlyphSubcategory, LibData, LibValue};
+use shift_font::{
+    Glyph, GlyphCategory, GlyphDataCategory, GlyphSubcategory, LibData, NamedGlyph,
+    OpenTypeCategories, OpenTypeCategory,
+};
 use write_fonts::tables::gdef::GlyphClassDef;
-
-/// Font lib key a UFO uses for explicit GDEF classes.
-const OPENTYPE_CATEGORIES_KEY: &str = "public.openTypeCategories";
-
-/// A glyph's effective category: its own where set, glyph data otherwise.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ResolvedCategory {
-    pub category: Option<GlyphCategory>,
-    pub sub_category: Option<GlyphSubcategory>,
-}
-
-impl ResolvedCategory {
-    /// Whether the glyph is in the Mark category, whatever its subcategory.
-    pub fn is_mark(self) -> bool {
-        self.category == Some(GlyphCategory::Mark)
-    }
-
-    /// Whether the glyph is a combining mark that takes no horizontal space.
-    pub fn is_nonspacing_mark(self) -> bool {
-        self.category == Some(GlyphCategory::Mark)
-            && self.sub_category == Some(GlyphSubcategory::Nonspacing)
-    }
-}
 
 /// Looks glyphs up in Glyphs' bundled glyph data.
 #[derive(Default)]
@@ -47,12 +29,12 @@ impl GlyphCategories {
     }
 
     /// The glyph data category for `name` and `unicodes`, if glyph data knows it.
-    pub fn lookup(&self, name: &str, unicodes: &[u32]) -> ResolvedCategory {
+    pub fn lookup(&self, name: &str, unicodes: &[u32]) -> GlyphDataCategory {
         let codepoints: BTreeSet<u32> = unicodes.iter().copied().collect();
         let Some(result) = self.data.query(name, Some(&codepoints)) else {
-            return ResolvedCategory::default();
+            return GlyphDataCategory::default();
         };
-        ResolvedCategory {
+        GlyphDataCategory {
             category: result.category.to_string().parse().ok(),
             sub_category: result
                 .subcategory
@@ -61,12 +43,16 @@ impl GlyphCategories {
     }
 
     /// The glyph's own category and subcategory, each falling back to glyph data.
-    pub fn resolve(&self, glyph: &Glyph) -> ResolvedCategory {
-        let looked_up = self.lookup(glyph.name(), glyph.unicodes());
-        ResolvedCategory {
-            category: glyph.category().or(looked_up.category),
-            sub_category: glyph.sub_category().or(looked_up.sub_category),
-        }
+    pub fn resolve(&self, glyph: &Glyph) -> GlyphDataCategory {
+        self.lookup(glyph.name(), glyph.unicodes()).resolve(glyph)
+    }
+
+    /// Glyph data's category for each of `glyphs`, in order.
+    pub fn lookup_all(&self, glyphs: &[NamedGlyph]) -> Vec<GlyphDataCategory> {
+        glyphs
+            .iter()
+            .map(|glyph| self.lookup(glyph.name.as_str(), &glyph.unicodes))
+            .collect()
     }
 
     /// The overrides to store for an imported glyph whose source resolved
@@ -75,10 +61,10 @@ impl GlyphCategories {
         &self,
         name: &str,
         unicodes: &[u32],
-        resolved: ResolvedCategory,
-    ) -> ResolvedCategory {
+        resolved: GlyphDataCategory,
+    ) -> GlyphDataCategory {
         let looked_up = self.lookup(name, unicodes);
-        ResolvedCategory {
+        GlyphDataCategory {
             category: resolved
                 .category
                 .filter(|category| Some(*category) != looked_up.category),
@@ -89,53 +75,20 @@ impl GlyphCategories {
     }
 }
 
-/// How a glyph is a ligature to anchor propagation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PropagationLigature {
-    /// A UFO `public.openTypeCategories` entry makes it one.
-    Explicit,
-    /// Its Ligature subcategory makes it one once it has an attaching anchor.
-    Subcategory,
-}
-
-/// What the editor reads from a glyph's category, as export resolves it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RecordCategory {
-    /// In the Mark category or classed `mark`: propagation keeps a mark's own anchors.
-    pub mark: bool,
-    /// In the Mark category with the Nonspacing subcategory: export compiles
-    /// it with no advance.
-    ///
-    /// Unlike [`Self::mark`], a UFO's `public.openTypeCategories` does not set
-    /// it, because export zeroes advances by category alone.
-    pub nonspacing_mark: bool,
-    /// Ligature components number their anchors (`top_1`, `top_2`).
-    pub ligature: Option<PropagationLigature>,
-}
-
-/// Each glyph's record category, by glyph id.
-pub fn record_categories<'a>(
+/// Each glyph's record category, by glyph id, as the editor's records carry it.
+#[cfg(test)]
+pub(crate) fn record_categories<'a>(
     glyphs: impl IntoIterator<Item = &'a Glyph>,
     font_lib: &LibData,
-) -> BTreeMap<GlyphId, RecordCategory> {
+) -> BTreeMap<shift_font::GlyphId, shift_font::RecordCategory> {
     let categories = GlyphCategories::new();
-    let explicit = opentype_categories(font_lib);
+    let explicit = OpenTypeCategories::of(font_lib);
     glyphs
         .into_iter()
         .map(|glyph| {
-            let resolved = categories.resolve(glyph);
-            let explicit = explicit.get(glyph.name()).copied();
-            let ligature = match explicit {
-                Some(GlyphClassDef::Ligature) => Some(PropagationLigature::Explicit),
-                Some(_) => None,
-                None => (resolved.sub_category == Some(GlyphSubcategory::Ligature))
-                    .then_some(PropagationLigature::Subcategory),
-            };
-            let category = RecordCategory {
-                mark: resolved.is_mark() || explicit == Some(GlyphClassDef::Mark),
-                nonspacing_mark: resolved.is_nonspacing_mark(),
-                ligature,
-            };
+            let glyph_data = categories.lookup(glyph.name(), glyph.unicodes());
+            let category =
+                shift_font::RecordCategory::of(glyph, glyph_data, explicit.class(glyph.name()));
             (glyph.id(), category)
         })
         .collect()
@@ -147,12 +100,12 @@ pub(crate) fn gdef_classes<'a>(
     font_lib: &LibData,
 ) -> BTreeMap<String, GlyphClassDef> {
     let categories = GlyphCategories::new();
-    let explicit = opentype_categories(font_lib);
+    let explicit = OpenTypeCategories::of(font_lib);
     glyphs
         .into_iter()
         .filter_map(|glyph| {
-            let class = match explicit.get(glyph.name()) {
-                Some(class) => *class,
+            let class = match explicit.class(glyph.name()) {
+                Some(class) => gdef_class(class),
                 None => class_for(categories.resolve(glyph), glyph.has_attaching_anchor())?,
             };
             Some((glyph.name().to_string(), class))
@@ -162,7 +115,7 @@ pub(crate) fn gdef_classes<'a>(
 
 /// fontc's Glyphs rule: marks by category, and bases and ligatures only when
 /// they carry an anchor something can attach to.
-fn class_for(resolved: ResolvedCategory, attaching_anchor: bool) -> Option<GlyphClassDef> {
+fn class_for(resolved: GlyphDataCategory, attaching_anchor: bool) -> Option<GlyphClassDef> {
     match (resolved.category, resolved.sub_category) {
         (_, Some(GlyphSubcategory::Ligature)) if attaching_anchor => Some(GlyphClassDef::Ligature),
         (
@@ -174,32 +127,20 @@ fn class_for(resolved: ResolvedCategory, attaching_anchor: bool) -> Option<Glyph
     }
 }
 
-fn opentype_categories(font_lib: &LibData) -> BTreeMap<&str, GlyphClassDef> {
-    let Some(LibValue::Dict(entries)) = font_lib.get(OPENTYPE_CATEGORIES_KEY) else {
-        return BTreeMap::new();
-    };
-    entries
-        .iter()
-        .filter_map(|(name, value)| {
-            let LibValue::String(class) = value else {
-                return None;
-            };
-            let class = match class.as_str() {
-                "base" => GlyphClassDef::Base,
-                "ligature" => GlyphClassDef::Ligature,
-                "mark" => GlyphClassDef::Mark,
-                "component" => GlyphClassDef::Component,
-                _ => return None,
-            };
-            Some((name.as_str(), class))
-        })
-        .collect()
+fn gdef_class(category: OpenTypeCategory) -> GlyphClassDef {
+    match category {
+        OpenTypeCategory::Base => GlyphClassDef::Base,
+        OpenTypeCategory::Ligature => GlyphClassDef::Ligature,
+        OpenTypeCategory::Mark => GlyphClassDef::Mark,
+        OpenTypeCategory::Component => GlyphClassDef::Component,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Anchor, GlyphLayer, LayerId, SourceId};
+    use shift_font::ir::glyph_category::OPENTYPE_CATEGORIES_KEY;
+    use shift_font::{Anchor, GlyphLayer, LayerId, LibValue, SourceId};
 
     fn glyph_with_anchor(name: &str, unicodes: &[u32], anchor: &str) -> Glyph {
         let mut glyph = Glyph::new(name);
@@ -291,14 +232,14 @@ mod tests {
     fn overrides_keep_only_what_glyph_data_would_not_say() {
         let categories = GlyphCategories::new();
         let as_data_says = categories.lookup("a", &[0x61]);
-        let as_mark = ResolvedCategory {
+        let as_mark = GlyphDataCategory {
             category: Some(GlyphCategory::Mark),
             sub_category: Some(GlyphSubcategory::Nonspacing),
         };
 
         assert_eq!(
             categories.overrides("a", &[0x61], as_data_says),
-            ResolvedCategory::default()
+            GlyphDataCategory::default()
         );
         assert_eq!(categories.overrides("a", &[0x61], as_mark), as_mark);
     }

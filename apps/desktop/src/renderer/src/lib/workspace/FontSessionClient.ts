@@ -4,22 +4,24 @@ import type {
   FontSessionMode,
   FontSourceAtlasPageRequest,
   FontSourceSnapshot,
+  FontStoreLocation,
   SlugAtlasOrigin,
-  SyncCallMap,
-  SyncEventMap,
   WorkspaceDocumentState,
   WorkspaceExportResult,
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
-  WorkspaceSnapshot,
-} from "@shared/workspace/protocol";
+  StoredWorkspaceSnapshot,
+  WorkspaceSync,
+} from "@shared/workspace/lanes";
+import type { SyncEventMap, SyncStreamCallMap } from "@shared/workspace/protocol";
+import { client } from "@shared/workspace/remote";
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type {
   AppliedChange,
+  SaveState,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  FontIntent,
   GlyphId,
   GlyphPreview,
   GlyphLayerSnapshot,
@@ -29,9 +31,7 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ParagraphRequest,
   SceneState,
-  ShapedRun,
   ShaperFont,
   SlugAtlas,
 } from "@shift/types";
@@ -41,9 +41,9 @@ import { signal } from "@shift/editor/signals";
  * Renderer side of the workspace sync lane.
  *
  * @remarks
- * `workspaceCell` is the renderer's latest workspace summary. `FontStore`
- * owns the renderer-local font model state; this client only
- * transports workspace calls and mirrors the summary for catch-up/recovery.
+ * `workspaceCell` is the workspace summary as of the latest connect, for the
+ * font model to open from. `FontStore` owns the renderer-local font model
+ * state after that; this client only transports workspace calls.
  */
 export type FontSessionClientOptions = {
   /**
@@ -54,15 +54,21 @@ export type FontSessionClientOptions = {
   mode?: Exclude<FontSessionMode, "memory">;
 };
 
+/** One connected sync lane: its channel (events, streams) and the interface over it. */
+type SyncLane = {
+  channel: Channel<SyncStreamCallMap, SyncEventMap>;
+  workspace: WorkspaceSync;
+};
+
 export class FontSessionClient {
-  readonly workspaceCell = signal<WorkspaceSnapshot | null>(null);
+  readonly workspaceCell = signal<StoredWorkspaceSnapshot | null>(null);
   readonly sourceCell = signal<FontSourceSnapshot | null>(null);
   readonly documentStateCell = signal<WorkspaceDocumentState | null>(null);
 
   readonly #mode: Exclude<FontSessionMode, "memory">;
   readonly #host: ShiftHost | null;
   readonly #transport: (() => Promise<Transport>) | null;
-  #channel: Channel<SyncCallMap, SyncEventMap> | null = null;
+  #lane: SyncLane | null = null;
   #connection: Promise<void> | null = null;
 
   constructor(host: ShiftHost | null, options: FontSessionClientOptions = {}) {
@@ -87,8 +93,8 @@ export class FontSessionClient {
   }
 
   dispose(): void {
-    this.#channel?.dispose();
-    this.#channel = null;
+    this.#lane?.channel.dispose();
+    this.#lane = null;
     this.#connection = null;
     this.workspaceCell.set(null);
     this.sourceCell.set(null);
@@ -96,46 +102,19 @@ export class FontSessionClient {
   }
 
   /**
-   * Applies an intent set; the response is pure replace-grade state.
+   * Persists a change set the window's engine applied, as named MessagePack.
    *
-   * @param intents - Complete set of edits to commit as one undo operation.
-   * @param label - Optional human-readable name for the undo operation.
-   * @returns The committed replacement state echoed by the workspace.
-   * @throws {Error} when the workspace rejects or cannot persist the edit.
+   * @returns The workspace's receipt: what it wrote, with the glyph records
+   * and dependent composites only it can build.
+   * @throws {Error} when the change set does not match the workspace's font or
+   * cannot be written.
    */
-  async apply(intents: FontIntent[], label?: string): Promise<AppliedChange> {
+  async persist(changeSet: Uint8Array, saveState: SaveState): Promise<AppliedChange> {
     await this.connect();
 
-    const { applied, documentState } = await this.#require().call("workspace.apply", {
-      intents,
-      label,
-    });
+    const { applied, documentState } = await this.#workspace().persist(changeSet, saveState);
     this.#setDocumentState(documentState);
-    return this.#fold(applied);
-  }
-
-  /** Replays the latest ledger entry; null when nothing is undoable. */
-  async undo(): Promise<AppliedChange | null> {
-    await this.connect();
-
-    const { applied, documentState } = await this.#require().call("workspace.undo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
-  }
-
-  /** Replays the latest undone entry; null when nothing is redoable. */
-  async redo(): Promise<AppliedChange | null> {
-    await this.connect();
-
-    const { applied, documentState } = await this.#require().call("workspace.redo", undefined);
-    this.documentStateCell.set(documentState);
-    return applied === null ? null : this.#fold(applied);
-  }
-
-  /** Permanently removes the current redo branch without changing document state. */
-  async discardRedo(): Promise<void> {
-    await this.connect();
-    await this.#require().call("workspace.discardRedo", undefined);
+    return applied;
   }
 
   /**
@@ -146,15 +125,13 @@ export class FontSessionClient {
   async setSceneState(state: SceneState): Promise<WorkspaceDocumentState> {
     await this.connect();
 
-    const documentState = await this.#require().call("workspace.setSceneState", state);
-    this.#setDocumentState(documentState);
-    return documentState;
+    return this.#setDocumentState(await this.#workspace().setSceneState(state));
   }
 
-  async snapshot(): Promise<WorkspaceSnapshot | null> {
+  async snapshot(): Promise<StoredWorkspaceSnapshot | null> {
     await this.connect();
 
-    const snapshot = await this.#require().call("workspace.snapshot", undefined);
+    const snapshot = await this.#workspace().snapshot();
     this.workspaceCell.set(snapshot);
     return snapshot;
   }
@@ -163,23 +140,23 @@ export class FontSessionClient {
   async sourceSnapshot(): Promise<FontSourceSnapshot | null> {
     await this.connect();
 
-    const snapshot = await this.#require().call("source.snapshot", undefined);
+    const snapshot = await this.#workspace().sourceSnapshot();
     this.sourceCell.set(snapshot);
     return snapshot;
   }
 
   /** Reads one retained location-independent glyph and its component closure. */
-  async sourceGlyph(glyphId: GlyphId): Promise<GlyphSnapshot[]> {
+  async sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]> {
     await this.connect();
 
-    return this.#require().call("source.glyph", { glyphId });
+    return this.#workspace().sourceGlyph(glyphId);
   }
 
   /** Prepares one retained-source atlas page at dense source coordinates. */
   async prepareSourceAtlasPage(request: FontSourceAtlasPageRequest): Promise<CatalogAtlasPage> {
     await this.connect();
 
-    return this.#require().call("source.atlasPagePrepare", request);
+    return this.#workspace().prepareSourceAtlasPage(request);
   }
 
   /** Streams one prepared retained-source page through bounded chunks. */
@@ -195,9 +172,7 @@ export class FontSessionClient {
 
     try {
       const [, totalLength] = await Promise.all([
-        this.#require().call("source.atlasPageStream", { generation, maximumLength }, [
-          ports.port2,
-        ]),
+        this.#streams().call("streamSourceAtlasPage", { generation, maximumLength }, [ports.port2]),
         stream.receive(write),
       ]);
       return totalLength;
@@ -210,21 +185,23 @@ export class FontSessionClient {
   async discardSourceAtlasPage(pageIndex: number, generation: number): Promise<void> {
     await this.connect();
 
-    await this.#require().call("source.atlasPageDiscard", { pageIndex, generation });
+    await this.#workspace().discardSourceAtlasPage(pageIndex, generation);
   }
 
   /** Resolves all retained page weights for one dense source location. */
-  async sourceAtlasWeights(coordinates: readonly number[]): Promise<CatalogAtlasWeights[]> {
+  async sourceAtlasWeights(
+    coordinates: readonly number[],
+  ): Promise<readonly CatalogAtlasWeights[]> {
     await this.connect();
 
-    return this.#require().call("source.atlasWeights", { coordinates: [...coordinates] });
+    return this.#workspace().sourceAtlasWeights([...coordinates]);
   }
 
   /** Reads utility-owned document state through the renderer sync lane. */
   async documentState(): Promise<WorkspaceDocumentState | null> {
     await this.connect();
 
-    const state = await this.#require().call("document.state", undefined);
+    const state = await this.#workspace().documentState();
     this.documentStateCell.set(state);
     return state;
   }
@@ -233,14 +210,21 @@ export class FontSessionClient {
   async save(): Promise<WorkspaceDocumentState> {
     await this.connect();
 
-    return this.#setDocumentState(await this.#require().call("workspace.save", undefined));
+    return this.#setDocumentState(await this.#workspace().save());
   }
 
   /** Saves to `path` and adopts it as the document's target. */
   async saveAs(path: string): Promise<WorkspaceDocumentState> {
     await this.connect();
 
-    return this.#setDocumentState(await this.#require().call("workspace.saveAs", { path }));
+    return this.#setDocumentState(await this.#workspace().saveAs(path));
+  }
+
+  /** Deletes the stores Save As moved off, once this window's reader no longer reads them. */
+  async releaseRetiredStores(): Promise<void> {
+    await this.connect();
+
+    await this.#workspace().releaseRetiredStores();
   }
 
   /**
@@ -254,7 +238,7 @@ export class FontSessionClient {
     await this.connect();
 
     return {
-      completion: this.#require().call("workspace.export", { path }),
+      completion: this.#workspace().export(path),
     };
   }
 
@@ -264,16 +248,14 @@ export class FontSessionClient {
   ): Promise<GlyphSnapshot[]> {
     await this.connect();
 
-    return this.#require().call("workspace.glyphSnapshots", {
-      requests: [...requests],
-    });
+    return this.#workspace().glyphSnapshots([...requests]);
   }
 
   /** Derives cross-layer entity matches behind the serialized workspace lane. */
   async layerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
     await this.connect();
 
-    return this.#require().call("workspace.layerMatch", { referenceLayerId, targetLayerId });
+    return this.#workspace().layerMatch(referenceLayerId, targetLayerId);
   }
 
   /**
@@ -283,10 +265,10 @@ export class FontSessionClient {
    * @returns One accepted-state snapshot per requested layer.
    * @throws {Error} when any layer identity is not in the font.
    */
-  async readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]> {
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
     await this.connect();
 
-    return this.#require().call("workspace.layers.read", { layerIds: [...layerIds] });
+    return this.#workspace().readLayers([...layerIds]);
   }
 
   /**
@@ -299,7 +281,7 @@ export class FontSessionClient {
   async resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]> {
     await this.connect();
 
-    return this.#require().call("workspace.layers.resolve", { layerIds: [...layerIds] });
+    return this.#workspace().resolveLayers([...layerIds]);
   }
 
   /**
@@ -311,9 +293,7 @@ export class FontSessionClient {
   async glyphProjections(glyphIds: readonly GlyphId[]): Promise<GlyphProjection[]> {
     await this.connect();
 
-    return this.#require().call("workspace.glyphProjections", {
-      glyphIds: [...glyphIds],
-    });
+    return this.#workspace().glyphProjections([...glyphIds]);
   }
 
   /**
@@ -326,24 +306,21 @@ export class FontSessionClient {
   async glyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]> {
     await this.connect();
 
-    return this.#require().call("workspace.glyphPreviews", {
-      glyphIds: [...glyphIds],
-      location,
-    });
+    return this.#workspace().glyphPreviews([...glyphIds], location);
   }
 
   /** Builds the current authored font's location-independent Slug generation. */
   async prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
     await this.connect();
 
-    return this.#require().call("workspace.slugAtlasPrepare", { alignment });
+    return this.#workspace().prepareSlugAtlas(alignment);
   }
 
   /** Opens or builds one deterministic root-glyph page behind committed edits. */
   async prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
     await this.connect();
 
-    return this.#require().call("workspace.slugAtlasPagePrepare", request);
+    return this.#workspace().prepareSlugAtlasPage(request);
   }
 
   /** Writes one prepared Slug generation through bounded, ordered chunks. */
@@ -359,9 +336,7 @@ export class FontSessionClient {
 
     try {
       const [, totalLength] = await Promise.all([
-        this.#require().call("workspace.slugAtlasStream", { generation, maximumLength }, [
-          ports.port2,
-        ]),
+        this.#streams().call("streamSlugAtlas", { generation, maximumLength }, [ports.port2]),
         stream.receive(write),
       ]);
       return totalLength;
@@ -384,11 +359,9 @@ export class FontSessionClient {
 
     try {
       const [, totalLength] = await Promise.all([
-        this.#require().call(
-          "workspace.slugAtlasPageStream",
-          { generation, origin, maximumLength },
-          [ports.port2],
-        ),
+        this.#streams().call("streamSlugAtlasPage", { generation, origin, maximumLength }, [
+          ports.port2,
+        ]),
         stream.receive(write),
       ]);
       return totalLength;
@@ -401,14 +374,40 @@ export class FontSessionClient {
   async discardSlugAtlas(generation: number): Promise<void> {
     await this.connect();
 
-    await this.#require().call("workspace.slugAtlasDiscard", { generation });
+    await this.#workspace().discardSlugAtlas(generation);
   }
 
   /** Releases a prepared page that was rejected before streaming. */
   async discardSlugAtlasPage(generation: number, origin: SlugAtlasOrigin): Promise<void> {
     await this.connect();
 
-    await this.#require().call("workspace.slugAtlasPageDiscard", { generation, origin });
+    await this.#workspace().discardSlugAtlasPage(generation, origin);
+  }
+
+  /**
+   * Where the open workspace's store lives, for this window's read-only layer
+   * reader.
+   *
+   * @returns `null` for a preview, which has no store.
+   */
+  async storeLocation(): Promise<FontStoreLocation | null> {
+    await this.connect();
+
+    return this.#workspace().storeLocation();
+  }
+
+  /**
+   * The open font's directory, every layer a placeholder, as named
+   * MessagePack: what this window's engine opens with. The workspace builds it
+   * from the font it already holds, so the window never reads the whole
+   * directory from the store itself.
+   *
+   * @returns `null` for a preview, which has no store.
+   */
+  async directory(): Promise<Uint8Array | null> {
+    await this.connect();
+
+    return this.#workspace().directory();
   }
 
   /**
@@ -420,18 +419,7 @@ export class FontSessionClient {
   async mapLocation(location: Location): Promise<Location> {
     await this.connect();
 
-    return this.#require().call("workspace.mapLocation", location);
-  }
-
-  /**
-   * Shapes paragraphs with the current font's feature code in the utility process.
-   *
-   * @returns Each paragraph's runs, in request order.
-   */
-  async shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
-    await this.connect();
-
-    return this.#require().call("workspace.shapeParagraphs", { paragraphs: [...paragraphs] });
+    return this.#workspace().mapLocation(location);
   }
 
   /**
@@ -441,42 +429,14 @@ export class FontSessionClient {
   async shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
     await this.connect();
 
-    return this.#require().call("workspace.shaperFont", { knownRevision });
-  }
-
-  #fold(applied: AppliedChange): AppliedChange {
-    const current = this.workspaceCell.peek();
-    if (!current) return applied;
-
-    const next = applied.next;
-    if (!next) return applied;
-
-    this.workspaceCell.set({
-      ...current,
-      metadata: next.metadata ?? current.metadata,
-      glyphs: next.glyphs ?? current.glyphs,
-      axes: next.axes ?? current.axes,
-      axisMappings: next.axisMappings ?? current.axisMappings,
-      axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
-      metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
-      sourceMetricsInterpolation: next.sourceMetricsInterpolation
-        ? (next.sourceMetricsInterpolation.snapshot ?? null)
-        : current.sourceMetricsInterpolation,
-      namedInstances: next.namedInstances ?? current.namedInstances,
-      languageIds: next.languages ? (next.languages.languageIds ?? null) : current.languageIds,
-      sources: next.sources ?? current.sources,
-      kerning: next.kerning ?? current.kerning,
-    });
-
-    return applied;
+    return this.#workspace().shaperFont(knownRevision);
   }
 
   async #connect(): Promise<void> {
     try {
       if (this.#transport) {
-        const channel = new Channel<SyncCallMap, SyncEventMap>(await this.#transport());
-        this.#installChannel(channel);
-        await this.#catchUp(channel);
+        const lane = this.#installLane(await this.#transport());
+        await this.#catchUp(lane.workspace);
         return;
       }
 
@@ -494,35 +454,40 @@ export class FontSessionClient {
         throw error;
       }
 
-      const channel = new Channel<SyncCallMap, SyncEventMap>(domPortTransport(await port.received));
-      this.#installChannel(channel);
+      const lane = this.#installLane(domPortTransport(await port.received));
 
       // Catch-up pull: covers renderer reattach (Vite hot reload now, crash
       // recovery later). Ports are FIFO, so this cannot overtake a later create.
-      await this.#catchUp(channel);
+      await this.#catchUp(lane.workspace);
     } catch (error) {
       this.#connection = null;
       throw error;
     }
   }
 
-  async #catchUp(channel: Channel<SyncCallMap, SyncEventMap>): Promise<void> {
+  async #catchUp(workspace: WorkspaceSync): Promise<void> {
     switch (this.#mode) {
       case "workspace":
-        this.workspaceCell.set(await channel.call("workspace.snapshot", undefined));
-        this.documentStateCell.set(await channel.call("document.state", undefined));
+        this.workspaceCell.set(await workspace.snapshot());
+        this.documentStateCell.set(await workspace.documentState());
         return;
       case "preview":
-        this.sourceCell.set(await channel.call("source.snapshot", undefined));
+        this.sourceCell.set(await workspace.sourceSnapshot());
         return;
     }
   }
 
-  #installChannel(channel: Channel<SyncCallMap, SyncEventMap>): void {
-    this.#channel = channel;
+  #installLane(transport: Transport): SyncLane {
+    const channel = new Channel<SyncStreamCallMap, SyncEventMap>(transport);
+    const lane = {
+      channel,
+      workspace: client<WorkspaceSync, SyncStreamCallMap, SyncEventMap>(channel),
+    };
+    this.#lane = lane;
     channel.listen("document.changed", (state) => {
       this.documentStateCell.set(state);
     });
+    return lane;
   }
 
   #setDocumentState(state: WorkspaceDocumentState): WorkspaceDocumentState {
@@ -552,11 +517,19 @@ export class FontSessionClient {
     return { received, cancel };
   }
 
-  #require(): Channel<SyncCallMap, SyncEventMap> {
-    if (!this.#channel) {
+  #require(): SyncLane {
+    if (!this.#lane) {
       throw new Error("font session is not connected");
     }
 
-    return this.#channel;
+    return this.#lane;
+  }
+
+  #workspace(): WorkspaceSync {
+    return this.#require().workspace;
+  }
+
+  #streams(): Channel<SyncStreamCallMap, SyncEventMap> {
+    return this.#require().channel;
   }
 }

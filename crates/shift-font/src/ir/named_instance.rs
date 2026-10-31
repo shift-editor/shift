@@ -11,6 +11,7 @@ use crate::{Axis, AxisKind, AxisRole, CoreError, CoreResult, ExternalLocation, N
 /// design space only when previewing or exporting the product.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct NamedInstance {
     id: NamedInstanceId,
     name: String,
@@ -41,7 +42,7 @@ impl NamedInstance {
 
     /// Returns the identity retained across product renames and location edits.
     pub fn id(&self) -> NamedInstanceId {
-        self.id.clone()
+        self.id
     }
 
     /// Returns the authored product name used as the variable-font subfamily name.

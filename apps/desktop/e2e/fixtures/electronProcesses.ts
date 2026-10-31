@@ -1,5 +1,9 @@
-import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import type { TestInfo } from "@playwright/test";
+import {
+  _electron as electron,
+  type ElectronApplication,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
 import { execFile, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -7,6 +11,7 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import type { ElectronLaunch } from "./types";
 import { collectWindowDiagnostics, prepareWindow } from "./window";
+import { registerApp } from "./appHooks";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
 export const MAIN_JS = path.join(APP_ROOT, ".vite/build/main.js");
@@ -51,7 +56,7 @@ export class ElectronProcesses {
         // runner, which fails exact interface goldens; the CPU rasterizer is deterministic.
         // Canvas content renders through WebGPU and is unaffected.
         "--disable-gpu-rasterization",
-        ...(launch.args ?? []),
+        ...launch.args,
       ],
       env: launch.env,
     });
@@ -63,9 +68,11 @@ export class ElectronProcesses {
     };
     this.#launches.push(registered);
     observe(registered);
+    registerApp(app);
 
     try {
       const page = await app.firstWindow();
+      // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron main, not app state
       const activeUserDataDir = await app.evaluate(({ app: electronApp }) =>
         electronApp.getPath("userData"),
       );

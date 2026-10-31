@@ -16,6 +16,10 @@ on:
 
 permissions: {}
 
+env:
+  # Shrink the shipped WebAssembly modules with wasm-opt (packages/wasm/scripts/build.mjs).
+  SHIFT_WASM_OPT: "1"
+
 concurrency:
   group: release-desktop-${{ inputs.tag }}
   cancel-in-progress: false
@@ -153,6 +157,11 @@ jobs:
       - name: Build Linux native binaries against glibc 2.17
         if: matrix.platform == 'linux'
         run: scripts/build-linux-portable.sh
+
+      # The app bundles the native workspace's generated clients, which are
+      # not committed.
+      - name: Generate bridge types
+        run: pnpm generate:bridge-types
 
       - name: Build desktop application
         env:

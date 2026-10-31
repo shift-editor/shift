@@ -65,14 +65,6 @@ async function checkRuntimeGraph() {
     }
   }
 
-  // `contourGeometry` is exported only by the test-only reference module.
-  const reference = files.filter((name) => /\bcontourGeometry\b/.test(sources.get(name)));
-  if (reference.length > 0) {
-    throw new Error(
-      `The SDK must not bundle @shift/wasm/reference, found in: ${reference.join(", ")}`,
-    );
-  }
-
   const ui = sources.get("ui.js");
   if (ui.includes("node_modules/react/cjs") || ui.includes('__require("react")')) {
     throw new Error("SDK UI must use the consumer's React instance");

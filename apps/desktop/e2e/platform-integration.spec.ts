@@ -2,12 +2,24 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ElectronApplication, Page, TestInfo } from "@playwright/test";
-import { documentTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
-import { createNewFont, glyphIdForName, quitApp, runCommand } from "./fixtures/documentLifecycle";
+import {
+  appRuntime,
+  documentTest as test,
+  expect,
+  rendererHostPlatform,
+  waitForWorkspaceReady,
+} from "./fixtures/electronApp";
+import {
+  createNewFont,
+  glyphIdForName,
+  openFontFromLauncher,
+  quitApp,
+  runCommand,
+} from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
 import type { RelaunchApp } from "./fixtures/types";
 import type { GlyphId } from "@shift/types";
-import { addSquare } from "./fixtures/editorInteractions";
+import { square } from "@/testing/fixtures";
 
 const platformTest = test.extend({
   saveShiftPath: async ({ testRoot }, use) => {
@@ -26,8 +38,8 @@ platformTest(
   "uses platform-appropriate window controls",
   { tag: "@os" },
   async ({ electronApp, page }) => {
-    const platform = await electronApp.evaluate(() => process.platform);
-    const rendererPlatform = await page.evaluate(() => window.shiftHost?.platform);
+    const { platform } = await appRuntime(electronApp);
+    const rendererPlatform = await rendererHostPlatform(page);
     const customWindowControls = page.getByRole("toolbar", { name: "Window controls" });
 
     expect(rendererPlatform).toBe(platform);
@@ -55,11 +67,12 @@ async function createEvidenceDocument(
   await attachScreenshot(testInfo, "glyph-catalog", workspacePage);
   await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
   const glyphId = await glyphIdForName(workspacePage, "newGlyph");
-  await workspacePage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle");
-  const editor = new EditorDriver(workspacePage);
+  const editor = new EditorDriver(workspacePage, electronApp);
+  await expect.poll(async () => (await editor.editorView()).applyStatus).toBe("idle");
   await editor.openGlyph(glyphId);
   expect(await editor.pointCount()).toBe(0);
-  expect(await addSquare(workspacePage)).toBe(4);
+  await editor.draw({ contours: [square(100)] });
+  expect(await editor.pointCount()).toBe(4);
   await attachScreenshot(testInfo, "editor", workspacePage);
   return { workspacePage, glyphId };
 }
@@ -98,11 +111,9 @@ async function reopenAndVerify(
 
   const launcherPage = await relaunchedApp.firstWindow();
   await launcherPage.waitForURL(/#\/launcher$/);
-  const workspaceWindow = relaunchedApp.waitForEvent("window");
-  await launcherPage.getByRole("button", { name: "Open Font…", exact: true }).click();
-  const workspacePage = await workspaceWindow;
+  const workspacePage = await openFontFromLauncher(launcherPage, relaunchedApp);
   await waitForWorkspaceReady(workspacePage);
-  const editor = new EditorDriver(workspacePage);
+  const editor = new EditorDriver(workspacePage, relaunchedApp);
   await editor.openGlyph(glyphId);
   expect(await editor.pointCount()).toBe(4);
   await attachScreenshot(testInfo, "reopened-editor", workspacePage);
@@ -123,12 +134,7 @@ async function attachManifest(
   saveShiftPath: string,
   exportTtfPath: string,
 ): Promise<void> {
-  const runtime = await electronApp.evaluate(({ app }) => ({
-    platform: process.platform,
-    architecture: process.arch,
-    electronVersion: process.versions.electron,
-    appVersion: app.getVersion(),
-  }));
+  const runtime = await appRuntime(electronApp);
   const files = [saveShiftPath, exportTtfPath].map((filePath) => ({
     name: path.basename(filePath),
     bytes: fs.statSync(filePath).size,

@@ -1,6 +1,6 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { FontStoreLocation, WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { Editor } from "@shift/editor";
 import { Font, FontStore } from "@shift/editor/model";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type { Signal } from "@shift/editor/signals";
 import { workspaceSceneStateStore } from "@/lib/workspace/workspaceSceneStateStore";
+import { WindowEngine } from "@/lib/engine/WindowEngine";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {
@@ -24,6 +25,7 @@ export interface WorkspaceOptions {
 export class Workspace {
   readonly #client: FontSessionClient;
   readonly #store: FontStore;
+  readonly #engine: WindowEngine;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #documentBridge: WorkspaceDocumentBridge;
   #connection: Promise<void> | null = null;
@@ -35,8 +37,9 @@ export class Workspace {
 
   constructor(options: WorkspaceOptions) {
     this.#client = options.client;
-    this.#store = new FontStore();
-    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store);
+    this.#engine = new WindowEngine(options.host.layers, this.#client);
+    this.#store = new FontStore({ engine: this.#engine });
+    this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store, this.#engine);
 
     this.font = new Font({
       store: this.#store,
@@ -66,6 +69,14 @@ export class Workspace {
     return this.#edits;
   }
 
+  /**
+   * Where this workspace's store lives, so the window's editing engine can
+   * read layers from it synchronously through `shiftHost.layers`.
+   */
+  storeLocation(): Promise<FontStoreLocation | null> {
+    return this.#client.storeLocation();
+  }
+
   connect(): Promise<void> {
     if (!this.#connection) {
       this.#connection = this.#connect();
@@ -79,6 +90,7 @@ export class Workspace {
     window.removeEventListener("pagehide", this.#flushSceneOnLeave);
     this.font.dispose();
     this.#documentBridge.dispose();
+    this.#engine.dispose();
   }
 
   /** Writes any canvas change still waiting for its quiet period. */
@@ -100,7 +112,9 @@ export class Workspace {
         throw new Error("workspace connected without a snapshot");
       }
 
-      this.#store.replaceWorkspace(snapshot);
+      // The font shows once the engine is open: it reads the axes, sources
+      // and kerning.
+      await this.#edits.open(snapshot);
       await this.editor.scenePersistence?.restore();
       window.addEventListener("blur", this.#flushSceneOnLeave);
       window.addEventListener("pagehide", this.#flushSceneOnLeave);

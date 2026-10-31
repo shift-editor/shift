@@ -4,11 +4,10 @@ import type { Point } from "./Point";
 import type {
   ContourGeometry,
   SegmentPoints,
-  LineSegmentPoints,
   QuadSegmentPoints,
   CubicSegmentPoints,
 } from "./types/contour";
-import { parseContourSegments } from "./parseContourSegments";
+import { segmentContour, type SegmentedContourGeometry } from "./segmentContour";
 
 export type {
   SegmentPoints,
@@ -98,37 +97,51 @@ export class Segment {
   #points: SegmentPoints | null = null;
   #flatPoints: readonly Point[] | null = null;
   #curve: CurveType | null = null;
-  #bounds: Bounds | null = null;
-  #length: number | null = null;
+  readonly #bounds: Bounds;
 
-  constructor(data: SegmentType) {
+  /**
+   * @param bounds - The segment's tight box, as shift-font bounds it; see {@link Segment.parse}.
+   */
+  constructor(data: SegmentType, bounds: Bounds) {
     this.#structure = data;
+    this.#bounds = bounds;
   }
 
-  /** Parse a contour's points into segment instances. */
+  /** Parse a contour's points into segment instances, as shift-font segments it. */
   static parse(contour: ContourGeometry): Segment[] {
-    return parseContourSegments(contour).map((segment) => {
+    return Segment.fromGeometry(segmentContour(contour));
+  }
+
+  /** Segment instances for a contour {@link segmentContour} already segmented. */
+  static fromGeometry(geometry: SegmentedContourGeometry<Point>): Segment[] {
+    return geometry.segments.map(({ points: segment, bounds }) => {
       switch (segment.type) {
         case "line":
-          return new Segment({
-            type: "line",
-            points: { anchor1: segment.start, anchor2: segment.end },
-          });
+          return new Segment(
+            { type: "line", points: { anchor1: segment.start, anchor2: segment.end } },
+            bounds,
+          );
         case "quad":
-          return new Segment({
-            type: "quad",
-            points: { anchor1: segment.start, control: segment.control, anchor2: segment.end },
-          });
-        case "cubic":
-          return new Segment({
-            type: "cubic",
-            points: {
-              anchor1: segment.start,
-              control1: segment.controlStart,
-              control2: segment.controlEnd,
-              anchor2: segment.end,
+          return new Segment(
+            {
+              type: "quad",
+              points: { anchor1: segment.start, control: segment.control, anchor2: segment.end },
             },
-          });
+            bounds,
+          );
+        case "cubic":
+          return new Segment(
+            {
+              type: "cubic",
+              points: {
+                anchor1: segment.start,
+                control1: segment.controlStart,
+                control2: segment.controlEnd,
+                anchor2: segment.end,
+              },
+            },
+            bounds,
+          );
       }
     });
   }
@@ -238,24 +251,7 @@ export class Segment {
   }
 
   get bounds(): Bounds {
-    if (this.#bounds === null) {
-      this.#bounds = Curve.bounds(this.toCurve());
-    }
-
     return this.#bounds;
-  }
-
-  /** @knipclassignore */
-  get length(): number {
-    if (this.#length === null) {
-      this.#length = Curve.length(this.toCurve());
-    }
-    return this.#length;
-  }
-
-  /** @internal Raw discriminated data for rendering / clipboard interop. */
-  get raw(): SegmentType {
-    return this.#structure;
   }
 
   toCurve(): CurveType {
@@ -292,16 +288,6 @@ export class Segment {
     return Curve.closestPoint(this.toCurve(), pos);
   }
 
-  /** @knipclassignore */
-  splitAt(t: number): [CurveType, CurveType] {
-    return Curve.splitAt(this.toCurve(), t);
-  }
-
-  /** @knipclassignore */
-  sample(count: number): Point2D[] {
-    return Curve.sample(this.toCurve(), count);
-  }
-
   hit(pos: Point2D, radius: number): SegmentHit | null {
     const radiusVector = { x: radius, y: radius };
     const min = Vec2.sub(this.bounds.min, radiusVector);
@@ -319,12 +305,6 @@ export class Segment {
       closestPoint: closest.point,
       distance: closest.distance,
     };
-  }
-
-  /** @knipclassignore Narrow to line points, or null if this isn't a line. */
-  asLine(): LineSegmentPoints | null {
-    const points = this.points;
-    return points.type === "line" ? points : null;
   }
 
   /** Narrow to quad points, or null if this isn't a quad. */

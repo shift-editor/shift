@@ -1,5 +1,6 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, GlyphName, ShapedGlyph, Source, Unicode } from "@shift/types";
+import type { GlyphId, GlyphName, Source, Unicode } from "@shift/types";
+import type { ShapedGlyph } from "@shift/wasm/protocol";
 import { track } from "../../signals";
 import { displayAdvance } from "../../utils/displayAdvance";
 import type { PositionedGlyph, PositionedRun, SegmentedRun } from "./types";
@@ -64,20 +65,17 @@ export class Positioner {
     const glyphs = run.shaped.map((shaped) => this.#runGlyph(run, shaped));
     const markOffsets =
       marks === "anchors" ? this.#anchorOffsets(run, glyphs) : this.#literalOffsets(glyphs);
+    const kerns = this.#kerns(run, glyphs, markOffsets);
 
     const positioned: PositionedGlyph[] = [];
     let pen = 0;
     let kernable: PositionedGlyph | null = null;
     for (const [index, glyph] of glyphs.entries()) {
       const mark = markOffsets.get(index);
-      if (!mark && kernable?.glyphId && glyph.glyphId && run.direction === "ltr") {
-        kernable.xKern = this.#editor.font.kerningBetween(
-          kernable.glyphId,
-          glyph.glyphId,
-          this.#externalLocation.peek(),
-          this.#editor.activeSourceIdCell.peek(),
-        );
-        pen += kernable.xKern;
+      const kern = kerns.get(index);
+      if (kernable && kern !== undefined) {
+        kernable.xKern = kern;
+        pen += kern;
       }
 
       const attached = mark !== undefined && mark.to !== null;
@@ -99,7 +97,6 @@ export class Positioner {
         xOffset: glyph.shaped.xOffset + ownOffset.x,
         yOffset: glyph.shaped.yOffset + ownOffset.y,
         cluster: run.clusterStart + glyph.shaped.cluster,
-        bounds: glyph.model?.bounds ?? null,
       };
       positioned.push(current);
       if (attached) continue;
@@ -120,6 +117,41 @@ export class Positioner {
     }
 
     return { ...run, glyphs: positioned, advance: pen };
+  }
+
+  /**
+   * The kern before each glyph that kerns with the glyph before it, by index,
+   * read for the whole run in one engine call: in a left-to-right run, each
+   * glyph and the last spacing glyph before it, skipping attached marks; a
+   * literal mark breaks the pair around it.
+   */
+  #kerns(
+    run: SegmentedRun,
+    glyphs: readonly RunGlyph[],
+    markOffsets: ReadonlyMap<number, MarkOffset>,
+  ): Map<number, number> {
+    const pairs: GlyphId[] = [];
+    const kerned: number[] = [];
+    if (run.direction === "ltr") {
+      let kernable: GlyphId | null = null;
+      for (const [index, glyph] of glyphs.entries()) {
+        const mark = markOffsets.get(index);
+        if (!mark && kernable && glyph.glyphId) {
+          pairs.push(kernable, glyph.glyphId);
+          kerned.push(index);
+        }
+        if (mark?.to != null) continue;
+        kernable = mark ? null : glyph.glyphId;
+      }
+    }
+    if (kerned.length === 0) return new Map();
+
+    const values = this.#editor.font.kerningRun(
+      pairs,
+      this.#externalLocation.peek(),
+      this.#editor.activeSourceIdCell.peek(),
+    );
+    return new Map(kerned.map((index, pair) => [index, values[pair] ?? 0]));
   }
 
   #runGlyph(run: SegmentedRun, shaped: ShapedGlyph): RunGlyph {
@@ -201,9 +233,7 @@ export class Positioner {
 
   #literalMarkOffset(glyph: RunGlyph, source: Source | null): Point2D {
     const layer =
-      glyph.glyphId && source
-        ? (this.#editor.glyphForId(glyph.glyphId)?.layerForSource(source.id) ?? null)
-        : null;
+      glyph.glyphId && source ? this.#editor.layerForGlyph(glyph.glyphId, source.id) : null;
     if (!layer) return { x: 0, y: 0 };
 
     const metrics = this.#editor.font.defaultSourceMetrics;

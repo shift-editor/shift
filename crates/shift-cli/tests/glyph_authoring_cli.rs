@@ -124,8 +124,8 @@ fn authors_glyph_geometry_and_copies_a_layer_through_the_cli() {
         .iter()
         .find(|source| source.name() == "Black")
         .unwrap();
-    let regular = glyph.layer_for_source(&regular_source.id()).unwrap();
-    let black = glyph.layer_for_source(&black_source.id()).unwrap();
+    let regular = glyph.layer_for_source(regular_source.id()).unwrap();
+    let black = glyph.layer_for_source(black_source.id()).unwrap();
     assert_eq!(regular.width(), 600.0);
     assert_eq!(black.width(), 600.0);
     assert_eq!(regular.contours_iter().next().unwrap().points().len(), 3);
@@ -168,7 +168,7 @@ fn reads_a_layer_payload_from_stdin() {
     let layer = font
         .glyph_by_name("space")
         .unwrap()
-        .layer_for_source(&font.default_source_id().unwrap())
+        .layer_for_source(font.default_source_id().unwrap())
         .unwrap();
     assert_eq!(layer.width(), 250.0);
     assert!(layer.contours().is_empty());
@@ -302,8 +302,8 @@ fn copying_a_layer_preserves_components_with_fresh_identity() {
         .iter()
         .find(|source| source.name() == "Light")
         .unwrap();
-    let regular = glyph.layer_for_source(&regular_source.id()).unwrap();
-    let light = glyph.layer_for_source(&light_source.id()).unwrap();
+    let regular = glyph.layer_for_source(regular_source.id()).unwrap();
+    let light = glyph.layer_for_source(light_source.id()).unwrap();
     assert_eq!(regular.components().len(), 2);
     assert_eq!(light.components().len(), regular.components().len());
     for (light_component, regular_component) in

@@ -1,3 +1,4 @@
+import { EntityMap, type ReadonlyEntityMap } from "@shift/types";
 /** How {@link Tree.from} reads identity, parent, and sibling order from flat items. */
 export interface TreeKeys<Id, Item> {
   readonly id: (item: Item) => Id;
@@ -15,8 +16,8 @@ export interface TreeKeys<Id, Item> {
  * a parent cycle is dropped from the walk rather than looping.
  */
 export class Tree<Id, Item> {
-  readonly #byId: ReadonlyMap<Id, Item>;
-  readonly #parentById: ReadonlyMap<Id, Id | null>;
+  readonly #byId: ReadonlyEntityMap<Id, Item>;
+  readonly #parentById: ReadonlyEntityMap<Id, Id | null>;
   readonly #childrenById: ReadonlyMap<Id, readonly Item[]>;
   readonly #roots: readonly Item[];
   readonly #order: readonly Item[];
@@ -24,10 +25,10 @@ export class Tree<Id, Item> {
 
   private constructor(items: Iterable<Item>, keys: TreeKeys<Id, Item>) {
     this.#id = keys.id;
-    const byId = new Map<Id, Item>();
+    const byId = new EntityMap<Id, Item>("tree item");
     for (const item of items) byId.set(keys.id(item), item);
 
-    const parentById = new Map<Id, Id | null>();
+    const parentById = new EntityMap<Id, Id | null>("tree parent");
     const childrenById = new Map<Id, Item[]>();
     const roots: Item[] = [];
     for (const [id, item] of byId) {
@@ -61,7 +62,7 @@ export class Tree<Id, Item> {
   }
 
   get(id: Id): Item | null {
-    return this.#byId.get(id) ?? null;
+    return this.#byId.get(id);
   }
 
   roots(): readonly Item[] {
@@ -75,7 +76,7 @@ export class Tree<Id, Item> {
 
   /** Returns an item's parent, or null for roots and unknown ids. */
   parent(id: Id): Item | null {
-    const parentId = this.#parentById.get(id) ?? null;
+    const parentId = this.#parentById.get(id);
     return parentId === null ? null : this.get(parentId);
   }
 

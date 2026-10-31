@@ -47,6 +47,7 @@ export class WorkspaceDocumentBridge {
           return this.#edits.save(path);
         },
         "document.export": ({ path }) => this.#edits.export(path),
+        "document.releaseStore": () => this.#edits.releaseStore(),
       },
     );
   }

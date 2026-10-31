@@ -1,10 +1,12 @@
 use crate::GlyphName;
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
+use crate::point::Canonical;
 use serde::{Deserialize, Serialize};
 
 /// Whether a component is placed by its anchors or by hand.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub enum ComponentAlignment {
     /// Not recorded, as in sources and documents from before alignment was:
@@ -18,6 +20,7 @@ pub enum ComponentAlignment {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Component {
     id: ComponentId,
     base_glyph_id: GlyphId,
@@ -44,18 +47,27 @@ impl Identified for Component {
 /// | 0   0   1  | (implicit)
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[cfg_attr(feature = "pack", pack(rename = "Matrix"))]
 pub struct Transform {
+    #[cfg_attr(feature = "pack", pack(rename = "a"))]
     pub xx: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "b"))]
     pub xy: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "c"))]
     pub yx: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "d"))]
     pub yy: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "e"))]
     pub dx: f64,
+    #[cfg_attr(feature = "pack", pack(rename = "f"))]
     pub dy: f64,
 }
 
 /// Decomposed 2D transformation with explicit scale, rotation, skew, and translation.
 /// Composition order: translate to center → rotate → scale → skew → translate back
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct DecomposedTransform {
     pub translate_x: f64,
@@ -252,8 +264,14 @@ impl DecomposedTransform {
     }
 
     pub fn set_offset(&mut self, offset: kurbo::Vec2) {
-        self.translate_x = offset.x;
-        self.translate_y = offset.y;
+        self.translate_x = offset.x.canonical();
+        self.translate_y = offset.y.canonical();
+    }
+}
+
+impl Canonical for DecomposedTransform {
+    fn canonical(self) -> Self {
+        Self::from_values(self.to_values().map(Canonical::canonical))
     }
 }
 
@@ -371,7 +389,7 @@ impl Component {
             id: ComponentId::new(),
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform,
+            transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -386,7 +404,7 @@ impl Component {
             id,
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform,
+            transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -400,7 +418,7 @@ impl Component {
             id: ComponentId::new(),
             base_glyph_id,
             base_glyph_name: base_glyph_name.into(),
-            transform: DecomposedTransform::from_matrix(matrix),
+            transform: DecomposedTransform::from_matrix(matrix).canonical(),
             alignment: ComponentAlignment::Unset,
         }
     }
@@ -410,7 +428,7 @@ impl Component {
     }
 
     pub fn base_glyph_id(&self) -> GlyphId {
-        self.base_glyph_id.clone()
+        self.base_glyph_id
     }
 
     pub fn base_glyph_name(&self) -> &GlyphName {
@@ -426,7 +444,7 @@ impl Component {
     }
 
     pub fn set_transform(&mut self, transform: DecomposedTransform) {
-        self.transform = transform;
+        self.transform = transform.canonical();
     }
 
     pub fn alignment(&self) -> ComponentAlignment {
@@ -438,8 +456,10 @@ impl Component {
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {
-        self.transform.translate_x += dx;
-        self.transform.translate_y += dy;
+        let mut transform = self.transform;
+        transform.translate_x += dx;
+        transform.translate_y += dy;
+        self.set_transform(transform);
     }
 }
 
@@ -497,7 +517,7 @@ mod tests {
     #[test]
     fn component_creation() {
         let base_id = GlyphId::from_raw("a");
-        let c = Component::new(base_id.clone(), "a".to_string());
+        let c = Component::new(base_id, "a".to_string());
         assert_eq!(c.base_glyph_id(), base_id);
         assert_eq!(c.base_glyph_name().as_str(), "a");
         assert!(c.transform().is_identity());
@@ -560,6 +580,17 @@ mod tests {
         let kurbo::Point { x, y } = d.transform_point(kurbo::Point::new(10.0, 20.0));
         assert!((x - 20.0).abs() < 1e-10);
         assert!((y - 60.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn decomposed_rotation_turns_counterclockwise() {
+        let d = DecomposedTransform {
+            rotation: 90.0,
+            ..Default::default()
+        };
+        let kurbo::Point { x, y } = d.transform_point(kurbo::Point::new(1.0, 0.0));
+        assert!(x.abs() < 1e-10);
+        assert!((y - 1.0).abs() < 1e-10);
     }
 
     #[test]

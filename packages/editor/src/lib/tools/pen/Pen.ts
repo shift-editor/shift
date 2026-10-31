@@ -195,6 +195,21 @@ export class Pen extends BaseTool<PenState, Pen> {
     return Curve.cubic(curve.start.position, controlStart, controlEnd, curve.anchorPosition);
   }
 
+  /** The guides the closing, pulled or dragged handle snapped to; hover guides are not a gesture's. */
+  override get snapGuides(): readonly PositionGuide[] {
+    const state = this.getState();
+    switch (state.type) {
+      case "closing":
+      case "pulling":
+      case "dragging":
+        return state.guides;
+      case "idle":
+      case "ready":
+      case "anchored":
+        return [];
+    }
+  }
+
   override getCursor(state: PenState): CursorType {
     if (state.type !== "ready") return { type: "pen" };
 
@@ -206,7 +221,7 @@ export class Pen extends BaseTool<PenState, Pen> {
 
     const nodePoint = this.editor.toLocal(stroke.node, pos.scene);
     const targets = PenTargets.forGeometry(stroke.layer.geometry);
-    const target = targets.at(nodePoint, this.editor.hitRadius);
+    const target = targets.at(nodePoint, this.editor.hitRadiusIn(stroke.node));
     const activeEndpoint = stroke.activeEndpoint;
 
     switch (target.type) {

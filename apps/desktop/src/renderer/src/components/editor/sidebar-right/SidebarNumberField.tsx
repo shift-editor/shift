@@ -59,7 +59,9 @@ export function SidebarNumberField({
         format={{
           maximumFractionDigits: 2,
           useGrouping: false,
-          ...(unit && { style: "unit", unit, unitDisplay: "narrow" }),
+          style: unit === undefined ? "decimal" : "unit",
+          unit,
+          unitDisplay: "narrow",
         }}
         disabled={disabled}
         onValueCommitted={(next, details) => {

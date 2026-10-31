@@ -15,10 +15,10 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
     let source_id = before.default_source_id().unwrap();
     let glyph_id = before.glyph_id_by_name("A").unwrap();
     let layer_id = before
-        .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone())
+        .layer_id_for_glyph_source(glyph_id, source_id)
         .unwrap();
     before
-        .layer_mut(&layer_id)
+        .layer_mut(layer_id)
         .unwrap()
         .add_contour(Contour::new());
     drop(ShiftStore::create_document(&path, &before).unwrap());
@@ -34,7 +34,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
             &FontIntentSet {
                 intents: vec![
                     ReplaceGlyphLayerContent {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         width: 720.0,
                         contours: vec![contour.clone()],
                         anchors: vec![Anchor::new(Some("top".to_string()), 20.0, 90.0)],
@@ -42,25 +42,25 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
                     }
                     .into(),
                     UpdateGlyph {
-                        glyph_id: glyph_id.clone(),
+                        glyph_id,
                         new_name: "A".into(),
                         new_unicodes: vec![0x41],
                     }
                     .into(),
                     CreateGlyph {
-                        glyph_id: Some(new_glyph_id.clone()),
+                        glyph_id: Some(new_glyph_id),
                         name: "B".to_string(),
                         unicodes: vec![0x42],
                     }
                     .into(),
                     CreateGlyphLayer {
-                        layer_id: new_layer_id.clone(),
+                        layer_id: new_layer_id,
                         glyph_id: new_glyph_id,
                         source_id,
                     }
                     .into(),
                     ReplaceGlyphLayerContent {
-                        layer_id: new_layer_id.clone(),
+                        layer_id: new_layer_id,
                         width: 620.0,
                         contours: Vec::new(),
                         anchors: Vec::new(),
@@ -73,10 +73,14 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         )
         .unwrap();
 
-    assert_eq!(workspace.loaded_layer_count(), 2);
+    // The two edited layers, `acute`, which `A`'s components are built from
+    // (an edit loads them so new components attach to their anchors), and the
+    // rest of `A`: the edit replaces the glyph whole, so it is recorded with
+    // every layer loaded.
+    assert_eq!(workspace.loaded_layer_count(), 4);
     let after = workspace.store().load_font_state().unwrap();
-    let layer = after.layer(&layer_id).unwrap();
-    let original = before.layer(&layer_id).unwrap();
+    let layer = after.layer(layer_id).unwrap();
+    let original = before.layer(layer_id).unwrap();
     assert_eq!(layer.contours_iter().next().unwrap(), &contour);
     assert_eq!(layer.width(), 720.0);
     assert_eq!(layer.height(), original.height());
@@ -85,11 +89,11 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
     assert_eq!(layer.anchors()[0].y(), 90.0);
     assert!(layer.components().is_empty());
     assert_eq!(after.glyph_by_name("A").unwrap().unicodes(), &[0x41]);
-    assert_eq!(after.layer(&new_layer_id).unwrap().width(), 620.0);
+    assert_eq!(after.layer(new_layer_id).unwrap().width(), 620.0);
     assert!(
         workspace
             .store()
-            .referenced_glyph_ids_for_glyph(&glyph_id)
+            .referenced_glyph_ids_for_glyph(glyph_id)
             .unwrap()
             .is_empty()
     );
@@ -100,7 +104,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
     assert_eq!(
         workspace
             .store()
-            .referenced_glyph_ids_for_glyph(&glyph_id)
+            .referenced_glyph_ids_for_glyph(glyph_id)
             .unwrap()
             .len(),
         1
@@ -111,7 +115,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
     assert!(
         workspace
             .store()
-            .referenced_glyph_ids_for_glyph(&glyph_id)
+            .referenced_glyph_ids_for_glyph(glyph_id)
             .unwrap()
             .is_empty()
     );
@@ -123,8 +127,8 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
         .acquire_glyphs(&[glyph_id], shift_workspace::AcquireScope::Glyphs)
         .unwrap();
     assert_eq!(
-        reopened.font().layer(&layer_id).unwrap(),
-        after.layer(&original.id()).unwrap()
+        reopened.font().layer(layer_id).unwrap(),
+        after.layer(original.id()).unwrap()
     );
 }
 
@@ -140,14 +144,14 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
     let layer_id = before
         .glyph_by_name("A")
         .unwrap()
-        .layer_for_source(&before.default_source_id().unwrap())
+        .layer_for_source(before.default_source_id().unwrap())
         .unwrap()
         .id();
     let result = workspace.apply(
         &FontIntentSet {
             intents: vec![
                 ReplaceGlyphLayerContent {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     width: 720.0,
                     contours: Vec::new(),
                     anchors: Vec::new(),
@@ -155,7 +159,7 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
                 }
                 .into(),
                 ReplaceGlyphLayerContent {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     width: f64::INFINITY,
                     contours: Vec::new(),
                     anchors: Vec::new(),
@@ -167,7 +171,7 @@ fn invalid_second_replacement_leaves_live_durable_and_history_truth_unchanged() 
         None,
     );
     assert!(result.is_err());
-    assert_eq!(workspace.font().layer(&layer_id), before.layer(&layer_id));
+    assert_eq!(workspace.font().layer(layer_id), before.layer(layer_id));
     assert_eq!(workspace.store().load_font_state().unwrap(), before);
     assert_eq!(std::fs::read(path).unwrap(), bytes);
     assert!(!workspace.is_dirty().unwrap());
@@ -186,7 +190,7 @@ fn component_replacement_acquires_the_dependency_closure_before_cycle_validation
     let layer_id = before
         .glyph_by_name("acute")
         .unwrap()
-        .layer_for_source(&before.default_source_id().unwrap())
+        .layer_for_source(before.default_source_id().unwrap())
         .unwrap()
         .id();
     assert!(

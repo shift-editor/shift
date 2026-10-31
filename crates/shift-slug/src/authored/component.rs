@@ -79,7 +79,7 @@ pub fn add_authored_glyph_with_weight_sets(
 ) -> Result<AuthoredGlyph, AuthoredSlugError> {
     let glyph_id = projection.glyph_id();
     let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
-    let projection = projection_set.projection(&glyph_id).require(&glyph_id)?;
+    let projection = projection_set.projection(glyph_id).require(&glyph_id)?;
     let checkpoint = builder.checkpoint();
     let mut defaults = AuthoredDefaultGlyphs::new();
     let mut inserted_defaults = Vec::new();
@@ -145,7 +145,7 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
             compilation.font,
             compilation.projection_set,
             projection,
-            &source_id,
+            source_id,
         )?;
         let topology = CurveTopology::from_contours(resolved.contours());
         let advance = authored_advance(resolved.x_advance(), 0)?;
@@ -194,7 +194,7 @@ pub(super) fn add_default_component_projection_glyph(
         if direct_glyphs.contains_key(&glyph_id) {
             continue;
         }
-        let direct_projection = projection_for(compilation.projection_set, &glyph_id)?;
+        let direct_projection = projection_for(compilation.projection_set, glyph_id)?;
         let weight_indices = projection_weight_indices(direct_projection, compilation.weight_sets)?;
         let glyph_index = add_default_projection_glyph(
             builder,
@@ -219,7 +219,7 @@ pub(super) fn add_default_component_projection_glyph(
     let mut components = Vec::with_capacity(projection.components().components().len());
     for (component_index, occurrence) in projection.components().components().iter().enumerate() {
         let parent_projection =
-            projection_for(compilation.projection_set, &occurrence.parent_glyph_id())?;
+            projection_for(compilation.projection_set, occurrence.parent_glyph_id())?;
         let source_start = u32::try_from(component_sources.len()).or_overflow()?;
         let source_context = AuthoredComponentSourceContext {
             weight_sets: compilation.weight_sets,
@@ -230,7 +230,7 @@ pub(super) fn add_default_component_projection_glyph(
             &mut component_sources,
             parent_projection,
             &occurrence.component_id(),
-            &occurrence.base_glyph_id(),
+            occurrence.base_glyph_id(),
             &source_context,
         )?;
         let source_count = u32::try_from(component_sources.len())
@@ -303,7 +303,7 @@ fn add_decomposed_component_glyph(
     if projection.decomposition().is_none() {
         return Ok(None);
     }
-    let Some(decomposition) = compilation.font.decomposition(&glyph_id)? else {
+    let Some(decomposition) = compilation.font.decomposition(glyph_id)? else {
         return Ok(None);
     };
     let outlines = decomposition.outlines();
@@ -317,7 +317,7 @@ fn add_decomposed_component_glyph(
         .iter()
         .find(|set| set.basis() == decomposition.basis())
         .map(AuthoredWeightSet::source_weight_indices)
-        .ok_or_else(|| AuthoredSlugError::MissingWeightBasis(glyph_id.clone()))?;
+        .ok_or(AuthoredSlugError::MissingWeightBasis(glyph_id))?;
     if weight_indices.len() != outlines.len() {
         return Err(AuthoredSlugError::WeightCountMismatch {
             expected: outlines.len(),
@@ -338,7 +338,7 @@ fn add_decomposed_component_glyph(
         if part_index == 0 {
             builder.set_glyph_source_advances(
                 glyph_index,
-                decomposition_advances(compilation.font, &glyph_id, decomposition.basis())?,
+                decomposition_advances(compilation.font, glyph_id, decomposition.basis())?,
             )?;
             root_glyph_index = Some(glyph_index);
         }
@@ -396,7 +396,7 @@ fn add_decomposed_component_glyph(
 /// The glyph's advance at each master of `basis`, in its source order.
 fn decomposition_advances(
     font: &Font,
-    glyph_id: &GlyphId,
+    glyph_id: GlyphId,
     basis: &InterpolationBasis,
 ) -> Result<Vec<f32>, AuthoredSlugError> {
     basis
@@ -404,23 +404,23 @@ fn decomposition_advances(
         .iter()
         .enumerate()
         .map(|(source_index, source_id)| {
-            let location = font.require_source(source_id)?.location();
+            let location = font.require_source(*source_id)?.location();
             let glyph = font
                 .projection(location)
                 .glyph(glyph_id)?
-                .require(glyph_id)?;
+                .require(&glyph_id)?;
             authored_advance(glyph.x_advance(), source_index)
         })
         .collect()
 }
 
-fn projection_for<'a>(
-    projection_set: &'a GlyphProjectionSet,
-    glyph_id: &GlyphId,
-) -> Result<&'a GlyphProjection, AuthoredSlugError> {
+fn projection_for(
+    projection_set: &GlyphProjectionSet,
+    glyph_id: GlyphId,
+) -> Result<&GlyphProjection, AuthoredSlugError> {
     projection_set
         .projection(glyph_id)
-        .require(glyph_id)
+        .require(&glyph_id)
         .map_err(Into::into)
 }
 
@@ -473,7 +473,7 @@ fn append_component_sources(
     output: &mut Vec<VariableComponentSource>,
     parent_projection: &GlyphProjection,
     component_id: &ComponentId,
-    base_glyph_id: &GlyphId,
+    base_glyph_id: GlyphId,
     context: &AuthoredComponentSourceContext<'_>,
 ) -> Result<(), AuthoredSlugError> {
     for (source_index, (weight_index, layer)) in context
@@ -483,7 +483,7 @@ fn append_component_sources(
     {
         let component = layer
             .component(component_id)
-            .filter(|component| component.base_glyph_id() == *base_glyph_id)
+            .filter(|component| component.base_glyph_id() == base_glyph_id)
             .ok_or_else(|| shift_font::CoreError::InvalidComponentId(component_id.to_string()))?;
         let transform = component.transform();
         let values = [
@@ -564,7 +564,7 @@ fn fallback_bounds(
         font,
         projection_set,
         projection,
-        &projection.fallback().source_id(),
+        projection.fallback().source_id(),
     )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
     Ok(Bounds::of_curves(&curves))
@@ -579,7 +579,7 @@ fn exact_source_ids(
         .chain(
             root.component_glyph_ids()
                 .iter()
-                .map(|glyph_id| projection_for(projection_set, glyph_id))
+                .map(|glyph_id| projection_for(projection_set, *glyph_id))
                 .collect::<Result<Vec<_>, _>>()?,
         )
         .collect::<Vec<_>>();
@@ -607,19 +607,14 @@ fn resolved_source_glyph<'a>(
     font: &Font,
     projection_set: &GlyphProjectionSet,
     projection: &GlyphProjection,
-    source_id: &SourceId,
+    source_id: SourceId,
 ) -> Result<&'a ResolvedGlyph, AuthoredSlugError> {
-    match resolved_sources.entry(source_id.clone()) {
+    match resolved_sources.entry(source_id) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
             let location = source_location(font, source_id)?;
             let resolved = projection_set
-                .resolve_glyph(
-                    &projection.glyph_id(),
-                    location,
-                    font.axes(),
-                    font.sources(),
-                )?
+                .resolve_glyph(projection.glyph_id(), location, font.axes(), font.sources())?
                 .require(&projection.glyph_id())?;
             Ok(entry.insert(resolved))
         }

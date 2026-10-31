@@ -32,8 +32,8 @@ impl KerningSummary {
         let kerning = font.kerning();
         let group_count = |position| kerning.groups(position).count();
         let resolves = |side: &KerningSide| match side {
-            KerningSide::Glyph(glyph_id) => font.glyph(glyph_id).is_some(),
-            KerningSide::Group(group_id) => kerning.group(group_id).is_some(),
+            KerningSide::Glyph(glyph_id) => font.glyph(*glyph_id).is_some(),
+            KerningSide::Group(group_id) => kerning.group(*group_id).is_some(),
         };
 
         let sources = font
@@ -48,7 +48,7 @@ impl KerningSummary {
                     group_pair_count: 0,
                     unresolved_count: 0,
                 };
-                let Some(source_kerning) = kerning.source(&source.id()) else {
+                let Some(source_kerning) = kerning.source(source.id()) else {
                     return summary;
                 };
                 for (pair, _) in source_kerning.pairs() {

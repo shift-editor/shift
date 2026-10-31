@@ -110,11 +110,11 @@ mod tests {
     fn mappings_view_reports_mapping_axes_and_points() {
         let mut font = sample_font();
         let axis_id = font.axes()[0].id();
-        let input = Location::from([(axis_id.clone(), 900.0)]);
-        let output = Location::from([(axis_id.clone(), 800.0)]);
+        let input = Location::from([(axis_id, 900.0)]);
+        let output = Location::from([(axis_id, 800.0)]);
         font.set_axis_mappings(vec![AxisMapping::new(
             "Weight curve".to_string(),
-            vec![axis_id.clone()],
+            vec![axis_id],
             vec![axis_id],
             vec![AxisMappingPoint {
                 description: None,
@@ -203,9 +203,9 @@ mod tests {
         let group_id = font
             .kerning()
             .group_id(shift_font::KerningPosition::Second, "A")
-            .cloned()
+            .copied()
             .unwrap();
-        font.kerning_mut().remove_group(&group_id);
+        font.kerning_mut().remove_group(group_id);
         let report = InspectReport::from_font(Path::new("/tmp/Kerned.shift"), &font);
 
         assert_eq!(report.kerning.sources[0].unresolved_count, 1);
@@ -229,7 +229,7 @@ mod tests {
 
         let axis_id = AxisId::from_raw("weight");
         let mut axis = Axis::with_id(
-            axis_id.clone(),
+            axis_id,
             "wght".to_string(),
             "Weight".to_string(),
             100.0,
@@ -246,7 +246,7 @@ mod tests {
         )]);
         font.add_axis(axis).expect("test axis should be valid");
 
-        let instance_location = ExternalLocation::from([(axis_id.clone(), 700.0)]);
+        let instance_location = ExternalLocation::from([(axis_id, 700.0)]);
         font.add_named_instance(NamedInstance::with_id(
             NamedInstanceId::from_raw("bold"),
             "Bold".to_string(),
@@ -266,12 +266,12 @@ mod tests {
         let bold_id = SourceId::from_raw("bold");
         let bold_location = DesignLocation::from([(axis_id, 700.0)]);
         font.add_source(Source::with_id(
-            bold_id.clone(),
+            bold_id,
             "Bold".to_string(),
             bold_location,
             Some("Bold.ufo".to_string()),
         ));
-        font.set_default_source_id(bold_id.clone());
+        font.set_default_source_id(bold_id);
 
         let mut glyph = Glyph::with_unicode("A", 0x41);
         let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_bold"), bold_id, 600.0);

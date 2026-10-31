@@ -1,11 +1,6 @@
 import type { Page } from "@playwright/test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import {
-  workspaceTest as test,
-  expect,
-  DESIGNSPACE_FONT_PATH,
-  UFO_FONT_PATH,
-} from "./fixtures/electronApp";
+import { workspaceTest as test, expect, FONTS } from "./fixtures/electronApp";
 
 /** Turns on agent connections in Settings → Agents and returns the MCP URL it shows. */
 async function enableAgentConnections(page: Page): Promise<string> {
@@ -37,6 +32,7 @@ async function runShiftCode(url: string, code: string): Promise<unknown> {
   try {
     await client.connect(transport);
     const result = await client.callTool({ name: "shift.execute", arguments: { code } });
+    // oxlint-disable-next-line shift/no-lookup-in-tests -- picks the MCP response's text parts, a protocol shape, not an app read
     const text = result.content
       .filter((item) => item.type === "text")
       .map((item) => item.text)
@@ -49,7 +45,7 @@ async function runShiftCode(url: string, code: string): Promise<unknown> {
 }
 
 test.describe("authored font reads from Home", () => {
-  test.use({ startupFontPath: UFO_FONT_PATH });
+  test.use({ startupFontPath: FONTS.mutatorSansLightCondensed });
 
   test("paginates glyphs and reads named source anchors", async ({ page: workspacePage }) => {
     await expect(workspacePage).toHaveURL(/#\/home/);
@@ -87,7 +83,7 @@ test.describe("authored font reads from Home", () => {
           },
           appearance: { outlineFill: "#123456" },
         })).value;
-        const sourcePage = (await shift.glyphs.list({ ...target, limit: 1, sourceId })).value;
+        const sourcePage = (await shift.glyphs.list({ ...target, limit: 1, source: { sourceId } })).value;
         const absent = await shift.layers
           .get({ ...target, layerId: "missing-layer" })
           .then(() => "found", () => "rejected");
@@ -211,7 +207,7 @@ test.describe("authored font reads from Home", () => {
 });
 
 test.describe("sparse source reads", () => {
-  test.use({ startupFontPath: DESIGNSPACE_FONT_PATH });
+  test.use({ startupFontPath: FONTS.mutatorSans });
 
   test("reads layers in a sparse source and reports glyphs without one", async ({ page }) => {
     const mcpUrl = await enableAgentConnections(page);
@@ -223,7 +219,7 @@ test.describe("sparse source reads", () => {
         return shift.read({ windowId: session.windowId }, async (read) => {
           const font = await read.font.get();
           for (const source of font.sources) {
-            const page = await read.glyphs.list({ limit: 100, sourceId: source.id });
+            const page = await read.glyphs.list({ limit: 100, source: { sourceId: source.id } });
             const authored = page.items.find(({ layer }) => layer);
             const missing = page.items.find(({ layer }) => layer === null);
             if (!authored || !missing) continue;
@@ -248,9 +244,11 @@ test.describe("sparse source reads", () => {
       missingAdvertised: boolean;
     } | null;
     expect(sparse).not.toBeNull();
-    expect(sparse?.layerSourceId).toBe(sparse?.sourceId);
-    expect(sparse?.advertised).toBe(true);
-    expect(sparse?.missingAdvertised).toBe(false);
+    expect(sparse).toMatchObject({
+      layerSourceId: sparse?.sourceId,
+      advertised: true,
+      missingAdvertised: false,
+    });
   });
 
   test("reads kerning groups, a master's pairs, and a pair at every master", async ({ page }) => {
@@ -262,13 +260,16 @@ test.describe("sparse source reads", () => {
         if (!session) throw new Error("Expected connected font");
         return shift.read({ windowId: session.windowId }, async (read) => {
           const font = await read.font.get();
-          const lightCondensed = font.sources.find(({ name }) => name === "LightCondensed");
+          const lightCondensed = await read.sources.get({ name: "LightCondensed" });
           const groups = await read.kerning.groups({ position: "second" });
-          const pairs = await read.kerning.pairs({ sourceId: lightCondensed.id, glyph: "T" });
+          const source = { name: "LightCondensed" };
+          const pairs = await read.kerning.pairs({ source, glyph: { name: "T" } });
           const resolved = await read.kerning.resolve({
-            pairs: [{ first: "T", second: "A" }],
-            sourceId: lightCondensed.id,
+            pairs: [{ first: { name: "T" }, second: { name: "A" } }],
+            source,
           });
+          const at = await read.kerning.at({ first: { name: "T" }, second: { name: "A" }, source });
+          const layer = await read.layers.get({ glyph: { name: "A" }, source });
           const [ta] = resolved.items;
           return {
             aGroupMembers: groups
@@ -278,6 +279,8 @@ test.describe("sparse source reads", () => {
             amount: ta.amount,
             masters: ta.masters.length === font.sources.length,
             lightCondensed: ta.masters.find(({ sourceId }) => sourceId === lightCondensed.id),
+            at,
+            layerSource: layer.sourceId === lightCondensed.id,
           };
         });
       }`,
@@ -289,6 +292,8 @@ test.describe("sparse source reads", () => {
       amount: -75,
       masters: true,
       lightCondensed: { amount: -75, origin: "authored", rule: "exception" },
+      at: { amount: -75, origin: "authored", rule: "exception" },
+      layerSource: true,
     });
   });
 });

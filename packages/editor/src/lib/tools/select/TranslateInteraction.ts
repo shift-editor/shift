@@ -36,7 +36,7 @@ export class TranslateInteraction {
 
     if (slide) this.move.along(slide.axis);
 
-    const pointIds = selection.targets.points ?? [];
+    const pointIds = selection.targets.points;
     const handlesFollow = slide?.handlesFollow ?? true;
     if (pointIds.length > 0 && handlesFollow) {
       this.move.constrainedBy(PointRuleConstraint.forSelection(selection.layer.geometry, pointIds));

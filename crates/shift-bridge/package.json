@@ -30,6 +30,8 @@
   "devDependencies": {
     "@napi-rs/cli": "3.6.2",
     "@napi-rs/cross-toolchain": "1.0.3",
+    "@shift/pack": "workspace:*",
+    "@shift/wasm": "workspace:*",
     "vitest": "^4.1.10"
   },
   "engines": {
@@ -40,6 +42,7 @@
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "build:e2e": "napi build --platform --profile e2e",
+    "types": "node scripts/types.mjs",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest run",
     "universal": "napi universal",

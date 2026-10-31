@@ -43,6 +43,16 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
   },
+  sources: {
+    async get() {
+      throw new Error("No open Shift window");
+    },
+  },
+  instances: {
+    async get() {
+      throw new Error("No open Shift window");
+    },
+  },
   glyphs: {
     async list() {
       throw new Error("No open Shift window");
@@ -73,6 +83,9 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
     async resolve() {
+      throw new Error("No open Shift window");
+    },
+    async at() {
       throw new Error("No open Shift window");
     },
   },

@@ -67,6 +67,7 @@ export class Clipboard {
           bounds,
           timestamp: Date.now(),
           sourceApp: "shift",
+          // oxlint-disable-next-line shift/no-conditional-spread -- ClipboardPayload is the persisted clipboard format; it stays strict
           ...(metadata.sourceGlyph ? { sourceGlyph: metadata.sourceGlyph } : {}),
         },
       };

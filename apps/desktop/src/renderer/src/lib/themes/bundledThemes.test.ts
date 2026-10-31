@@ -1,5 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { descending } from "@shift/types";
 import { readThemeFiles } from "../../../../main/config/themeFiles";
 import { applyResolvedTheme, bundledColorThemes, colorThemes, type ColorTheme } from ".";
 
@@ -103,7 +104,7 @@ function contrast(foreground: string, background: string): number {
   const blended = top
     .slice(0, 3)
     .map((channel, index) => channel * top[3] + below[index] * (1 - top[3]));
-  const [lighter, darker] = [luminance(blended), luminance(below)].sort((a, b) => b - a);
+  const [lighter, darker] = [luminance(blended), luminance(below)].sort(descending);
   return (lighter + 0.05) / (darker + 0.05);
 }
 

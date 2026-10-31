@@ -1,6 +1,7 @@
 import { useSignalState } from "@shift/editor/signals";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
 import { KerningGroupsPanel } from "@/components/kerning/groups/KerningGroupsPanel";
+import { KerningGroupsTarget } from "@/lib/kerning/KerningGroupsTarget";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarSection, SidebarSubsection } from "./SidebarSection";
 
@@ -21,19 +22,19 @@ interface GlyphKerningSectionProps {
 
 export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => {
   const editor = useEditor();
-  const scene = useSignalState(editor.scene.cell);
-  const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-  const node = glyphNodes.length === 1 ? glyphNodes[0] : undefined;
-  if (node?.kind !== "glyph") return null;
+  const node = useSignalState(editor.scene.onlyCell("glyph"));
+  if (!node) return null;
 
   const glyphId = node.glyphId;
-  const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
+  const glyphName = editor.font.glyphName(glyphId) ?? glyphId;
   const disabled = editor.sessionMode !== "workspace";
 
   return (
     <SidebarSection
       title="Kerning"
-      actions={<KerningGroupsPanel target={{ kind: "glyph", glyphId }} anchorRef={anchorRef} />}
+      actions={
+        <KerningGroupsPanel target={KerningGroupsTarget.glyph(glyphId)} anchorRef={anchorRef} />
+      }
     >
       <SidebarSubsection title="Groups">
         <div className="flex gap-2">

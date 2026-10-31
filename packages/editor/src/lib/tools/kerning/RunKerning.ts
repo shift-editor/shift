@@ -69,7 +69,7 @@ export class KerningPair {
    */
   editablePair(editor: Editor, sourceId = this.source(editor)): ResolvedKerning | null {
     if (!sourceId || editor.sessionMode !== "workspace") return null;
-    return editor.font.kerningCell.peek().editablePair(sourceId, this.first, this.second);
+    return editor.font.kerning.editablePair(sourceId, this.first, this.second);
   }
 
   /**
@@ -111,7 +111,7 @@ export class KerningPair {
   lock(editor: Editor, position: KerningPairPosition): KerningLock {
     const glyphId = position === "first" ? this.first : this.second;
     const pair = this.editablePair(editor);
-    const grouped = editor.font.kerningCell.peek().groupOf(position, glyphId) !== null;
+    const grouped = editor.font.kerning.groupOf(position, glyphId) !== null;
     const side = pair ? pair[position] : null;
     return {
       locked: !grouped || (side !== null && !isGroupSide(side)),
@@ -129,17 +129,13 @@ export class KerningPair {
     const sourceId = this.source(editor);
     const pair = this.editablePair(editor);
     if (!sourceId || !pair) return false;
-
-    const exception = isGroupSide(pair[position]);
-    const edit = editor.font.kerningCell
-      .peek()
-      .exceptionEdit(sourceId, this.first, this.second, pair, position, exception);
-    if (!edit) return false;
-    editor.font.setKerningValues(
-      [edit],
-      exception ? "Make kerning exception" : "Remove kerning exception",
+    return editor.font.setKerningException(
+      sourceId,
+      this.first,
+      this.second,
+      position,
+      isGroupSide(pair[position]),
     );
-    return true;
   }
 }
 
@@ -195,16 +191,19 @@ export class RunKerning {
     const edited = pair.editablePair(this.#editor);
     if (!sourceId || !edited) return [];
 
-    const kerning = this.#editor.font.kerningCell.peek();
     const definition = this.#editor.nodeDefinition("textRun");
-    return this.#editor.scene
+    const candidates = this.#editor.scene
       .nodesOfKind("textRun")
       .flatMap((node) => definition.spacingGaps(node).flatMap((gap) => kernedPair(gap) ?? []))
-      .filter((candidate) => {
-        if (candidate.sameAs(pair)) return false;
-        const applied = kerning.editablePair(sourceId, candidate.first, candidate.second);
-        return applied.first === edited.first && applied.second === edited.second;
-      });
+      .filter((candidate) => !candidate.sameAs(pair));
+    const applied = this.#editor.font.kerning.editablePairs(
+      sourceId,
+      candidates.flatMap((candidate) => [candidate.first, candidate.second]),
+    );
+    return candidates.filter(
+      (_, index) =>
+        applied[index]?.first === edited.first && applied[index]?.second === edited.second,
+    );
   }
 
   /**

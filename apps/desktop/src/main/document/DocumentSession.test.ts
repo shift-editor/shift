@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import type { WorkspaceDocumentState } from "../../shared/workspace/lanes";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { ShiftLogger } from "../logging";
 import type { Document } from "./DocumentClient";

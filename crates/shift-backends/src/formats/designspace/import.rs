@@ -327,7 +327,7 @@ fn register_designspace_sources(
         source.set_underline_thickness(material.metrics.underline_thickness());
         let source_id = header.add_source(source);
         if material.index == default_index {
-            header.set_default_source_id(source_id.clone());
+            header.set_default_source_id(source_id);
         }
         directories.push(SourceDirectory {
             source_id,
@@ -353,7 +353,7 @@ fn import_kerning(
     default_kerning.add_groups(&mut import);
     for directory in directories {
         if let Some(kerning) = &directory.kerning {
-            kerning.add_pairs(&mut import, &directory.source_id);
+            kerning.add_pairs(&mut import, directory.source_id);
         }
     }
     *header.kerning_mut() = import.finish(&mut report);
@@ -414,14 +414,14 @@ fn build_glyph_directory(
                 .filter_map(|directory| {
                     let path = directory.glyphs.get(&name)?;
                     Some(GlifLayer {
-                        source_id: directory.source_id.clone(),
+                        source_id: directory.source_id,
                         layer_id: LayerId::new(),
                         path: path.clone(),
                     })
                 })
                 .collect();
             GlifGlyph {
-                id: glyph_ids[&name].clone(),
+                id: glyph_ids[&name],
                 name,
                 layers,
             }

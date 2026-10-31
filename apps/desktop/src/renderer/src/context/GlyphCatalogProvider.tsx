@@ -19,6 +19,8 @@ import type {
   GlyphCatalogSource,
   GlyphCategoryFilter,
 } from "@/types/glyphCatalog";
+import { NameQuery } from "@/lib/utils/NameQuery";
+import { useMemberSet } from "@/hooks/useMemberSet";
 
 const NO_LANGUAGE_IDS = signal<readonly string[] | null>(null, {
   name: "glyphCatalog.previewLanguageIds",
@@ -103,9 +105,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [query, setQuery] = useState("");
   const [categoryFilters, setCategoryFilters] = useState<readonly GlyphCategoryFilter[]>([]);
   const [selectedLanguageId, setSelectedLanguageId] = useState<string | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<ReadonlySet<GlyphCategory>>(
-    () => new Set(),
-  );
+  const expanded = useMemberSet<GlyphCategory>();
+  const expandedCategories = expanded.values;
 
   const availableUnicodes = useMemo(
     () => availableGlyphs.flatMap((glyph) => (glyph.unicode === null ? [] : [glyph.unicode])),
@@ -145,8 +146,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   );
 
   const filteredGlyphs = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const hasQuery = normalizedQuery !== "";
+    const search = NameQuery.from(query);
     const filteringByGroup = categoryFilters.length > 0 || selectedLanguageId !== null;
     const matchedUnicodes = matchingUnicodes({
       query,
@@ -160,11 +160,9 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     return availableGlyphs.filter((glyph) => {
       const unicodeMatched = glyph.unicode !== null && matchedUnicodes.has(glyph.unicode);
       if (filteringByGroup) return unicodeMatched;
-      if (!hasQuery) return true;
+      if (search.isEmpty) return true;
 
-      const nameMatched =
-        glyph.name.toLowerCase().includes(normalizedQuery) ||
-        glyph.displayName.toLowerCase().includes(normalizedQuery);
+      const nameMatched = search.matchesText(glyph.name) || search.matchesText(glyph.displayName);
       return unicodeMatched || nameMatched;
     });
   }, [
@@ -289,7 +287,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     selectedLanguageId,
     visibleCategoryFilters,
     expandedCategories,
-    setExpandedCategories,
+    setCategoryExpanded: expanded.set,
     query,
     setQuery,
     atlasSource: catalog.atlas,

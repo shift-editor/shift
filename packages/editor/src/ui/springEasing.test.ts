@@ -31,4 +31,12 @@ describe("springEasing", () => {
 
     expect(slow.duration).toBeGreaterThan(quick.duration);
   });
+
+  it("reports when the spring reaches a share of its distance, which comes early", () => {
+    const { timeAtProgress } = springEasing({ visualDuration: 0.24, bounce: 0.08 });
+
+    expect(timeAtProgress(0)).toBe(0);
+    expect(timeAtProgress(0.5)).toBeLessThan(timeAtProgress(0.9));
+    expect(timeAtProgress(0.9)).toBeLessThan(0.5);
+  });
 });

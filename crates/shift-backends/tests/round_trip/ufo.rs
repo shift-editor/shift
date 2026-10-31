@@ -415,10 +415,10 @@ fn preserves_metadata_metrics_and_glyph_count() {
     ] {
         assert_eq!(
             reloaded
-                .metric_value(&reloaded.default_source_id().unwrap(), kind)
+                .metric_value(reloaded.default_source_id().unwrap(), kind)
                 .map(|value| value.position),
             original
-                .metric_value(&original.default_source_id().unwrap(), kind)
+                .metric_value(original.default_source_id().unwrap(), kind)
                 .map(|value| value.position)
         );
     }
@@ -455,10 +455,10 @@ fn preserves_components_anchors_layers_and_kerning() {
         .layers()
         .iter()
         .max_by_key(|(_, layer)| layer.contours().len())
-        .map(|(layer_id, _)| layer_id.clone())
+        .map(|(layer_id, _)| *layer_id)
         .expect("E should have a main layer");
     original
-        .layer_mut(&e_layer_id)
+        .layer_mut(e_layer_id)
         .expect("E should have a main layer")
         .add_anchor(Anchor::new(None::<String>, 123.0, 456.0));
 

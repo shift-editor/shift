@@ -41,14 +41,14 @@ pub(crate) fn list_kerning(args: ListKerningArgs) -> Result<KerningListReport> {
         Some(selector) => {
             let source_id = font.source_id_for(selector)?;
             vec![
-                font.source(&source_id)
+                font.source(source_id)
                     .ok_or_else(|| miette!("source does not exist"))?,
             ]
         }
         None => font
             .sources()
             .iter()
-            .filter(|source| kerning.source(&source.id()).is_some())
+            .filter(|source| kerning.source(source.id()).is_some())
             .collect(),
     };
     let glyph_sides = args
@@ -59,7 +59,7 @@ pub(crate) fn list_kerning(args: ListKerningArgs) -> Result<KerningListReport> {
 
     let mut rows = BTreeMap::<(String, String), (KerningPair, Vec<Option<f64>>)>::new();
     for (column, source) in sources.iter().enumerate() {
-        let Some(source_kerning) = kerning.source(&source.id()) else {
+        let Some(source_kerning) = kerning.source(source.id()) else {
             continue;
         };
         for (pair, value) in source_kerning.pairs() {
@@ -106,7 +106,7 @@ pub(crate) fn kerning_groups(args: KerningGroupsArgs) -> Result<KerningGroupsRep
         .kerning()
         .all_groups()
         .filter(|(_, group)| position.is_none_or(|position| group.position == position))
-        .map(|(group_id, group)| GroupReport::from_group(&font, group_id, group))
+        .map(|(group_id, group)| GroupReport::from_group(&font, *group_id, group))
         .collect::<Vec<_>>();
     groups.sort_by(|a, b| (a.position, &a.name).cmp(&(b.position, &b.name)));
 
@@ -134,18 +134,18 @@ pub(crate) fn get_kerning(args: GetKerningArgs) -> Result<KerningResolutionRepor
 
     let masters = font
         .masters()
-        .map(|source| master_kerning(&font, source, &first, &second))
+        .map(|source| master_kerning(&font, source, first, second))
         .collect::<Result<Vec<_>>>()?;
     let location = if args.location.is_empty() {
         None
     } else {
-        Some(location_kerning(&font, &args.location, &first, &second)?)
+        Some(location_kerning(&font, &args.location, first, second)?)
     };
 
     Ok(KerningResolutionReport {
         document: args.path,
-        first: glyph_sides(&font, KerningPosition::First, &first),
-        second: glyph_sides(&font, KerningPosition::Second, &second),
+        first: glyph_sides(&font, KerningPosition::First, first),
+        second: glyph_sides(&font, KerningPosition::Second, second),
         masters,
         location,
     })
@@ -168,25 +168,25 @@ fn source_reference(source: &Source) -> SourceReference {
     }
 }
 
-fn glyph_sides(font: &Font, position: KerningPosition, glyph_id: &GlyphId) -> GlyphSides {
+fn glyph_sides(font: &Font, position: KerningPosition, glyph_id: GlyphId) -> GlyphSides {
     GlyphSides {
         glyph: GlyphReference::from_id(font, glyph_id),
         group: font
             .kerning()
             .group_of(position, glyph_id)
-            .map(|group_id| SideReport::from_side(font, &KerningSide::Group(group_id.clone()))),
+            .map(|group_id| SideReport::from_side(font, &KerningSide::Group(*group_id))),
     }
 }
 
 fn master_kerning(
     font: &Font,
     source: &Source,
-    first: &GlyphId,
-    second: &GlyphId,
+    first: GlyphId,
+    second: GlyphId,
 ) -> Result<MasterKerning> {
     let source_id = source.id();
     let kerning = font.kerning();
-    if let Some(resolved) = kerning.resolve(&source_id, first, second) {
+    if let Some(resolved) = kerning.resolve(source_id, first, second) {
         let rule = match (&resolved.pair.first, &resolved.pair.second) {
             (KerningSide::Glyph(_), KerningSide::Glyph(_)) => KerningRule::Glyph,
             (KerningSide::Group(_), KerningSide::Group(_)) => KerningRule::Group,
@@ -201,7 +201,7 @@ fn master_kerning(
         });
     }
 
-    let in_basis = kerning.source(&source_id).is_some()
+    let in_basis = kerning.source(source_id).is_some()
         || font.default_source_id().as_ref() == Some(&source_id);
     let (value, origin) = if in_basis {
         (0.0, KerningOrigin::Unkerned)
@@ -224,8 +224,8 @@ fn master_kerning(
 fn location_kerning(
     font: &Font,
     coordinates: &[String],
-    first: &GlyphId,
-    second: &GlyphId,
+    first: GlyphId,
+    second: GlyphId,
 ) -> Result<LocationKerning> {
     let external = parse_location(font, coordinates)?;
     let design = font
@@ -266,8 +266,8 @@ impl GlyphFilter {
         let glyph = font.glyph_id_for(selector)?;
         let group = |position| {
             font.kerning()
-                .group_of(position, &glyph)
-                .map(|group_id| KerningSide::Group(group_id.clone()))
+                .group_of(position, glyph)
+                .map(|group_id| KerningSide::Group(*group_id))
         };
         Ok(Self {
             first_group: group(KerningPosition::First),

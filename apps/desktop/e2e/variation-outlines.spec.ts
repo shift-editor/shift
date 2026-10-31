@@ -1,22 +1,24 @@
+import type { NamedInstanceId, SourceId } from "@shift/types";
 import type { Page } from "@playwright/test";
-import { resolve } from "node:path";
+import { workspaceTest, expect, FONTS, navigateToEditor } from "./fixtures/electronApp";
 import {
-  workspaceTest,
-  expect,
-  DESIGNSPACE_FONT_PATH,
-  navigateToEditor,
-} from "./fixtures/electronApp";
-import { editorSidebar, openVariationControls, variationControls } from "./fixtures/appLocators";
-import type { ExternalAxisLocation } from "@shift/editor/types";
+  editorSidebar,
+  instanceRow,
+  openVariationControls,
+  sourceRow,
+  variationControls,
+} from "./fixtures/appLocators";
+import type { EditorDriver } from "./fixtures/EditorDriver";
+import type { OutlinePoint, OutlineTarget } from "@/testing/reads";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
 
-const test = workspaceTest.extend({ startupFontPath: DESIGNSPACE_FONT_PATH });
+const test = workspaceTest.extend({ startupFontPath: FONTS.mutatorSans });
 
 const toggleModifier = process.platform === "darwin" ? "Meta" : "Control";
 
 workspaceTest.describe("mapped weight interpolation", () => {
   workspaceTest.use({
-    startupFontPath: resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs"),
+    startupFontPath: FONTS.mappedWeight,
   });
 
   workspaceTest(
@@ -24,23 +26,19 @@ workspaceTest.describe("mapped weight interpolation", () => {
     async ({ page, editor }) => {
       await editor.openGlyphByName("A");
       const controls = await openVariationControls(page);
-      const instances = await page.evaluate(() =>
-        window.shiftSession!.font.namedInstances.map(({ id, name }) => ({ id, name })),
-      );
 
       for (const [name, x, advance] of [
         ["ExtraLight", 50, 407.14285714285717],
         ["SemiBold", 110, 697.2972972972973],
       ] as const) {
-        const instance = instances.find((candidate) => candidate.name === name);
-        if (!instance) throw new Error(`Expected ${name} instance`);
-        await controls.getByTestId(`instance-${instance.id}`).click();
+        await instanceRow(controls, name).click();
         await editor.waitForCanvasRender();
         await expect
           .poll(() =>
+            // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
             page.evaluate(() => {
               const editor = window.shiftSession!.editor;
-              const node = editor.scene.nodesOfKind("glyph")[0]!;
+              const node = editor.scene.first("glyph")!;
               const model = editor
                 .glyphForId(node.glyphId)!
                 .renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
@@ -58,52 +56,38 @@ workspaceTest.describe("mapped weight interpolation", () => {
 
 interface OutlineFixture {
   readonly activeSource: { readonly id: string; readonly name: string };
-  readonly source: { readonly id: string; readonly name: string };
-  readonly comparisonSourceIds: readonly string[];
-  readonly instance: { readonly id: string; readonly name: string };
-  readonly instanceIds: readonly string[];
+  readonly source: { readonly id: SourceId; readonly name: string };
+  /** The outline each comparison source draws, in the font's source order. */
+  readonly comparisonSources: readonly OutlineTarget[];
+  readonly instance: { readonly id: NamedInstanceId; readonly name: string };
+  /** The outline each instance draws, in the font's instance order. */
+  readonly instances: readonly OutlineTarget[];
 }
 
 /** Opens S with the Variations tab and returns the sources and instances it can outline. */
-async function openOutlineFixture(page: Page): Promise<OutlineFixture> {
+async function openOutlineFixture(page: Page, editor: EditorDriver): Promise<OutlineFixture> {
   await navigateToEditor(page, "53");
   await openVariationControls(page);
 
-  const fixture = await page.evaluate(() => {
-    const { editor, font } = window.shiftSession!;
-    const activeSource = font.sources.find(({ id }) => id === editor.activeSourceId);
-    const comparisonSources = font.sources.filter(({ id }) => id !== editor.activeSourceId);
-    const instance = font.namedInstances[0];
-    if (!activeSource || !comparisonSources[0] || !instance) return null;
+  const [{ sources, instances }, activeSource] = await Promise.all([
+    editor.fontOverview(),
+    editor.source("active"),
+  ]);
+  // The default source comes first and is the one open; the rest are comparison sources.
+  const [first, ...comparisonSources] = sources;
+  const [instance] = instances;
+  expect(first).toEqual(activeSource);
+  if (!activeSource || !comparisonSources[0] || !instance) {
+    throw new Error("Expected variable sources and an instance");
+  }
 
-    return {
-      activeSource: { id: activeSource.id, name: activeSource.name },
-      source: { id: comparisonSources[0].id, name: comparisonSources[0].name },
-      comparisonSourceIds: comparisonSources.map(({ id }) => `source:${id}`).sort(),
-      instance: { id: instance.id, name: instance.name },
-      instanceIds: font.namedInstances.map(({ id }) => `instance:${id}`).sort(),
-    };
-  });
-  if (!fixture) throw new Error("Expected variable sources and an instance");
-
-  return fixture;
-}
-
-/** Returns the comparison outlines the glyph node draws, as sorted `kind:id` keys. */
-async function drawnOutlines(page: Page): Promise<readonly string[]> {
-  return page.evaluate(() => {
-    const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
-    if (!node) return [];
-
-    return editor
-      .nodeDefinition("glyph")
-      .visibleOutlines(node.id)
-      .map((target) =>
-        target.kind === "source" ? `source:${target.sourceId}` : `instance:${target.instanceId}`,
-      )
-      .sort();
-  });
+  return {
+    activeSource: { id: activeSource.id, name: activeSource.name },
+    source: { id: comparisonSources[0].id, name: comparisonSources[0].name },
+    comparisonSources: comparisonSources.map(({ id }) => ({ kind: "source", sourceId: id })),
+    instance: { id: instance.id, name: instance.name },
+    instances: instances.map(({ id }) => ({ kind: "instance", instanceId: id })),
+  };
 }
 
 function outlineToggle(
@@ -118,110 +102,62 @@ function outlineToggle(
   });
 }
 
-async function activeSourceId(page: Page): Promise<string | null> {
-  return page.evaluate(() => window.shiftSession!.editor.activeSourceId);
-}
-
 test("moves matched points in every selected source as one edit", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
-  const controls = await openVariationControls(page);
-  const source = await page.evaluate(() => {
-    const session = window.shiftSession!;
-    return session.font.sources.find(({ id }) => id !== session.editor.activeSourceId);
-  });
-  if (!source) throw new Error("Expected comparison source");
-
-  await controls
-    .getByTestId(`source-${source.id}`)
-    .click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
-  await expect
-    .poll(() =>
-      page.evaluate(() => window.shiftSession!.editor.editingLayerMatchesCell.peek().size),
-    )
-    .toBe(1);
+  // LightCondensed is the open default source; BoldWide joins it for editing.
+  const active = (await editor.source("active"))!.name;
+  await editor.clickSource("BoldWide", "toggle");
+  const glyph = (await editor.editorView()).glyph!.name;
+  const pointsIn = async (source: string) =>
+    (await editor.layerOf(glyph, source)).contours.flatMap((contour) => contour.points);
+  // Which points moved between two reads of a layer, by how much; null for one that stayed.
+  const moves = (before: readonly OutlinePoint[], after: readonly OutlinePoint[]) =>
+    after.map((point, index) => {
+      const was = before[index]!;
+      return point.x === was.x && point.y === was.y
+        ? null
+        : { x: point.x - was.x, y: point.y - was.y };
+    });
 
   const drag = await editor.selectVisiblePoint();
-  const referenceBefore = await editor.pointPosition(drag.id);
-  const target = await page.evaluate((referencePointId) => {
-    const session = window.shiftSession!;
-    const [layerMatch] = session.editor.editingLayerMatchesCell.peek().values();
-    if (!layerMatch?.complete) throw new Error("Expected complete layer match");
-    const targetPointId = layerMatch.points.find(
-      ({ referenceId }) => referenceId === referencePointId,
-    )?.targetId;
-    const node = session.editor.scene.nodesOfKind("glyph")[0];
-    const targetLayer = node
-      ? session.editor.glyphForId(node.glyphId)?.layerForId(layerMatch.targetLayerId)
-      : null;
-    const point = targetPointId ? targetLayer?.point(targetPointId) : null;
-    if (!targetPointId || !point) throw new Error("Expected matched target point");
-
-    return {
-      layerId: layerMatch.targetLayerId,
-      pointId: targetPointId,
-      position: { x: point.x, y: point.y },
-    };
-  }, drag.id);
-
+  const [referenceBefore, activeBefore, boldWideBefore] = await Promise.all([
+    editor.point(drag.id),
+    pointsIn(active),
+    pointsIn("BoldWide"),
+  ]);
   await editor.dragPoint(drag);
-  const referenceAfter = await editor.pointPosition(drag.id);
-  const targetAfter = await page.evaluate(({ layerId, pointId }) => {
-    const node = window.shiftSession!.editor.scene.nodesOfKind("glyph")[0];
-    const point = node
-      ? window.shiftSession!.editor.glyphForId(node.glyphId)?.layerForId(layerId)?.point(pointId)
-      : null;
-    if (!point) throw new Error("Expected matched target point");
+  const [referenceAfter, activeAfter, boldWideAfter] = await Promise.all([
+    editor.point(drag.id),
+    pointsIn(active),
+    pointsIn("BoldWide"),
+  ]);
 
-    return { x: point.x, y: point.y };
-  }, target);
-  expect(targetAfter).toEqual({
-    x: target.position.x + referenceAfter.x - referenceBefore.x,
-    y: target.position.y + referenceAfter.y - referenceBefore.y,
+  // The same points move in both sources, and BoldWide's match moves by the dragged delta.
+  const activeMoves = moves(activeBefore, activeAfter);
+  const boldWideMoves = moves(boldWideBefore, boldWideAfter);
+  expect(boldWideMoves.map((move) => move !== null)).toEqual(
+    activeMoves.map((move) => move !== null),
+  );
+  expect(boldWideMoves).toContainEqual({
+    x: referenceAfter!.x - referenceBefore!.x,
+    y: referenceAfter!.y - referenceBefore!.y,
   });
 
   await editor.undo();
-  await expect.poll(() => editor.pointPosition(drag.id)).toEqual(referenceBefore);
-  await expect
-    .poll(() =>
-      page.evaluate(({ layerId, pointId }) => {
-        const node = window.shiftSession!.editor.scene.nodesOfKind("glyph")[0];
-        const point = node
-          ? window
-              .shiftSession!.editor.glyphForId(node.glyphId)
-              ?.layerForId(layerId)
-              ?.point(pointId)
-          : null;
-        return point ? { x: point.x, y: point.y } : null;
-      }, target),
-    )
-    .toEqual(target.position);
+  await expect.poll(() => editor.point(drag.id)).toEqual(referenceBefore);
+  await expect.poll(() => pointsIn("BoldWide")).toEqual(boldWideBefore);
 });
 
 test("selects displayed objects at an interpolated instance", async ({ page, editor }) => {
   await navigateToEditor(page, "53");
   const controls = await openVariationControls(page);
-  const instanceId = await page.evaluate(() => {
-    const font = window.shiftSession!.font;
-    return font.namedInstances.find(
-      (instance) =>
-        !font.sourceAt(
-          new Map(
-            font
-              .getAxes()
-              .map((axis) => [axis.id, instance.location.values[axis.id] ?? axis.default]),
-          ) as unknown as ExternalAxisLocation,
-        ),
-    )?.id;
-  });
-  if (!instanceId) throw new Error("Expected an interpolated instance");
-
-  await controls.getByTestId(`instance-${instanceId}`).click();
-  await expect
-    .poll(() => page.evaluate(() => window.shiftSession!.editor.activeSourceId))
-    .toBeNull();
+  // Medium_Narrow_I sits between MutatorSans's sources.
+  await instanceRow(controls, "Medium_Narrow_I").click();
+  await expect.poll(() => editor.editorView()).toMatchObject({ activeSourceId: null });
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   const pointId = await page.evaluate(() => {
     const editor = window.shiftSession!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0];
+    const node = editor.scene.first("glyph");
     const point = node
       ? editor.glyphForId(node.glyphId)?.geometryAt(editor.externalLocation).allPoints[0]
       : null;
@@ -238,151 +174,130 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
 
 test("row visibility outlines one comparison source without changing the active source", async ({
   page,
+  editor,
 }) => {
-  const fixture = await openOutlineFixture(page);
+  const fixture = await openOutlineFixture(page, editor);
   const controls = variationControls(page);
-  const sourceKey = `source:${fixture.source.id}`;
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
   await expect(outlineToggle(page, "Show", "source", fixture.activeSource.name)).toHaveCount(0);
 
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
-  await expect(controls.getByTestId(`source-${fixture.source.id}`)).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
-  expect(await activeSourceId(page)).toBe(fixture.activeSource.id);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
+  await expect(sourceRow(controls, fixture.source.name)).toHaveAttribute("aria-pressed", "false");
+  expect(await editor.editorView()).toMatchObject({ activeSourceId: fixture.activeSource.id });
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test("editing-selection sources stay outlined until hidden, panning, or deselected", async ({
   page,
   editor,
 }) => {
-  const fixture = await openOutlineFixture(page);
-  const sourceButton = variationControls(page).getByTestId(`source-${fixture.source.id}`);
-  const sourceKey = `source:${fixture.source.id}`;
+  const fixture = await openOutlineFixture(page, editor);
+  const sourceButton = sourceRow(variationControls(page), fixture.source.name);
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
 
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  expect(await activeSourceId(page)).toBe(fixture.activeSource.id);
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
+  expect(await editor.editorView()).toMatchObject({ activeSourceId: fixture.activeSource.id });
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 
   // Leaving and rejoining the editing selection forgets the per-row hide.
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
   await sourceButton.click({ modifiers: [toggleModifier] });
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   // Holding Space over the canvas pans with the hand tool, which hides comparison outlines.
   await editor.canvas.hover();
   await page.keyboard.down("Space");
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
   await page.keyboard.up("Space");
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await page.keyboard.press("Escape");
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test("an explicitly shown source outline survives leaving the editing selection", async ({
   page,
+  editor,
 }) => {
-  const fixture = await openOutlineFixture(page);
-  const sourceButton = variationControls(page).getByTestId(`source-${fixture.source.id}`);
-  const sourceKey = `source:${fixture.source.id}`;
+  const fixture = await openOutlineFixture(page, editor);
+  const sourceButton = sourceRow(variationControls(page), fixture.source.name);
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
 
   await sourceButton.click({ modifiers: [toggleModifier] });
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 
   await page.keyboard.press("Escape");
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
 });
 
-test("the edit-all-sources shortcut outlines every comparison source", async ({ page }) => {
-  const fixture = await openOutlineFixture(page);
-  const sourceButton = variationControls(page).getByTestId(`source-${fixture.source.id}`);
+test("the edit-all-sources shortcut outlines every comparison source", async ({ page, editor }) => {
+  const fixture = await openOutlineFixture(page, editor);
+  const sourceButton = sourceRow(variationControls(page), fixture.source.name);
   const toggleAllSources = `${toggleModifier}+e`;
 
   await page.keyboard.press(toggleAllSources);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(() => drawnOutlines(page)).toEqual(fixture.comparisonSourceIds);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.comparisonSources);
 
   await page.keyboard.press(toggleAllSources);
   await expect(sourceButton).toHaveAttribute("aria-pressed", "false");
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
 
 test("show-all and hide-all keep explicitly shown source and instance outlines", async ({
   page,
+  editor,
 }) => {
-  const fixture = await openOutlineFixture(page);
+  const fixture = await openOutlineFixture(page, editor);
   const controls = variationControls(page);
-  const sourceKey = `source:${fixture.source.id}`;
-  const instanceKey = `instance:${fixture.instance.id}`;
+  const sourceKey = { kind: "source", sourceId: fixture.source.id } as const;
+  const instanceKey = { kind: "instance", instanceId: fixture.instance.id } as const;
 
   await controls.getByRole("button", { name: "Show all source outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual(fixture.comparisonSourceIds);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.comparisonSources);
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
-  await expect
-    .poll(() => drawnOutlines(page))
-    .toEqual(fixture.comparisonSourceIds.filter((key) => key !== sourceKey));
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.comparisonSources.slice(1));
   await outlineToggle(page, "Show", "source", fixture.source.name).click();
   await controls.getByRole("button", { name: "Hide all source outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([sourceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([sourceKey]);
   await outlineToggle(page, "Hide", "source", fixture.source.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 
   await outlineToggle(page, "Show", "instance", fixture.instance.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([instanceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([instanceKey]);
   await controls.getByRole("button", { name: "Show all instance outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual(fixture.instanceIds);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual(fixture.instances);
   await controls.getByRole("button", { name: "Hide all instance outlines", exact: true }).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([instanceKey]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([instanceKey]);
   await outlineToggle(page, "Hide", "instance", fixture.instance.name).click();
-  await expect.poll(() => drawnOutlines(page)).toEqual([]);
+  await expect.poll(() => editor.drawnOutlineTargets()).toEqual([]);
 });
-
-/** Returns a named instance whose location is not a source, so its outline has its own shape. */
-async function interpolatedInstance(page: Page): Promise<{ id: string; name: string }> {
-  const instance = await page.evaluate(() => {
-    const font = window.shiftSession!.font;
-    const match = font.namedInstances.find(
-      (candidate) =>
-        !font.sourceAt(
-          new Map(
-            font
-              .getAxes()
-              .map((axis) => [axis.id, candidate.location.values[axis.id] ?? axis.default]),
-          ) as unknown as ExternalAxisLocation,
-        ),
-    );
-    return match ? { id: match.id, name: match.name } : null;
-  });
-  if (!instance) throw new Error("Expected an instance between sources");
-
-  return instance;
-}
 
 test(
   "a comparison source outline matches snapshot",
   { tag: "@golden" },
   async ({ page, editor }) => {
-    const fixture = await openOutlineFixture(page);
+    const fixture = await openOutlineFixture(page, editor);
 
     await outlineToggle(page, "Show", "source", fixture.source.name).click();
-    await expect.poll(() => drawnOutlines(page)).toEqual([`source:${fixture.source.id}`]);
+    await expect
+      .poll(() => editor.drawnOutlineTargets())
+      .toEqual([{ kind: "source", sourceId: fixture.source.id }]);
 
     await expectCanvasSnapshot(editor, "outline-source.png");
   },
@@ -392,11 +307,13 @@ test(
   "an interpolated instance outline matches snapshot",
   { tag: "@golden" },
   async ({ page, editor }) => {
-    await openOutlineFixture(page);
-    const instance = await interpolatedInstance(page);
+    await openOutlineFixture(page, editor);
+    const instance = (await editor.instance({ name: "Medium_Narrow_I" }))!;
 
     await outlineToggle(page, "Show", "instance", instance.name).click();
-    await expect.poll(() => drawnOutlines(page)).toEqual([`instance:${instance.id}`]);
+    await expect
+      .poll(() => editor.drawnOutlineTargets())
+      .toEqual([{ kind: "instance", instanceId: instance.id }]);
 
     await expectCanvasSnapshot(editor, "outline-interpolated-instance.png");
   },
