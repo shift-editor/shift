@@ -10,10 +10,12 @@ import {
   WorkspaceEditCoordinator,
   type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
-import type { Signal } from "@shift/editor/signals";
+import { computed, type Signal } from "@shift/editor/signals";
 import { WindowEngine } from "@/lib/engine/WindowEngine";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 import { WindowTabs } from "@/lib/tabs/WindowTabs";
+import { WindowViewMemory } from "@/lib/tabs/WindowViewMemory";
+import { documentViewKey } from "@/lib/workspace/documentViews";
 
 export interface WorkspaceOptions {
   readonly host: ShiftHost;
@@ -28,6 +30,7 @@ export class Workspace {
   readonly #engine: WindowEngine;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #documentBridge: WorkspaceDocumentBridge;
+  readonly #viewMemory: WindowViewMemory;
   #connection: Promise<void> | null = null;
 
   readonly font: Font;
@@ -45,6 +48,7 @@ export class Workspace {
     this.#documentBridge = new WorkspaceDocumentBridge({
       host: options.host,
       edits: this.#edits,
+      flushView: () => this.#viewMemory.flush(),
     });
 
     this.font = new Font({
@@ -60,6 +64,13 @@ export class Workspace {
     });
     this.tabs = new WindowTabs(this.editor);
     this.documentStateCell = this.#client.documentStateCell;
+    const documentStateCell = this.documentStateCell;
+    this.#viewMemory = new WindowViewMemory(this.editor, this.tabs, {
+      keyCell: computed(() => {
+        const state = documentStateCell.value;
+        return state ? documentViewKey(state) : null;
+      }),
+    });
     this.applyStatusCell = this.#edits.applyStatusCell;
 
     registerBuiltInTools(this.editor);
@@ -87,10 +98,16 @@ export class Workspace {
   }
 
   dispose(): void {
+    window.removeEventListener("blur", this.#flushViewOnLeave);
+    window.removeEventListener("pagehide", this.#flushViewOnLeave);
+    this.#viewMemory.dispose();
     this.font.dispose();
     this.#documentBridge.dispose();
     this.#engine.dispose();
   }
+
+  // Leaving the window writes the view state still waiting for its quiet period.
+  readonly #flushViewOnLeave = (): void => this.#viewMemory.flush();
 
   async #connect(): Promise<void> {
     try {
@@ -104,6 +121,9 @@ export class Workspace {
       // The font shows once the engine is open: it reads the axes, sources
       // and kerning.
       await this.#edits.open(snapshot);
+      this.#viewMemory.restore();
+      window.addEventListener("blur", this.#flushViewOnLeave);
+      window.addEventListener("pagehide", this.#flushViewOnLeave);
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

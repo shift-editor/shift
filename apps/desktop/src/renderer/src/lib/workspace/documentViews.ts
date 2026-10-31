@@ -1,15 +1,33 @@
 import { z } from "zod";
 import {
   asGlyphId,
+  asNodeId,
   RecentList,
   type RecentListRules,
   type WorkspaceDocumentState,
 } from "@shift/types";
 import { parseEach } from "@shared/parseEach";
 
+const glyphIdSchema = z.string().startsWith("glyph_").transform(asGlyphId);
+const nodeIdSchema = z.string().startsWith("node_").transform(asNodeId);
+
+const storedTabSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("page"), pageId: nodeIdSchema }).strict(),
+  z.object({ kind: z.literal("glyph"), pageId: nodeIdSchema, glyphId: glyphIdSchema }).strict(),
+]);
+
 const documentViewSchema = z
   .object({
-    glyphId: z.string().startsWith("glyph_").transform(asGlyphId).optional(),
+    /** The glyph the editor route shows; absent on Home and the canvas. */
+    glyphId: glyphIdSchema.optional(),
+    /** Present when the window showed a page's canvas. */
+    canvas: z.literal(true).optional(),
+    /** The page the canvas showed. */
+    pageId: nodeIdSchema.optional(),
+    /** The window's page and glyph tabs in order, after the pinned Glyphs tab. */
+    tabs: z.array(storedTabSchema).optional(),
+    /** The page the font overview shows its selected glyph on. */
+    selectionPageId: nodeIdSchema.optional(),
   })
   .strict();
 
@@ -22,6 +40,9 @@ const storedViewSchema = documentViewSchema
 
 /** What a viewer last saw in one document, restored when the document resumes. */
 export type DocumentView = z.output<typeof documentViewSchema>;
+
+/** One page or glyph tab as a {@link DocumentView} keeps it. */
+export type StoredTab = z.output<typeof storedTabSchema>;
 
 type StoredView = z.output<typeof storedViewSchema>;
 
@@ -68,6 +89,15 @@ export class DocumentViews {
 
     const { key: _key, usedAt: _usedAt, ...view } = stored;
     return view;
+  }
+
+  /**
+   * Records part of the view for `key`, keeping the rest of what was remembered.
+   *
+   * @param patch - The fields to replace; a field set to `undefined` is forgotten.
+   */
+  update(key: string, patch: DocumentView, usedAt: number = Date.now()): void {
+    this.write(key, { ...this.read(key), ...patch }, usedAt);
   }
 
   /** Records the view for `key`, replacing what was remembered. */
