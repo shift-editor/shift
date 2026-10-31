@@ -17,7 +17,7 @@ use crate::{
     FormatBackendError, FormatBackendResult, ImportLoss, ImportReport, distinct_named_instances,
     feature_includes::inline_feature_includes,
     font_source::piecewise_map,
-    glyph_category::{GlyphCategories, ResolvedCategory},
+    glyph_category::GlyphCategories,
     kerning_import::{KerningImport, NamedKerningSide},
 };
 
@@ -457,7 +457,7 @@ pub(super) fn convert_glyph(
     let overrides = GlyphCategories::new().overrides(
         glyph.name.as_str(),
         result.unicodes(),
-        ResolvedCategory {
+        shift_font::GlyphDataCategory {
             category: glyph
                 .category
                 .and_then(|category| category.to_string().parse().ok()),

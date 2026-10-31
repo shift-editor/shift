@@ -66,6 +66,11 @@ where
         self.0.remove(key)
     }
 
+    /// Every value, in key order.
+    pub(crate) fn values(&self) -> impl Iterator<Item = &V> {
+        self.0.values()
+    }
+
     /// The value at `key`, inserting `V::default()` first when it is missing.
     pub(crate) fn get_or_default(&mut self, key: K) -> &mut V
     where
@@ -246,6 +251,11 @@ where
         Q: Ord + ?Sized,
     {
         self.0.get(key)
+    }
+
+    /// Every value, in key order.
+    pub(crate) fn values(&self) -> impl Iterator<Item = &V> {
+        self.0.values()
     }
 
     /// Inserts every entry, failing with the first key already held.

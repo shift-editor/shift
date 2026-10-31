@@ -1546,7 +1546,7 @@ mod tests {
       .and_then(|next| next.glyph_changes)
       .expect("a rename must echo its glyph's record");
     assert!(renamed.removed.is_empty());
-    let [record] = renamed.updated.as_slice() else {
+    let [record] = &*renamed.updated else {
       panic!("only the renamed glyph's record must cross");
     };
     let listed = bridge.get_glyphs().unwrap();
@@ -3313,7 +3313,7 @@ mod tests {
   fn get_glyph_projections_returns_location_independent_shape_backing() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, contour_id) = pen_setup(&mut bridge);
-    let glyph = bridge.get_glyphs().unwrap().remove(0);
+    let glyph = bridge.get_glyphs().unwrap()[0].clone();
     bridge
       .apply(
         vec![add_points_intent(
@@ -3342,7 +3342,7 @@ mod tests {
   fn get_glyph_previews_resolve_drawable_paths_at_a_location() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, contour_id) = pen_setup(&mut bridge);
-    let glyph = bridge.get_glyphs().unwrap().remove(0);
+    let glyph = bridge.get_glyphs().unwrap()[0].clone();
     bridge
       .apply(
         vec![add_points_intent(

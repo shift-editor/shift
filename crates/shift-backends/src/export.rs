@@ -419,7 +419,7 @@ mod tests {
         font: &Font,
         glyph_id: shift_font::GlyphId,
         source_id: shift_font::SourceId,
-        categories: &std::collections::BTreeMap<shift_font::GlyphId, crate::RecordCategory>,
+        categories: &std::collections::BTreeMap<shift_font::GlyphId, shift_font::RecordCategory>,
     ) -> shift_font::anchor_propagation::PropagatedAnchors {
         use shift_font::anchor_propagation::{
             PropagationAnchor, PropagationComponent, PropagationGlyph, compiled_anchors,
@@ -460,8 +460,8 @@ mod tests {
             components: &components,
             is_mark: category.mark,
             is_ligature: match category.ligature {
-                Some(crate::PropagationLigature::Explicit) => true,
-                Some(crate::PropagationLigature::Subcategory) => attaching,
+                Some(shift_font::Ligature::Explicit) => true,
+                Some(shift_font::Ligature::Subcategory) => attaching,
                 None => false,
             },
         })

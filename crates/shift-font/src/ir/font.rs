@@ -934,6 +934,12 @@ impl Font {
         self.glyph(self.glyph_id_by_name(name)?)
     }
 
+    /// Every glyph's id in name order, as the editor lists glyphs: by each
+    /// name's code points. Read from the name index, so it sorts nothing.
+    pub fn glyph_ids_by_name(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.index().ids_by_name().copied()
+    }
+
     pub fn glyphs_by_unicode(&self, unicode: u32) -> impl Iterator<Item = &Glyph> {
         self.index()
             .ids_with_unicode(unicode)

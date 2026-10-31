@@ -1258,7 +1258,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     if (!glyphId) throw new Error("createGlyph must echo the record id");
 
     const undone = await undoWorkspace(sync);
-    expect(undone?.next?.glyphChanges).toEqual({ updated: [], removed: [glyphId] });
+    expect(undone?.next?.glyphChanges).toEqual({ updated: [], removed: [glyphId], order: null });
     expect(undone?.layers).toEqual([]);
     await expect(sync.snapshot()).resolves.toMatchObject({
       glyphs: [],

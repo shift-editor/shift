@@ -38,7 +38,10 @@ pub use entity::{
 pub use features::FeatureData;
 pub use font::{Font, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
-pub use glyph_category::{GlyphCategory, GlyphSubcategory, UnknownGlyphCategory};
+pub use glyph_category::{
+    GlyphCategory, GlyphDataCategory, GlyphSubcategory, Ligature, NamedGlyph, OpenTypeCategories,
+    OpenTypeCategory, RecordCategory, UnknownGlyphCategory,
+};
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{

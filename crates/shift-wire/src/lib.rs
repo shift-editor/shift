@@ -17,7 +17,7 @@ use shift_font::{
     Anchor as IrAnchor, AnchorId, AxisId, AxisMapping as IrAxisMapping,
     AxisMappingBasis as IrAxisMappingBasis, AxisMappingId, Component as IrComponent,
     ComponentAlignment, ComponentId, Contour as IrContour, ContourId, Font as IrFont,
-    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
+    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
     GuidelineId, InterpolationBasis as IrInterpolationBasis, KerningPosition as IrKerningPosition,
@@ -243,99 +243,6 @@ impl From<&IrAxisMappingBasis> for AxisMappingBasis {
             input_axis_ids: basis.input_axis_ids().to_vec(),
             output_axis_ids: basis.output_axis_ids().to_vec(),
             basis: basis.basis().into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct GlyphRecord {
-    pub id: GlyphId,
-    pub name: GlyphName,
-    pub unicodes: Vec<u32>,
-    pub component_base_glyph_ids: Vec<GlyphId>,
-    pub layers: Vec<GlyphLayerRecord>,
-    /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
-    pub mark: bool,
-    /// A nonspacing mark (Mark category, Nonspacing subcategory): export
-    /// compiles it with no advance.
-    pub nonspacing_mark: bool,
-    /// Whether anchor propagation treats the glyph as a ligature; `None`
-    /// when it does not.
-    pub ligature: Option<Ligature>,
-}
-
-/// Why anchor propagation treats a glyph as a ligature.
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Ligature {
-    /// Classed a ligature.
-    Explicit,
-    /// In the ligature subcategory: a ligature once it has an attaching
-    /// anchor.
-    Subcategory,
-}
-
-impl From<&IrGlyph> for GlyphRecord {
-    fn from(glyph: &IrGlyph) -> Self {
-        let mut component_base_glyph_ids: Vec<_> = glyph
-            .layers()
-            .values()
-            .flat_map(|layer| layer.components_iter())
-            .map(shift_font::Component::base_glyph_id)
-            .collect();
-        component_base_glyph_ids.sort();
-        component_base_glyph_ids.dedup();
-        let mut layers: Vec<_> = glyph
-            .layers()
-            .values()
-            .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
-            .collect();
-        layers.sort_by(|a, b| {
-            a.source_id
-                .as_str()
-                .cmp(b.source_id.as_str())
-                .then_with(|| a.id.as_str().cmp(b.id.as_str()))
-        });
-
-        Self {
-            id: glyph.id(),
-            name: glyph.glyph_name().clone(),
-            unicodes: glyph.unicodes().to_vec(),
-            component_base_glyph_ids,
-            layers,
-            mark: false,
-            nonspacing_mark: false,
-            ligature: None,
-        }
-    }
-}
-
-/// The glyph records one edit changed: the changed glyphs' records as they
-/// are now, and the glyphs it removed. Every other record is unchanged.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-#[serde(rename_all = "camelCase")]
-pub struct GlyphRecordChanges {
-    pub updated: Vec<GlyphRecord>,
-    pub removed: Vec<GlyphId>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct GlyphLayerRecord {
-    pub id: LayerId,
-    pub source_id: SourceId,
-}
-
-impl From<&GlyphLayer> for GlyphLayerRecord {
-    fn from(layer: &GlyphLayer) -> Self {
-        Self {
-            id: layer.id(),
-            source_id: layer.source_id(),
         }
     }
 }

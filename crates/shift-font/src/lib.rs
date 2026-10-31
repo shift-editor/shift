@@ -43,6 +43,7 @@ pub mod curve;
 pub mod curve_fit;
 pub mod drag_rules;
 pub mod error;
+pub mod glyph_record;
 pub mod intents;
 pub mod interpolation;
 pub mod ir;
@@ -61,6 +62,7 @@ pub use contour_edit::{
     ContourEditError, ContourEnd, ContourSide, DeleteMode, EditOption, JoinMode, UnknownEditOption,
 };
 pub use error::{CoreError, CoreResult, EntityKind, EntityRef, Require};
+pub use glyph_record::{GlyphLayerRecord, GlyphRecord, GlyphRecordChanges, GlyphRecords};
 pub use intents::*;
 pub use interpolation::*;
 pub use ir::*;
