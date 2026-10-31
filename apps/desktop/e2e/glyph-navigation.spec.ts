@@ -74,7 +74,7 @@ test("starts a fresh Pen context after navigating to another glyph", async ({ pa
   await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 
   await returnHome(page);
-  await openCatalogGlyph(page, "navigationB", glyphs.secondId);
+  await openCatalogGlyph(page, "navigationB", glyphs.secondId, "open");
   await expect.poll(() => editor.activeGlyph()).toMatchObject({ glyphId: glyphs.secondId });
   const secondBounds = await editor.canvasBounds();
   await page.mouse.click(
@@ -100,7 +100,7 @@ test("clears transient editor state when navigating between glyphs", async ({ pa
   await editor.hoverVisibleUnselectedPoint();
 
   await returnHome(page);
-  await openCatalogGlyph(page, "navigationB", glyphs.secondId);
+  await openCatalogGlyph(page, "navigationB", glyphs.secondId, "open");
 
   await expect
     .poll(async () => {

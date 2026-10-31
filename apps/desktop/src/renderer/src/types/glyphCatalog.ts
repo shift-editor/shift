@@ -49,6 +49,13 @@ export interface GlyphCatalogSource {
   categoryFilters: readonly GlyphCategoryFilter[];
   selectedLanguageId: string | null;
   visibleCategoryFilters: readonly GlyphCategoryFilter[];
+  /**
+   * The position of a category's filter, or one of its subcategories', in
+   * {@link visibleCategoryFilters}; -1 when it is not shown.
+   *
+   * @param subCategoryKey - null for the category itself.
+   */
+  filterIndexOf: (category: GlyphCategory, subCategoryKey: string | null) => number;
   expandedCategories: ReadonlySet<GlyphCategory>;
   /** Expands or collapses one category in the sidebar. */
   setCategoryExpanded: (category: GlyphCategory, expanded: boolean) => void;

@@ -37,6 +37,7 @@ export const GlyphCatalogView = () => {
     categoryFilters,
     selectedLanguageId,
     visibleCategoryFilters,
+    filterIndexOf,
     expandedCategories,
     setCategoryExpanded,
     query,
@@ -86,10 +87,7 @@ export const GlyphCatalogView = () => {
       <ObjectSectionRow title="Categories" defaultOpen>
         <div className="flex flex-col gap-1">
           {categories.map((categoryNode) => {
-            const filterIndex = visibleCategoryFilters.findIndex(
-              (filter) =>
-                filter.category === categoryNode.category && filter.subCategoryKey === null,
-            );
+            const filterIndex = filterIndexOf(categoryNode.category, null);
             const active = selectedFilterIndexes.has(filterIndex);
             const open = expandedCategories.has(categoryNode.category);
             // A chosen category covers its subcategories, which highlight with it, as a
@@ -97,13 +95,7 @@ export const GlyphCatalogView = () => {
             const covered = categoryNode.subCategories.map(
               (subCategory) =>
                 active ||
-                selectedFilterIndexes.has(
-                  visibleCategoryFilters.findIndex(
-                    (filter) =>
-                      filter.category === categoryNode.category &&
-                      filter.subCategoryKey === subCategory.key,
-                  ),
-                ),
+                selectedFilterIndexes.has(filterIndexOf(categoryNode.category, subCategory.key)),
             );
             const coversChildren = open && covered.length > 0 && active;
 
@@ -142,28 +134,22 @@ export const GlyphCatalogView = () => {
                   <CollapsiblePanel>
                     <div className="flex flex-col gap-1 pt-1">
                       {categoryNode.subCategories.map((subCategory, index) => {
-                        const subCategoryFilterIndex = visibleCategoryFilters.findIndex(
-                          (filter) =>
-                            filter.category === categoryNode.category &&
-                            filter.subCategoryKey === subCategory.key,
+                        const subCategoryFilterIndex = filterIndexOf(
+                          categoryNode.category,
+                          subCategory.key,
                         );
-                        const subCategoryActive = selectedFilterIndexes.has(subCategoryFilterIndex);
+                        const joins = subCategoryJoins(covered, index, {
+                          categoryActive: active,
+                          nextFilterSelected: selectedFilterIndexes.has(subCategoryFilterIndex + 1),
+                        });
 
                         return (
                           <SubCategory
                             key={subCategory.key}
                             label={subCategory.label}
-                            active={covered[index] ?? subCategoryActive}
-                            joinsPrevious={
-                              (covered[index] ?? false) &&
-                              (index === 0 ? active : (covered[index - 1] ?? false))
-                            }
-                            joinsNext={
-                              (covered[index] ?? false) &&
-                              (index < covered.length - 1
-                                ? (covered[index + 1] ?? false)
-                                : selectedFilterIndexes.has(subCategoryFilterIndex + 1))
-                            }
+                            active={covered[index] ?? false}
+                            joinsPrevious={joins.previous}
+                            joinsNext={joins.next}
                             onSelect={(mode) =>
                               selectSubCategory(categoryNode.category, subCategory.key, mode)
                             }
@@ -298,3 +284,33 @@ const GlyphSearchField = ({
     </Tooltip>
   </>
 );
+
+/** Which neighbours a subcategory's highlight runs into: the row above, the row below. */
+interface HighlightJoins {
+  readonly previous: boolean;
+  readonly next: boolean;
+}
+
+/**
+ * Whether a highlighted subcategory's highlight joins the rows around it.
+ *
+ * @remarks
+ * The first subcategory joins its category when that is chosen; the last
+ * joins whatever filter follows the category when that is chosen too.
+ *
+ * @param covered - whether each of the category's subcategories is highlighted.
+ */
+function subCategoryJoins(
+  covered: readonly boolean[],
+  index: number,
+  neighbours: { readonly categoryActive: boolean; readonly nextFilterSelected: boolean },
+): HighlightJoins {
+  if (!covered[index]) return { previous: false, next: false };
+
+  const isFirst = index === 0;
+  const isLast = index === covered.length - 1;
+  return {
+    previous: isFirst ? neighbours.categoryActive : (covered[index - 1] ?? false),
+    next: isLast ? neighbours.nextFilterSelected : (covered[index + 1] ?? false),
+  };
+}

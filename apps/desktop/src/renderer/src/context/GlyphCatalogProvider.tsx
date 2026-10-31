@@ -142,6 +142,13 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       ]),
     [categoryCatalog.categories, expandedCategories],
   );
+  const filterIndexOf = useMemo(() => {
+    const indexes = new Map(
+      visibleCategoryFilters.map((filter, index) => [filterKey(filter), index] as const),
+    );
+    return (category: GlyphCategory, subCategoryKey: string | null) =>
+      indexes.get(filterKey({ category, subCategoryKey })) ?? -1;
+  }, [visibleCategoryFilters]);
   const { selectItem: selectCategoryFilter } = useListSelection(
     visibleCategoryFilters,
     categoryFilters,
@@ -316,6 +323,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     categoryFilters,
     selectedLanguageId,
     visibleCategoryFilters,
+    filterIndexOf,
     expandedCategories,
     setCategoryExpanded: expanded.set,
     query,
@@ -401,4 +409,9 @@ function glyphId(glyph: GlyphCatalogItem) {
 
 function sameCategoryFilter(left: GlyphCategoryFilter, right: GlyphCategoryFilter) {
   return left.category === right.category && left.subCategoryKey === right.subCategoryKey;
+}
+
+/** One key per category filter, for looking a filter up by its category and subcategory. */
+function filterKey(filter: GlyphCategoryFilter): string {
+  return `${filter.category}\u0000${filter.subCategoryKey ?? ""}`;
 }

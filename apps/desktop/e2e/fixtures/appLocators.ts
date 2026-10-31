@@ -9,10 +9,15 @@ export function glyphCatalogViewport(page: Page) {
   return page.getByLabel("Glyph catalog", { exact: true });
 }
 
-/** The glyph search field, opened from the Glyphs header when it is closed. */
+/** The glyph search field, which the Glyphs header shows while a search is open. */
+export function glyphSearchField(page: Page): Locator {
+  return page.getByPlaceholder("Search glyphs...");
+}
+
+/** Opens the glyph search from the Glyphs header, which must not be searching yet, and returns its field. */
 export async function glyphSearch(page: Page): Promise<Locator> {
-  const field = page.getByPlaceholder("Search glyphs...");
-  if (!(await field.isVisible())) await page.getByRole("button", { name: "Search glyphs" }).click();
+  await page.getByRole("button", { name: "Search glyphs" }).click();
+  const field = glyphSearchField(page);
   await expect(field).toBeVisible();
   return field;
 }
@@ -181,14 +186,22 @@ export async function openSessionGlyphNamed(page: Page, name: string): Promise<G
   return glyphId;
 }
 
+/**
+ * Filters the catalog to one glyph and opens it.
+ *
+ * @param search - `open` when an earlier search is still open, as it is on
+ *   returning Home after one: the header then shows the field, not its button.
+ */
 export async function openCatalogGlyph(
   page: Page,
   glyphName: string,
   glyphId: string,
+  search: "closed" | "open" = "closed",
 ): Promise<void> {
   const surface = glyphCatalogSurface(page);
   await expect(surface).toBeVisible();
-  await (await glyphSearch(page)).fill(glyphName);
+  const field = search === "open" ? glyphSearchField(page) : await glyphSearch(page);
+  await field.fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
   await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
