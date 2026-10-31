@@ -13,6 +13,7 @@ import type {
   LayerRead,
   Location,
   SaveState,
+  SceneState,
   ShaperFont,
   SlugAtlas,
   Specimen,
@@ -364,6 +365,19 @@ export interface WorkspaceSync {
   persist(changeSet: Uint8Array, saveState: SaveState): Promise<PersistedChange>;
 
   /**
+   * Replaces the editor's canvas stored with the document.
+   *
+   * @remarks
+   * Rides the edit lane so a save sent after it includes it. Marks the
+   * document dirty when the canvas changed, but adds no undo entry and does
+   * not change exports. Emits `document.changed`.
+   *
+   * @param state - The canvas payload and the format version it is written in.
+   * @returns The document state the write left.
+   */
+  setSceneState(state: SceneState): Promise<WorkspaceDocumentState>;
+
+  /**
    * Saves to the current canonical document.
    *
    * @remarks
@@ -532,6 +546,7 @@ export const workspaceSyncMethods: LaneMethods<WorkspaceSync> = {
   sourceAtlasWeights: true,
   documentState: true,
   persist: true,
+  setSceneState: true,
   save: true,
   saveAs: true,
   releaseRetiredStores: true,

@@ -70,20 +70,27 @@ test("recovers edits made after a previous recovery", async ({ recoveryApp }) =>
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(secondGlyph);
 });
 
-test("reopens a saved document on the glyph it was editing after forced termination", async ({
+test("reopens a saved document on the glyph and canvas it was editing after forced termination", async ({
   recoveryApp,
 }) => {
-  const editor = new EditorDriver(recoveryApp.page);
+  const editor = new EditorDriver(recoveryApp.page, recoveryApp.app);
   await editor.openGlyphByUnicode("41");
   const glyph = await editor.activeGlyph();
   if (!glyph) throw new Error("Expected glyph A to be open before the crash");
+  // Placing the glyph on the canvas is document content: wait until it is recovered.
+  await expect
+    .poll(() => editor.documentState(), { timeout: 20_000 })
+    .toMatchObject({
+      dirty: true,
+    });
+  const before = await editor.canvasText();
 
   const reopened = await recoveryApp.crashAndRecoverWindow(glyph.glyphId);
 
   await waitForEditorReady(reopened, glyph.glyphId);
-  expect(await new EditorDriver(reopened, recoveryApp.app).documentState()).toMatchObject({
-    dirty: false,
-  });
+  const after = new EditorDriver(reopened, recoveryApp.app);
+  expect(await after.canvasText()).toMatchObject({ items: before?.items });
+  expect(await after.documentState()).toMatchObject({ dirty: true });
 });
 
 /** Waits until each of `glyphNames` is in the font, or none is, and the document is dirty or not. */

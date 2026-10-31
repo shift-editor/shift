@@ -139,6 +139,8 @@ import { PageNodeDefinition } from "../nodes/PageNodeDefinition";
 import { Pages } from "../pages/Pages";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { ScenePersistence } from "./persistence/ScenePersistence";
+import type { ScenePersistenceOptions } from "../../types/sceneState";
 import { SelectedPoints } from "./SelectedPoints";
 import { PositionTargets } from "../model/positions/PositionTargets";
 
@@ -148,6 +150,8 @@ interface EditorOptions {
   clipboard: SystemClipboard;
   sessionMode: FontSessionMode;
   nodeDefinitions?: Partial<NodeDefinitionConstructors>;
+  /** Where the canvas is kept between sessions; omit for a canvas that is never stored. */
+  sceneState?: ScenePersistenceOptions;
 }
 
 /**
@@ -202,6 +206,12 @@ export class Editor {
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
+  /**
+   * Keeps text runs and scene nodes with the document, or null when the
+   * session stores no canvas. Restore it once the font has loaded; flush it
+   * before saving.
+   */
+  readonly scenePersistence: ScenePersistence | null;
   readonly text: Text;
   readonly textEditing: TextEditing;
   /** The document's pages and the page the canvas shows. */
@@ -333,6 +343,9 @@ export class Editor {
     this.pages = new Pages(this);
     // A session starts with one page; setup, not an edit.
     this.pages.ensure();
+    this.scenePersistence = options.sceneState
+      ? new ScenePersistence(this.#store, this, options.sceneState)
+      : null;
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectedPoints = computed(
@@ -2508,6 +2521,7 @@ export class Editor {
 
   public destroy() {
     this.#events.emit("destroying");
+    this.scenePersistence?.dispose();
     this.#cursorEffect.dispose();
     this.#multiSourceEditing.dispose();
     this.nodeDefinition("glyph").outlines.dispose();

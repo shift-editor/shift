@@ -13,4 +13,5 @@ pub use document_identity::DocumentIdentity;
 pub use import_pipeline::{ImportBatchProgress, stream_into};
 pub use ledger::{Ledger, LedgerEntry};
 pub use new_workspace::NewWorkspace;
+pub use shift_store::SceneState;
 pub use workspace::{AcquireScope, FontWorkspace, WorkspaceError, WorkspaceSource};

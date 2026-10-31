@@ -10,8 +10,11 @@ import {
   WorkspaceEditCoordinator,
   type WorkspaceApplyStatus,
 } from "@/lib/workspace/WorkspaceEditCoordinator";
-import type { Signal } from "@shift/editor/signals";
+import { computed, type Signal } from "@shift/editor/signals";
+import { workspaceSceneStateStore } from "@/lib/workspace/workspaceSceneStateStore";
 import { WindowEngine } from "@/lib/engine/WindowEngine";
+import { WindowViewMemory } from "@/lib/tabs/WindowViewMemory";
+import { documentViewKey } from "@/lib/workspace/documentViews";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
 
 export interface WorkspaceOptions {
@@ -27,6 +30,7 @@ export class Workspace {
   readonly #engine: WindowEngine;
   readonly #edits: WorkspaceEditCoordinator;
   readonly #documentBridge: WorkspaceDocumentBridge;
+  readonly #viewMemory: WindowViewMemory;
   #connection: Promise<void> | null = null;
 
   readonly font: Font;
@@ -39,10 +43,6 @@ export class Workspace {
     this.#engine = new WindowEngine(options.host.layers, this.#client);
     this.#store = new FontStore({ engine: this.#engine });
     this.#edits = new WorkspaceEditCoordinator(this.#client, this.#store, this.#engine);
-    this.#documentBridge = new WorkspaceDocumentBridge({
-      host: options.host,
-      edits: this.#edits,
-    });
 
     this.font = new Font({
       store: this.#store,
@@ -54,8 +54,21 @@ export class Workspace {
       fontStore: this.#store,
       clipboard: options.clipboard,
       sessionMode: "workspace",
+      sceneState: { store: workspaceSceneStateStore(this.#client, this.#edits) },
+    });
+    this.#documentBridge = new WorkspaceDocumentBridge({
+      host: options.host,
+      edits: this.#edits,
+      flushScene: () => this.#flushScene(),
     });
     this.documentStateCell = this.#client.documentStateCell;
+    const documentStateCell = this.documentStateCell;
+    this.#viewMemory = new WindowViewMemory(this.editor, {
+      keyCell: computed(() => {
+        const state = documentStateCell.value;
+        return state ? documentViewKey(state) : null;
+      }),
+    });
     this.applyStatusCell = this.#edits.applyStatusCell;
 
     registerBuiltInTools(this.editor);
@@ -83,10 +96,24 @@ export class Workspace {
   }
 
   dispose(): void {
+    window.removeEventListener("blur", this.#flushSceneOnLeave);
+    window.removeEventListener("pagehide", this.#flushSceneOnLeave);
+    this.#viewMemory.dispose();
     this.font.dispose();
     this.#documentBridge.dispose();
     this.#engine.dispose();
   }
+
+  /** Writes any canvas or view change still waiting for its quiet period. */
+  #flushScene(): Promise<void> {
+    this.#viewMemory.flush();
+    return this.editor.scenePersistence?.flush() ?? Promise.resolve();
+  }
+
+  // Leaving the window is a fire-and-forget boundary; flush logs its own failures.
+  readonly #flushSceneOnLeave = (): void => {
+    void this.#flushScene();
+  };
 
   async #connect(): Promise<void> {
     try {
@@ -100,6 +127,10 @@ export class Workspace {
       // The font shows once the engine is open: it reads the axes, sources
       // and kerning.
       await this.#edits.open(snapshot);
+      await this.editor.scenePersistence?.restore();
+      this.#viewMemory.restore();
+      window.addEventListener("blur", this.#flushSceneOnLeave);
+      window.addEventListener("pagehide", this.#flushSceneOnLeave);
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

@@ -12,6 +12,7 @@ import type {
   LayerRead,
   Location,
   SaveState,
+  SceneState,
   ShaperFont,
   SlugAtlas,
 } from "@shift/types";
@@ -239,6 +240,14 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       const applied = this.#bridge.workspace.persist(changeSet, saveState);
       this.#atlasCacheRevision = null;
       return { applied, documentState: this.#emitDocumentChanged() };
+    });
+  }
+
+  // Same queue as edits and save, so a save sent after it writes this canvas.
+  setSceneState(state: SceneState): Promise<WorkspaceDocumentState> {
+    return this.#serialize(() => {
+      this.#bridge.workspace.setSceneState(state);
+      return this.#emitDocumentChanged();
     });
   }
 
@@ -776,6 +785,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       axisMappingBases: this.#bridge.workspace.getAxisMappingBases(),
       namedInstances: this.#bridge.workspace.getNamedInstances(),
       languageIds: this.#bridge.workspace.getLanguageIds(),
+      sceneState: this.#bridge.workspace.sceneState(),
     };
   }
 

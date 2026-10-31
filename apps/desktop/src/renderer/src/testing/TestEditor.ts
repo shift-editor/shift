@@ -70,6 +70,7 @@ import {
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
+import { workspaceSceneStateStore } from "@/lib/workspace/workspaceSceneStateStore";
 import type {
   GlyphNode,
   GlyphOutlineTarget,
@@ -258,12 +259,17 @@ export class TestEditor extends Editor implements EditorTestSurface {
   /**
    * Creates a real editor stack with the requested immutable session capability.
    *
-   * @param sessionMode - Presentation and interaction capability under test.
+   * @param sessionMode - Presentation and interaction capability under test; a
+   *   workspace session keeps its canvas in the document as the app does.
    */
   constructor(sessionMode: FontSessionMode = "workspace") {
     const stack = createWorkspaceStack();
     const clipboard = new InMemorySystemClipboard();
-    super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
+    const sceneState =
+      sessionMode === "workspace"
+        ? { store: workspaceSceneStateStore(stack.client, stack.editCoordinator) }
+        : undefined;
+    super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode, sceneState });
     this.#stack = stack;
     this.#clipboard = clipboard;
     this.#reads = {
@@ -290,10 +296,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this;
   }
 
-  /** Opens a saved package through a fresh workspace stack and places one glyph. */
+  /**
+   * Opens a saved package through a fresh workspace stack, restores its
+   * canvas, and opens one glyph as the editor route does.
+   */
   async openSession(sourcePath: string, glyphName: string): Promise<this> {
     await this.#stack.openWorkspace(sourcePath);
     this.selectSource(this.font.defaultSource.id);
+    await this.scenePersistence?.restore();
 
     const record = this.font.recordForName(glyphName as GlyphName);
     if (!record) throw new Error(`Opened package has no ${glyphName} glyph`);
@@ -307,8 +317,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#stack.editCoordinator;
   }
 
-  /** Flushes pending edits, saves to a new target, and adopts it. */
-  saveAs(sourcePath: string): Promise<WorkspaceDocumentState> {
+  /** Flushes pending edits and the canvas, saves to a new target, and adopts it. */
+  async saveAs(sourcePath: string): Promise<WorkspaceDocumentState> {
+    await this.scenePersistence?.flush();
     return this.#stack.editCoordinator.save(sourcePath);
   }
 
@@ -318,10 +329,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   /**
-   * Flushes pending edits and saves to the current target; a document never
-   * saved yet goes to a temporary file, removed on {@link close}.
+   * Flushes pending edits and the canvas, and saves to the current target; a
+   * document never saved yet goes to a temporary file, removed on {@link close}.
    */
   async save(): Promise<WorkspaceDocumentState> {
+    await this.scenePersistence?.flush();
     const state = await this.#stack.editCoordinator.state();
     if (!state?.needsSaveAs) return this.#stack.editCoordinator.save(null);
 
@@ -1557,7 +1569,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async reopen(): Promise<EditorTestSurface> {
-    const glyphName = this.glyphRecord?.name;
+    // The glyph open on the shown page, else one open on another page, as on a page tab.
+    const node =
+      this.glyphNode ?? this.scene.allNodes().find((candidate) => candidate.kind === "glyph");
+    const glyphName = node?.kind === "glyph" ? this.font.recordForId(node.glyphId)?.name : null;
     if (!glyphName) throw new Error("reopen needs an open glyph");
 
     const directory = mkdtempSync(join(tmpdir(), "shift-reopen-"));

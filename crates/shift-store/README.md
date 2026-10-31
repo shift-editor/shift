@@ -16,6 +16,7 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 - `DocumentMetadata` contains the stable `DocumentId` and current `saved_commit_id`. A raw copy preserves both; Save As mints a new document identity and saved commit.
 - `StoreReader` opens a document with its recovery overlay, or a working store, read-only beside the process that writes it. It installs the same merged views, then sets `query_only`; it never creates, migrates, or reconciles anything. The renderer's preload reads layers through it.
 - Canonical documents never contain app-local `workspace_state` or recovery rows. Working databases retain WAL + NORMAL and their revision/source-binding row.
+- `scene_state` holds the editor's canvas as one opaque row (`version`, `payload`); Rust stores it and never parses it. It is document content, so Save, Save As, and recovery carry it, unlike `workspace_state`. `ShiftStore::set_scene_state` writes it to the recovery overlay (documents) or the working table, marks the document unsaved without advancing the recovery or workspace revision that addresses derived font caches, and does nothing when the stored value is identical. Exports ignore it.
 
 ## Recovery boundary
 
@@ -100,5 +101,6 @@ src/
     tests.rs        # integrated SQLite layer behavior
   write_mode.rs     # shared insert/upsert policy for canonical write paths
   change_set.rs     # transactional reversible replacements and touched-layer writes
+  scene_state.rs    # opaque editor canvas row; writes mark unsaved without a font revision
   workspace_state.rs
 ```

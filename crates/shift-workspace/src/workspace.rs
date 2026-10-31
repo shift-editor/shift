@@ -13,7 +13,8 @@ use shift_font::{
     AppliedIntents, FontChangeSet, FontIntentSet, GlyphId, GlyphLayer, LayerId, error::CoreError,
 };
 use shift_store::{
-    DocumentMetadata, RecoveryState, SaveState, ShiftStore, WorkspaceSourceKind, WorkspaceState,
+    DocumentMetadata, RecoveryState, SaveState, SceneState, SceneStateWrite, ShiftStore,
+    WorkspaceSourceKind, WorkspaceState,
 };
 
 use crate::document_identity::{DocumentIdentity, document_identity};
@@ -72,6 +73,17 @@ pub struct FontWorkspace {
     source: WorkspaceSource,
     store: ShiftStore,
     ledger: Ledger,
+    /// Whether the scene state changed since the last save. The ledger only
+    /// knows font history, so an undo back to the saved font must not mark
+    /// the document saved while this is set.
+    scene: SceneSaveState,
+}
+
+/// Whether the scene state differs from what was last saved.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SceneSaveState {
+    Saved,
+    Unsaved,
 }
 
 impl FontWorkspace {
@@ -86,6 +98,7 @@ impl FontWorkspace {
             source,
             store,
             ledger: Ledger::new(save_state),
+            scene: SceneSaveState::Saved,
         }
     }
 
@@ -192,6 +205,7 @@ impl FontWorkspace {
             WorkspaceSource::Document { .. } => {
                 self.store.save_document()?;
                 self.ledger.mark_saved();
+                self.scene = SceneSaveState::Saved;
                 Ok(())
             }
             WorkspaceSource::Untitled | WorkspaceSource::Imported { .. } => {
@@ -219,6 +233,7 @@ impl FontWorkspace {
             path: document_path.to_path_buf(),
         };
         self.ledger = Ledger::default();
+        self.scene = SceneSaveState::Saved;
 
         Ok(metadata)
     }
@@ -233,6 +248,32 @@ impl FontWorkspace {
         self.store.discard_recovery()?;
         self.session = EngineSession::open_directory(self.store.load_font_directory()?);
         self.ledger = Ledger::default();
+        self.scene = SceneSaveState::Saved;
+        Ok(())
+    }
+
+    /// Returns the editor's stored scene state, or `None` when none was written.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the scene state cannot be read.
+    pub fn scene_state(&self) -> Result<Option<SceneState>, WorkspaceError> {
+        self.store.scene_state().map_err(WorkspaceError::from)
+    }
+
+    /// Replaces the editor's scene state.
+    ///
+    /// A changed scene state marks the document unsaved but is not a font
+    /// edit: it adds no undo entry, does not advance the font revision, and
+    /// is not exported. Writing the stored scene state again does nothing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceError::Store`] when the scene state cannot be written.
+    pub fn set_scene_state(&mut self, state: &SceneState) -> Result<(), WorkspaceError> {
+        if self.store.set_scene_state(state)? == SceneStateWrite::Written {
+            self.scene = SceneSaveState::Unsaved;
+        }
         Ok(())
     }
 
@@ -420,6 +461,15 @@ impl FontWorkspace {
         self.ledger.discard_redo();
     }
 
+    /// Keeps a change that returns the font to the saved font unsaved while
+    /// the scene state has unsaved changes.
+    fn with_scene(&self, font: SaveState) -> SaveState {
+        match self.scene {
+            SceneSaveState::Saved => font,
+            SceneSaveState::Unsaved => SaveState::Unsaved,
+        }
+    }
+
     fn replay(
         &mut self,
         entry: &LedgerEntry,
@@ -444,6 +494,7 @@ impl FontWorkspace {
         staged: StagedEdit,
         save_state: SaveState,
     ) -> Result<AppliedIntents, WorkspaceError> {
+        let save_state = self.with_scene(save_state);
         self.store
             .apply_change_set_with_font(staged.changes(), staged.font(), save_state)?;
         Ok(self.session.commit(staged))

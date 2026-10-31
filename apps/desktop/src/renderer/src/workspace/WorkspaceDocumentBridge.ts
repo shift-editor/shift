@@ -6,16 +6,20 @@ import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoor
 interface WorkspaceDocumentBridgeOptions {
   readonly host: ShiftHost;
   readonly edits: WorkspaceEditCoordinator;
+  /** Writes a pending canvas change; runs before every state read and save. */
+  readonly flushScene: () => Promise<void>;
 }
 
 export class WorkspaceDocumentBridge {
   readonly #host: ShiftHost;
   readonly #edits: WorkspaceEditCoordinator;
+  readonly #flushScene: () => Promise<void>;
   #requests: ChannelServer<DocumentEventMap> | null = null;
 
   constructor(options: WorkspaceDocumentBridgeOptions) {
     this.#host = options.host;
     this.#edits = options.edits;
+    this.#flushScene = options.flushScene;
   }
 
   async connect(): Promise<void> {
@@ -32,8 +36,16 @@ export class WorkspaceDocumentBridge {
     this.#requests = serveChannel<DocumentCallMap, DocumentEventMap>(
       domPortTransport(await port.received),
       {
-        "document.state": () => this.#edits.state(),
-        "document.save": ({ path }) => this.#edits.save(path),
+        // Main reads state before closing or quitting, so a pending canvas
+        // change is written (and makes the document dirty) before it decides.
+        "document.state": async () => {
+          await this.#flushScene();
+          return this.#edits.state();
+        },
+        "document.save": async ({ path }) => {
+          await this.#flushScene();
+          return this.#edits.save(path);
+        },
         "document.export": ({ path }) => this.#edits.export(path),
         "document.releaseStore": () => this.#edits.releaseStore(),
       },

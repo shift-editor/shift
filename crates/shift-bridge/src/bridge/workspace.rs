@@ -196,6 +196,24 @@ pub(crate) trait NativeWorkspace {
   /// Fails when no workspace is open.
   fn discard_redo(&mut self) -> Result<(), NativeWorkspaceError>;
 
+  /// The editor's canvas as stored with the document, or `None` when none
+  /// was written.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no workspace is open or its store cannot be read.
+  fn scene_state(&self) -> Result<Option<SceneState>, NativeWorkspaceError>;
+
+  /// Replaces the editor's stored canvas and returns the document state.
+  ///
+  /// A changed canvas marks the document unsaved but is not a font edit: no
+  /// undo entry, no font revision, nothing exported.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no workspace is open or the write fails.
+  fn set_scene_state(&mut self, state: SceneState) -> Result<DocumentState, NativeWorkspaceError>;
+
   /// The authored layers `layer_ids` name, in request order, as accepted
   /// workspace state. Components are not resolved, so a layer with a broken
   /// component reference stays readable.
@@ -344,6 +362,38 @@ pub(crate) struct DocumentState {
   pub dirty: bool,
   /// Whether saving needs a path: the workspace is untitled or imported.
   pub needs_save_as: bool,
+}
+
+/// The editor's canvas as stored with the document: an opaque payload in the
+/// format `version` names. The bridge never reads the payload.
+#[derive(Clone, Debug, PartialEq, Eq, Pack)]
+pub(crate) struct SceneState {
+  pub version: u32,
+  pub payload: String,
+}
+
+impl TryFrom<shift_workspace::SceneState> for SceneState {
+  type Error = BridgeError;
+
+  fn try_from(state: shift_workspace::SceneState) -> BridgeResult<Self> {
+    let version = u32::try_from(state.version).map_err(|_| BridgeError::InvalidInput {
+      kind: "scene state version",
+      value: state.version.to_string(),
+    })?;
+    Ok(Self {
+      version,
+      payload: state.payload,
+    })
+  }
+}
+
+impl From<SceneState> for shift_workspace::SceneState {
+  fn from(state: SceneState) -> Self {
+    Self {
+      version: i64::from(state.version),
+      payload: state.payload,
+    }
+  }
 }
 
 /// A Shift document's identity, read without opening it.
@@ -551,6 +601,16 @@ impl NativeWorkspace for Bridge {
   fn discard_redo(&mut self) -> Result<(), NativeWorkspaceError> {
     self.workspace_mut()?.discard_redo();
     Ok(())
+  }
+
+  fn scene_state(&self) -> Result<Option<SceneState>, NativeWorkspaceError> {
+    let state = self.workspace()?.scene_state()?;
+    Ok(state.map(SceneState::try_from).transpose()?)
+  }
+
+  fn set_scene_state(&mut self, state: SceneState) -> Result<DocumentState, NativeWorkspaceError> {
+    self.workspace_mut()?.set_scene_state(&state.into())?;
+    Ok(self.document_state_snapshot()?)
   }
 
   fn read_layers(

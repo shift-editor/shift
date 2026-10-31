@@ -119,6 +119,7 @@ export type {
   AppliedChange,
   FontReplacement,
   SaveState,
+  SceneState,
   ApplyBooleanOp,
   MoveAnchors,
   MovePoints,

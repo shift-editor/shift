@@ -2,6 +2,7 @@ import type {
   StoredWorkspaceSnapshot,
   AppliedChange,
   SaveState,
+  SceneState,
   FontIntent,
   GlyphId,
   GlyphLayerSnapshot,
@@ -483,6 +484,17 @@ export class WorkspaceEditCoordinator {
   discardRedo(): Promise<void> {
     this.#engine.discardRedo();
     return Promise.resolve();
+  }
+
+  /**
+   * Stores the editor's canvas behind every queued edit and ahead of any
+   * later save. The canvas is not a font edit: no pending edit, no authored
+   * revision, no undo entry.
+   *
+   * @returns the document state, dirty when the canvas changed.
+   */
+  setSceneState(state: SceneState): Promise<WorkspaceDocumentState> {
+    return this.#withFlush(() => this.#session.setSceneState(state));
   }
 
   /** Reads document state behind every queued and in-flight edit. */

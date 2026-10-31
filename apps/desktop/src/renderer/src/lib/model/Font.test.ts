@@ -52,6 +52,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   namedInstances: [],
   languageIds: null,
   kerning: { groups: [], sources: [] },
+  sceneState: null,
 };
 
 describe("Font projects the workspace snapshot", () => {

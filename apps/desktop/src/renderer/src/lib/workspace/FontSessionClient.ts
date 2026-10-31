@@ -31,6 +31,7 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
+  SceneState,
   ShaperFont,
   SlugAtlas,
 } from "@shift/types";
@@ -114,6 +115,17 @@ export class FontSessionClient {
     const { applied, documentState } = await this.#workspace().persist(changeSet, saveState);
     this.#setDocumentState(documentState);
     return applied;
+  }
+
+  /**
+   * Replaces the canvas stored with the document.
+   *
+   * @returns the document state, dirty when the canvas changed.
+   */
+  async setSceneState(state: SceneState): Promise<WorkspaceDocumentState> {
+    await this.connect();
+
+    return this.#setDocumentState(await this.#workspace().setSceneState(state));
   }
 
   async snapshot(): Promise<StoredWorkspaceSnapshot | null> {

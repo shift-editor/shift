@@ -130,6 +130,7 @@ export type {
   RenameKerningGroup,
   ReverseContour,
   SaveState,
+  SceneState,
   SetAxisMappings,
   SetComponentAlignment,
   SetComponentTransforms,

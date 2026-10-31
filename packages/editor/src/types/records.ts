@@ -1,6 +1,6 @@
 import type { GlyphId, NodeId, RunId, SelectableId, ShiftId } from "@shift/types";
 import type { EditingId } from "./editing";
-import type { GlyphNode, TextRunNode } from "./node";
+import type { GlyphNode, PageNode, TextRunNode } from "./node";
 import type { SelectionId } from "./object";
 import type { TextEditingId, TextEditingRecord, TextRunRecord } from "./text";
 
@@ -21,7 +21,9 @@ export type GlyphNodeRecord = GlyphNode & ShiftRecord<"node", NodeId>;
 
 export type TextRunNodeRecord = TextRunNode & ShiftRecord<"node", NodeId>;
 
-export type ShiftNodeRecord = GlyphNodeRecord | TextRunNodeRecord;
+export type PageNodeRecord = PageNode & ShiftRecord<"node", NodeId>;
+
+export type ShiftNodeRecord = GlyphNodeRecord | TextRunNodeRecord | PageNodeRecord;
 
 export type SelectionRecord = ShiftRecord<"selection", SelectionId> & {
   readonly scope: "session";

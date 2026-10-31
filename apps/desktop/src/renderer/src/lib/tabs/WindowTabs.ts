@@ -31,6 +31,17 @@ export type WindowLocation =
   | { readonly kind: "glyph"; readonly glyphId: GlyphId }
   | { readonly kind: "canvas"; readonly pageId: NodeId | null };
 
+/** A window's tabs as view memory keeps them: the page and glyph tabs in order, and the overview's page. */
+export interface WindowTabsView {
+  readonly tabs: readonly StoredWindowTab[];
+  readonly selectionPageId: NodeId | null;
+}
+
+/** A page or glyph tab without its session-only id. */
+export type StoredWindowTab =
+  | { readonly kind: "page"; readonly pageId: NodeId }
+  | { readonly kind: "glyph"; readonly pageId: NodeId; readonly glyphId: GlyphId };
+
 /** The result of opening a glyph in a tab. */
 export interface OpenedGlyph {
   /** The edited glyph node, or null when the glyph could not be shown. */
@@ -199,6 +210,59 @@ export class WindowTabs {
     this.#tabs.set(tabs.filter((candidate) => candidate.id !== tabId));
     if (tab.kind === "glyph") this.#editor.pages.discardGlyphPage(tab.pageId);
     return neighbour;
+  }
+
+  /** The tabs as view memory keeps them; the pinned overview is implied. */
+  view(): WindowTabsView {
+    const tabs: StoredWindowTab[] = [];
+    for (const tab of this.#tabs.peek()) {
+      switch (tab.kind) {
+        case "glyphs":
+          continue;
+        case "page":
+          tabs.push({ kind: "page", pageId: tab.pageId });
+          continue;
+        case "glyph":
+          tabs.push({ kind: "glyph", pageId: tab.pageId, glyphId: tab.glyphId });
+          continue;
+      }
+    }
+
+    return { tabs, selectionPageId: this.#selectionPageId };
+  }
+
+  /**
+   * Reopens the tabs a window had, after the overview.
+   *
+   * @remarks
+   * A tab whose page is gone, or whose glyph is no longer in the font, is
+   * dropped and logged. Replaces any tabs opened since the window started.
+   *
+   * @returns the tabs dropped.
+   */
+  restore(view: WindowTabsView): readonly StoredWindowTab[] {
+    const scene = this.#editor.scene;
+    const font = this.#editor.font;
+    const kept: WindowTab[] = [GLYPHS_TAB];
+    const dropped: StoredWindowTab[] = [];
+    for (const stored of view.tabs) {
+      const pageExists = scene.nodeOfKind(stored.pageId, "page") !== null;
+      const glyphExists = stored.kind === "page" || font.recordForId(stored.glyphId) !== null;
+      if (!pageExists || !glyphExists) {
+        dropped.push(stored);
+        continue;
+      }
+
+      kept.push({ ...stored, id: this.#mintId() });
+    }
+    if (dropped.length > 0) console.info("dropped window tabs that no longer resolve", dropped);
+
+    this.#tabs.set(kept);
+    const selectionPage = view.selectionPageId
+      ? scene.nodeOfKind(view.selectionPageId, "page")
+      : null;
+    if (selectionPage) this.#selectionPageId = selectionPage.id;
+    return dropped;
   }
 
   #selectionPage(): PageNode {
