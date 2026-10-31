@@ -408,6 +408,9 @@ fn parse_feature_source(
 
 #[cfg(test)]
 mod shape_tests;
+
+#[cfg(test)]
+mod positioning_tests;
 #[cfg(test)]
 mod tests;
 
