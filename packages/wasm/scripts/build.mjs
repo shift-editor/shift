@@ -26,6 +26,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { withLock } from "../../../scripts/target-lock.mjs";
 import { writeProtocol } from "./protocol.mjs";
 
 const root = resolve(import.meta.dirname, "../../..");
@@ -72,18 +73,22 @@ const variants = typesOnly
 
 // Compiles run in turn: they share one target directory, so later variants
 // reuse the crates the first one compiled. Each variant's optimisation then
-// runs while the next one compiles.
-const finishing = [];
-for (const variant of variants) {
-  const staged = await compile(variant.folder, variant.features);
-  const out = join(src, variant.folder);
-  mkdirSync(out, { recursive: true });
-  writeDeclarations(staged, out, variant.file);
-  if (!typesOnly) finishing.push(finish(staged, out, variant.file));
-}
-// The generated classes over the modules' request exports.
-if (!referenceOnly) writeProtocol();
-await Promise.all(finishing);
+// runs while the next one compiles. The build reads the module and staging
+// folders it wrote under target/, which other checkouts sharing target/ write
+// too, so it holds a lock from the first compile to the last install.
+await withLock(join(root, "target"), `wasm-${profile}`, async () => {
+  const finishing = [];
+  for (const variant of variants) {
+    const staged = await compile(variant.folder, variant.features);
+    const out = join(src, variant.folder);
+    mkdirSync(out, { recursive: true });
+    writeDeclarations(staged, out, variant.file);
+    if (!typesOnly) finishing.push(finish(staged, out, variant.file));
+  }
+  // The generated classes over the modules' request exports.
+  if (!referenceOnly) await writeProtocol();
+  await Promise.all(finishing);
+});
 
 /**
  * Compiles shift-wasm with `features` and writes the wasm-bindgen output to a

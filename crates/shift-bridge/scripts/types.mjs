@@ -6,10 +6,10 @@
 // The check uses its own target directory: napi-derive writes the definitions
 // only when NAPI_TYPE_DEF_TMP_FOLDER is set, so a check without it in a shared
 // directory would leave a crate up to date with no fresh definitions.
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { generateTypeDef } from "@napi-rs/cli";
+import { cargo, withLock } from "../../../scripts/target-lock.mjs";
 
 const crate = resolve(import.meta.dirname, "..");
 const root = resolve(crate, "../..");
@@ -19,21 +19,24 @@ const typeDefDir = join(targetDir, "type-defs");
 const napiCrates = ["shift-bridge", "shift-wire"];
 
 mkdirSync(typeDefDir, { recursive: true });
-const cargo = (args) =>
-  execFileSync("cargo", [...args, "--target-dir", targetDir], {
+const check = (args) =>
+  cargo([...args, "--target-dir", targetDir], {
     cwd: root,
-    stdio: "inherit",
     env: { ...process.env, NAPI_TYPE_DEF_TMP_FOLDER: typeDefDir },
   });
-// A crate that is up to date but has no definitions file would contribute
-// nothing; clean it so the check expands its macros again.
-const missing = napiCrates.filter((name) => !existsSync(join(typeDefDir, name)));
-if (missing.length > 0) cargo(["clean", ...missing.flatMap((name) => ["-p", name])]);
-cargo(["check", "-p", "shift-bridge"]);
+// Other checkouts sharing target/ check into the same directory, so the
+// check and the read of its definitions hold one lock.
+await withLock(join(root, "target"), "napi-types", async () => {
+  // A crate that is up to date but has no definitions file would contribute
+  // nothing; clean it so the check expands its macros again.
+  const missing = napiCrates.filter((name) => !existsSync(join(typeDefDir, name)));
+  if (missing.length > 0) await check(["clean", ...missing.flatMap((name) => ["-p", name])]);
+  await check(["check", "-p", "shift-bridge"]);
 
-const { dts } = await generateTypeDef({
-  typeDefDir,
-  configDtsHeaderFile: "dts-header.d.ts",
-  cwd: crate,
+  const { dts } = await generateTypeDef({
+    typeDefDir,
+    configDtsHeaderFile: "dts-header.d.ts",
+    cwd: crate,
+  });
+  writeFileSync(join(crate, "index.d.ts"), dts);
 });
-writeFileSync(join(crate, "index.d.ts"), dts);
