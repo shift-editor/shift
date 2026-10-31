@@ -105,56 +105,24 @@ describe("LayerReader", () => {
     return pointId;
   }
 
-  it("reads layers as the workspace writes them", () => {
-    const { layerId } = createGlyph("A");
-    const contourId = mintId("contour");
-    bridge.apply([{ kind: "addContour", addContour: { layerId, contourId, closed: false } }]);
-    const first = addPoint(layerId, contourId, 10);
-
-    const reader = LayerReader.openWorkingStore(storePath);
-    const bytes = reader.loadLayers([layerId]);
-    // A MessagePack array of one named-field layer.
-    expect(bytes[0]).toBe(0x91);
-    expect(text(bytes)).toContain(layerId);
-    expect(text(bytes)).toContain(first);
-
-    const second = addPoint(layerId, contourId, 20);
-    expect(text(reader.loadLayers([layerId]))).toContain(second);
-  });
-
-  it("answers which glyphs a composite uses and which composites use a glyph", () => {
-    const base = createGlyph("base");
-    const composite = createGlyph("composite");
-    bridge.apply([
-      {
-        kind: "addComponent",
-        addComponent: {
-          layerId: composite.layerId,
-          componentId: mintId("component"),
-          baseGlyphId: base.glyphId,
-        },
-      },
-    ]);
-
-    const reader = LayerReader.openWorkingStore(storePath);
-    expect(reader.componentClosure([composite.glyphId]).sort()).toEqual(
-      [base.glyphId, composite.glyphId].sort(),
-    );
-    expect(reader.dependents([base.layerId])).toEqual([composite.glyphId]);
-  });
-
   it("answers a StoreReader request with layers as one blob", () => {
     const { layerId } = createGlyph("A");
     const contourId = mintId("contour");
     bridge.apply([{ kind: "addContour", addContour: { layerId, contourId, closed: false } }]);
     const point = addPoint(layerId, contourId, 10);
 
-    const reply = ask(LayerReader.openWorkingStore(storePath), "layers", [layerId]);
+    const reader = LayerReader.openWorkingStore(storePath);
+    const reply = ask(reader, "layers", [layerId]);
 
     expect(reply.numbers).toEqual([1, 0]);
     expect(reply.blobs).toHaveLength(1);
+    // A MessagePack array of one named-field layer.
     expect(reply.blobs[0][0]).toBe(0x91);
+    expect(text(reply.blobs[0])).toContain(layerId);
     expect(text(reply.blobs[0])).toContain(point);
+
+    const second = addPoint(layerId, contourId, 20);
+    expect(text(ask(reader, "layers", [layerId]).blobs[0])).toContain(second);
   });
 
   it("answers bases without the roots and only direct composites", () => {
@@ -185,8 +153,11 @@ describe("LayerReader", () => {
     expect(ask(reader, "basesOf", []).numbers).toEqual([0, 0]);
   });
 
-  it("rejects ids that are not layer ids", () => {
-    const reader = LayerReader.openWorkingStore(storePath);
-    expect(() => reader.loadLayers(["not an id"])).toThrow(/layer ID/);
+  it("replies with the store's error for a layer it does not hold", () => {
+    const reply = ask(LayerReader.openWorkingStore(storePath), "layers", ["not a layer"]);
+
+    const [ok, kind, detail] = reply.numbers;
+    expect([ok, kind]).toEqual([0, 1]);
+    expect(reply.names[detail]).toMatch(/not a layer/);
   });
 });

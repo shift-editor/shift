@@ -5,10 +5,7 @@ use shift_font as font;
 
 use crate::StoreError;
 use crate::connection::configure_common;
-use crate::layer::{
-    bases_of_from_conn, composites_of_from_conn, dependent_glyph_ids_for_layers_from_conn,
-    load_glyph_layers_from_conn, referenced_glyph_closure_from_conn,
-};
+use crate::layer::{bases_of_from_conn, composites_of_from_conn, load_glyph_layers_from_conn};
 use crate::recovery::attach_merged_views;
 use crate::schema;
 
@@ -69,30 +66,6 @@ impl StoreReader {
         layer_ids: &[font::LayerId],
     ) -> Result<Vec<font::GlyphLayer>, StoreError> {
         self.read(|conn| load_glyph_layers_from_conn(conn, layer_ids))
-    }
-
-    /// As [`crate::ShiftStore::referenced_glyph_closure`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StoreError::Sqlite`] when a read fails.
-    pub fn referenced_glyph_closure(
-        &self,
-        roots: impl IntoIterator<Item = font::GlyphId>,
-    ) -> Result<Vec<font::GlyphId>, StoreError> {
-        self.read(|conn| referenced_glyph_closure_from_conn(conn, roots))
-    }
-
-    /// As [`crate::ShiftStore::dependent_glyph_ids_for_layers`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StoreError::Sqlite`] when the read fails.
-    pub fn dependent_glyph_ids_for_layers(
-        &self,
-        layer_ids: &[font::LayerId],
-    ) -> Result<Vec<font::GlyphId>, StoreError> {
-        self.read(|conn| dependent_glyph_ids_for_layers_from_conn(conn, layer_ids))
     }
 
     /// As [`crate::ShiftStore::bases_of`].

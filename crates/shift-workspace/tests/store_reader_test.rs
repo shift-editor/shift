@@ -89,13 +89,11 @@ fn a_reader_answers_component_questions_as_the_writer_does() {
 
     let roots: Vec<GlyphId> = composites.iter().map(|glyph| glyph.id()).collect();
     assert_eq!(
-        reader
-            .referenced_glyph_closure(roots.iter().copied())
-            .unwrap(),
-        workspace.store().referenced_glyph_closure(roots).unwrap()
+        reader.bases_of(&roots).unwrap(),
+        workspace.store().bases_of(&roots).unwrap()
     );
 
-    let base_layers: Vec<_> = composites
+    let bases: Vec<GlyphId> = composites
         .iter()
         .flat_map(|glyph| glyph.layers().values())
         .flat_map(|layer| {
@@ -103,11 +101,19 @@ fn a_reader_answers_component_questions_as_the_writer_does() {
                 .components_iter()
                 .map(shift_font::Component::base_glyph_id)
         })
-        .filter_map(|base| workspace.font().glyph(base))
+        .collect();
+    let base_layers: Vec<_> = bases
+        .iter()
+        .filter_map(|base| workspace.font().glyph(*base))
         .flat_map(Glyph::layer_ids)
         .collect();
+    let composites_of = reader.composites_of(&bases).unwrap();
     assert_eq!(
-        reader.dependent_glyph_ids_for_layers(&base_layers).unwrap(),
+        composites_of,
+        workspace.store().composites_of(&bases).unwrap()
+    );
+    assert_eq!(
+        composites_of,
         workspace
             .store()
             .dependent_glyph_ids_for_layers(&base_layers)

@@ -151,9 +151,7 @@ impl EngineSession {
         let mut closure: BTreeSet<GlyphId> = roots.into_iter().collect();
         let mut frontier: Vec<GlyphId> = closure.iter().copied().collect();
         while !frontier.is_empty() {
-            let persisted = source
-                .component_closure(&frontier)
-                .map_err(LoadError::Source)?;
+            let persisted = source.bases_of(&frontier).map_err(LoadError::Source)?;
             let loaded = self.font.component_glyph_ids_of_glyphs(&frontier);
             // `insert` is true only for a glyph not seen yet.
             frontier = persisted
@@ -391,9 +389,14 @@ impl EngineSession {
             return Ok(BTreeSet::new());
         }
         let mut dependents = self.font.dependent_glyph_ids(layer_ids);
+        let owners: BTreeSet<GlyphId> = layer_ids
+            .iter()
+            .filter_map(|layer_id| self.font.glyph_id_by_layer(*layer_id))
+            .collect();
+        let owners: Vec<GlyphId> = owners.into_iter().collect();
         // Loaded composites may use the glyph through edits not persisted
         // yet, so the source's answer only adds to the font's.
-        dependents.extend(source.dependents(layer_ids).map_err(LoadError::Source)?);
+        dependents.extend(source.composites_of(&owners).map_err(LoadError::Source)?);
         Ok(dependents)
     }
 

@@ -6,15 +6,14 @@
 //! preload passes each encoded request to [`LayerReader::request`] unchanged.
 
 use napi::Env;
-use napi::bindgen_prelude::{Buffer, BufferSlice, Float64Array, Float64ArraySlice, Uint8ArraySlice};
+use napi::bindgen_prelude::{BufferSlice, Float64Array, Float64ArraySlice, Uint8ArraySlice};
 use napi_derive::napi;
 use pack::{Bytes, Packed};
 use shift_engine::{StoreReadError, StoreReader, store_reader_request};
 use shift_font::{GlyphId, LayerId};
 use shift_store::StoreReader as StoreFiles;
 
-use crate::errors::{BridgeError, BridgeResult};
-use crate::input::parse_id_list;
+use crate::errors::BridgeError;
 
 /// A [`StoreReader`] reply: its numbers, and its blobs, the last of them the
 /// names it uses.
@@ -60,37 +59,6 @@ impl LayerReader {
     Ok(Self {
       reader: Some(reader),
     })
-  }
-
-  /// The content of `layer_ids` as one MessagePack array of named-field
-  /// layers, the encoding the engine decodes.
-  ///
-  /// # Errors
-  ///
-  /// Fails on a malformed or unknown layer id, and when a layer cannot be read or decoded.
-  #[napi]
-  pub fn load_layers(&self, layer_ids: Vec<String>) -> napi::Result<Buffer> {
-    Ok(self.encoded_layers(&layer_ids)?.into())
-  }
-
-  /// `glyph_ids` plus every glyph their components use, transitively.
-  ///
-  /// # Errors
-  ///
-  /// Fails on a malformed glyph id or when the component references cannot be read.
-  #[napi]
-  pub fn component_closure(&self, glyph_ids: Vec<String>) -> napi::Result<Vec<String>> {
-    Ok(self.closure(&glyph_ids)?)
-  }
-
-  /// Glyphs with a component of a glyph that owns one of `layer_ids`.
-  ///
-  /// # Errors
-  ///
-  /// Fails on a malformed layer id or when the component references cannot be read.
-  #[napi]
-  pub fn dependents(&self, layer_ids: Vec<String>) -> napi::Result<Vec<String>> {
-    Ok(self.dependent_glyphs(&layer_ids)?)
   }
 
   /// Answers one [`StoreReader`] request, as the engine's `StoreReaderClient`
@@ -168,30 +136,5 @@ impl LayerReader {
   /// The store, for a [`StoreReader`] method.
   fn open(&self) -> Result<&StoreFiles, StoreReadError> {
     self.reader.as_ref().ok_or(StoreReadError::Closed)
-  }
-
-  fn reader(&self) -> BridgeResult<&StoreFiles> {
-    self.reader.as_ref().ok_or(BridgeError::ReaderClosed)
-  }
-
-  fn encoded_layers(&self, layer_ids: &[String]) -> BridgeResult<Vec<u8>> {
-    let layers = self
-      .reader()?
-      .load_glyph_layers(&parse_id_list::<LayerId>(layer_ids)?)?;
-    Ok(rmp_serde::to_vec_named(&layers)?)
-  }
-
-  fn closure(&self, glyph_ids: &[String]) -> BridgeResult<Vec<String>> {
-    let closure = self
-      .reader()?
-      .referenced_glyph_closure(parse_id_list::<GlyphId>(glyph_ids)?)?;
-    Ok(closure.iter().map(ToString::to_string).collect())
-  }
-
-  fn dependent_glyphs(&self, layer_ids: &[String]) -> BridgeResult<Vec<String>> {
-    let dependents = self
-      .reader()?
-      .dependent_glyph_ids_for_layers(&parse_id_list::<LayerId>(layer_ids)?)?;
-    Ok(dependents.iter().map(ToString::to_string).collect())
   }
 }

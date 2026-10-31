@@ -15,7 +15,7 @@ import {
 } from "@shift/editor/model";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { FontEngine, KerningPlace } from "@shift/editor/types";
-import { engineLayerSource } from "./engineLayerSource";
+import { engineStoreRequest } from "./engineStoreRequest";
 
 /** Which of the engine's reads a change may have changed. */
 interface ChangedReads {
@@ -109,7 +109,7 @@ export class WindowEngine implements FontEngine {
       // its source can follow the current reader.
       const session = EngineSession.open(
         directory,
-        engineLayerSource(this.#layers, () => this.#reader()),
+        engineStoreRequest(this.#layers, () => this.#reader()),
       );
       this.#close();
       this.#opened = { session, reader, location };

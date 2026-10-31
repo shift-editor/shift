@@ -35,7 +35,8 @@ import {
   type WorkspaceSnapshot,
 } from "../../shared/workspace/protocol";
 import { loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
-import { engineLayerSource } from "../../renderer/src/lib/engine/engineLayerSource";
+import { engineStoreRequest } from "../../renderer/src/lib/engine/engineStoreRequest";
+import { storeReader } from "@shift/wasm/store-reader";
 import { WorkspaceHost } from "./WorkspaceHost";
 
 type ShellChannel = Channel<ShellCallMap, ShellEventMap>;
@@ -150,7 +151,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const { EngineSession } = await loadEngine();
     const session = EngineSession.open(
       directory,
-      engineLayerSource(layerReaders, () => reader),
+      engineStoreRequest(layerReaders, () => reader),
     );
     engines.set(sync, { session, reader, location });
     return session;
@@ -402,10 +403,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(location?.kind).toBe("working");
     const layers = layerReaderHost();
     const reader = layers.open(location!);
-    expect(new TextDecoder().decode(layers.load(reader, [glyph.layerId]))).toContain(glyph.layerId);
+    const store = storeReader((method, numbers, blobs) =>
+      layers.request(reader, method, numbers, blobs),
+    );
+    expect(new TextDecoder().decode(store.layers([glyph.layerId]))).toContain(glyph.layerId);
 
     layers.close(reader);
-    expect(() => layers.load(reader, [glyph.layerId])).toThrow(/no layer reader/);
+    expect(() => store.layers([glyph.layerId])).toThrow(/no layer reader/);
   });
 
   it("keeps the store Save As moves off until the window's reader follows", async () => {
@@ -438,9 +442,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
     const layers = layerReaderHost();
     const reader = layers.open(location!);
-    expect(new TextDecoder().decode(layers.load(reader, [unsaved.layerId]))).toContain(
-      unsaved.layerId,
+    const store = storeReader((method, numbers, blobs) =>
+      layers.request(reader, method, numbers, blobs),
     );
+    expect(new TextDecoder().decode(store.layers([unsaved.layerId]))).toContain(unsaved.layerId);
   });
 
   it("reads selected retained glyph geometry without authored state", async () => {

@@ -250,15 +250,20 @@ export interface LayerReaderHost {
    */
   open: (location: FontStoreLocation) => number;
   /**
-   * The content of `layerIds` as one MessagePack array of named-field layers.
+   * Answers one request of shift-engine's `StoreReader` protocol, as the
+   * engine encoded it, from the reader's store; the window passes it on
+   * unchanged. A store failure comes back in the reply, as the method's error.
    *
-   * @throws {Error} for an unknown reader, an unknown layer, or a layer that cannot be decoded.
+   * @param blobs - The request's blobs, the last of them the names it uses.
+   * @returns The reply's numbers and blobs, the last of them the names it uses.
+   * @throws {Error} for an unknown reader.
    */
-  load: (reader: number, layerIds: readonly string[]) => Uint8Array;
-  /** `glyphIds` plus every glyph their components use, transitively. */
-  componentClosure: (reader: number, glyphIds: readonly string[]) => string[];
-  /** Glyphs with a component of a glyph that owns one of `layerIds`. */
-  dependents: (reader: number, layerIds: readonly string[]) => string[];
+  request: (
+    reader: number,
+    method: number,
+    numbers: Float64Array,
+    blobs: readonly Uint8Array[],
+  ) => { numbers: Float64Array; blobs: Uint8Array[] };
   /** Releases a reader; unknown handles are ignored. */
   close: (reader: number) => void;
 }

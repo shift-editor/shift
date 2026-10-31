@@ -27,6 +27,10 @@
     "./protocol": {
       "types": "./src/generated-protocol/index.ts",
       "import": "./src/generated-protocol/index.ts"
+    },
+    "./store-reader": {
+      "types": "./src/storeReader.ts",
+      "import": "./src/storeReader.ts"
     }
   },
   "scripts": {

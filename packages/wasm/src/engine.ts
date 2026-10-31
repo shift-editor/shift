@@ -88,7 +88,8 @@ export {
   type EngineLayer,
   type EngineStructure,
   type KeptContour,
-  type EngineLayerSource,
+  type StoreRequest,
+  type StoreReply,
   type EngineStage,
   type MissingKerningOrigin,
 } from "./generated-engine/shift_wasm.js";
