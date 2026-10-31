@@ -2,8 +2,8 @@ import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { WorkspaceDocumentState } from "@shift/types";
 import { computed, signal, useSignalState } from "@shift/editor/signals";
-import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
-import { DocumentViews, documentViewKey } from "@/lib/workspace/documentViews";
+import { CANVAS_PATH, editorPath, glyphIdFromPath } from "@/lib/editorRoute";
+import { DocumentViews, documentViewKey, type DocumentView } from "@/lib/workspace/documentViews";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 
 const NO_DOCUMENT_STATE = signal<WorkspaceDocumentState | null>(null, {
@@ -11,9 +11,17 @@ const NO_DOCUMENT_STATE = signal<WorkspaceDocumentState | null>(null, {
 });
 const documentViews = new DocumentViews();
 
+/** Where a remembered view returns the window: its glyph, the canvas, or Home. */
+function resumePath(view: DocumentView | null): string {
+  if (view?.glyphId) return editorPath(view.glyphId);
+  if (view?.canvas) return CANVAS_PATH;
+  return "/home";
+}
+
 /**
- * Remembers the glyph each document shows, and returns a window to it when main reopens
- * the document after an interruption.
+ * Remembers the glyph or canvas each document shows, and returns a window to it when main
+ * reopens the document after an interruption. Tabs and the shown page are remembered by
+ * `WindowViewMemory`.
  *
  * @remarks
  * Main marks such a load with a `resume` search param. Restoring replaces the route, which
@@ -42,16 +50,19 @@ export function useDocumentViewMemory(): void {
   useEffect(() => {
     if (!resuming || key === null || !fontLoaded) return;
 
-    const glyphId = documentViews.read(key)?.glyphId;
-    navigate(glyphId ? editorPath(glyphId) : "/home", { replace: true });
+    navigate(resumePath(documentViews.read(key)), { replace: true });
   }, [fontLoaded, key, navigate, resuming]);
 
   useEffect(() => {
     if (resuming || key === null) return;
 
     const glyphId = glyphIdFromPath(location.pathname);
-    if (glyphId === null && location.pathname !== "/home") return;
+    const canvas = location.pathname === CANVAS_PATH;
+    if (glyphId === null && !canvas && location.pathname !== "/home") return;
 
-    documentViews.write(key, glyphId === null ? {} : { glyphId });
+    documentViews.update(key, {
+      glyphId: glyphId ?? undefined,
+      canvas: canvas ? true : undefined,
+    });
   }, [key, location.pathname, resuming]);
 }

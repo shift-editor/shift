@@ -1569,7 +1569,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async reopen(): Promise<EditorTestSurface> {
-    const glyphName = this.glyphRecord?.name;
+    // The glyph open on the shown page, else one open on another page, as on a page tab.
+    const node =
+      this.glyphNode ?? this.scene.allNodes().find((candidate) => candidate.kind === "glyph");
+    const glyphName = node?.kind === "glyph" ? this.font.recordForId(node.glyphId)?.name : null;
     if (!glyphName) throw new Error("reopen needs an open glyph");
 
     const directory = mkdtempSync(join(tmpdir(), "shift-reopen-"));

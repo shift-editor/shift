@@ -63,7 +63,9 @@ export class ScenePersistence {
    *
    * @remarks
    * Restoring is not an edit: it records no history and writes nothing back.
-   * Records whose references no longer resolve are left out and logged. When
+   * Records whose references no longer resolve are left out and logged. A
+   * stored canvas with pages replaces the empty page a session starts with,
+   * and nodes stored before pages existed move onto the first page. When
    * the canvas has a child glyph, its source becomes the active source, so
    * the editor shows the layer that was being edited.
    *
@@ -83,9 +85,20 @@ export class ScenePersistence {
       console.warn("scene restore dropped stale records", restore.dropped);
     }
 
+    const restoredIds = new Set(restore.restored.map((record) => record.id));
+    const restoresPages = restore.restored.some(
+      (record) => record.type === "node" && record.kind === "page",
+    );
+    const scene = this.#editor.scene;
     this.#editor.history.withoutRecording(() =>
       batch(() => {
+        if (restoresPages) {
+          for (const page of scene.pages()) {
+            if (!restoredIds.has(page.id)) this.#store.delete(page.id);
+          }
+        }
         for (const record of restore.restored) this.#store.put(record);
+        scene.ensurePage();
       }),
     );
     this.#cancelTimer();
