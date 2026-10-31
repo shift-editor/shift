@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { _electron as electron } from "@playwright/test";
-import nativeBridge from "../crates/shift-bridge/index.js";
+import { nativeBridge } from "../crates/shift-bridge/__test__/bridge.mjs";
 
 const execFileAsync = promisify(execFile);
 const availableCaptures = [
@@ -54,15 +54,15 @@ try {
 }
 
 function createDocument(destinationPath) {
-  const bridge = new nativeBridge.Bridge();
+  const { workspace } = nativeBridge();
   const workspacePath = path.join(testRoot, "fixture-workspace.sqlite");
   const recoveryPath = path.join(testRoot, "fixture-recovery.sqlite");
 
   try {
-    bridge.openWorkspace(sourcePath, workspacePath);
-    bridge.saveWorkspaceAsDocument(destinationPath, recoveryPath);
+    workspace.openWorkspace(sourcePath, workspacePath);
+    workspace.saveWorkspaceAsDocument(destinationPath, recoveryPath);
   } finally {
-    bridge.closeWorkspace();
+    workspace.closeWorkspace();
   }
 }
 
