@@ -145,6 +145,7 @@ export class Designspace {
         axesCell: Signal<readonly Axis$1[]>;
         mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
         sourcesCell: Signal<readonly Source[]>;
+        variation?: VariationReader;
     });
     // (undocumented)
     get axes(): readonly Axis[];
@@ -157,6 +158,7 @@ export class Designspace {
         value: number;
     }[];
     defaultLocation(): ExternalAxisLocation;
+    interpolationWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array;
     location(coordinates: readonly {
         axisId: AxisId;
         value: number;
@@ -172,6 +174,7 @@ export class Designspace {
     toDesign(location: ExternalAxisLocation): DesignAxisLocation;
     toExternal(location: DesignAxisLocation): ExternalAxisLocation;
     track(): void;
+    variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array;
 }
 
 // @beta
@@ -780,13 +783,11 @@ export interface GlyphReader {
     read(glyphIds: readonly GlyphId[]): Promise<readonly GlyphSnapshot[]>;
 }
 
-// @public (undocumented)
+// @public
 export interface GlyphRecord {
-    // (undocumented)
     readonly componentBaseGlyphIds: readonly GlyphId[];
     // (undocumented)
     readonly id: GlyphId;
-    // (undocumented)
     readonly layers: readonly GlyphLayerRecord[];
     readonly ligature?: Ligature | null;
     readonly mark: boolean;

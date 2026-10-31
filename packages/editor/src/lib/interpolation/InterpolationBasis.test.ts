@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import type { Axis, AxisId, InterpolationBasis, SourceId } from "@shift/types";
 import { mintAxisId, mintSourceId } from "@shift/types";
 import { interpolateSourceValues } from "./InterpolationBasis";
-import { interpolationWeights } from "../wasm/variation";
+import { StatelessVariationReader } from "../wasm/variation";
 import { designAxisLocationFromLocation } from "../variation/location";
+import { signal } from "../signals";
+import type { DesignAxisLocation } from "../../types/variation";
 
 interface ParityMaster {
   readonly expected: number[];
@@ -14,6 +16,18 @@ interface ParityMaster {
 interface ParityFixture {
   readonly expected: number[];
   readonly masters: ParityMaster[];
+}
+
+/** `basis`'s weights at `location`, as a font with `axes` and no axis mappings evaluates them. */
+function interpolationWeights(
+  basis: InterpolationBasis,
+  location: DesignAxisLocation,
+  axes: readonly Axis[],
+): Float64Array {
+  return new StatelessVariationReader(signal(axes), signal([])).interpolationWeights(
+    basis,
+    location,
+  );
 }
 
 describe("InterpolationBasis", () => {

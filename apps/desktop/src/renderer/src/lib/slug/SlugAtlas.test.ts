@@ -51,6 +51,7 @@ function residentFixture(): {
     weightSets: [],
     weightAxes: [],
     weightMappingBases: [],
+    weightEngine: null,
     resolvedWeights: null,
   };
   const bytes = new Uint8Array(descriptor.layout.totalLength);

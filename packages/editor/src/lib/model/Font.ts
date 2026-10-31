@@ -65,7 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import { locationValues } from "../wasm/variation";
+import { EngineVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
@@ -316,10 +316,14 @@ export class Font {
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
     this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
+    const axisRecordsCell = computed(() => fontCell.value?.axes ?? NO_AXES);
     this.#designspace = new Designspace({
-      axesCell: computed(() => fontCell.value?.axes ?? NO_AXES),
+      axesCell: axisRecordsCell,
       mappingBasesCell: this.#axisMappingBasesCell,
       sourcesCell: this.#sourcesCell,
+      variation: store.engine
+        ? new EngineVariationReader(store.engine, axisRecordsCell, this.#axisMappingBasesCell)
+        : undefined,
     });
     this.#axesCell = this.#designspace.axesCell;
     this.#externalAxesCell = computed(() =>
@@ -1755,9 +1759,7 @@ export class Font {
     });
     if (exactSource) return this.#metricsForSource(exactSource);
 
-    const interpolated = this.#store.engine?.sourceMetricsAt(
-      Array.from(locationValues(axes, designLocation)),
-    );
+    const interpolated = this.#store.engine?.sourceMetricsAt(locationValues(axes, designLocation));
     return (interpolated && this.#interpolatedMetrics(interpolated)) ?? this.defaultSourceMetrics;
   }
 
@@ -1806,7 +1808,7 @@ export class Font {
       if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
       return {
         kind: "location",
-        location: Array.from(locationValues(designspace.axes, designspace.toDesign(location))),
+        location: locationValues(designspace.axes, designspace.toDesign(location)),
       };
     });
     return this.#kerningCell.peek().between(pairs, place);

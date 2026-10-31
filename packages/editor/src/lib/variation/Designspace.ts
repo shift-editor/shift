@@ -1,7 +1,19 @@
-import type { AxisId, AxisMappingBasis, Axis as AxisRecord, Source, SourceId } from "@shift/types";
+import type {
+  AxisId,
+  AxisMappingBasis,
+  Axis as AxisRecord,
+  InterpolationBasis,
+  Source,
+  SourceId,
+  VariationBasis,
+} from "@shift/types";
 import { Axis } from "../model/Axis";
 import { computed, track, type ComputedSignal, type Signal } from "../signals";
-import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
+import type {
+  DesignAxisLocation,
+  ExternalAxisLocation,
+  VariationReader,
+} from "../../types/variation";
 import {
   axisValue,
   defaultExternalAxisLocation,
@@ -11,7 +23,7 @@ import {
   emptyExternalAxisLocation,
   externalAxisLocationFromRecord,
 } from "./location";
-import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/variation";
+import { StatelessVariationReader } from "../wasm/variation";
 
 /**
  * A font's axes, axis mappings, and sources, with the location operations over them.
@@ -19,26 +31,34 @@ import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/
  * @remarks
  * Every method subscribes to exactly the cells it reads (`track` then `peek`),
  * so calls are correct from imperative code and keep `computed`/`effect`
- * readers current when the designspace changes.
+ * readers current when the designspace changes. Mapping and interpolation
+ * weights are evaluated by its {@link VariationReader}: the window's engine
+ * for the open document, stateless calls over these cells otherwise.
  */
 export class Designspace {
   readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
   readonly #sourcesCell: Signal<readonly Source[]>;
+  readonly #variation: VariationReader;
 
   /**
    * @param cells - the font's axis records, axis mapping bases and sources;
-   *   each is read reactively, never written.
+   *   each is read reactively, never written. `variation` evaluates the
+   *   font's variation; stateless calls over the axis records and mapping
+   *   bases when omitted.
    */
   constructor(cells: {
     axesCell: Signal<readonly AxisRecord[]>;
     mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
     sourcesCell: Signal<readonly Source[]>;
+    variation?: VariationReader;
   }) {
     const recordsCell = cells.axesCell;
     this.#axesCell = computed(() => recordsCell.value.map((record) => new Axis(record)));
     this.#mappingBasesCell = cells.mappingBasesCell;
     this.#sourcesCell = cells.sourcesCell;
+    this.#variation =
+      cells.variation ?? new StatelessVariationReader(cells.axesCell, cells.mappingBasesCell);
   }
 
   /**
@@ -46,7 +66,7 @@ export class Designspace {
    *
    * @remarks
    * The array keeps its identity while the records do, so readers that key on
-   * it (module handles, memoized weights) stay valid across unrelated edits.
+   * it (memoized weights) stay valid across unrelated edits.
    */
   get axesCell(): ComputedSignal<readonly Axis[]> {
     return this.#axesCell;
@@ -101,12 +121,38 @@ export class Designspace {
 
   /** Maps external user coordinates once into internal design coordinates. */
   toDesign(location: ExternalAxisLocation): DesignAxisLocation {
-    return mapAxisLocation(location, this.axes, read(this.#mappingBasesCell));
+    this.#trackMapping();
+    return this.#variation.toDesign(location);
   }
 
   /** Resolves the external user coordinates that represent a design location. */
   toExternal(location: DesignAxisLocation): ExternalAxisLocation {
-    return externalAxisLocationForDesignLocation(location, this.axes, read(this.#mappingBasesCell));
+    this.#trackMapping();
+    return this.#variation.toExternal(location);
+  }
+
+  /**
+   * One weight per source of `basis`, in its order, at a design location.
+   *
+   * @remarks
+   * Subscribes to the axes, mappings and sources, from which the open
+   * document's engine builds the basis it evaluates. The result is shared
+   * between callers at the same location: read it, don't change it.
+   */
+  interpolationWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array {
+    this.track();
+    return this.#variation.interpolationWeights(basis, location);
+  }
+
+  /** A compiled variation basis's values at a design location. */
+  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array {
+    track(this.#axesCell);
+    return this.#variation.variationAdjustments(basis, location);
+  }
+
+  #trackMapping(): void {
+    track(this.#axesCell);
+    track(this.#mappingBasesCell);
   }
 
   /** The source exactly at an external location after mapping, or `null` when interpolated. */

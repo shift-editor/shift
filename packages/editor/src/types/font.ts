@@ -19,6 +19,7 @@ import type {
   GlyphName,
   Unicode,
   ReadonlyEntityMap,
+  SlugWeightSet,
   SourceId,
 } from "@shift/types";
 import type { FontStore } from "../lib/model/FontStore";
@@ -141,6 +142,53 @@ export interface FontEngine {
    * @returns null for a font whose masters do not interpolate, or while the engine is not open.
    */
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null;
+
+  /**
+   * One weight per source of `sourceIds`, in that order, at a design
+   * location, from the basis the engine's font gives that source set.
+   *
+   * @param location - Design coordinates in the font's axis order, NaN for an axis default.
+   * @returns null while the engine is not open; empty when the font lacks a
+   * source or the sources form no model.
+   */
+  interpolationWeights(
+    sourceIds: readonly SourceId[],
+    location: readonly number[],
+  ): readonly number[] | null;
+
+  /**
+   * A Slug atlas's weights at an external location, from the bases the
+   * engine's font gives its weight sets: weight 0 is 1, and each set's
+   * weights sit at its `sourceWeightIndices`. Pass the atlas's same `sets`
+   * array every frame: the engine interns it once.
+   *
+   * @param external - External coordinates in the font's axis order, NaN for an axis default.
+   * @returns null while the engine is not open, when a set's sources are
+   * missing from the font or form no model, or a set names an index past
+   * `weightCount`.
+   */
+  atlasWeights(
+    sets: readonly SlugWeightSet[],
+    weightCount: number,
+    external: readonly number[],
+  ): readonly number[] | null;
+
+  /**
+   * Maps an external location once through the engine's font's axis
+   * mappings, both as numbers in the font's axis order, NaN for an axis the
+   * location omits.
+   *
+   * @returns null while the engine is not open.
+   */
+  designLocation(external: readonly number[]): readonly number[] | null;
+
+  /**
+   * The external location a design location's mapping came from, both as
+   * numbers in the font's axis order; NaN on internal axes.
+   *
+   * @returns null while the engine is not open.
+   */
+  externalLocation(design: readonly number[]): readonly number[] | null;
 
   /**
    * The name a new glyph asked to be called `name` takes: `name` trimmed, or

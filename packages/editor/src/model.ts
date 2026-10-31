@@ -22,7 +22,7 @@ export type {
 export { FontStore, type GlyphInvalidation } from "./lib/model/FontStore";
 export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 /** An anchor's role in mark positioning, and the kind fontc reads from a name. */
-export { anchorKind, type AnchorKind } from "@shift/wasm";
+export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
 export {
   loadEngine,
   type EditablePair,

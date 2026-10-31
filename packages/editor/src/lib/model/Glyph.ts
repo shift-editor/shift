@@ -50,7 +50,6 @@ import type { WeightedSource } from "../../types/glyphRender";
 import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues } from "../interpolation/InterpolationBasis";
-import { evaluateVariationBasis, interpolationWeights } from "../wasm/variation";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import type { FontOptions } from "../../types/font";
@@ -2458,10 +2457,9 @@ export class Glyph {
     const basis = this.#projectionCell.peek()?.decomposition;
     if (!basis) return null;
 
-    const weights = interpolationWeights(
+    const weights = this.#designspace.interpolationWeights(
       basis,
       this.#designspace.toDesign(externalLocation),
-      this.#designspace.axes,
     );
     return basis.sourceIds.map((sourceId, index) => ({
       sourceId,
@@ -2515,10 +2513,9 @@ export class Glyph {
     );
     if (exactShape) return projectionGeometry(exactShape.shape);
 
-    const axes = this.#designspace.axes;
     const interpolation = projection.interpolation;
     if (interpolation) {
-      const weights = interpolationWeights(interpolation.basis, designLocation, axes);
+      const weights = this.#designspace.interpolationWeights(interpolation.basis, designLocation);
       const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
         const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
         if (sourceLayer) {
@@ -2540,7 +2537,7 @@ export class Glyph {
     const variation = projection.variation;
     if (!variation) return projectionGeometry(projection.fallback);
 
-    const adjustments = evaluateVariationBasis(variation.basis, designLocation, axes);
+    const adjustments = this.#designspace.variationAdjustments(variation.basis, designLocation);
     const values = new Float64Array(projection.fallback.values);
     for (let index = 0; index < values.length; index++) {
       values[index] += adjustments[index] ?? 0;

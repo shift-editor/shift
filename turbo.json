@@ -128,20 +128,6 @@
       ],
       "env": ["SHIFT_WASM_OPT"]
     },
-    "@shift/wasm#build:reference": {
-      "inputs": [
-        "scripts/**",
-        "package.json",
-        "$TURBO_ROOT$/Cargo.toml",
-        "$TURBO_ROOT$/Cargo.lock",
-        "$TURBO_ROOT$/rust-toolchain.toml",
-        "$TURBO_ROOT$/crates/*/Cargo.toml",
-        "$TURBO_ROOT$/crates/*/build.rs",
-        "$TURBO_ROOT$/crates/*/src/**"
-      ],
-      "outputs": ["src/generated-reference/**"],
-      "env": ["SHIFT_WASM_OPT"]
-    },
     "@shift/wasm#types": {
       "inputs": [
         "scripts/**",
@@ -318,8 +304,7 @@
       "dependsOn": [
         "^generate:bridge-types",
         "generate:bridge-types",
-        "@shift/wasm#build",
-        "@shift/wasm#build:reference"
+        "@shift/wasm#build"
       ]
     },
     "@shift/editor#test": {
@@ -328,8 +313,7 @@
       "dependsOn": [
         "^generate:bridge-types",
         "generate:bridge-types",
-        "@shift/wasm#build",
-        "@shift/wasm#build:reference"
+        "@shift/wasm#build"
       ]
     },
     "@shift/glyph-info#test": {
@@ -342,8 +326,7 @@
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
         "@shift/glyph-info#generate",
-        "@shift/wasm#build",
-        "@shift/wasm#build:reference"
+        "@shift/wasm#build"
       ],
       "outputs": [],
       "inputs": [
@@ -364,8 +347,7 @@
       "dependsOn": [
         "^generate:bridge-types",
         "generate:bridge-types",
-        "@shift/wasm#build",
-        "@shift/wasm#build:reference"
+        "@shift/wasm#build"
       ]
     },
     "@shift/glyph-info#test:watch": {
@@ -378,8 +360,7 @@
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
         "@shift/glyph-info#generate",
-        "@shift/wasm#build",
-        "@shift/wasm#build:reference"
+        "@shift/wasm#build"
       ],
       "cache": false,
       "persistent": true

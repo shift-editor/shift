@@ -6,6 +6,7 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  SlugWeightSet,
   SourceId,
 } from "@shift/types";
 import {
@@ -288,6 +289,29 @@ export class WindowEngine implements FontEngine {
 
   sourceMetricsAt(location: readonly number[]): InterpolatedMetrics | null {
     return this.#opened?.session.sourceMetricsAt(location) ?? null;
+  }
+
+  interpolationWeights(
+    sourceIds: readonly SourceId[],
+    location: readonly number[],
+  ): readonly number[] | null {
+    return this.#opened?.session.interpolationWeights(sourceIds, location) ?? null;
+  }
+
+  atlasWeights(
+    sets: readonly SlugWeightSet[],
+    weightCount: number,
+    external: readonly number[],
+  ): readonly number[] | null {
+    return this.#opened?.session.atlasWeights(sets, weightCount, external) ?? null;
+  }
+
+  designLocation(external: readonly number[]): readonly number[] | null {
+    return this.#opened?.session.designLocation(external) ?? null;
+  }
+
+  externalLocation(design: readonly number[]): readonly number[] | null {
+    return this.#opened?.session.externalLocation(design) ?? null;
   }
 
   nextGlyphName(name: string): GlyphName {

@@ -116,6 +116,13 @@ export class SurfaceActions {
     await this.#editor.font.updateSource(new Source(this.#sourceNamed(source)).withName(name));
   }
 
+  /** Moves the source `source` along the axis tagged `tag` to `value`, as Settings › Sources does. */
+  async setSourceLocation(source: string, tag: string, value: number): Promise<void> {
+    await this.#editor.font.updateSource(
+      new Source(this.#sourceNamed(source)).withLocationValue(this.#axisTagged(tag), value),
+    );
+  }
+
   /** Sets the source `source`'s italic angle, as Settings › Sources does. */
   async setSourceItalicAngle(source: string, italicAngle: number): Promise<void> {
     await this.#editor.font.updateSource(

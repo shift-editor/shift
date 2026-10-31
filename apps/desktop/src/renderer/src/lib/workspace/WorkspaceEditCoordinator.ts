@@ -118,6 +118,11 @@ export class WorkspaceEditCoordinator {
     return this.#applyStatus;
   }
 
+  /** The window's editing engine these edits apply in, which the open document's reads ask. */
+  get engine(): WindowEngine {
+    return this.#engine;
+  }
+
   /** Returns the session-local sequence of authored font state transitions. */
   get authoredRevisionCell(): Signal<number> {
     return this.#authoredRevisionCell;
