@@ -32,8 +32,8 @@ pub use harfrust::{
 };
 pub use itemize::visual_order;
 pub use shape::{
-    FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedParagraph,
-    ShapedRun, Shaper, TextDirection,
+    FeatureSetting, ParagraphHook, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph,
+    ShapedParagraph, ShapedRun, Shaper, TextDirection,
 };
 pub use source::{FontGlyphs, GlyphSource, NOTDEF, character_glyphs};
 

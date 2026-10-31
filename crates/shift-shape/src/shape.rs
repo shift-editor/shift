@@ -114,6 +114,9 @@ impl<G, L: ?Sized> Copy for ShapeRequest<'_, G, L> {}
 pub struct ParagraphRequest<'a, G, L: ?Sized = [NormalizedCoord]> {
     pub units: &'a [Unit<G>],
     pub location: &'a L,
+    /// An ISO 15924 script tag every run shapes in; `None` takes each run's
+    /// from its characters.
+    pub script: Option<&'a str>,
     /// A BCP 47 language tag; `None` uses the default language system.
     pub language: Option<&'a str>,
     /// Settings over the features the shaper applies by default, for every run.
@@ -129,6 +132,7 @@ impl<'a, G, L: ?Sized> ParagraphRequest<'a, G, L> {
         ParagraphRequest {
             units: self.units,
             location,
+            script: self.script,
             language: self.language,
             features: self.features,
         }
@@ -145,7 +149,7 @@ impl<'a, G, L: ?Sized> ParagraphRequest<'a, G, L> {
             units,
             location: self.location,
             direction: Some(direction),
-            script,
+            script: self.script.or(script),
             language: self.language,
             features: self.features,
         }
@@ -203,6 +207,13 @@ pub struct ShapedGlyph<G> {
     /// Whether `GDEF` classes the glyph as a mark, as export classes
     /// category-Mark glyphs: it attaches by anchors and kerning passes over it.
     pub is_mark: bool,
+}
+
+/// A [`ShapeHook`] for a whole paragraph, told where each run starts.
+pub trait ParagraphHook: ShapeHook {
+    /// Called before the run covering `units` of the paragraph is shaped in
+    /// `direction`; the hook's events until the next call are that run's.
+    fn start_run(&mut self, units: Range<u32>, direction: TextDirection);
 }
 
 /// Describes why a run could not be shaped.
@@ -284,9 +295,9 @@ impl Shaper {
     /// The paragraph splits where its bidi level or script changes, and each
     /// run is shaped in its level's direction, so Arabic and Hebrew come back
     /// right to left and digits inside them left to right. Runs stay in
-    /// logical order. `hook` is told about each run's shaping in turn, as in
-    /// [`Self::shape`]; its clusters index the run's units, not the
-    /// paragraph's.
+    /// logical order. `hook` is told where each run starts and about its
+    /// shaping, as in [`Self::shape`]; its clusters index the run's units,
+    /// not the paragraph's.
     ///
     /// # Errors
     ///
@@ -295,7 +306,7 @@ impl Shaper {
         &self,
         source: &S,
         request: &ParagraphRequest<S::Glyph>,
-        mut hook: Option<&mut dyn ShapeHook>,
+        mut hook: Option<&mut dyn ParagraphHook>,
     ) -> Result<ShapedParagraph<S::Glyph>, ShapeError> {
         let itemized = itemize(request.units);
         let mut runs = Vec::with_capacity(itemized.runs.len());
@@ -305,7 +316,10 @@ impl Shaper {
             let script = run.script.map(|script| script.short_name().to_string());
             let direction = TextDirection::of_level(run.level);
             let units = &request.units[run.units];
-            let run_hook = hook.as_mut().map(|hook| &mut **hook as &mut dyn ShapeHook);
+            let run_hook = hook.as_mut().map(|hook| {
+                hook.start_run(start..end, direction);
+                &mut **hook as &mut dyn ShapeHook
+            });
             let run_request = request.run(units, direction, script.as_deref());
             let mut glyphs = self.shape_run(source, &run_request, run_hook)?;
             for glyph in &mut glyphs {

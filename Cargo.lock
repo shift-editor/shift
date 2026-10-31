@@ -2529,6 +2529,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-layout"
+version = "0.1.0"
+dependencies = [
+ "pack",
+ "shift-backends",
+ "shift-font",
+ "shift-shape",
+ "shift-shaper-font",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "shift-proof"
 version = "0.1.0"
 dependencies = [

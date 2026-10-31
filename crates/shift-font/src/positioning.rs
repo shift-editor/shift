@@ -18,7 +18,7 @@ use std::sync::Arc;
 use kurbo::{Point, Vec2};
 
 use crate::GlyphId;
-use crate::anchor_propagation::PropagationAnchor;
+use crate::anchor_propagation::{PropagatedAnchors, PropagationAnchor};
 
 /// The anchor a glyph is entered at, joining the glyph before it in reading
 /// order: fontc reads exactly this name as a cursive entry.
@@ -93,7 +93,7 @@ impl RunPosition {
 pub trait PositioningFont {
     /// The glyph's anchors as export compiles them, with its components'
     /// anchors propagated in; `None` for a glyph the font cannot resolve.
-    fn anchors(&mut self, glyph_id: GlyphId) -> Option<Arc<[PropagationAnchor]>>;
+    fn anchors(&mut self, glyph_id: GlyphId) -> Option<Arc<PropagatedAnchors>>;
 
     /// The kerning between each pair of glyphs, in pair order.
     fn kerning(&mut self, pairs: &[(GlyphId, GlyphId)]) -> Vec<f64>;
@@ -251,7 +251,7 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
             return false;
         };
         let Some((mark_anchor, target_anchor)) =
-            matching_anchors(&mark_anchors, &target_anchors, kind)
+            matching_anchors(&mark_anchors.anchors, &target_anchors.anchors, kind)
         else {
             return false;
         };
@@ -299,7 +299,7 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
             .iter()
             .map(|glyph| {
                 let anchors = self.font.anchors(glyph.glyph_id?)?;
-                Some(CursiveAnchors::of(&anchors))
+                Some(CursiveAnchors::of(&anchors.anchors))
             })
             .collect();
         // The glyph each joined glyph hangs from; a root hangs from none.

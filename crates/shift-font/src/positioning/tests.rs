@@ -5,7 +5,7 @@ use super::*;
 /// Anchors and kerning by glyph, for runs of glyphs numbered by test.
 #[derive(Default)]
 struct TestFont {
-    anchors: HashMap<GlyphId, Arc<[PropagationAnchor]>>,
+    anchors: HashMap<GlyphId, Arc<PropagatedAnchors>>,
     kerning: HashMap<(GlyphId, GlyphId), f64>,
 }
 
@@ -19,7 +19,13 @@ impl TestFont {
                 y: *y,
             })
             .collect();
-        self.anchors.insert(glyph, anchors.into());
+        self.anchors.insert(
+            glyph,
+            Arc::new(PropagatedAnchors {
+                anchors,
+                base_glyph_count: 1,
+            }),
+        );
         self
     }
 
@@ -30,13 +36,8 @@ impl TestFont {
 }
 
 impl PositioningFont for TestFont {
-    fn anchors(&mut self, glyph_id: GlyphId) -> Option<Arc<[PropagationAnchor]>> {
-        Some(
-            self.anchors
-                .get(&glyph_id)
-                .cloned()
-                .unwrap_or_else(|| Arc::from([])),
-        )
+    fn anchors(&mut self, glyph_id: GlyphId) -> Option<Arc<PropagatedAnchors>> {
+        Some(self.anchors.get(&glyph_id).cloned().unwrap_or_default())
     }
 
     fn kerning(&mut self, pairs: &[(GlyphId, GlyphId)]) -> Vec<f64> {

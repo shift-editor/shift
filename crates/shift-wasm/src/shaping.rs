@@ -309,6 +309,7 @@ mod exports {
         let runs = shaper.shape_paragraph(&shift_shaper_font::ParagraphRequest {
             units: &units,
             location: &location,
+            script: None,
             language: paragraph.language.as_deref(),
             features: &features,
         })?;

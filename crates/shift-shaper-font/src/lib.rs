@@ -55,7 +55,7 @@ pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use glyph_order::ShaperGlyphOrder;
 pub use inputs::UnitsPerEm;
 use inputs::{FeatureSource, GlyphSet, ShaperAxes};
-pub use positioning::{GeneratedPositioning, PositioningGlyphs};
+pub use positioning::{GeneratedPositioning, LiveAdvances, PositioningGlyphs};
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
     ShapedParagraph, ShapedRun, TextDirection,

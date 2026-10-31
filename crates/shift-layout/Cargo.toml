@@ -1,0 +1,24 @@
+[package]
+name = "shift-layout"
+version = "0.1.0"
+edition = "2024"
+description = "Lays out text over the live font: shaping, generated positioning, line breaking, bidi order, carets and boxes"
+license.workspace = true
+
+[features]
+# A number packing for the types the editor's WebAssembly calls carry.
+pack = ["dep:pack", "shift-font/pack"]
+
+[dependencies]
+pack = { workspace = true, optional = true }
+shift-font = { workspace = true }
+shift-shape = { workspace = true }
+shift-shaper-font = { workspace = true }
+unicode-segmentation = "1.12"
+
+[dev-dependencies]
+shift-backends = { workspace = true }
+shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

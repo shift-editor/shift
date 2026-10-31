@@ -288,6 +288,7 @@ fn paragraph<'a>(units: &'a [ShapeUnit], location: &'a ExternalLocation) -> Para
     ParagraphRequest {
         units,
         location,
+        script: None,
         language: None,
         features: &[],
     }
