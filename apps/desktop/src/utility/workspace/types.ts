@@ -1,10 +1,7 @@
 import type { GlyphId, SlugAtlas } from "@shift/types";
 import type { FileHandle } from "node:fs/promises";
-import type {
-  ByteReadableStream,
-  FontSourceSnapshot,
-  WorkspaceDocumentIdentity,
-} from "../../shared/workspace/protocol";
+import type { FontSourceSnapshot, WorkspaceDocumentIdentity } from "../../shared/workspace/lanes";
+import type { ByteReadableStream } from "../../shared/workspace/protocol";
 
 /** Opaque key for one authored revision's disposable Slug pages. */
 export type CachedAtlasKey = {

@@ -214,9 +214,13 @@ export function serveChannel<Calls extends CallMap, Events extends EventMap>(
   };
 
   const dispatch = async (request: RequestEnvelope, ports: readonly unknown[]): Promise<void> => {
-    const handler = handlers[request.type as keyof Calls] as
-      | ((payload: unknown, context: HandlerContext) => unknown)
-      | undefined;
+    // Own handlers only: a request named after an `Object.prototype` member is unknown.
+    const handler = Object.hasOwn(handlers, request.type)
+      ? (handlers[request.type as keyof Calls] as (
+          payload: unknown,
+          context: HandlerContext,
+        ) => unknown)
+      : undefined;
 
     if (!handler) {
       respond({

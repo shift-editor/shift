@@ -13,6 +13,8 @@ import type {
   TextRunView,
 } from "@shift/runtime";
 import type { Editor } from "@shift/editor";
+import type { Point2D } from "@shift/geo";
+import { snapFeedback } from "@shift/editor/rendering";
 import type { ScenePoint } from "@shift/editor/spaces";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
@@ -280,6 +282,18 @@ export class ShiftEditorReader {
    */
   drawnSnapGuides(): PositionGuide[] {
     return [...(this.#editor.toolManager.activeTool?.snapGuides ?? [])];
+  }
+
+  /**
+   * Where the active tool's snap feedback draws a cross for the gesture in
+   * flight, in glyph units: guide ends, snapped positions, and the crossings a
+   * guide passes through, in `snapFeedback`'s marker order. Empty when
+   * nothing snaps or no gesture is in flight.
+   */
+  drawnSnapCrossings(): Point2D[] {
+    const tool = this.#editor.toolManager.activeTool;
+    if (!tool) return [];
+    return snapFeedback(tool.snapGuides, tool.snapCrossings).markers.map(({ x, y }) => ({ x, y }));
   }
 
   /**

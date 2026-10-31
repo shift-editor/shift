@@ -476,3 +476,80 @@ describe("shift/no-drill-into-reads", () => {
     assert.deepEqual(lines, []);
   });
 });
+
+describe("shift/no-editor-internals-in-tests", () => {
+  const source = [
+    'import { TestEditor, startTestEditor } from "@/testing/TestEditor";',
+    'import { useTestEditor } from "@/testing/fontFixture";',
+    "const editor = new TestEditor();",
+    "editor.toolManager.flushPointerMoves();",
+    "editor.scene.glyphNode();",
+    'editor.history.capture("Select", () => {});',
+    "expect(editor.selectionBoundsCell.peek()).toBeNull();",
+    "function layerOf(subject: TestEditor) { return subject.requireGlyphLayer(); }",
+    "const { workspaceEditCoordinator } = editor;",
+    "const started = await new TestEditor().startSession();",
+    "started.font.glyph();",
+    "const surface = await startTestEditor();",
+    "surface.glyphLayer;",
+    "await editor.outline();",
+    'editor.selectTool("pen");',
+    "takesEditor(editor.asEditor());",
+    "const fixture = useTestEditor();",
+    "await fixture.drawnOutline();",
+    "declare const store: { scene: unknown; history: unknown };",
+    "store.scene;",
+    "const other = makeEditor();",
+    "other.toolManager;",
+  ].join("\n");
+
+  it("flags reads of members EditorTestSurface does not declare", () => {
+    assert.deepEqual(
+      reportedLines(
+        "no-editor-internals-in-tests",
+        source,
+        "apps/desktop/src/renderer/src/lib/editor/Editor.test.ts",
+      ),
+      [4, 5, 6, 7, 8, 9, 10, 11, 13],
+    );
+  });
+
+  it("checks the Editor a helper takes from asEditor() like the TestEditor it came from", () => {
+    const helpers = [
+      'import type { Editor } from "@shift/editor";',
+      'import { startTestEditor } from "@/testing/TestEditor";',
+      'function captureOf(subject: Editor) { return subject.history.begin("Edit"); }',
+      "function outlineOf(subject: Editor) { return subject.outline(); }",
+      "const editor = await startTestEditor();",
+      "captureOf(editor.asEditor());",
+      "editor.asEditor().toolManager;",
+      'runRendererCommand(editor.asEditor(), "edit.selectAll");',
+      "declare const other: { history: unknown };",
+      "function historyOf(subject: typeof other) { return subject.history; }",
+    ].join("\n");
+
+    assert.deepEqual(
+      reportedLines(
+        "no-editor-internals-in-tests",
+        helpers,
+        "apps/desktop/src/renderer/src/lib/editor/EditorHistory.test.ts",
+      ),
+      [3, 7],
+    );
+  });
+
+  it("allows them in the harness, outside the renderer and outside tests", () => {
+    for (const fileName of [
+      "apps/desktop/src/renderer/src/testing/TestEditor.test.ts",
+      "apps/desktop/src/renderer/src/testing/TestEditor.ts",
+      "packages/editor/src/lib/editor/Editor.test.ts",
+      "apps/desktop/e2e/editor.spec.ts",
+    ]) {
+      assert.deepEqual(
+        reportedLines("no-editor-internals-in-tests", source, fileName),
+        [],
+        fileName,
+      );
+    }
+  });
+});

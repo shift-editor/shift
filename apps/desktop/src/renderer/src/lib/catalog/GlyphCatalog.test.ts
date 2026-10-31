@@ -1,102 +1,62 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { effect } from "@shift/editor/signals";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
-import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
-import { TestEditor } from "@/testing/TestEditor";
+import type { EditorTestSurface } from "@/testing/surface";
+import { authoredGlyphAtlas, startTestEditor } from "@/testing/TestEditor";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { GlyphCatalog } from "./GlyphCatalog";
 
-describe("GlyphCatalog", () => {
-  let editor: TestEditor;
+const WEIGHT = { tag: "wght", name: "Weight", minimum: 100, default: 400, maximum: 900 };
 
-  afterEach(() => editor.destroy());
+describe("GlyphCatalog", () => {
+  let editor: EditorTestSurface;
+
+  afterEach(() => editor.close());
 
   it("keeps its metrics readable when the active source is deleted", async () => {
-    editor = await new TestEditor().startSession();
-    const font = editor.font;
-    const axisId = font.createAxis({
-      tag: "wght",
-      name: "Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await editor.settle();
-    const boldId = font.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 900 }));
-    await editor.settle();
-    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 900 }));
-    expect(editor.activeSourceIdCell.peek()).toBe(boldId);
+    editor = await startTestEditor();
+    await editor.addAxis(WEIGHT);
+    await editor.addSource("Bold", { wght: 900 });
+    const bold = editor.source({ name: "Bold" });
+    if (!bold) throw new Error("Expected the Bold source");
+    editor.setLocation({ wght: 900 });
+    expect(editor.source("active")).toMatchObject({ id: bold.id });
 
-    const catalog = new GlyphCatalog(
-      editor,
-      getGlyphInfo(),
-      new AuthoredGlyphAtlasSource(
-        editor.workspaceEditCoordinator,
-        () => font.getAxes(),
-        () => font.getAxisMappingBases(),
-      ),
-    );
+    const catalog = new GlyphCatalog(editor.asEditor(), getGlyphInfo(), authoredGlyphAtlas(editor));
     const reader = effect(() => {
       catalog.metricsCell.value;
     });
-    const outcomes: string[] = [];
-    const stopListening = font.editCoordinator.onEdit((event) => outcomes.push(event.kind));
 
-    font.deleteSource(boldId);
-    await editor.settle();
-    stopListening();
+    await editor.deleteSource("Bold");
     reader.dispose();
 
-    expect(outcomes).toEqual(["accepted", "committed"]);
-    expect(font.sources.map(({ id }) => id)).not.toContain(boldId);
-    expect(catalog.metricsCell.peek().unitsPerEm).toBe(font.metrics.unitsPerEm);
+    // A delete the workspace rejects is rolled back once the edits settle, bringing Bold back.
+    expect(editor.source({ name: "Bold" })).toBeNull();
+    expect(editor.fontOverview().sources).not.toContainEqual(
+      expect.objectContaining({ id: bold.id }),
+    );
+    expect(catalog.metricsCell.peek().unitsPerEm).toBe(editor.metrics().unitsPerEm);
   });
 
   it("follows a master's metric edit between the masters", async () => {
-    editor = await new TestEditor().startSession();
-    const font = editor.font;
-    const axisId = font.createAxis({
-      tag: "wght",
-      name: "Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    });
-    await editor.settle();
-    const boldId = font.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 900 }));
-    await editor.settle();
-    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 650 }));
-    const catalog = new GlyphCatalog(
-      editor,
-      getGlyphInfo(),
-      new AuthoredGlyphAtlasSource(
-        editor.workspaceEditCoordinator,
-        () => font.getAxes(),
-        () => font.getAxisMappingBases(),
-      ),
-    );
+    editor = await startTestEditor();
+    await editor.addAxis(WEIGHT);
+    await editor.addSource("Bold", { wght: 900 });
+    editor.setLocation({ wght: 650 });
+    const catalog = new GlyphCatalog(editor.asEditor(), getGlyphInfo(), authoredGlyphAtlas(editor));
     const ascenders: number[] = [];
     const reader = effect(() => {
       ascenders.push(catalog.metricsCell.value.ascender);
     });
     const before = catalog.metricsCell.peek().ascender;
 
-    const bold = font.source(boldId)!;
-    const ascender = font.metricDefinitions.find((definition) => definition.kind === "ascender")!;
-    const edited = font.updateSource({
-      ...bold,
-      metricValues: bold.metricValues.map((value) =>
-        value.metricId === ascender.id ? { ...value, position: value.position + 200 } : value,
-      ),
-    });
+    const ascender = editor
+      .fontOverview()
+      .metricDefinitions.find((definition) => definition.kind === "ascender");
+    const boldAscender = editor
+      .source({ name: "Bold" })
+      ?.metricValues.find((value) => value.metricId === ascender?.id);
+    if (!ascender || !boldAscender) throw new Error("Expected Bold's ascender");
+    const edited = editor.setSourceMetric("Bold", ascender.name, boldAscender.position + 200);
     expect(catalog.metricsCell.peek().ascender).toBeCloseTo(before + 100);
     await edited;
     reader.dispose();

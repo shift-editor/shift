@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { RecentDocument, RecentDocumentVisit } from "../../shared/recents";
-import type { Specimen } from "../../shared/workspace/protocol";
+import type { Specimen } from "../../shared/workspace/lanes";
 import { RecentList, type RecentListRules } from "@shift/types";
 import { z } from "zod";
 import { parseEach } from "../../shared/parseEach";

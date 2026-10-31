@@ -41,7 +41,7 @@ function checkParam(context, node) {
 const GLYPH_SNAPSHOT_ALLOWED = [
   "bridge/",
   "shared/bridge/",
-  "shared/workspace/protocol.ts",
+  "shared/workspace/lanes.ts",
   "utility/workspace/WorkspaceHost.ts",
   "renderer/src/types/glyph.ts",
   "renderer/src/lib/model/",
@@ -154,6 +154,128 @@ function isElementSide(context, expression, seen = new Set()) {
     definition.type === "Variable" &&
     definition.node.init != null &&
     isElementSide(context, definition.node.init, seen)
+  );
+}
+
+/** The harness files that declare `EditorTestSurface` and the interfaces it extends. */
+const TEST_SURFACE_FILES = ["surface.ts", "reads.ts", "fonts.ts"];
+
+let testSurfaceMemberNames = null;
+
+/**
+ * The member names `EditorTestSurface` declares, with those of the interfaces it extends.
+ *
+ * Read from the harness sources the way `brandsWithHelpers` reads `ids.ts`: an interface's own
+ * members are its lines at two-space indentation, which the formatter keeps fixed.
+ */
+function testSurfaceMembers() {
+  if (testSurfaceMemberNames) return testSurfaceMemberNames;
+
+  const interfaces = new Map();
+  for (const file of TEST_SURFACE_FILES) {
+    const filePath = fileURLToPath(
+      new URL(`../../apps/desktop/src/renderer/src/testing/${file}`, import.meta.url),
+    );
+    const source = readFileSync(filePath, "utf8");
+    const declaration = /^export interface (\w+)(?:<[^>]*>)?(?: extends ([^{]+))? \{$/gm;
+    for (const match of source.matchAll(declaration)) {
+      const bodyStart = match.index + match[0].length;
+      const bodyEnd = source.indexOf("\n}", bodyStart);
+      const body = source.slice(bodyStart, bodyEnd);
+      const members = Array.from(
+        body.matchAll(/^ {2}(?:readonly )?([A-Za-z_$][\w$]*)\??\s*[(<:]/gm),
+        (member) => member[1],
+      );
+      const parents = (match[2] ?? "").split(",").map((name) => name.trim().replace(/<.*$/, ""));
+      interfaces.set(match[1], { members, parents: parents.filter(Boolean) });
+    }
+  }
+
+  const names = new Set();
+  const visit = (name) => {
+    const entry = interfaces.get(name);
+    if (!entry) return;
+    for (const member of entry.members) names.add(member);
+    for (const parent of entry.parents) visit(parent);
+  };
+  visit("EditorTestSurface");
+  testSurfaceMemberNames = names;
+  return names;
+}
+
+/** Calls that return the editor a test drives: `TestEditor`'s factories in `@/testing`. */
+const TEST_EDITOR_FACTORIES = new Set([
+  "useTestEditor",
+  "startTestEditor",
+  "openTestEditor",
+  "startEditorWith",
+]);
+
+/**
+ * Type names a test annotates its editor with. `Editor` counts too: a helper taking the
+ * `asEditor()` result reaches the same internals as the `TestEditor` it came from.
+ */
+const TEST_EDITOR_TYPES = new Set(["TestEditor", "EditorTestSurface", "Editor"]);
+
+/** `TestEditor` methods that return the editor itself, so a chain stays on it. */
+const TEST_EDITOR_CHAINS = new Set([
+  "startSession",
+  "openSession",
+  "pointerDown",
+  "pointerMove",
+  "pointerUp",
+  "keyDown",
+  "escape",
+  "selectTool",
+  "asEditor",
+]);
+
+/**
+ * True when `expression` is provably the editor a test drives: `new TestEditor(…)`, a call to a
+ * `TestEditor` factory, a chain of its self-returning methods or `asEditor()`, a binding
+ * annotated `TestEditor`, `EditorTestSurface` or `Editor`, a `const` initialised from one of
+ * those, or a same-file function whose return type is one.
+ */
+function isTestEditor(context, expression, seen = new Set()) {
+  let node = expression;
+  while (
+    node?.type === "AwaitExpression" ||
+    node?.type === "ChainExpression" ||
+    node?.type === "TSNonNullExpression" ||
+    node?.type === "ParenthesizedExpression"
+  ) {
+    node = node.type === "AwaitExpression" ? node.argument : node.expression;
+  }
+
+  if (node?.type === "NewExpression") {
+    return node.callee.type === "Identifier" && node.callee.name === "TestEditor";
+  }
+
+  if (node?.type === "CallExpression") {
+    const callee = node.callee;
+    if (callee.type === "MemberExpression" && !callee.computed) {
+      return (
+        TEST_EDITOR_CHAINS.has(callee.property.name) && isTestEditor(context, callee.object, seen)
+      );
+    }
+    if (callee.type !== "Identifier") return false;
+    if (TEST_EDITOR_FACTORIES.has(callee.name)) return true;
+    const definition = definitionOf(context, callee);
+    return (
+      definition?.type === "FunctionName" &&
+      TEST_EDITOR_TYPES.has(annotatedTypeName(definition.node.returnType))
+    );
+  }
+
+  if (node?.type !== "Identifier" || seen.has(node.name)) return false;
+  seen.add(node.name);
+  const definition = definitionOf(context, node);
+  if (!definition) return false;
+  if (TEST_EDITOR_TYPES.has(annotatedTypeName(definition.name.typeAnnotation))) return true;
+  return (
+    definition.type === "Variable" &&
+    definition.node.init != null &&
+    isTestEditor(context, definition.node.init, seen)
   );
 }
 
@@ -1975,6 +2097,60 @@ export default {
             if (method !== "waitForFunction" && isElementSide(context, callee.object)) return;
 
             context.report({ node, messageId: "useDriver", data: { method } });
+          },
+        };
+      },
+    },
+
+    /**
+     * Ban reaching past `EditorTestSurface` into the editor a desktop test drives.
+     *
+     * `TestEditor` still extends `Editor`, so a test holding one can read the tool manager, the
+     * scene, the edit coordinator, history, layer buffers and signal cells, and breaks when they
+     * move while the behaviour holds (#798). Flags a member read on a provable `TestEditor`, or on
+     * the `Editor` a helper takes from its `asEditor()` (see `isTestEditor`), whose name
+     * `EditorTestSurface` does not declare, and the same names destructured from one. The allowed names are read from the surface's own declarations
+     * (`testSurfaceMembers`), so there is no list of internals to keep in step: a read the
+     * surface lacks is added there. `asEditor()` is on the surface; `no-escape-hatch-reads`
+     * covers where it may go.
+     *
+     * Applies to tests under the renderer outside the harness's own `testing/` directory.
+     * Without type information an editor passed through an unannotated binding is not seen.
+     */
+    "no-editor-internals-in-tests": {
+      meta: {
+        type: "suggestion",
+        messages: {
+          internal:
+            "`{{name}}` is an editor internal, not on EditorTestSurface. Act and read through the surface; add the action or read there if it is missing. See /writing-tests skill.",
+        },
+        schema: [],
+      },
+      create(context) {
+        const filename = context.getFilename().replace(/\\/g, "/");
+        if (!filename.includes("/apps/desktop/src/renderer/")) return {};
+        if (!/\.test\.tsx?$/.test(filename)) return {};
+        if (filename.includes("/testing/")) return {};
+
+        const surface = testSurfaceMembers();
+        const report = (node, name) => {
+          if (surface.has(name)) return;
+          context.report({ node, messageId: "internal", data: { name } });
+        };
+
+        return {
+          MemberExpression(node) {
+            if (node.computed || node.property.type !== "Identifier") return;
+            if (!isTestEditor(context, node.object)) return;
+            report(node.property, node.property.name);
+          },
+          VariableDeclarator(node) {
+            if (node.id.type !== "ObjectPattern" || node.init == null) return;
+            if (!isTestEditor(context, node.init)) return;
+            for (const property of node.id.properties) {
+              const key = staticKey(property);
+              if (key !== null) report(property.key, key);
+            }
           },
         };
       },

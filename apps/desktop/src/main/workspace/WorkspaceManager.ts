@@ -8,7 +8,7 @@ import type {
   WorkspaceDocumentIdentity,
   WorkspaceDocumentState,
   WorkspaceRecovery,
-} from "../../shared/workspace/protocol";
+} from "../../shared/workspace/lanes";
 import { WorkspaceProcess } from "./WorkspaceProcess";
 import { FontSessionHost, type FontSessionId } from "./FontSessionHost";
 import { DocumentSessionIndex } from "./DocumentSessionIndex";

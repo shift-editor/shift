@@ -1,6 +1,6 @@
 import type { GlyphInfo } from "@shift/glyph-info";
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { FontStoreLocation, WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { FontStoreLocation, WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { Editor } from "@shift/editor";
 import { Font, FontStore } from "@shift/editor/model";

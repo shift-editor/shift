@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mintPointId } from "@shift/types";
 import { expectEdit } from "@/testing/expectEdit";
-import { square } from "@/testing/fixtures";
+import { cubic, square } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
 
 const editor = useTestEditor();
@@ -57,6 +57,26 @@ describe("deleting points", () => {
         ]);
       },
     );
+  });
+
+  it("shows the outline without the point before the workspace confirms, and the confirmed outline matches", async () => {
+    await editor.draw({ contours: [cubic([0, 0], [0, 100], [200, 100], [200, 0])] });
+    editor.selectTool("pen");
+    await editor.clickAt({ x: 100, y: 75 });
+    const split = await editor.pointAt({ x: 100, y: 75 });
+    if (!split) throw new Error("Expected the split point");
+    editor.selectTool("select");
+    editor.select([split.id]);
+
+    const deleting = editor.deleteSelection();
+    await expect.poll(() => editor.drawnPoint(split.id)).toBeNull();
+    const local = editor.drawnOutline();
+    expect(editor.editorView().applyStatus).not.toBe("idle");
+    expect(local).toMatchObject([{ points: Array(4).fill({}) }]);
+    expect(editor.drawnPoint(split.id)).toBeNull();
+    await deleting;
+    await editor.settle();
+    expect(await editor.outline()).toEqual(local);
   });
 });
 

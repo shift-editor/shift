@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { alphabetical, comparing, orderBy } from "@shift/types";
 import { z } from "zod";
-import type { WorkspaceRecovery } from "../../shared/workspace/protocol";
+import type { WorkspaceRecovery } from "../../shared/workspace/lanes";
 import { DocumentAddress, type DocumentBinding, type WorkspaceAllocation } from "./types";
 
 const SQLITE_SIDECAR_SUFFIXES = ["", "-wal", "-shm", "-journal"] as const;

@@ -1,6 +1,6 @@
 import type { LayerReader } from "shift-bridge";
 import type { LayerReaderHost } from "../shared/host/ShiftHost";
-import type { FontStoreLocation } from "../shared/workspace/protocol";
+import type { FontStoreLocation } from "../shared/workspace/lanes";
 
 type LayerReaderStatics = typeof LayerReader;
 

@@ -1,18 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { TestEditor } from "@/testing/TestEditor";
+import { startTestEditor } from "@/testing/TestEditor";
 
 describe("registerBuiltInTools", () => {
   it("puts Kerning in the Spacing slot and binds it to K", async () => {
-    const editor = await new TestEditor().startSession();
+    const editor = await startTestEditor();
 
-    expect(editor.getToolShortcuts()).toContainEqual(
-      expect.objectContaining({ toolId: "kerning", shortcut: "k" }),
-    );
-    expect(editor.toolRegistry.get("kerning")?.hidden).toBe(true);
-    expect(editor.toolRegistry.get("spacing")?.menuItems?.map((item) => item.toolId)).toEqual([
-      "spacing",
-      "kerning",
-    ]);
+    expect(editor.toolShortcuts()).toContainEqual({ key: "k", tool: "kerning" });
+    expect(editor.toolbar().map(({ tool }) => tool)).not.toContain("kerning");
+    expect(editor.toolbar()).toContainEqual({ tool: "spacing", menu: ["spacing", "kerning"] });
     await editor.close();
   });
 });

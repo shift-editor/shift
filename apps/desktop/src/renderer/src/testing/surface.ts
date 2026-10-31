@@ -39,7 +39,7 @@ import type {
   Unicode,
 } from "@shift/types";
 import type { EditorCommandId } from "@shared/commands";
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { AxisFixture, AxisLocation, FontBuilder } from "./fonts";
 import type {
@@ -97,6 +97,41 @@ export interface DrawnGlyph {
    * turn, an anchor a later one replaces by name keeping its place.
    */
   readonly anchors: readonly { readonly name: string; readonly x: number; readonly y: number }[];
+}
+
+/** One button of the tools pane: the tool it selects, and the tools its dropdown offers, in menu order. */
+export interface ToolbarButton {
+  readonly tool: ToolName;
+  /** Empty for a plain button without a dropdown. */
+  readonly menu: readonly ToolName[];
+}
+
+/** A single-key shortcut that selects a tool on the canvas. */
+export interface ToolShortcut {
+  readonly key: string;
+  readonly tool: ToolName;
+}
+
+/**
+ * What one recorded canvas frame draws, by outline id (see
+ * {@link EditorTestSurface.drawnOutlineIds}), in drawing order. Test-only.
+ */
+export interface CanvasFrame {
+  /** The outlines the frame fills. */
+  readonly fills: readonly number[];
+  /** The outlines the frame strokes. */
+  readonly strokes: readonly number[];
+}
+
+/**
+ * The ids of the outlines the canvas draws for one glyph at the current
+ * location: its closed contours, which it fills, and its open contours, which
+ * it strokes. An outline keeps its id while it is unchanged and gets a new one
+ * when it is rebuilt. Each is null until the glyph loads. Test-only.
+ */
+export interface DrawnOutlineIds {
+  readonly closed: number | null;
+  readonly open: number | null;
 }
 
 // The read types tests see beyond {@link EditorReads}'s. Each aliases the
@@ -450,6 +485,15 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The snap guides the active tool draws for the gesture in flight, in glyph units. */
   drawnSnapGuides(): readonly PositionGuide[];
   /**
+   * Returns where the active tool's snap feedback draws a cross for the gesture in flight.
+   *
+   * @remarks
+   * In glyph units: guide ends, snapped positions, and the box corners a guide
+   * passes through, each once: each guide's ends, then the crossings on its line. Empty when
+   * nothing snaps. Test-only: not agent data.
+   */
+  drawnSnapCrossings(): readonly Point2D[];
+  /**
    * One point of the open glyph as the canvas draws it now, a gesture not yet
    * released included, as {@link drawnOutline} draws it; null when it draws no
    * point with that id.
@@ -462,6 +506,27 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null;
   /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. Test-only. */
   drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
+  /**
+   * Draws the canvas onto recording surfaces from now on, as mounting the
+   * canvas does; {@link latestCanvasFrame} reads what they record. Test-only.
+   */
+  recordCanvas(): void;
+  /**
+   * What the latest frame since {@link recordCanvas} draws; empty before the
+   * first frame. Test-only.
+   */
+  latestCanvasFrame(): CanvasFrame;
+  /** The ids of the outlines the canvas draws for the glyph named `glyph` now. Test-only. */
+  drawnOutlineIds(glyph: string): DrawnOutlineIds;
+  /** Whether the glyph named `name` has loaded, so the canvas can draw it. Test-only: not agent data. */
+  glyphLoaded(name: string): boolean;
+  /**
+   * How many times the canvas text has been laid out since this was first
+   * read, the layout then counting as none: the same before and after a step
+   * that kept the layout. Reading it holds the layout the way the canvas does.
+   * Test-only: not agent data.
+   */
+  textLayoutCount(): number;
   /** The id selection uses for the segment from `start` to `end`. */
   segmentBetween(start: PointId, end: PointId): string;
   /** The selection's bounds in glyph units, or null when nothing is selected. */
@@ -476,6 +541,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   canDecomposeSelection(): boolean;
   /** Whether the session disables tool `name`. */
   toolDisabled(name: ToolName): boolean;
+  /** The tools pane's buttons, in order; a tool the pane does not show has none. Test-only. */
+  toolbar(): readonly ToolbarButton[];
+  /** The single-key shortcuts that select a tool on the canvas, as the keyboard routes them. Test-only. */
+  toolShortcuts(): readonly ToolShortcut[];
+  /** The text on the system clipboard, as another app would paste it. Test-only: not agent data. */
+  clipboardText(): string;
   /** The CSS cursor the editor shows. Test-only: not agent data. */
   shownCursor(): string;
   /** The cursor the active tool asks for, by name (`move`, `bend`, `nwse-resize`). Test-only. */
@@ -505,6 +576,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   redo(): Promise<void>;
   /** Waits for every pending edit to be confirmed. */
   settle(): Promise<void>;
+  /** Makes the workspace refuse the next edit it is sent, as a failed write does. Test-only. */
+  failNextWorkspaceApply(): void;
   /**
    * Saves the document, as File › Save does. A document never saved yet is
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.

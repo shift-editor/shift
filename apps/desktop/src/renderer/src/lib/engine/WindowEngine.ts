@@ -1,5 +1,5 @@
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
-import { FontStoreLocation } from "@shared/workspace/protocol";
+import { FontStoreLocation } from "@shared/workspace/lanes";
 import type { FontIntent, GlyphId, GlyphName, LayerId, SourceId } from "@shift/types";
 import {
   loadEngine,

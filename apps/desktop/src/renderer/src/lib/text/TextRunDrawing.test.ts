@@ -1,129 +1,94 @@
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import type { GlyphName } from "@shift/types";
-import type { GlyphRenderModel } from "@shift/editor/model";
-import { TestEditor } from "@/testing/TestEditor";
-import { createStubContext } from "@/testing/stubCanvas";
+import { afterEach, describe, expect, it } from "vitest";
+import type { PointId } from "@shift/types";
+import type { EditorTestSurface } from "@/testing/surface";
+import { openTestEditor } from "@/testing/TestEditor";
 
 const FONT = resolve(process.cwd(), "../../fixtures/fonts/AnchorDragBench.glyphs");
 
-interface SceneFrame {
-  readonly fills: Path2D[];
-  readonly strokes: Path2D[];
-}
-
-/**
- * Attaches the real renderer to stub canvases and records the paths the
- * scene fills and strokes in each frame it draws.
- */
-function recordSceneFrames(editor: TestEditor): () => SceneFrame {
-  const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
-  const element = () =>
-    ({
-      width: 1000,
-      height: 800,
-      getBoundingClientRect: () => rect,
-      getContext: () => null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }) as unknown as HTMLCanvasElement;
-  const surface = () => ({
-    canvas: element(),
-    rect,
-    dpr: 1,
-    ctx: createStubContext(),
-    width: 1000,
-    height: 800,
-  });
-
-  const frames: SceneFrame[] = [];
-  const scene = surface();
-  // The renderer clears a layer at the start of each frame it draws.
-  scene.ctx.clearRect = () => frames.push({ fills: [], strokes: [] });
-  scene.ctx.fill = ((path: Path2D) => frames.at(-1)?.fills.push(path)) as typeof scene.ctx.fill;
-  scene.ctx.stroke = ((path?: Path2D) => {
-    if (path) frames.at(-1)?.strokes.push(path);
-  }) as typeof scene.ctx.stroke;
-  editor.attachRenderSurfaces(
-    surface() as never,
-    scene as never,
-    surface() as never,
-    { canvas: element(), rect, dpr: 1, width: 1000, height: 800 } as never,
-  );
-  return () => frames.at(-1) ?? { fills: [], strokes: [] };
-}
-
-/** Records the paths the scene fills in its latest frame. */
-function recordSceneFills(editor: TestEditor): () => readonly Path2D[] {
-  const latest = recordSceneFrames(editor);
-  return () => latest().fills;
+/** Types `text` after the edited glyph in Text mode, then goes back to editing it. */
+async function typeAfterEditedGlyph(editor: EditorTestSurface, text: string): Promise<void> {
+  editor.selectTool("text");
+  editor.typeText(text);
+  await editor.pressKey("Escape");
+  await editor.settle();
 }
 
 describe("text run drawing", () => {
-  let editor: TestEditor;
+  let editor: EditorTestSurface;
 
-  const glyphId = (name: string) => editor.font.recordForName(name as GlyphName)!.id;
-  const renderModel = (name: string): GlyphRenderModel | null =>
-    editor
-      .glyphForId(glyphId(name))
-      ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell) ?? null;
-  /** Fills of `model`'s closed contours in the latest scene frame. */
-  const fillsOf = (fills: readonly Path2D[], model: GlyphRenderModel | null) =>
-    model ? fills.filter((path) => path === model.closedContoursPath).length : 0;
+  afterEach(() => editor.close());
+
+  /** How many times the latest frame fills `glyph`'s closed contours as they are now. */
+  const fillsOf = (glyph: string) => {
+    const { closed } = editor.drawnOutlineIds(glyph);
+    return editor.latestCanvasFrame().fills.filter((fill) => fill === closed).length;
+  };
 
   it("redraws every composite occurrence when an outline only the run draws changes", async () => {
-    editor = await new TestEditor().openSession(FONT, "u");
-    const run = editor.textRun!;
-    const edited = editor.text.run(run.runId)!.items[0]!;
-    editor.text.setItems(run.runId, [edited, ...editor.text.itemsFromText("ǖlǖü")]);
-    const latestFills = recordSceneFills(editor);
-    await expect.poll(() => fillsOf(latestFills(), renderModel("udieresismacron"))).toBe(2);
+    // The dieresis is a component of both composites; u stays the edited glyph throughout.
+    editor = await openTestEditor(FONT, "u");
+    editor.selectTool("text");
+    editor.typeText("ǖlǖü");
+    // At the start of the text the dieresis has no base, so it is a run glyph of its own.
+    editor.moveCaret(-1, "line");
+    editor.pasteText("/dieresiscomb");
+    await editor.pressKey("Escape");
+    await editor.settle();
+    editor.recordCanvas();
+    await expect.poll(() => fillsOf("udieresismacron")).toBe(2);
 
-    const composite = renderModel("udieresismacron")!;
-    const drawnBefore = composite.closedContoursPath;
-    // The dieresis is a component of both composites and is not the edited glyph. A drag
-    // preview commits nothing, so only the run's own subscriptions can redraw it.
-    const dieresis = editor.glyphForId(glyphId("dieresiscomb"))!;
-    const layer = dieresis.layerForSource(editor.font.defaultSource.id)!;
-    const point = layer.allPoints[0]!;
-    layer.previewPositionPatch([{ kind: "point", id: point.id, x: point.x + 25, y: point.y }]);
+    // The dieresis's first point, in the edited u's units.
+    const text = editor.canvasText();
+    const placed = (name: string) => text?.glyphs.find((glyph) => glyph.name === name);
+    const dieresis = placed("dieresiscomb");
+    const u = placed("u");
+    const [contour] = (await editor.layerOf("dieresiscomb")).contours;
+    const point = contour?.points[0];
+    if (!dieresis || !u || !point) throw new Error("Expected the dieresis and u in the text");
+    const at = { x: dieresis.origin.x - u.left + point.x, y: dieresis.origin.y + point.y };
+    editor.selectTool("select");
+    await editor.clickAt(at);
+    const drawnBefore = editor.drawnOutlineIds("udieresismacron").closed;
+    // Dragging the selected run glyph previews a move of its outline and commits nothing, and
+    // the dieresis is not the edited glyph, so only the run's own subscriptions can redraw it.
+    editor.holdDragFrom(at, { x: at.x + 25, y: at.y });
 
-    await expect.poll(() => fillsOf(latestFills(), composite)).toBe(2);
-    expect(composite.closedContoursPath).not.toBe(drawnBefore);
-    expect(latestFills()).not.toContain(drawnBefore);
-    const single = renderModel("udieresis")!;
-    expect(fillsOf(latestFills(), single)).toBe(1);
+    await expect.poll(() => fillsOf("udieresismacron")).toBe(2);
+    expect(editor.canvasText()?.editedItemId).toBe(text?.editedItemId);
+    expect(editor.drawnOutlineIds("udieresismacron").closed).not.toBe(drawnBefore);
+    expect(editor.latestCanvasFrame().fills).not.toContain(drawnBefore);
+    expect(fillsOf("udieresis")).toBe(1);
   });
 
   it("draws every occurrence of a glyph that loads after the run first draws", async () => {
-    editor = await new TestEditor().openSession(FONT, "u");
-    expect(editor.glyphForId(glyphId("o"))).toBeNull();
-    const latestFills = recordSceneFills(editor);
+    editor = await openTestEditor(FONT, "u");
+    expect(editor.glyphLoaded("o")).toBe(false);
+    editor.recordCanvas();
 
-    const run = editor.textRun!;
-    const edited = editor.text.run(run.runId)!.items[0]!;
-    editor.text.setItems(run.runId, [edited, ...editor.text.itemsFromText("ouo")]);
+    await typeAfterEditedGlyph(editor, "ouo");
 
-    await expect.poll(() => fillsOf(latestFills(), renderModel("o"))).toBe(2);
+    await expect.poll(() => fillsOf("o")).toBe(2);
   });
 
   it("starts stroking a run glyph's open contour when one of its contours opens", async () => {
-    editor = await new TestEditor().openSession(FONT, "u");
-    const latestFrame = recordSceneFrames(editor);
-    const run = editor.textRun!;
-    const edited = editor.text.run(run.runId)!.items[0]!;
-    editor.text.setItems(run.runId, [edited, ...editor.text.itemsFromText("ouo")]);
-    await expect.poll(() => fillsOf(latestFrame().fills, renderModel("o"))).toBe(2);
+    editor = await openTestEditor(FONT, "o");
+    editor.recordCanvas();
+    await typeAfterEditedGlyph(editor, "ouo");
+    await expect.poll(() => fillsOf("o")).toBe(2);
 
-    const o = renderModel("o")!;
-    const strokesOfOpenPath = () =>
-      latestFrame().strokes.filter((path) => path === o.openContoursPath).length;
+    const strokesOfOpenPath = () => {
+      const { open } = editor.drawnOutlineIds("o");
+      return editor.latestCanvasFrame().strokes.filter((stroke) => stroke === open).length;
+    };
     // Closed contours only: the run strokes nothing for it.
-    expect(o.hasOpenContoursCell.peek()).toBe(false);
+    expect((await editor.outline()).some((contour) => !contour.closed)).toBe(false);
     expect(strokesOfOpenPath()).toBe(0);
-    const layer = editor.glyphForId(glyphId("o"))!.layerForSource(editor.font.defaultSource.id)!;
-    layer.openContour(layer.contours[0]!.id);
-    await editor.settle();
+    const [contour] = await editor.outline();
+    const point = contour?.points[0];
+    if (!point) throw new Error("Expected a point in the o");
+    editor.select([point.id as PointId]);
+    await editor.deleteSelection("gap");
 
     await expect.poll(strokesOfOpenPath).toBe(2);
   });
