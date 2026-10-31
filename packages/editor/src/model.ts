@@ -5,7 +5,8 @@ export {
   kerningRule,
   kerningValueEdit,
   unkerned,
-  fontSide,
+  kerningSide,
+  kerningSideId,
 } from "./lib/model/Kerning";
 export type {
   Kerning,

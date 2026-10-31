@@ -38,6 +38,18 @@ describe("the window's engine edits from the store", () => {
     const storePath = path.join(dir, "working.sqlite");
     bridge = createBridge();
     bridge.workspace.createUntitledWorkspace(storePath);
+    const layers = layerReaderHost();
+    const reader = layers.open({ kind: "working", storePath });
+    openEngine = async () => {
+      const { EngineSession } = await loadEngine();
+      return EngineSession.open(
+        bridge.workspace.encodedDirectory(),
+        engineStoreRequest(layers, () => reader),
+      );
+    };
+    const blank = await openEngine();
+    const sourceId = blank.fontRecords().sources[0]!.id;
+    blank.dispose();
     const glyphId = mintGlyphId();
     layerId = mintLayerId();
     const contourId = mintContourId();
@@ -46,7 +58,7 @@ describe("the window's engine edits from the store", () => {
       { kind: "createGlyph", createGlyph: { glyphId, name: "A", unicodes: [65] } },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: bridge.workspace.getSources()[0]!.id },
+        createGlyphLayer: { layerId, glyphId, sourceId },
       },
       { kind: "addContour", addContour: { layerId, contourId, closed: true } },
       {
@@ -65,15 +77,6 @@ describe("the window's engine edits from the store", () => {
       },
     ]);
 
-    const layers = layerReaderHost();
-    const reader = layers.open({ kind: "working", storePath });
-    openEngine = async () => {
-      const { EngineSession } = await loadEngine();
-      return EngineSession.open(
-        bridge.workspace.encodedDirectory(),
-        engineStoreRequest(layers, () => reader),
-      );
-    };
     engine = await openEngine();
   });
 
@@ -103,7 +106,7 @@ describe("the window's engine edits from the store", () => {
 
   it("returns the same font-level records the workspace echoes for the edit", () => {
     const glyphId = bridge.workspace.getGlyphs()[0]!.id;
-    const sourceId = bridge.workspace.getSources()[0]!.id;
+    const sourceId = engine.fontRecords().sources[0]!.id;
     const edits: FontIntent[] = [
       {
         kind: "setKerningValues",
@@ -178,7 +181,7 @@ describe("the window's engine edits from the store", () => {
   });
 
   it("moves the composites attached to a moved anchor", async () => {
-    const source = bridge.workspace.getSources()[0]!.id;
+    const source = engine.fontRecords().sources[0]!.id;
     const glyph = (name: string) => {
       const glyphId = mintGlyphId();
       const glyphLayer = mintLayerId();

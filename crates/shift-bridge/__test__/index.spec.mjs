@@ -5,6 +5,7 @@ import { join } from "path";
 import { fileURLToPath } from "url";
 import { PackError } from "@shift/pack";
 import { nativeBridge } from "./bridge.mjs";
+import { engineFontRecords } from "./engineReads.mjs";
 
 const shortIdAlphabet = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 const shortIdLength = 10;
@@ -37,7 +38,7 @@ describe("Bridge", () => {
   });
 
   function defaultSourceId() {
-    return bridge.workspace.getSources()[0].id;
+    return engineFontRecords(bridge).sources[0].id;
   }
 
   function createGlyphLayer(name = "A", unicodes = [65]) {
@@ -114,13 +115,11 @@ describe("Bridge", () => {
       expect.objectContaining({ kind: "descender", name: "Descender" }),
     ]);
 
-    const [defaultSource] = bridge.workspace.getSources();
-    expect(defaultSource.metricValues).toHaveLength(5);
-    expect(
-      definitions.map(
-        ({ id }) => defaultSource.metricValues.find(({ metricId }) => metricId === id).position,
-      ),
-    ).toEqual([800, 700, 500, 0, -200]);
+    const [defaultSource] = engineFontRecords(bridge).sources;
+    expect(Object.keys(defaultSource.metricValues)).toHaveLength(5);
+    expect(definitions.map(({ id }) => defaultSource.metricValues[id].position)).toEqual([
+      800, 700, 500, 0, -200,
+    ]);
 
     expect(bridge.workspace.getGlyphs()).toEqual([]);
   });
@@ -336,7 +335,7 @@ function sourceRows(snapshot) {
     source.name,
     source.filename,
     source.location.values,
-    source.metricValues.map(({ position }) => position),
+    standardMetricDefinitions.map(({ id }) => source.metricValues[id].position),
   ]);
 }
 
@@ -348,13 +347,14 @@ const standardMetricDefinitions = [
   { id: "metric:descender", kind: "descender", name: "Descender" },
 ];
 
-/** Standard metric values at the given positions, without overshoot. */
+/** Standard metric values at the given positions, without overshoot, by metric row. */
 function metricValues(positions) {
-  return standardMetricDefinitions.map(({ id }, index) => ({
-    metricId: id,
-    position: positions[index],
-    overshoot: 0,
-  }));
+  return Object.fromEntries(
+    standardMetricDefinitions.map(({ id }, index) => [
+      id,
+      { position: positions[index], overshoot: 0 },
+    ]),
+  );
 }
 
 describe("font source previews", () => {
@@ -364,11 +364,8 @@ describe("font source previews", () => {
       id: `axis:${tag}`,
       tag,
       name,
-      minimum: 0,
-      default: 0,
-      maximum: 1000,
+      kind: { kind: "continuous", minimum: 0, default: 0, maximum: 1000 },
       hidden: false,
-      axisType: "continuous",
       role: "external",
       labels: [],
     });
@@ -414,6 +411,7 @@ describe("font source previews", () => {
       metricValues: metricValues(lightMetrics),
       italicAngle: 0,
       lineGap: 0,
+      role: "master",
     });
     expect(sourceRows(snapshot)).toEqual([
       ["LightCondensed", lightCondensed, location(0, 0), lightMetrics],
@@ -426,7 +424,9 @@ describe("font source previews", () => {
     ]);
     for (const source of snapshot.sources) {
       expect(source).toMatchObject({ italicAngle: 0, lineGap: 0 });
-      expect(source.metricValues.map(({ overshoot }) => overshoot)).toEqual([0, 0, 0, 0, 0]);
+      expect(Object.values(source.metricValues).map(({ overshoot }) => overshoot)).toEqual([
+        0, 0, 0, 0, 0,
+      ]);
     }
 
     expect(snapshot.namedInstances).toEqual([
@@ -470,6 +470,7 @@ describe("font source previews", () => {
         location: { values: {} },
         metricValues: metricValues([1000, 700, 500, 0, -200]),
         lineGap: 0,
+        role: "master",
       },
     ]);
     expect(snapshot.axes).toEqual([]);

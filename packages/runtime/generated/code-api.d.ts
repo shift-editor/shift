@@ -227,33 +227,67 @@ interface MetricDefinition {
 interface Location {
   readonly values: Readonly<Record<AxisId, number>>;
 }
-interface SourceMetricValue {
-  readonly metricId: MetricId;
+/**
+ * One source's authored position and alignment-zone overshoot for a metric.
+ *
+ * Both values are expressed in font units. Overshoots are positive above a
+ * metric line and negative below it.
+ */
+interface MetricValue {
   readonly position: number;
   readonly overshoot: number;
 }
+/**
+ * How a source participates in the font. A `Master` is a genuine
+ * designspace source: it has a design-space location and earns a
+ * `<source>` entry when the font is written as a designspace. A `Layer`
+ * only carries a format layer that rides along with its file's masters
+ * (e.g. a plain UFO background layer) and must never gain a designspace
+ * `<source>` entry on save.
+ */
+type SourceRole = "master" | "layer";
 interface Source {
   readonly id: SourceId;
   readonly name: string;
   readonly location: Location;
-  readonly filename?: string | null;
-  readonly metricValues: readonly SourceMetricValue[];
+  readonly metricValues: Readonly<Record<MetricId, MetricValue>>;
   readonly italicAngle?: number | null;
   readonly lineGap?: number | null;
   readonly underlinePosition?: number | null;
   readonly underlineThickness?: number | null;
+  readonly filename?: string | null;
+  readonly color?: string | null;
+  readonly role: SourceRole;
+  readonly layerName?: string | null;
 }
-/** Whether an axis reaches the compiled font or exists only while designing. */
 type AxisRole = "external" | "internal";
-/** Whether an axis takes any value in its range or only its listed values. */
-type AxisType = "continuous" | "discrete";
-/** Wire projection of a stable external-axis label. */
+type AxisKind =
+  | {
+      readonly kind: "continuous";
+      readonly minimum: number;
+      readonly default: number;
+      readonly maximum: number;
+    }
+  | {
+      readonly kind: "discrete";
+      readonly values: readonly number[];
+      readonly default: number;
+    };
+interface AxisLabelRange {
+  readonly minimum: number;
+  readonly maximum: number;
+}
+/**
+ * One authored external-axis name and its stable identity.
+ *
+ * Labels describe values for authoring UI and STAT output. They do not create
+ * products or reference sources.
+ */
 interface AxisLabel {
   readonly id: AxisLabelId;
   readonly name: string;
   readonly value: number;
-  readonly minimum?: number | null;
-  readonly maximum?: number | null;
+  readonly range?: AxisLabelRange | null;
   readonly linkedValue?: number | null;
   readonly elidable: boolean;
 }
@@ -262,11 +296,7 @@ interface Axis {
   readonly tag: string;
   readonly name: string;
   readonly role: AxisRole;
-  readonly axisType: AxisType;
-  readonly minimum?: number | null;
-  readonly default: number;
-  readonly maximum?: number | null;
-  readonly values?: readonly number[] | null;
+  readonly kind: AxisKind;
   readonly labels: readonly AxisLabel[];
   readonly hidden: boolean;
 }
@@ -306,7 +336,7 @@ type PointType = "onCurve" | "offCurve" | "qCurve";
 /** Standard and technical metrics resolved for one authored source. */
 type SourceMetrics = Readonly<
   FontMetrics & {
-    metricValues: readonly SourceMetricValue[];
+    metricValues: Readonly<Record<MetricId, MetricValue>>;
     ascender: number;
     descender: number;
     baseline: number;

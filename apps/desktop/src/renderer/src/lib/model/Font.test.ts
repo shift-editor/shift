@@ -9,6 +9,7 @@ import {
   type AxisId,
   type GlyphId,
   type GlyphName,
+  type Source,
   type SourceId,
   type Unicode,
 } from "@shift/types";
@@ -41,7 +42,8 @@ const SNAPSHOT: WorkspaceSnapshot = {
       id: "source-1" as SourceId,
       name: "Regular",
       location: { values: {} },
-      metricValues: [],
+      metricValues: {},
+      role: "master",
     },
   ],
   axes: [],
@@ -147,11 +149,12 @@ describe("Font answers directory and source queries", () => {
     mark: false,
     nonspacingMark: false,
   });
-  const source = (id: string, name: string) => ({
+  const source = (id: string, name: string): Source => ({
     id: id as SourceId,
     name,
     location: { values: {} },
-    metricValues: [],
+    metricValues: {},
+    role: "master",
   });
   const font = (snapshot: Partial<WorkspaceSnapshot>) =>
     new Font({ store: new FontStore({ workspace: { ...SNAPSHOT, ...snapshot } }) });
@@ -259,10 +262,7 @@ describe("font-level intents make the font variable", () => {
       tag: "opsz",
       name: "Optical Size",
       role: "external",
-      axisType: "continuous",
-      minimum: 8,
-      default: 14,
-      maximum: 72,
+      kind: { kind: "continuous", minimum: 8, default: 14, maximum: 72 },
       labels: [],
       hidden: false,
     });
@@ -275,7 +275,9 @@ describe("font-level intents make the font variable", () => {
     await stack.editCoordinator.settled();
 
     const source = stack.font.sources.find((candidate) => candidate.id === sourceId);
-    expect(source?.metricValues).toHaveLength(stack.font.metricDefinitions.length);
+    expect(Object.keys(source?.metricValues ?? {})).toHaveLength(
+      stack.font.metricDefinitions.length,
+    );
   });
 
   it("createGlyphLayer projects sparse glyph-layer membership", async () => {
@@ -313,10 +315,7 @@ describe("font-level intents make the font variable", () => {
       tag: "wght",
       name: "Weight",
       role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
+      kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
       labels: [],
       hidden: false,
     });
@@ -405,9 +404,7 @@ describe("font-level intents make the font variable", () => {
       ...weightAxis(),
       tag: "wdth",
       name: "Width",
-      minimum: 50,
-      default: 100,
-      maximum: 200,
+      kind: { kind: "continuous", minimum: 50, default: 100, maximum: 200 },
     });
     await stack.editCoordinator.settled();
     const boldSourceId = stack.font.createSource(
@@ -459,10 +456,7 @@ describe("font-level intents make the font variable", () => {
       tag: "wght",
       name: "Weight",
       role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
+      kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
       labels: [
         {
           id: labelId,
@@ -787,10 +781,7 @@ function weightAxis(): AxisDefinition {
     tag: "wght",
     name: "Weight",
     role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
+    kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
     labels: [],
     hidden: false,
   };

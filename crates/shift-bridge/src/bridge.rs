@@ -27,8 +27,8 @@ use shift_wire::{
   FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
   GlyphProjection, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
   GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, LayerMatch as WireLayerMatch,
-  Location as WireLocation, MetricDefinition, NamedInstance, PointData, PointType, Source,
-  SourceMetricValue, VariationBasis, VariationDelta,
+  Location as WireLocation, MetricDefinition, NamedInstance, PointData, PointType, VariationBasis,
+  VariationDelta,
   bridges::napi::{
     NapiGlyphPreview, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
     NapiLayerMatch, NapiLayerRead,
@@ -156,7 +156,7 @@ impl RetainedSource {
       glyphs: ids.wire(&ids.glyph_ids, directory.glyphs()),
       sources: ids.wire(&ids.source_ids, directory.sources()),
       named_instances: ids.wire(&ids.instance_ids, directory.instances()),
-      axes: ids.font_axes.iter().into_each(),
+      axes: ids.font_axes.to_vec(),
       axis_mappings: ids.axis_mappings_of(directory)?.iter().into_each(),
       axis_mapping_bases: ids.mapping_bases.iter().into_each(),
       // A preview reads only its source's directory: no lib, kerning or
@@ -664,32 +664,32 @@ impl ToWire for DirectoryGlyph {
 
 impl ToWire for DirectorySource {
   type Id = SourceId;
-  type Wire = Source;
+  type Wire = shift_font::Source;
 
-  fn to_wire(&self, id: &SourceId, identity: &SourceIdentity) -> Source {
+  fn to_wire(&self, id: &SourceId, identity: &SourceIdentity) -> shift_font::Source {
     let metrics = &self.metrics;
-    Source {
-      id: *id,
-      name: self.name.clone(),
-      location: identity.location(&self.location),
-      filename: self.filename.clone(),
-      metric_values: identity
+    let location =
+      shift_font::DesignLocation::from_map(identity.axis_values(self.location.iter().copied()));
+    let mut source =
+      shift_font::Source::with_id(*id, self.name.clone(), location, self.filename.clone());
+    source.set_metric_values(
+      identity
         .metric_ids
         .iter()
         .zip(MetricKind::STANDARD)
         .filter_map(|(metric_id, kind)| {
-          Some(SourceMetricValue {
-            metric_id: *metric_id,
-            position: metrics.position(kind)?,
-            overshoot: 0.0,
-          })
+          Some((
+            *metric_id,
+            shift_font::MetricValue::new(metrics.position(kind)?, 0.0),
+          ))
         })
         .collect(),
-      italic_angle: metrics.italic_angle,
-      line_gap: Some(metrics.line_gap),
-      underline_position: metrics.underline_position,
-      underline_thickness: metrics.underline_thickness,
-    }
+    );
+    source.set_italic_angle(metrics.italic_angle);
+    source.set_line_gap(Some(metrics.line_gap));
+    source.set_underline_position(metrics.underline_position);
+    source.set_underline_thickness(metrics.underline_thickness);
+    source
   }
 }
 
@@ -2397,8 +2397,13 @@ mod tests {
     assert_eq!(bridge.workspace().unwrap().loaded_layer_count(), 0);
   }
 
+  /// The open font's master sources.
+  fn masters(bridge: &Bridge) -> Vec<shift_font::Source> {
+    bridge.font().unwrap().masters().cloned().collect()
+  }
+
   fn default_source_id(bridge: &Bridge) -> String {
-    bridge.get_sources().unwrap()[0].id.to_string()
+    masters(bridge)[0].id().to_string()
   }
 
   fn create_default_glyph_layer(bridge: &mut Bridge, name: &str, unicode: Option<u32>) -> String {
@@ -2489,11 +2494,11 @@ mod tests {
       .expect("createAxis must echo font replacements");
     let axes = next.axes.expect("createAxis must echo axes");
     assert_eq!(axes.len(), 1);
-    assert_eq!(axes[0].tag, "wght");
-    assert_eq!(axes[0].name, "Weight");
-    assert_eq!(axes[0].minimum, Some(100.0));
-    assert_eq!(axes[0].default, 400.0);
-    assert_eq!(axes[0].maximum, Some(900.0));
+    assert_eq!(axes[0].tag(), "wght");
+    assert_eq!(axes[0].name(), "Weight");
+    assert_eq!(axes[0].minimum(), 100.0);
+    assert_eq!(axes[0].default(), 400.0);
+    assert_eq!(axes[0].maximum(), 900.0);
     // locations may change shape, so sources ride along
     assert!(next.sources.is_some());
     assert!(next.glyph_changes.is_none());
@@ -2519,7 +2524,7 @@ mod tests {
     );
 
     assert!(result.is_err());
-    assert_eq!(bridge.get_axes().unwrap().len(), 1);
+    assert_eq!(bridge.font().unwrap().axes().to_vec().len(), 1);
   }
 
   #[test]
@@ -2614,7 +2619,7 @@ mod tests {
     assert!(
       sources
         .iter()
-        .all(|source| source.location.values.is_empty())
+        .all(|source| source.location().as_untyped().is_empty())
     );
     assert!(!bridge.is_variable().unwrap());
   }
@@ -2643,12 +2648,12 @@ mod tests {
     assert_eq!(sources.len(), 2);
     let bold = sources
       .iter()
-      .find(|source| source.name == "Bold")
+      .find(|source| source.name() == "Bold")
       .expect("new source must be in the echo");
-    assert_eq!(bold.id.as_str(), "source_bold");
+    assert_eq!(bold.id().as_str(), "source_bold");
     assert_eq!(
-      bold.location.values.get(&AxisId::from_raw("axis_weight")),
-      Some(&700.0)
+      bold.location().get(&AxisId::from_raw("axis_weight")),
+      Some(700.0)
     );
     assert!(applied.layers.is_empty());
     assert!(next.glyph_changes.is_none());
@@ -2857,7 +2862,7 @@ mod tests {
     );
 
     assert!(result.is_err());
-    assert_eq!(bridge.get_sources().unwrap().len(), 1);
+    assert_eq!(masters(&bridge).len(), 1);
   }
 
   #[test]
@@ -2876,7 +2881,7 @@ mod tests {
     );
 
     assert!(result.is_err());
-    assert_eq!(bridge.get_sources().unwrap().len(), 1);
+    assert_eq!(masters(&bridge).len(), 1);
   }
 
   #[test]
@@ -2904,7 +2909,7 @@ mod tests {
     );
 
     assert!(result.is_err());
-    assert_eq!(bridge.get_sources().unwrap().len(), 2);
+    assert_eq!(masters(&bridge).len(), 2);
   }
 
   #[test]
@@ -2945,7 +2950,7 @@ mod tests {
       .expect("deleteSource must echo font replacements");
     let sources = next.sources.expect("deleteSource must echo sources");
     assert_eq!(sources.len(), 1);
-    assert_eq!(sources[0].name, "Regular");
+    assert_eq!(sources[0].name(), "Regular");
     let glyphs = next
       .glyph_changes
       .expect("deleteSource layer removal must echo glyph records")
@@ -2967,7 +2972,7 @@ mod tests {
     let result = bridge.apply(vec![delete_source_intent(&source_id)], None);
 
     assert!(result.is_err());
-    assert_eq!(bridge.get_sources().unwrap().len(), 1);
+    assert_eq!(masters(&bridge).len(), 1);
   }
 
   #[test]
@@ -3054,13 +3059,13 @@ mod tests {
     let metrics = bridge.get_metrics().unwrap();
 
     assert!(bridge.get_glyphs().unwrap().is_empty());
-    assert_eq!(bridge.get_sources().unwrap().len(), 1);
-    assert_eq!(bridge.get_sources().unwrap()[0].name, "Regular");
+    assert_eq!(masters(&bridge).len(), 1);
+    assert_eq!(masters(&bridge)[0].name(), "Regular");
     assert_eq!(metadata.family_name.as_deref(), Some("Untitled Font"));
     assert_eq!(metadata.style_name.as_deref(), Some("Regular"));
     assert_eq!(metrics.units_per_em, 1000.0);
     assert_eq!(bridge.get_metric_definitions().unwrap().len(), 5);
-    assert_eq!(bridge.get_sources().unwrap()[0].metric_values.len(), 5);
+    assert_eq!(masters(&bridge)[0].metric_values().len(), 5);
   }
 
   #[test]
@@ -3072,9 +3077,9 @@ mod tests {
     bridge.create_untitled_workspace(store_path, None).unwrap();
 
     assert!(bridge.get_glyphs().unwrap().is_empty());
-    assert!(bridge.get_axes().unwrap().is_empty());
-    assert_eq!(bridge.get_sources().unwrap().len(), 1);
-    assert_eq!(bridge.get_sources().unwrap()[0].name, "Regular");
+    assert!(bridge.font().unwrap().axes().to_vec().is_empty());
+    assert_eq!(masters(&bridge).len(), 1);
+    assert_eq!(masters(&bridge)[0].name(), "Regular");
   }
 
   #[test]

@@ -52,9 +52,7 @@ describe("GlyphCatalog", () => {
     const ascender = editor
       .fontOverview()
       .metricDefinitions.find((definition) => definition.kind === "ascender");
-    const boldAscender = editor
-      .source({ name: "Bold" })
-      ?.metricValues.find((value) => value.metricId === ascender?.id);
+    const boldAscender = ascender && editor.source({ name: "Bold" })?.metricValues[ascender.id];
     if (!ascender || !boldAscender) throw new Error("Expected Bold's ascender");
     const edited = editor.setSourceMetric("Bold", ascender.name, boldAscender.position + 200);
     expect(catalog.metricsCell.peek().ascender).toBeCloseTo(before + 100);

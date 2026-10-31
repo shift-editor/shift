@@ -50,7 +50,7 @@ test.describe("source topology", () => {
       fixture.mediumSourceId,
       fixture.boldSourceId,
     ]);
-    expectCanonicalFont(recoveryApp, baseline);
+    await expectCanonicalFont(recoveryApp, baseline);
 
     await editor.deleteSource("Medium Master");
     const deleted = await observeVariableFont(recoveryApp);
@@ -62,16 +62,16 @@ test.describe("source topology", () => {
       fixture.defaultSourceId,
       fixture.boldSourceId,
     ]);
-    expectCanonicalFont(recoveryApp, baseline);
+    await expectCanonicalFont(recoveryApp, baseline);
 
     await recoveryApp.crashAndRecover();
     await expectVariableFont(recoveryApp, deleted);
-    expectCanonicalFont(recoveryApp, baseline);
+    await expectCanonicalFont(recoveryApp, baseline);
 
     await save(recoveryApp);
     const saved = { ...deleted, dirty: false };
     await expectVariableFont(recoveryApp, saved);
-    expectCanonicalFont(recoveryApp, saved);
+    await expectCanonicalFont(recoveryApp, saved);
 
     await recoveryApp.crashAndReopenDocument();
     await expectVariableFont(recoveryApp, saved);
@@ -114,23 +114,23 @@ test.describe("axis topology", () => {
       fixture.widthAxisId,
       fixture.slantAxisId,
     ]);
-    expectCanonicalFont(recoveryApp, baseline);
+    await expectCanonicalFont(recoveryApp, baseline);
 
     await editor.deleteAxis("wdth");
     const deleted = await observeVariableFont(recoveryApp);
     expect(deleted.axes.map(({ id }) => id)).toEqual([fixture.weightAxisId, fixture.slantAxisId]);
     expect(deleted.defaultSourceId).toBe(fixture.defaultSourceId);
     expect(deleted.dirty).toBe(true);
-    expectCanonicalFont(recoveryApp, baseline);
+    await expectCanonicalFont(recoveryApp, baseline);
 
     await recoveryApp.crashAndRecover();
     await expectVariableFont(recoveryApp, deleted);
-    expectCanonicalFont(recoveryApp, baseline);
+    await expectCanonicalFont(recoveryApp, baseline);
 
     await save(recoveryApp);
     const saved = { ...deleted, dirty: false };
     await expectVariableFont(recoveryApp, saved);
-    expectCanonicalFont(recoveryApp, saved);
+    await expectCanonicalFont(recoveryApp, saved);
 
     await recoveryApp.crashAndReopenDocument();
     await expectVariableFont(recoveryApp, saved);
@@ -160,8 +160,11 @@ async function expectVariableFont(
   await expect.poll(() => observeVariableFont(recoveryApp), { timeout: 20_000 }).toEqual(expected);
 }
 
-function expectCanonicalFont(recoveryApp: RecoveryApp, expected: ObservedVariableFont): void {
-  expect(recoveryApp.canonicalVariableFont()).toEqual({
+async function expectCanonicalFont(
+  recoveryApp: RecoveryApp,
+  expected: ObservedVariableFont,
+): Promise<void> {
+  expect(await recoveryApp.canonicalVariableFont()).toEqual({
     axes: expected.axes,
     sources: expected.sources,
     namedInstances: expected.namedInstances,

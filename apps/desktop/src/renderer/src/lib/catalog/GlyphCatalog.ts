@@ -10,7 +10,11 @@ import type {
 } from "@shift/types";
 import { computed, track, type ComputedSignal, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import {
+  continuousBounds,
+  discreteValues,
+  externalAxisLocationFromRecord,
+} from "@shift/editor/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
 import { RenderGlyph, type GlyphInvalidation } from "@shift/editor/model";
@@ -47,7 +51,7 @@ export class GlyphCatalog {
     this.locationCell = computed(
       () => {
         const location = editor.externalLocationCell.value;
-        return font.axesCell.value.map((axis) => location.get(axis.id) ?? axis.default);
+        return font.axesCell.value.map((axis) => location.get(axis.id) ?? axis.kind.default);
       },
       { name: "catalog.location" },
     );
@@ -100,7 +104,9 @@ export class GlyphCatalog {
     }
 
     const externalLocation = externalAxisLocationFromRecord(
-      Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
+      Object.fromEntries(
+        axes.map((axis, index) => [axis.id, location[index] ?? axis.kind.default]),
+      ),
     );
     return font.glyphPreviews(glyphIds, font.designspace.toDesign(externalLocation));
   }
@@ -119,7 +125,9 @@ export class GlyphCatalog {
     }
 
     const axisLocation = externalAxisLocationFromRecord(
-      Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
+      Object.fromEntries(
+        axes.map((axis, index) => [axis.id, location[index] ?? axis.kind.default]),
+      ),
     );
     this.#editor.setExternalLocation(axisLocation);
   }
@@ -151,10 +159,10 @@ function catalogAxis(axis: Axis, index: number): CatalogAxis {
     tag: axis.tag,
     name: axis.name,
     hidden: axis.hidden,
-    axisType: axis.axisType,
-    minimum: axis.minimum ?? undefined,
-    default: axis.default,
-    maximum: axis.maximum ?? undefined,
-    values: [...(axis.values ?? [])],
+    axisType: axis.kind.kind,
+    minimum: continuousBounds(axis)?.minimum,
+    default: axis.kind.default,
+    maximum: continuousBounds(axis)?.maximum,
+    values: [...(discreteValues(axis) ?? [])],
   };
 }

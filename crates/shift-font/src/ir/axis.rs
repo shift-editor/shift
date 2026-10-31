@@ -76,7 +76,7 @@ pub struct AxisLabelRange {
 /// products or reference sources.
 // The editor's axis records keep the name `AxisLabel` until it reads axes
 // from the engine.
-#[cfg_attr(feature = "pack", derive(pack::Pack), pack(rename = "FontAxisLabel"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisLabel {
     id: AxisLabelId,
     pub name: String,
@@ -141,7 +141,7 @@ impl AxisLabel {
 #[serde(rename_all = "camelCase")]
 // The editor's axis records keep the name `Axis` until it reads axes from the
 // engine.
-#[cfg_attr(feature = "pack", derive(pack::Pack), pack(rename = "FontAxis"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Axis {
     id: AxisId,
     tag: String,

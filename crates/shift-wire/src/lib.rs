@@ -14,19 +14,17 @@ use shift_font::composite::{
     ComponentGlyph as IrComponentGlyph, GlyphComponents as IrGlyphComponents,
 };
 use shift_font::{
-    Anchor as IrAnchor, AnchorId, Axis as IrAxis, AxisId, AxisKind as IrAxisKind, AxisLabelId,
-    AxisMapping as IrAxisMapping, AxisMappingBasis as IrAxisMappingBasis, AxisMappingId,
-    AxisRole as IrAxisRole, Component as IrComponent, ComponentAlignment, ComponentId,
-    Contour as IrContour, ContourId, Font as IrFont, FontMetadata as IrFontMetadata,
-    FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
+    Anchor as IrAnchor, AnchorId, AxisId, AxisMapping as IrAxisMapping,
+    AxisMappingBasis as IrAxisMappingBasis, AxisMappingId, Component as IrComponent,
+    ComponentAlignment, ComponentId, Contour as IrContour, ContourId, Font as IrFont,
+    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, Glyph as IrGlyph, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
     GuidelineId, InterpolationBasis as IrInterpolationBasis, KerningPosition as IrKerningPosition,
-    KerningSide as IrKerningSide, LayerDifference as IrLayerDifference, LayerId,
-    Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
-    MetricKind as IrMetricKind, NamedInstance as IrNamedInstance, NamedInstanceId,
-    Point as IrPoint, PointId, PointType as IrPointType, Source as IrSource, SourceId,
-    SourceMetricField as IrSourceMetricField,
+    LayerDifference as IrLayerDifference, LayerId, Location as IrLocation,
+    MetricDefinition as IrMetricDefinition, MetricId, MetricKind as IrMetricKind,
+    NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
+    PointType as IrPointType, SourceId, SourceMetricField as IrSourceMetricField,
     SourceMetricInterpolation as IrSourceMetricInterpolation, VariationBasis as IrVariationBasis,
 };
 
@@ -162,100 +160,6 @@ impl From<&IrMetricDefinition> for MetricDefinition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct SourceMetricValue {
-    pub metric_id: MetricId,
-    pub position: f64,
-    pub overshoot: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct Axis {
-    pub id: AxisId,
-    pub tag: String,
-    pub name: String,
-    pub role: AxisRole,
-    pub axis_type: AxisType,
-    pub minimum: Option<f64>,
-    pub default: f64,
-    pub maximum: Option<f64>,
-    pub values: Option<Vec<f64>>,
-    pub labels: Vec<AxisLabel>,
-    pub hidden: bool,
-}
-
-/// Whether an axis reaches the compiled font or exists only while designing.
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AxisRole {
-    External,
-    Internal,
-}
-
-/// Whether an axis takes any value in its range or only its listed values.
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AxisType {
-    Continuous,
-    Discrete,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-/// Wire projection of a stable external-axis label.
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct AxisLabel {
-    pub id: AxisLabelId,
-    pub name: String,
-    pub value: f64,
-    pub minimum: Option<f64>,
-    pub maximum: Option<f64>,
-    pub linked_value: Option<f64>,
-    pub elidable: bool,
-}
-
-impl From<&IrAxis> for Axis {
-    fn from(axis: &IrAxis) -> Self {
-        Self {
-            id: axis.id(),
-            tag: axis.tag().to_string(),
-            name: axis.name().to_string(),
-            role: match axis.role() {
-                IrAxisRole::External => AxisRole::External,
-                IrAxisRole::Internal => AxisRole::Internal,
-            },
-            axis_type: match axis.kind() {
-                IrAxisKind::Continuous { .. } => AxisType::Continuous,
-                IrAxisKind::Discrete { .. } => AxisType::Discrete,
-            },
-            minimum: matches!(axis.kind(), IrAxisKind::Continuous { .. }).then(|| axis.minimum()),
-            default: axis.default(),
-            maximum: matches!(axis.kind(), IrAxisKind::Continuous { .. }).then(|| axis.maximum()),
-            values: axis.discrete_values().map(<[f64]>::to_vec),
-            labels: axis
-                .labels()
-                .iter()
-                .map(|label| AxisLabel {
-                    id: label.id(),
-                    name: label.name.clone(),
-                    value: label.value,
-                    minimum: label.range.as_ref().map(|range| range.minimum),
-                    maximum: label.range.as_ref().map(|range| range.maximum),
-                    linked_value: label.linked_value,
-                    elidable: label.elidable,
-                })
-                .collect(),
-            hidden: axis.is_hidden(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 /// Wire projection of an explicit named product preset.
 ///
 /// `location` is complete external authoring state, not a normalized or
@@ -339,45 +243,6 @@ impl From<&IrAxisMappingBasis> for AxisMappingBasis {
             input_axis_ids: basis.input_axis_ids().to_vec(),
             output_axis_ids: basis.output_axis_ids().to_vec(),
             basis: basis.basis().into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct Source {
-    pub id: SourceId,
-    pub name: String,
-    pub location: Location,
-    pub filename: Option<String>,
-    pub metric_values: Vec<SourceMetricValue>,
-    pub italic_angle: Option<f64>,
-    pub line_gap: Option<f64>,
-    pub underline_position: Option<f64>,
-    pub underline_thickness: Option<f64>,
-}
-
-impl From<&IrSource> for Source {
-    fn from(source: &IrSource) -> Self {
-        Self {
-            id: source.id(),
-            name: source.name().to_string(),
-            location: source.location().as_untyped().into(),
-            filename: source.filename().map(str::to_string),
-            metric_values: source
-                .metric_values()
-                .iter()
-                .map(|(metric_id, value)| SourceMetricValue {
-                    metric_id: *metric_id,
-                    position: value.position,
-                    overshoot: value.overshoot,
-                })
-                .collect(),
-            italic_angle: source.italic_angle(),
-            line_gap: source.line_gap(),
-            underline_position: source.underline_position(),
-            underline_thickness: source.underline_thickness(),
         }
     }
 }
@@ -843,8 +708,8 @@ pub struct FontSnapshot {
     pub metric_definitions: Vec<MetricDefinition>,
     pub source_metrics_interpolation: Option<SourceMetricsInterpolationSnapshot>,
     pub glyphs: Vec<GlyphEntry>,
-    pub sources: Vec<Source>,
-    pub axes: Vec<Axis>,
+    pub sources: Vec<shift_font::Source>,
+    pub axes: Vec<shift_font::Axis>,
     pub axis_mappings: Vec<AxisMapping>,
     pub axis_mapping_bases: Vec<AxisMappingBasis>,
     pub named_instances: Vec<NamedInstance>,
@@ -1446,39 +1311,6 @@ impl From<IrKerningPosition> for KerningPosition {
     }
 }
 
-/// Whether a kerning pair side names one glyph or a group.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub enum KerningSideKind {
-    Glyph,
-    Group,
-}
-
-/// One side of a kerning pair: `id` is a glyph id or a group id, by `kind`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct KerningSide {
-    pub kind: KerningSideKind,
-    pub id: String,
-}
-
-impl From<&IrKerningSide> for KerningSide {
-    fn from(side: &IrKerningSide) -> Self {
-        match side {
-            IrKerningSide::Glyph(glyph_id) => Self {
-                kind: KerningSideKind::Glyph,
-                id: glyph_id.to_string(),
-            },
-            IrKerningSide::Group(group_id) => Self {
-                kind: KerningSideKind::Group,
-                id: group_id.to_string(),
-            },
-        }
-    }
-}
-
 /// One kerning group and its members in authored order.
 ///
 /// Pairs reference the group by `id`; `name` is its label, unique at its position.
@@ -1498,8 +1330,8 @@ pub struct KerningGroup {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningPairValue {
-    pub first: KerningSide,
-    pub second: KerningSide,
+    pub first: shift_font::KerningSide,
+    pub second: shift_font::KerningSide,
     pub amount: f64,
 }
 
@@ -1549,8 +1381,8 @@ impl From<&IrFont> for KerningSnapshot {
                 pairs: pairs
                     .pairs()
                     .map(|(pair, amount)| KerningPairValue {
-                        first: (&pair.first).into(),
-                        second: (&pair.second).into(),
+                        first: pair.first.clone(),
+                        second: pair.second.clone(),
                         amount,
                     })
                     .collect(),

@@ -98,6 +98,8 @@ export type {
   WorkspaceDocumentState,
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
+  StoredWorkspaceSnapshot,
+  EngineFontRecords,
 } from "./workspace";
 
 export type {
@@ -150,7 +152,6 @@ export type {
   AxisMappingBasis,
   AxisMappingPoint,
   AxisRole,
-  AxisType,
   BridgeApi,
   CatalogAtlasGlyph,
   CatalogAtlasPage,
@@ -224,7 +225,6 @@ export type {
   KerningPairValue,
   KerningPosition,
   KerningSide,
-  KerningSideKind,
   KerningSnapshot,
   KerningValueEdit,
   LayerDifference,
@@ -244,7 +244,6 @@ export type {
   SetLanguages,
   SetMetricDefinitions,
   Source,
-  SourceMetricValue,
   Specimen,
   Unicode,
   UpdateAxis,
@@ -253,9 +252,6 @@ export type {
   UpdateSource,
   VariationBasis,
   VariationDelta,
-  FontAxis,
-  FontAxisLabel,
-  FontKerningSide,
   KerningPair,
   MetricValue,
   AxisKind,

@@ -28,7 +28,9 @@ pub mod decomposition;
 pub mod drag;
 #[cfg(feature = "engine")]
 pub mod engine;
-pub mod engine_intents;
+#[cfg(feature = "engine-protocol")]
+pub mod engine_edits;
+#[cfg(feature = "engine-protocol")]
 pub mod engine_reads;
 pub mod geometry;
 pub mod names;

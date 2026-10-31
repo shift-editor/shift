@@ -52,9 +52,7 @@ impl KerningGroup {
 /// A group side only resolves when the group's position matches the side it
 /// occupies in the pair.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-// The editor's kerning records keep the name `KerningSide` until it reads
-// kerning from the engine.
-#[cfg_attr(feature = "pack", derive(pack::Pack), pack(rename = "FontKerningSide"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum KerningSide {
     Glyph(GlyphId),
     Group(KerningGroupId),

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Axis, AxisMapping, AxisMappingPoint } from "@shift/types";
 import { ascending, mintAxisMappingId, removeBy } from "@shift/types";
-import { independentMappingFor } from "@shift/editor/variation";
+import { continuousBounds, discreteValues, independentMappingFor } from "@shift/editor/variation";
 import { Button, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -119,13 +119,13 @@ export const AxisMappingPanel = ({ axis }: AxisMappingPanelProps) => {
                 <tr key={`${draft.id}:${index}`} className="group">
                   <MappingValueCell
                     label={`User mapping point ${index + 1}`}
-                    value={point.input.values[axis.id] ?? axis.default}
+                    value={point.input.values[axis.id] ?? axis.kind.default}
                     onChange={(value) => updatePoint(index, "input", value)}
                     onCommit={form.commit}
                   />
                   <MappingValueCell
                     label={`Source mapping point ${index + 1}`}
-                    value={point.output.values[axis.id] ?? axis.default}
+                    value={point.output.values[axis.id] ?? axis.kind.default}
                     onChange={(value) => updatePoint(index, "output", value)}
                     onCommit={form.commit}
                   />
@@ -200,10 +200,10 @@ const MappingValueCell = ({ label, value, onChange, onCommit }: MappingValueCell
 );
 
 function identityMapping(axis: Axis): AxisMapping {
-  const values = axis.values ?? [
-    axis.minimum ?? axis.default,
-    axis.default,
-    axis.maximum ?? axis.default,
+  const values = discreteValues(axis) ?? [
+    continuousBounds(axis)?.minimum ?? axis.kind.default,
+    axis.kind.default,
+    continuousBounds(axis)?.maximum ?? axis.kind.default,
   ];
   const unique = [...new Set(values)].sort(ascending);
   return {
@@ -235,16 +235,16 @@ function nextMappingPoint(axis: Axis, mapping: AxisMapping): AxisMappingPoint | 
     .sort(byInput);
   const inputs = new Set(coordinates.map(({ input }) => input));
 
-  if (axis.axisType === "discrete") {
-    const input = axis.values?.find((value) => !inputs.has(value));
+  if (axis.kind.kind === "discrete") {
+    const input = discreteValues(axis)?.find((value) => !inputs.has(value));
     if (input === undefined) return null;
 
     return mappingPoint(axis, input, interpolateMapping(coordinates, input));
   }
 
-  const minimum = axis.minimum ?? axis.default;
-  const maximum = axis.maximum ?? axis.default;
-  const preferred = [axis.default, minimum, maximum].find((value) => !inputs.has(value));
+  const minimum = continuousBounds(axis)?.minimum ?? axis.kind.default;
+  const maximum = continuousBounds(axis)?.maximum ?? axis.kind.default;
+  const preferred = [axis.kind.default, minimum, maximum].find((value) => !inputs.has(value));
   if (preferred !== undefined) {
     return mappingPoint(axis, preferred, interpolateMapping(coordinates, preferred));
   }

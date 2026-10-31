@@ -8,10 +8,9 @@ use shift_font::{
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{
-  Axis, AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities,
-  GlyphLayerRecord, GlyphLayerSnapshot, GlyphRecord, GlyphRecordChanges, GlyphStructure,
-  KerningSnapshot, Ligature, MetricDefinition, NamedInstance, Source,
-  SourceMetricsInterpolationSnapshot,
+  AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
+  GlyphLayerSnapshot, GlyphRecord, GlyphRecordChanges, GlyphStructure, Ligature, MetricDefinition,
+  NamedInstance, SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity as StoreDocumentIdentity, FontWorkspace, NewWorkspace,
@@ -215,13 +214,6 @@ pub(crate) trait NativeWorkspace {
   /// Fails when no workspace is open.
   fn is_variable(&self) -> Result<bool, NativeWorkspaceError>;
 
-  /// The font's axes, in order.
-  ///
-  /// # Errors
-  ///
-  /// Fails when no workspace is open.
-  fn get_axes(&self) -> Result<Vec<Axis>, NativeWorkspaceError>;
-
   /// The font's axis mappings, as authored.
   ///
   /// # Errors
@@ -252,14 +244,6 @@ pub(crate) trait NativeWorkspace {
   /// Fails when no workspace is open.
   fn get_language_ids(&self) -> Result<Option<Vec<String>>, NativeWorkspaceError>;
 
-  /// The font's kerning groups, per-source pairs, and the basis kerning
-  /// interpolates over.
-  ///
-  /// # Errors
-  ///
-  /// Fails when no workspace is open.
-  fn get_kerning(&self) -> Result<KerningSnapshot, NativeWorkspaceError>;
-
   /// The font's named instances, in order.
   ///
   /// # Errors
@@ -276,13 +260,6 @@ pub(crate) trait NativeWorkspace {
   fn get_source_metrics_interpolation(
     &self,
   ) -> Result<Option<SourceMetricsInterpolationSnapshot>, NativeWorkspaceError>;
-
-  /// The font's master sources, in order.
-  ///
-  /// # Errors
-  ///
-  /// Fails when no workspace is open.
-  fn get_sources(&self) -> Result<Vec<Source>, NativeWorkspaceError>;
 }
 
 /// Why a [`NativeWorkspace`] request failed. Every variant carries the Rust error's
@@ -593,10 +570,6 @@ impl NativeWorkspace for Bridge {
     Ok(self.font()?.is_variable())
   }
 
-  fn get_axes(&self) -> Result<Vec<Axis>, NativeWorkspaceError> {
-    Ok(self.font()?.axes().iter().map(Axis::from).collect())
-  }
-
   fn get_axis_mappings(&self) -> Result<Vec<AxisMapping>, NativeWorkspaceError> {
     Ok(
       self
@@ -634,10 +607,6 @@ impl NativeWorkspace for Bridge {
     Ok(self.font()?.language_ids())
   }
 
-  fn get_kerning(&self) -> Result<KerningSnapshot, NativeWorkspaceError> {
-    Ok(KerningSnapshot::from(self.font()?))
-  }
-
   fn get_named_instances(&self) -> Result<Vec<NamedInstance>, NativeWorkspaceError> {
     Ok(
       self
@@ -659,10 +628,6 @@ impl NativeWorkspace for Bridge {
         .as_ref()
         .map(SourceMetricsInterpolationSnapshot::from),
     )
-  }
-
-  fn get_sources(&self) -> Result<Vec<Source>, NativeWorkspaceError> {
-    Ok(Source::masters_of(self.font()?))
   }
 }
 

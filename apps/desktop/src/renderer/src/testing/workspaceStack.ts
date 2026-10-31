@@ -99,8 +99,7 @@ export function createWorkspaceStack(): WorkspaceStack {
         throw new Error("workspace stack connected without a snapshot");
       }
 
-      store.replaceWorkspace(snapshot);
-      await editCoordinator.reopenEngine();
+      await editCoordinator.open(snapshot);
     },
     async openWorkspace(sourcePath: string): Promise<void> {
       await shell.open(sourcePath);
@@ -111,8 +110,7 @@ export function createWorkspaceStack(): WorkspaceStack {
         throw new Error("workspace stack connected without a snapshot");
       }
 
-      store.replaceWorkspace(snapshot);
-      await editCoordinator.reopenEngine();
+      await editCoordinator.open(snapshot);
     },
     async closeWorkspace(discard = false): Promise<void> {
       await shell.close(discard);

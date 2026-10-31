@@ -60,11 +60,11 @@ export function locationFromDesignAxisLocation(location: DesignAxisLocation): Lo
 }
 
 export function defaultExternalAxisLocation(axes: readonly Axis[]): ExternalAxisLocation {
-  return asExternalAxisLocation(new Map(axes.map((axis) => [axis.id, axis.default])));
+  return asExternalAxisLocation(new Map(axes.map((axis) => [axis.id, axis.kind.default])));
 }
 
 export function axisValue(location: AnyAxisLocation, axis: Axis): number {
-  return location.get(axis.id) ?? axis.default;
+  return location.get(axis.id) ?? axis.kind.default;
 }
 
 export function withExternalAxisValue(

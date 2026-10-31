@@ -16,5 +16,5 @@ export const byInput: Comparator<MappingCoordinate> = comparing((point) => point
 
 /** Mapping points in input order along `axis`; a point without a value there sits at its default. */
 export function byMappingInput(axis: Axis): Comparator<AxisMappingPoint> {
-  return comparing((point) => point.input.values[axis.id] ?? axis.default, ascending);
+  return comparing((point) => point.input.values[axis.id] ?? axis.kind.default, ascending);
 }

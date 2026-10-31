@@ -36,7 +36,7 @@ import {
   type WorkspaceShell,
   type WorkspaceSlugAtlas,
   type WorkspaceSlugAtlasPageRequest,
-  type WorkspaceSnapshot,
+  type StoredWorkspaceSnapshot,
   type WorkspaceSync,
 } from "../../shared/workspace/lanes";
 import type {
@@ -198,7 +198,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   // Sync lane.
 
-  snapshot(): Promise<WorkspaceSnapshot | null> {
+  snapshot(): Promise<StoredWorkspaceSnapshot | null> {
     return this.#serialize(() =>
       this.#state.kind === "document" ? this.#snapshot(this.#state.allocation.workspaceId) : null,
     );
@@ -765,7 +765,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     };
   }
 
-  #snapshot(workspaceId: string): WorkspaceSnapshot {
+  #snapshot(workspaceId: string): StoredWorkspaceSnapshot {
     return {
       workspaceId,
       metadata: this.#bridge.workspace.getMetadata(),
@@ -773,13 +773,10 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       metricDefinitions: this.#bridge.workspace.getMetricDefinitions(),
       sourceMetricsInterpolation: this.#bridge.workspace.getSourceMetricsInterpolation(),
       glyphs: this.#bridge.workspace.getGlyphs(),
-      sources: this.#bridge.workspace.getSources(),
-      axes: this.#bridge.workspace.getAxes(),
       axisMappings: this.#bridge.workspace.getAxisMappings(),
       axisMappingBases: this.#bridge.workspace.getAxisMappingBases(),
       namedInstances: this.#bridge.workspace.getNamedInstances(),
       languageIds: this.#bridge.workspace.getLanguageIds(),
-      kerning: this.#bridge.workspace.getKerning(),
     };
   }
 

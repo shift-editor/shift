@@ -31,6 +31,7 @@
     "@napi-rs/cli": "3.6.2",
     "@napi-rs/cross-toolchain": "1.0.3",
     "@shift/pack": "workspace:*",
+    "@shift/wasm": "workspace:*",
     "vitest": "^4.1.10"
   },
   "engines": {

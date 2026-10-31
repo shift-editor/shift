@@ -8,6 +8,7 @@ import {
 } from "@shift/types";
 import { between, expectNumbersClose, REFERENCE_SEED, seededRandom } from "../../testing/reference";
 import { axisValue, externalAxisLocationFromRecord } from "./location";
+import { continuousBounds } from "./axisKind";
 import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/variation";
 import { compileAxisMappings, mapLocation } from "@shift/wasm/reference";
 import type {
@@ -30,10 +31,7 @@ function axis(id: string, tag: string, range: [number, number, number], role: Ax
     tag,
     name: tag,
     role,
-    axisType: "continuous",
-    minimum,
-    default: defaultValue,
-    maximum,
+    kind: { kind: "continuous", minimum, default: defaultValue, maximum },
     labels: [],
     hidden: false,
   };
@@ -125,8 +123,16 @@ function mappingCases(sweep = 60): MappingCase[] {
       name: `${name} ${index}`,
       mappings,
       location: {
-        [weight.id]: between(random, weight.minimum!, weight.maximum!),
-        [width.id]: between(random, width.minimum!, width.maximum!),
+        [weight.id]: between(
+          random,
+          continuousBounds(weight)!.minimum,
+          continuousBounds(weight)!.maximum,
+        ),
+        [width.id]: between(
+          random,
+          continuousBounds(width)!.minimum,
+          continuousBounds(width)!.maximum,
+        ),
       },
     })),
   );
@@ -164,7 +170,7 @@ describe("external axis locations use Rust-compiled mapping bases", () => {
 
     expectNumbersClose(
       axes.map((candidate) => axisValue(mapped, candidate)),
-      axes.map((candidate) => expected.get(candidate.id) ?? candidate.default),
+      axes.map((candidate) => expected.get(candidate.id) ?? candidate.kind.default),
       mappingCase,
       { labels: axes.map((candidate) => candidate.tag) },
     );

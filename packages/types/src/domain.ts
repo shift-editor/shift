@@ -1,4 +1,5 @@
-import type { Axis, FontMetrics, NamedInstance, SourceMetricValue } from "./bridge";
+import type { Axis, FontMetrics, MetricValue, NamedInstance } from "./bridge";
+import type { MetricId } from "./ids";
 
 /** Complete axis definition before the editor assigns its stable identity. */
 export type AxisDefinition = Pick<
@@ -6,11 +7,7 @@ export type AxisDefinition = Pick<
   | "tag"
   | "name"
   | "role"
-  | "axisType"
-  | "minimum"
-  | "default"
-  | "maximum"
-  | "values"
+  | "kind"
   | "labels"
   | "hidden"
 >;
@@ -21,7 +18,7 @@ export type NamedInstanceDefinition = Omit<NamedInstance, "id">;
 /** Standard and technical metrics resolved for one authored source. */
 export type SourceMetrics = Readonly<
   FontMetrics & {
-    metricValues: readonly SourceMetricValue[];
+    metricValues: Readonly<Record<MetricId, MetricValue>>;
     ascender: number;
     descender: number;
     baseline: number;

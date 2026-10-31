@@ -26,7 +26,8 @@ describe("local glyph layer position edits", () => {
       id: "source-memory" as SourceId,
       name: "Regular",
       location: { values: {} },
-      metricValues: [],
+      metricValues: {},
+      role: "master",
     };
     const layer = new GlyphLayer(source, null, state);
 

@@ -104,10 +104,7 @@ function continuousAxis(
     tag,
     name: tag,
     role: "external",
-    axisType: "continuous",
-    minimum,
-    default: defaultValue,
-    maximum,
+    kind: { kind: "continuous", minimum, default: defaultValue, maximum },
     labels: [],
     hidden: false,
   };

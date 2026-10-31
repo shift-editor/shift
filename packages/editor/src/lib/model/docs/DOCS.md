@@ -184,7 +184,7 @@ contour.reverse();
 
 ### Boundaries
 
-- `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode.
+- `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode. A workspace's stored snapshot (`StoredWorkspaceSnapshot`) has no axes, sources or kerning: `WorkspaceEditCoordinator.open` opens the window's engine first and shows the font with the ones the engine reads (`EngineSession.fontRecords`), unsaved edits included.
 - `GlyphCatalog` is the only font-wide surface consumed by Home/Grid. Imported `GlyphEntry` directory values populate `FontStore`, while imported authored-record and layer collections remain empty.
 - Rust/Fontdrasil owns source compatibility and constructs every variation and axis-mapping basis.
 - `shift-wire` and the workspace bridge translate those values without inventing samples, source identities, support regions, or a UI location.

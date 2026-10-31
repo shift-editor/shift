@@ -156,7 +156,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
             <InstanceNumberField
               key={axis.id}
               label={axis.name}
-              value={draft.location.values[axis.id] ?? axis.default}
+              value={draft.location.values[axis.id] ?? axis.kind.default}
               onChange={(value) => {
                 form.update((current) => ({
                   ...current,

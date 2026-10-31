@@ -7,10 +7,7 @@ const pointAxis: Axis = {
   tag: "wdth",
   name: "Width",
   role: "external",
-  axisType: "continuous",
-  minimum: 100,
-  default: 100,
-  maximum: 100,
+  kind: { kind: "continuous", minimum: 100, default: 100, maximum: 100 },
   labels: [],
   hidden: false,
 };
@@ -20,9 +17,7 @@ const variableAxis: Axis = {
   id: asAxisId("axis_weight"),
   tag: "wght",
   name: "Weight",
-  minimum: 300,
-  default: 400,
-  maximum: 900,
+  kind: { kind: "continuous", minimum: 300, default: 400, maximum: 900 },
 };
 
 describe("variation axis controls", () => {

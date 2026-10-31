@@ -1,4 +1,5 @@
-import { ascending, type Axis, type AxisType } from "@shift/types";
+import { ascending, type Axis, type AxisKind } from "@shift/types";
+import { continuousBounds, discreteValues } from "@shift/editor/variation";
 import {
   Checkbox,
   Input,
@@ -26,8 +27,8 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
   const axis = draft.axis;
   const registeredTag = isRegisteredOpenTypeAxisTag(axis.tag);
 
-  const changeType = async (axisType: AxisType | null): Promise<void> => {
-    if (!axisType || axisType === axis.axisType) return;
+  const changeType = async (axisType: AxisKind["kind"] | null): Promise<void> => {
+    if (!axisType || axisType === axis.kind.kind) return;
 
     await draft.updateAndCommit((current) => axisWithType(current, axisType));
   };
@@ -77,28 +78,34 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
         <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_7rem] gap-2">
           <DefinitionNumberField
             label="Minimum"
-            value={axis.minimum ?? axis.default}
-            disabled={axis.axisType === "discrete"}
-            onChange={(minimum) => draft.update((current) => ({ ...current, minimum }))}
+            value={continuousBounds(axis)?.minimum ?? axis.kind.default}
+            disabled={axis.kind.kind === "discrete"}
+            onChange={(minimum) =>
+              draft.update((current) => withContinuousBound(current, { minimum }))
+            }
             onCommit={draft.commit}
           />
           <DefinitionNumberField
             label="Default"
-            value={axis.default}
-            onChange={(value) => draft.update((current) => ({ ...current, default: value }))}
+            value={axis.kind.default}
+            onChange={(value) =>
+              draft.update((current) => ({ ...current, kind: { ...current.kind, default: value } }))
+            }
             onCommit={draft.commit}
           />
           <DefinitionNumberField
             label="Maximum"
-            value={axis.maximum ?? axis.default}
-            disabled={axis.axisType === "discrete"}
-            onChange={(maximum) => draft.update((current) => ({ ...current, maximum }))}
+            value={continuousBounds(axis)?.maximum ?? axis.kind.default}
+            disabled={axis.kind.kind === "discrete"}
+            onChange={(maximum) =>
+              draft.update((current) => withContinuousBound(current, { maximum }))
+            }
             onCommit={draft.commit}
           />
 
           <label className="flex flex-col gap-1.5 text-sm text-secondary">
             Type
-            <Select value={axis.axisType} onValueChange={changeType}>
+            <Select value={axis.kind.kind} onValueChange={changeType}>
               <SelectTrigger variant="plain" className="h-8">
                 <SelectValue />
                 <SelectIcon />
@@ -167,23 +174,36 @@ const DefinitionNumberField = ({
   </label>
 );
 
-function axisWithType(axis: Axis, axisType: AxisType): Axis {
+/** `axis` with one continuous bound replaced; a discrete axis has no bounds to change. */
+function withContinuousBound(
+  axis: Axis,
+  bound: { readonly minimum: number } | { readonly maximum: number },
+): Axis {
+  if (axis.kind.kind !== "continuous") return axis;
+
+  return { ...axis, kind: { ...axis.kind, ...bound } };
+}
+
+function axisWithType(axis: Axis, axisType: AxisKind["kind"]): Axis {
   switch (axisType) {
     case "continuous": {
-      const values = axis.values ?? [axis.default];
+      const values = discreteValues(axis) ?? [axis.kind.default];
       return {
         ...axis,
-        axisType,
-        minimum: Math.min(...values),
-        maximum: Math.max(...values),
-        values: undefined,
+        kind: {
+          kind: axisType,
+          minimum: Math.min(...values),
+          default: axis.kind.default,
+          maximum: Math.max(...values),
+        },
       };
     }
     case "discrete": {
-      const values = [...new Set([axis.minimum, axis.default, axis.maximum])]
+      const bounds = continuousBounds(axis);
+      const values = [...new Set([bounds?.minimum, axis.kind.default, bounds?.maximum])]
         .filter((value): value is number => value !== undefined)
         .sort(ascending);
-      return { ...axis, axisType, minimum: undefined, maximum: undefined, values };
+      return { ...axis, kind: { kind: axisType, values, default: axis.kind.default } };
     }
   }
 }

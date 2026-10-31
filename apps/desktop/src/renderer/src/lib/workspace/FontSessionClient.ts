@@ -11,7 +11,7 @@ import type {
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
   WorkspaceSlugAtlasPageRequest,
-  WorkspaceSnapshot,
+  StoredWorkspaceSnapshot,
   WorkspaceSync,
 } from "@shared/workspace/lanes";
 import type { SyncEventMap, SyncStreamCallMap } from "@shared/workspace/protocol";
@@ -60,7 +60,7 @@ type SyncLane = {
 };
 
 export class FontSessionClient {
-  readonly workspaceCell = signal<WorkspaceSnapshot | null>(null);
+  readonly workspaceCell = signal<StoredWorkspaceSnapshot | null>(null);
   readonly sourceCell = signal<FontSourceSnapshot | null>(null);
   readonly documentStateCell = signal<WorkspaceDocumentState | null>(null);
 
@@ -116,7 +116,7 @@ export class FontSessionClient {
     return applied;
   }
 
-  async snapshot(): Promise<WorkspaceSnapshot | null> {
+  async snapshot(): Promise<StoredWorkspaceSnapshot | null> {
     await this.connect();
 
     const snapshot = await this.#workspace().snapshot();

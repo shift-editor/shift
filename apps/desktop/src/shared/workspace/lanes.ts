@@ -17,7 +17,7 @@ import type {
   SlugAtlas,
   Specimen,
   WorkspaceDocumentState,
-  WorkspaceSnapshot,
+  StoredWorkspaceSnapshot,
 } from "@shift/types";
 import type { LaneMethods } from "./remote";
 
@@ -28,6 +28,7 @@ export type {
   WorkspaceDocumentState,
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
+  StoredWorkspaceSnapshot,
 } from "@shift/types";
 
 export type WorkspaceGlyphSnapshotRequest = {
@@ -277,11 +278,12 @@ export const workspaceShellMethods: LaneMethods<WorkspaceShell> = {
  */
 export interface WorkspaceSync {
   /**
-   * Reads the open workspace's font summary for the window's model to open from.
+   * Reads the open workspace's font summary for the window's model to open
+   * from; the window reads the axes, sources and kerning from its engine.
    *
    * @returns `null` when no workspace document is open (a preview, or closed).
    */
-  snapshot(): Promise<WorkspaceSnapshot | null>;
+  snapshot(): Promise<StoredWorkspaceSnapshot | null>;
 
   /**
    * Reads where the open workspace's store lives, for the window's read-only layer reader.

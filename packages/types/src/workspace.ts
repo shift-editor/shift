@@ -32,6 +32,16 @@ export interface WorkspaceSnapshot {
   kerning: KerningSnapshot;
 }
 
+/**
+ * What the workspace's store answers at open: a {@link WorkspaceSnapshot}
+ * without the axes, sources and kerning, which the window reads from its
+ * engine.
+ */
+export type StoredWorkspaceSnapshot = Omit<WorkspaceSnapshot, "axes" | "sources" | "kerning">;
+
+/** The axes, sources and kerning of an open font, as the window's engine reads them. */
+export type EngineFontRecords = Pick<WorkspaceSnapshot, "axes" | "sources" | "kerning">;
+
 export interface WorkspaceGlyphLayerSnapshot {
   glyphId: GlyphId;
   sourceId: SourceId;

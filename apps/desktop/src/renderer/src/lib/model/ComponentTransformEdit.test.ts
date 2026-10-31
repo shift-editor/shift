@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Mat, Rect, Vec2, type Rect2D } from "@shift/geo";
-import type { ComponentId } from "@shift/types";
+import type { AxisDefinition, ComponentId } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type {
   ComponentTransformSelection,
@@ -250,15 +250,12 @@ function rectCenter(bounds: Rect2D) {
   return Vec2.midpoint({ x: bounds.left, y: bounds.top }, { x: bounds.right, y: bounds.bottom });
 }
 
-function weightAxis() {
+function weightAxis(): AxisDefinition {
   return {
     tag: "wght",
     name: "Weight",
-    role: "external" as const,
-    axisType: "continuous" as const,
-    minimum: 100,
-    default: 400,
-    maximum: 900,
+    role: "external",
+    kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
     labels: [],
     hidden: false,
   };

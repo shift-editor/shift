@@ -55,13 +55,14 @@ test.describe("variable-font authoring controls", () => {
     await expect(dialog.getByRole("button", { name: "Black", exact: true })).toBeVisible();
 
     const axis = await editor.axis({ id: axisId });
+    const bounds = axis?.kind.kind === "continuous" ? axis.kind : null;
     const authored = {
       axis: axis && {
         tag: axis.tag,
         name: axis.name,
-        minimum: axis.minimum,
-        default: axis.default,
-        maximum: axis.maximum,
+        minimum: bounds?.minimum,
+        default: axis.kind.default,
+        maximum: bounds?.maximum,
       },
       source: (await editor.source({ name: "Bold" }))?.location.values[axisId],
       instance: (await editor.instance({ name: "Black" }))?.location.values[axisId],

@@ -167,7 +167,9 @@ export class SlugAtlas {
       );
     }
     const externalLocation = externalAxisLocationFromRecord(
-      Object.fromEntries(axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.default])),
+      Object.fromEntries(
+        axes.map((axis, index) => [axis.id, coordinates[index] ?? axis.kind.default]),
+      ),
     );
     const designLocation = mapAxisLocation(
       externalLocation,

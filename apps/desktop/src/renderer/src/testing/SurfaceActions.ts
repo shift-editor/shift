@@ -72,10 +72,12 @@ export class SurfaceActions {
       tag: axis.tag,
       name: axis.name ?? axis.tag,
       role: axis.role ?? "external",
-      axisType: "continuous",
-      minimum: axis.minimum,
-      default: axis.default,
-      maximum: axis.maximum,
+      kind: {
+        kind: "continuous",
+        minimum: axis.minimum,
+        default: axis.default,
+        maximum: axis.maximum,
+      },
       labels: [],
       hidden: false,
     });
@@ -131,7 +133,7 @@ export class SurfaceActions {
     const definition = font.metricDefinitions.find((candidate) => candidate.name === metric);
     if (!definition) throw new Error(`The font has no metric named ${metric}`);
     const value = sourceMetricValue(current, definition.id);
-    await font.updateSource(withSourceMetricValue(current, { ...value, position }));
+    await font.updateSource(withSourceMetricValue(current, definition.id, { ...value, position }));
   }
 
   /** Adds a named instance at `location`, keyed by axis tag, as Settings › Instances does. */

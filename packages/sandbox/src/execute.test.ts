@@ -101,7 +101,7 @@ const capabilities: ShiftCapabilities = {
         sourceId: null,
         metrics: {
           unitsPerEm: 1000,
-          metricValues: [],
+          metricValues: {},
           ascender: 800,
           descender: -200,
           baseline: 0,
@@ -117,7 +117,8 @@ const capabilities: ShiftCapabilities = {
         id: asSourceId("source-a"),
         name: "Light",
         location: { values: {} },
-        metricValues: [],
+        metricValues: {},
+        role: "master",
       });
     },
   },

@@ -1,7 +1,9 @@
 import type {
   FontMetrics,
   MetricDefinition,
+  MetricId,
   MetricKind,
+  MetricValue,
   FontMetadata,
   Axis,
   AxisDefinition,
@@ -75,7 +77,6 @@ import {
   type KerningSideId,
 } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
-import { fontAxis, metricValuesById } from "./fontValues";
 import {
   designAxisLocationFromLocation,
   locationFromDesignAxisLocation,
@@ -1476,14 +1477,14 @@ export class Font {
       kind: "createSource",
       createSource: { sourceId, name, location: designLocation },
     });
-    if (metrics.metricValues.length === this.#metricDefinitionsCell.peek().length) {
+    if (Object.keys(metrics.metricValues).length === this.#metricDefinitionsCell.peek().length) {
       this.editCoordinator.push({
         kind: "updateSource",
         updateSource: {
           sourceId,
           name,
           location: designLocation,
-          metricValues: metricValuesById(metrics.metricValues),
+          metricValues: metrics.metricValues,
           italicAngle: metrics.italicAngle,
           lineGap: metrics.lineGap,
           underlinePosition: metrics.underlinePosition,
@@ -1523,7 +1524,7 @@ export class Font {
     const axisId = mintAxisId();
     this.editCoordinator.push({
       kind: "createAxis",
-      createAxis: { axis: fontAxis({ id: axisId, ...axis }) },
+      createAxis: { axis: { id: axisId, ...axis } },
     });
 
     return axisId;
@@ -1540,7 +1541,7 @@ export class Font {
       [
         {
           kind: "updateAxis",
-          updateAxis: { axis: fontAxis(axis) },
+          updateAxis: { axis },
         },
       ],
       "Update Axis",
@@ -1598,7 +1599,7 @@ export class Font {
             sourceId: source.id,
             name: source.name,
             location: source.location,
-            metricValues: metricValuesById(source.metricValues),
+            metricValues: source.metricValues,
             italicAngle: source.italicAngle,
             lineGap: source.lineGap,
             underlinePosition: source.underlinePosition,
@@ -1939,14 +1940,12 @@ export class Font {
     const definitions = this.#metricDefinitionsCell.peek();
     if (interpolated.metrics.length !== definitions.length) return null;
 
-    const metricValues = definitions.map((definition, index) => ({
-      metricId: definition.id,
-      position: interpolated.metrics[index]!.position,
-      overshoot: interpolated.metrics[index]!.overshoot,
-    }));
+    const metricValues: Record<MetricId, MetricValue> = Object.fromEntries(
+      definitions.map((definition, index) => [definition.id, interpolated.metrics[index]!]),
+    );
     const position = (kind: MetricKind): number | undefined => {
-      const index = definitions.findIndex((definition) => definition.kind === kind);
-      return index < 0 ? undefined : metricValues[index]!.position;
+      const definition = definitions.find((candidate) => candidate.kind === kind);
+      return definition ? metricValues[definition.id]?.position : undefined;
     };
     return {
       unitsPerEm,
@@ -1970,13 +1969,13 @@ export class Font {
       const definition = definitions.find((candidate) => candidate.kind === kind);
       if (!definition) return undefined;
 
-      return source?.metricValues.find((value) => value.metricId === definition.id)?.position;
+      return source?.metricValues[definition.id]?.position;
     };
     const unloaded = source === null;
 
     return {
       unitsPerEm,
-      metricValues: source?.metricValues ?? [],
+      metricValues: source?.metricValues ?? {},
       ascender: position("ascender") ?? unitsPerEm * 0.8,
       descender: position("descender") ?? unitsPerEm * -0.2,
       baseline: position("baseline") ?? 0,

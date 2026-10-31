@@ -3,6 +3,7 @@ import { drag, type D3DragEvent } from "d3-drag";
 import { scaleLinear } from "d3-scale";
 import { select } from "d3-selection";
 import type { Axis, AxisMappingPoint } from "@shift/types";
+import { continuousBounds } from "@shift/editor/variation";
 import { byInput } from "./mappingOrder";
 
 interface MappingGraphProps {
@@ -28,8 +29,8 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
     );
 
   const values = coordinates.flatMap((point) => [point.input, point.output]);
-  const minimum = Math.min(axis.minimum ?? axis.default, ...values);
-  const maximum = Math.max(axis.maximum ?? axis.default, ...values);
+  const minimum = Math.min(continuousBounds(axis)?.minimum ?? axis.kind.default, ...values);
+  const maximum = Math.max(continuousBounds(axis)?.maximum ?? axis.kind.default, ...values);
   const size = 220;
   const left = 36;
   const right = size - 16;

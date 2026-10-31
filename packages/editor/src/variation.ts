@@ -15,6 +15,7 @@ export {
   locationFromDesignAxisLocation,
   withExternalAxisValue,
 } from "./lib/variation/location";
+export { continuousBounds, discreteValues } from "./lib/variation/axisKind";
 export { Designspace } from "./lib/variation/Designspace";
 export { independentMappingFor, withIndependentMapping } from "./lib/variation/independentMapping";
 export type { DesignAxisLocation, ExternalAxisLocation } from "./types/variation";

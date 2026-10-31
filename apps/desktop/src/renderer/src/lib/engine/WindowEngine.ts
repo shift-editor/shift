@@ -1,6 +1,13 @@
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
 import { FontStoreLocation } from "@shared/workspace/lanes";
-import type { FontIntent, GlyphId, GlyphName, LayerId, SourceId } from "@shift/types";
+import type {
+  EngineFontRecords,
+  FontIntent,
+  GlyphId,
+  GlyphName,
+  LayerId,
+  SourceId,
+} from "@shift/types";
 import {
   loadEngine,
   type EditablePair,
@@ -118,6 +125,16 @@ export class WindowEngine implements FontEngine {
       this.#layers.close(reader);
       throw error;
     }
+  }
+
+  /**
+   * The open font's axes, master sources and kerning, as the engine holds
+   * them, unsaved edits included.
+   *
+   * @throws When no session is open.
+   */
+  fontRecords(): EngineFontRecords {
+    return this.#require().fontRecords();
   }
 
   /**

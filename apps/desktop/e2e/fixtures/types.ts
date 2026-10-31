@@ -120,7 +120,7 @@ export type RecoveryApp = {
   crashAndRecoverWindow: (persistedText: string) => Promise<Page>;
   crashAndReopenDocument: () => Promise<Page>;
   canonicalGlyphNames: () => string[];
-  canonicalVariableFont: () => CanonicalVariableFont;
+  canonicalVariableFont: () => Promise<CanonicalVariableFont>;
 };
 
 /** One Electron launch owned by {@link ElectronProcesses}. */

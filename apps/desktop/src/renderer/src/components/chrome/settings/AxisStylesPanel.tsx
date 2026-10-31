@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
 import { ascending, mintAxisLabelId, removeBy, replaceBy } from "@shift/types";
+import { continuousBounds, discreteValues } from "@shift/editor/variation";
 import { Button, Checkbox, Input, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -131,20 +132,20 @@ const RangeLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
           />
           <NumberCell
             label={`${label.name} minimum`}
-            value={label.minimum ?? labelValue}
+            value={label.range?.minimum ?? labelValue}
             onChange={(minimum) => {
               if (minimum !== null) {
-                updateLabelDraft(draft, label.id, (item) => ({ ...item, minimum }));
+                updateLabelDraft(draft, label.id, (item) => withRangeBound(item, { minimum }));
               }
             }}
             onCommit={draft.commit}
           />
           <NumberCell
             label={`${label.name} maximum`}
-            value={label.maximum ?? labelValue}
+            value={label.range?.maximum ?? labelValue}
             onChange={(maximum) => {
               if (maximum !== null) {
-                updateLabelDraft(draft, label.id, (item) => ({ ...item, maximum }));
+                updateLabelDraft(draft, label.id, (item) => withRangeBound(item, { maximum }));
               }
             }}
             onCommit={draft.commit}
@@ -251,7 +252,16 @@ const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) =>
 );
 
 function isRangeLabel(label: AxisLabel): boolean {
-  return label.minimum != null || label.maximum != null;
+  return label.range != null;
+}
+
+/** `label` with one range bound replaced; a bound it lacks reads as its value, as the fields show it. */
+function withRangeBound(
+  label: AxisLabel,
+  bound: { readonly minimum: number } | { readonly maximum: number },
+): AxisLabel {
+  const { value: nominal, range } = label;
+  return { ...label, range: { minimum: nominal, maximum: nominal, ...range, ...bound } };
 }
 
 function updateLabelDraft(
@@ -294,8 +304,7 @@ async function addLabel(draft: AxisDraft, range: boolean): Promise<void> {
       id: mintAxisLabelId(),
       name: "New style",
       value,
-      minimum: range ? value : undefined,
-      maximum: range ? value : undefined,
+      range: range ? { minimum: value, maximum: value } : null,
       elidable: false,
     };
     return { ...axis, labels: [...axis.labels, label] };
@@ -304,14 +313,14 @@ async function addLabel(draft: AxisDraft, range: boolean): Promise<void> {
 
 function nextLabelValue(axis: Axis): number | null {
   const used = new Set(axis.labels.map(({ value }) => value));
-  if (!used.has(axis.default)) return axis.default;
+  if (!used.has(axis.kind.default)) return axis.kind.default;
 
-  if (axis.axisType === "discrete") {
-    return axis.values?.find((value) => !used.has(value)) ?? null;
+  if (axis.kind.kind === "discrete") {
+    return discreteValues(axis)?.find((value) => !used.has(value)) ?? null;
   }
 
-  const minimum = axis.minimum ?? axis.default;
-  const maximum = axis.maximum ?? axis.default;
+  const minimum = continuousBounds(axis)?.minimum ?? axis.kind.default;
+  const maximum = continuousBounds(axis)?.maximum ?? axis.kind.default;
   if (!used.has(minimum)) return minimum;
   if (!used.has(maximum)) return maximum;
 

@@ -2,10 +2,10 @@ import type { Axis } from "@shift/types";
 
 /** Returns whether an axis has more than one usable variation coordinate. */
 export function axisVaries(axis: Axis): boolean {
-  switch (axis.axisType) {
+  switch (axis.kind.kind) {
     case "continuous":
-      return axis.minimum != null && axis.maximum != null && axis.minimum < axis.maximum;
+      return axis.kind.minimum < axis.kind.maximum;
     case "discrete":
-      return new Set(axis.values).size > 1;
+      return new Set(axis.kind.values).size > 1;
   }
 }

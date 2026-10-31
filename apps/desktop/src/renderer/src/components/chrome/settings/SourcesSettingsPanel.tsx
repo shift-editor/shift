@@ -2,9 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   type Axis,
   type MetricDefinition,
+  type MetricValue,
   type Source,
   type SourceId,
-  type SourceMetricValue,
 } from "@shift/types";
 import { sourceMetricValue, withSourceMetricValue } from "@shift/editor/model";
 import { Input, Tooltip } from "@shift/ui";
@@ -173,7 +173,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
               <SourceNumberField
                 key={axis.id}
                 label={axis.name}
-                value={draft.location.values[axis.id] ?? axis.default}
+                value={draft.location.values[axis.id] ?? axis.kind.default}
                 onChange={(value) => {
                   form.update((current) => ({
                     ...current,
@@ -199,7 +199,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
                 definition={definition}
                 value={value}
                 onChange={(next) => {
-                  form.update((current) => withSourceMetricValue(current, next));
+                  form.update((current) => withSourceMetricValue(current, definition.id, next));
                 }}
                 onCommit={commit}
               />
@@ -253,8 +253,8 @@ const SettingsSection = ({ title, children }: { title: string; children: ReactNo
 
 interface MetricFieldsProps {
   definition: MetricDefinition;
-  value: SourceMetricValue;
-  onChange: (value: SourceMetricValue) => void;
+  value: MetricValue;
+  onChange: (value: MetricValue) => void;
   onCommit: () => Promise<void>;
 }
 

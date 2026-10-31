@@ -8,10 +8,7 @@ const weight: Axis = {
   tag: "wght",
   name: "Weight",
   role: "external",
-  axisType: "continuous",
-  minimum: 100,
-  default: 400,
-  maximum: 900,
+  kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
   labels: [],
   hidden: false,
 };
