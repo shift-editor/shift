@@ -243,8 +243,6 @@ export type {
   PointSeed,
   PointType,
   SetAxisMappings,
-  ShaperAxis,
-  ShaperFont,
   SetKerningValues,
   SetLanguages,
   SetMetricDefinitions,

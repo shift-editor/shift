@@ -18,7 +18,6 @@ use shift_font::{
   GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind, NamedInstanceId, PointId,
   SourceId,
 };
-use shift_shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
 use shift_wire::bridges::napi::IntoEach;
 use shift_wire::values;
@@ -44,12 +43,10 @@ use std::{
 };
 
 mod atlas;
-mod shaping;
 mod source;
 mod workspace;
 
 use atlas::native_atlas_request;
-use shaping::native_shaping_request;
 use source::native_source_request;
 use workspace::native_workspace_request;
 
@@ -935,9 +932,6 @@ pub struct Bridge {
   slug_generation: u32,
   slug_atlas: Option<SlugAtlasGeneration>,
   source_atlas_descriptors: BTreeMap<u32, SourceAtlasDescriptor>,
-  shaper_fonts: ShaperFontState,
-  /// Shaper for the current font; `None` until the next shape after a change.
-  shaper: Option<LiveShaper>,
 }
 
 #[napi]
@@ -952,8 +946,6 @@ impl Bridge {
       slug_generation: 0,
       slug_atlas: None,
       source_atlas_descriptors: BTreeMap::new(),
-      shaper_fonts: ShaperFontState::default(),
-      shaper: None,
     }
   }
 
@@ -1022,28 +1014,6 @@ impl Bridge {
   ) -> Result<PackedReply<'env>> {
     answer(env, &numbers, &blobs, |input, blobs, names| {
       native_source_request(self, method, input, blobs, names)
-    })
-  }
-
-  /// Answers one [`shaping::NativeShaping`] request, as
-  /// [`Self::workspace_request`] answers a workspace one.
-  ///
-  /// # Errors
-  ///
-  /// Fails only when JavaScript cannot allocate the reply.
-  #[napi(
-    ts_args_type = "method: number, numbers: Float64Array, blobs: readonly Uint8Array[]",
-    ts_return_type = "{ numbers: Float64Array; blobs: Uint8Array[] }"
-  )]
-  pub fn shaping_request<'env>(
-    &mut self,
-    env: &'env Env,
-    method: u32,
-    numbers: Float64ArraySlice<'_>,
-    blobs: Vec<Uint8ArraySlice<'_>>,
-  ) -> Result<PackedReply<'env>> {
-    answer(env, &numbers, &blobs, |input, blobs, names| {
-      native_shaping_request(self, method, input, blobs, names)
     })
   }
 
@@ -1398,51 +1368,8 @@ impl Bridge {
   fn font(&self) -> BridgeResult<&Font> {
     Ok(self.workspace()?.font())
   }
-  /// Returns the shaper for the current font, making a new one after a font
-  /// change.
-  fn live_shaper(&mut self) -> BridgeResult<&LiveShaper> {
-    let shaper = match self.shaper.take() {
-      Some(shaper) => shaper,
-      None => self.new_live_shaper()?,
-    };
-    Ok(self.shaper.insert(shaper))
-  }
-
-  /// Updates the shaping tables from the current font and makes a shaper
-  /// with its character mapping. Every layer is acquired first, because a
-  /// glyph's `GDEF` class depends on its anchors.
-  fn new_live_shaper(&mut self) -> BridgeResult<LiveShaper> {
-    self.workspace_mut()?.acquire_all_layers()?;
-    let font = self.font()?;
-    let request = ShaperFontRequest::new(&shift_backends::shaper_font_source(font))?;
-    self.shaper_fonts.update(request)?;
-    let shaper_font =
-      self
-        .shaper_fonts
-        .font()
-        .cloned()
-        .ok_or_else(|| BridgeError::InvalidInput {
-          kind: "font",
-          value: "it has no shaping tables".to_string(),
-        })?;
-    let characters: Vec<(u32, GlyphId)> = self
-      .font()?
-      .glyphs()
-      .flat_map(|glyph| {
-        glyph
-          .unicodes()
-          .iter()
-          .map(move |&codepoint| (codepoint, glyph.id()))
-      })
-      .collect();
-    let mut shaper = LiveShaper::new(shaper_font, characters.iter().copied())?;
-    shaper.set_glyphs(self.shaper_fonts.glyph_order(), characters);
-    Ok(shaper)
-  }
-
   fn mark_font_changed(&mut self) {
     self.slug_atlas = None;
-    self.shaper = None;
     self.bump_live_version();
   }
 
@@ -1456,8 +1383,6 @@ impl Bridge {
 
   fn reset_versions(&mut self) {
     self.slug_atlas = None;
-    self.shaper_fonts = ShaperFontState::default();
-    self.shaper = None;
     self.source_atlas_descriptors.clear();
     self.live_version = DocumentVersion::default();
     self.saved_version = DocumentVersion::default();

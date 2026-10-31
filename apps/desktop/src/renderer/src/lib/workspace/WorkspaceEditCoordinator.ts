@@ -13,7 +13,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ShaperFont,
   SlugAtlas,
 } from "@shift/types";
 import type {
@@ -462,14 +461,6 @@ export class WorkspaceEditCoordinator {
    */
   mapLocation(location: Location): Promise<Location> {
     return this.#withFlush(() => this.#session.mapLocation(location));
-  }
-
-  /**
-   * Returns the shaper font behind pending edits, so new glyphs and feature
-   * code are compiled in; null while `knownRevision` is still current.
-   */
-  shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
-    return this.#withFlush(() => this.#session.shaperFont(knownRevision));
   }
 
   /** Makes the latest undone edit again, as {@link undo} takes one back. */

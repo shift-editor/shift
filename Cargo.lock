@@ -2457,7 +2457,6 @@ dependencies = [
  "shift-config",
  "shift-engine",
  "shift-font",
- "shift-shaper-font",
  "shift-slug",
  "shift-specimen",
  "shift-store",

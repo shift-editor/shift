@@ -12,7 +12,6 @@ import type {
   LayerRead,
   Location,
   SaveState,
-  ShaperFont,
   SlugAtlas,
 } from "@shift/types";
 import fs from "node:fs";
@@ -305,11 +304,6 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   mapLocation(location: Location): Promise<Location> {
     return this.#serialize(() => this.#bridge.napi.mapLocation(location));
-  }
-
-  // Not serialized: a synchronous bridge read, so it never waits behind a save or import.
-  async shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
-    return this.#bridge.shaping.shaperFont(knownRevision ?? undefined) ?? null;
   }
 
   #connectSyncLane(ports: readonly unknown[]): void {

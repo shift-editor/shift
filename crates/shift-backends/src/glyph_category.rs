@@ -11,9 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use glyphs_reader::glyphdata::GlyphData;
-use shift_font::{
-    Font, Glyph, GlyphDataCategory, LibData, NamedGlyph, OpenTypeCategory, ShaperFontSource,
-};
+use shift_font::{Glyph, GlyphDataCategory, LibData, NamedGlyph, OpenTypeCategory};
 
 /// Looks glyphs up in Glyphs' bundled glyph data.
 #[derive(Default)]
@@ -102,14 +100,6 @@ pub(crate) fn gdef_classes<'a>(
     shift_font::gdef_classes(glyphs, font_lib, |glyph| {
         categories.lookup(glyph.name(), glyph.unicodes())
     })
-}
-
-/// What the font's shaper font compiles from, with each glyph's GDEF class
-/// resolved through glyph data. Every layer must be loaded, because a class
-/// depends on the glyph's anchors.
-pub fn shaper_font_source(font: &Font) -> ShaperFontSource {
-    let classes = gdef_classes(font.glyphs(), font.lib());
-    font.shaper_font_source(|glyph| classes.get(glyph.name()).copied())
 }
 
 #[cfg(test)]

@@ -259,7 +259,6 @@ describe("Bridge", () => {
     expect(kindOf(() => closed.source.readFontSourceGlyph(mintId("glyph")))).toBe(
       "NativeSourceError.noFontSource",
     );
-    expect(kindOf(() => closed.shaping.shaperFont())).toBe("NativeShapingError.noWorkspace");
     expect(kindOf(() => bridge.workspace.saveWorkspace())).toBe("NativeWorkspaceError.needsSaveAs");
     expect(() => bridge.workspace.persist(new Uint8Array([0xc1]), "unsaved")).toThrow(
       /^NativeWorkspaceError\.invalidInput: cannot decode from the window/,
@@ -269,12 +268,9 @@ describe("Bridge", () => {
   it("carries bytes whole in both directions", () => {
     createGlyphLayer();
     const directory = bridge.workspace.encodedDirectory();
-    const shaper = bridge.shaping.shaperFont();
 
     expect(directory).toBeInstanceOf(Uint8Array);
     expect(directory.length).toBeGreaterThan(0);
-    expect(shaper?.bytes).toBeInstanceOf(Uint8Array);
-    expect(bridge.shaping.shaperFont(shaper?.revision)).toBeNull();
   });
 
   it("surfaces typed bridge errors at the NAPI boundary", () => {

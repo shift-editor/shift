@@ -13,7 +13,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ShaperFont,
   WorkspaceDocumentState,
   WorkspaceSnapshot,
   GlyphName,
@@ -268,7 +267,6 @@ export interface WorkspaceEditCoordinator {
   resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
-  shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
   settled(): Promise<void>;
   undo(): Promise<AppliedChange | null>;
   redo(): Promise<AppliedChange | null>;
