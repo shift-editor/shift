@@ -23,6 +23,7 @@
 )]
 
 pub mod anchors;
+pub mod axis;
 pub mod blobs;
 pub mod decomposition;
 pub mod drag;

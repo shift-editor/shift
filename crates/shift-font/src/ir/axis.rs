@@ -28,6 +28,8 @@ pub enum AxisKind {
 }
 
 impl AxisKind {
+    /// Returns the lowest position: a continuous axis's minimum, or a
+    /// discrete axis's smallest value (its default when it has none).
     pub fn minimum(&self) -> f64 {
         match self {
             Self::Continuous { minimum, .. } => *minimum,
@@ -43,6 +45,8 @@ impl AxisKind {
         }
     }
 
+    /// Returns the highest position: a continuous axis's maximum, or a
+    /// discrete axis's largest value (its default when it has none).
     pub fn maximum(&self) -> f64 {
         match self {
             Self::Continuous { maximum, .. } => *maximum,
@@ -56,6 +60,66 @@ impl AxisKind {
         match self {
             Self::Continuous { .. } => None,
             Self::Discrete { values, .. } => Some(values),
+        }
+    }
+
+    /// Returns whether the axis has more than one position: a range wider
+    /// than a point, or more than one discrete value.
+    pub fn varies(&self) -> bool {
+        self.minimum() < self.maximum()
+    }
+
+    /// Returns whether `value` is a position this axis allows: finite and
+    /// inside its range, or one of its discrete values.
+    pub fn accepts(&self, value: f64) -> bool {
+        match self {
+            Self::Continuous {
+                minimum, maximum, ..
+            } => value.is_finite() && value >= *minimum && value <= *maximum,
+            Self::Discrete { values, .. } => values.contains(&value),
+        }
+    }
+
+    /// Maps a user-space `value` to `-1..=1`, with the default at `0`, the
+    /// minimum at `-1` and the maximum at `1`, linearly on each side.
+    ///
+    /// A side with no extent (the default at the minimum or maximum) maps to
+    /// `0`. Values outside the range are not clamped.
+    pub fn normalize(&self, value: f64) -> f64 {
+        let minimum = self.minimum();
+        let default = self.default();
+        let maximum = self.maximum();
+
+        if value < default {
+            if (default - minimum).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - default) / (default - minimum)
+            }
+        } else if value > default {
+            if (maximum - default).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - default) / (maximum - default)
+            }
+        } else {
+            0.0
+        }
+    }
+
+    /// Maps a normalized `value` back to user space: the inverse of
+    /// [`Self::normalize`] on a side with extent.
+    pub fn denormalize(&self, value: f64) -> f64 {
+        let minimum = self.minimum();
+        let default = self.default();
+        let maximum = self.maximum();
+
+        if value < 0.0 {
+            default + value * (default - minimum)
+        } else if value > 0.0 {
+            default + value * (maximum - default)
+        } else {
+            default
         }
     }
 }
@@ -170,15 +234,10 @@ impl AxisList for [Axis] {
 }
 
 impl Axis {
-    /// Returns whether `value` is a position this axis allows: finite and
-    /// inside its range, or one of its discrete values.
+    /// Returns whether `value` is a position this axis allows; see
+    /// [`AxisKind::accepts`].
     pub fn accepts(&self, value: f64) -> bool {
-        match self.kind() {
-            AxisKind::Continuous {
-                minimum, maximum, ..
-            } => value.is_finite() && value >= *minimum && value <= *maximum,
-            AxisKind::Discrete { values, .. } => values.contains(&value),
-        }
+        self.kind.accepts(value)
     }
 
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
@@ -429,40 +488,15 @@ impl Axis {
         }
     }
 
+    /// Maps a user-space `value` to `-1..=1`; see [`AxisKind::normalize`].
     pub fn normalize(&self, value: f64) -> f64 {
-        let minimum = self.minimum();
-        let default = self.default();
-        let maximum = self.maximum();
-
-        if value < default {
-            if (default - minimum).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - default) / (default - minimum)
-            }
-        } else if value > default {
-            if (maximum - default).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - default) / (maximum - default)
-            }
-        } else {
-            0.0
-        }
+        self.kind.normalize(value)
     }
 
+    /// Maps a normalized `value` back to user space; see
+    /// [`AxisKind::denormalize`].
     pub fn denormalize(&self, value: f64) -> f64 {
-        let minimum = self.minimum();
-        let default = self.default();
-        let maximum = self.maximum();
-
-        if value < 0.0 {
-            default + value * (default - minimum)
-        } else if value > 0.0 {
-            default + value * (maximum - default)
-        } else {
-            default
-        }
+        self.kind.denormalize(value)
     }
 }
 
@@ -838,6 +872,35 @@ impl DesignLocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_discrete_axis_ranges_from_its_smallest_to_its_largest_value() {
+        let kind = AxisKind::Discrete {
+            values: vec![0.0, 1.0, 2.0],
+            default: 1.0,
+        };
+
+        assert_eq!((kind.minimum(), kind.maximum()), (0.0, 2.0));
+        assert!(kind.varies());
+        assert!(kind.accepts(2.0));
+        assert!(!kind.accepts(0.5));
+    }
+
+    #[test]
+    fn an_axis_with_one_position_does_not_vary() {
+        let point = AxisKind::Continuous {
+            minimum: 100.0,
+            default: 100.0,
+            maximum: 100.0,
+        };
+        let single = AxisKind::Discrete {
+            values: vec![1.0],
+            default: 1.0,
+        };
+
+        assert!(!point.varies());
+        assert!(!single.varies());
+    }
 
     #[test]
     fn locations_build_from_pairs_and_axis_defaults() {

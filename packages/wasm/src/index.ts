@@ -6,12 +6,13 @@
  * The module is embedded as base64, so the import works unchanged in the
  * desktop renderer, vitest, and the SDK, with no bundler plugin, fetch, or
  * top-level await. Hot calls go through the generated classes exported here
- * ({@link geometry}, {@link drag}, …), over the module's request exports; the
+ * ({@link axes}, {@link geometry}, {@link drag}, …), over the module's request exports; the
  * typed wrappers in `@shift/editor` hold handles; the raw exports are for them.
  */
 import { syncTransport } from "@shift/pack";
 import {
   anchorsRequest,
+  axesRequest,
   decompositionRequest,
   dragRequest,
   geometryRequest,
@@ -23,7 +24,7 @@ import {
 } from "./generated/shift_wasm.js";
 import { moduleBase64 } from "./generated/module";
 import { embeddedModule } from "./embedded";
-import { Anchors, Decomposition, Drag, Geometry } from "./generated-protocol";
+import { Anchors, Axes, Decomposition, Drag, Geometry } from "./generated-protocol";
 import { moduleNames } from "./names";
 
 /** The instantiated module's exports, including its memory. */
@@ -33,6 +34,8 @@ const names = moduleNames(internName, nameOf);
 
 /** Anchor propagation and placement, as export and the workspace run them. */
 export const anchors = new Anchors(syncTransport(anchorsRequest, names, takeReplyBlobs));
+/** An axis's range and the positions it allows, as shift-font decides them. */
+export const axes = new Axes(syncTransport(axesRequest, names, takeReplyBlobs));
 /** Component outlines between masters, as compilers interpolate a decomposed glyph. */
 export const decomposition = new Decomposition(
   syncTransport(decompositionRequest, names, takeReplyBlobs),
