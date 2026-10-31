@@ -9,7 +9,7 @@
  * before it answers.
  */
 import type { Editor } from "@shift/editor";
-import { sourceMetricValue, withSourceMetricValue } from "@shift/editor/model";
+import { Source } from "@shift/editor/model";
 import type { SourceSelectionMode } from "@shift/editor/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { Point2D } from "@shift/geo";
@@ -19,7 +19,7 @@ import type {
   GlyphName,
   PointId,
   SelectableId,
-  Source,
+  Source as SourceRecord,
   Unicode,
 } from "@shift/types";
 import { drawFixture } from "./drawFixture";
@@ -113,27 +113,31 @@ export class SurfaceActions {
 
   /** Renames the source `source` to `name`, as Settings › Sources does. */
   async renameSource(source: string, name: string): Promise<void> {
-    await this.#editor.font.updateSource({ ...this.#sourceNamed(source), name });
+    await this.#editor.font.updateSource(new Source(this.#sourceNamed(source)).withName(name));
   }
 
   /** Sets the source `source`'s italic angle, as Settings › Sources does. */
   async setSourceItalicAngle(source: string, italicAngle: number): Promise<void> {
-    await this.#editor.font.updateSource({ ...this.#sourceNamed(source), italicAngle });
+    await this.#editor.font.updateSource(
+      new Source(this.#sourceNamed(source)).withItalicAngle(italicAngle),
+    );
   }
 
   /** Sets the source `source`'s line gap, as Settings › Sources does. */
   async setSourceLineGap(source: string, lineGap: number): Promise<void> {
-    await this.#editor.font.updateSource({ ...this.#sourceNamed(source), lineGap });
+    await this.#editor.font.updateSource(
+      new Source(this.#sourceNamed(source)).withLineGap(lineGap),
+    );
   }
 
   /** Moves the metric named `metric` (`Ascender`, `x-Height`, …) in the source `source` to `position`. */
   async setSourceMetric(source: string, metric: string, position: number): Promise<void> {
     const font = this.#editor.font;
-    const current = this.#sourceNamed(source);
+    const current = new Source(this.#sourceNamed(source));
     const definition = font.metricDefinitions.find((candidate) => candidate.name === metric);
     if (!definition) throw new Error(`The font has no metric named ${metric}`);
-    const value = sourceMetricValue(current, definition.id);
-    await font.updateSource(withSourceMetricValue(current, definition.id, { ...value, position }));
+    const value = current.metricValue(definition.id);
+    await font.updateSource(current.withMetricValue(definition.id, { ...value, position }));
   }
 
   /** Adds a named instance at `location`, keyed by axis tag, as Settings › Instances does. */
@@ -182,7 +186,7 @@ export class SurfaceActions {
     this.#editor.zoomToFit();
   }
 
-  #sourceNamed(name: string): Source {
+  #sourceNamed(name: string): SourceRecord {
     const source = this.#editor.font.sourceNamed(name);
     if (!source) throw new Error(`The font has no source named ${name}`);
     return source;

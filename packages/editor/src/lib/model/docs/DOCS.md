@@ -45,6 +45,8 @@ Reactive TypeScript font, authored glyph-layer, and derived glyph-view surfaces.
 lib/model/
   Axis.ts                    -- one axis: its record, its range and positions from shift-font, and its edited records
   AxisMapping.ts             -- an axis's independent mapping: its points along the axis and its edited records
+  Source.ts                  -- one source's reads and edited records for the settings forms
+  NamedInstance.ts           -- one named instance's reads and edited records for the settings forms
   Font.ts                    -- eager metadata, authoring operations, and Glyph acquisition
   FontStore.ts               -- workspace records, authored layer state, projections, canonical Glyph ownership
   Glyph.ts                   -- Glyph, GlyphLayer, internal GlyphRenderModel, root lookup, composed metrics
