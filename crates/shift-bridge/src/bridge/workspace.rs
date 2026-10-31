@@ -4,13 +4,14 @@
 
 use pack::{Bytes, Pack};
 use shift_font::{
-  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, LayerId,
+  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphRecord,
+  GlyphRecordChanges, LayerId, OpenTypeCategories,
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{
-  AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
-  GlyphLayerSnapshot, GlyphRecord, GlyphRecordChanges, GlyphStructure, Ligature, MetricDefinition,
-  NamedInstance, SourceMetricsInterpolationSnapshot,
+  AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities,
+  GlyphLayerSnapshot, GlyphStructure, MetricDefinition, NamedInstance,
+  SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity as StoreDocumentIdentity, FontWorkspace, NewWorkspace,
@@ -694,28 +695,20 @@ impl Bridge {
     mut component_bases: impl FnMut(GlyphId) -> BridgeResult<Vec<GlyphId>>,
   ) -> BridgeResult<Vec<GlyphRecord>> {
     let font = self.font()?;
-    let categories = shift_backends::record_categories(glyphs.iter().copied(), font.lib());
+    let glyph_data = shift_backends::GlyphCategories::new();
+    let explicit = OpenTypeCategories::of(font.lib());
     let mut records = glyphs
       .iter()
       .map(|glyph| {
-        let mut record = GlyphRecord::from(*glyph);
-        if let Some(category) = categories.get(&glyph.id()) {
-          record.mark = category.mark;
-          record.nonspacing_mark = category.nonspacing_mark;
-          record.ligature = category.ligature.map(|ligature| match ligature {
-            shift_backends::PropagationLigature::Explicit => Ligature::Explicit,
-            shift_backends::PropagationLigature::Subcategory => Ligature::Subcategory,
-          });
-        }
-        record.component_base_glyph_ids = component_bases(glyph.id())?;
-        record.layers = font
-          .master_layers(glyph)
-          .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
-          .collect();
-        Ok(record)
+        Ok(font.glyph_record(
+          glyph,
+          component_bases(glyph.id())?,
+          glyph_data.lookup(glyph.name(), glyph.unicodes()),
+          &explicit,
+        ))
       })
       .collect::<BridgeResult<Vec<_>>>()?;
-    records.sort_by(|a, b| a.name.cmp(&b.name));
+    GlyphRecord::sort_by_name(&mut records);
     Ok(records)
   }
 

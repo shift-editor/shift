@@ -6,11 +6,11 @@
 //! store adds them as [`FontReplacement::glyph_changes`].
 
 use serde::Serialize;
-use shift_font::{CoreResult, Font, FontChangeImpact};
+use shift_font::{CoreResult, Font, FontChangeImpact, GlyphRecordChanges};
 
 use crate::{
-    AxisMapping, AxisMappingBasis, FontMetadata, GlyphRecordChanges, KerningSnapshot,
-    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
+    AxisMapping, AxisMappingBasis, FontMetadata, KerningSnapshot, MetricDefinition, NamedInstance,
+    SourceMetricsInterpolationSnapshot,
 };
 
 /// Each font-level collection an edit changed, whole; `None` for one it left
