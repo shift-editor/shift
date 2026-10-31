@@ -1426,7 +1426,10 @@ impl Bridge {
           kind: "font",
           value: "it has no shaping tables".to_string(),
         })?;
-    Ok(LiveShaper::new(shaper_font, self.font()?.character_map())?)
+    let font = self.font()?;
+    let mut shaper = LiveShaper::new(shaper_font, font.character_map())?;
+    shaper.set_glyphs(self.shaper_fonts.glyph_order(), font.character_map());
+    Ok(shaper)
   }
 
   fn mark_font_changed(&mut self) {

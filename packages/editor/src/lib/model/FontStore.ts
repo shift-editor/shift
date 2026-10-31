@@ -136,7 +136,7 @@ export class FontStore {
     });
     this.#kerning = computed(
       () => {
-        if (engine) track(engine.kerningRevisionCell);
+        if (engine) track(engine.revision("kerning"));
         return new Kerning(kerningRecords.value, engine);
       },
       { name: "fontStore.kerning" },

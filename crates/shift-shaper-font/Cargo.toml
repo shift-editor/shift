@@ -5,6 +5,10 @@ edition = "2024"
 description = "Compiles a font's authored OpenType features into a shaper font, natively and in WebAssembly"
 license.workspace = true
 
+[features]
+# Exposes `ShaperFontState::compiles` to other crates' tests.
+test-support = []
+
 [dependencies]
 shift-font = { workspace = true }
 shift-shape = { workspace = true }

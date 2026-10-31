@@ -32,6 +32,7 @@ import type {
   MissingKerningOrigin,
   SourceSetWeights,
 } from "../lib/wasm/engine";
+import type { FontChangeFlag, ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -95,12 +96,13 @@ export type KerningPlace =
  */
 export interface FontEngine {
   /**
-   * Changes whenever {@link kerningRun}, {@link kerningPairs},
-   * {@link kerningPairsNaming} or {@link missingKerningOrigin} may answer differently.
+   * Changes whenever an edit, undo, redo or staged frame sets `flag` in its
+   * impact, and on every open: a reader of what that flag covers (kerning,
+   * source metrics, the glyph directory, …) tracks it to read again.
    */
-  readonly kerningRevisionCell: Signal<number>;
-  /** Changes whenever {@link sourceMetricsAt} may answer differently. */
-  readonly sourceMetricsRevisionCell: Signal<number>;
+  revision(flag: FontChangeFlag): Signal<number>;
+  /** The flags whose change may change what {@link shapeParagraphs} returns. */
+  shapingInputs(): readonly FontChangeFlag[];
 
   /**
    * Reads the kerning between glyph pairs at one place, in one call.
@@ -182,6 +184,18 @@ export interface FontEngine {
    * @throws When the engine is not open.
    */
   newAnchorName(layerIds: readonly LayerId[]): string;
+
+  /**
+   * Shapes paragraphs with the font's feature code, through a shaper font
+   * the engine compiles from its own font: the glyph order with each glyph's
+   * GDEF class, feature code, units per em and axes, unsaved edits included.
+   *
+   * @returns Each paragraph's runs in logical order, in request order, or
+   * why it could not be shaped (as when the store's reader cannot answer or
+   * the font cannot make a shaper font); null only while the engine is not
+   * open.
+   */
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null;
 }
 
 /**

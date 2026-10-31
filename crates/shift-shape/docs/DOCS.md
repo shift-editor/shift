@@ -51,6 +51,7 @@ crates/shift-shape/src/
 
 - **Thai, Lao, Khmer, and Burmese break only at spaces.** UAX #14 needs a dictionary to find their word boundaries; `unicode-linebreak` has none.
 - **Clusters index units, not bytes or UTF-16 code units.** One `Unit` is one character or one inserted glyph.
+- **`.notdef` is two things.** HarfRust gives glyph id 0 both for a character with no glyph and for a `.notdef` inserted by name; only the second comes back as a host glyph, told apart by the unit at its cluster.
 
 ## Verification
 

@@ -23,15 +23,16 @@ crates/shift-shaper-font/src/
   diagnostics.rs   fea-rs diagnostics with UTF-16 ranges
   tables.rs        GDEF classes, fvar axis names, insert markers
   glyph_order.rs   ShaperGlyphOrder: the Shift glyph at each shaper glyph id, both ways
-  state.rs         ShaperFontState: last valid font, skip an unchanged request
+  state.rs         ShaperFontState: last valid font, compile only when a compile input changes
+  references.rs    the glyph names a feature source names
   shape.rs         LiveShaper over shift-shape
 ```
 
 ## Key Types
 
 - `ShaperFontRequest` / `ShaperFont::compile` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; `GDEF` glyph classes come from the source's classes unless the feature code declares its own; diagnostics carry UTF-16 ranges
-- `ShaperFontState` -- keeps the last successfully compiled shaper font active while later feature source has errors, and skips recompiling an unchanged request
-- `LiveShaper` -- shapes with `shift-shape` through `LiveGlyphs`, a `GlyphSource` mapping characters through the live font's Unicode values with zero advances; the request and result types are `shift-shape`'s, aliased over `GlyphId` and `ExternalLocation`
+- `ShaperFontState` -- keeps the last successfully compiled shaper font active while later feature source has errors, and compiles only when a compile input changes: units per em, the feature source, the axes and their mappings, a glyph the feature source names (added, removed or renamed; a source with a glyph range or CID names every glyph), or a glyph's `GDEF` class. Any other added glyph is appended to its `glyph_order` past the compiled font's glyph count, where HarfRust shapes it as itself, uncovered by any lookup and unclassed; a removed glyph keeps its slot, unmapped. `compiles` counts compile attempts. **WHY:** a compile of a large feature source takes about 11 ms (10,000 glyphs, 5,074-line source), and adding a glyph is the commonest edit that changes the glyph directory
+- `LiveShaper` -- shapes over the state's glyph order (`set_glyphs`) with `shift-shape` through `LiveGlyphs`, a `GlyphSource` mapping characters through the live font's Unicode values with zero advances; the request and result types are `shift-shape`'s, aliased over `GlyphId` and `ExternalLocation`
 
 ## How it works
 

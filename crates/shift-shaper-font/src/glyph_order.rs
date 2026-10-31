@@ -1,6 +1,6 @@
 //! The Shift glyph at each shaper glyph id, both ways.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use shift_font::GlyphId;
 
@@ -77,5 +77,21 @@ impl ShaperGlyphOrder {
         }
         self.glyphs.extend(added);
         Ok(())
+    }
+
+    /// Unmaps every glyph not in `present`, keeping its slot; returns whether
+    /// any was unmapped.
+    pub fn unmap_absent(&mut self, present: &HashSet<GlyphId>) -> bool {
+        let mut unmapped = false;
+        for slot in &mut self.glyphs {
+            if let Some(glyph) = *slot
+                && !present.contains(&glyph)
+            {
+                self.ids.remove(&glyph);
+                *slot = None;
+                unmapped = true;
+            }
+        }
+        unmapped
     }
 }

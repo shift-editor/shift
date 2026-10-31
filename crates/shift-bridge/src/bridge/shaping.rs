@@ -80,11 +80,15 @@ pub(crate) struct ShaperAxis {
 }
 
 impl ShaperFont {
-  fn new(revision: u64, font: &shift_shaper_font::ShaperFont) -> Self {
+  fn new(
+    revision: u64,
+    font: &shift_shaper_font::ShaperFont,
+    glyph_order: &[Option<GlyphId>],
+  ) -> Self {
     Self {
       revision: u32::try_from(revision).unwrap_or(u32::MAX),
       bytes: Bytes(font.bytes().to_vec()),
-      glyph_ids: font.glyph_ids().to_vec(),
+      glyph_ids: glyph_order.to_vec(),
       axes: font
         .axis_normalizations()
         .into_iter()
@@ -116,6 +120,10 @@ impl NativeShaping for Bridge {
     if known_revision.is_some_and(|known| u64::from(known) == revision) {
       return Ok(None);
     }
-    Ok(Some(ShaperFont::new(revision, &font)))
+    Ok(Some(ShaperFont::new(
+      revision,
+      &font,
+      self.shaper_fonts.glyph_order().as_slice(),
+    )))
   }
 }

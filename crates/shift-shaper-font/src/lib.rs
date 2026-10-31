@@ -24,11 +24,13 @@
 mod axes;
 mod diagnostics;
 mod glyph_order;
+mod inputs;
+mod references;
 mod shape;
 mod state;
 mod tables;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -50,6 +52,8 @@ use write_fonts::types::Tag;
 pub use axes::{AxisConversionError, MappingSide, axis_tag, to_ir_axes};
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use glyph_order::ShaperGlyphOrder;
+pub use inputs::UnitsPerEm;
+use inputs::{FeatureSource, GlyphSet, ShaperAxes};
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
     ShapedRun, TextDirection,
@@ -57,46 +61,10 @@ pub use shape::{
 pub use state::ShaperFontState;
 
 use diagnostics::feature_diagnostics;
+use references::FeatureReferences;
 
 /// Path fea-rs reports for the authored feature source.
 const FEATURE_SOURCE_PATH: &str = "features.fea";
-
-const MIN_UNITS_PER_EM: f64 = 16.0;
-const MAX_UNITS_PER_EM: f64 = 16_384.0;
-
-/// Units per em as a font's `head` table holds them: a whole number from 16
-/// to 16384.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UnitsPerEm(u16);
-
-impl UnitsPerEm {
-    /// The `head` value.
-    pub fn get(self) -> u16 {
-        self.0
-    }
-}
-
-impl TryFrom<f64> for UnitsPerEm {
-    type Error = ShaperFontError;
-
-    /// # Errors
-    ///
-    /// Returns [`ShaperFontError::InvalidUnitsPerEm`] when `value` is not a
-    /// whole number from 16 to 16384.
-    fn try_from(value: f64) -> Result<Self, ShaperFontError> {
-        let valid = value.fract() == 0.0 && (MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&value);
-        if !valid {
-            return Err(ShaperFontError::InvalidUnitsPerEm { value });
-        }
-        // In range and whole, so the conversion is exact.
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "checked whole and within 16..=16384 above"
-        )]
-        Ok(Self(value as u16))
-    }
-}
 
 /// The `GDEF` glyph class write-fonts writes for a glyph's
 /// [`OpenTypeCategory`]. A trait, since neither type is this crate's to give
@@ -117,22 +85,16 @@ impl ToGlyphClassDef for OpenTypeCategory {
     }
 }
 
-/// Everything a shaper font is compiled from.
-///
-/// Two requests compare equal exactly when they compile to the same shaper
-/// font, so a caller can skip rebuilding for an unchanged request.
-#[derive(Clone, Debug, PartialEq)]
+/// Everything a shaper font is compiled from, in parts: units per em, the
+/// feature source, the axes, and the glyph set with each glyph's `GDEF`
+/// class. [`ShaperFontState`] compares a new request part by part to decide
+/// whether it compiles differently.
+#[derive(Clone, Debug)]
 pub struct ShaperFontRequest {
     units_per_em: UnitsPerEm,
-    glyph_names: Vec<String>,
-    /// The Shift glyph for each name in `glyph_names`; `None` for a `.notdef`
-    /// the font does not have.
-    glyph_ids: Vec<Option<GlyphId>>,
-    feature_source: String,
-    axes: Vec<IrAxis>,
-    /// The Shift axis for each axis in `axes`.
-    axis_ids: Vec<AxisId>,
-    gdef_classes: BTreeMap<String, GlyphClassDef>,
+    feature_source: FeatureSource,
+    axes: ShaperAxes,
+    glyphs: GlyphSet,
 }
 
 impl ShaperFontRequest {
@@ -150,36 +112,37 @@ impl ShaperFontRequest {
     pub fn new(source: &ShaperFontSource) -> Result<Self, ShaperFontError> {
         let units_per_em = UnitsPerEm::try_from(source.units_per_em)?;
         let axes = to_ir_axes(&source.axes, &source.axis_mappings)?;
-        let mut glyph_names = Vec::with_capacity(source.glyphs.len() + 1);
-        let mut glyph_ids = Vec::with_capacity(source.glyphs.len() + 1);
-        let mut gdef_classes = BTreeMap::new();
+        let mut glyphs = GlyphSet::default();
         for glyph in source.glyph_order() {
-            glyph_names.push(glyph.name.to_string());
-            glyph_ids.push(glyph.id);
+            glyphs.names.push(glyph.name.to_string());
+            glyphs.ids.push(glyph.id);
             if let Some(class) = glyph.gdef_class {
-                gdef_classes.insert(glyph.name.to_string(), class.to_glyph_class_def());
+                glyphs
+                    .gdef_classes
+                    .insert(glyph.name.to_string(), class.to_glyph_class_def());
             }
         }
 
         Ok(Self {
             units_per_em,
-            glyph_names,
-            glyph_ids,
-            feature_source: source.feature_source.clone(),
-            axes,
-            axis_ids: source.axes.iter().map(shift_font::Axis::id).collect(),
-            gdef_classes,
+            feature_source: FeatureSource(source.feature_source.clone()),
+            axes: ShaperAxes {
+                axes,
+                ids: source.axes.iter().map(shift_font::Axis::id).collect(),
+            },
+            glyphs,
         })
     }
 
     /// Returns the variation model fea-rs needs to resolve variable values, or
     /// `None` for a static font.
     fn variation_metadata(&self) -> Result<Option<StaticMetadata>, VariationModelError> {
-        if self.axes.is_empty() {
+        if self.axes.axes.is_empty() {
             return Ok(None);
         }
 
         let default_location: NormalizedLocation = self
+            .axes
             .axes
             .iter()
             .map(|axis| (axis.tag, NormalizedCoord::new(0.0)))
@@ -187,7 +150,7 @@ impl ShaperFontRequest {
         let metadata = StaticMetadata::new(
             self.units_per_em.get(),
             Default::default(),
-            self.axes.clone(),
+            self.axes.axes.clone(),
             Vec::new(),
             HashSet::from([default_location]),
             None,
@@ -201,7 +164,7 @@ impl ShaperFontRequest {
     /// Returns this request with no feature source, which always compiles.
     fn without_features(&self) -> Self {
         Self {
-            feature_source: String::new(),
+            feature_source: FeatureSource::default(),
             ..self.clone()
         }
     }
@@ -231,18 +194,30 @@ impl ShaperFont {
     /// Returns [`ShaperFontError`] when the glyph order has duplicate names,
     /// or the axes or compiled tables cannot be assembled into a font.
     pub fn compile(request: &ShaperFontRequest) -> Result<ShaperFontCompilation, ShaperFontError> {
-        let glyph_map = GlyphMap::new(request.glyph_names.iter().map(String::as_str))?;
+        let glyph_map = GlyphMap::new(request.glyphs.names.iter().map(String::as_str))?;
 
-        let (tree, parse_diagnostics) = parse_feature_source(&request.feature_source, &glyph_map)?;
+        let (tree, parse_diagnostics) =
+            parse_feature_source(request.feature_source.as_str(), &glyph_map)?;
         if parse_diagnostics.has_errors() {
-            return Ok(ShaperFontCompilation::failed(&parse_diagnostics, &tree));
+            // What a source that does not parse names is unknown, so any
+            // glyph change may let it compile.
+            return Ok(ShaperFontCompilation::failed(
+                &parse_diagnostics,
+                &tree,
+                FeatureReferences::every_glyph(),
+            ));
         }
+        let references = FeatureReferences::of(&tree);
 
         let static_metadata = request.variation_metadata()?;
         let variation_info = static_metadata.as_ref().map(FeaVariationInfo::new);
         let validation = compile::validate(&tree, &glyph_map, variation_info.as_ref());
         if validation.has_errors() {
-            return Ok(ShaperFontCompilation::failed(&validation, &tree));
+            return Ok(ShaperFontCompilation::failed(
+                &validation,
+                &tree,
+                references,
+            ));
         }
 
         let compiled = compile::compile(
@@ -254,16 +229,21 @@ impl ShaperFont {
         );
         let (mut compilation, warnings) = match compiled {
             Ok(compiled) => compiled,
-            Err(errors) => return Ok(ShaperFontCompilation::failed(&errors, &tree)),
+            Err(errors) => {
+                return Ok(ShaperFontCompilation::failed(&errors, &tree, references));
+            }
         };
 
-        tables::add_glyph_classes(&mut compilation, &glyph_map, &request.gdef_classes);
+        tables::add_glyph_classes(&mut compilation, &glyph_map, &request.glyphs.gdef_classes);
         compilation
             .head
             .get_or_insert_with(Default::default)
             .units_per_em = request.units_per_em.get();
         let fvar = match static_metadata {
-            Some(_) => Some(tables::add_axis_names(&mut compilation, &request.axes)?),
+            Some(_) => Some(tables::add_axis_names(
+                &mut compilation,
+                &request.axes.axes,
+            )?),
             None => None,
         };
 
@@ -275,13 +255,14 @@ impl ShaperFont {
         Ok(ShaperFontCompilation {
             font: Some(Self {
                 bytes: builder.build(),
-                glyph_names: request.glyph_names.clone(),
-                glyph_order: ShaperGlyphOrder::new(request.glyph_ids.clone())?,
-                axes: request.axes.clone(),
-                axis_ids: request.axis_ids.clone(),
+                glyph_names: request.glyphs.names.clone(),
+                glyph_order: ShaperGlyphOrder::new(request.glyphs.ids.clone())?,
+                axes: request.axes.axes.clone(),
+                axis_ids: request.axes.ids.clone(),
                 insert_markers: tables::insert_markers(&compilation, &tree),
             }),
             diagnostics: feature_diagnostics(&warnings, &tree),
+            references,
         })
     }
 
@@ -351,13 +332,21 @@ pub struct InsertMarker {
 pub struct ShaperFontCompilation {
     pub font: Option<ShaperFont>,
     pub diagnostics: Vec<FeatureDiagnostic>,
+    /// The glyphs the feature source names, which decide whether a later
+    /// glyph change needs a recompile.
+    references: FeatureReferences,
 }
 
 impl ShaperFontCompilation {
-    fn failed(diagnostics: &DiagnosticSet, tree: &ParseTree) -> Self {
+    fn failed(
+        diagnostics: &DiagnosticSet,
+        tree: &ParseTree,
+        references: FeatureReferences,
+    ) -> Self {
         Self {
             font: None,
             diagnostics: feature_diagnostics(diagnostics, tree),
+            references,
         }
     }
 }

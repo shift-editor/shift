@@ -62,6 +62,21 @@ impl LiveShaper {
         self.glyphs.set_characters(characters);
     }
 
+    /// Shapes with `glyph_order` in place of the font's own, the Shift glyph
+    /// at each shaper glyph id, and maps characters through `characters`.
+    ///
+    /// The order may extend past the font's glyph count: glyphs added since
+    /// it compiled (see [`ShaperFontState::glyph_order`](crate::ShaperFontState::glyph_order)),
+    /// which its lookups do not cover.
+    pub fn set_glyphs(
+        &mut self,
+        glyph_order: &ShaperGlyphOrder,
+        characters: impl IntoIterator<Item = (u32, GlyphId)>,
+    ) {
+        self.glyphs.set_glyph_order(glyph_order);
+        self.glyphs.set_characters(characters);
+    }
+
     /// Returns the shaper font this shaper uses.
     pub fn font(&self) -> &Arc<ShaperFont> {
         &self.glyphs.font
@@ -121,6 +136,10 @@ impl LiveGlyphs {
             font,
             characters: HashMap::new(),
         }
+    }
+
+    fn set_glyph_order(&mut self, glyph_order: &ShaperGlyphOrder) {
+        self.order = glyph_order.clone();
     }
 
     fn set_characters(&mut self, characters: impl IntoIterator<Item = (u32, GlyphId)>) {

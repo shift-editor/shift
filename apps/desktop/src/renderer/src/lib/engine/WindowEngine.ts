@@ -21,17 +21,21 @@ import {
   type MissingKerningOrigin,
   unkerned,
 } from "@shift/editor/model";
+import {
+  FontChangeFlagSchema,
+  type FontChangeFlag,
+  type ParagraphRequest,
+  type ShapedParagraph,
+} from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
 import { engineStoreRequest } from "./engineStoreRequest";
 
-/** Which of the engine's reads a change may have changed. */
-interface ChangedReads {
-  readonly kerning: boolean;
-  readonly sourceMetrics: boolean;
-}
+/** Every flag an edit's impact can set, in bit order: bit `i` is flag `i`, as Rust declares them. */
+const CHANGE_FLAGS: readonly FontChangeFlag[] = FontChangeFlagSchema.names;
 
-const UNCHANGED: ChangedReads = { kerning: false, sourceMetrics: false };
+/** An impact that sets every flag, as opening a session does. */
+const EVERY_CHANGE = (1 << CHANGE_FLAGS.length) - 1;
 
 /**
  * The open session and the reader it loads layers through, which moves with
@@ -63,38 +67,40 @@ export interface EngineWorkspace {
  * engine's own history. {@link reopen} starts over from the store, dropping
  * that history: only after a persist failed.
  *
- * The window reads kerning and interpolated metrics from here too, as the
- * {@link FontEngine}; its revision cells change with every edit, undo, redo
- * or staged frame that changed what those reads return, and on every open.
+ * The window reads kerning, interpolated metrics and shaped text from here
+ * too, as the {@link FontEngine}. There is one revision per Rust
+ * `FontChangeFlag` ({@link revision}), bumped from each edit's, undo's,
+ * redo's or staged frame's impact bits, and all of them on every open.
  */
 export class WindowEngine implements FontEngine {
   readonly #layers: LayerReaderHost;
   readonly #workspace: EngineWorkspace;
-  readonly #kerningRevision: WritableSignal<number> = signal(0, {
-    name: "windowEngine.kerningRevision",
-  });
-  readonly #sourceMetricsRevision: WritableSignal<number> = signal(0, {
-    name: "windowEngine.sourceMetricsRevision",
-  });
+  // non-reactive: one revision signal per flag, made once; the signals themselves notify
+  readonly #revisions: ReadonlyMap<FontChangeFlag, WritableSignal<number>> = new Map(
+    CHANGE_FLAGS.map((flag) => [flag, signal(0, { name: `windowEngine.revision.${flag}` })]),
+  );
   #opened: Opened | null = null;
   readonly #variation: WritableSignal<EngineVariation | null> = signal<EngineVariation | null>(
     null,
     { name: "windowEngine.variation" },
   );
-  /** Which reads the open edit changed so far, to show again when it is rewound or cancelled. */
-  #inEdit: ChangedReads = UNCHANGED;
+  /** The impact of the open edit's changes so far, to show again when it is rewound or cancelled. */
+  #inEdit = 0;
 
   constructor(layers: LayerReaderHost, workspace: EngineWorkspace) {
     this.#layers = layers;
     this.#workspace = workspace;
   }
 
-  get kerningRevisionCell(): Signal<number> {
-    return this.#kerningRevision;
+  revision(flag: FontChangeFlag): Signal<number> {
+    const revision = this.#revisions.get(flag);
+    if (!revision) throw new Error(`no revision for the change flag ${flag}`);
+    return revision;
   }
 
-  get sourceMetricsRevisionCell(): Signal<number> {
-    return this.#sourceMetricsRevision;
+  shapingInputs(): readonly FontChangeFlag[] {
+    // Before a session opens, any flag: opening changes them all.
+    return this.#opened?.session.shapingInputs() ?? CHANGE_FLAGS;
   }
 
   get variationCell(): Signal<EngineVariation | null> {
@@ -131,7 +137,7 @@ export class WindowEngine implements FontEngine {
         this.#close();
         this.#opened = { session, reader, location };
         this.#variation.set(session);
-        this.#changed({ kerning: true, sourceMetrics: true });
+        this.#changed(EVERY_CHANGE);
       });
     } catch (error) {
       this.#layers.close(reader);
@@ -178,7 +184,7 @@ export class WindowEngine implements FontEngine {
   /** Opens an edit: the applies until {@link endEdit} become one undo step and one change set. */
   beginEdit(): void {
     this.#require().beginEdit();
-    this.#inEdit = UNCHANGED;
+    this.#inEdit = 0;
   }
 
   /**
@@ -222,7 +228,7 @@ export class WindowEngine implements FontEngine {
     performance.mark("engine.stage.start");
     try {
       const staged = session.stage(intents);
-      this.#record(staged);
+      this.#record(staged.impact);
       return staged;
     } finally {
       performance.measure("engine.stage", "engine.stage.start");
@@ -253,7 +259,7 @@ export class WindowEngine implements FontEngine {
    */
   endEdit(): Uint8Array | undefined {
     const changeSet = this.#require().endEdit();
-    this.#inEdit = UNCHANGED;
+    this.#inEdit = 0;
     return changeSet;
   }
 
@@ -314,6 +320,10 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null {
+    return this.#opened?.session.shapeParagraphs(paragraphs) ?? null;
+  }
+
   newAnchorName(layerIds: readonly LayerId[]): string {
     return this.#require().newAnchorName(layerIds);
   }
@@ -356,34 +366,30 @@ export class WindowEngine implements FontEngine {
 
   /** `edit`, after telling readers which of the engine's reads it changed. */
   #shown(edit: EngineEdit): EngineEdit {
-    this.#record({
-      kerning: edit.next?.kerning != null,
-      sourceMetrics: edit.next?.sourceMetricsInterpolation != null,
-    });
+    this.#record(edit.impact);
     return edit;
   }
 
   /** Tells readers that what the open edit changed is gone, as after a rewind or cancel. */
   #showEditUndone(): void {
     const changed = this.#inEdit;
-    this.#inEdit = UNCHANGED;
+    this.#inEdit = 0;
     this.#changed(changed);
   }
 
-  /** Records what a change within the open edit, if one is open, changed, and tells readers. */
-  #record(changed: ChangedReads): void {
-    this.#inEdit = {
-      kerning: this.#inEdit.kerning || changed.kerning,
-      sourceMetrics: this.#inEdit.sourceMetrics || changed.sourceMetrics,
-    };
-    this.#changed(changed);
+  /** Records a change's impact within the open edit, if one is open, and tells readers. */
+  #record(impact: number): void {
+    this.#inEdit |= impact;
+    this.#changed(impact);
   }
 
-  /** Tells readers of the reads `changed` names that they may answer differently. */
-  #changed(changed: ChangedReads): void {
+  /** Bumps the revision of each flag `impact` sets. */
+  #changed(impact: number): void {
     batch(() => {
-      if (changed.kerning) this.#kerningRevision.update((revision) => revision + 1);
-      if (changed.sourceMetrics) this.#sourceMetricsRevision.update((revision) => revision + 1);
+      CHANGE_FLAGS.forEach((flag, bit) => {
+        if ((impact & (1 << bit)) === 0) return;
+        this.#revisions.get(flag)?.update((revision) => revision + 1);
+      });
     });
   }
 

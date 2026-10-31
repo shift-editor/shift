@@ -17,23 +17,74 @@ use crate::{
     NamedInstance, Source, SourceId, TouchedLayer,
 };
 
+/// One domain projection a font change can invalidate, by name: each is one
+/// [`FontChangeImpact`] flag, its bit the variant's position here, so a
+/// reader outside Rust decodes an impact's bits with [`Self::ALL`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub enum FontChangeFlag {
+    Metadata,
+    Languages,
+    Glyphs,
+    Axes,
+    AxisMappings,
+    AxisMappingBases,
+    MetricDefinitions,
+    SourceMetrics,
+    NamedInstances,
+    Sources,
+    /// Kerning values or the sources, axes, and mappings its interpolation
+    /// basis is built from.
+    Kerning,
+}
+
+impl FontChangeFlag {
+    /// Every flag, in bit order.
+    pub const ALL: [Self; 11] = [
+        Self::Metadata,
+        Self::Languages,
+        Self::Glyphs,
+        Self::Axes,
+        Self::AxisMappings,
+        Self::AxisMappingBases,
+        Self::MetricDefinitions,
+        Self::SourceMetrics,
+        Self::NamedInstances,
+        Self::Sources,
+        Self::Kerning,
+    ];
+
+    /// The flag's bit in a [`FontChangeImpact`].
+    const fn bit(self) -> u16 {
+        1 << self as u16
+    }
+
+    /// The flags `impact` sets, in bit order.
+    pub fn of(impact: FontChangeImpact) -> impl Iterator<Item = Self> {
+        Self::ALL
+            .into_iter()
+            .filter(move |flag| impact.bits() & flag.bit() != 0)
+    }
+}
+
 bitflags! {
-    /// Domain projections invalidated by a font change.
+    /// Domain projections invalidated by a font change; each flag is a
+    /// [`FontChangeFlag`].
     #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
     pub struct FontChangeImpact: u16 {
-        const METADATA = 1 << 0;
-        const LANGUAGES = 1 << 1;
-        const GLYPHS = 1 << 2;
-        const AXES = 1 << 3;
-        const AXIS_MAPPINGS = 1 << 4;
-        const AXIS_MAPPING_BASES = 1 << 5;
-        const METRIC_DEFINITIONS = 1 << 6;
-        const SOURCE_METRICS = 1 << 7;
-        const NAMED_INSTANCES = 1 << 8;
-        const SOURCES = 1 << 9;
+        const METADATA = FontChangeFlag::Metadata.bit();
+        const LANGUAGES = FontChangeFlag::Languages.bit();
+        const GLYPHS = FontChangeFlag::Glyphs.bit();
+        const AXES = FontChangeFlag::Axes.bit();
+        const AXIS_MAPPINGS = FontChangeFlag::AxisMappings.bit();
+        const AXIS_MAPPING_BASES = FontChangeFlag::AxisMappingBases.bit();
+        const METRIC_DEFINITIONS = FontChangeFlag::MetricDefinitions.bit();
+        const SOURCE_METRICS = FontChangeFlag::SourceMetrics.bit();
+        const NAMED_INSTANCES = FontChangeFlag::NamedInstances.bit();
+        const SOURCES = FontChangeFlag::Sources.bit();
         /// Kerning values or the sources, axes, and mappings its
         /// interpolation basis is built from.
-        const KERNING = 1 << 10;
+        const KERNING = FontChangeFlag::Kerning.bit();
     }
 }
 
@@ -723,6 +774,25 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_impact_flag_has_one_named_flag_in_bit_order() {
+        let named: FontChangeImpact = FontChangeFlag::ALL
+            .into_iter()
+            .map(|flag| FontChangeImpact::from_bits_retain(flag.bit()))
+            .collect();
+
+        assert_eq!(named, FontChangeImpact::all());
+        assert_eq!(
+            FontChangeImpact::all().iter().count(),
+            FontChangeFlag::ALL.len()
+        );
+        assert_eq!(
+            FontChangeFlag::of(FontChangeImpact::KERNING | FontChangeImpact::GLYPHS)
+                .collect::<Vec<_>>(),
+            [FontChangeFlag::Glyphs, FontChangeFlag::Kerning]
+        );
+    }
 
     fn glyph_with_layer() -> (Glyph, Arc<GlyphLayer>) {
         let layer = GlyphLayer::new(LayerId::new(), SourceId::new());
