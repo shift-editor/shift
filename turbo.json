@@ -172,23 +172,32 @@
       "outputs": ["resources/**"]
     },
     "typecheck": {
-      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#types"],
-      "outputs": []
-    },
-    "@shift/glyph-info#typecheck": {
-      "dependsOn": ["^generate:bridge-types", "generate"],
-      "outputs": []
-    },
-    "@shift/desktop#typecheck": {
-      "dependsOn": [
-        "@shift/glyph-info#generate",
-        "^generate:bridge-types",
-        "generate:bridge-types",
-        "@shift/wasm#types"
-      ],
       "outputs": [],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
+        "$TURBO_ROOT$/packages/types/src/bridge/generated.ts",
+        "$TURBO_ROOT$/packages/wasm/src/generated*/**/*.d.ts"
+      ]
+    },
+    "@shift/glyph-info#typecheck": {
+      "dependsOn": ["generate"],
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
+        "$TURBO_ROOT$/packages/types/src/bridge/generated.ts",
+        "$TURBO_ROOT$/packages/wasm/src/generated*/**/*.d.ts"
+      ]
+    },
+    "@shift/desktop#typecheck": {
+      "dependsOn": ["@shift/glyph-info#generate"],
+      "outputs": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
+        "$TURBO_ROOT$/packages/types/src/bridge/generated.ts",
+        "$TURBO_ROOT$/packages/wasm/src/generated*/**/*.d.ts",
         "$TURBO_ROOT$/packages/*/src/**",
         "$TURBO_ROOT$/packages/*/package.json"
       ]
