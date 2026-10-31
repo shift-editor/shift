@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// glyphs: 183 against 58 bytes per entry with string keys). Iteration
 /// follows key order.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PersistentMap<K, V>(imbl::OrdMap<K, V>)
+pub struct PersistentMap<K, V>(imbl::OrdMap<K, V>)
 where
     K: Ord + Clone,
     V: Clone;
@@ -28,7 +28,7 @@ where
     K: Ord + Clone,
     V: Clone,
 {
-    pub(crate) fn get<Q>(&self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Ord + ?Sized,
@@ -37,7 +37,7 @@ where
     }
 
     /// The value at `key`, copied out of any structure it shares first.
-    pub(crate) fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
+    pub fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
         Q: Ord + ?Sized,
@@ -45,7 +45,7 @@ where
         self.0.get_mut(key)
     }
 
-    pub(crate) fn contains_key<Q>(&self, key: &Q) -> bool
+    pub fn contains_key<Q>(&self, key: &Q) -> bool
     where
         K: Borrow<Q>,
         Q: Ord + ?Sized,
@@ -54,11 +54,11 @@ where
     }
 
     /// Inserts `value` at `key`, returning the value it replaced.
-    pub(crate) fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.0.insert(key, value)
     }
 
-    pub(crate) fn remove<Q>(&mut self, key: &Q) -> Option<V>
+    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Ord + ?Sized,
@@ -67,12 +67,25 @@ where
     }
 
     /// Every value, in key order.
-    pub(crate) fn values(&self) -> impl Iterator<Item = &V> {
+    pub fn values(&self) -> impl Iterator<Item = &V> {
         self.0.values()
     }
 
+    /// Every entry, in key order.
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.0.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// The value at `key`, inserting `V::default()` first when it is missing.
-    pub(crate) fn get_or_default(&mut self, key: K) -> &mut V
+    pub fn get_or_default(&mut self, key: K) -> &mut V
     where
         V: Default,
     {
@@ -87,6 +100,16 @@ where
 {
     fn default() -> Self {
         Self(imbl::OrdMap::new())
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for PersistentMap<K, V>
+where
+    K: Ord + Clone,
+    V: Clone,
+{
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(entries: I) -> Self {
+        Self(entries.into_iter().collect())
     }
 }
 

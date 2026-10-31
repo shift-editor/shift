@@ -16,6 +16,7 @@
 mod history;
 mod records;
 mod residency;
+pub mod scene;
 mod session;
 mod source;
 mod store_reader;

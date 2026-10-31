@@ -36,11 +36,14 @@ pub enum FontChangeFlag {
     /// Kerning values or the sources, axes, and mappings its interpolation
     /// basis is built from.
     Kerning,
+    /// The canvas the font is shown on: its pages, text runs and placed
+    /// glyphs. A font change never sets it; a scene edit does.
+    Scene,
 }
 
 impl FontChangeFlag {
     /// Every flag, in bit order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Metadata,
         Self::Languages,
         Self::Glyphs,
@@ -52,6 +55,7 @@ impl FontChangeFlag {
         Self::NamedInstances,
         Self::Sources,
         Self::Kerning,
+        Self::Scene,
     ];
 
     /// The flag's bit in a [`FontChangeImpact`].
@@ -85,6 +89,8 @@ bitflags! {
         /// Kerning values or the sources, axes, and mappings its
         /// interpolation basis is built from.
         const KERNING = FontChangeFlag::Kerning.bit();
+        /// The canvas the font is shown on, which only scene edits change.
+        const SCENE = FontChangeFlag::Scene.bit();
     }
 }
 
