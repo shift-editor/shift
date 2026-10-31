@@ -2434,6 +2434,8 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
+ "shift-layout",
+ "shift-shape",
  "shift-shaper-font",
  "shift-slug",
  "shift-store",
