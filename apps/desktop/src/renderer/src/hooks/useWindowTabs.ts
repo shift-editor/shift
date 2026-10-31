@@ -2,8 +2,8 @@ import { useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { NodeId } from "@shift/types";
 import { CANVAS_PATH, editorPath } from "@/lib/editorRoute";
-import { windowLocation, windowTabs, type WindowTab, type WindowTabs } from "@/lib/tabs/WindowTabs";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { windowLocation, type WindowTab, type WindowTabs } from "@/lib/tabs/WindowTabs";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 /** The window's tabs, and the navigation that shows them. */
 export interface WindowTabNavigation {
@@ -17,12 +17,18 @@ export interface WindowTabNavigation {
   readonly showPage: (pageId: NodeId, options?: { readonly newTab?: boolean }) => void;
   /** Closes a tab; when it was the one shown, shows its neighbour. */
   readonly close: (tab: WindowTab, shown: boolean) => void;
+  /**
+   * Closes the shown tab, as Close Tab does, and shows its neighbour.
+   *
+   * @returns false when only the pinned overview is shown, so the window should close instead.
+   */
+  readonly closeShown: () => boolean;
 }
 
 export const useWindowTabs = (): WindowTabNavigation => {
   const editor = useEditor();
+  const { tabs } = useFontSession();
   const navigate = useNavigate();
-  const tabs = windowTabs(editor);
 
   const show = useCallback(
     (tab: WindowTab) => {
@@ -45,12 +51,17 @@ export const useWindowTabs = (): WindowTabNavigation => {
   );
 
   const { pathname } = useLocation();
+  const location = useCallback(
+    () => windowLocation(pathname, editor.scene.shownPageIdCell.peek()),
+    [editor, pathname],
+  );
+
   const showPage = useCallback(
     (pageId: NodeId, options?: { readonly newTab?: boolean }) => {
-      const shown = tabs.activeTab(windowLocation(pathname, editor.pages.activeCell.peek()));
+      const shown = tabs.activeTab(location());
       show(tabs.navigateToPage(pageId, shown, options?.newTab ?? false));
     },
-    [editor, pathname, show, tabs],
+    [location, show, tabs],
   );
 
   const close = useCallback(
@@ -61,5 +72,16 @@ export const useWindowTabs = (): WindowTabNavigation => {
     [show, tabs],
   );
 
-  return useMemo(() => ({ tabs, show, showPage, close }), [close, show, showPage, tabs]);
+  const closeShown = useCallback(() => {
+    const outcome = tabs.closeShown(location());
+    if (outcome.kind === "closeWindow") return false;
+
+    show(outcome.tab);
+    return true;
+  }, [location, show, tabs]);
+
+  return useMemo(
+    () => ({ tabs, show, showPage, close, closeShown }),
+    [close, closeShown, show, showPage, tabs],
+  );
 };

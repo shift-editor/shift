@@ -32,29 +32,30 @@ describe("window tabs", () => {
 
     expect(glyphTabs().map((tab) => tab.kind === "glyph" && tab.glyphId)).toEqual([glyphA, glyphB]);
     expect([first.placed, again.placed]).toEqual([true, false]);
-    expect(editor.shownPage()?.id).toBe(glyphTabs()[0]!.pageId);
+    expect(editor.shownPageId()).toBe(glyphTabs()[0]!.pageId);
   });
 
   it("records no undo step for opening a glyph", async () => {
     tabs.openGlyph(glyphA);
-    const shown = editor.shownPage();
+    const shown = editor.shownPageId();
 
     await editor.undo();
 
-    expect(editor.shownPage()).toEqual(shown);
+    expect(editor.shownPageId()).toEqual(shown);
     expect(editor.editorView().glyph?.name).toBe("tab.one");
   });
 
   it("selects a glyph on the overview's own page, which is no tab", () => {
     tabs.selectGlyph(glyphA);
-    const selectionPage = editor.shownPage();
+    tabs.showSelection();
+    const selectionPage = editor.shownPageId();
     tabs.openPage(firstPageId());
     editor.showPage(firstPageId());
 
     tabs.showSelection();
 
     expect(tabs.selectedGlyphCell.peek()).toBe(glyphA);
-    expect(editor.shownPage()).toEqual(selectionPage);
+    expect(editor.shownPageId()).toEqual(selectionPage);
     expect(editor.editorView().glyph?.name).toBe("tab.one");
     expect(glyphTabs()).toEqual([]);
   });
@@ -116,7 +117,7 @@ describe("window tabs", () => {
 
     expect(next).toEqual(page);
     expect(glyphTabs()).toEqual([]);
-    expect(glyphTab.kind === "glyph" && editor.page(glyphTab.pageId)).toBeNull();
+    expect(editor.pageExists(glyphTab.pageId)).toBe(false);
   });
 
   it("closes a page's tab when the page is deleted, and never the overview", () => {
@@ -127,5 +128,50 @@ describe("window tabs", () => {
     tabs.close(GLYPHS_TAB_ID);
 
     expect(tabs.tabsCell.peek().map((tab) => tab.id)).toEqual([GLYPHS_TAB_ID]);
+  });
+
+  it("reorders page and glyph tabs, keeping the overview pinned first", () => {
+    const page = tabs.openPage(firstPageId());
+    tabs.openGlyph(glyphA);
+    const glyphTab = glyphTabs()[0]!;
+
+    tabs.move(glyphTab.id, 0);
+    tabs.move(GLYPHS_TAB_ID, 2);
+
+    expect(tabs.tabsCell.peek().map((tab) => tab.id)).toEqual([
+      GLYPHS_TAB_ID,
+      glyphTab.id,
+      page.id,
+    ]);
+  });
+
+  it("keeps the order through later opens and closes", () => {
+    const first = tabs.openPage(firstPageId());
+    const second = tabs.openPage(addPageId());
+    tabs.move(second.id, 0);
+
+    tabs.openGlyph(glyphA);
+    tabs.close(glyphTabs()[0]!.id);
+
+    expect(tabs.tabsCell.peek().map((tab) => tab.id)).toEqual([GLYPHS_TAB_ID, second.id, first.id]);
+  });
+
+  it("closes the shown glyph tab and shows its neighbour, as Close Tab does", () => {
+    tabs.openGlyph(glyphA);
+    tabs.openGlyph(glyphB);
+    const [shown, neighbour] = glyphTabs();
+
+    const outcome = tabs.closeShown({ kind: "glyph", glyphId: glyphA });
+
+    expect(outcome).toEqual({ kind: "show", tab: neighbour });
+    expect(glyphTabs()).toEqual([neighbour]);
+    expect(editor.pageExists(shown!.pageId)).toBe(false);
+  });
+
+  it("asks to close the window when Close Tab runs on the pinned overview", () => {
+    tabs.openPage(firstPageId());
+
+    expect(tabs.closeShown({ kind: "glyphs" })).toEqual({ kind: "closeWindow" });
+    expect(tabs.tabsCell.peek()).toHaveLength(2);
   });
 });

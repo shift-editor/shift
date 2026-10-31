@@ -10,7 +10,7 @@ import { LeftSidebar } from "@/components/editor/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Canvas } from "@/components/editor/Canvas";
 import { CanvasContextMenu } from "@/components/editor/CanvasContextMenu";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import { FloatingToolbar } from "@shift/editor/ui";
 import { useOpenedGlyph } from "@/context/GlyphCatalogContext";
 import { useFocusZone, ZoneContainer } from "@/context/FocusZoneContext";
@@ -19,11 +19,11 @@ import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { asGlyphId } from "@shift/types";
-import { windowTabs } from "@/lib/tabs/WindowTabs";
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
   const editor = useEditor();
+  const { tabs } = useFontSession();
   const openedGlyph = useOpenedGlyph();
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
   // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
@@ -45,14 +45,12 @@ export const Editor = () => {
   }, [setZone, ready]);
 
   // GlyphGrid acquires the complete Glyph before navigating. The glyph shows in its tab:
-  // a tab already open for it as it was left, else the preview tab, which it replaces.
+  // a tab already open for it as it was left, else a new tab. Opening is navigation, never
+  // a history entry, and showing its page resets the tools (`Pages.activate`).
   useEffect(() => {
     if (!glyph) return undefined;
 
-    // Route hydration is navigation, never a history entry; opening a glyph records none.
-    const opened = windowTabs(editor).openGlyph(glyph.id);
-    // Tools activate against the glyph node they find, so reset after it is placed.
-    editor.toolManager.reset();
+    const opened = tabs.openGlyph(glyph.id);
     if (opened.node && opened.placed) editor.fitGlyphFrame(opened.node);
 
     return () => {
@@ -61,7 +59,7 @@ export const Editor = () => {
       editor.hover.clear();
       editor.editing.clear();
     };
-  }, [editor, glyph]);
+  }, [editor, glyph, tabs]);
 
   useEffect(() => {
     if (!glyph) return;

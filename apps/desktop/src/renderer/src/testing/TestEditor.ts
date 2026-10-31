@@ -73,7 +73,6 @@ import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
   GlyphNode,
   GlyphOutlineTarget,
-  PageNode,
   PositionGuide,
   SourceSelectionMode,
   TextRunNode,
@@ -110,13 +109,13 @@ import type {
   DrawOptions,
   EditorTestSurface,
   Modifiers,
-  PageListing,
   ToolbarButton,
   ToolShortcut,
 } from "./surface";
 import { drawFixture } from "./drawFixture";
 import { createStubContext } from "./stubCanvas";
 import { SurfaceActions } from "./SurfaceActions";
+import { WindowTabs } from "@/lib/tabs/WindowTabs";
 import type {
   AnchorReadOptions,
   AxisSelection,
@@ -124,6 +123,7 @@ import type {
   InstanceSelection,
   Outline,
   PointReadOptions,
+  PageEntry,
   SourceSelection,
 } from "./reads";
 
@@ -232,6 +232,8 @@ export async function authoredAtlasPage(editor: EditorTestSurface): Promise<Glyp
 export class TestEditor extends Editor implements EditorTestSurface {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
+  /** The window's tabs, which open glyphs as the editor route does. */
+  readonly #tabs: WindowTabs;
   /** Temporary directories this editor's document was saved into, removed on {@link close}. */
   readonly #temporaryDirectories: string[] = [];
   /**
@@ -265,6 +267,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const clipboard = new InMemorySystemClipboard();
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
+    this.#tabs = new WindowTabs(this);
     this.#clipboard = clipboard;
     this.#reads = {
       font: new ShiftFontReader(stack.font, sessionMode),
@@ -384,10 +387,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return run ? this.nodeDefinition("textRun").childGlyph(run) : null;
   }
 
-  /** Opens a glyph as the editor route does: the active page's run becomes that glyph, edited in place. */
+  /** Opens a glyph as the editor route does: in its window tab, on a glyph page of its own. */
   #placeGlyph(glyphId: GlyphId): void {
     if (!this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
-    if (!this.openGlyphInText(glyphId)) throw new Error("placed glyph is not loaded");
+    if (!this.#tabs.openGlyph(glyphId).node) throw new Error("placed glyph is not loaded");
   }
 
   /**
@@ -675,6 +678,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.clickLocal(position.x, position.y, modifiers);
   }
 
+  async clickAtScreen(position: ScreenPoint, modifiers?: Modifiers): Promise<void> {
+    await this.click(position.x, position.y, modifiers);
+  }
+
+  panBy(by: ScreenVector): void {
+    const { x, y } = this.pan;
+    this.setPan({ x: x + by.x, y: y + by.y });
+  }
+
   async dragPoint(id: PointId, by: Point2D, modifiers?: Modifiers): Promise<void> {
     await this.dragLocal(this.#pointDrag(id, by, modifiers));
   }
@@ -836,7 +848,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   async openGlyph(name: string): Promise<void> {
     const glyphId = this.#glyphNamed(name);
     await this.font.loadGlyph(glyphId);
-    if (!this.openGlyphInText(glyphId)) throw new Error(`openGlyph could not open ${name}`);
+    if (!this.#tabs.openGlyph(glyphId).node) throw new Error(`openGlyph could not open ${name}`);
     await this.settle();
   }
 
@@ -1578,27 +1590,21 @@ export class TestEditor extends Editor implements EditorTestSurface {
     }
   }
 
-  pageList(): readonly PageListing[] {
-    return this.pages.list.map(pageListing);
+  pageList(): readonly PageEntry[] {
+    return this.editorView().pages;
   }
 
-  page(id: string): PageListing | null {
-    const page = this.scene.nodeOfKind(asNodeId(id), "page");
-    return page ? pageListing(page) : null;
+  shownPageId(): string | null {
+    return this.editorView().shownPageId;
   }
 
-  shownPage(): PageListing | null {
-    const page = this.pages.active;
-    return page ? pageListing(page) : null;
+  pageExists(id: string): boolean {
+    return this.scene.nodeOfKind(asNodeId(id), "page") !== null;
   }
 
-  pageOf(nodeId: string): PageListing | null {
-    const page = this.pages.pageOf(asNodeId(nodeId));
-    return page ? pageListing(page) : null;
-  }
-
-  addPage(name?: string): PageListing {
-    return pageListing(this.pages.create(name));
+  addPage(name?: string): PageEntry {
+    const { id, name: pageName } = this.pages.create(name);
+    return { id, name: pageName };
   }
 
   showPage(id: string): void {
@@ -1630,9 +1636,4 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
 function plainBounds(bounds: Bounds | null): Bounds | null {
   return bounds && { min: { ...bounds.min }, max: { ...bounds.max } };
-}
-
-/** A page as plain data, for {@link TestEditor.pageList} and the other page reads. */
-function pageListing(page: PageNode): PageListing {
-  return { id: page.id, name: page.name, role: page.role ?? null };
 }

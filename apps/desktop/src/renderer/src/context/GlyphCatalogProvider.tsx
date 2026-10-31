@@ -9,7 +9,6 @@ import {
 import type { GlyphId, GlyphName } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
 import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
-import { windowTabs } from "@/lib/tabs/WindowTabs";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { useListSelection } from "@/hooks/useListSelection";
@@ -86,7 +85,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogSource["openedGlyph"]>(null);
   const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
   const openRequestRef = useRef(new LatestRequest());
-  const [selectedGlyphId, setSelectedGlyphId] = useState<GlyphId | null>(null);
+  // The window's tabs keep the overview's selection; the catalog only shows it.
+  const selectedGlyphId = useSignalState(session.tabs.selectedGlyphCell);
   const selectRequestRef = useRef(new LatestRequest());
   const pendingSelectionRef = useRef<GlyphId | null>(null);
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
@@ -193,17 +193,16 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
 
   const selectGlyph = useCallback<GlyphCatalogSource["selectGlyph"]>(
     async (glyph) => {
-      setSelectedGlyphId(glyph.id);
+      session.tabs.selectGlyph(glyph.id);
       if (!workspace) return;
 
       // Loaded as opening loads it, then shown on the overview's own page, never navigated to.
       const result = await selectRequestRef.current.run(() => catalog.openGlyph(glyph.id));
       if (result.status === "stale") return;
 
-      const editor = workspace.editor;
-      windowTabs(editor).selectGlyph(glyph.id);
+      session.tabs.showSelection();
     },
-    [catalog, workspace],
+    [catalog, session.tabs, workspace],
   );
 
   useEffect(() => {

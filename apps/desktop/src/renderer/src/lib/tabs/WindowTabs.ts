@@ -1,5 +1,5 @@
 import type { Editor } from "@shift/editor";
-import { effect, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
+import { computed, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { GlyphNode, PageNode } from "@shift/editor/types";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
@@ -13,7 +13,7 @@ export const GLYPHS_TAB_ID = "glyphs";
  * @remarks
  * `glyphs` is the font overview, always first. A `page` tab shows one of the
  * user's pages. A `glyph` tab shows a glyph opened from the overview on a
- * glyph-view page of its own, which closing the tab discards.
+ * glyph page of its own, which closing the tab discards.
  */
 export type WindowTab =
   | { readonly kind: "glyphs"; readonly id: typeof GLYPHS_TAB_ID }
@@ -24,6 +24,9 @@ export type WindowTab =
       readonly pageId: NodeId;
       readonly glyphId: GlyphId;
     };
+
+/** A page or glyph tab: every tab but the pinned overview. */
+export type MovableTab = Exclude<WindowTab, { readonly kind: "glyphs" }>;
 
 /** What a window shows, read from its route: the overview, a glyph tab's glyph, or a page. */
 export type WindowLocation =
@@ -39,62 +42,106 @@ export interface OpenedGlyph {
   readonly placed: boolean;
 }
 
+/** What closing the shown tab leads to: another tab to show, or closing the window. */
+export type TabClose =
+  | { readonly kind: "show"; readonly tab: WindowTab }
+  | { readonly kind: "closeWindow" };
+
 const GLYPHS_TAB: WindowTab = { kind: "glyphs", id: GLYPHS_TAB_ID };
 
 /**
- * A window's open tabs: the font overview, then pages and glyphs in the order opened.
+ * A window's open tabs: the font overview, then pages and glyphs in the order
+ * the user arranged them.
  *
  * @remarks
- * Which tab is active is not stored: it follows the route and the shown page
+ * Owned by the window's font session and disposed with it. Which tab is
+ * active is not stored: it follows the route and the shown page
  * ({@link WindowTabs.activeTab}), so navigation from anywhere keeps it right.
- * Session state, never saved or undone. A page deleted from the pages list
- * closes its tab.
+ * Session state, never saved in the document or undone.
+ *
+ * Tabs follow the pages without an effect: {@link tabsCell} is derived from
+ * the tabs the user opened and the scene's pages. A page tab whose page is
+ * deleted moves to the page the canvas falls back to when that page has no
+ * tab, as a browser tab follows a redirect, and otherwise closes.
  */
 export class WindowTabs {
   readonly #editor: Editor;
-  readonly #tabs: WritableSignal<readonly WindowTab[]>;
-  readonly #selectedGlyph: WritableSignal<GlyphId | null>;
-  #selectionPageId: NodeId | null = null;
+  /** The tabs as opened and arranged, before pages deleted since are accounted for. */
+  readonly #openedCell: WritableSignal<readonly MovableTab[]>;
+  readonly #tabsCell: Signal<readonly WindowTab[]>;
+  readonly #selectedGlyphCell: WritableSignal<GlyphId | null>;
+  readonly #selectionPageIdCell: WritableSignal<NodeId | null>;
   #nextId = 1;
 
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#tabs = signal<readonly WindowTab[]>([GLYPHS_TAB], { name: "desktop.windowTabs" });
-    this.#selectedGlyph = signal<GlyphId | null>(null, { name: "desktop.overviewSelection" });
-
-    // Lives as long as the editor: a page deleted anywhere closes its tab.
-    effect(() => {
-      const pageIds = new Set(editor.scene.pagesCell.value.map((page) => page.id));
-      const tabs = this.#tabs.peek();
-      const kept = tabs.filter((tab) => tab.kind === "glyphs" || pageIds.has(tab.pageId));
-      if (kept.length !== tabs.length) this.#tabs.set(kept);
+    this.#openedCell = signal<readonly MovableTab[]>([], { name: "desktop.windowTabs.opened" });
+    this.#selectedGlyphCell = signal<GlyphId | null>(null, { name: "desktop.overviewSelection" });
+    this.#selectionPageIdCell = signal<NodeId | null>(null, {
+      name: "desktop.overviewSelectionPage",
     });
+    this.#tabsCell = computed(
+      () =>
+        resolveTabs(
+          this.#openedCell.value,
+          editor.scene.pagesCell.value,
+          editor.scene.shownPageIdCell.value,
+        ),
+      { name: "desktop.windowTabs" },
+    );
   }
 
+  /** The window's tabs: the pinned overview first, then the page and glyph tabs in order. */
   get tabsCell(): Signal<readonly WindowTab[]> {
-    return this.#tabs;
+    return this.#tabsCell;
+  }
+
+  /**
+   * The glyph selected in the font overview, or null.
+   *
+   * @remarks
+   * The one record of the overview's selection. Selection is not a tab: the
+   * glyph goes on a glyph page of the overview's own, shown while the overview
+   * is, so the glyph sidebar describes and edits it.
+   */
+  get selectedGlyphCell(): Signal<GlyphId | null> {
+    return this.#selectedGlyphCell;
+  }
+
+  /** The page the overview shows its selected glyph on, or null before a glyph is selected. */
+  get selectionPageIdCell(): Signal<NodeId | null> {
+    return this.#selectionPageIdCell;
   }
 
   /** Returns the tab showing `location`, or null when no open tab shows it. */
   activeTab(location: WindowLocation): WindowTab | null {
-    const tabs = this.#tabs.peek();
     switch (location.kind) {
       case "glyphs":
         return GLYPHS_TAB;
       case "glyph":
-        return tabs.find((tab) => tab.kind === "glyph" && tab.glyphId === location.glyphId) ?? null;
+        return this.glyphTab(location.glyphId);
       case "canvas":
-        return tabs.find((tab) => tab.kind === "page" && tab.pageId === location.pageId) ?? null;
+        return location.pageId ? this.pageTab(location.pageId) : null;
     }
+  }
+
+  /** Returns the tab showing page `pageId`, or null when it has none. */
+  pageTab(pageId: NodeId): MovableTab | null {
+    return this.#movable().find((tab) => tab.kind === "page" && tab.pageId === pageId) ?? null;
+  }
+
+  /** Returns the tab showing glyph `glyphId`, or null when it has none. */
+  glyphTab(glyphId: GlyphId): MovableTab | null {
+    return this.#movable().find((tab) => tab.kind === "glyph" && tab.glyphId === glyphId) ?? null;
   }
 
   /** Returns the page's tab, opening one after the last tab when it has none. */
   openPage(pageId: NodeId): WindowTab {
-    const existing = this.#tabs.peek().find((tab) => tab.kind === "page" && tab.pageId === pageId);
+    const existing = this.pageTab(pageId);
     if (existing) return existing;
 
-    const tab: WindowTab = { kind: "page", id: this.#mintId(), pageId };
-    this.#tabs.update((tabs) => [...tabs, tab]);
+    const tab: MovableTab = { kind: "page", id: this.#mintId(), pageId };
+    this.#openedCell.set([...this.#movable(), tab]);
     return tab;
   }
 
@@ -109,12 +156,12 @@ export class WindowTabs {
    * @param shown - the tab shown now, or null when none is.
    */
   navigateToPage(pageId: NodeId, shown: WindowTab | null, newTab = false): WindowTab {
-    const existing = this.#tabs.peek().find((tab) => tab.kind === "page" && tab.pageId === pageId);
+    const existing = this.pageTab(pageId);
     if (existing) return existing;
     if (newTab || shown?.kind !== "page") return this.openPage(pageId);
 
-    const next: WindowTab = { ...shown, pageId };
-    this.#replace(shown.id, next);
+    const next: MovableTab = { ...shown, pageId };
+    this.#openedCell.set(this.#movable().map((tab) => (tab.id === shown.id ? next : tab)));
     return next;
   }
 
@@ -122,64 +169,67 @@ export class WindowTabs {
    * Shows a glyph opened from the overview in a tab of its own and edits it.
    *
    * @remarks
-   * A glyph already open in a tab is shown there as it was left. Navigation,
-   * never a history entry.
+   * A glyph already open in a tab is shown there as it was left; otherwise the
+   * glyph goes on a new glyph page. Navigation, never a history entry.
    */
   openGlyph(glyphId: GlyphId): OpenedGlyph {
     return this.#editor.history.withoutRecording(() => this.#openGlyph(glyphId));
   }
 
-  #openGlyph(glyphId: GlyphId): OpenedGlyph {
-    const pages = this.#editor.pages;
-    const open = this.#tabs.peek().find((tab) => tab.kind === "glyph" && tab.glyphId === glyphId);
-    if (open?.kind === "glyph") {
-      pages.activate(open.pageId);
-      const node =
-        this.#editor.scene
-          .nodesOfKind("glyph")
-          .find((candidate) => candidate.glyphId === glyphId) ?? null;
-      if (node) this.#editor.enterNode(node.id);
-      return { node, placed: false };
-    }
-
-    const page = pages.createGlyphPage();
-    const node = this.#editor.openGlyphInText(glyphId, page);
-    const tab: WindowTab = { kind: "glyph", id: this.#mintId(), pageId: page.id, glyphId };
-    this.#tabs.update((current) => [...current, tab]);
-    return { node, placed: true };
-  }
-
   /**
-   * The glyph selected in the font overview, or null.
+   * Selects a glyph in the font overview.
    *
    * @remarks
-   * Selection is not a tab: the glyph goes on a glyph-view page of the
-   * overview's own, shown while the overview is, so the glyph sidebar describes
-   * and edits it.
-   */
-  get selectedGlyphCell(): Signal<GlyphId | null> {
-    return this.#selectedGlyph;
-  }
-
-  /**
-   * Selects a loaded glyph in the font overview and shows it on the overview's page.
-   *
-   * @remarks
-   * Navigation, never a history entry.
+   * Records the selection at once, so the overview highlights it. Call
+   * {@link showSelection} once the glyph is loaded to show it on the
+   * overview's page.
    */
   selectGlyph(glyphId: GlyphId): void {
-    this.#selectedGlyph.set(glyphId);
-    const page = this.#editor.history.withoutRecording(() => this.#selectionPage());
-    this.#editor.openGlyphInText(glyphId, page);
+    this.#selectedGlyphCell.set(glyphId);
   }
 
   /**
-   * Shows the overview's page again, with its selected glyph, after another
-   * page was shown. Does nothing while no glyph is selected.
+   * Shows the overview's selected glyph on the overview's page.
+   *
+   * @remarks
+   * Does nothing while no glyph is selected. The glyph must be loaded.
+   * Navigation, never a history entry.
    */
   showSelection(): void {
-    const pageId = this.#selectionPageId;
-    if (this.#selectedGlyph.peek() !== null && pageId) this.#editor.pages.activate(pageId);
+    const glyphId = this.#selectedGlyphCell.peek();
+    if (glyphId === null) return;
+
+    const shown = this.#editor.history.withoutRecording(() => {
+      const page = this.#selectionPage();
+      const run = this.#editor.scene.children(page.id).find((node) => node.kind === "textRun");
+      const child =
+        run?.kind === "textRun" ? this.#editor.nodeDefinition("textRun").childGlyph(run) : null;
+      // The page already shows the selected glyph: show it as it was left.
+      if (child?.glyphId === glyphId) {
+        this.#editor.pages.activate(page.id);
+        return true;
+      }
+      return this.#editor.openGlyphInText(glyphId, page) !== null;
+    });
+    if (!shown) console.warn("could not show the overview's selected glyph", glyphId);
+  }
+
+  /**
+   * Moves a page or glyph tab to `index` among the page and glyph tabs.
+   *
+   * @remarks
+   * The overview stays pinned first and cannot move.
+   *
+   * @param index - position among the page and glyph tabs after the move; clamped.
+   */
+  move(tabId: string, index: number): void {
+    const tabs = this.#movable();
+    const tab = tabs.find((candidate) => candidate.id === tabId);
+    if (!tab) return;
+
+    const others = tabs.filter((candidate) => candidate.id !== tabId);
+    const to = Math.max(0, Math.min(Math.trunc(index), others.length));
+    this.#openedCell.set([...others.slice(0, to), tab, ...others.slice(to)]);
   }
 
   /**
@@ -190,30 +240,58 @@ export class WindowTabs {
    * A glyph tab's page goes with it; a page tab only closes, and the page stays.
    */
   close(tabId: string): WindowTab {
-    const tabs = this.#tabs.peek();
+    const tabs = this.#tabsCell.peek();
     const at = tabs.findIndex((tab) => tab.id === tabId);
     const tab = tabs[at];
     if (!tab || tab.kind === "glyphs") return GLYPHS_TAB;
 
     const neighbour = tabs[at + 1] ?? tabs[at - 1] ?? GLYPHS_TAB;
-    this.#tabs.set(tabs.filter((candidate) => candidate.id !== tabId));
+    this.#openedCell.set(this.#movable().filter((candidate) => candidate.id !== tabId));
     if (tab.kind === "glyph") this.#editor.pages.discardGlyphPage(tab.pageId);
     return neighbour;
   }
 
+  /**
+   * Closes the tab showing `location`, as Close Tab does.
+   *
+   * @returns the tab to show next, or `closeWindow` when only the pinned
+   * overview is shown or nothing closable is: Close Tab then closes the window.
+   */
+  closeShown(location: WindowLocation): TabClose {
+    const shown = this.activeTab(location);
+    if (!shown || shown.kind === "glyphs") return { kind: "closeWindow" };
+
+    return { kind: "show", tab: this.close(shown.id) };
+  }
+
+  #openGlyph(glyphId: GlyphId): OpenedGlyph {
+    const open = this.glyphTab(glyphId);
+    if (open) {
+      this.#editor.pages.activate(open.pageId);
+      const node = this.#editor.scene.first("glyph");
+      if (node) this.#editor.enterNode(node.id);
+      return { node, placed: false };
+    }
+
+    const page = this.#editor.pages.createGlyphPage();
+    const node = this.#editor.openGlyphInText(glyphId, page);
+    const tab: MovableTab = { kind: "glyph", id: this.#mintId(), pageId: page.id, glyphId };
+    this.#openedCell.set([...this.#movable(), tab]);
+    return { node, placed: true };
+  }
+
+  /** The page and glyph tabs, as {@link tabsCell} resolves them now. */
+  #movable(): readonly MovableTab[] {
+    return this.#tabsCell.peek().filter((tab): tab is MovableTab => tab.kind !== "glyphs");
+  }
+
   #selectionPage(): PageNode {
-    const existing = this.#selectionPageId
-      ? this.#editor.scene.nodeOfKind(this.#selectionPageId, "page")
-      : null;
+    const existing = this.#editor.scene.nodeOfKind(this.#selectionPageIdCell.peek(), "page");
     if (existing) return existing;
 
     const page = this.#editor.pages.createGlyphPage();
-    this.#selectionPageId = page.id;
+    this.#selectionPageIdCell.set(page.id);
     return page;
-  }
-
-  #replace(tabId: string, next: WindowTab): void {
-    this.#tabs.update((tabs) => tabs.map((tab) => (tab.id === tabId ? next : tab)));
   }
 
   #mintId(): string {
@@ -221,19 +299,44 @@ export class WindowTabs {
   }
 }
 
-/** Reads what a window shows from its route and the page its canvas shows. */
-export function windowLocation(pathname: string, activePageId: NodeId | null): WindowLocation {
-  const glyphId = glyphIdFromPath(pathname);
-  if (glyphId) return { kind: "glyph", glyphId };
-  if (pathname === CANVAS_PATH) return { kind: "canvas", pageId: activePageId };
-  return { kind: "glyphs" };
+/**
+ * The tabs a window shows: the pinned overview, then each opened tab whose
+ * page still exists. A deleted page's tab follows to the shown page, once,
+ * when that is one of the user's pages and has no tab of its own.
+ */
+function resolveTabs(
+  opened: readonly MovableTab[],
+  pages: readonly PageNode[],
+  shownPageId: NodeId | null,
+): readonly WindowTab[] {
+  const pageIds = new Set(pages.map((page) => page.id));
+  const shownPage = pages.find((page) => page.id === shownPageId) ?? null;
+  const shownIsUntabbedUserPage =
+    shownPage !== null && shownPage.role === undefined && !hasPageTab(opened, shownPage.id);
+  let fallback = shownIsUntabbedUserPage ? shownPage.id : null;
+
+  const tabs: WindowTab[] = [GLYPHS_TAB];
+  for (const tab of opened) {
+    if (pageIds.has(tab.pageId)) {
+      tabs.push(tab);
+      continue;
+    }
+    if (tab.kind === "page" && fallback) {
+      tabs.push({ ...tab, pageId: fallback });
+      fallback = null;
+    }
+  }
+  return tabs;
 }
 
-const windowTabsByEditor = new WeakMap<Editor, WindowTabs>();
+function hasPageTab(tabs: readonly MovableTab[], pageId: NodeId): boolean {
+  return tabs.some((tab) => tab.kind === "page" && tab.pageId === pageId);
+}
 
-/** Returns the editor's window tabs, creating them the first time. */
-export function windowTabs(editor: Editor): WindowTabs {
-  let tabs = windowTabsByEditor.get(editor);
-  if (!tabs) windowTabsByEditor.set(editor, (tabs = new WindowTabs(editor)));
-  return tabs;
+/** Reads what a window shows from its route and the page its canvas shows. */
+export function windowLocation(pathname: string, shownPageId: NodeId | null): WindowLocation {
+  const glyphId = glyphIdFromPath(pathname);
+  if (glyphId) return { kind: "glyph", glyphId };
+  if (pathname === CANVAS_PATH) return { kind: "canvas", pageId: shownPageId };
+  return { kind: "glyphs" };
 }

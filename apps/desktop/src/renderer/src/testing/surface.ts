@@ -59,6 +59,7 @@ import type {
   LocationSummary,
   Outline,
   OutlinePoint,
+  PageEntry,
   SourceKerning,
   SourceLayer,
   SourceSelection,
@@ -138,14 +139,6 @@ export interface DrawnOutlineIds {
 // `@shift/runtime` (or app reader) type agents read; tests import these,
 // never the runtime or `agent/`.
 
-/** A page as the pages list names it. Test-only: not agent data yet. */
-export interface PageListing {
-  readonly id: string;
-  readonly name: string;
-  /** `glyph` for the glyph view's page, which the pages list leaves out; null for an ordinary page. */
-  readonly role: "glyph" | null;
-}
-
 /** A glyph drawn at a designspace location: its path and advance. */
 export type GlyphAtLocation = ResolvedGlyph;
 /** The active tool and its state. */
@@ -186,6 +179,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   selectAll(): void;
   /** Clicks at a glyph-local position and waits for the edit it makes. */
   clickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Clicks at a point in the viewport, in screen pixels, whatever the page shows. */
+  clickAtScreen(position: ScreenPoint, modifiers?: Modifiers): Promise<void>;
   /** Clicks twice at a glyph-local position and waits for the edit it makes. */
   doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
   /** Presses the pointer at a glyph-local position, starting a gesture. */
@@ -298,6 +293,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   resizeCanvas(width: number, height: number): void;
   /** Sets the zoom level around the viewport centre, as the zoom controls do. */
   setZoom(zoom: number): void;
+  /** Pans the canvas by a distance in screen pixels, as dragging with the hand does. */
+  panBy(by: ScreenVector): void;
   /** Frames all content, as View › Zoom to Fit does. */
   zoomToFit(): void;
   /** Frames the selection, as View › Zoom to Selection does. */
@@ -580,16 +577,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** The document's save state behind every edit made so far, as agents read it; null without a document. */
   documentState(): Promise<DocumentSaveState | null>;
 
-  /** The pages list, in order; the glyph view's page is left out. Test-only. */
-  pageList(): readonly PageListing[];
-  /** The page with id `id`, the glyph view's page included, or null. Test-only. */
-  page(id: string): PageListing | null;
-  /** The page the canvas shows, or null. Test-only. */
-  shownPage(): PageListing | null;
-  /** The page the scene node `nodeId` is on, or null. Test-only. */
-  pageOf(nodeId: string): PageListing | null;
+  /** The document's pages in list order, as agents read them (`EditorView.pages`). */
+  pageList(): readonly PageEntry[];
+  /** The page the canvas shows, as agents read it (`EditorView.shownPageId`). */
+  shownPageId(): string | null;
+  /** Whether a page with id `id` exists, glyph pages included. Test-only: not agent data. */
+  pageExists(id: string): boolean;
   /** Adds a page after the last one, as the pages list's add button does, without showing it. */
-  addPage(name?: string): PageListing;
+  addPage(name?: string): PageEntry;
   /** Shows a page on the canvas, as choosing it in the pages list does. */
   showPage(id: string): void;
   /** Renames a page, as editing its name in the pages list does. */

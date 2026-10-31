@@ -13,6 +13,7 @@ import {
 import type { Signal } from "@shift/editor/signals";
 import { WindowEngine } from "@/lib/engine/WindowEngine";
 import { WorkspaceDocumentBridge } from "./WorkspaceDocumentBridge";
+import { WindowTabs } from "@/lib/tabs/WindowTabs";
 
 export interface WorkspaceOptions {
   readonly host: ShiftHost;
@@ -31,6 +32,8 @@ export class Workspace {
 
   readonly font: Font;
   readonly editor: Editor;
+  /** The window's tabs over this workspace's editor. */
+  readonly tabs: WindowTabs;
   readonly documentStateCell: Signal<WorkspaceDocumentState | null>;
   readonly applyStatusCell: Signal<WorkspaceApplyStatus>;
 
@@ -55,6 +58,7 @@ export class Workspace {
       clipboard: options.clipboard,
       sessionMode: "workspace",
     });
+    this.tabs = new WindowTabs(this.editor);
     this.documentStateCell = this.#client.documentStateCell;
     this.applyStatusCell = this.#edits.applyStatusCell;
 

@@ -10,7 +10,7 @@ export const usePages = (): readonly PageNode[] => {
 };
 
 /** The page the canvas shows, or null while the scene has no page. */
-export const useActivePageId = (): NodeId | null => {
+export const useShownPageId = (): NodeId | null => {
   const editor = useEditor();
-  return useSignalState(editor.pages.activeCell);
+  return useSignalState(editor.scene.shownPageIdCell);
 };

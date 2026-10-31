@@ -22,7 +22,7 @@ import {
   SidebarActionRow,
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
-import { useActivePageId, usePages } from "@/hooks/usePages";
+import { useShownPageId, usePages } from "@/hooks/usePages";
 import { usePointerReorder } from "@/hooks/usePointerReorder";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
 import { CANVAS_PATH } from "@/lib/editorRoute";
@@ -92,7 +92,7 @@ interface PagesProps {
 const Pages = ({ renamingId, onRenamingChange }: PagesProps) => {
   const editor = useEditor();
   const pages = usePages();
-  const activePageId = useActivePageId();
+  const activePageId = useShownPageId();
   const { showPage } = useWindowTabs();
   // A page is current only while its canvas shows: never in the font overview or the glyph view.
   const onCanvas = useLocation().pathname === CANVAS_PATH;

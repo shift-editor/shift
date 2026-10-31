@@ -1,46 +1,44 @@
 import { describe, expect, it } from "vitest";
+import { screenVector } from "@shift/editor/spaces";
+import { line } from "@/testing/fixtures";
 import { useTestEditor } from "@/testing/fontFixture";
-import type { EditorTestSurface, PageListing } from "@/testing/surface";
+import type { PageEntry } from "@/testing/reads";
+import type { EditorTestSurface } from "@/testing/surface";
 
 function pageNames(editor: EditorTestSurface): string[] {
   return editor.pageList().map((page) => page.name);
 }
 
-function firstPage(editor: EditorTestSurface): PageListing {
+function firstPage(editor: EditorTestSurface): PageEntry {
   const page = editor.pageList()[0];
   if (!page) throw new Error("Expected a page");
   return page;
 }
 
-/** The node id of the glyph the canvas edits, or null. */
-function openGlyphNodeId(editor: EditorTestSurface): string | null {
-  return editor.editorView().glyph?.nodeId ?? null;
-}
-
 describe("pages hold the scene, one page shown at a time", () => {
-  // The open glyph, A, is edited on the glyph view's page.
+  // The open glyph, A, is edited on its tab's glyph page, as the editor route opens it.
   const editor = useTestEditor();
 
-  it("lists Page 1, and opens the glyph on the glyph view's page, which the list leaves out", () => {
+  it("lists Page 1, and opens the glyph on a glyph page, which the list leaves out", () => {
     const page = firstPage(editor);
-    const glyphView = editor.shownPage();
+    const glyphPageId = editor.shownPageId();
 
     expect(pageNames(editor)).toEqual(["Page 1"]);
-    expect(glyphView).toMatchObject({ role: "glyph" });
-    expect(glyphView?.id).not.toBe(page.id);
-    expect(editor.pageOf(openGlyphNodeId(editor)!)).toEqual(glyphView);
-    expect(editor.pageOf(page.id)).toEqual(page);
+    expect(glyphPageId).not.toBeNull();
+    expect(glyphPageId).not.toBe(page.id);
+    expect(editor.pageExists(glyphPageId!)).toBe(true);
+    expect(editor.editorView()).toMatchObject({ glyph: { name: "A" } });
   });
 
   it("adds pages after the last one without showing them", () => {
-    const shown = editor.shownPage();
+    const shown = editor.shownPageId();
 
     editor.addPage();
     const named = editor.addPage("Proofs");
 
     expect(pageNames(editor)).toEqual(["Page 1", "Page 2", "Proofs"]);
-    expect(named).toMatchObject({ name: "Proofs", role: null });
-    expect(editor.shownPage()).toEqual(shown);
+    expect(named).toMatchObject({ name: "Proofs" });
+    expect(editor.shownPageId()).toEqual(shown);
   });
 
   it("renames a page and ignores a blank name", () => {
@@ -80,8 +78,8 @@ describe("pages hold the scene, one page shown at a time", () => {
     expect(editor.deletePage(page.id)).toBe(true);
 
     expect(editor.pageList()).toEqual([second]);
-    expect(editor.shownPage()).toEqual(second);
-    expect(editor.page(page.id)).toBeNull();
+    expect(editor.shownPageId()).toEqual(second.id);
+    expect(editor.pageExists(page.id)).toBe(false);
     expect(editor.canvasText()).toBeNull();
   });
 
@@ -119,39 +117,45 @@ describe("pages hold the scene, one page shown at a time", () => {
     await editor.undo();
 
     expect(editor.pageList()).toEqual([page]);
-    expect(editor.shownPage()).toEqual(page);
+    expect(editor.shownPageId()).toEqual(page.id);
   });
 
-  it("shows only the shown page's nodes", async () => {
+  it("draws and hits only the shown page's nodes", async () => {
     const page = firstPage(editor);
-    await editor.addGlyph("B", 66);
-    await editor.openGlyph("B");
-    const glyphView = editor.shownPage();
+    const glyphPageId = editor.shownPageId()!;
+    const { start } = await editor.draw({
+      contours: [line({ x: 100, y: 100, name: "start" }, { x: 300, y: 100 })],
+    });
+    const point = editor.screenPosition({ x: 100, y: 100 });
+    editor.selectTool("select");
 
-    expect(editor.editorView()).toMatchObject({ glyph: { name: "B" } });
-    expect(editor.canvasText()).not.toBeNull();
+    await editor.clickAtScreen(point);
+    expect(editor.selectionIds()).toEqual([start]);
 
+    await editor.pressKey("Escape");
     editor.showPage(page.id);
+    await editor.clickAtScreen(point);
 
+    expect(editor.selectionIds()).toEqual([]);
     expect(editor.editorView().glyph).toBeNull();
     expect(editor.canvasText()).toBeNull();
 
-    editor.showPage(glyphView!.id);
+    editor.showPage(glyphPageId);
 
-    expect(editor.editorView()).toMatchObject({ glyph: { name: "B" } });
+    expect(editor.editorView()).toMatchObject({ glyph: { name: "A" } });
   });
 
-  it("opens glyphs on the glyph view's page whichever page is shown, leaving pages alone", async () => {
-    const glyphView = editor.shownPage();
+  it("opens a glyph on its own glyph page whichever page is shown, leaving pages alone", async () => {
     await editor.addGlyph("B", 66);
     const second = editor.addPage();
     editor.showPage(second.id);
 
     await editor.openGlyph("B");
 
-    expect(editor.shownPage()).toEqual(glyphView);
+    const glyphPageId = editor.shownPageId();
+    expect(glyphPageId).not.toBe(second.id);
+    expect(pageNames(editor)).toEqual(["Page 1", "Page 2"]);
     expect(editor.editorView()).toMatchObject({ glyph: { name: "B" } });
-    expect(editor.pageOf(openGlyphNodeId(editor)!)).toEqual(glyphView);
 
     editor.showPage(second.id);
     expect(editor.canvasText()).toBeNull();
@@ -162,12 +166,15 @@ describe("pages hold the scene, one page shown at a time", () => {
     editor.showPage(page.id);
     const second = editor.addPage();
     editor.setZoom(2);
+    editor.panBy(screenVector(40, 60));
+    const shown = { zoom: editor.zoomLevel(), offset: editor.canvasOffset() };
 
     editor.showPage(second.id);
     editor.setZoom(3);
+    editor.panBy(screenVector(-300, 10));
     editor.showPage(page.id);
 
-    expect(editor.zoomLevel()).toBe(2);
+    expect({ zoom: editor.zoomLevel(), offset: editor.canvasOffset() }).toEqual(shown);
   });
 });
 

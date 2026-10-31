@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useLocation } from "react-router";
 import {
   Button,
@@ -12,7 +11,7 @@ import { useSignalState } from "@shift/editor/signals";
 import type { GlyphId } from "@shift/types";
 import GridIcon from "@/assets/toolbar/grid.svg";
 import PlusIcon from "@/assets/general/plus.svg";
-import { useActivePageId } from "@/hooks/usePages";
+import { useShownPageId } from "@/hooks/usePages";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
 import { windowLocation, type WindowTab } from "@/lib/tabs/WindowTabs";
 import { useEditor } from "@/workspace/WorkspaceContext";
@@ -26,17 +25,9 @@ export const WindowTabsBar = () => {
   const { tabs, show, showPage, close } = useWindowTabs();
   const openTabs = useSignalState(tabs.tabsCell);
   const pages = useSignalState(editor.scene.pagesCell);
-  const activePageId = useActivePageId();
-  const location = windowLocation(useLocation().pathname, activePageId);
+  const shownPageId = useShownPageId();
+  const location = windowLocation(useLocation().pathname, shownPageId);
   const active = tabs.activeTab(location);
-
-  // A page shown from elsewhere, such as after deleting the shown page, gets a tab.
-  const shownPage = pages.find((page) => page.id === activePageId);
-  const untabbedPage =
-    location.kind === "canvas" && shownPage && shownPage.role === undefined && active === null;
-  useEffect(() => {
-    if (untabbedPage && activePageId) tabs.openPage(activePageId);
-  }, [activePageId, tabs, untabbedPage]);
 
   const [overview, ...rest] = openTabs;
   const label = (tab: WindowTab): string => {
