@@ -114,7 +114,7 @@ pub struct UnknownGlyphCategory(pub String);
 pub const OPENTYPE_CATEGORIES_KEY: &str = "public.openTypeCategories";
 
 /// What glyph data is asked about a glyph: its name and codepoints.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct NamedGlyph {
     pub name: GlyphName,

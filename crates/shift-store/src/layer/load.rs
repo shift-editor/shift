@@ -381,3 +381,19 @@ fn load_glyph_layer_batch_with_directory(
     }
     Ok(layers)
 }
+
+/// Those of `layer_ids` the store has, in id order.
+pub(crate) fn present_layer_ids_from_conn(
+    conn: &Connection,
+    layer_ids: &[font::LayerId],
+) -> Result<Vec<font::LayerId>, StoreError> {
+    // One JSON parameter keeps the statement prepared for any count, and an
+    // IN subquery keeps the recovery views searched by key.
+    let mut stmt = conn.prepare_cached(
+        "SELECT id FROM glyph_layers WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY id",
+    )?;
+    let rows = stmt.query_map([serde_json::to_string(layer_ids)?], |row| {
+        row.get::<_, font::LayerId>(0)
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
