@@ -304,6 +304,8 @@ function fixture(): {
           { id: regularLayerId, sourceId: regularSourceId },
           { id: boldLayerId, sourceId: boldSourceId },
         ],
+        mark: false,
+        nonspacingMark: false,
       },
     ],
     glyph: {

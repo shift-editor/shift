@@ -311,7 +311,7 @@ export interface WorkspaceSync {
    * @param glyphId - Glyph in the open preview.
    * @returns The glyph first, then the glyphs its components reference.
    */
-  sourceGlyph(glyphId: GlyphId): Promise<GlyphSnapshot[]>;
+  sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]>;
 
   /**
    * Prepares one preview atlas page at dense source coordinates, for streaming.
@@ -337,7 +337,7 @@ export interface WorkspaceSync {
    * @param coordinates - Dense source coordinates, one per axis.
    * @returns One weight set per prepared page.
    */
-  sourceAtlasWeights(coordinates: number[]): Promise<CatalogAtlasWeights[]>;
+  sourceAtlasWeights(coordinates: number[]): Promise<readonly CatalogAtlasWeights[]>;
 
   /**
    * Reads the open workspace's document lifecycle state.
@@ -427,7 +427,7 @@ export interface WorkspaceSync {
    * @returns One accepted-state snapshot per requested layer.
    * @throws {Error} when any layer identity is not in the font.
    */
-  readLayers(layerIds: LayerId[]): Promise<GlyphLayerSnapshot[]>;
+  readLayers(layerIds: LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
 
   /**
    * Reads exact authored layers with composited geometry at each layer's source.

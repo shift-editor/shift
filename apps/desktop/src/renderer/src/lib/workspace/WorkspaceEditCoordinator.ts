@@ -371,7 +371,7 @@ export class WorkspaceEditCoordinator {
   }
 
   /** Reads exact authored layers behind pending authored edits. */
-  async readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]> {
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
     if (layerIds.length === 0) return [];
 
     return this.#withFlush(() => this.#session.readLayers(layerIds));

@@ -10,6 +10,14 @@ pub enum BridgeError {
   #[error("invalid {kind}: {value}")]
   InvalidInput { kind: &'static str, value: String },
 
+  /// A call needs the open workspace, and none is open.
+  #[error("invalid workspace: no workspace is open")]
+  NoWorkspace,
+
+  /// A call needs the retained font source, and none is open.
+  #[error("invalid font source: no retained font source is open")]
+  NoFontSource,
+
   #[error(transparent)]
   Core(#[from] CoreError),
 
@@ -55,6 +63,8 @@ pub enum BridgeError {
 pub(crate) fn to_napi_error(error: BridgeError) -> Error {
   let status = match &error {
     BridgeError::InvalidInput { .. }
+    | BridgeError::NoWorkspace
+    | BridgeError::NoFontSource
     | BridgeError::Wire(_)
     | BridgeError::Backend(
       BackendError::MissingExtension { .. }
@@ -98,6 +108,41 @@ impl From<BridgeError> for JsError {
     Self::from(to_napi_error(error))
   }
 }
+
+/// Converts every error [`BridgeError`] wraps into an interface's error
+/// enum through `From<BridgeError>`, so a method that returns that enum can
+/// use `?` on whatever it calls.
+macro_rules! through_bridge_error {
+  ($error:ty) => {
+    $crate::errors::through_bridge_error!(
+      $error:
+      shift_font::error::CoreError,
+      shift_backends::BackendError,
+      shift_backends::FontReadError,
+      shift_backends::SourceAtlasError,
+      shift_workspace::WorkspaceError,
+      shift_wire::intents::WireError,
+      shift_store::StoreError,
+      rmp_serde::encode::Error,
+      rmp_serde::decode::Error,
+      shift_slug::AuthoredSlugError,
+      shift_slug::SlugError,
+      shift_backends::shaper_font::ShaperFontError,
+      shift_backends::shaper_font::ShapeError,
+    );
+  };
+  ($error:ty: $($source:ty),+ $(,)?) => {
+    $(
+      impl From<$source> for $error {
+        fn from(error: $source) -> Self {
+          $crate::errors::BridgeError::from(error).into()
+        }
+      }
+    )+
+  };
+}
+
+pub(crate) use through_bridge_error;
 
 pub(crate) type Result<T> = std::result::Result<T, BridgeError>;
 

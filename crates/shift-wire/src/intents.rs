@@ -1,14 +1,12 @@
 //! The edits the editor sends, in the shape it sends them, for every
-//! transport: NAPI to the native workspace and serde to the WebAssembly
-//! engine. Each value converts into the shift-font value it describes through
+//! transport: packed numbers to the native workspace and serde to the
+//! WebAssembly engine. Each value converts into the shift-font value it describes through
 //! one `TryFrom` impl that both transports share.
 
 use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::PointType as StatePointType;
-#[cfg(feature = "napi")]
-use napi::bindgen_prelude::Float64Array;
 #[cfg(feature = "napi")]
 use napi_derive::napi;
 use shift_font as font;
@@ -195,6 +193,7 @@ impl WireParse for SourceId {
 }
 
 #[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(
     clippy::enum_variant_names,
@@ -208,7 +207,7 @@ pub enum PointType {
     QCurve,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontMetadata {
@@ -228,11 +227,11 @@ pub struct FontMetadata {
     pub note: Option<String>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Axis {
-    #[cfg_attr(feature = "napi", napi(ts_type = "AxisId"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisId"))]
     pub id: String,
     pub tag: String,
     pub name: String,
@@ -246,27 +245,13 @@ pub struct Axis {
     pub hidden: bool,
 }
 
-#[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AxisRole {
-    External,
-    Internal,
-}
+pub use crate::{AxisRole, AxisType};
 
-#[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AxisType {
-    Continuous,
-    Discrete,
-}
-
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AxisLabel {
-    #[cfg_attr(feature = "napi", napi(ts_type = "AxisLabelId"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisLabelId"))]
     pub id: String,
     pub name: String,
     pub value: f64,
@@ -276,19 +261,19 @@ pub struct AxisLabel {
     pub elidable: bool,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 /// NAPI projection of one explicit named product preset.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NamedInstance {
-    #[cfg_attr(feature = "napi", napi(ts_type = "NamedInstanceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "NamedInstanceId"))]
     pub id: String,
     pub name: String,
     pub location: Location,
     pub postscript_name: Option<String>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AxisMappingPoint {
@@ -297,42 +282,42 @@ pub struct AxisMappingPoint {
     pub output: Location,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AxisMapping {
-    #[cfg_attr(feature = "napi", napi(ts_type = "AxisMappingId"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisMappingId"))]
     pub id: String,
     pub name: String,
     pub description: Option<String>,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<AxisId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisId"))]
     pub inputs: Vec<String>,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<AxisId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisId"))]
     pub outputs: Vec<String>,
     pub points: Vec<AxisMappingPoint>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceMetricValue {
-    #[cfg_attr(feature = "napi", napi(ts_type = "MetricId"))]
+    #[cfg_attr(feature = "pack", pack(id = "MetricId"))]
     pub metric_id: String,
     pub position: f64,
     pub overshoot: f64,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetricDefinition {
-    #[cfg_attr(feature = "napi", napi(ts_type = "MetricId"))]
+    #[cfg_attr(feature = "pack", pack(id = "MetricId"))]
     pub id: String,
     pub kind: MetricKind,
     pub name: String,
 }
 
-#[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MetricKind {
@@ -345,19 +330,21 @@ pub enum MetricKind {
 }
 
 #[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
     #[cfg_attr(feature = "napi", napi(ts_type = "Record<AxisId, number>"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisId"))]
     pub values: HashMap<String, f64>,
 }
 
 /// One kerning pair value to set or remove at one source.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KerningValueEdit {
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
     pub first: KerningSide,
     pub second: KerningSide,
@@ -366,7 +353,7 @@ pub struct KerningValueEdit {
 }
 
 /// Sets or removes kerning pair values at sources as one undoable edit.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetKerningValuesIntent {
@@ -374,49 +361,49 @@ pub struct SetKerningValuesIntent {
 }
 
 /// Creates an empty kerning group under an id the client mints.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateKerningGroupIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "KerningGroupId"))]
+    #[cfg_attr(feature = "pack", pack(id = "KerningGroupId"))]
     pub group_id: String,
     pub position: KerningPosition,
     pub name: String,
 }
 
 /// Moves a glyph into a group, or out of its group at `position` without one.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetKerningGroupMemberIntent {
     pub position: KerningPosition,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub glyph_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "KerningGroupId"))]
+    #[cfg_attr(feature = "pack", pack(id = "KerningGroupId"))]
     pub group_id: Option<String>,
 }
 
 /// Renames a kerning group; its pairs keep referencing it by id.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenameKerningGroupIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "KerningGroupId"))]
+    #[cfg_attr(feature = "pack", pack(id = "KerningGroupId"))]
     pub group_id: String,
     pub name: String,
 }
 
 /// Deletes a kerning group; its pairs stay and resolve again on undo.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteKerningGroupIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "KerningGroupId"))]
+    #[cfg_attr(feature = "pack", pack(id = "KerningGroupId"))]
     pub group_id: String,
 }
 
 /// Replaces the complete authored metadata snapshot without changing metrics.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateFontMetadataIntent {
@@ -425,7 +412,7 @@ pub struct UpdateFontMetadataIntent {
 }
 
 /// Replaces the font's tracked language list as one undoable edit.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetLanguagesIntent {
@@ -437,54 +424,50 @@ pub struct SetLanguagesIntent {
 /// Font-level glyph creation. The glyph id is client-minted (decision 6:
 /// verbs return identity synchronously); Rust honors it and rejects
 /// duplicates.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGlyphIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub glyph_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphName"))]
     pub name: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<Unicode>"))]
     pub unicodes: Vec<u32>,
 }
 
 /// Font-level glyph update. The glyph id targets an existing committed glyph;
 /// names are user-editable labels and are not stable identity.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateGlyphIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub glyph_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphName"))]
     pub new_name: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<Unicode>"))]
     pub new_unicodes: Vec<u32>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAxisIntent {
     pub axis: Axis,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetAxisMappingsIntent {
     pub mappings: Vec<AxisMapping>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetMetricDefinitionsIntent {
     pub definitions: Vec<MetricDefinition>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 /// Creates an authored named instance with client-minted stable identity.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -492,7 +475,7 @@ pub struct CreateNamedInstanceIntent {
     pub instance: NamedInstance,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 /// Replaces an authored named instance while retaining its identity.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -500,18 +483,18 @@ pub struct UpdateNamedInstanceIntent {
     pub instance: NamedInstance,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 /// Deletes an authored named instance without changing sources or geometry.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteNamedInstanceIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "NamedInstanceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "NamedInstanceId"))]
     pub instance_id: String,
 }
 
 /// Font-level axis creation. The axis id is client-minted; the tag is an
 /// OpenType label and must be unique within the font.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAxisIntent {
@@ -519,41 +502,41 @@ pub struct CreateAxisIntent {
 }
 
 /// Font-level axis deletion. Removing an axis also reshapes source locations.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteAxisIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "AxisId"))]
+    #[cfg_attr(feature = "pack", pack(id = "AxisId"))]
     pub axis_id: String,
 }
 
 /// Font-level source deletion. Removing a source also removes its glyph layers.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteSourceIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
 }
 
 /// Font-level source creation. The source id is client-minted so verbs can
 /// return identity synchronously; Rust honors it and rejects duplicates.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSourceIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
     pub name: String,
     /// Axis id → design-space value for the new source.
     pub location: Location,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSourceIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
     pub name: String,
     pub location: Location,
@@ -565,81 +548,58 @@ pub struct UpdateSourceIntent {
 }
 
 /// Creates one sparse glyph layer at an existing source for an existing glyph.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGlyphLayerIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub glyph_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
 }
 
 /// Creates one glyph layer by copying another layer's shape with fresh internal ids.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloneGlyphLayerIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub glyph_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub from_layer_id: String,
-}
-
-/// A layer's numeric state as a transport carries it: a `Float64Array` over
-/// NAPI, a number sequence through serde (a `Float64Array` from WebAssembly).
-#[cfg(feature = "napi")]
-pub type LayerValues = Float64Array;
-/// A layer's numeric state as a transport carries it: a `Float64Array` over
-/// NAPI, a number sequence through serde (a `Float64Array` from WebAssembly).
-#[cfg(not(feature = "napi"))]
-pub type LayerValues = Vec<f64>;
-
-#[cfg(feature = "napi")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "one signature for both transports; the serde build moves its Vec"
-)]
-fn values_vec(values: LayerValues) -> Vec<f64> {
-    values.to_vec()
-}
-
-#[cfg(not(feature = "napi"))]
-fn values_vec(values: LayerValues) -> Vec<f64> {
-    values
 }
 
 /// Creates one sparse layer from resolved values at a design-space location.
-#[cfg_attr(feature = "napi", napi(object))]
-#[cfg_attr(not(feature = "napi"), derive(serde::Deserialize))]
-#[cfg_attr(not(feature = "napi"), serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MaterializeGlyphLayerIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub glyph_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "SourceId"))]
+    #[cfg_attr(feature = "pack", pack(id = "SourceId"))]
     pub source_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub from_layer_id: String,
     /// Numeric state ordered like `GlyphState.values`.
-    #[cfg_attr(feature = "napi", napi(ts_type = "Float64Array"))]
-    pub values: LayerValues,
+    #[cfg_attr(feature = "pack", pack(numbers))]
+    pub values: Vec<f64>,
 }
 
 /// A point to create, carrying its caller-minted id (decision 6: ids are
 /// client-minted so verbs return identity synchronously).
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSeed {
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub id: String,
     pub x: f64,
     pub y: f64,
@@ -647,397 +607,382 @@ pub struct PointSeed {
     pub smooth: bool,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddPointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
     /// Absent when `before` carries the anchor; Rust derives the contour.
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id: Option<String>,
     /// Insert before this point; append when absent.
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub before: Option<String>,
     pub points: Vec<PointSeed>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddContourIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id: String,
     pub closed: bool,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetContourClosedIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id: String,
     pub closed: bool,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MovePointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
     /// Interleaved absolute coordinates: x0, y0, x1, y1, …
     pub coords: Vec<f64>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetPointSmoothIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_id: String,
     pub smooth: bool,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemovePointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
 }
 
 /// An anchor to create, carrying its caller-minted id (decision 6: ids are
 /// client-minted so verbs return identity synchronously).
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnchorSeed {
-    #[cfg_attr(feature = "napi", napi(ts_type = "AnchorId"))]
+    #[cfg_attr(feature = "pack", pack(id = "AnchorId"))]
     pub id: String,
     pub name: Option<String>,
     pub x: f64,
     pub y: f64,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddAnchorsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
     pub anchors: Vec<AnchorSeed>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MoveAnchorsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<AnchorId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "AnchorId"))]
     pub anchor_ids: Vec<String>,
     /// Interleaved absolute coordinates: x0, y0, x1, y1, …
     pub coords: Vec<f64>,
 }
 
 /// Every point and anchor position of a layer, naming none of them.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetPositionsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
     /// Every contour point, contour after contour, then every anchor, each as `x, y`.
     pub positions: Vec<f64>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveAnchorsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<AnchorId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "AnchorId"))]
     pub anchor_ids: Vec<String>,
 }
 
 /// Renames anchors in one layer; `names[i]` is the new name of `anchorIds[i]`.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenameAnchorsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<AnchorId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "AnchorId"))]
     pub anchor_ids: Vec<String>,
     pub names: Vec<String>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddComponentIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ComponentId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ComponentId"))]
     pub component_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "GlyphId"))]
+    #[cfg_attr(feature = "pack", pack(id = "GlyphId"))]
     pub base_glyph_id: String,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetComponentTransformsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<ComponentId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "ComponentId"))]
     pub component_ids: Vec<String>,
     pub transforms: Vec<f64>,
 }
 
 /// Records whether components are placed by their anchors; anchoring one also
 /// places it on its anchors now.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetComponentAlignmentIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<ComponentId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "ComponentId"))]
     pub component_ids: Vec<String>,
-    #[cfg_attr(
-        feature = "napi",
-        napi(ts_type = "\"anchored\" | \"free\" | \"unset\"")
-    )]
     pub alignment: String,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoveComponentsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<ComponentId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "ComponentId"))]
     pub component_ids: Vec<String>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecomposeComponentsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<ComponentId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "ComponentId"))]
     pub component_ids: Vec<String>,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReverseContourIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id: String,
 }
 
 /// Selects an existing on-curve start for a closed contour; does not move or convert points.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetContourStartIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_id: String,
 }
 
 /// Affine transform of a whole layer: points, anchors, and component placements.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransformLayerIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
     /// Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
     pub matrix: Vec<f64>,
 }
 
 /// Moves points by one affine transform.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransformPointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
     /// Six affine values `[a, b, c, d, e, f]`: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
     pub matrix: Vec<f64>,
 }
 
 /// Lines points up on an edge or centre of the box around them.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AlignPointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
-    #[cfg_attr(
-        feature = "napi",
-        napi(
-            ts_type = "\"left\" | \"center-h\" | \"right\" | \"top\" | \"center-v\" | \"bottom\""
-        )
-    )]
     pub alignment: String,
 }
 
 /// Spaces points evenly along an axis between the outermost two.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DistributePointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
-    #[cfg_attr(feature = "napi", napi(ts_type = "\"horizontal\" | \"vertical\""))]
     pub axis: String,
 }
 
 /// Adds `delta` to one sidebearing; the left one moves the whole layer with the advance.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftSidebearingIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "\"lsb\" | \"rsb\""))]
     pub sidebearing: String,
     pub delta: f64,
 }
 
 /// Affine move: O(selection-ids) wire instead of O(N) coords.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslatePointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
     pub dx: f64,
     pub dy: f64,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetXAdvanceIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
     pub width: f64,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BooleanOpIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id_a: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id_b: String,
     /// "union" | "subtract" | "intersect" | "difference"
     pub operation: String,
 }
 
 /// Deletes points and reconnects what survives, fitting or leaving gaps.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeletePointsIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "Array<PointId>"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_ids: Vec<String>,
-    #[cfg_attr(feature = "napi", napi(ts_type = "\"fit\" | \"gap\""))]
     pub mode: String,
 }
 
 /// Splits the segment between two on-curve points at `t`; the caller mints
 /// the new on-curve point's id.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SplitSegmentIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub start_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub end_id: String,
     pub t: f64,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub point_id: String,
 }
 
 /// Raises the line between two on-curve points to a cubic of the same shape.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeLineToCubicIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub start_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "PointId"))]
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub end_id: String,
 }
 
 /// One open end of a contour.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContourEnd {
-    #[cfg_attr(feature = "napi", napi(ts_type = "ContourId"))]
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub contour_id: String,
-    #[cfg_attr(feature = "napi", napi(ts_type = "\"start\" | \"end\""))]
     pub side: String,
 }
 
 /// Closes a contour by its two ends, or joins two contours into `from`.
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JoinContoursIntent {
-    #[cfg_attr(feature = "napi", napi(ts_type = "LayerId"))]
+    #[cfg_attr(feature = "pack", pack(id = "LayerId"))]
     pub layer_id: String,
     pub from: ContourEnd,
     pub to: ContourEnd,
-    #[cfg_attr(feature = "napi", napi(ts_type = "\"merge\" | \"connect\""))]
     pub mode: String,
 }
 
-#[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KerningPosition {
@@ -1045,7 +990,7 @@ pub enum KerningPosition {
     Second,
 }
 
-#[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum KerningSideKind {
@@ -1053,7 +998,7 @@ pub enum KerningSideKind {
     Group,
 }
 
-#[cfg_attr(feature = "napi", napi(object))]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 /// One kerning pair side: `id` is a glyph id when `kind` is `glyph`, else a group id.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1102,10 +1047,7 @@ impl TryFrom<KerningSide> for FontKerningSide {
 macro_rules! wire_intents {
     ($($(#[$attr:meta])* $variant:ident { $field:ident: $payload:ty },)+) => {
         /// One edit as the editor sends it: `{ kind: "addPoints", addPoints: {…} }`.
-        #[cfg_attr(
-            feature = "napi",
-            napi(discriminant = "kind", discriminant_case = "camelCase")
-        )]
+        #[cfg_attr(feature = "pack", derive(pack::Pack))]
         #[derive(serde::Deserialize)]
         #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
         pub enum FontIntent {
@@ -1877,17 +1819,6 @@ impl TryFrom<CloneGlyphLayerIntent> for font::FontIntent {
     }
 }
 
-/// A NAPI build reads this intent's `Float64Array` only through NAPI; serde
-/// decodes it in builds without NAPI, such as the WebAssembly engine.
-#[cfg(feature = "napi")]
-impl<'de> serde::Deserialize<'de> for MaterializeGlyphLayerIntent {
-    fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
-        Err(serde::de::Error::custom(
-            "materializeGlyphLayer is only accepted over NAPI in this build",
-        ))
-    }
-}
-
 impl TryFrom<MaterializeGlyphLayerIntent> for font::FontIntent {
     type Error = WireError;
 
@@ -1897,7 +1828,7 @@ impl TryFrom<MaterializeGlyphLayerIntent> for font::FontIntent {
             glyph_id: parse::<GlyphId>(&wire.glyph_id)?,
             source_id: parse::<SourceId>(&wire.source_id)?,
             from_layer_id: parse::<LayerId>(&wire.from_layer_id)?,
-            values: shift_font::GlyphInterpolationValues::new(values_vec(wire.values)),
+            values: shift_font::GlyphInterpolationValues::new(wire.values),
         }
         .into())
     }

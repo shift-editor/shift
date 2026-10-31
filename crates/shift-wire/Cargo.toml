@@ -11,8 +11,11 @@ crate-type = ["rlib"]
 [features]
 default = []
 napi = ["dep:napi", "dep:napi-derive"]
+# A number packing for the values the native workspace's interfaces carry.
+pack = ["dep:pack", "shift-font/pack"]
 
 [dependencies]
+pack = { workspace = true, optional = true }
 shift-font = { workspace = true }
 
 napi = { version = "=3.8.6", optional = true, default-features = false, features = [

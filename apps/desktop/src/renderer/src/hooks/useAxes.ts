@@ -7,7 +7,7 @@ import { useSignalState } from "@shift/editor/signals";
  * Stable reference until the committed axis list changes. Slider scrubs update
  * external location, not the axis list, so they do not re-render subscribers.
  */
-export const useAxes = (): Axis[] => {
+export const useAxes = (): readonly Axis[] => {
   const font = useFont();
   return useSignalState(font.axesCell);
 };

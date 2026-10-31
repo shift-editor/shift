@@ -32,6 +32,8 @@ const SNAPSHOT: WorkspaceSnapshot = {
       unicodes: [65 as Unicode],
       componentBaseGlyphIds: [],
       layers: [],
+      mark: false,
+      nonspacingMark: false,
     },
   ],
   sources: [
@@ -142,6 +144,8 @@ describe("Font answers directory and source queries", () => {
     unicodes: [],
     componentBaseGlyphIds: [],
     layers: [],
+    mark: false,
+    nonspacingMark: false,
   });
   const source = (id: string, name: string) => ({
     id: id as SourceId,

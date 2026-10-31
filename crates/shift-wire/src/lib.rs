@@ -53,6 +53,7 @@ pub type GlyphValues = Vec<GlyphValue>;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct FontMetadata {
     pub family_name: Option<String>,
     pub style_name: Option<String>,
@@ -93,6 +94,7 @@ impl From<&IrFontMetadata> for FontMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct FontMetrics {
     pub units_per_em: f64,
 }
@@ -116,6 +118,7 @@ impl From<&IrFontMetrics> for FontMetrics {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MetricDefinition {
     pub id: MetricId,
     pub kind: MetricKind,
@@ -124,6 +127,7 @@ pub struct MetricDefinition {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum MetricKind {
     Ascender,
     CapHeight,
@@ -158,6 +162,7 @@ impl From<&IrMetricDefinition> for MetricDefinition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SourceMetricValue {
     pub metric_id: MetricId,
     pub position: f64,
@@ -166,12 +171,13 @@ pub struct SourceMetricValue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Axis {
     pub id: AxisId,
     pub tag: String,
     pub name: String,
-    pub role: String,
-    pub axis_type: String,
+    pub role: AxisRole,
+    pub axis_type: AxisType,
     pub minimum: Option<f64>,
     pub default: f64,
     pub maximum: Option<f64>,
@@ -180,9 +186,28 @@ pub struct Axis {
     pub hidden: bool,
 }
 
+/// Whether an axis reaches the compiled font or exists only while designing.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AxisRole {
+    External,
+    Internal,
+}
+
+/// Whether an axis takes any value in its range or only its listed values.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AxisType {
+    Continuous,
+    Discrete,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Wire projection of a stable external-axis label.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisLabel {
     pub id: AxisLabelId,
     pub name: String,
@@ -200,15 +225,13 @@ impl From<&IrAxis> for Axis {
             tag: axis.tag().to_string(),
             name: axis.name().to_string(),
             role: match axis.role() {
-                IrAxisRole::External => "external",
-                IrAxisRole::Internal => "internal",
-            }
-            .to_string(),
+                IrAxisRole::External => AxisRole::External,
+                IrAxisRole::Internal => AxisRole::Internal,
+            },
             axis_type: match axis.kind() {
-                IrAxisKind::Continuous { .. } => "continuous",
-                IrAxisKind::Discrete { .. } => "discrete",
-            }
-            .to_string(),
+                IrAxisKind::Continuous { .. } => AxisType::Continuous,
+                IrAxisKind::Discrete { .. } => AxisType::Discrete,
+            },
             minimum: matches!(axis.kind(), IrAxisKind::Continuous { .. }).then(|| axis.minimum()),
             default: axis.default(),
             maximum: matches!(axis.kind(), IrAxisKind::Continuous { .. }).then(|| axis.maximum()),
@@ -237,6 +260,7 @@ impl From<&IrAxis> for Axis {
 ///
 /// `location` is complete external authoring state, not a normalized or
 /// compiler-owned coordinate record.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct NamedInstance {
     pub id: NamedInstanceId,
     pub name: String,
@@ -257,6 +281,7 @@ impl From<&IrNamedInstance> for NamedInstance {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMappingPoint {
     pub description: Option<String>,
     pub input: Location,
@@ -265,6 +290,7 @@ pub struct AxisMappingPoint {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMapping {
     pub id: AxisMappingId,
     pub name: String,
@@ -298,6 +324,7 @@ impl From<&IrAxisMapping> for AxisMapping {
 /// Fontdrasil-compiled contribution basis for one authored axis mapping.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMappingBasis {
     pub mapping_id: AxisMappingId,
     pub input_axis_ids: Vec<AxisId>,
@@ -318,6 +345,7 @@ impl From<&IrAxisMappingBasis> for AxisMappingBasis {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Source {
     pub id: SourceId,
     pub name: String,
@@ -356,6 +384,7 @@ impl From<&IrSource> for Source {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphRecord {
     pub id: GlyphId,
     pub name: GlyphName,
@@ -367,9 +396,21 @@ pub struct GlyphRecord {
     /// A nonspacing mark (Mark category, Nonspacing subcategory): export
     /// compiles it with no advance.
     pub nonspacing_mark: bool,
-    /// `"explicit"` when classed a ligature, `"subcategory"` when a ligature
-    /// once it has an attaching anchor.
-    pub ligature: Option<String>,
+    /// Whether anchor propagation treats the glyph as a ligature; `None`
+    /// when it does not.
+    pub ligature: Option<Ligature>,
+}
+
+/// Why anchor propagation treats a glyph as a ligature.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Ligature {
+    /// Classed a ligature.
+    Explicit,
+    /// In the ligature subcategory: a ligature once it has an attaching
+    /// anchor.
+    Subcategory,
 }
 
 impl From<&IrGlyph> for GlyphRecord {
@@ -407,8 +448,19 @@ impl From<&IrGlyph> for GlyphRecord {
     }
 }
 
+/// The glyph records one edit changed: the changed glyphs' records as they
+/// are now, and the glyphs it removed. Every other record is unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[serde(rename_all = "camelCase")]
+pub struct GlyphRecordChanges {
+    pub updated: Vec<GlyphRecord>,
+    pub removed: Vec<GlyphId>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphLayerRecord {
     pub id: LayerId,
     pub source_id: SourceId,
@@ -725,11 +777,13 @@ mod layer_match_tests {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphState {
     pub layer_id: LayerId,
     pub structure: GlyphStructure,
     /// Numeric glyph state ordered to match `GlyphStructure`.
-    pub values: GlyphValues,
+    #[cfg_attr(feature = "pack", pack(numbers))]
+    pub values: Vec<f64>,
 }
 
 impl GlyphState {
@@ -744,6 +798,7 @@ impl GlyphState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphLayerSnapshot {
     pub glyph_id: GlyphId,
     pub source_id: SourceId,
@@ -758,6 +813,7 @@ pub struct GlyphSnapshotRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphSnapshot {
     pub glyph_id: GlyphId,
     pub projection: Option<GlyphProjection>,
@@ -767,6 +823,7 @@ pub struct GlyphSnapshot {
 /// Lightweight glyph identity present before geometry is acquired.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphEntry {
     pub id: GlyphId,
     pub name: GlyphName,
@@ -779,6 +836,7 @@ pub struct GlyphEntry {
 /// from its source's directory and leaves without a lib or kerning.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct FontSnapshot {
     pub metadata: FontMetadata,
     pub metrics: FontMetrics,
@@ -798,6 +856,7 @@ pub struct FontSnapshot {
 /// Numeric encoding used for component transforms in one projection shape.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum ComponentTransformKind {
     Decomposed,
     Affine,
@@ -806,9 +865,11 @@ pub enum ComponentTransformKind {
 /// One compact glyph layer shape suitable for local projection evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphLayerShape {
     pub structure: GlyphStructure,
-    pub values: GlyphValues,
+    #[cfg_attr(feature = "pack", pack(numbers))]
+    pub values: Vec<f64>,
     pub component_transform_kind: ComponentTransformKind,
 }
 
@@ -825,6 +886,7 @@ impl From<&GlyphLayer> for GlyphLayerShape {
 /// One axis support within an interpolation coefficient region.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct InterpolationSupport {
     pub axis_id: AxisId,
     pub lower: f64,
@@ -835,14 +897,17 @@ pub struct InterpolationSupport {
 /// One normalized support and numeric contribution vector.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct VariationDelta {
     pub region: Vec<InterpolationSupport>,
+    #[cfg_attr(feature = "pack", pack(numbers))]
     pub values: Vec<f64>,
 }
 
 /// Fontdrasil-compiled supports and numeric contributions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct VariationBasis {
     pub deltas: Vec<VariationDelta>,
 }
@@ -875,6 +940,7 @@ impl From<&IrVariationBasis> for VariationBasis {
 /// Design-space normalization transported without authoring-axis metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DesignNormalization {
     pub axis_id: AxisId,
     pub minimum: f64,
@@ -896,6 +962,7 @@ impl From<&shift_font::DesignNormalization> for DesignNormalization {
 /// Coordinate-independent interpolation weights for an ordered source set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct InterpolationBasis {
     pub source_ids: Vec<SourceId>,
     pub basis: VariationBasis,
@@ -919,14 +986,17 @@ impl From<&IrInterpolationBasis> for InterpolationBasis {
 /// Initial numeric values for one compatible glyph source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphSourceValues {
     pub source_id: SourceId,
-    pub values: GlyphValues,
+    #[cfg_attr(feature = "pack", pack(numbers))]
+    pub values: Vec<f64>,
 }
 
 /// Compatible glyph interpolation over a shared structural fallback.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphInterpolation {
     pub basis: InterpolationBasis,
     pub sources: Vec<GlyphSourceValues>,
@@ -935,6 +1005,7 @@ pub struct GlyphInterpolation {
 /// Compiled numeric variation for a passive imported glyph shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphVariation {
     pub basis: VariationBasis,
 }
@@ -958,6 +1029,7 @@ impl From<&IrGlyphInterpolation> for GlyphInterpolation {
 /// Exact authored source shape not represented by compatible interpolation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphSourceShape {
     pub source_id: SourceId,
     pub shape: GlyphLayerShape,
@@ -966,6 +1038,7 @@ pub struct GlyphSourceShape {
 /// One ordered, cycle-pruned component occurrence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ComponentGlyph {
     pub parent_glyph_id: GlyphId,
     pub component_id: ComponentId,
@@ -991,6 +1064,7 @@ impl From<&IrComponentGlyph> for ComponentGlyph {
 /// Ordered component relationships for one resolved root glyph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphComponents {
     pub root_glyph_id: GlyphId,
     pub components: Vec<ComponentGlyph>,
@@ -1008,6 +1082,7 @@ impl From<&IrGlyphComponents> for GlyphComponents {
 /// Exact-source component relationships that differ from the default shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphSourceComponents {
     pub source_id: SourceId,
     pub components: GlyphComponents,
@@ -1025,6 +1100,7 @@ impl From<&IrGlyphSourceComponents> for GlyphSourceComponents {
 /// Location-independent glyph payload evaluated synchronously by renderers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphProjection {
     pub glyph_id: GlyphId,
     pub fallback: GlyphLayerShape,
@@ -1068,6 +1144,7 @@ impl From<&IrGlyphProjection> for GlyphProjection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphStructure {
     pub contours: Vec<ContourData>,
     pub anchors: Vec<AnchorData>,
@@ -1086,7 +1163,9 @@ impl From<&GlyphLayer> for GlyphStructure {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ContourData {
+    #[cfg_attr(feature = "pack", pack(id = "ContourId"))]
     pub id: String,
     pub points: Vec<PointData>,
     pub closed: bool,
@@ -1104,7 +1183,9 @@ impl From<&IrContour> for ContourData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct PointData {
+    #[cfg_attr(feature = "pack", pack(id = "PointId"))]
     pub id: String,
     pub point_type: PointType,
     pub smooth: bool,
@@ -1126,6 +1207,7 @@ impl From<&IrPoint> for PointData {
     clippy::enum_variant_names,
     reason = "the font-format names for point types"
 )]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum PointType {
     OnCurve,
     OffCurve,
@@ -1154,7 +1236,9 @@ impl From<PointType> for IrPointType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AnchorData {
+    #[cfg_attr(feature = "pack", pack(id = "AnchorId"))]
     pub id: String,
     pub name: Option<String>,
 }
@@ -1170,7 +1254,9 @@ impl From<&IrAnchor> for AnchorData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ComponentData {
+    #[cfg_attr(feature = "pack", pack(id = "ComponentId"))]
     pub id: String,
     pub base_glyph_id: GlyphId,
     pub base_glyph_name: GlyphName,
@@ -1192,6 +1278,7 @@ impl From<&IrComponent> for ComponentData {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphChangedEntities {
     pub point_ids: Vec<PointId>,
     pub contour_ids: Vec<ContourId>,
@@ -1253,6 +1340,7 @@ impl GlyphChangedEntities {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Location {
     pub values: HashMap<AxisId, f64>,
 }
@@ -1271,6 +1359,7 @@ impl From<&IrLocation> for Location {
 /// Optional source-level numeric fields appended after authored metric rows.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum SourceMetricField {
     ItalicAngle,
     LineGap,
@@ -1281,8 +1370,10 @@ pub enum SourceMetricField {
 /// Initial metric values for one authored source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SourceMetricValues {
     pub source_id: SourceId,
+    #[cfg_attr(feature = "pack", pack(numbers))]
     pub values: Vec<f64>,
 }
 
@@ -1294,6 +1385,7 @@ pub struct SourceMetricValues {
 /// interpolation never invents values for a sparse optional field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SourceMetricsInterpolationSnapshot {
     pub metric_ids: Vec<MetricId>,
     pub technical_fields: Vec<SourceMetricField>,
@@ -1339,6 +1431,7 @@ impl From<IrSourceMetricField> for SourceMetricField {
 /// edge, `Second` its left edge.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum KerningPosition {
     First,
     Second,
@@ -1356,6 +1449,7 @@ impl From<IrKerningPosition> for KerningPosition {
 /// Whether a kerning pair side names one glyph or a group.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum KerningSideKind {
     Glyph,
     Group,
@@ -1364,6 +1458,7 @@ pub enum KerningSideKind {
 /// One side of a kerning pair: `id` is a glyph id or a group id, by `kind`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningSide {
     pub kind: KerningSideKind,
     pub id: String,
@@ -1389,7 +1484,9 @@ impl From<&IrKerningSide> for KerningSide {
 /// Pairs reference the group by `id`; `name` is its label, unique at its position.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningGroup {
+    #[cfg_attr(feature = "pack", pack(id = "KerningGroupId"))]
     pub id: String,
     pub position: KerningPosition,
     pub name: String,
@@ -1399,6 +1496,7 @@ pub struct KerningGroup {
 /// One authored pair and its adjustment in font units.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningPairValue {
     pub first: KerningSide,
     pub second: KerningSide,
@@ -1408,6 +1506,7 @@ pub struct KerningPairValue {
 /// The pairs one source authors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SourceKerningPairs {
     pub source_id: SourceId,
     pub pairs: Vec<KerningPairValue>,
@@ -1420,6 +1519,7 @@ pub struct SourceKerningPairs {
 /// glyphs or sources that are not in the font; they never resolve.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningSnapshot {
     pub groups: Vec<KerningGroup>,
     pub sources: Vec<SourceKerningPairs>,

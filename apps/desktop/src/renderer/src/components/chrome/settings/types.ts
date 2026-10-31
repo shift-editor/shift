@@ -2,11 +2,11 @@ import type { Axis, FontMetadata } from "@shift/types";
 import type { FieldValues, UseFormReturn } from "react-hook-form";
 
 export type TextMetadataKey = {
-  [Key in keyof FontMetadata]-?: FontMetadata[Key] extends string | undefined ? Key : never;
+  [Key in keyof FontMetadata]-?: FontMetadata[Key] extends string | null | undefined ? Key : never;
 }[keyof FontMetadata];
 
 export type NumberMetadataKey = {
-  [Key in keyof FontMetadata]-?: FontMetadata[Key] extends number | undefined ? Key : never;
+  [Key in keyof FontMetadata]-?: FontMetadata[Key] extends number | null | undefined ? Key : never;
 }[keyof FontMetadata];
 
 export type AxisTransform = (axis: Axis) => Axis;

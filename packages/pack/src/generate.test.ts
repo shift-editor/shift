@@ -321,6 +321,17 @@ describe("a generated union", () => {
     ]);
   });
 
+  it("refuses to write a case it does not know, rather than send nothing for it", async () => {
+    const generated = await load([EDIT, GLYPH_ID, EDITS]);
+    const { requests, transport } = module((write) => write.count(0));
+    const edits = new (generated.Edits as new (t: unknown) => Edits)(transport);
+
+    expect(() => edits.apply([{ kind: "explode" }], new Float64Array())).toThrow(
+      "unknown Edit kind explode",
+    );
+    expect(requests).toEqual([]);
+  });
+
   it("throws on a case index the module does not know", async () => {
     const generated = await load([EDIT, GLYPH_ID, EDITS]);
     const { transport } = module((write) => {
@@ -422,6 +433,173 @@ describe("a method returning a Result", () => {
   });
 });
 
+const FAILURE: Fragment = {
+  kind: "union",
+  rust: "Failure",
+  name: "Failure",
+  doc: null,
+  cases: [
+    {
+      name: "unreadable",
+      doc: null,
+      fields: [{ name: "detail", doc: null, type: { kind: "name" } }],
+    },
+  ],
+};
+const LOCATIONS: Fragment = {
+  kind: "interface",
+  rust: "Locations",
+  name: "Locations",
+  doc: null,
+  methods: [
+    {
+      name: "moveTo",
+      doc: null,
+      params: [
+        {
+          name: "location",
+          type: { kind: "map", key: { kind: "ref", rust: "GlyphId" }, value: { kind: "number" } },
+        },
+      ],
+      output: { kind: "unit" },
+    },
+    {
+      name: "location",
+      doc: null,
+      params: [],
+      output: { kind: "map", key: { kind: "name" }, value: { kind: "number" } },
+    },
+    {
+      name: "close",
+      doc: null,
+      params: [],
+      output: { kind: "result", ok: { kind: "unit" }, err: { kind: "ref", rust: "Failure" } },
+    },
+  ],
+};
+
+const LABELLED: Fragment = {
+  kind: "interface",
+  rust: "Labelled",
+  name: "Labelled",
+  doc: null,
+  methods: [
+    {
+      name: "label",
+      doc: null,
+      params: [
+        { name: "x", type: { kind: "number" } },
+        { name: "name", type: { kind: "option", inner: { kind: "name" } } },
+      ],
+      output: { kind: "number" },
+    },
+  ],
+};
+
+interface Labelled {
+  label(x: number, name?: string): number;
+}
+
+interface Locations {
+  moveTo(location: Record<string, number>): unknown;
+  location(): unknown;
+  close(): unknown;
+}
+
+describe("a method without a result", () => {
+  it("sends its arguments and reads nothing back", async () => {
+    const generated = await load([GLYPH_ID, FAILURE, LOCATIONS]);
+    const { requests, transport } = module(() => {});
+    const locations = new (generated.Locations as new (t: unknown) => Locations)(transport);
+
+    expect(locations.moveTo({})).toBeUndefined();
+    expect(requests[0]).toEqual({ method: 0, input: [0], blobs: undefined });
+  });
+
+  it("returns nothing for an Ok without a value, and throws for an Err", async () => {
+    const generated = await load([GLYPH_ID, FAILURE, LOCATIONS]);
+    let ok = true;
+    const { transport } = module((write) => {
+      write.flag(ok);
+      if (!ok) {
+        write.count(0);
+        write.name("store is gone");
+      }
+    });
+    const locations = new (generated.Locations as new (t: unknown) => Locations)(transport);
+
+    expect(locations.close()).toBeUndefined();
+    ok = false;
+    expect(() => locations.close()).toThrow("Failure.unreadable: store is gone");
+  });
+});
+
+describe("a map", () => {
+  it("writes its length, then each key and its value", async () => {
+    const generated = await load([GLYPH_ID, FAILURE, LOCATIONS]);
+    const { requests, transport } = module(() => {});
+    const locations = new (generated.Locations as new (t: unknown) => Locations)(transport);
+
+    locations.moveTo({ glyph_wght: 400 });
+
+    expect(requests[0]!.input).toEqual([1, names.id("glyph_wght"), 400]);
+  });
+
+  it("reads back as a record", async () => {
+    const generated = await load([GLYPH_ID, FAILURE, LOCATIONS]);
+    const wdth = names.id("wdth");
+    const { transport } = module((write) => {
+      for (const value of [1, wdth, 75]) write.number(value);
+    });
+    const locations = new (generated.Locations as new (t: unknown) => Locations)(transport);
+
+    expect(locations.location()).toEqual({ wdth: 75 });
+  });
+});
+
+describe("a trailing optional argument", () => {
+  it("may be left out, and writes as absent", async () => {
+    const generated = await load([SEGMENT_KIND, ANCHOR, LABELLED]);
+    const { requests, transport } = module((write) => write.number(1));
+    const labelled = new (generated.Labelled as new (t: unknown) => Labelled)(transport);
+
+    labelled.label(2);
+    labelled.label(2, "top");
+
+    expect(requests.map((request) => request.input)).toEqual([
+      [2, 0],
+      [2, 1, names.id("top")],
+    ]);
+    expect(render([SEGMENT_KIND, ANCHOR, LABELLED])).toContain(
+      "label(x: number, name?: string | null): number",
+    );
+  });
+});
+
+describe("crates", () => {
+  it("renders only the interfaces the listed packages declare", () => {
+    const text = render(
+      [{ ...MEASURE, crate: "one" }, { ...LABELLED, crate: "other" }, SEGMENT_KIND, ANCHOR],
+      "",
+      { crates: ["other"] },
+    );
+
+    expect(text).toContain("export class Labelled");
+    expect(text).not.toContain("export class Measure");
+  });
+});
+
+describe("brandModules", () => {
+  it("imports an id's brand from the module it names instead", () => {
+    const text = render([EDIT, GLYPH_ID, EDITS], "", {
+      brandModules: { "@shift/types": "../ids" },
+    });
+
+    expect(text).toContain('import type { GlyphId } from "../ids"');
+    expect(text).not.toContain('from "@shift/types"');
+  });
+});
+
 describe("carryingNames", () => {
   it("sends the request's names as its last blob and reads the reply's from its own", async () => {
     const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
@@ -460,6 +638,13 @@ describe("PackError", () => {
   it("takes a unit-only error's value as its kind", () => {
     expect(new PackError("Closed", "closed").kind).toBe("closed");
   });
+
+  it("ends its message with the error's detail when it carries one", () => {
+    const error = new PackError("ReadError", { kind: "unreadable", detail: "disk full" });
+
+    expect(error.message).toBe("ReadError.unreadable: disk full");
+    expect(new PackError("ReadError", { kind: "closed" }).message).toBe("ReadError.closed");
+  });
 });
 
 describe("Reader.numbers", () => {
@@ -472,10 +657,29 @@ describe("Reader.numbers", () => {
 });
 
 describe("render", () => {
+  it("spells each type out by name, its schema beside it", () => {
+    const text = render([SEGMENT_KIND, ANCHOR, MEASURE, EDIT, GLYPH_ID, EDITS]);
+
+    expect(text).toContain("export interface Anchor {");
+    expect(text).toContain("readonly name?: string | null;");
+    expect(text).toContain("readonly kinds: readonly SegmentKind[];");
+    expect(text).toMatch(/export type SegmentKind =\s*"line" \| "quad";/);
+    expect(text).toMatch(/readonly kind: "rename";\s*readonly glyph: GlyphId;/);
+    expect(text).toContain("export const AnchorSchema =");
+  });
+
   it("fails for a type no fragment declares", () => {
     expect(() => render([ANCHOR, MEASURE])).toThrow(
       "Anchor uses SegmentKind, which has no #[derive(Pack)]",
     );
+  });
+
+  it("keeps one declaration when two crates declare the same shape under one name", () => {
+    const documented = { ...SEGMENT_KIND, doc: "Kinds of segment.", crate: "other" };
+
+    const text = render([{ ...SEGMENT_KIND, crate: "one" }, documented, ANCHOR, MEASURE]);
+
+    expect(text.match(/export type SegmentKind =/g)).toHaveLength(1);
   });
 
   it("fails when two crates declare different types under one name", () => {

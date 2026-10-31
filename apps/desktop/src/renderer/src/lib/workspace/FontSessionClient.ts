@@ -134,7 +134,7 @@ export class FontSessionClient {
   }
 
   /** Reads one retained location-independent glyph and its component closure. */
-  async sourceGlyph(glyphId: GlyphId): Promise<GlyphSnapshot[]> {
+  async sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]> {
     await this.connect();
 
     return this.#workspace().sourceGlyph(glyphId);
@@ -177,7 +177,9 @@ export class FontSessionClient {
   }
 
   /** Resolves all retained page weights for one dense source location. */
-  async sourceAtlasWeights(coordinates: readonly number[]): Promise<CatalogAtlasWeights[]> {
+  async sourceAtlasWeights(
+    coordinates: readonly number[],
+  ): Promise<readonly CatalogAtlasWeights[]> {
     await this.connect();
 
     return this.#workspace().sourceAtlasWeights([...coordinates]);
@@ -251,7 +253,7 @@ export class FontSessionClient {
    * @returns One accepted-state snapshot per requested layer.
    * @throws {Error} when any layer identity is not in the font.
    */
-  async readLayers(layerIds: readonly LayerId[]): Promise<GlyphLayerSnapshot[]> {
+  async readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
     await this.connect();
 
     return this.#workspace().readLayers([...layerIds]);

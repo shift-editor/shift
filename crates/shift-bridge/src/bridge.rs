@@ -1,5 +1,6 @@
 use crate::errors::{self, BridgeError, BridgeResult};
 use crate::input::{parse, parse_id_list};
+use crate::reply::{PackedReply, answer};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -9,54 +10,48 @@ use shift_backends::{
   FontDirectory, FontExportRequest, FontExportResult, FontExporter, FontSource, FontView,
   GlyphIndex, GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
   GlyphShape as SourceGlyphShape, OpenedFont, SourceAtlasDescriptor, SourceGlyphIds,
-  VariationAxisKind, build_binary_atlas_page, font_loader::FontLoader, variable_glyph_inputs,
+  VariationAxisKind, font_loader::FontLoader,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
-  AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, FontChangeImpact,
-  FontChangeSet, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation,
-  MetricId, MetricKind, NamedInstanceId, PointId, SourceId,
+  AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, Glyph, GlyphId,
+  GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind, NamedInstanceId, PointId,
+  SourceId,
 };
-use shift_slug::length::OrOverflow;
-use shift_slug::{
-  AuthoredAtlas, AuthoredAtlasProfile, Section as SlugSection, VariableAtlas, VariableLayout,
-  build_authored_atlas_page_profiled, build_authored_atlas_profiled,
-  retained::compile_page as compile_retained_page,
-};
+use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
 use shift_wire::bridges::napi::IntoEach;
 use shift_wire::intents;
-use shift_wire::replacement::FontReplacement;
 use shift_wire::{
-  AnchorData, Axis, AxisMapping, AxisMappingBasis, ComponentData, ComponentGlyph,
-  ComponentTransformKind, ContourData, FontMetadata, FontMetrics, FontSnapshot,
-  GlyphChangedEntities, GlyphComponents, GlyphEntry, GlyphLayerRecord, GlyphLayerShape,
-  GlyphLayerSnapshot, GlyphProjection, GlyphRecord, GlyphSnapshot, GlyphSnapshotRequest,
-  GlyphSourceComponents, GlyphSourceShape, GlyphState, GlyphStructure, GlyphVariation,
-  InterpolationBasis as WireInterpolationBasis, InterpolationSupport, KerningSnapshot,
-  LayerMatch as WireLayerMatch, Location as WireLocation, MetricDefinition, NamedInstance,
-  PointData, PointType, Source, SourceMetricValue, SourceMetricsInterpolationSnapshot,
-  VariationBasis, VariationDelta,
+  AnchorData, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData, FontMetadata,
+  FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
+  GlyphProjection, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
+  GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, LayerMatch as WireLayerMatch,
+  Location as WireLocation, MetricDefinition, NamedInstance, PointData, PointType, Source,
+  SourceMetricValue, VariationBasis, VariationDelta,
   bridges::napi::{
-    NapiAppliedChange, NapiAxisMappingBasis, NapiCatalogAtlasGlyph, NapiCatalogAtlasPage,
-    NapiCatalogAtlasWeights, NapiFontMetrics, NapiFontReplacement, NapiFontSnapshot,
-    NapiGlyphLayerSnapshot, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphRecord,
-    NapiGlyphRecordChanges, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiInterpolationBasis,
-    NapiKerningSnapshot, NapiLayerMatch, NapiLayerRead, NapiLayerReplaced, NapiSlugAtlas,
-    NapiSlugExactSource, NapiSlugGlyph, NapiSlugLayout, NapiSlugPreviewExtents, NapiSlugSection,
-    NapiSlugWeightSet, NapiSource, NapiSourceMetricsInterpolationSnapshot,
+    NapiGlyphPreview, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
+    NapiLayerMatch, NapiLayerRead,
   },
 };
-use shift_workspace::{
-  AcquireScope, DocumentIdentity, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource,
-};
+use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
 use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
   iter,
   path::Path,
   sync::Arc,
-  time::{Duration, Instant},
+  time::Duration,
 };
+
+mod atlas;
+mod shaping;
+mod source;
+mod workspace;
+
+use atlas::native_atlas_request;
+use shaping::native_shaping_request;
+use source::native_source_request;
+use workspace::native_workspace_request;
 
 #[napi(object)]
 #[derive(Clone, Debug)]
@@ -71,50 +66,11 @@ pub struct NapiFontExportResult {
   pub format: String,
 }
 
-#[napi(object)]
-pub struct NapiNewWorkspace {
-  pub family_name: Option<String>,
-  pub units_per_em: Option<i64>,
-}
-
-#[napi(object)]
-#[derive(Debug)]
-pub struct NapiDocumentState {
-  pub source_kind: String,
-  pub document_id: Option<String>,
-  pub save_target: Option<String>,
-  pub dirty: bool,
-  pub needs_save_as: bool,
-}
-
-#[napi(object)]
-pub struct NapiDocumentIdentity {
-  pub document_id: String,
-  pub canonical_path: String,
-}
-
 struct SlugAtlasGeneration {
   generation: u32,
   alignment: usize,
   atlas: VariableAtlas,
 }
-
-fn new_workspace_from_options(options: Option<NapiNewWorkspace>) -> NewWorkspace {
-  let Some(options) = options else {
-    return NewWorkspace::default();
-  };
-
-  let mut new_workspace = NewWorkspace::default();
-  if let Some(family_name) = options.family_name {
-    new_workspace.family_name = family_name;
-  }
-  if let Some(units_per_em) = options.units_per_em {
-    new_workspace.units_per_em = units_per_em;
-  }
-
-  new_workspace
-}
-
 impl TryFrom<NapiFontExportRequest> for FontExportRequest {
   type Error = Error;
 
@@ -137,42 +93,6 @@ impl From<FontExportResult> for NapiFontExportResult {
     }
   }
 }
-
-impl TryFrom<DocumentIdentity> for NapiDocumentIdentity {
-  type Error = BridgeError;
-
-  fn try_from(identity: DocumentIdentity) -> BridgeResult<Self> {
-    Ok(Self {
-      document_id: identity.document_id.to_string(),
-      canonical_path: path_to_string(&identity.canonical_path)?,
-    })
-  }
-}
-
-fn napi_slug_section(section: SlugSection) -> BridgeResult<NapiSlugSection> {
-  Ok(NapiSlugSection {
-    offset: u32::try_from(section.offset).or_overflow()?,
-    length: u32::try_from(section.length).or_overflow()?,
-  })
-}
-
-fn napi_slug_layout(layout: VariableLayout) -> BridgeResult<NapiSlugLayout> {
-  Ok(NapiSlugLayout {
-    base_curves: napi_slug_section(layout.base_curves)?,
-    curve_deltas: napi_slug_section(layout.curve_deltas)?,
-    sparse_deltas: napi_slug_section(layout.sparse_deltas)?,
-    glyphs: napi_slug_section(layout.glyphs)?,
-    sources: napi_slug_section(layout.sources)?,
-    source_advances: napi_slug_section(layout.source_advances)?,
-    component_glyphs: napi_slug_section(layout.component_glyphs)?,
-    component_parts: napi_slug_section(layout.component_parts)?,
-    components: napi_slug_section(layout.components)?,
-    component_sources: napi_slug_section(layout.component_sources)?,
-    line_bits: napi_slug_section(layout.line_bits)?,
-    total_length: u32::try_from(layout.total_length).or_overflow()?,
-  })
-}
-
 fn slug_atlas_profile_enabled() -> bool {
   std::env::var("SHIFT_PROFILE_SLUG_ATLAS").is_ok_and(|value| value != "0")
 }
@@ -576,116 +496,6 @@ impl ShapeIds {
     format!("{}-{}-{kind}{index}", self.glyph_id, self.selector)
   }
 }
-
-fn napi_source_atlas_page(
-  generation: u32,
-  page_index: u32,
-  atlas: &VariableAtlas,
-  descriptor: &SourceAtlasDescriptor,
-  location: &[f64],
-  layout: VariableLayout,
-  identity: &SourceIdentity,
-) -> BridgeResult<NapiCatalogAtlasPage> {
-  let statistics = atlas.statistics();
-  let weights = descriptor
-    .design_weights(location)?
-    .into_iter()
-    .map(f64::from)
-    .collect::<Vec<_>>();
-  let preview_extents = descriptor.preview_extents(atlas)?;
-
-  Ok(NapiCatalogAtlasPage {
-    generation,
-    page_index,
-    band_count: atlas.band_count(),
-    weight_count: u32::try_from(weights.len()).or_overflow()?,
-    layout: napi_slug_layout(layout)?,
-    preview_extents: NapiSlugPreviewExtents {
-      horizontal: f64::from(preview_extents.horizontal),
-      minimum_y: f64::from(preview_extents.minimum_y),
-      maximum_y: f64::from(preview_extents.maximum_y),
-    },
-    glyphs: descriptor
-      .glyphs()
-      .iter()
-      .map(|(glyph, default_glyph)| {
-        Ok(NapiCatalogAtlasGlyph {
-          glyph_id: identity.glyph_id(GlyphIndex::new(*glyph))?.to_string(),
-          default_glyph: default_glyph.get(),
-          exact_sources: descriptor
-            .exact_glyphs()
-            .iter()
-            .filter(|(root, _, _)| root == glyph)
-            .map(|(_, source, glyph_index)| {
-              let source_id = identity.source_id(shift_backends::SourceIndex::new(*source))?;
-              Ok(NapiSlugExactSource {
-                source_id: source_id.to_string(),
-                glyph_index: glyph_index.get(),
-              })
-            })
-            .collect::<BridgeResult<Vec<_>>>()?,
-        })
-      })
-      .collect::<BridgeResult<Vec<_>>>()?,
-    weights,
-    atlas_glyph_count: u32::try_from(statistics.glyph_count).or_overflow()?,
-    curve_count: u32::try_from(statistics.curve_count).or_overflow()?,
-    component_count: u32::try_from(statistics.component_count).or_overflow()?,
-  })
-}
-
-fn napi_slug_atlas(
-  generation: u32,
-  authored: &AuthoredAtlas,
-  layout: VariableLayout,
-) -> BridgeResult<NapiSlugAtlas> {
-  let statistics = authored.atlas().statistics();
-  let glyphs = authored
-    .glyphs()
-    .iter()
-    .map(|glyph| NapiSlugGlyph {
-      glyph_id: glyph.glyph_id.to_string(),
-      default_glyph: glyph.authored.default_glyph.get(),
-      exact_sources: glyph
-        .authored
-        .exact_sources
-        .iter()
-        .map(|source| NapiSlugExactSource {
-          source_id: source.source_id.to_string(),
-          glyph_index: source.glyph_index.get(),
-        })
-        .collect(),
-    })
-    .collect();
-  let weight_sets = authored
-    .weight_sets()
-    .iter()
-    .map(|set| NapiSlugWeightSet {
-      basis: NapiInterpolationBasis::from(WireInterpolationBasis::from(set.basis())),
-      source_weight_indices: set.source_weight_indices().to_vec(),
-    })
-    .collect();
-
-  let preview_extents = authored.preview_extents()?;
-
-  Ok(NapiSlugAtlas {
-    generation,
-    band_count: authored.atlas().band_count(),
-    weight_count: authored.weight_count(),
-    layout: napi_slug_layout(layout)?,
-    preview_extents: NapiSlugPreviewExtents {
-      horizontal: f64::from(preview_extents.horizontal),
-      minimum_y: f64::from(preview_extents.minimum_y),
-      maximum_y: f64::from(preview_extents.maximum_y),
-    },
-    glyphs,
-    weight_sets,
-    atlas_glyph_count: u32::try_from(statistics.glyph_count).or_overflow()?,
-    curve_count: u32::try_from(statistics.curve_count).or_overflow()?,
-    component_count: u32::try_from(statistics.component_count).or_overflow()?,
-  })
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct DocumentVersion(u64);
 
@@ -1130,26 +940,6 @@ pub struct Bridge {
   shaper: Option<LiveShaper>,
 }
 
-/// Where a persisted change leaves the font, as the session that made it
-/// claims.
-#[napi(string_enum = "camelCase")]
-pub enum NapiSaveState {
-  /// The font now differs from the saved document.
-  Unsaved,
-  /// The font is back to the saved document, as an undo or redo onto the
-  /// saved position leaves it; the store verifies this before trusting it.
-  MatchesSaved,
-}
-
-impl From<NapiSaveState> for shift_store::SaveState {
-  fn from(state: NapiSaveState) -> Self {
-    match state {
-      NapiSaveState::Unsaved => Self::Unsaved,
-      NapiSaveState::MatchesSaved => Self::MatchesSaved,
-    }
-  }
-}
-
 #[napi]
 impl Bridge {
   #[napi(constructor)]
@@ -1167,19 +957,94 @@ impl Bridge {
     }
   }
 
-  #[napi]
-  pub fn create_untitled_workspace(
+  /// Answers one [`workspace::NativeWorkspace`] request, as its generated
+  /// client encoded it: the method's index, its numbers, and its blobs, the
+  /// last of them the names it uses. A failure is in the reply, as the
+  /// method's error.
+  ///
+  /// # Errors
+  ///
+  /// Fails only when JavaScript cannot allocate the reply.
+  #[napi(
+    ts_args_type = "method: number, numbers: Float64Array, blobs: readonly Uint8Array[]",
+    ts_return_type = "{ numbers: Float64Array; blobs: Uint8Array[] }"
+  )]
+  pub fn workspace_request<'env>(
     &mut self,
-    store_path: String,
-    options: Option<NapiNewWorkspace>,
-  ) -> errors::Result<()> {
-    self.workspace = Some(FontWorkspace::create_untitled(
-      store_path,
-      new_workspace_from_options(options),
-    )?);
-    self.retained_source = None;
-    self.reset_versions();
-    Ok(())
+    env: &'env Env,
+    method: u32,
+    numbers: Float64ArraySlice<'_>,
+    blobs: Vec<Uint8ArraySlice<'_>>,
+  ) -> Result<PackedReply<'env>> {
+    answer(env, &numbers, &blobs, |input, blobs, names| {
+      native_workspace_request(self, method, input, blobs, names)
+    })
+  }
+
+  /// Answers one [`atlas::NativeAtlas`] request, as
+  /// [`Self::workspace_request`] answers a workspace one.
+  ///
+  /// # Errors
+  ///
+  /// Fails only when JavaScript cannot allocate the reply.
+  #[napi(
+    ts_args_type = "method: number, numbers: Float64Array, blobs: readonly Uint8Array[]",
+    ts_return_type = "{ numbers: Float64Array; blobs: Uint8Array[] }"
+  )]
+  pub fn atlas_request<'env>(
+    &mut self,
+    env: &'env Env,
+    method: u32,
+    numbers: Float64ArraySlice<'_>,
+    blobs: Vec<Uint8ArraySlice<'_>>,
+  ) -> Result<PackedReply<'env>> {
+    answer(env, &numbers, &blobs, |input, blobs, names| {
+      native_atlas_request(self, method, input, blobs, names)
+    })
+  }
+
+  /// Answers one [`source::NativeSource`] request, as
+  /// [`Self::workspace_request`] answers a workspace one.
+  ///
+  /// # Errors
+  ///
+  /// Fails only when JavaScript cannot allocate the reply.
+  #[napi(
+    ts_args_type = "method: number, numbers: Float64Array, blobs: readonly Uint8Array[]",
+    ts_return_type = "{ numbers: Float64Array; blobs: Uint8Array[] }"
+  )]
+  pub fn source_request<'env>(
+    &mut self,
+    env: &'env Env,
+    method: u32,
+    numbers: Float64ArraySlice<'_>,
+    blobs: Vec<Uint8ArraySlice<'_>>,
+  ) -> Result<PackedReply<'env>> {
+    answer(env, &numbers, &blobs, |input, blobs, names| {
+      native_source_request(self, method, input, blobs, names)
+    })
+  }
+
+  /// Answers one [`shaping::NativeShaping`] request, as
+  /// [`Self::workspace_request`] answers a workspace one.
+  ///
+  /// # Errors
+  ///
+  /// Fails only when JavaScript cannot allocate the reply.
+  #[napi(
+    ts_args_type = "method: number, numbers: Float64Array, blobs: readonly Uint8Array[]",
+    ts_return_type = "{ numbers: Float64Array; blobs: Uint8Array[] }"
+  )]
+  pub fn shaping_request<'env>(
+    &mut self,
+    env: &'env Env,
+    method: u32,
+    numbers: Float64ArraySlice<'_>,
+    blobs: Vec<Uint8ArraySlice<'_>>,
+  ) -> Result<PackedReply<'env>> {
+    answer(env, &numbers, &blobs, |input, blobs, names| {
+      native_shaping_request(self, method, input, blobs, names)
+    })
   }
 
   #[napi(ts_return_type = "Promise<NapiFontExportResult>")]
@@ -1221,330 +1086,6 @@ impl Bridge {
           .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
       ),
     }))
-  }
-
-  #[napi]
-  pub fn document_state(&self) -> errors::Result<NapiDocumentState> {
-    self.document_state_snapshot()
-  }
-
-  #[allow(clippy::unused_self, reason = "a JavaScript instance method")]
-  #[napi]
-  pub fn inspect_document(&self, path: String) -> errors::Result<NapiDocumentIdentity> {
-    FontWorkspace::inspect_document(path)?.try_into()
-  }
-
-  #[napi]
-  pub fn close_workspace(&mut self) {
-    self.workspace = None;
-    self.reset_versions();
-  }
-
-  #[napi]
-  pub fn open_document(&mut self, path: String, recovery_path: String) -> errors::Result<()> {
-    self.workspace = Some(FontWorkspace::open_document(path, recovery_path)?);
-    self.retained_source = None;
-    self.reset_versions();
-    Ok(())
-  }
-
-  #[napi]
-  pub fn open_workspace(&mut self, path: String, store_path: String) -> errors::Result<()> {
-    self.workspace = Some(FontWorkspace::open(path, store_path)?);
-    self.retained_source = None;
-    self.reset_versions();
-    Ok(())
-  }
-
-  #[napi]
-  pub fn resume_workspace(&mut self, store_path: String) -> errors::Result<()> {
-    self.workspace = Some(FontWorkspace::resume(store_path)?);
-    self.retained_source = None;
-    self.reset_versions();
-    Ok(())
-  }
-
-  #[napi]
-  pub fn open_font_source(&mut self, path: String) -> errors::Result<NapiFontSnapshot> {
-    let source = RetainedSource::open(Path::new(&path))?;
-    let snapshot = source.snapshot()?;
-    self.workspace = None;
-    self.retained_source = Some(source);
-    self.slug_atlas = None;
-    self.source_atlas_descriptors.clear();
-    Ok(snapshot.into())
-  }
-
-  #[napi]
-  pub fn close_font_source(&mut self) {
-    self.retained_source = None;
-    self.slug_atlas = None;
-    self.source_atlas_descriptors.clear();
-  }
-
-  #[napi]
-  pub fn set_workspace_id(&mut self, workspace_id: String) -> errors::Result<NapiDocumentState> {
-    self.workspace_mut()?.set_workspace_id(&workspace_id)?;
-    self.document_state_snapshot()
-  }
-
-  #[napi]
-  pub fn save_workspace(&mut self) -> errors::Result<NapiDocumentState> {
-    self.workspace_mut()?.save()?;
-    self.mark_saved();
-    self.document_state_snapshot()
-  }
-
-  #[napi]
-  pub fn save_workspace_as_document(
-    &mut self,
-    path: String,
-    recovery_path: String,
-  ) -> errors::Result<NapiDocumentState> {
-    self
-      .workspace_mut()?
-      .save_as_document(path, recovery_path)?;
-    self.mark_saved();
-    self.document_state_snapshot()
-  }
-
-  #[napi]
-  pub fn discard_workspace_changes(&mut self) -> errors::Result<NapiDocumentState> {
-    self.workspace_mut()?.discard_recovery()?;
-    self.reset_versions();
-    self.document_state_snapshot()
-  }
-
-  /// The open font's metadata and its glyph and layer directory, every
-  /// layer a placeholder, as named MessagePack: what a window's engine session
-  /// opens with.
-  ///
-  /// # Errors
-  ///
-  /// Fails when no workspace is open or the directory cannot be encoded.
-  #[napi]
-  pub fn encoded_directory(&self) -> errors::Result<Uint8Array> {
-    let directory = self.workspace()?.directory()?;
-    Ok(Uint8Array::new(
-      rmp_serde::to_vec_named(&directory).map_err(BridgeError::from)?,
-    ))
-  }
-
-  #[napi]
-  pub fn get_metadata(&self) -> errors::Result<intents::FontMetadata> {
-    Ok(FontMetadata::from(self.font()?.metadata()).into())
-  }
-
-  #[napi]
-  pub fn get_metrics(&self) -> errors::Result<NapiFontMetrics> {
-    Ok(FontMetrics::from(self.font()?.metrics()).into())
-  }
-
-  /// Lists glyph records whose layers are only those on [`Font::masters`], so every listed
-  /// layer's source is one [`Self::get_sources`] returns.
-  #[napi]
-  pub fn get_glyphs(&self) -> errors::Result<Vec<NapiGlyphRecord>> {
-    let workspace = self.workspace()?;
-    let mut component_references = workspace.glyph_component_references()?;
-    let glyphs: Vec<&Glyph> = workspace.font().glyphs().collect();
-    self.glyph_records(&glyphs, |glyph_id| {
-      Ok(component_references.remove(&glyph_id).unwrap_or_default())
-    })
-  }
-
-  /// The records of the glyphs `changes` changed, as they are now, and the
-  /// glyphs it removed: what a reply to the edit carries instead of every
-  /// record, which on a 65K-glyph font took 128 ms to build.
-  fn glyph_record_changes(
-    &self,
-    changes: &FontChangeSet,
-  ) -> errors::Result<NapiGlyphRecordChanges> {
-    let workspace = self.workspace()?;
-    let font = workspace.font();
-    let mut glyphs = Vec::new();
-    let mut removed = Vec::new();
-    for glyph_id in changes.record_glyph_ids() {
-      match font.glyph(glyph_id) {
-        Some(glyph) => glyphs.push(glyph),
-        None => removed.push(glyph_id.to_string()),
-      }
-    }
-
-    let updated = self.glyph_records(&glyphs, |glyph_id| {
-      Ok(workspace.referenced_glyph_ids_for_glyph(glyph_id)?)
-    })?;
-    Ok(NapiGlyphRecordChanges { updated, removed })
-  }
-
-  /// The records of `glyphs` sorted by name, each listing only layers on
-  /// [`Font::masters`] and the component bases `component_bases` reads for it.
-  fn glyph_records(
-    &self,
-    glyphs: &[&Glyph],
-    mut component_bases: impl FnMut(GlyphId) -> errors::Result<Vec<GlyphId>>,
-  ) -> errors::Result<Vec<NapiGlyphRecord>> {
-    let font = self.font()?;
-    let categories = shift_backends::record_categories(glyphs.iter().copied(), font.lib());
-    let mut records = glyphs
-      .iter()
-      .map(|glyph| {
-        let mut record = GlyphRecord::from(*glyph);
-        if let Some(category) = categories.get(&glyph.id()) {
-          record.mark = category.mark;
-          record.nonspacing_mark = category.nonspacing_mark;
-          record.ligature = category.ligature.map(|ligature| {
-            match ligature {
-              shift_backends::PropagationLigature::Explicit => "explicit",
-              shift_backends::PropagationLigature::Subcategory => "subcategory",
-            }
-            .to_string()
-          });
-        }
-        record.component_base_glyph_ids = component_bases(glyph.id())?;
-        record.layers = font
-          .master_layers(glyph)
-          .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
-          .collect();
-        Ok(NapiGlyphRecord::from(record))
-      })
-      .collect::<errors::Result<Vec<_>>>()?;
-    records.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(records)
-  }
-
-  /// Applies one intent set as a single atomic workspace apply: every kind
-  /// — editing and create alike — decodes into one
-  /// `FontWorkspace::apply` call. One call = one SQLite transaction = one
-  /// undo step, however many intents the set batches.
-  #[napi]
-  pub fn apply(
-    &mut self,
-    intents: Vec<intents::FontIntent>,
-    label: Option<String>,
-  ) -> errors::Result<NapiAppliedChange> {
-    if intents.is_empty() {
-      return Ok(NapiAppliedChange {
-        layers: Vec::new(),
-        next: None,
-        dependents: Vec::new(),
-      });
-    }
-
-    let mut set = FontIntentSet::default();
-    for intent in intents {
-      set.intents.push(shift_font::FontIntent::try_from(intent)?);
-    }
-
-    let outcome = self.workspace_mut()?.apply(&set, label)?;
-    self.mark_font_changed();
-
-    self.applied_echo(outcome)
-  }
-
-  /// Assembles the pure-state echo for an applied outcome: replace-grade
-  /// layers plus dependent composites. Shared by apply/undo/redo. Font-level
-  /// lists (axes, sources, …) ride along whole whenever the change set
-  /// touched them; glyph records only for the glyphs it changed.
-  fn applied_echo(&self, outcome: shift_font::AppliedIntents) -> errors::Result<NapiAppliedChange> {
-    let impact = outcome.changes.impact();
-    let glyphs_changed = impact.contains(FontChangeImpact::GLYPHS);
-
-    let touched_layer_ids: Vec<LayerId> = outcome
-      .layers
-      .iter()
-      .map(|touched| touched.layer.id())
-      .collect();
-    let dependents = self
-      .workspace()?
-      .dependent_glyph_ids_for_layers(&touched_layer_ids)?
-      .into_iter()
-      .map(|name| name.to_string())
-      .collect();
-
-    let layers = outcome
-      .layers
-      .into_iter()
-      .map(|touched| NapiLayerReplaced {
-        layer_id: touched.layer.id().to_string(),
-        structure: touched
-          .structural
-          .then(|| GlyphStructure::from(touched.layer.as_ref()).into()),
-        values: shift_wire::values_from_layer(touched.layer.as_ref()).into(),
-        changed: GlyphChangedEntities::default().into(),
-      })
-      .collect();
-
-    let next = FontReplacement::changed_by(self.font()?, impact)?
-      .map(|replacement| -> errors::Result<NapiFontReplacement> {
-        let glyph_changes = glyphs_changed
-          .then(|| self.glyph_record_changes(&outcome.changes))
-          .transpose()?;
-        Ok(NapiFontReplacement::new(replacement, glyph_changes))
-      })
-      .transpose()?;
-
-    Ok(NapiAppliedChange {
-      layers,
-      next,
-      dependents,
-    })
-  }
-
-  /// Applies the most recent ledger entry's inverse changeset; `null` when
-  /// the undo stack is empty.
-  #[napi]
-  pub fn undo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
-    let Some(outcome) = self.workspace_mut()?.undo()? else {
-      return Ok(None);
-    };
-
-    self.mark_font_changed();
-    Ok(Some(self.applied_echo(outcome)?))
-  }
-
-  /// Reapplies the most recently undone changeset; `null` when the redo
-  /// stack is empty.
-  #[napi]
-  pub fn redo(&mut self) -> errors::Result<Option<NapiAppliedChange>> {
-    let Some(outcome) = self.workspace_mut()?.redo()? else {
-      return Ok(None);
-    };
-
-    self.mark_font_changed();
-    Ok(Some(self.applied_echo(outcome)?))
-  }
-
-  /// Persists a change set, as named MessagePack, that a session over this
-  /// font already applied, and returns its echo: the layers it touched, the
-  /// font-level and glyph records it changed, and the composites that depend
-  /// on them. Nothing is added to this workspace's undo ledger. `save_state`
-  /// claims where the change leaves the font; the store verifies a claim to
-  /// match the saved document before discarding unsaved edits.
-  ///
-  /// # Errors
-  ///
-  /// Fails when the bytes do not decode to a change set, when a `before` in it
-  /// does not match this font, or when the write fails; the font is then
-  /// unchanged.
-  #[napi]
-  pub fn persist(
-    &mut self,
-    change_set: Uint8Array,
-    save_state: NapiSaveState,
-  ) -> errors::Result<NapiAppliedChange> {
-    let change_set: shift_font::CompactChangeSet = rmp_serde::from_slice(&change_set)?;
-    let outcome = self
-      .workspace_mut()?
-      .persist_compact_change_set(change_set, save_state.into())?;
-    self.mark_font_changed();
-    self.applied_echo(outcome)
-  }
-
-  /// Permanently removes every redo entry without changing font or dirty state.
-  #[napi]
-  pub fn discard_redo(&mut self) -> errors::Result<()> {
-    self.workspace_mut()?.discard_redo();
-    Ok(())
   }
 
   /// Glyph-addressed snapshots for renderer-local synchronous font state.
@@ -1590,32 +1131,6 @@ impl Bridge {
     Ok(snapshots.into_each())
   }
 
-  /// Reads exact authored layers by stable layer identity.
-  ///
-  /// Results preserve request order and contain accepted workspace state
-  /// only. Components are not resolved, so a layer with a broken component
-  /// reference remains readable.
-  ///
-  /// # Errors
-  ///
-  /// Returns an error when any identity is malformed or absent from the font.
-  #[napi(ts_args_type = "layerIds: Array<LayerId>")]
-  pub fn read_layers(
-    &mut self,
-    layer_ids: Vec<String>,
-  ) -> errors::Result<Vec<NapiGlyphLayerSnapshot>> {
-    let (layer_ids, glyph_ids) = self.layer_owners(&layer_ids)?;
-    let font = self.acquire_and_font(&glyph_ids, AcquireScope::Glyphs)?;
-
-    layer_ids
-      .iter()
-      .zip(glyph_ids)
-      .map(|(layer_id, glyph_id)| {
-        Ok(layer_snapshot(glyph_id, font.require_layer(*layer_id)?).into())
-      })
-      .collect()
-  }
-
   /// Reads exact authored layers with their composited geometry.
   ///
   /// Each root keeps its requested authored geometry; components resolve at
@@ -1629,7 +1144,8 @@ impl Bridge {
   /// cannot resolve, or referenced interpolation is incompatible.
   #[napi(ts_args_type = "layerIds: Array<LayerId>")]
   pub fn resolve_layers(&mut self, layer_ids: Vec<String>) -> errors::Result<Vec<NapiLayerRead>> {
-    let (layer_ids, glyph_ids) = self.layer_owners(&layer_ids)?;
+    let layer_ids = parse_id_list::<LayerId>(&layer_ids)?;
+    let glyph_ids = self.layer_owners(&layer_ids)?;
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
 
     layer_ids
@@ -1642,17 +1158,6 @@ impl Bridge {
         })
       })
       .collect()
-  }
-
-  /// Parses layer identities and finds each owning glyph, in request order.
-  fn layer_owners(&self, layer_ids: &[String]) -> errors::Result<(Vec<LayerId>, Vec<GlyphId>)> {
-    let font = self.font()?;
-    let layer_ids = parse_id_list::<LayerId>(layer_ids)?;
-    let glyph_ids = layer_ids
-      .iter()
-      .map(|layer_id| Ok(font.require_layer_owner(*layer_id)?))
-      .collect::<errors::Result<Vec<_>>>()?;
-    Ok((layer_ids, glyph_ids))
   }
 
   /// Derives entity mappings and structural diagnostics between two layers.
@@ -1757,83 +1262,6 @@ impl Bridge {
     Ok(previews)
   }
 
-  /// Builds one complete authored Slug generation without resolving a location.
-  ///
-  /// The returned metadata is small enough for the ordinary sync lane. Packed
-  /// geometry remains native until `stream_slug_atlas` emits bounded chunks.
-  #[napi]
-  pub fn prepare_slug_atlas(&mut self, alignment: u32) -> errors::Result<NapiSlugAtlas> {
-    let total_started = Instant::now();
-    let started = Instant::now();
-    self.workspace_mut()?.acquire_all_layers()?;
-    let acquisition = started.elapsed();
-    let (authored, profile) =
-      build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
-    let started = Instant::now();
-    let layout = authored.atlas().layout(alignment as usize)?;
-    let layout_elapsed = started.elapsed();
-    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
-    let generation = self.slug_generation;
-    let result = napi_slug_atlas(generation, &authored, layout)?;
-    log_slug_atlas_profile(
-      "complete",
-      acquisition,
-      profile,
-      layout_elapsed,
-      total_started.elapsed(),
-    );
-    self.slug_atlas = Some(SlugAtlasGeneration {
-      generation,
-      alignment: alignment as usize,
-      atlas: authored.into_atlas(),
-    });
-    Ok(result)
-  }
-
-  /// Returns the durable authored revision used to address disposable cached atlas pages.
-  #[napi]
-  pub fn slug_atlas_cache_revision(&self) -> errors::Result<String> {
-    Ok(self.workspace()?.slug_atlas_cache_revision()?)
-  }
-
-  /// Builds one ordered root-glyph page plus its transitive component geometry.
-  ///
-  /// The page uses the same packed layout as a complete atlas, but excludes
-  /// unrelated roots so the renderer can make its viewport resident first.
-  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, alignment: number")]
-  pub fn prepare_slug_atlas_page(
-    &mut self,
-    glyph_ids: Vec<String>,
-    alignment: u32,
-  ) -> errors::Result<NapiSlugAtlas> {
-    let total_started = Instant::now();
-    let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
-    let started = Instant::now();
-    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
-    let acquisition = started.elapsed();
-    let (authored, profile) =
-      build_authored_atlas_page_profiled(font, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
-    let started = Instant::now();
-    let layout = authored.atlas().layout(alignment as usize)?;
-    let layout_elapsed = started.elapsed();
-    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
-    let generation = self.slug_generation;
-    let result = napi_slug_atlas(generation, &authored, layout)?;
-    log_slug_atlas_profile(
-      "page",
-      acquisition,
-      profile,
-      layout_elapsed,
-      total_started.elapsed(),
-    );
-    self.slug_atlas = Some(SlugAtlasGeneration {
-      generation,
-      alignment: alignment as usize,
-      atlas: authored.into_atlas(),
-    });
-    Ok(result)
-  }
-
   /// Streams the prepared generation with native Web Stream backpressure.
   ///
   /// A capacity-one channel bounds temporary memory to one upload chunk. The
@@ -1909,82 +1337,6 @@ impl Bridge {
     self.stream_slug_atlas(env, generation, maximum_length)
   }
 
-  /// Releases a prepared generation after adapter rejection or initialization failure.
-  #[napi]
-  pub fn discard_slug_atlas(&mut self, generation: u32) {
-    if self
-      .slug_atlas
-      .as_ref()
-      .is_some_and(|prepared| prepared.generation == generation)
-    {
-      self.slug_atlas = None;
-    }
-  }
-
-  /// Releases one rejected prepared page.
-  #[napi]
-  pub fn discard_slug_atlas_page(&mut self, generation: u32) {
-    self.discard_slug_atlas(generation);
-  }
-
-  /// Reads one location-independent source glyph and its complete component closure.
-  #[napi(ts_args_type = "glyphId: GlyphId")]
-  pub fn read_font_source_glyph(&self, glyph_id: String) -> errors::Result<Vec<NapiGlyphSnapshot>> {
-    let glyph_id = parse::<GlyphId>(&glyph_id)?;
-    Ok(self.retained_source()?.glyph(glyph_id)?.into_each())
-  }
-
-  /// Builds one source-neutral catalog page through the active format adapter.
-  #[napi(
-    ts_args_type = "pageIndex: number, glyphIds: Array<GlyphId>, coordinates: Array<number>, alignment: number"
-  )]
-  pub fn prepare_source_atlas_page(
-    &mut self,
-    page_index: u32,
-    glyph_ids: Vec<String>,
-    coordinates: Vec<f64>,
-    alignment: u32,
-  ) -> errors::Result<NapiCatalogAtlasPage> {
-    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
-    let generation = self.slug_generation;
-    let (atlas, descriptor, location, layout) = {
-      let source = self.retained_source()?;
-      let location = source.location(coordinates)?;
-      let roots = parse_id_list::<GlyphId>(&glyph_ids)?
-        .iter()
-        .map(|glyph_id| source.identity.glyph_index(*glyph_id))
-        .collect::<BridgeResult<Vec<_>>>()?;
-      let page = match &source.font {
-        OpenedFont::OpenType(font) => {
-          build_binary_atlas_page(font, &roots, shift_slug::DEFAULT_BAND_COUNT)?
-        }
-        source => {
-          let input = variable_glyph_inputs(source, &roots)?;
-          compile_retained_page(&input, shift_slug::DEFAULT_BAND_COUNT)?
-        }
-      };
-      let (atlas, descriptor) = page.into_parts();
-      let layout = atlas.layout(alignment as usize)?;
-      (atlas, descriptor, location, layout)
-    };
-    let result = napi_source_atlas_page(
-      generation,
-      page_index,
-      &atlas,
-      &descriptor,
-      &location,
-      layout,
-      &self.retained_source()?.identity,
-    )?;
-    self.source_atlas_descriptors.insert(page_index, descriptor);
-    self.slug_atlas = Some(SlugAtlasGeneration {
-      generation,
-      alignment: alignment as usize,
-      atlas,
-    });
-    Ok(result)
-  }
-
   /// Streams one prepared source page through the same bounded atlas lane.
   #[napi]
   #[allow(
@@ -2000,165 +1352,12 @@ impl Bridge {
     self.stream_slug_atlas(env, generation, maximum_length)
   }
 
-  /// Releases a rejected source page and its retained weight descriptor.
-  #[napi]
-  pub fn discard_source_atlas_page(&mut self, page_index: u32, generation: u32) {
-    self.discard_slug_atlas(generation);
-    self.source_atlas_descriptors.remove(&page_index);
-  }
-
-  /// Evaluates every resident page's small weight buffer at one source location.
-  #[napi]
-  pub fn source_atlas_weights(
-    &self,
-    coordinates: Vec<f64>,
-  ) -> errors::Result<Vec<NapiCatalogAtlasWeights>> {
-    let location = self.retained_source()?.location(coordinates)?;
-
-    self
-      .source_atlas_descriptors
-      .iter()
-      .map(|(page_index, descriptor)| {
-        Ok(NapiCatalogAtlasWeights {
-          page_index: *page_index,
-          weights: descriptor
-            .design_weights(&location)?
-            .into_iter()
-            .map(f64::from)
-            .collect(),
-        })
-      })
-      .collect()
-  }
-
-  #[napi]
-  pub fn is_variable(&self) -> errors::Result<bool> {
-    Ok(self.font()?.is_variable())
-  }
-
-  #[napi]
-  pub fn get_axes(&self) -> errors::Result<Vec<intents::Axis>> {
-    Ok(
-      self
-        .font()?
-        .axes()
-        .iter()
-        .map(Axis::from)
-        .map(Into::into)
-        .collect(),
-    )
-  }
-
-  #[napi]
-  pub fn get_axis_mappings(&self) -> errors::Result<Vec<intents::AxisMapping>> {
-    Ok(
-      self
-        .font()?
-        .axis_mappings()
-        .iter()
-        .map(AxisMapping::from)
-        .map(Into::into)
-        .collect(),
-    )
-  }
-
-  #[napi]
-  pub fn get_axis_mapping_bases(&self) -> errors::Result<Vec<NapiAxisMappingBasis>> {
-    Ok(
-      self
-        .font()?
-        .axis_mapping_bases()?
-        .iter()
-        .map(AxisMappingBasis::from)
-        .map(Into::into)
-        .collect(),
-    )
-  }
-
-  #[napi]
-  pub fn get_metric_definitions(&self) -> errors::Result<Vec<intents::MetricDefinition>> {
-    Ok(
-      self
-        .font()?
-        .metric_definitions()
-        .iter()
-        .map(MetricDefinition::from)
-        .map(Into::into)
-        .collect(),
-    )
-  }
-
-  /// Returns the font's tracked Hyperglot language ids in authored order.
-  ///
-  /// `null` when the font lib has no tracked-language key, so the renderer
-  /// applies its own default; an empty array is an explicit empty list.
-  #[napi]
-  pub fn get_language_ids(&self) -> errors::Result<Option<Vec<String>>> {
-    Ok(self.font()?.language_ids())
-  }
-
-  /// Returns the font's kerning groups, per-source pairs, and the basis
-  /// kerning interpolates over.
-  #[napi]
-  pub fn get_kerning(&self) -> errors::Result<NapiKerningSnapshot> {
-    Ok(KerningSnapshot::from(self.font()?).into())
-  }
-
-  #[napi]
-  pub fn get_named_instances(&self) -> errors::Result<Vec<intents::NamedInstance>> {
-    Ok(
-      self
-        .font()?
-        .named_instances()
-        .iter()
-        .map(NamedInstance::from)
-        .map(Into::into)
-        .collect(),
-    )
-  }
-
-  /// Returns the precomputed source-metric interpolation model for this font.
-  #[napi]
-  pub fn get_source_metrics_interpolation(
-    &self,
-  ) -> errors::Result<Option<NapiSourceMetricsInterpolationSnapshot>> {
-    let font = self.font()?;
-    let Some(interpolation) = font.source_metric_interpolation() else {
-      return Ok(None);
-    };
-    let snapshot = SourceMetricsInterpolationSnapshot::from(&interpolation);
-
-    Ok(Some(snapshot.into()))
-  }
-
-  /// Returns the compiled shaping tables, for the editor to shape with
-  /// itself, or `null` when they are still at `known_revision`. Compiles
-  /// them first if the font changed in a way they depend on: glyph order,
-  /// glyph categories, feature code, or axes.
-  #[napi]
-  pub fn shaper_font(
-    &mut self,
-    known_revision: Option<u32>,
-  ) -> errors::Result<Option<crate::shaping::NapiShaperFont>> {
-    let font = Arc::clone(self.live_shaper()?.font());
-    let revision = self.shaper_fonts.revision();
-    if known_revision.is_some_and(|known| u64::from(known) == revision) {
-      return Ok(None);
-    }
-    Ok(Some(crate::shaping::NapiShaperFont::new(revision, &font)))
-  }
-
   #[napi]
   pub fn map_location(&self, location: intents::Location) -> errors::Result<intents::Location> {
     let external =
       shift_font::ExternalLocation::from_untyped(shift_font::Location::try_from(location)?);
     let mapped = self.font()?.mapped_location(&external)?;
     Ok(shift_wire::Location::from(mapped.as_untyped()).into())
-  }
-
-  #[napi]
-  pub fn get_sources(&self) -> errors::Result<Vec<NapiSource>> {
-    Ok(Source::masters_of(self.font()?).into_each())
   }
 
   /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
@@ -2173,33 +1372,18 @@ impl Bridge {
   }
 
   fn workspace(&self) -> BridgeResult<&FontWorkspace> {
-    self
-      .workspace
-      .as_ref()
-      .ok_or_else(|| BridgeError::InvalidInput {
-        kind: "workspace",
-        value: "no workspace is open".to_string(),
-      })
+    self.workspace.as_ref().ok_or(BridgeError::NoWorkspace)
   }
 
   fn workspace_mut(&mut self) -> BridgeResult<&mut FontWorkspace> {
-    self
-      .workspace
-      .as_mut()
-      .ok_or_else(|| BridgeError::InvalidInput {
-        kind: "workspace",
-        value: "no workspace is open".to_string(),
-      })
+    self.workspace.as_mut().ok_or(BridgeError::NoWorkspace)
   }
 
   fn retained_source(&self) -> BridgeResult<&RetainedSource> {
     self
       .retained_source
       .as_ref()
-      .ok_or_else(|| BridgeError::InvalidInput {
-        kind: "font source",
-        value: "no retained font source is open".to_string(),
-      })
+      .ok_or(BridgeError::NoFontSource)
   }
 
   fn acquire_and_font(
@@ -2214,29 +1398,6 @@ impl Bridge {
   fn font(&self) -> BridgeResult<&Font> {
     Ok(self.workspace()?.font())
   }
-
-  fn document_state_snapshot(&self) -> BridgeResult<NapiDocumentState> {
-    let workspace = self.workspace()?;
-    let source_kind = match workspace.source() {
-      WorkspaceSource::Untitled => "untitled",
-      WorkspaceSource::Document { .. } => "document",
-      WorkspaceSource::Imported { .. } => "imported",
-    };
-    let document_id = workspace
-      .document_metadata()?
-      .map(|metadata| metadata.document_id.to_string());
-    let save_target = workspace.save_target().map(path_to_string).transpose()?;
-    let needs_save_as = !matches!(workspace.source(), WorkspaceSource::Document { .. });
-
-    Ok(NapiDocumentState {
-      source_kind: source_kind.to_string(),
-      document_id,
-      save_target,
-      dirty: workspace.is_dirty()?,
-      needs_save_as,
-    })
-  }
-
   /// Returns the shaper for the current font, making a new one after a font
   /// change.
   fn live_shaper(&mut self) -> BridgeResult<&LiveShaper> {
@@ -2307,8 +1468,14 @@ fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
 
 #[cfg(test)]
 mod tests {
+  use super::workspace::{
+    NativeWorkspace, NativeWorkspaceClient, NativeWorkspaceError, SaveState, SourceKind,
+  };
   use super::*;
+  use pack::{Bytes, CarryingNames, Packed};
+  use shift_font::FontIntentSet;
   use shift_wire::bridges::napi::{NapiGlyphSnapshotRequest, NapiGlyphState};
+  use std::cell::RefCell;
   use std::sync::atomic::{AtomicUsize, Ordering};
 
   static TEST_ID: AtomicUsize = AtomicUsize::new(0);
@@ -2399,7 +1566,10 @@ mod tests {
       panic!("only the renamed glyph's record must cross");
     };
     let listed = bridge.get_glyphs().unwrap();
-    let listed = listed.iter().find(|glyph| glyph.id == "glyph_a").unwrap();
+    let listed = listed
+      .iter()
+      .find(|glyph| glyph.id.as_str() == "glyph_a")
+      .unwrap();
     assert_eq!(
       (
         &record.name,
@@ -2412,7 +1582,7 @@ mod tests {
         &listed.component_base_glyph_ids
       )
     );
-    assert_eq!(record.name, "A.alt");
+    assert_eq!(record.name.as_str(), "A.alt");
 
     bridge.undo().unwrap();
     let uncreated = bridge
@@ -2422,7 +1592,7 @@ mod tests {
       .and_then(|next| next.glyph_changes)
       .expect("undoing a creation must echo the removal");
     assert!(uncreated.updated.is_empty());
-    assert_eq!(uncreated.removed, ["glyph_b"]);
+    assert_eq!(uncreated.removed, [GlyphId::from_raw("glyph_b")]);
   }
 
   #[test]
@@ -2443,7 +1613,7 @@ mod tests {
       .expect("createGlyph must echo records")
       .updated;
     assert_eq!(glyphs.len(), 1);
-    assert_eq!(glyphs[0].name, "A");
+    assert_eq!(glyphs[0].name.as_str(), "A");
     assert!(glyphs[0].layers.is_empty());
     assert!(applied.layers.is_empty());
   }
@@ -2472,10 +1642,10 @@ mod tests {
       .expect("createGlyphLayer must echo records")
       .updated;
     assert_eq!(glyphs[0].layers.len(), 1);
-    assert_eq!(glyphs[0].layers[0].id, layer_id);
-    assert_eq!(glyphs[0].layers[0].source_id, source_id);
+    assert_eq!(glyphs[0].layers[0].id.as_str(), layer_id);
+    assert_eq!(glyphs[0].layers[0].source_id.as_str(), source_id);
     assert_eq!(applied.layers.len(), 1);
-    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert_eq!(applied.layers[0].layer_id.as_str(), layer_id);
     assert!(applied.layers[0].structure.is_some());
   }
 
@@ -2497,7 +1667,7 @@ mod tests {
       .unwrap();
 
     assert!(applied.next.is_none());
-    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert_eq!(applied.layers[0].layer_id.as_str(), layer_id);
     assert!(applied.layers[0].structure.is_none());
     // canonical values layout: x advance is slot 0
     assert_eq!(applied.layers[0].values[0], 642.0);
@@ -2516,7 +1686,7 @@ mod tests {
         None,
       )
       .unwrap();
-    assert_eq!(created.layers[0].layer_id, layer_id);
+    assert_eq!(created.layers[0].layer_id.as_str(), layer_id);
 
     let contour_id = ContourId::new().to_string();
     bridge
@@ -2950,11 +2120,12 @@ mod tests {
       .get_glyphs()
       .unwrap()
       .into_iter()
-      .find(|record| record.name == name)
+      .find(|record| record.name.as_str() == name)
       .expect("glyph record should exist");
     let source_id = default_source_id(bridge);
 
-    glyph_source_state(bridge, &record.id, &source_id).expect("glyph state should be readable")
+    glyph_source_state(bridge, record.id.as_str(), &source_id)
+      .expect("glyph state should be readable")
   }
 
   fn glyph_source_state(
@@ -3058,6 +2229,77 @@ mod tests {
     assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
   }
 
+  /// A client of `bridge`'s workspace requests, encoding and decoding each
+  /// one as the utility process's generated class does, without napi.
+  fn workspace_client(
+    bridge: &RefCell<Bridge>,
+  ) -> NativeWorkspaceClient<
+    CarryingNames<impl Fn(u32, Packed) -> std::result::Result<Packed, ()> + '_>,
+  > {
+    NativeWorkspaceClient(CarryingNames(move |method, request: Packed| {
+      Ok(request.answer_carrying_names(|input, blobs, names| {
+        native_workspace_request(&mut *bridge.borrow_mut(), method, input, blobs, names)
+      }))
+    }))
+  }
+
+  #[test]
+  fn a_workspace_request_replies_with_the_kind_of_error_it_failed_with() {
+    let bridge = RefCell::new(Bridge::new());
+    let client = workspace_client(&bridge);
+
+    assert!(matches!(
+      client.document_state(),
+      Ok(Err(NativeWorkspaceError::NoWorkspace { detail })) if detail.contains("no workspace is open")
+    ));
+    let (_, store_path) = test_paths("request-errors");
+    assert_eq!(
+      client.create_untitled_workspace(store_path, None),
+      Ok(Ok(()))
+    );
+    assert!(matches!(
+      client.save_workspace(),
+      Ok(Err(NativeWorkspaceError::NeedsSaveAs { detail })) if detail == "workspace needs a save path"
+    ));
+    let Ok(Err(NativeWorkspaceError::InvalidInput { detail })) =
+      client.persist(Bytes(vec![0xc1]), SaveState::Unsaved)
+    else {
+      panic!("a change set that does not decode must be refused as invalid input");
+    };
+    assert!(detail.starts_with("cannot decode from the window"));
+  }
+
+  #[test]
+  fn intents_cross_in_and_the_directory_crosses_out_as_bytes() {
+    let bridge = RefCell::new(Bridge::new());
+    let client = workspace_client(&bridge);
+    let (_, store_path) = test_paths("request-bytes");
+    client
+      .create_untitled_workspace(store_path, None)
+      .unwrap()
+      .unwrap();
+
+    let applied = client
+      .apply(
+        vec![create_glyph_napi_with_id("glyph_a", "A", vec![65])],
+        Some("Add Glyph".to_string()),
+      )
+      .unwrap()
+      .unwrap();
+    let directory = client.encoded_directory().unwrap().unwrap();
+
+    let created = applied
+      .next
+      .and_then(|next| next.glyph_changes)
+      .expect("createGlyph must echo records");
+    assert_eq!(created.updated[0].id, GlyphId::from_raw("glyph_a"));
+    let font: Font = rmp_serde::from_slice(&directory.0).unwrap();
+    assert_eq!(
+      font.glyph(GlyphId::from_raw("glyph_a")).map(Glyph::name),
+      Some("A")
+    );
+  }
+
   #[test]
   fn persist_writes_a_change_set_applied_to_another_copy_of_the_font() {
     let mut bridge = bridge_with_workspace();
@@ -3088,19 +2330,15 @@ mod tests {
     // Sent compacted, as the window's engine sends it.
     let bytes = rmp_serde::to_vec_named(&moved.changes.compact()).unwrap();
 
-    let echo = bridge
-      .persist(bytes.into(), NapiSaveState::Unsaved)
-      .unwrap();
+    let echo = bridge.persist(Bytes(bytes), SaveState::Unsaved).unwrap();
     assert_eq!(&echo.layers[0].values[1..3], &[30.0, 40.0]);
     assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
     // A second persist of the same change set no longer matches the font.
     assert!(
       bridge
         .persist(
-          rmp_serde::to_vec_named(&moved.changes.compact())
-            .unwrap()
-            .into(),
-          NapiSaveState::Unsaved,
+          Bytes(rmp_serde::to_vec_named(&moved.changes.compact()).unwrap()),
+          SaveState::Unsaved,
         )
         .is_err()
     );
@@ -3271,7 +2509,7 @@ mod tests {
     let mut bridge = bridge_with_workspace();
 
     let state = bridge.document_state().unwrap();
-    assert_eq!(state.source_kind, "untitled");
+    assert_eq!(state.source_kind, SourceKind::Untitled);
     assert_eq!(state.save_target, None);
     assert!(!state.dirty);
     assert!(state.needs_save_as);
@@ -3286,7 +2524,7 @@ mod tests {
     let state = bridge
       .save_workspace_as_document(save_path.clone(), recovery_path)
       .unwrap();
-    assert_eq!(state.source_kind, "document");
+    assert_eq!(state.source_kind, SourceKind::Document);
     assert_eq!(state.save_target.as_deref(), Some(save_path.as_str()));
     assert!(!state.dirty);
     assert!(!state.needs_save_as);
@@ -3339,7 +2577,7 @@ mod tests {
   }
 
   fn default_source_id(bridge: &Bridge) -> String {
-    bridge.get_sources().unwrap()[0].id.clone()
+    bridge.get_sources().unwrap()[0].id.to_string()
   }
 
   fn create_default_glyph_layer(bridge: &mut Bridge, name: &str, unicode: Option<u32>) -> String {
@@ -3355,7 +2593,7 @@ mod tests {
         None,
       )
       .unwrap();
-    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert_eq!(applied.layers[0].layer_id.as_str(), layer_id);
     layer_id
   }
 
@@ -3503,7 +2741,10 @@ mod tests {
     assert_eq!(instances.len(), 1);
     assert_eq!(instances[0].name, "Bold");
     assert_eq!(
-      instances[0].location.values.get("axis_weight"),
+      instances[0]
+        .location
+        .values
+        .get(&AxisId::from_raw("axis_weight")),
       Some(&700.0)
     );
 
@@ -3597,8 +2838,11 @@ mod tests {
       .iter()
       .find(|source| source.name == "Bold")
       .expect("new source must be in the echo");
-    assert_eq!(bold.id, "source_bold");
-    assert_eq!(bold.location.values.get("axis_weight"), Some(&700.0));
+    assert_eq!(bold.id.as_str(), "source_bold");
+    assert_eq!(
+      bold.location.values.get(&AxisId::from_raw("axis_weight")),
+      Some(&700.0)
+    );
     assert!(applied.layers.is_empty());
     assert!(next.glyph_changes.is_none());
     assert_eq!(bridge.get_glyphs().unwrap()[0].layers.len(), 1);
@@ -3644,7 +2888,7 @@ mod tests {
   fn set_kerning_values_echoes_kerning_and_undo_restores_it() {
     let mut bridge = bridge_with_workspace();
     create_default_glyph_layer(&mut bridge, "A", Some(65));
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.to_string();
     let source_id = default_source_id(&bridge);
     let side = || intents::KerningSide {
       kind: intents::KerningSideKind::Glyph,
@@ -3672,7 +2916,7 @@ mod tests {
       .and_then(|next| next.kerning)
       .expect("setKerningValues must echo kerning");
     assert_eq!(kerning.sources.len(), 1);
-    assert_eq!(kerning.sources[0].source_id, source_id);
+    assert_eq!(kerning.sources[0].source_id.as_str(), source_id);
     assert_eq!(kerning.sources[0].pairs[0].amount, -30.0);
 
     let undone = bridge
@@ -3703,7 +2947,7 @@ mod tests {
       )
       .unwrap();
 
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.to_string();
     let layer_id = LayerId::new().to_string();
 
     let applied = bridge
@@ -3720,7 +2964,7 @@ mod tests {
     let state = glyph_source_state(&mut bridge, &glyph_id, "source_bold")
       .expect("the explicit layer must resolve by glyph and source");
     assert_eq!(state.layer_id, layer_id);
-    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert_eq!(applied.layers[0].layer_id.as_str(), layer_id);
     let glyphs = applied
       .next
       .expect("layer membership must echo font replacements")
@@ -3734,7 +2978,7 @@ mod tests {
   fn apply_clone_glyph_layer_copies_shape_with_fresh_internal_ids() {
     let mut bridge = bridge_with_workspace();
     let (from_layer_id, contour_id) = pen_setup(&mut bridge);
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.to_string();
     let point_a = PointId::new().to_string();
     let point_b = PointId::new().to_string();
     let anchor_top = AnchorId::new().to_string();
@@ -3787,7 +3031,7 @@ mod tests {
     let cloned = glyph_source_state(&mut bridge, &glyph_id, "source_bold")
       .expect("cloned layer should be readable");
 
-    assert_eq!(applied.layers[0].layer_id, layer_id);
+    assert_eq!(applied.layers[0].layer_id.as_str(), layer_id);
     assert_eq!(cloned.layer_id, layer_id);
     assert_eq!(cloned.values.len(), source.values.len());
     for index in 0..cloned.values.len() {
@@ -3891,7 +3135,7 @@ mod tests {
         None,
       )
       .unwrap();
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.to_string();
     let bold_layer_id = LayerId::new().to_string();
     bridge
       .apply(
@@ -4001,7 +3245,7 @@ mod tests {
       applied
         .layers
         .iter()
-        .any(|layer| layer.layer_id == layer_id)
+        .any(|layer| layer.layer_id.as_str() == layer_id)
     );
 
     let undone = bridge.undo().unwrap().expect("mixed set should undo");
@@ -4144,27 +3388,31 @@ mod tests {
       .find(|glyph| glyph.component_base_glyph_ids.is_empty() && glyph.layers.len() > 1)
       .unwrap();
     let layer_ids = vec![
-      composite.layers[1].id.clone(),
-      plain.layers[0].id.clone(),
-      composite.layers[0].id.clone(),
+      composite.layers[1].id,
+      plain.layers[0].id,
+      composite.layers[0].id,
     ];
 
     let authored = bridge.read_layers(layer_ids.clone()).unwrap();
-    let resolved = bridge.resolve_layers(layer_ids.clone()).unwrap();
+    let layer_texts = layer_ids
+      .iter()
+      .map(ToString::to_string)
+      .collect::<Vec<_>>();
+    let resolved = bridge.resolve_layers(layer_texts.clone()).unwrap();
 
     let authored_ids = authored
       .iter()
-      .map(|layer| layer.state.layer_id.clone())
+      .map(|layer| layer.state.layer_id)
       .collect::<Vec<_>>();
     let resolved_ids = resolved
       .iter()
       .map(|layer| layer.authored.state.layer_id.clone())
       .collect::<Vec<_>>();
     assert_eq!(authored_ids, layer_ids);
-    assert_eq!(resolved_ids, layer_ids);
+    assert_eq!(resolved_ids, layer_texts);
     assert_eq!(
       resolved[0].authored.source_id,
-      composite.layers[1].source_id
+      composite.layers[1].source_id.as_str()
     );
     assert_eq!(
       resolved[0].resolved.components.len(),
@@ -4190,7 +3438,10 @@ mod tests {
 
     assert!(
       bridge
-        .read_layers(vec![layer_id.clone(), missing.clone()])
+        .read_layers(vec![
+          LayerId::from_raw(&layer_id),
+          LayerId::from_raw(&missing)
+        ])
         .is_err()
     );
     assert!(bridge.resolve_layers(vec![layer_id, missing]).is_err());
@@ -4240,7 +3491,7 @@ mod tests {
         None,
       )
       .unwrap();
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.clone();
+    let glyph_id = bridge.get_glyphs().unwrap()[0].id.to_string();
     let target_layer_id = LayerId::new().to_string();
     bridge
       .apply(
@@ -4297,11 +3548,11 @@ mod tests {
       .unwrap();
 
     let projections = bridge
-      .get_glyph_projections(vec![glyph.id.clone()])
+      .get_glyph_projections(vec![glyph.id.to_string()])
       .unwrap();
 
     assert_eq!(projections.len(), 1);
-    assert_eq!(projections[0].glyph_id, glyph.id);
+    assert_eq!(projections[0].glyph_id, glyph.id.as_str());
     assert_eq!(
       projections[0].fallback.values.as_ref(),
       &[500.0, 10.0, 20.0]
@@ -4331,7 +3582,7 @@ mod tests {
 
     let previews = bridge
       .get_glyph_previews(
-        vec![glyph.id.clone(), missing_glyph_id],
+        vec![glyph.id.to_string(), missing_glyph_id],
         intents::Location {
           values: HashMap::new(),
         },
@@ -4339,7 +3590,7 @@ mod tests {
       .unwrap();
 
     assert_eq!(previews.len(), 1);
-    assert_eq!(previews[0].glyph_id, glyph.id);
+    assert_eq!(previews[0].glyph_id, glyph.id.as_str());
     assert_eq!(previews[0].x_advance, 500.0);
     assert!(previews[0].svg_path.starts_with('M'));
   }
@@ -4361,10 +3612,7 @@ mod tests {
 
     assert!(matches!(
       result.err().unwrap(),
-      BridgeError::Wire(intents::WireError::InvalidId {
-        kind: intents::IdKind::Layer,
-        ..
-      })
+      NativeWorkspaceError::InvalidInput { detail } if detail.contains(intents::IdKind::Layer.as_str())
     ));
   }
 }

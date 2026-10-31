@@ -6,23 +6,15 @@
 //! preload passes each encoded request to [`LayerReader::request`] unchanged.
 
 use napi::Env;
-use napi::bindgen_prelude::{BufferSlice, Float64Array, Float64ArraySlice, Uint8ArraySlice};
+use napi::bindgen_prelude::{Float64ArraySlice, Uint8ArraySlice};
 use napi_derive::napi;
-use pack::{Bytes, Packed};
+use pack::Bytes;
 use shift_engine::{StoreReadError, StoreReader, store_reader_request};
 use shift_font::{GlyphId, LayerId};
 use shift_store::StoreReader as StoreFiles;
 
 use crate::errors::BridgeError;
-
-/// A [`StoreReader`] reply: its numbers, and its blobs, the last of them the
-/// names it uses.
-#[napi(object, object_from_js = false)]
-pub struct StoreReply<'env> {
-  pub numbers: Float64Array,
-  #[napi(ts_type = "Uint8Array[]")]
-  pub blobs: Vec<BufferSlice<'env>>,
-}
+use crate::reply::{PackedReply, answer};
 
 /// A read-only view of a workspace's store.
 #[napi]
@@ -66,11 +58,6 @@ impl LayerReader {
   /// them the names it uses. A failure is in the reply, as the method's
   /// error.
   ///
-  /// The request is read in place, and the reply copied once into
-  /// JavaScript memory: an external buffer costs more than copying a small
-  /// reply, and Electron's V8 sandbox refuses external buffers, so napi would
-  /// copy them anyway.
-  ///
   /// # Errors
   ///
   /// Fails only when JavaScript cannot allocate the reply.
@@ -81,21 +68,9 @@ impl LayerReader {
     method: u32,
     numbers: Float64ArraySlice<'_>,
     blobs: Vec<Uint8ArraySlice<'_>>,
-  ) -> napi::Result<StoreReply<'env>> {
-    let request = Packed {
-      numbers: numbers.to_vec(),
-      blobs: blobs.iter().map(|blob| blob.to_vec()).collect(),
-    };
-    let reply = request.answer_carrying_names(|input, blobs, names| {
+  ) -> napi::Result<PackedReply<'env>> {
+    answer(env, &numbers, &blobs, |input, blobs, names| {
       store_reader_request(self, method, input, blobs, names)
-    });
-    Ok(StoreReply {
-      numbers: reply.numbers.into(),
-      blobs: reply
-        .blobs
-        .iter()
-        .map(|blob| BufferSlice::copy_from(env, blob))
-        .collect::<napi::Result<_>>()?,
     })
   }
 

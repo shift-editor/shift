@@ -19,16 +19,16 @@ export interface WorkspaceSnapshot {
   workspaceId: string;
   metadata: FontMetadata;
   metrics: FontMetrics;
-  metricDefinitions: MetricDefinition[];
+  metricDefinitions: readonly MetricDefinition[];
   sourceMetricsInterpolation: SourceMetricsInterpolationSnapshot | null;
-  glyphs: GlyphRecord[];
-  sources: Source[];
-  axes: Axis[];
-  axisMappings: AxisMapping[];
-  axisMappingBases: AxisMappingBasis[];
-  namedInstances: NamedInstance[];
+  glyphs: readonly GlyphRecord[];
+  sources: readonly Source[];
+  axes: readonly Axis[];
+  axisMappings: readonly AxisMapping[];
+  axisMappingBases: readonly AxisMappingBasis[];
+  namedInstances: readonly NamedInstance[];
   /** Tracked Hyperglot language ids; `null` when the font stores no list. */
-  languageIds: string[] | null;
+  languageIds: readonly string[] | null;
   kerning: KerningSnapshot;
 }
 

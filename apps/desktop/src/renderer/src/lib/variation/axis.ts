@@ -4,9 +4,7 @@ import type { Axis } from "@shift/types";
 export function axisVaries(axis: Axis): boolean {
   switch (axis.axisType) {
     case "continuous":
-      return (
-        axis.minimum !== undefined && axis.maximum !== undefined && axis.minimum < axis.maximum
-      );
+      return axis.minimum != null && axis.maximum != null && axis.minimum < axis.maximum;
     case "discrete":
       return new Set(axis.values).size > 1;
   }

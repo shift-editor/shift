@@ -39,14 +39,14 @@ export function instanceCreationIssue(
         message: `Choose a defined value for ${axis.name}`,
       };
     }
-    if (axis.minimum !== undefined && value < axis.minimum) {
+    if (axis.minimum != null && value < axis.minimum) {
       return {
         kind: "axis",
         axisId: axis.id,
         message: `${axis.name} must be at least ${axis.minimum}`,
       };
     }
-    if (axis.maximum !== undefined && value > axis.maximum) {
+    if (axis.maximum != null && value > axis.maximum) {
       return {
         kind: "axis",
         axisId: axis.id,

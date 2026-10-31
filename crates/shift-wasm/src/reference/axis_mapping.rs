@@ -16,14 +16,19 @@ use crate::variation::{VariationAxes, axis};
 /// Authored axis mappings; the editor's `AxisMapping[]` satisfies this.
 #[derive(Deserialize, Tsify)]
 #[serde(transparent)]
-pub struct ReferenceAxisMappings(Vec<ReferenceAxisMapping>);
+pub struct ReferenceAxisMappings(
+    #[tsify(type = "readonly ReferenceAxisMapping[]")] Vec<ReferenceAxisMapping>,
+);
 
 #[derive(Deserialize, Tsify)]
 pub struct ReferenceAxisMapping {
     id: String,
     name: String,
+    #[tsify(type = "readonly string[]")]
     inputs: Vec<String>,
+    #[tsify(type = "readonly string[]")]
     outputs: Vec<String>,
+    #[tsify(type = "readonly ReferenceAxisMappingPoint[]")]
     points: Vec<ReferenceAxisMappingPoint>,
 }
 

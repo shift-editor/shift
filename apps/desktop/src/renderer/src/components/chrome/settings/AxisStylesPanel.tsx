@@ -251,7 +251,7 @@ const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) =>
 );
 
 function isRangeLabel(label: AxisLabel): boolean {
-  return label.minimum !== undefined || label.maximum !== undefined;
+  return label.minimum != null || label.maximum != null;
 }
 
 function updateLabelDraft(

@@ -98,8 +98,8 @@ function assertRenamesApplied() {
       const source = readFileSync(join(root, "crates", crate, "src", file), "utf8");
       for (const [, name, rust] of source.matchAll(RENAME)) {
         if (
-          module.includes(`export const ${rust} =`) &&
-          !module.includes(`export const ${name} =`)
+          module.includes(`export const ${rust}Schema =`) &&
+          !module.includes(`export const ${name}Schema =`)
         ) {
           throw new Error(
             `${output} declares ${rust}, which ${crate} renames to ${name}: its pack fragments are stale. ` +

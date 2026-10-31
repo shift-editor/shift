@@ -215,12 +215,18 @@ importers:
       '@napi-rs/cross-toolchain':
         specifier: 1.0.3
         version: 1.0.3(supports-color@8.1.1)
+      '@shift/pack':
+        specifier: workspace:*
+        version: link:../../packages/pack
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@25.3.0)(jsdom@26.1.0(supports-color@8.1.1))(vite@6.4.3(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.49.0)(tsx@4.21.0))
 
   packages/bridge:
     dependencies:
+      '@shift/pack':
+        specifier: workspace:*
+        version: link:../pack
       '@shift/types':
         specifier: workspace:*
         version: link:../types
@@ -501,6 +507,10 @@ importers:
   packages/tsconfig: {}
 
   packages/types:
+    dependencies:
+      '@shift/pack':
+        specifier: workspace:*
+        version: link:../pack
     devDependencies:
       '@shift/tsconfig':
         specifier: workspace:*

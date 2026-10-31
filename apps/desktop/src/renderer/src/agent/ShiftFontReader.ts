@@ -55,12 +55,13 @@ export class ShiftFontReader {
       mode: this.#mode,
       info: font.metadata,
       metrics: font.metrics,
-      metricDefinitions: font.metricDefinitions,
+      // The agent API hands out its own arrays; the font's are read-only.
+      metricDefinitions: [...font.metricDefinitions],
       glyphCount: font.glyphCount,
-      axes: font.getAxes(),
-      axisMappings: font.getAxisMappings(),
-      sources: font.sources,
-      instances: font.namedInstances,
+      axes: [...font.getAxes()],
+      axisMappings: [...font.getAxisMappings()],
+      sources: [...font.sources],
+      instances: [...font.namedInstances],
     };
   }
 
@@ -251,7 +252,7 @@ export class ShiftFontReader {
       id: entry.id,
       name: entry.name,
       unicodes: [...entry.unicodes],
-      componentBaseGlyphIds: record?.componentBaseGlyphIds ?? [],
+      componentBaseGlyphIds: [...(record?.componentBaseGlyphIds ?? [])],
       layers: record?.layers.map(({ id, sourceId }) => ({ layerId: id, sourceId })) ?? [],
     };
   }

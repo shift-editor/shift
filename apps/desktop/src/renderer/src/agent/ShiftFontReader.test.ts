@@ -156,9 +156,11 @@ describe("ShiftFontReader serves public reads of accepted font state", () => {
     const mapping = {
       id: mintAxisMappingId(),
       name: `${axis!.name} mapping`,
+      description: null,
       inputs: [axis!.id],
       outputs: [axis!.id],
       points: [0, 250, 1000].map((value, i) => ({
+        description: null,
         input: { values: { [axis!.id]: value } },
         output: { values: { [axis!.id]: [0, 400, 1000][i]! } },
       })),

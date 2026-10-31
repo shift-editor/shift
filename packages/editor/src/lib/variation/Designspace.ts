@@ -21,14 +21,14 @@ import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/
  * readers current when the designspace changes.
  */
 export class Designspace {
-  readonly #axesCell: Signal<Axis[]>;
-  readonly #mappingBasesCell: Signal<AxisMappingBasis[]>;
-  readonly #sourcesCell: Signal<Source[]>;
+  readonly #axesCell: Signal<readonly Axis[]>;
+  readonly #mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
+  readonly #sourcesCell: Signal<readonly Source[]>;
 
   constructor(cells: {
-    axesCell: Signal<Axis[]>;
-    mappingBasesCell: Signal<AxisMappingBasis[]>;
-    sourcesCell: Signal<Source[]>;
+    axesCell: Signal<readonly Axis[]>;
+    mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
+    sourcesCell: Signal<readonly Source[]>;
   }) {
     this.#axesCell = cells.axesCell;
     this.#mappingBasesCell = cells.mappingBasesCell;

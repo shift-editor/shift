@@ -26,6 +26,12 @@ mod fragments;
 /// `#[pack(rename = "…")]` names the type, a field or a variant in
 /// TypeScript; by default a type keeps its name, a field is camel-cased and a
 /// variant is camel-cased with a lowercase first letter.
+///
+/// Two field attributes change only how TypeScript types a field, never what
+/// crosses: `#[pack(id = "GlyphId")]` types each text in the field (a
+/// `String`, or the strings of a list, option or map key) as that id's brand,
+/// which crosses as its text too; `#[pack(numbers)]` types a `Vec<f64>` as a
+/// `Float64Array`, which crosses as the same count and values.
 #[proc_macro_derive(Pack, attributes(pack))]
 pub fn derive_pack(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -36,13 +42,15 @@ pub fn derive_pack(input: TokenStream) -> TokenStream {
 
 /// Turns a trait into a request protocol.
 ///
-/// Every method takes `&self` and arguments and a result that pack into
-/// numbers. Next to the trait it writes:
+/// Every method takes `&self` or `&mut self`, and arguments and a result
+/// that pack into numbers; a method without a result returns `()`. Next to
+/// the trait it writes:
 ///
 /// - `<trait>_request(target, method, input, blobs, names)`, which calls the
 ///   method at index `method` (in declaration order) on `target` with the
 ///   arguments decoded from `input` and `blobs`, and returns the encoded
-///   result as a `pack::Packed`; an unknown index returns nothing.
+///   result as a `pack::Packed`; an unknown index returns nothing. `target`
+///   is `&mut` when any method takes `&mut self`.
 /// - `<Trait>Client<T>`, which sends each method through a
 ///   `pack::Transport` `T` and returns its result, or the transport's error:
 ///   the asking side, for a caller in Rust.
@@ -126,13 +134,14 @@ fn packed_fields(
             Some(path) => quote! { &#path.#ident },
             None => quote! { #ident },
         };
+        let options = FieldOptions::of(&field.attrs)?;
         packed.push(PackedField {
             read: quote! { #ident: <#ty as ::pack::Pack>::read(read) },
             write: quote! { ::pack::Pack::write(#value, write); },
             described: json!({
-                "name": rename(&field.attrs)?.unwrap_or_else(|| camel(&ident.to_string())),
+                "name": options.rename.clone().unwrap_or_else(|| camel(&ident.to_string())),
                 "doc": doc_of(&field.attrs),
-                "type": type_of(ty)?,
+                "type": options.describe(field, type_of(ty)?)?,
             }),
         });
     }
@@ -376,6 +385,7 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
     let mut methods = Vec::new();
     let mut arms = Vec::new();
     let mut client_methods = Vec::new();
+    let mut mutable = false;
     for (index, trait_item) in item.items.iter().enumerate() {
         let TraitItem::Fn(method) = trait_item else {
             return Err(Error::new_spanned(
@@ -387,12 +397,13 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
         let ident = &signature.ident;
         let mut inputs = signature.inputs.iter();
         match inputs.next() {
-            Some(FnArg::Receiver(receiver))
-                if receiver.reference.is_some() && receiver.mutability.is_none() => {}
+            Some(FnArg::Receiver(receiver)) if receiver.reference.is_some() => {
+                mutable |= receiver.mutability.is_some();
+            }
             _ => {
                 return Err(Error::new_spanned(
                     signature,
-                    "an interface method takes `&self`",
+                    "an interface method takes `&self` or `&mut self`",
                 ));
             }
         }
@@ -423,11 +434,10 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
                 "type": type_of(ty)?,
             }));
         }
-        let ReturnType::Type(_, output) = &signature.output else {
-            return Err(Error::new_spanned(
-                signature,
-                "an interface method returns a value",
-            ));
+        let unit: Type = syn::parse_quote! { () };
+        let output = match &signature.output {
+            ReturnType::Type(_, output) => output.as_ref(),
+            ReturnType::Default => &unit,
         };
         let index = u32::try_from(index)
             .map_err(|_| Error::new_spanned(signature, "an interface has too many methods"))?;
@@ -483,13 +493,18 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
         "Asks for [`{name}`]'s methods through a [`pack::Transport`]: each \
          method sends its arguments by the method's index and reads the reply."
     );
+    let target = if mutable {
+        quote! { &mut T }
+    } else {
+        quote! { &T }
+    };
     Ok(quote! {
         #item
 
         #[doc = #docs]
         #[allow(clippy::needless_pass_by_value, unused_mut, unused_variables)]
         #visibility fn #request<T: #name + ?Sized>(
-            target: &T,
+            target: #target,
             method: u32,
             input: &[f64],
             mut blobs: ::std::vec::Vec<::std::vec::Vec<u8>>,
@@ -514,6 +529,15 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
 
 /// Describes a field's type for TypeScript, as Rust spells it.
 fn type_of(ty: &Type) -> syn::Result<Value> {
+    // A type a `macro_rules!` macro passed through as `$ty:ty` arrives grouped.
+    if let Type::Group(group) = ty {
+        return type_of(&group.elem);
+    }
+    if let Type::Tuple(tuple) = ty
+        && tuple.elems.is_empty()
+    {
+        return Ok(json!({ "kind": "unit" }));
+    }
     let Type::Path(path) = ty else {
         return Err(Error::new_spanned(ty, "a packed type is a path"));
     };
@@ -540,24 +564,110 @@ fn type_of(ty: &Type) -> syn::Result<Value> {
         "Option" => json!({ "kind": "option", "inner": inner()? }),
         "Bytes" => json!({ "kind": "bytes" }),
         "Result" => {
-            let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
-                return Err(Error::new_spanned(ty, "expected two type arguments"));
-            };
-            let types: Vec<_> = arguments
-                .args
-                .iter()
-                .filter_map(|argument| match argument {
-                    GenericArgument::Type(inner) => Some(inner),
-                    _ => None,
-                })
-                .collect();
-            let [ok, err] = types.as_slice() else {
-                return Err(Error::new_spanned(ty, "expected two type arguments"));
-            };
+            let [ok, err] = two_arguments(ty, segment)?;
             json!({ "kind": "result", "ok": type_of(ok)?, "err": type_of(err)? })
+        }
+        "HashMap" => {
+            let [key, value] = two_arguments(ty, segment)?;
+            json!({ "kind": "map", "key": type_of(key)?, "value": type_of(value)? })
         }
         _ => json!({ "kind": "ref", "rust": ident }),
     })
+}
+
+/// The two type arguments of a `Result` or a `HashMap`.
+fn two_arguments<'a>(ty: &Type, segment: &'a syn::PathSegment) -> syn::Result<[&'a Type; 2]> {
+    let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return Err(Error::new_spanned(ty, "expected two type arguments"));
+    };
+    let types: Vec<_> = arguments
+        .args
+        .iter()
+        .filter_map(|argument| match argument {
+            GenericArgument::Type(inner) => Some(inner),
+            _ => None,
+        })
+        .collect();
+    match types.as_slice() {
+        [first, second] => Ok([*first, *second]),
+        _ => Err(Error::new_spanned(ty, "expected two type arguments")),
+    }
+}
+
+/// A field's `#[pack(…)]` attributes.
+#[derive(Default)]
+struct FieldOptions {
+    rename: Option<String>,
+    /// The id whose brand types the field's text.
+    id: Option<String>,
+    /// Whether the field's `Vec<f64>` is typed as a `Float64Array`.
+    numbers: bool,
+}
+
+impl FieldOptions {
+    fn of(attributes: &[Attribute]) -> syn::Result<Self> {
+        let mut options = Self::default();
+        for attribute in attributes.iter().filter(|a| a.path().is_ident("pack")) {
+            attribute.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename") {
+                    options.rename = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("id") {
+                    options.id = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("numbers") {
+                    options.numbers = true;
+                } else {
+                    return Err(meta.error("expected `rename = \"…\"`, `id = \"…\"` or `numbers`"));
+                }
+                Ok(())
+            })?;
+        }
+        Ok(options)
+    }
+
+    /// `described`, the field's type as Rust spells it, as TypeScript types
+    /// it: with its text typed as the id's brand, or its numbers as a
+    /// `Float64Array`.
+    fn describe(&self, field: &syn::Field, mut described: Value) -> syn::Result<Value> {
+        if let Some(id) = &self.id
+            && !replace(
+                &mut described,
+                &json!({ "kind": "name" }),
+                &json!({ "kind": "ref", "rust": id }),
+            )
+        {
+            return Err(Error::new_spanned(
+                field,
+                "`id` types a field that holds a `String`",
+            ));
+        }
+        if self.numbers
+            && !replace(
+                &mut described,
+                &json!({ "kind": "list", "item": { "kind": "number" } }),
+                &json!({ "kind": "numbers" }),
+            )
+        {
+            return Err(Error::new_spanned(
+                field,
+                "`numbers` types a field that holds a `Vec<f64>`",
+            ));
+        }
+        Ok(described)
+    }
+}
+
+/// Replaces every `from` in `value` with `to`; whether any was replaced.
+fn replace(value: &mut Value, from: &Value, to: &Value) -> bool {
+    if value == from {
+        *value = to.clone();
+        return true;
+    }
+    match value {
+        Value::Object(entries) => entries
+            .values_mut()
+            .fold(false, |replaced, entry| replace(entry, from, to) | replaced),
+        _ => false,
+    }
 }
 
 /// The `rename` in a `#[pack(rename = "…")]` attribute, if any.

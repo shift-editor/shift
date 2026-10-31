@@ -2639,6 +2639,7 @@ version = "0.0.0"
 dependencies = [
  "napi",
  "napi-derive",
+ "pack",
  "serde",
  "serde_json",
  "shift-font",

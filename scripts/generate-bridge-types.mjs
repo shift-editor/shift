@@ -1,9 +1,13 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const inputPath = resolve(repoRoot, "crates/shift-bridge/index.d.ts");
 const outputPath = resolve(repoRoot, "packages/types/src/bridge/generated.ts");
+// The native workspace's interfaces, which crates/shift-bridge/scripts/types.mjs
+// generates from Rust beside index.d.ts.
+const protocolInput = resolve(repoRoot, "crates/shift-bridge/protocol.ts");
+const protocolOutput = resolve(repoRoot, "packages/types/src/bridge/protocol.ts");
 
 const source = readFileSync(inputPath, "utf8");
 
@@ -30,16 +34,14 @@ const idTypeNames = new Set([
   "GuidelineId",
   "SourceId",
   "NamedInstanceId",
+  "GlyphName",
 ]);
-const scalarTypeNames = new Set(["GlyphName", "Unicode"]);
+const scalarTypeNames = new Set(["Unicode"]);
 
 const idImports = headerImports.filter((name) => idTypeNames.has(name));
 const scalarAliases = headerImports
   .filter((name) => scalarTypeNames.has(name))
   .map((name) => {
-    if (name === "GlyphName") {
-      return "export type GlyphName = string;";
-    }
     if (name === "Unicode") {
       return "export type Unicode = number;";
     }
@@ -100,10 +102,13 @@ export interface NativeReadableStreamReader<T> {
 
 `;
 
+// Only the ids the declarations still name: the napi surface shrinks as
+// calls move onto the pack interfaces, which import their own.
+const usedIdImports = idImports.filter((name) => new RegExp(`\\b${name}\\b`).test(body));
 const imports =
-  [idImports.length > 0 ? `import type {\n  ${idImports.join(",\n  ")},\n} from "../ids";\n` : ""]
+  [usedIdImports.length > 0 ? `import type {\n  ${usedIdImports.join(",\n  ")},\n} from "../ids";\n` : ""]
     .filter(Boolean)
-    .join("") + (idImports.length > 0 ? "\n" : "");
+    .join("") + (usedIdImports.length > 0 ? "\n" : "");
 
 const aliases = scalarAliases.length > 0 ? `${scalarAliases.join("\n")}\n\n` : "";
 
@@ -115,3 +120,4 @@ const output =
 
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, output);
+copyFileSync(protocolInput, protocolOutput);

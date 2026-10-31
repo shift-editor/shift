@@ -63,9 +63,10 @@
         "$TURBO_ROOT$/crates/*/Cargo.toml",
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/packages/pack/src/**",
         "scripts/**"
       ],
-      "outputs": ["index.d.ts"]
+      "outputs": ["index.d.ts", "protocol.ts"]
     },
     "@shift/wasm#build": {
       "inputs": [
@@ -163,10 +164,11 @@
       "dependsOn": ["shift-bridge#types"],
       "inputs": [
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
+        "$TURBO_ROOT$/crates/shift-bridge/protocol.ts",
         "$TURBO_ROOT$/crates/shift-bridge/dts-header.d.ts",
         "$TURBO_ROOT$/scripts/generate-bridge-types.mjs"
       ],
-      "outputs": ["src/bridge/generated.ts"]
+      "outputs": ["src/bridge/generated.ts", "src/bridge/protocol.ts"]
     },
     "generate": {
       "outputs": ["resources/**"]
@@ -177,6 +179,7 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
         "$TURBO_ROOT$/packages/types/src/bridge/generated.ts",
+        "$TURBO_ROOT$/packages/types/src/bridge/protocol.ts",
         "$TURBO_ROOT$/packages/wasm/src/generated*/**/*.d.ts"
       ]
     },
@@ -187,6 +190,7 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
         "$TURBO_ROOT$/packages/types/src/bridge/generated.ts",
+        "$TURBO_ROOT$/packages/types/src/bridge/protocol.ts",
         "$TURBO_ROOT$/packages/wasm/src/generated*/**/*.d.ts"
       ]
     },
@@ -197,6 +201,7 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
         "$TURBO_ROOT$/packages/types/src/bridge/generated.ts",
+        "$TURBO_ROOT$/packages/types/src/bridge/protocol.ts",
         "$TURBO_ROOT$/packages/wasm/src/generated*/**/*.d.ts",
         "$TURBO_ROOT$/packages/*/src/**",
         "$TURBO_ROOT$/packages/*/package.json"
@@ -349,7 +354,7 @@
       ]
     },
     "shift-bridge#test": {
-      "dependsOn": ["build"],
+      "dependsOn": ["build", "@shift/types#generate:bridge-types"],
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
     },

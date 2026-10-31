@@ -93,7 +93,7 @@ export interface KeptContour {
 
 /** A layer's structure after a structural edit; the contours it kept come by id alone. */
 export interface EngineStructure extends Omit<GlyphStructure, "contours"> {
-  contours: (ContourData | KeptContour)[];
+  contours: readonly (ContourData | KeptContour)[];
 }
 
 /**
@@ -522,7 +522,11 @@ fn edit_object(font: &Font, before: &Font, applied: &AppliedIntents) -> Result<O
         .impact()
         .difference(FontChangeImpact::GLYPHS);
     if let Some(next) = FontReplacement::changed_by(font, impact)? {
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        // Absent values cross as null, as the native workspace's packed
+        // replacement carries them: the window reads one type from both.
+        let serializer = serde_wasm_bindgen::Serializer::new()
+            .serialize_maps_as_objects(true)
+            .serialize_missing_as_null(true);
         set(&edit, "next", &next.serialize(&serializer)?)?;
     }
     Ok(edit)

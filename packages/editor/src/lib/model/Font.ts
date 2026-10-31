@@ -253,22 +253,22 @@ export class Font {
   readonly #loadedCell: Signal<boolean>;
 
   readonly #metricsCell: Signal<FontMetrics>;
-  readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
+  readonly #metricDefinitionsCell: Signal<readonly MetricDefinition[]>;
 
   readonly #sourceMetricsRevisionCell: Signal<number>;
   readonly #kerningCell: Signal<Kerning>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
   readonly #metadataCell: Signal<FontMetadata>;
-  readonly #sourcesCell: Signal<Source[]>;
+  readonly #sourcesCell: Signal<readonly Source[]>;
 
-  readonly #axesCell: Signal<Axis[]>;
+  readonly #axesCell: Signal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
-  readonly #axisMappingsCell: Signal<AxisMapping[]>;
-  readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
+  readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
+  readonly #axisMappingBasesCell: Signal<readonly AxisMappingBasis[]>;
   readonly #designspace: Designspace;
 
-  readonly #namedInstancesCell: Signal<NamedInstance[]>;
+  readonly #namedInstancesCell: Signal<readonly NamedInstance[]>;
   readonly #languageIdsCell: Signal<readonly string[] | null>;
 
   readonly #unicodesCell: Signal<Unicode[]>;
@@ -389,7 +389,7 @@ export class Font {
   }
 
   /** Reactive font-owned identities for authored metric rows. */
-  get metricDefinitionsCell(): Signal<MetricDefinition[]> {
+  get metricDefinitionsCell(): Signal<readonly MetricDefinition[]> {
     return this.#metricDefinitionsCell;
   }
 
@@ -427,7 +427,7 @@ export class Font {
   }
 
   /** Reactive committed variation axes for sidebar controls. */
-  get axesCell(): Signal<Axis[]> {
+  get axesCell(): Signal<readonly Axis[]> {
     return this.#axesCell;
   }
 
@@ -443,12 +443,12 @@ export class Font {
   }
 
   /** Reactive font-owned independent and cross-axis mappings. */
-  get axisMappingsCell(): Signal<AxisMapping[]> {
+  get axisMappingsCell(): Signal<readonly AxisMapping[]> {
     return this.#axisMappingsCell;
   }
 
   /** Reactive authored product presets in external axis coordinates. */
-  get namedInstancesCell(): Signal<NamedInstance[]> {
+  get namedInstancesCell(): Signal<readonly NamedInstance[]> {
     return this.#namedInstancesCell;
   }
 
@@ -465,7 +465,7 @@ export class Font {
   }
 
   /** Reactive committed variation sources for sidebar controls. */
-  get sourcesCell(): Signal<Source[]> {
+  get sourcesCell(): Signal<readonly Source[]> {
     return this.#sourcesCell;
   }
 
@@ -822,6 +822,8 @@ export class Font {
       unicodes,
       componentBaseGlyphIds: [],
       layers: [{ id: layerId, sourceId }],
+      mark: false,
+      nonspacingMark: false,
     };
   }
 
@@ -1670,27 +1672,27 @@ export class Font {
   }
 
   /** @knipclassignore — used by VariationPanel component */
-  getAxes(): Axis[] {
+  getAxes(): readonly Axis[] {
     return this.#axesCell.peek();
   }
 
   /** Returns the current font-owned mapping collection. */
-  getAxisMappings(): AxisMapping[] {
+  getAxisMappings(): readonly AxisMapping[] {
     return this.#axisMappingsCell.peek();
   }
 
   /** Returns the Rust-compiled mapping bases for external-to-design evaluation. */
-  getAxisMappingBases(): AxisMappingBasis[] {
+  getAxisMappingBases(): readonly AxisMappingBasis[] {
     return this.#axisMappingBasesCell.peek();
   }
 
   /** Returns font-owned identities and semantics for authored metric rows. */
-  get metricDefinitions(): MetricDefinition[] {
+  get metricDefinitions(): readonly MetricDefinition[] {
     return this.#metricDefinitionsCell.peek();
   }
 
   /** Returns the current explicit named product presets. */
-  get namedInstances(): NamedInstance[] {
+  get namedInstances(): readonly NamedInstance[] {
     return this.#namedInstancesCell.peek();
   }
 
@@ -1705,7 +1707,7 @@ export class Font {
   }
 
   /** @knipclassignore — used by VariationPanel component */
-  get sources(): Source[] {
+  get sources(): readonly Source[] {
     return this.#sourcesCell.peek();
   }
 
@@ -1979,10 +1981,10 @@ export class Font {
       baseline: position("baseline") ?? 0,
       capHeight: position("capHeight") ?? (unloaded ? unitsPerEm * 0.7 : undefined),
       xHeight: position("xHeight") ?? (unloaded ? unitsPerEm * 0.5 : undefined),
-      lineGap: source?.lineGap,
-      italicAngle: source?.italicAngle,
-      underlinePosition: source?.underlinePosition,
-      underlineThickness: source?.underlineThickness,
+      lineGap: source?.lineGap ?? undefined,
+      italicAngle: source?.italicAngle ?? undefined,
+      underlinePosition: source?.underlinePosition ?? undefined,
+      underlineThickness: source?.underlineThickness ?? undefined,
     };
   }
 

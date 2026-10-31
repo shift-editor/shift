@@ -1,8 +1,9 @@
 //! The font-level records an edit changed, read from the font it left.
 //!
 //! Every session that applies an edit builds them the same way, with
-//! [`FontReplacement::changed_by`]. Glyph records are not here: they need the
-//! store's component references and glyph categories.
+//! [`FontReplacement::changed_by`]. Glyph records are not read here: they need
+//! the store's component references and glyph categories, so a session with a
+//! store adds them as [`FontReplacement::glyph_changes`].
 
 use std::collections::HashMap;
 
@@ -10,13 +11,14 @@ use serde::Serialize;
 use shift_font::{CoreResult, Font, FontChangeImpact};
 
 use crate::{
-    Axis, AxisMapping, AxisMappingBasis, FontMetadata, KerningSnapshot, MetricDefinition,
-    NamedInstance, Source, SourceMetricsInterpolationSnapshot,
+    Axis, AxisMapping, AxisMappingBasis, FontMetadata, GlyphRecordChanges, KerningSnapshot,
+    MetricDefinition, NamedInstance, Source, SourceMetricsInterpolationSnapshot,
 };
 
 /// Each font-level collection an edit changed, whole; `None` for one it left
 /// as it was.
 #[derive(Debug, Clone, Default, Serialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct FontReplacement {
     pub metadata: Option<FontMetadata>,
@@ -29,11 +31,16 @@ pub struct FontReplacement {
     pub languages: Option<LanguagesReplacement>,
     pub sources: Option<Vec<Source>>,
     pub kerning: Option<KerningSnapshot>,
+    /// The glyph records the edit changed, which a session with a store adds;
+    /// `None` from [`Self::changed_by`] and when it changed none. Only the
+    /// changed glyphs cross, since a large font has tens of thousands.
+    pub glyph_changes: Option<GlyphRecordChanges>,
 }
 
 /// The source-metrics interpolation after an edit that changed it; `None`
 /// inside when the font no longer has one.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct SourceMetricsInterpolationReplacement {
     pub snapshot: Option<SourceMetricsInterpolationSnapshot>,
@@ -42,6 +49,7 @@ pub struct SourceMetricsInterpolationReplacement {
 /// The font's languages after an edit that changed them; `None` inside when
 /// it declares none.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct LanguagesReplacement {
     pub language_ids: Option<Vec<String>>,
@@ -93,6 +101,7 @@ impl FontReplacement {
             languages: changed.read(FontChangeImpact::LANGUAGES, LanguagesReplacement::of),
             sources: changed.read(FontChangeImpact::SOURCES, Source::masters_of),
             kerning: changed.read(FontChangeImpact::KERNING, KerningSnapshot::from),
+            glyph_changes: None,
         }))
     }
 }

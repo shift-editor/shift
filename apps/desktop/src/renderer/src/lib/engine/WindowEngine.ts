@@ -320,8 +320,8 @@ export class WindowEngine implements FontEngine {
   /** `edit`, after telling readers which of the engine's reads it changed. */
   #shown(edit: EngineEdit): EngineEdit {
     this.#record({
-      kerning: edit.next?.kerning !== undefined,
-      sourceMetrics: edit.next?.sourceMetricsInterpolation !== undefined,
+      kerning: edit.next?.kerning != null,
+      sourceMetrics: edit.next?.sourceMetricsInterpolation != null,
     });
     return edit;
   }

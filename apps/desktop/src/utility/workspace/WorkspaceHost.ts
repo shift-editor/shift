@@ -210,7 +210,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   directory(): Promise<Uint8Array | null> {
     return this.#serialize(() =>
-      this.#state.kind === "document" ? this.#bridge.encodedDirectory() : null,
+      this.#state.kind === "document" ? this.#bridge.workspace.encodedDirectory() : null,
     );
   }
 
@@ -218,8 +218,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     return this.#serialize(() => (this.#state.kind === "preview" ? this.#state.preview : null));
   }
 
-  sourceGlyph(glyphId: GlyphId): Promise<GlyphSnapshot[]> {
-    return this.#serialize(() => this.#bridge.readFontSourceGlyph(glyphId));
+  sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]> {
+    return this.#serialize(() => this.#bridge.source.readFontSourceGlyph(glyphId));
   }
 
   prepareSourceAtlasPage(request: FontSourceAtlasPageRequest): Promise<CatalogAtlasPage> {
@@ -230,13 +230,13 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     return this.#serialize(() => this.#discardSourceAtlasPage(pageIndex, generation));
   }
 
-  sourceAtlasWeights(coordinates: number[]): Promise<CatalogAtlasWeights[]> {
-    return this.#serialize(() => this.#bridge.sourceAtlasWeights(coordinates));
+  sourceAtlasWeights(coordinates: number[]): Promise<readonly CatalogAtlasWeights[]> {
+    return this.#serialize(() => this.#bridge.atlas.sourceAtlasWeights(coordinates));
   }
 
   persist(changeSet: Uint8Array, saveState: SaveState): Promise<PersistedChange> {
     return this.#serialize(() => {
-      const applied = this.#bridge.persist(changeSet, saveState);
+      const applied = this.#bridge.workspace.persist(changeSet, saveState);
       this.#atlasCacheRevision = null;
       return { applied, documentState: this.#emitDocumentChanged() };
     });
@@ -261,31 +261,31 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   }
 
   glyphSnapshots(requests: WorkspaceGlyphSnapshotRequest[]): Promise<GlyphSnapshot[]> {
-    return this.#serialize(() => this.#bridge.getGlyphSnapshots(requests) as GlyphSnapshot[]);
+    return this.#serialize(() => this.#bridge.napi.getGlyphSnapshots(requests) as GlyphSnapshot[]);
   }
 
-  readLayers(layerIds: LayerId[]): Promise<GlyphLayerSnapshot[]> {
-    return this.#serialize(() => this.#bridge.readLayers(layerIds));
+  readLayers(layerIds: LayerId[]): Promise<readonly GlyphLayerSnapshot[]> {
+    return this.#serialize(() => this.#bridge.workspace.readLayers(layerIds));
   }
 
   resolveLayers(layerIds: LayerId[]): Promise<LayerRead[]> {
-    return this.#serialize(() => this.#bridge.resolveLayers(layerIds));
+    return this.#serialize(() => this.#bridge.napi.resolveLayers(layerIds));
   }
 
   layerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
-    return this.#serialize(() => this.#bridge.getLayerMatch(referenceLayerId, targetLayerId));
+    return this.#serialize(() => this.#bridge.napi.getLayerMatch(referenceLayerId, targetLayerId));
   }
 
   glyphProjections(glyphIds: GlyphId[]): Promise<GlyphProjection[]> {
-    return this.#serialize(() => this.#bridge.getGlyphProjections(glyphIds));
+    return this.#serialize(() => this.#bridge.napi.getGlyphProjections(glyphIds));
   }
 
   glyphPreviews(glyphIds: GlyphId[], location: Location): Promise<GlyphPreview[]> {
-    return this.#serialize(() => this.#bridge.getGlyphPreviews(glyphIds, location));
+    return this.#serialize(() => this.#bridge.napi.getGlyphPreviews(glyphIds, location));
   }
 
   prepareSlugAtlas(alignment: number): Promise<SlugAtlas> {
-    return this.#serialize(() => this.#bridge.prepareSlugAtlas(alignment));
+    return this.#serialize(() => this.#bridge.atlas.prepareSlugAtlas(alignment));
   }
 
   prepareSlugAtlasPage(request: WorkspaceSlugAtlasPageRequest): Promise<WorkspaceSlugAtlas> {
@@ -294,7 +294,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   discardSlugAtlas(generation: number): Promise<null> {
     return this.#serialize(() => {
-      this.#bridge.discardSlugAtlas(generation);
+      this.#bridge.atlas.discardSlugAtlas(generation);
       return null;
     });
   }
@@ -304,12 +304,12 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   }
 
   mapLocation(location: Location): Promise<Location> {
-    return this.#serialize(() => this.#bridge.mapLocation(location));
+    return this.#serialize(() => this.#bridge.napi.mapLocation(location));
   }
 
   // Not serialized: a synchronous bridge read, so it never waits behind a save or import.
   async shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
-    return this.#bridge.shaperFont(knownRevision ?? undefined) ?? null;
+    return this.#bridge.shaping.shaperFont(knownRevision ?? undefined) ?? null;
   }
 
   #connectSyncLane(ports: readonly unknown[]): void {
@@ -370,7 +370,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       return { ...cached.atlas, generation, origin: "cached" };
     }
 
-    const descriptor = this.#bridge.prepareSlugAtlasPage(request.glyphIds, request.alignment);
+    const descriptor = this.#bridge.atlas.prepareSlugAtlasPage(request.glyphIds, request.alignment);
     this.#preparedPages.set(descriptor.generation, {
       request: cacheRequest,
       descriptor,
@@ -435,7 +435,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const stream = new PortByteStream(this.#portTransport(port));
     try {
       await stream.send(
-        this.#bridge.streamSlugAtlas(generation, maximumLength),
+        this.#bridge.napi.streamSlugAtlas(generation, maximumLength),
         undefined,
         maximumLength,
       );
@@ -495,7 +495,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     try {
       const streamStarted = performance.now();
       await stream.send(
-        this.#bridge.streamSlugAtlasPage(generation, maximumLength),
+        this.#bridge.napi.streamSlugAtlasPage(generation, maximumLength),
         async (bytes) => {
           if (!sink) return;
 
@@ -558,7 +558,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   #prepareSourceAtlasPage(request: FontSourceAtlasPageRequest) {
     this.#requirePreview();
-    const descriptor = this.#bridge.prepareSourceAtlasPage(
+    const descriptor = this.#bridge.atlas.prepareSourceAtlasPage(
       request.pageIndex,
       request.glyphIds,
       request.coordinates,
@@ -583,7 +583,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const stream = new PortByteStream(this.#portTransport(port));
     try {
       await stream.send(
-        this.#bridge.streamSourceAtlasPage(generation, maximumLength),
+        this.#bridge.napi.streamSourceAtlasPage(generation, maximumLength),
         undefined,
         maximumLength,
       );
@@ -595,7 +595,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   #discardSourceAtlasPage(pageIndex: number, generation: number): null {
     this.#preparedSourcePages.delete(generation);
-    this.#bridge.discardSourceAtlasPage(pageIndex, generation);
+    this.#bridge.atlas.discardSourceAtlasPage(pageIndex, generation);
     return null;
   }
 
@@ -608,7 +608,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     }
 
     this.#preparedPages.delete(generation);
-    this.#bridge.discardSlugAtlasPage(generation);
+    this.#bridge.atlas.discardSlugAtlasPage(generation);
     return null;
   }
 
@@ -674,7 +674,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     }
 
     const canonicalPath = fs.realpathSync(sourcePath);
-    const font = this.#bridge.openFontSource(canonicalPath);
+    const font = this.#bridge.source.openFontSource(canonicalPath);
     const session = {
       sessionId: `source:${canonicalPath}`,
       canonicalPath,
@@ -686,7 +686,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   #closeFontSource(): null {
     this.#requirePreview();
-    this.#bridge.closeFontSource();
+    this.#bridge.source.closeFontSource();
     this.#state = { kind: "closed" };
     this.#preparedSourcePages.clear();
     return null;
@@ -698,8 +698,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     }
 
     const allocation = this.#documents.createWorkspace();
-    this.#bridge.createUntitledWorkspace(allocation.storePath);
-    this.#bridge.setWorkspaceId(allocation.workspaceId);
+    this.#bridge.workspace.createUntitledWorkspace(allocation.storePath);
+    this.#bridge.workspace.setWorkspaceId(allocation.workspaceId);
     this.#state = {
       kind: "document",
       allocation,
@@ -718,8 +718,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const allocation = this.#documents.createWorkspace();
 
     try {
-      this.#bridge.openWorkspace(sourcePath, allocation.storePath);
-      this.#bridge.setWorkspaceId(allocation.workspaceId);
+      this.#bridge.workspace.openWorkspace(sourcePath, allocation.storePath);
+      this.#bridge.workspace.setWorkspaceId(allocation.workspaceId);
       this.#state = {
         kind: "document",
         allocation,
@@ -732,7 +732,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       const workspace = this.#state.kind === "document" ? this.#state : null;
       let publishedDocument = false;
       try {
-        const saveTarget = workspace ? this.#bridge.documentState().saveTarget : null;
+        const saveTarget = workspace ? this.#bridge.workspace.documentState().saveTarget : null;
         publishedDocument =
           typeof saveTarget === "string" && path.resolve(saveTarget) === path.resolve(documentPath);
       } catch {
@@ -742,7 +742,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       if (workspace?.binding.kind === "bound") {
         this.#documents.removeDocumentBinding(workspace.binding.address);
       }
-      this.#bridge.closeWorkspace();
+      this.#bridge.workspace.closeWorkspace();
       this.#state = { kind: "closed" };
       this.#atlasCacheRevision = null;
       this.#documents.deleteWorkspace(allocation.workspaceId);
@@ -758,7 +758,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   }
 
   #inspectDocument(documentPath: string): WorkspaceDocumentIdentity {
-    const identity = this.#bridge.inspectDocument(documentPath);
+    const identity = this.#bridge.workspace.inspectDocument(documentPath);
     return {
       documentId: identity.documentId,
       canonicalPath: identity.canonicalPath,
@@ -768,18 +768,18 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   #snapshot(workspaceId: string): WorkspaceSnapshot {
     return {
       workspaceId,
-      metadata: this.#bridge.getMetadata(),
-      metrics: this.#bridge.getMetrics(),
-      metricDefinitions: this.#bridge.getMetricDefinitions(),
-      sourceMetricsInterpolation: this.#bridge.getSourceMetricsInterpolation(),
-      glyphs: this.#bridge.getGlyphs(),
-      sources: this.#bridge.getSources(),
-      axes: this.#bridge.getAxes(),
-      axisMappings: this.#bridge.getAxisMappings(),
-      axisMappingBases: this.#bridge.getAxisMappingBases(),
-      namedInstances: this.#bridge.getNamedInstances(),
-      languageIds: this.#bridge.getLanguageIds(),
-      kerning: this.#bridge.getKerning(),
+      metadata: this.#bridge.workspace.getMetadata(),
+      metrics: this.#bridge.workspace.getMetrics(),
+      metricDefinitions: this.#bridge.workspace.getMetricDefinitions(),
+      sourceMetricsInterpolation: this.#bridge.workspace.getSourceMetricsInterpolation(),
+      glyphs: this.#bridge.workspace.getGlyphs(),
+      sources: this.#bridge.workspace.getSources(),
+      axes: this.#bridge.workspace.getAxes(),
+      axisMappings: this.#bridge.workspace.getAxisMappings(),
+      axisMappingBases: this.#bridge.workspace.getAxisMappingBases(),
+      namedInstances: this.#bridge.workspace.getNamedInstances(),
+      languageIds: this.#bridge.workspace.getLanguageIds(),
+      kerning: this.#bridge.workspace.getKerning(),
     };
   }
 
@@ -790,8 +790,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     if (isShiftDocumentPath(sourcePath)) return this.#openDocument(sourcePath);
 
     const allocation = this.#documents.createWorkspace();
-    this.#bridge.openWorkspace(sourcePath, allocation.storePath);
-    this.#bridge.setWorkspaceId(allocation.workspaceId);
+    this.#bridge.workspace.openWorkspace(sourcePath, allocation.storePath);
+    this.#bridge.workspace.setWorkspaceId(allocation.workspaceId);
     this.#state = {
       kind: "document",
       allocation,
@@ -820,8 +820,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     }
 
     const allocation = this.#documents.workspace(workspaceId);
-    this.#bridge.resumeWorkspace(allocation.storePath);
-    this.#bridge.setWorkspaceId(allocation.workspaceId);
+    this.#bridge.workspace.resumeWorkspace(allocation.storePath);
+    this.#bridge.workspace.setWorkspaceId(allocation.workspaceId);
     this.#state = {
       kind: "document",
       allocation,
@@ -833,7 +833,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   }
 
   #save(): WorkspaceDocumentState {
-    this.#bridge.saveWorkspace();
+    this.#bridge.workspace.saveWorkspace();
     return this.#emitDocumentChanged();
   }
 
@@ -843,7 +843,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const recoveryPath = this.#documents.createRecoveryPath(workspaceId);
 
     try {
-      this.#bridge.saveWorkspaceAsDocument(savePath, recoveryPath);
+      this.#bridge.workspace.saveWorkspaceAsDocument(savePath, recoveryPath);
     } catch (error) {
       this.#documents.deleteRecovery(recoveryPath);
       throw error;
@@ -894,7 +894,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const { completion } = await this.#serialize(() => ({
       // exportWorkspace captures its immutable native snapshot synchronously.
       // Wrapping the completion releases the workspace queue while fontc runs.
-      completion: this.#bridge.exportWorkspace({
+      completion: this.#bridge.napi.exportWorkspace({
         path: outputPath,
         format: "ttf",
       }),
@@ -909,8 +909,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       // thread, so the workspace queue is released while fontc runs.
       completion:
         this.#state.kind === "document"
-          ? this.#bridge.documentSpecimen()
-          : this.#bridge.fontFileSpecimen(path),
+          ? this.#bridge.napi.documentSpecimen()
+          : this.#bridge.napi.fontFileSpecimen(path),
     }));
     return completion;
   }
@@ -926,7 +926,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const workspaceId = workspace.allocation.workspaceId;
 
     if (state.dirty && discard && state.sourceKind === "document") {
-      this.#bridge.discardWorkspaceChanges();
+      this.#bridge.workspace.discardWorkspaceChanges();
     }
 
     for (const page of this.#cachedPages.values()) {
@@ -941,7 +941,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     this.#openedCachedAtlasKey = null;
     this.#preparedPages.clear();
     this.#discardAtlasBuildsExcept(null);
-    this.#bridge.closeWorkspace();
+    this.#bridge.workspace.closeWorkspace();
     this.#state = { kind: "closed" };
     this.#atlasCacheRevision = null;
 
@@ -960,7 +960,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     if (this.#state.kind !== "document") return null;
 
     const workspace = this.#state;
-    const state = this.#bridge.documentState();
+    const state = this.#bridge.workspace.documentState();
     const canonicalPath =
       workspace.binding.kind === "bound" ? workspace.binding.address.canonicalPath : null;
 
@@ -1008,7 +1008,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
   }
 
   #currentAtlasCacheRevision(): string {
-    this.#atlasCacheRevision ??= this.#bridge.slugAtlasCacheRevision();
+    this.#atlasCacheRevision ??= this.#bridge.atlas.slugAtlasCacheRevision();
     return this.#atlasCacheRevision;
   }
 

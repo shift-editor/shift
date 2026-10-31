@@ -195,99 +195,112 @@ type SourceId = string & {
 type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId | TextItemId;
 /** Identifies objects that can be selected by the editor. */
 type SelectableId = ShiftId;
-//#endregion
-//#region ../types/src/bridge/generated.d.ts
+/** A glyph's authored name, such as `A` or `uni0041`. */
 type GlyphName = string;
-interface Axis {
-  id: AxisId;
-  tag: string;
-  name: string;
-  role: AxisRole;
-  axisType: AxisType;
-  minimum?: number;
-  default: number;
-  maximum?: number;
-  values?: Array<number>;
-  labels: Array<AxisLabel>;
-  hidden: boolean;
-}
-interface AxisLabel {
-  id: AxisLabelId;
-  name: string;
-  value: number;
-  minimum?: number;
-  maximum?: number;
-  linkedValue?: number;
-  elidable: boolean;
-}
-interface AxisMapping {
-  id: AxisMappingId;
-  name: string;
-  description?: string;
-  inputs: Array<AxisId>;
-  outputs: Array<AxisId>;
-  points: Array<AxisMappingPoint>;
-}
-interface AxisMappingPoint {
-  description?: string;
-  input: Location;
-  output: Location;
-}
-type AxisRole = "external" | "internal";
-type AxisType = "continuous" | "discrete";
+//#endregion
+//#region ../types/src/bridge/protocol.d.ts
 interface FontMetadata {
-  familyName?: string;
-  styleName?: string;
-  versionMajor?: number;
-  versionMinor?: number;
-  copyright?: string;
-  trademark?: string;
-  designer?: string;
-  designerUrl?: string;
-  manufacturer?: string;
-  manufacturerUrl?: string;
-  license?: string;
-  licenseUrl?: string;
-  description?: string;
-  note?: string;
-}
-type KerningPosition = "first" | "second";
-interface Location {
-  values: Record<AxisId, number>;
-}
-interface MetricDefinition {
-  id: MetricId;
-  kind: MetricKind;
-  name: string;
-}
-type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
-/** NAPI projection of one explicit named product preset. */
-interface NamedInstance {
-  id: NamedInstanceId;
-  name: string;
-  location: Location;
-  postscriptName?: string;
+  readonly familyName?: string | null;
+  readonly styleName?: string | null;
+  readonly versionMajor?: number | null;
+  readonly versionMinor?: number | null;
+  readonly copyright?: string | null;
+  readonly trademark?: string | null;
+  readonly designer?: string | null;
+  readonly designerUrl?: string | null;
+  readonly manufacturer?: string | null;
+  readonly manufacturerUrl?: string | null;
+  readonly license?: string | null;
+  readonly licenseUrl?: string | null;
+  readonly description?: string | null;
+  readonly note?: string | null;
 }
 interface FontMetrics {
-  unitsPerEm: number;
+  readonly unitsPerEm: number;
+}
+type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
+interface MetricDefinition {
+  readonly id: MetricId;
+  readonly kind: MetricKind;
+  readonly name: string;
+}
+interface Location {
+  readonly values: Readonly<Record<AxisId, number>>;
+}
+interface SourceMetricValue {
+  readonly metricId: MetricId;
+  readonly position: number;
+  readonly overshoot: number;
 }
 interface Source {
-  id: SourceId;
-  name: string;
-  location: Location;
-  filename?: string;
-  metricValues: Array<SourceMetricValue>;
-  italicAngle?: number;
-  lineGap?: number;
-  underlinePosition?: number;
-  underlineThickness?: number;
+  readonly id: SourceId;
+  readonly name: string;
+  readonly location: Location;
+  readonly filename?: string | null;
+  readonly metricValues: readonly SourceMetricValue[];
+  readonly italicAngle?: number | null;
+  readonly lineGap?: number | null;
+  readonly underlinePosition?: number | null;
+  readonly underlineThickness?: number | null;
 }
+/** Whether an axis reaches the compiled font or exists only while designing. */
+type AxisRole = "external" | "internal";
+/** Whether an axis takes any value in its range or only its listed values. */
+type AxisType = "continuous" | "discrete";
+/** Wire projection of a stable external-axis label. */
+interface AxisLabel {
+  readonly id: AxisLabelId;
+  readonly name: string;
+  readonly value: number;
+  readonly minimum?: number | null;
+  readonly maximum?: number | null;
+  readonly linkedValue?: number | null;
+  readonly elidable: boolean;
+}
+interface Axis {
+  readonly id: AxisId;
+  readonly tag: string;
+  readonly name: string;
+  readonly role: AxisRole;
+  readonly axisType: AxisType;
+  readonly minimum?: number | null;
+  readonly default: number;
+  readonly maximum?: number | null;
+  readonly values?: readonly number[] | null;
+  readonly labels: readonly AxisLabel[];
+  readonly hidden: boolean;
+}
+interface AxisMappingPoint {
+  readonly description?: string | null;
+  readonly input: Location;
+  readonly output: Location;
+}
+interface AxisMapping {
+  readonly id: AxisMappingId;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly inputs: readonly AxisId[];
+  readonly outputs: readonly AxisId[];
+  readonly points: readonly AxisMappingPoint[];
+}
+/**
+ * Wire projection of an explicit named product preset.
+ *
+ * `location` is complete external authoring state, not a normalized or
+ * compiler-owned coordinate record.
+ */
+interface NamedInstance {
+  readonly id: NamedInstanceId;
+  readonly name: string;
+  readonly location: Location;
+  readonly postscriptName?: string | null;
+}
+/**
+ * Pair position a kerning group applies to: `First` kerns a glyph's right
+ * edge, `Second` its left edge.
+ */
+type KerningPosition = "first" | "second";
 type PointType = "onCurve" | "offCurve" | "qCurve";
-interface SourceMetricValue {
-  metricId: MetricId;
-  position: number;
-  overshoot: number;
-}
 //#endregion
 //#region ../types/src/domain.d.ts
 /** Standard and technical metrics resolved for one authored source. */

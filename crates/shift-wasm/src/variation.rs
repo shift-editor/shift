@@ -27,12 +27,12 @@ pub struct VariationAxis {
     name: String,
     role: VariationAxisRole,
     axis_type: VariationAxisType,
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | null")]
     minimum: Option<f64>,
     default: f64,
-    #[tsify(optional)]
+    #[tsify(optional, type = "number | null")]
     maximum: Option<f64>,
-    #[tsify(optional)]
+    #[tsify(optional, type = "readonly number[] | null")]
     values: Option<Vec<f64>>,
 }
 
@@ -53,12 +53,14 @@ pub enum VariationAxisType {
 /// Axes in order.
 #[derive(Deserialize, Tsify)]
 #[serde(transparent)]
-pub struct VariationAxes(pub(crate) Vec<VariationAxis>);
+pub struct VariationAxes(#[tsify(type = "readonly VariationAxis[]")] pub(crate) Vec<VariationAxis>);
 
 /// A font's compiled axis mappings, in order.
 #[derive(Deserialize, Tsify)]
 #[serde(transparent)]
-pub struct AxisMappingBases(Vec<AxisMappingBasisData>);
+pub struct AxisMappingBases(
+    #[tsify(type = "readonly AxisMappingBasisData[]")] Vec<AxisMappingBasisData>,
+);
 
 /// One axis's support within a region, normalized.
 #[derive(Deserialize, Tsify)]
@@ -73,6 +75,7 @@ pub struct VariationSupport {
 /// One contribution: a region and the values it adds there.
 #[derive(Deserialize, Tsify)]
 pub struct VariationBasisDelta {
+    #[tsify(type = "readonly VariationSupport[]")]
     region: Vec<VariationSupport>,
     #[tsify(type = "Float64Array | number[]")]
     values: Vec<f64>,
@@ -81,6 +84,7 @@ pub struct VariationBasisDelta {
 /// A variation basis Rust compiled.
 #[derive(Deserialize, Tsify)]
 pub struct VariationBasisData {
+    #[tsify(type = "readonly VariationBasisDelta[]")]
     deltas: Vec<VariationBasisDelta>,
 }
 
@@ -98,8 +102,10 @@ pub struct VariationDesignNormalization {
 #[derive(Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationBasisData {
+    #[tsify(type = "readonly string[]")]
     source_ids: Vec<String>,
     basis: VariationBasisData,
+    #[tsify(type = "readonly VariationDesignNormalization[]")]
     design_normalization: Vec<VariationDesignNormalization>,
 }
 
@@ -108,7 +114,9 @@ pub struct InterpolationBasisData {
 #[serde(rename_all = "camelCase")]
 pub struct AxisMappingBasisData {
     mapping_id: String,
+    #[tsify(type = "readonly string[]")]
     input_axis_ids: Vec<String>,
+    #[tsify(type = "readonly string[]")]
     output_axis_ids: Vec<String>,
     basis: VariationBasisData,
 }

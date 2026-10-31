@@ -48,17 +48,14 @@ class Handles<T extends object> {
   }
 }
 
-const axesHandles = new Handles<readonly Axis[]>(
-  (axes) => registerAxes(axes as Axis[]),
-  releaseAxes,
-);
+const axesHandles = new Handles<readonly Axis[]>(registerAxes, releaseAxes);
 const basisHandles = new Handles<VariationBasis>(registerVariationBasis, releaseVariationBasis);
 const interpolationHandles = new Handles<InterpolationBasis>(
   registerInterpolationBasis,
   releaseInterpolationBasis,
 );
 const mappingHandles = new Handles<readonly AxisMappingBasis[]>(
-  (bases) => registerAxisMappings(bases as AxisMappingBasis[]),
+  registerAxisMappings,
   releaseAxisMappings,
 );
 

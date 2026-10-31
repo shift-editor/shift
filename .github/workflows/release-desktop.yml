@@ -158,6 +158,11 @@ jobs:
         if: matrix.platform == 'linux'
         run: scripts/build-linux-portable.sh
 
+      # The app bundles the native workspace's generated clients, which are
+      # not committed.
+      - name: Generate bridge types
+        run: pnpm generate:bridge-types
+
       - name: Build desktop application
         env:
           SHIFT_DISTRIBUTION: release
