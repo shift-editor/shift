@@ -12,7 +12,7 @@
 // cleaned so its macros expand again (crates/shift-bridge/scripts/types.mjs
 // does the same for napi's type definitions).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generate } from "@shift/pack/generate";
@@ -41,7 +41,69 @@ export function writeProtocol() {
   const missing = packed.filter((name) => !existsSync(join(fragments, name)));
   if (missing.length > 0) cargo(["clean", ...missing.flatMap((name) => ["-p", name])]);
   cargo(["check", "-p", "shift-wasm", "-p", "shift-engine"]);
+  // A crate checked without its fragments being written (or since rewritten
+  // by another checkout sharing this target directory) has fragments older
+  // than its last check. Expand its macros again rather than trust them.
+  const stale = packed.filter((name) => newestFragment(name) < lastCheck(name) - STALE_MS);
+  if (stale.length > 0) {
+    cargo(["clean", ...stale.flatMap((name) => ["-p", name])]);
+    cargo(["check", "-p", "shift-wasm", "-p", "shift-engine"]);
+  }
   generate(fragments, output, HEADER);
+  assertRenamesApplied();
+}
+
+/**
+ * A crate's macros write its fragments while it compiles, so they are at most
+ * one compile older than its .rmeta. Allow for the slowest one.
+ */
+const STALE_MS = 60_000;
+
+/** When `name`'s fragments were last written, in ms since the epoch (0 when it has none). */
+function newestFragment(name) {
+  const folder = join(fragments, name);
+  if (!existsSync(folder)) return 0;
+  return Math.max(0, ...readdirSync(folder).map((file) => statSync(join(folder, file)).mtimeMs));
+}
+
+/** When `name` was last checked in the target directory, in ms since the epoch. */
+function lastCheck(name) {
+  const deps = join(targetDir, "debug", "deps");
+  const prefix = `lib${name.replaceAll("-", "_")}-`;
+  const metadata = readdirSync(deps).filter(
+    (file) => file.startsWith(prefix) && file.endsWith(".rmeta"),
+  );
+  return Math.max(0, ...metadata.map((file) => statSync(join(deps, file)).mtimeMs));
+}
+
+/** `#[pack(rename = "Name")]` followed, after any other attributes, by the item it renames. */
+const RENAME =
+  /pack\(rename\s*=\s*"(\w+)"\)\)?\]\s*(?:#\[[^\]]*\]\s*)*pub(?:\([^)]*\))?\s+(?:struct|enum)\s+(\w+)/g;
+
+/**
+ * Fails when a type that `#[pack(rename = …)]` renames appears in the module
+ * under its Rust name. A stale fragment produces that, and it typechecks. The
+ * renames are read from the source, since a stale fragment has lost them.
+ */
+function assertRenamesApplied() {
+  const module = readFileSync(output, "utf8");
+  for (const crate of packed) {
+    for (const file of readdirSync(join(root, "crates", crate, "src"), { recursive: true })) {
+      if (!file.endsWith(".rs")) continue;
+      const source = readFileSync(join(root, "crates", crate, "src", file), "utf8");
+      for (const [, name, rust] of source.matchAll(RENAME)) {
+        if (
+          module.includes(`export const ${rust} =`) &&
+          !module.includes(`export const ${name} =`)
+        ) {
+          throw new Error(
+            `${output} declares ${rust}, which ${crate} renames to ${name}: its pack fragments are stale. ` +
+              `Delete ${fragments} and run \`pnpm --filter @shift/wasm types\` again.`,
+          );
+        }
+      }
+    }
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) writeProtocol();
